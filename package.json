@@ -1,6 +1,7 @@
 {
   "name": "student-portal",
   "private": true,
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "dev:api": "pnpm --filter @student-portal/api run dev",
@@ -12,6 +13,6 @@
     "clean": "pnpm -r run clean"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "22.x"
   }
 }
