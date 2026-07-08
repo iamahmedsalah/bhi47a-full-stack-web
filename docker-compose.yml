@@ -1,0 +1,105 @@
+
+services:
+  # ===================================================
+  # LOCAL DATABASE: MongoDB
+  # ===================================================
+  mongodb:
+    image: mongo:6.0
+    container_name: student-portal-mongodb-prod
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: student-portal
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===================================================
+  # LOCAL CACHE & QUEUE: Redis
+  # ===================================================
+  redis:
+    image: redis:7.0-alpine
+    container_name: student-portal-redis-prod
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ===================================================
+  # BACKEND SERVICE: NestJS API
+  # ===================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: student-portal-api-prod
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - API_PORT=4000
+      # Connects to the local docker mongo container service name
+      - MONGODB_URI=mongodb://mongodb:27017/student-portal
+      # Connects to the local docker redis container service name
+      - REDIS_URL=redis://redis:6379
+      - QUEUE_REQUIRED=true
+      - JWT_SECRET=production-secret-must-be-rotated-32-chars
+      - JWT_EXPIRES_IN=7d
+      - CLIENT_URL=http://localhost:3000
+      - DNS_SERVERS=8.8.8.8,1.1.1.1
+      # Local Seeds (For simulation only)
+      - ADMIN_EMAIL=admin@portal.edu
+      - ADMIN_PASSWORD=AdminProductionSecretPass123!
+      - ADMIN_NAME=System Administrator
+      # Rate Limiting Mock Limits
+      - STUDENT_LOGIN_RATE_LIMIT=100
+      - ADMIN_LOGIN_RATE_LIMIT=100
+      - CHANGE_PASSWORD_RATE_LIMIT=100
+      - STUDENT_COMPLAINT_DAILY_RATE_LIMIT=100
+      - STUDENT_COMPLAINT_REPLY_DAILY_RATE_LIMIT=100
+      - FAQ_CHAT_RATE_LIMIT=500
+      - ADMIN_UPLOAD_RATE_LIMIT=100
+      - ADMIN_MESSAGE_RATE_LIMIT=100
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ===================================================
+  # FRONTEND SERVICE: Next.js Web
+  # ===================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: student-portal-web-prod
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+    depends_on:
+      - api
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local

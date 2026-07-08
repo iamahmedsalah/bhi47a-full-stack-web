@@ -1,0 +1,5 @@
+interface:
+  display_name: Full-Stack Codex Engineer
+  short_description: Build, review, and prompt Codex for the Student Portal full-stack monorepo.
+  icon: code
+  color: blue

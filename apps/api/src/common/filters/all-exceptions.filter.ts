@@ -1,0 +1,138 @@
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { AppLoggerService } from '../../core/logger/logger.service';
+
+type ErrorLike = Error & {
+  status?: number;
+  errors?: unknown;
+  type?: string;
+  code?: string;
+  customMessage?: string;
+};
+
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  constructor(private readonly logger: AppLoggerService) {}
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const error = exception as ErrorLike;
+
+    const method = request?.method || 'UNKNOWN';
+    const url = request?.originalUrl || '';
+    const statusMessage =
+      exception instanceof HttpException
+        ? exception.message
+        : error?.message || 'Unhandled exception';
+
+    const logRequestError = (statusCode?: number) => {
+      const message = `Request failed on ${method} ${url}`;
+      const metadata = {
+        context: 'AllExceptionsFilter',
+        statusCode,
+        method,
+        path: url,
+        ip: request?.ip,
+        userAgent: request?.headers?.['user-agent'],
+        message: statusMessage,
+      };
+
+      if (statusCode && statusCode < 500) {
+        this.logger.warn(message, metadata);
+        return;
+      }
+
+      this.logger.error(message, error?.stack, metadata);
+    };
+
+    if (error?.type === 'entity.parse.failed') {
+      logRequestError(HttpStatus.BAD_REQUEST);
+      return response.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Invalid JSON payload.',
+        timestamp: new Date().toISOString(),
+        path: url,
+      });
+    }
+
+    if (error?.type === 'entity.too.large') {
+      logRequestError(HttpStatus.PAYLOAD_TOO_LARGE);
+      return response.status(HttpStatus.PAYLOAD_TOO_LARGE).json({
+        success: false,
+        statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+        message: 'Request payload is too large.',
+        timestamp: new Date().toISOString(),
+        path: url,
+      });
+    }
+
+    if (String(error?.message || '').startsWith('CORS blocked')) {
+      logRequestError(HttpStatus.FORBIDDEN);
+      return response.status(HttpStatus.FORBIDDEN).json({
+        success: false,
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Origin is not allowed by CORS policy.',
+        timestamp: new Date().toISOString(),
+        path: url,
+      });
+    }
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      logRequestError(status);
+      const body = exception.getResponse();
+      const message =
+        typeof body === 'object' && body !== null && 'message' in body
+          ? (body as { message: string | string[] }).message
+          : exception.message;
+
+      return response.status(status).json({
+        success: false,
+        statusCode: status,
+        message: Array.isArray(message)
+          ? message.join(', ')
+          : message || 'Error',
+        timestamp: new Date().toISOString(),
+        path: url,
+        ...(typeof body === 'object' && body !== null && 'errors' in body
+          ? { errors: body.errors }
+          : {}),
+      });
+    }
+
+    if (
+      error?.status &&
+      Number.isInteger(error.status) &&
+      error.status >= 400 &&
+      error.status < 600
+    ) {
+      logRequestError(error.status);
+      return response.status(error.status).json({
+        success: false,
+        statusCode: error.status,
+        message: error.message || 'Error',
+        timestamp: new Date().toISOString(),
+        path: url,
+        ...(error.errors ? { errors: error.errors } : {}),
+      });
+    }
+
+    logRequestError(HttpStatus.INTERNAL_SERVER_ERROR);
+    return response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'Internal server error.',
+      timestamp: new Date().toISOString(),
+      path: url,
+    });
+  }
+}

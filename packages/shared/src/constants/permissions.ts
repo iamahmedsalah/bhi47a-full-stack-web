@@ -1,0 +1,29 @@
+export const PERMISSIONS = {
+  STUDENTS_READ: 'students.read',
+  STUDENTS_WRITE: 'students.write',
+  STUDENTS_RESET_PASSWORD: 'students.reset_password',
+  COURSES_READ: 'courses.read',
+  COURSES_WRITE: 'courses.write',
+  GRADES_READ: 'grades.read',
+  GRADES_WRITE: 'grades.write',
+  GRADES_DELETE: 'grades.delete',
+  ACADEMIC_EMAILS_READ: 'academic_emails.read',
+  ACADEMIC_EMAILS_WRITE: 'academic_emails.write',
+  COMPLAINTS_READ: 'complaints.read',
+  COMPLAINTS_REPLY: 'complaints.reply',
+  COMPLAINTS_MANAGE_SETTINGS: 'complaints.manage_settings',
+  EMAILS_READ: 'emails.read',
+  EMAILS_SEND: 'emails.send',
+  NOTIFICATIONS_READ: 'notifications.read',
+  NOTIFICATIONS_SEND: 'notifications.send',
+  FAQS_READ: 'faqs.read',
+  FAQS_WRITE: 'faqs.write',
+  UPLOADS_IMPORT: 'uploads.import',
+  EXAM_SCHEDULES_READ: 'exam_schedules.read',
+  EXAM_SCHEDULES_WRITE: 'exam_schedules.write',
+  DANGER_ZONE_DELETE_ALL: 'danger_zone.delete_all',
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export const PERMISSION_VALUES: Permission[] = Object.values(PERMISSIONS);

@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-portal-web
+  namespace: student-portal
+  labels:
+    app: student-portal-web
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: student-portal-web
+  template:
+    metadata:
+      labels:
+        app: student-portal-web
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/student-portal/web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: web-port
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+          # Environmental config binding
+          envFrom:
+            - configMapRef:
+                name: student-portal-config
+          # Security context - non-root user execution
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          # Health checking
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-portal-web
+  namespace: student-portal
+  labels:
+    app: student-portal-web
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: student-portal-web
+  type: ClusterIP
+
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: student-portal-web-hpa
+  namespace: student-portal
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: student-portal-web
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

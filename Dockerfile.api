@@ -1,0 +1,63 @@
+# ===================================================
+# STAGE 1: Build & Prune Dependencies
+# ===================================================
+FROM node:20-alpine AS builder
+
+# Install build dependencies for native modules (e.g., bcrypt)
+RUN apk add --no-cache libc6-compat python3 make g++
+
+WORKDIR /app
+
+# Enable Corepack and activate pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+# Copy root lockfiles and configurations
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY packages/shared/package.json ./packages/shared/
+COPY apps/api/package.json ./apps/api/
+
+# Install dependencies (leveraging Docker cache)
+RUN pnpm install --frozen-lockfile
+
+# Copy project source files
+COPY tsconfig.base.json ./
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+
+# Build dependencies and target app
+RUN pnpm --filter @student-portal/shared run build
+RUN pnpm --filter @student-portal/api run build
+
+# Deploy only the api package with production dependencies to a separate folder
+RUN pnpm --filter @student-portal/api --prod deploy /app/pruned
+
+# ===================================================
+# STAGE 2: Lightweight Production Runtime
+# ===================================================
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=4000
+ENV API_PORT=4000
+
+# Install runtime utilities (timezone data, certificates)
+RUN apk add --no-cache tzdata ca-certificates
+
+# Create non-root system user for security hardening
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nestjs
+
+# Copy self-contained deployed application from builder
+COPY --from=builder /app/pruned ./
+
+# Enforce secure ownership of application files
+RUN chown -R nestjs:nodejs /app
+
+# Drop root privileges
+USER nestjs
+
+EXPOSE 4000
+
+# Run using the production main entrypoint
+CMD ["node", "dist/main.js"]

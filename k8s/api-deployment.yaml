@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-portal-api
+  namespace: student-portal
+  labels:
+    app: student-portal-api
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: student-portal-api
+  template:
+    metadata:
+      labels:
+        app: student-portal-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/student-portal/api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+              name: api-port
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+          # Environmental config binding
+          envFrom:
+            - configMapRef:
+                name: student-portal-config
+            - secretRef:
+                name: student-portal-secrets
+          # Security context - non-root user execution
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+          # Health & SLA checking
+          livenessProbe:
+            tcpSocket:
+              port: 4000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-portal-api
+  namespace: student-portal
+  labels:
+    app: student-portal-api
+spec:
+  ports:
+    - port: 4000
+      targetPort: 4000
+      name: http
+  selector:
+    app: student-portal-api
+  type: ClusterIP
+
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: student-portal-api-hpa
+  namespace: student-portal
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: student-portal-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

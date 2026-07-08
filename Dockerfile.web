@@ -1,0 +1,72 @@
+# ===================================================
+# STAGE 1: Build Frontend App
+# ===================================================
+FROM node:20-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+# Enable Corepack and activate pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+
+# Copy root lockfiles and configurations
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY packages/shared/package.json ./packages/shared/
+COPY apps/web/package.json ./apps/web/
+
+# Install dependencies (leveraging Docker cache)
+RUN pnpm install --frozen-lockfile
+
+# Copy project source files
+COPY tsconfig.base.json ./
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+
+# Setup build-time environment variables
+ENV NEXT_PUBLIC_API_URL=http://localhost:4000/api
+# Next.js compiles pages and pre-renders static pages during build time.
+# Production configurations can be overwritten at runtime, but NEXT_PUBLIC_ variables
+# are baked in unless handled dynamically.
+ENV PORT=3000
+ENV NODE_ENV=production
+
+# Build packages
+RUN pnpm --filter @student-portal/shared run build
+RUN pnpm --filter @student-portal/web run build
+
+# ===================================================
+# STAGE 2: Lightweight Next.js Runtime
+# ===================================================
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Install runtime utilities
+RUN apk add --no-cache tzdata ca-certificates
+
+# Create non-root system user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy Next.js standalone directory output (already bundles node_modules and shared dependencies)
+COPY --from=builder /app/apps/web/.next/standalone ./
+
+# Copy public assets and static compilation directory (not included in standalone by default)
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+
+# Enforce secure ownership
+RUN chown -R nextjs:nodejs /app
+
+# Drop root privileges
+USER nextjs
+
+EXPOSE 3000
+
+# Execute next.js standalone server
+CMD ["node", "apps/web/server.js"]

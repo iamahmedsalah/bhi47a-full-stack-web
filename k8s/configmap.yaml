@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: student-portal
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: student-portal-config
+  namespace: student-portal
+data:
+  NODE_ENV: "production"
+  API_PORT: "4000"
+  CLIENT_URL: "https://student-portal.local"
+  NEXT_PUBLIC_API_URL: "https://student-portal.local/api"
+  DNS_SERVERS: "8.8.8.8,1.1.1.1"
+  QUEUE_REQUIRED: "true"
+  REDIS_URL: "redis://student-portal-redis:6379"
+  CLOUDINARY_CLOUD_NAME: "student-portal-cloud"
+  RESEND_FROM_EMAIL: "no-reply@portal.edu"
+  # Rate limiting limits for production
+  STUDENT_LOGIN_RATE_LIMIT: "8"
+  ADMIN_LOGIN_RATE_LIMIT: "8"
+  CHANGE_PASSWORD_RATE_LIMIT: "8"
+  STUDENT_COMPLAINT_DAILY_RATE_LIMIT: "3"
+  STUDENT_COMPLAINT_REPLY_DAILY_RATE_LIMIT: "3"
+  PUBLIC_COMPLAINT_DAILY_RATE_LIMIT: "3"
+  FAQ_CHAT_RATE_LIMIT: "20"
+  ADMIN_UPLOAD_RATE_LIMIT: "20"
+  ADMIN_MESSAGE_RATE_LIMIT: "30"

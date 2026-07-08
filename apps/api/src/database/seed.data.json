@@ -1,0 +1,133 @@
+{
+  "staffPermissions": [
+    "students.read",
+    "courses.read",
+    "grades.read",
+    "academic_emails.read",
+    "complaints.read",
+    "complaints.reply",
+    "exam_schedules.read",
+    "notifications.read",
+    "emails.read"
+  ],
+  "students": [
+    {
+      "studentCode": "202600001",
+      "fullName": "Ahmed Salah Mohamed",
+      "nationalId": "30101011234567",
+      "academicEmail": "ahmed.salah.2026@bis.edu.eg",
+      "department": "Business Information Systems",
+      "level": "1",
+      "group": "A",
+      "section": "1",
+      "academicYear": "2026-2027",
+      "semester": "first",
+      "seatNumber": "1001",
+      "examBuilding": "A",
+      "examFloor": "1",
+      "examRoom": "101",
+      "phone": "01010000001"
+    },
+    {
+      "studentCode": "202600002",
+      "fullName": "Mariam Hassan Ali",
+      "nationalId": "30102022345678",
+      "academicEmail": "mariam.hassan.2026@bis.edu.eg",
+      "department": "Business Information Systems",
+      "level": "1",
+      "group": "A",
+      "section": "2",
+      "academicYear": "2026-2027",
+      "semester": "first",
+      "seatNumber": "1002",
+      "examBuilding": "A",
+      "examFloor": "1",
+      "examRoom": "102",
+      "phone": "01010000002"
+    },
+    {
+      "studentCode": "202600003",
+      "fullName": "Omar Mohamed Ibrahim",
+      "nationalId": "30103033456789",
+      "academicEmail": "omar.ibrahim.2026@bis.edu.eg",
+      "department": "Business Information Systems",
+      "level": "1",
+      "group": "B",
+      "section": "1",
+      "academicYear": "2026-2027",
+      "semester": "first",
+      "seatNumber": "1003",
+      "examBuilding": "B",
+      "examFloor": "2",
+      "examRoom": "205",
+      "phone": "01010000003"
+    },
+    {
+      "studentCode": "202600004",
+      "fullName": "Sara Ahmed Mahmoud",
+      "nationalId": "30104044567890",
+      "academicEmail": "sara.mahmoud.2026@bis.edu.eg",
+      "department": "Business Information Systems",
+      "level": "1",
+      "group": "B",
+      "section": "2",
+      "academicYear": "2026-2027",
+      "semester": "first",
+      "seatNumber": "1004",
+      "examBuilding": "B",
+      "examFloor": "2",
+      "examRoom": "206",
+      "phone": "01010000004"
+    }
+  ],
+  "courses": [
+    {
+      "name": "Introduction to Information Systems",
+      "code": "BIS101-2026",
+      "level": "1",
+      "academicLevel": "1",
+      "semester": "first",
+      "department": "Business Information Systems",
+      "creditHours": 3,
+      "prerequisites": [],
+      "type": "required",
+      "isActive": true
+    },
+    {
+      "name": "Programming Fundamentals",
+      "code": "CS101-2026",
+      "level": "1",
+      "academicLevel": "1",
+      "semester": "first",
+      "department": "Computer Science",
+      "creditHours": 3,
+      "prerequisites": [],
+      "type": "required",
+      "isActive": true
+    },
+    {
+      "name": "Mathematics I",
+      "code": "MTH101-2026",
+      "level": "1",
+      "academicLevel": "1",
+      "semester": "first",
+      "department": "General",
+      "creditHours": 3,
+      "prerequisites": [],
+      "type": "required",
+      "isActive": true
+    },
+    {
+      "name": "English Language",
+      "code": "ENG101-2026",
+      "level": "1",
+      "academicLevel": "1",
+      "semester": "first",
+      "department": "General",
+      "creditHours": 2,
+      "prerequisites": [],
+      "type": "required",
+      "isActive": true
+    }
+  ]
+}

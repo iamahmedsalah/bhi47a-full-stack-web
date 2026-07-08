@@ -1,0 +1,62 @@
+'use client';
+
+import React, { useState, useCallback } from 'react';
+import { Copy, Check } from 'lucide-react';
+import { cn } from '@/lib/cn';
+import { toast } from 'sonner';
+
+interface CopyButtonProps {
+  /** Value to copy to clipboard */
+  value: string;
+  /** Label text shown next to icon */
+  label?: string;
+  /** Toast message shown on copy */
+  successMessage?: string;
+  /** Extra classNames */
+  className?: string;
+}
+
+/**
+ * Clipboard copy button with visual feedback.
+ * Shows a check icon briefly after copy, plus a toast.
+ */
+export function CopyButton({
+  value,
+  label,
+  successMessage = 'تم النسخ',
+  className,
+}: CopyButtonProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast.success(successMessage);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('فشل النسخ');
+    }
+  }, [value, successMessage]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+        copied
+          ? 'border-success/30 bg-success/10 text-success'
+          : 'border-border text-muted hover:border-primary/30 hover:text-primary',
+        className,
+      )}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+      {label && <span>{label}</span>}
+    </button>
+  );
+}

@@ -1,0 +1,17 @@
+{
+  "name": "student-portal",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "dev:api": "pnpm --filter @student-portal/api run dev",
+    "dev:web": "pnpm --filter @student-portal/web run dev",
+    "build": "pnpm -r run build",
+    "build:api": "pnpm --filter @student-portal/api run build",
+    "build:web": "pnpm --filter @student-portal/web run build",
+    "lint": "pnpm -r run lint",
+    "clean": "pnpm -r run clean"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
