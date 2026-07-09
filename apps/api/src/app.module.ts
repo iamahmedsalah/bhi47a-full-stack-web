@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { EmailsModule } from './modules/emails/emails.module';
 import { FaqsModule } from './modules/faqs/faqs.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -44,5 +45,6 @@ import { RegistrationsModule } from './modules/registrations/registrations.modul
     FaqsModule,
     RegistrationsModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

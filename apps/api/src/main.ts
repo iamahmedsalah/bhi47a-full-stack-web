@@ -11,20 +11,44 @@ import { rateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { AppLoggerService } from './core/logger/logger.service';
 
+function parseAllowedOrigins(rawOrigins: string) {
+  return rawOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
   const configService = app.get(ConfigService);
   const logger = app.get(AppLoggerService);
-  const port = configService.get<number>('API_PORT', 4000);
+  const port = Number(
+    configService.get<string>('PORT') ??
+      configService.get<string>('API_PORT') ??
+      4000,
+  );
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
+  const allowedOrigins = parseAllowedOrigins(
+    configService.get<string>('CLIENT_URL', 'http://localhost:3000'),
+  );
 
   app.useLogger(logger);
   app.setGlobalPrefix('api');
 
   app.enableCors({
-    origin: configService.get<string>('CLIENT_URL', 'http://localhost:3000'),
+    origin(
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS origin not allowed: ${origin}`));
+    },
     credentials: true,
   });
 

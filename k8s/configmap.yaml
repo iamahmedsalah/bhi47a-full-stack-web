@@ -12,13 +12,16 @@ metadata:
   namespace: student-portal
 data:
   NODE_ENV: "production"
+  PORT: "4000"
   API_PORT: "4000"
   CLIENT_URL: "https://student-portal.local"
   NEXT_PUBLIC_API_URL: "https://student-portal.local/api"
+  COOKIE_SAME_SITE: "lax"
+  COOKIE_DOMAIN: ""
   DNS_SERVERS: "8.8.8.8,1.1.1.1"
   QUEUE_REQUIRED: "true"
   REDIS_URL: "redis://student-portal-redis:6379"
-  CLOUDINARY_CLOUD_NAME: "student-portal-cloud"
+  CLOUDINARY_CLOUD_NAME: "replace-with-cloudinary-cloud"
   RESEND_FROM_EMAIL: "no-reply@portal.edu"
   # Rate limiting limits for production
   STUDENT_LOGIN_RATE_LIMIT: "8"

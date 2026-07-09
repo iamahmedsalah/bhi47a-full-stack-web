@@ -47,12 +47,14 @@ spec:
             runAsUser: 1001
           # Health & SLA checking
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/health
               port: 4000
             initialDelaySeconds: 15
             periodSeconds: 15
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /api/health
               port: 4000
             initialDelaySeconds: 10
             periodSeconds: 10

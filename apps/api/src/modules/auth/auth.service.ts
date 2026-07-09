@@ -5,7 +5,7 @@ import { UsersService } from '../users/users.service';
 import { StudentLoginDto } from './dto/student-login.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { Response } from 'express';
+import { CookieOptions, Response } from 'express';
 import { randomBytes } from 'node:crypto';
 
 @Injectable()
@@ -241,37 +241,45 @@ export class AuthService {
 
   setCookieToken(res: Response, token: string) {
     res.cookie('access_token', token, {
-      httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'lax',
+      ...this.getCookieOptions(true),
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/',
     });
     this.setCsrfToken(res);
   }
 
   clearCookieToken(res: Response) {
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
-    res.clearCookie('csrf_token', {
-      secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
+    res.clearCookie('access_token', this.getCookieOptions(true));
+    res.clearCookie('csrf_token', this.getCookieOptions(false));
   }
 
   private setCsrfToken(res: Response) {
     res.cookie('csrf_token', randomBytes(32).toString('hex'), {
-      httpOnly: false,
-      secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'lax',
+      ...this.getCookieOptions(false),
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
     });
+  }
+
+  private getCookieOptions(httpOnly: boolean): CookieOptions {
+    const rawSameSite = this.configService
+      .get<string>('COOKIE_SAME_SITE', 'lax')
+      .toLowerCase();
+    const sameSite: CookieOptions['sameSite'] =
+      rawSameSite === 'none' || rawSameSite === 'strict' ? rawSameSite : 'lax';
+    const cookieDomain = this.configService.get<string>('COOKIE_DOMAIN');
+    const options: CookieOptions = {
+      httpOnly,
+      secure:
+        this.configService.get('NODE_ENV') === 'production' ||
+        sameSite === 'none',
+      sameSite,
+      path: '/',
+    };
+
+    if (cookieDomain?.trim()) {
+      options.domain = cookieDomain.trim();
+    }
+
+    return options;
   }
 
   private generateToken(

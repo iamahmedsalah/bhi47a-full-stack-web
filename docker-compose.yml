@@ -52,19 +52,34 @@ services:
     environment:
       - NODE_ENV=production
       - API_PORT=4000
+      - PORT=4000
       # Connects to the local docker mongo container service name
       - MONGODB_URI=mongodb://mongodb:27017/student-portal
       # Connects to the local docker redis container service name
       - REDIS_URL=redis://redis:6379
       - QUEUE_REQUIRED=true
-      - JWT_SECRET=production-secret-must-be-rotated-32-chars
-      - JWT_EXPIRES_IN=7d
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in .env}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - CLIENT_URL=http://localhost:3000
+      - COOKIE_SAME_SITE=lax
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - DNS_SERVERS=8.8.8.8,1.1.1.1
-      # Local Seeds (For simulation only)
-      - ADMIN_EMAIL=admin@portal.edu
-      - ADMIN_PASSWORD=AdminProductionSecretPass123!
-      - ADMIN_NAME=System Administrator
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-}
+      - FIREBASE_CLIENT_EMAIL=${FIREBASE_CLIENT_EMAIL:-}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@institute.edu}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_NAME=${ADMIN_NAME:-System Administrator}
+      - STAFF_EMAIL=${STAFF_EMAIL:-staff@institute.edu}
+      - STAFF_PASSWORD=${STAFF_PASSWORD:-StaffPass12345!}
+      - AUTH_MAX_FAILED_ATTEMPTS=${AUTH_MAX_FAILED_ATTEMPTS:-5}
+      - AUTH_LOCK_MINUTES=${AUTH_LOCK_MINUTES:-30}
+      - RATE_LIMIT_STORE=${RATE_LIMIT_STORE:-mongo}
       # Rate Limiting Mock Limits
       - STUDENT_LOGIN_RATE_LIMIT=100
       - ADMIN_LOGIN_RATE_LIMIT=100
@@ -87,6 +102,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000/api
     container_name: student-portal-web-prod
     restart: always
     ports:

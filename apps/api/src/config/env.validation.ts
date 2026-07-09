@@ -41,7 +41,7 @@ function validateJwtSecret(config: Record<string, unknown>) {
 }
 
 function validateOptionalPort(config: Record<string, unknown>) {
-  const apiPort = readString(config, 'API_PORT');
+  const apiPort = readString(config, 'API_PORT') ?? readString(config, 'PORT');
   if (!apiPort) return;
 
   const parsed = Number(apiPort);
@@ -61,7 +61,9 @@ export function validateEnv(
   if (nodeEnv === 'production') {
     requireValue(config, 'MONGODB_URI');
     requireValue(config, 'CLIENT_URL');
-    requireValue(config, 'API_PORT');
+    if (!readString(config, 'API_PORT') && !readString(config, 'PORT')) {
+      throw new Error('API_PORT or PORT is required');
+    }
   }
 
   return config;
