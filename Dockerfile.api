@@ -29,7 +29,7 @@ RUN pnpm --filter @student-portal/shared run build
 RUN pnpm --filter @student-portal/api run build
 
 # Deploy only the api package with production dependencies to a separate folder
-RUN pnpm --filter @student-portal/api --prod deploy /app/pruned
+RUN pnpm --filter @student-portal/api deploy --prod --legacy /app/pruned
 
 # ===================================================
 # STAGE 2: Lightweight Production Runtime
