@@ -10,6 +10,7 @@ import type { AuthenticatedRequest } from '../types/authenticated-request';
 
 const ALLOWED_WHILE_PASSWORD_CHANGE_REQUIRED = new Set([
   'GET /api/auth/me',
+  'GET /api/auth/csrf',
   'POST /api/auth/change-password',
   'POST /api/auth/logout',
 ]);

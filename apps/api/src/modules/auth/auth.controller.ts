@@ -33,8 +33,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.studentLogin(dto);
-    this.authService.setCookieToken(res, result.token);
-    return { user: result.user };
+    const csrfToken = this.authService.setCookieToken(res, result.token);
+    return { user: result.user, csrfToken };
   }
 
   @Public()
@@ -46,14 +46,21 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.adminLogin(dto);
-    this.authService.setCookieToken(res, result.token);
-    return { user: result.user };
+    const csrfToken = this.authService.setCookieToken(res, result.token);
+    return { user: result.user, csrfToken };
   }
 
   @Get('me')
   @ApiOperation({ summary: 'Get current authenticated user' })
   async getMe(@CurrentUser('_id') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @Get('csrf')
+  @ApiOperation({ summary: 'Refresh CSRF token for unsafe requests' })
+  refreshCsrf(@Res({ passthrough: true }) res: express.Response) {
+    const csrfToken = this.authService.refreshCsrfToken(res);
+    return { csrfToken };
   }
 
   @Post('logout')
@@ -73,8 +80,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.changePassword(userId, dto);
-    this.authService.setCookieToken(res, result.token);
-    return { message: result.message };
+    const csrfToken = this.authService.setCookieToken(res, result.token);
+    return { message: result.message, csrfToken };
   }
 
   @Post('google/link/start')

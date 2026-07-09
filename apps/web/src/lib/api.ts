@@ -1,4 +1,8 @@
-import axios from 'axios';
+import axios, {
+  AxiosHeaders,
+  type AxiosError,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -51,6 +55,9 @@ const api = axios.create({
   },
 });
 
+const CSRF_STORAGE_KEY = 'student_portal_csrf_token';
+let csrfTokenMemory: string | undefined;
+
 function readCookie(name: string): string | undefined {
   if (typeof document === 'undefined') return undefined;
   const prefix = `${name}=`;
@@ -61,28 +68,115 @@ function readCookie(name: string): string | undefined {
     ?.slice(prefix.length);
 }
 
+function readStoredCsrfToken(): string | undefined {
+  if (csrfTokenMemory) return csrfTokenMemory;
+  if (typeof window === 'undefined') return undefined;
+
+  const token = window.localStorage.getItem(CSRF_STORAGE_KEY) ?? undefined;
+  csrfTokenMemory = token;
+  return token;
+}
+
+function writeStoredCsrfToken(token: string | undefined) {
+  csrfTokenMemory = token;
+  if (typeof window === 'undefined') return;
+
+  if (token) {
+    window.localStorage.setItem(CSRF_STORAGE_KEY, token);
+  } else {
+    window.localStorage.removeItem(CSRF_STORAGE_KEY);
+  }
+}
+
+function readCsrfToken(): string | undefined {
+  const cookieToken = readCookie('csrf_token');
+  if (cookieToken) {
+    const decodedToken = decodeURIComponent(cookieToken);
+    writeStoredCsrfToken(decodedToken);
+    return decodedToken;
+  }
+
+  return readStoredCsrfToken();
+}
+
+function syncCsrfTokenFromResponse(data: unknown) {
+  if (!isRecord(data)) return;
+  const payload = isRecord(data.data) ? data.data : data;
+  const csrfToken = readString(payload, 'csrfToken');
+  if (csrfToken) {
+    writeStoredCsrfToken(csrfToken);
+  }
+}
+
+async function refreshCsrfToken() {
+  const response = await axios.get<ApiEnvelope<{ csrfToken: string }>>(
+    `${apiBaseUrl}/auth/csrf`,
+    { withCredentials: true },
+  );
+  const csrfToken = response.data.data.csrfToken;
+  writeStoredCsrfToken(csrfToken);
+  return csrfToken;
+}
+
+function isUnsafeMethod(method: string | undefined) {
+  return !!method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+}
+
+type RetriableAxiosConfig = InternalAxiosRequestConfig & {
+  _csrfRetry?: boolean;
+};
+
+function isInvalidCsrfError(error: AxiosError<ApiErrorPayload>) {
+  if (error.response?.status !== 403) return false;
+  const message = normalizeErrorMessage(error.response.data?.message);
+  return message === 'Invalid CSRF token';
+}
+
 api.interceptors.request.use((config) => {
+  const headers = AxiosHeaders.from(config.headers);
+
   if (typeof window !== 'undefined') {
     const locale = window.location.pathname.split('/')[1];
     if (locale === 'ar' || locale === 'en') {
-      config.headers.set('accept-language', locale);
+      headers.set('accept-language', locale);
     }
   }
 
-  const method = config.method?.toUpperCase();
-  if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrfToken = readCookie('csrf_token');
+  if (isUnsafeMethod(config.method)) {
+    const csrfToken = readCsrfToken();
     if (csrfToken) {
-      config.headers.set('x-csrf-token', decodeURIComponent(csrfToken));
+      headers.set('x-csrf-token', csrfToken);
     }
   }
+  config.headers = headers;
   return config;
 });
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
+  (response) => {
+    syncCsrfTokenFromResponse(response.data);
+    if (response.config.url?.includes('/auth/logout')) {
+      writeStoredCsrfToken(undefined);
+    }
+    return response.data;
+  },
+  async (error: AxiosError<ApiErrorPayload>) => {
+    const originalConfig = error.config as RetriableAxiosConfig | undefined;
+    if (
+      originalConfig &&
+      isUnsafeMethod(originalConfig.method) &&
+      !originalConfig._csrfRetry &&
+      isInvalidCsrfError(error)
+    ) {
+      originalConfig._csrfRetry = true;
+      const csrfToken = await refreshCsrfToken();
+      const headers = AxiosHeaders.from(originalConfig.headers);
+      headers.set('x-csrf-token', csrfToken);
+      originalConfig.headers = headers;
+      return api.request(originalConfig);
+    }
+
     if (error.response?.status === 401) {
       // Redirect to login on auth failure (client-side only), but check to prevent infinite loop
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {

@@ -244,7 +244,7 @@ export class AuthService {
       ...this.getCookieOptions(true),
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
-    this.setCsrfToken(res);
+    return this.setCsrfToken(res);
   }
 
   clearCookieToken(res: Response) {
@@ -252,11 +252,17 @@ export class AuthService {
     res.clearCookie('csrf_token', this.getCookieOptions(false));
   }
 
+  refreshCsrfToken(res: Response) {
+    return this.setCsrfToken(res);
+  }
+
   private setCsrfToken(res: Response) {
-    res.cookie('csrf_token', randomBytes(32).toString('hex'), {
+    const csrfToken = randomBytes(32).toString('hex');
+    res.cookie('csrf_token', csrfToken, {
       ...this.getCookieOptions(false),
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+    return csrfToken;
   }
 
   private getCookieOptions(httpOnly: boolean): CookieOptions {
