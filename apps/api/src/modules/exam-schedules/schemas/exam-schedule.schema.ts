@@ -17,13 +17,13 @@ export class ExamSchedule {
   @Prop({ required: true })
   title!: string;
 
-  @Prop({ required: true, enum: EXAM_TYPE_VALUES })
+  @Prop({ type: String, required: true, enum: EXAM_TYPE_VALUES })
   examType!: ExamType;
 
   @Prop({ required: true })
   academicYear!: string;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ required: true })

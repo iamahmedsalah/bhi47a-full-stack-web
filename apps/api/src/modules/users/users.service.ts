@@ -36,18 +36,38 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel
+    return (await this.userModel
       .findOne({ email: email.toLowerCase() })
-      .select('+passwordHash +nationalIdHash');
+      .select('+passwordHash +nationalIdHash')
+      .lean()) as unknown as UserDocument | null;
   }
 
   async findByStudentCode(studentCode: string): Promise<UserDocument | null> {
-    return this.userModel
+    return (await this.userModel
       .findOne({ studentCode })
-      .select('+passwordHash +nationalIdHash');
+      .select('+passwordHash +nationalIdHash')
+      .lean()) as unknown as UserDocument | null;
   }
 
-  private async generateUserCode(role: Role, studentCode?: string): Promise<string> {
+  async findByIdentifier(identifier: string): Promise<UserDocument | null> {
+    const trimmed = identifier.trim();
+    return (await this.userModel
+      .findOne({
+        $or: [
+          { email: trimmed.toLowerCase() },
+          { studentCode: trimmed },
+          { userCode: trimmed },
+          { username: trimmed.toLowerCase() },
+        ],
+      })
+      .select('+passwordHash +nationalIdHash')
+      .lean()) as unknown as UserDocument | null;
+  }
+
+  private async generateUserCode(
+    role: Role,
+    studentCode?: string,
+  ): Promise<string> {
     if (role === 'student') {
       return `STD-${studentCode}`;
     }
@@ -95,7 +115,9 @@ export class UsersService {
       nationalIdMasked = maskNationalId(data.nationalId);
     }
 
-    const finalUserCode = data.userCode || (await this.generateUserCode(data.role, data.studentCode));
+    const finalUserCode =
+      data.userCode ||
+      (await this.generateUserCode(data.role, data.studentCode));
 
     const user = new this.userModel({
       role: data.role,
@@ -270,10 +292,10 @@ export class UsersService {
   }
 
   async findActiveStaffAdvisors(): Promise<UserDocument[]> {
-    return this.userModel
+    return (await this.userModel
       .find({ role: 'staff', isActive: true })
       .sort({ name: 1 })
-      .exec();
+      .lean()) as unknown as UserDocument[];
   }
 
   /** Check if an account is currently locked */
@@ -322,6 +344,18 @@ export class UsersService {
     });
   }
 
+  /** Reset login attempts, clear lock, and update last login time in a single write operation */
+  async resetAttemptsAndUpdateLastLogin(userId: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: {
+        failedLoginAttempts: 0,
+        loginAttempts: 0,
+        lastLoginAt: new Date(),
+      },
+      $unset: { lockUntil: 1, lockedUntil: 1 },
+    });
+  }
+
   async updateTheme(
     userId: string,
     theme: 'light' | 'dark' | 'system',
@@ -336,7 +370,9 @@ export class UsersService {
   }
 
   async listStaff(): Promise<UserDocument[]> {
-    return this.userModel.find({ role: 'staff' }).exec();
+    return (await this.userModel
+      .find({ role: 'staff' })
+      .lean()) as unknown as UserDocument[];
   }
 
   async updateStaffPermissions(

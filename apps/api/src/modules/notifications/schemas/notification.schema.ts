@@ -14,7 +14,7 @@ export class Notification {
   @Prop({ required: true })
   body!: string;
 
-  @Prop({ required: true, enum: ['all', 'level', 'student'], default: 'all' })
+  @Prop({ type: String, required: true, enum: ['all', 'level', 'student'], default: 'all' })
   targetType!: 'all' | 'level' | 'student';
 
   @Prop()

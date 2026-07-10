@@ -135,7 +135,7 @@ export class RegistrationsService {
       academicLevel: profile.academicLevel,
       semester: profile.semester,
       failedCourses: profile.failedCourses,
-      advisingRequest: null as AcademicAdvisingRequestDocument | null,
+      advisingRequest: null as any,
     };
 
     if (rule.requiresAdvisor) {
@@ -156,7 +156,7 @@ export class RegistrationsService {
       );
     }
 
-    const courses = await this.courseModel.find({ isActive: true });
+    const courses = await this.courseModel.find({ isActive: true }).lean() as unknown as CourseDocument[];
     const eligibleCourses = buildEligibleCourseList({
       courses,
       completedCourses: profile.completedCourses,
@@ -402,12 +402,13 @@ export class RegistrationsService {
         studentId: profile.studentId,
         status: { $in: ['pending', 'reviewed'] },
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     if (existing) return existing;
 
     const rule = await this.getRuleForGpa(profile.gpa);
-    const courses = await this.courseModel.find({ isActive: true });
+    const courses = await this.courseModel.find({ isActive: true }).lean() as unknown as CourseDocument[];
     const assignedStaffId = await this.assignStaffAdvisor(profile);
     const autoSuggestedCourses = recommendCourses({
       courses,
@@ -434,15 +435,33 @@ export class RegistrationsService {
     const staff = await this.usersService.findActiveStaffAdvisors();
     if (staff.length === 0) return undefined;
 
-    const counts = await Promise.all(
-      staff.map(async (advisor) => ({
-        advisor,
-        count: await this.advisingRequestModel.countDocuments({
-          assignedStaffId: advisor._id,
+    const staffIds = staff.map((advisor) => advisor._id);
+    const aggResults = await this.advisingRequestModel.aggregate([
+      {
+        $match: {
+          assignedStaffId: { $in: staffIds },
           status: { $in: ['pending', 'reviewed'] },
-        }),
-      })),
-    );
+        },
+      },
+      {
+        $group: {
+          _id: '$assignedStaffId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const countsMap = new Map<string, number>();
+    aggResults.forEach((result) => {
+      if (result._id) {
+        countsMap.set(result._id.toString(), result.count);
+      }
+    });
+
+    const counts = staff.map((advisor) => ({
+      advisor,
+      count: countsMap.get(advisor._id.toString()) ?? 0,
+    }));
 
     counts.sort((a, b) => a.count - b.count);
     return counts[0].advisor._id;
@@ -455,10 +474,12 @@ export class RegistrationsService {
     requireEligiblePlan: boolean,
   ) {
     const courseCodes = normalizeCourseCodes(rawCourseCodes);
-    const courses = await this.courseModel.find({
-      code: { $in: courseCodes },
-      isActive: true,
-    });
+    const courses = await this.courseModel
+      .find({
+        code: { $in: courseCodes },
+        isActive: true,
+      })
+      .lean();
 
     if (courses.length !== courseCodes.length) {
       throw new BadRequestException(
@@ -482,7 +503,7 @@ export class RegistrationsService {
 
     if (requireEligiblePlan) {
       const eligible = buildEligibleCourseList({
-        courses: await this.courseModel.find({ isActive: true }),
+        courses: await this.courseModel.find({ isActive: true }).lean() as unknown as CourseDocument[],
         completedCourses: profile.completedCourses,
         failedCourses: profile.failedCourses,
         academicLevel: profile.academicLevel,
@@ -514,13 +535,15 @@ export class RegistrationsService {
   }
 
   private async getAcademicProfile(studentId: string) {
-    const profile = await this.academicProfileModel.findOne({
-      studentId: new Types.ObjectId(studentId),
-    });
+    const profile = await this.academicProfileModel
+      .findOne({
+        studentId: new Types.ObjectId(studentId),
+      })
+      .lean();
     if (!profile) {
       throw new NotFoundException('Student academic profile not found');
     }
-    return profile;
+    return profile as unknown as StudentAcademicProfileDocument;
   }
 
   private async getRuleForGpa(gpa: number): Promise<EffectiveRule> {
@@ -530,7 +553,8 @@ export class RegistrationsService {
         minGpa: { $lte: gpa },
         maxGpa: { $gte: gpa },
       })
-      .sort({ minGpa: -1 });
+      .sort({ minGpa: -1 })
+      .lean();
 
     if (rule) {
       return {

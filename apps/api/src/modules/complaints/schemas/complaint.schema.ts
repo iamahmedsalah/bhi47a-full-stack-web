@@ -11,7 +11,7 @@ class ReplyEntry {
   @Prop({ required: true })
   senderName!: string;
 
-  @Prop({ required: true, enum: ['admin', 'staff', 'student'] })
+  @Prop({ type: String, required: true, enum: ['admin', 'staff', 'student'] })
   senderRole!: 'admin' | 'staff' | 'student';
 
   @Prop({ required: true })
@@ -94,6 +94,7 @@ export class Complaint {
   screenshotUrl?: string;
 
   @Prop({
+    type: String,
     required: true,
     enum: [
       'complaint',
@@ -114,6 +115,7 @@ export class Complaint {
     | 'other';
 
   @Prop({
+    type: String,
     enum: [
       'student_affairs',
       'technical_support',
@@ -136,6 +138,7 @@ export class Complaint {
   description!: string;
 
   @Prop({
+    type: String,
     required: true,
     enum: ['low', 'medium', 'high', 'urgent'],
     default: 'medium',
@@ -143,6 +146,7 @@ export class Complaint {
   priority!: 'low' | 'medium' | 'high' | 'urgent';
 
   @Prop({
+    type: String,
     required: true,
     enum: ['open', 'in_review', 'in_progress', 'resolved', 'closed'],
     default: 'open',

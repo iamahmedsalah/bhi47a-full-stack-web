@@ -18,7 +18,7 @@ export class Attendance {
   @Prop({ required: true })
   academicYear!: string;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ required: true, default: 0 })

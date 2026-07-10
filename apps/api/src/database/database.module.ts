@@ -87,7 +87,10 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
           try {
             resolver.setServers(dnsServers);
           } catch (e) {
-            logger.warn(`Failed to set DNS servers on resolver: ${(e as Error).message}`, 'DatabaseModule');
+            logger.warn(
+              `Failed to set DNS servers on resolver: ${(e as Error).message}`,
+              'DatabaseModule',
+            );
           }
         }
 

@@ -5,7 +5,6 @@ export class StudentLoginDto {
   @ApiProperty({ example: '20231001', description: 'Student code' })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^\d{4,12}$/, { message: 'كود الطالب يجب أن يكون من 4 إلى 12 رقم' })
   studentCode!: string;
 
   @ApiProperty({

@@ -26,26 +26,28 @@ import {
 } from 'lucide-react';
 import LangToggle from '@/components/ui/LangToggle';
 
-function AdminLoginContent() {
-  const t = useTranslations('auth');
-  const tValidation = useTranslations('validation');
-  const { login } = useAuth();
-  const params = useParams();
-  const router = useRouter();
-  const locale = params.locale as string;
+interface AdminLoginFormProps {
+  onSubmit: (data: AdminLoginInput) => Promise<void>;
+  loading: boolean;
+  isLocked: boolean;
+  banRemainingSeconds: number | null;
+  locale: string;
+  t: any;
+  tValidation: any;
+  adminCodeInputRef: React.MutableRefObject<HTMLInputElement | null>;
+}
 
-  const [loading, setLoading] = useState(false);
+function AdminLoginForm({
+  onSubmit,
+  loading,
+  isLocked,
+  banRemainingSeconds,
+  locale,
+  t,
+  tValidation,
+  adminCodeInputRef,
+}: AdminLoginFormProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const [showExpiredToast, setShowExpiredToast] = useState(false);
-  
-  // Security lockout states (5 attempts, 30 minutes cooldown)
-  const [attempts, setAttempts] = useState<number>(0);
-  const [isLocked, setIsLocked] = useState(false);
-  const [banExpiresAt, setBanExpiresAt] = useState<string | null>(null);
-  const [banRemainingSeconds, setBanRemainingSeconds] = useState<number | null>(null);
-  const adminCodeInputRef = useRef<HTMLInputElement | null>(null);
-
-  const maxAttempts = 5;
 
   const schema = getAdminLoginSchema((key) => {
     const translationKey = key.replace('validation.', '');
@@ -67,6 +69,119 @@ function AdminLoginContent() {
 
   const emailVal = watch('email');
   const passwordVal = watch('password');
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
+      <div className="space-y-4">
+        {/* Admin Code/Email */}
+        <div className="relative">
+          <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
+            <UserCircle className="w-5 h-5" />
+          </div>
+          <Input
+            type="text"
+            placeholder={locale === 'ar' ? 'كود المدير / البريد الإلكتروني' : 'Manager Code / Email'}
+            disabled={loading}
+            {...register('email')}
+            ref={(e) => {
+              register('email').ref(e);
+              adminCodeInputRef.current = e;
+            }}
+            className="h-12 ps-11 pe-4 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
+            dir="ltr"
+          />
+        </div>
+        {errors.email && (
+          <p className="text-xs text-red-500 text-center">{errors.email.message}</p>
+        )}
+
+        {/* Password */}
+        <div className="relative">
+          <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
+            <Lock className="w-5 h-5" />
+          </div>
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="••••••••"
+            disabled={loading}
+            {...register('password')}
+            className="h-12 ps-11 pe-10 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
+            dir="ltr"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute inset-y-0 end-3 flex items-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+          >
+            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
+        {errors.password && (
+          <p className="text-xs text-red-500 text-center">{errors.password.message}</p>
+        )}
+      </div>
+
+      {isLocked && banRemainingSeconds !== null && (
+        <Alert variant="destructive" className="bg-destructive/10 border-destructive animate-in fade-in slide-in-from-top-2 duration-300">
+          <Clock className="h-4 w-4" />
+          <AlertDescription className="space-y-3">
+            <div className="text-center font-semibold text-sm">
+              {locale === 'ar' 
+                ? 'الحساب محظور مؤقتاً لأسباب أمنية' 
+                : 'Account temporarily locked for security reasons'}
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono" dir="ltr">
+                {Math.floor(banRemainingSeconds / 60).toString().padStart(2, "0")}:{(banRemainingSeconds % 60).toString().padStart(2, "0")}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {locale === 'ar' ? 'الوقت المتبقي للحظر' : 'Remaining ban duration'}
+              </div>
+            </div>
+            <Progress 
+              value={((1800 - (banRemainingSeconds ?? 0)) / 1800) * 100} 
+              className="h-2"
+            />
+            <div className="text-xs text-center text-muted-foreground">
+              {locale === 'ar' 
+                ? 'سيتم رفع الحظر تلقائياً بعد انتهاء المدة' 
+                : 'Ban will be automatically lifted after the countdown'}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Button
+        type="submit"
+        className="w-full h-12 gap-2 text-lg bg-primary hover:bg-primary/40 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer"
+        disabled={loading || !emailVal || !passwordVal}
+      >
+        {loading ? (locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing in...') : (locale === 'ar' ? 'الدخول' : 'Sign In')}
+        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
+      </Button>
+    </form>
+  );
+}
+
+function AdminLoginContent() {
+  const t = useTranslations('auth');
+  const tValidation = useTranslations('validation');
+  const { login } = useAuth();
+  const params = useParams();
+  const router = useRouter();
+  const locale = params.locale as string;
+
+  const [loading, setLoading] = useState(false);
+  const [showExpiredToast, setShowExpiredToast] = useState(false);
+  
+  // Security lockout states (5 attempts, 30 minutes cooldown)
+  const [attempts, setAttempts] = useState<number>(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [banExpiresAt, setBanExpiresAt] = useState<string | null>(null);
+  const [banRemainingSeconds, setBanRemainingSeconds] = useState<number | null>(null);
+  const adminCodeInputRef = useRef<HTMLInputElement | null>(null);
+
+  const maxAttempts = 5;
 
   // Check for session expired and auto-focus
   useEffect(() => {
@@ -243,96 +358,16 @@ function AdminLoginContent() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
-            <div className="space-y-4">
-              
-              {/* Admin Code/Email */}
-              <div className="relative">
-                <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-                  <UserCircle className="w-5 h-5" />
-                </div>
-                <Input
-                  type="text"
-                  placeholder={locale === 'ar' ? 'كود المدير / البريد الإلكتروني' : 'Manager Code / Email'}
-                  disabled={loading}
-                  {...register('email')}
-                  ref={(e) => {
-                    register('email').ref(e);
-                    adminCodeInputRef.current = e;
-                  }}
-                  className="h-12 ps-11 pe-4 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
-                  dir="ltr"
-                />
-              </div>
-              {errors.email && (
-                <p className="text-xs text-red-500 text-center">{errors.email.message}</p>
-              )}
-
-              {/* Password */}
-              <div className="relative">
-                <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  disabled={loading}
-                  {...register('password')}
-                  className="h-12 ps-11 pe-10 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
-                  dir="ltr"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 end-3 flex items-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="text-xs text-red-500 text-center">{errors.password.message}</p>
-              )}
-            </div>
-
-            {isLocked && banRemainingSeconds !== null && (
-              <Alert variant="destructive" className="bg-destructive/10 border-destructive animate-in fade-in slide-in-from-top-2 duration-300">
-                <Clock className="h-4 w-4" />
-                <AlertDescription className="space-y-3">
-                  <div className="text-center font-semibold text-sm">
-                    {locale === 'ar' 
-                      ? 'الحساب محظور مؤقتاً لأسباب أمنية' 
-                      : 'Account temporarily locked for security reasons'}
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold font-mono" dir="ltr">
-                      {Math.floor(banRemainingSeconds / 60).toString().padStart(2, "0")}:{(banRemainingSeconds % 60).toString().padStart(2, "0")}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {locale === 'ar' ? 'الوقت المتبقي للحظر' : 'Remaining ban duration'}
-                    </div>
-                  </div>
-                  <Progress 
-                    value={((1800 - (banRemainingSeconds ?? 0)) / 1800) * 100} 
-                    className="h-2"
-                  />
-                  <div className="text-xs text-center text-muted-foreground">
-                    {locale === 'ar' 
-                      ? 'سيتم رفع الحظر تلقائياً بعد انتهاء المدة' 
-                      : 'Ban will be automatically lifted after the countdown'}
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full h-12 gap-2 text-lg bg-primary hover:bg-primary/40 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer"
-              disabled={loading || !emailVal || !passwordVal}
-            >
-              {loading ? (locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing in...') : (locale === 'ar' ? 'الدخول' : 'Sign In')}
-              {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-            </Button>
-          </form>
+          <AdminLoginForm
+            onSubmit={onSubmit}
+            loading={loading}
+            isLocked={isLocked}
+            banRemainingSeconds={banRemainingSeconds}
+            locale={locale}
+            t={t}
+            tValidation={tValidation}
+            adminCodeInputRef={adminCodeInputRef}
+          />
         </div>
       </Card>
 

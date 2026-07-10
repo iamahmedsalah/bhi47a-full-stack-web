@@ -17,10 +17,10 @@ export class StudentAcademicProfile {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, unique: true })
   studentId!: Types.ObjectId;
 
-  @Prop({ required: true, enum: COURSE_LEVEL_VALUES })
+  @Prop({ type: String, required: true, enum: COURSE_LEVEL_VALUES })
   academicLevel!: CourseLevel;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ required: true, min: 0, max: 4 })

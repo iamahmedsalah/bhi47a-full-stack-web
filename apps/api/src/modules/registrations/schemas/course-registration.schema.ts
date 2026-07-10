@@ -20,10 +20,11 @@ export class CourseRegistration {
   @Prop({ required: true, min: 0 })
   totalCreditHours!: number;
 
-  @Prop({ required: true, enum: ['student', 'advisor'] })
+  @Prop({ type: String, required: true, enum: ['student', 'advisor'] })
   source!: RegistrationSource;
 
   @Prop({
+    type: String,
     required: true,
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',

@@ -20,13 +20,13 @@ export class Course {
   @Prop({ required: true, unique: true })
   code!: string;
 
-  @Prop({ required: true, enum: COURSE_LEVEL_VALUES })
+  @Prop({ type: String, required: true, enum: COURSE_LEVEL_VALUES })
   level!: CourseLevel;
 
-  @Prop({ required: true, enum: COURSE_LEVEL_VALUES })
+  @Prop({ type: String, required: true, enum: COURSE_LEVEL_VALUES })
   academicLevel!: CourseLevel;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop()

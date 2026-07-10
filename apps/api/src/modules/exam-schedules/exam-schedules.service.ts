@@ -77,7 +77,10 @@ export class ExamSchedulesService {
   }
 
   private getUploadKind(file: ExamScheduleUploadFile): ScheduleUploadKind {
-    if (file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname)) {
+    if (
+      file.mimetype === 'application/pdf' ||
+      /\.pdf$/i.test(file.originalname)
+    ) {
       return 'raw';
     }
 

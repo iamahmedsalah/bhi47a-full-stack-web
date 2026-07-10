@@ -19,6 +19,7 @@ export class AcademicAdvisingRequest {
   assignedStaffId?: Types.ObjectId;
 
   @Prop({
+    type: String,
     required: true,
     enum: ['low_gpa', 'probation', 'failed_courses'],
   })
@@ -34,6 +35,7 @@ export class AcademicAdvisingRequest {
   staffNotes?: string;
 
   @Prop({
+    type: String,
     required: true,
     enum: ['pending', 'reviewed', 'approved', 'rejected'],
     default: 'pending',

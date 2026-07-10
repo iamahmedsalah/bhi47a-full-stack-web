@@ -3,7 +3,7 @@
 import React, { Suspense, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   BookOpen,
   Download,
@@ -71,6 +71,7 @@ interface StudentUserRef {
   lastLoginAt?: string;
   phone?: string;
   nationalIdMasked?: string;
+  nationalId?: string;
 }
 
 interface Student {
@@ -78,6 +79,7 @@ interface Student {
   studentCode: string;
   fullName: string;
   nationalIdMasked?: string;
+  nationalId?: string;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -232,9 +234,11 @@ function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) 
 
 function SensitiveNationalId({
   value,
+  realValue,
   canView,
 }: {
   value?: string;
+  realValue?: string;
   canView: boolean;
 }) {
   if (!canView) {
@@ -245,15 +249,17 @@ function SensitiveNationalId({
     );
   }
 
-  if (!value) {
+  const displayValue = realValue || value;
+
+  if (!displayValue) {
     return <span className="text-sm text-muted-foreground">N/A</span>;
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-sm text-muted-foreground">{value}</span>
+      <span className="font-mono text-sm text-muted-foreground">{displayValue}</span>
       <CopyButton
-        value={value}
+        value={realValue || displayValue}
         label="Copy"
         successMessage="National ID copied"
         className="rounded-squircle px-2 py-1"
@@ -610,6 +616,7 @@ function StudentsPageContent() {
         <TableCell className="p-4">
           <SensitiveNationalId
             value={student.nationalIdMasked || getUserRef(student)?.nationalIdMasked}
+            realValue={getUserRef(student)?.nationalId}
             canView={canViewSensitiveStudentData}
           />
         </TableCell>
@@ -1125,6 +1132,14 @@ function StudentProfileDialog({
   locale: string;
   canViewSensitiveStudentData: boolean;
 }) {
+  const router = useRouter();
+  const [visibleComplaints, setVisibleComplaints] = useState(5);
+
+  React.useEffect(() => {
+    if (!open) {
+      setVisibleComplaints(5);
+    }
+  }, [open]);
   const userRef = student ? getUserRef(student) : null;
   const coursesFromGrades = useMemo(() => {
     const map = new Map<string, Grade>();
@@ -1169,6 +1184,7 @@ function StudentProfileDialog({
                   value={
                     <SensitiveNationalId
                       value={student.nationalIdMasked || userRef?.nationalIdMasked}
+                      realValue={userRef?.nationalId}
                       canView={canViewSensitiveStudentData}
                     />
                   }
@@ -1232,8 +1248,15 @@ function StudentProfileDialog({
                   <p className="text-sm text-muted-foreground">No tickets found for this student.</p>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    {complaints.slice(0, 8).map((complaint) => (
-                      <div key={complaint._id} className="rounded-squircle border border-border/70 bg-card/70 p-3 text-sm">
+                    {complaints.slice(0, visibleComplaints).map((complaint) => (
+                      <div
+                        key={complaint._id}
+                        className="rounded-squircle border border-border/70 bg-card/70 p-3 text-sm cursor-pointer hover:border-primary/50 hover:bg-card/90 transition-all"
+                        onClick={() => {
+                          onOpenChange(false);
+                          router.push(`/${locale}/admin/complaints?ticket=${complaint.ticketNumber}`);
+                        }}
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <p className="font-mono font-bold text-primary">{complaint.ticketNumber}</p>
                           <StatusBadge label={complaint.status} variant={complaint.status === 'resolved' ? 'success' : 'warning'} />
@@ -1242,6 +1265,16 @@ function StudentProfileDialog({
                         <p className="mt-1 text-xs text-muted-foreground">{complaint.type} · {complaint.priority} · {formatDate(complaint.createdAt, locale)}</p>
                       </div>
                     ))}
+                    {complaints.length > visibleComplaints && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs hover:bg-primary/10 hover:text-primary mt-2 cursor-pointer"
+                        onClick={() => setVisibleComplaints((prev) => prev + 5)}
+                      >
+                        {locale === 'ar' ? 'عرض المزيد من الشكاوى' : 'Load more complaints'}
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

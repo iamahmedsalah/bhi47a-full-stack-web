@@ -9,7 +9,7 @@ export type UserDocument = User & Document;
   timestamps: true,
 })
 export class User {
-  @Prop({ required: true, enum: ROLE_VALUES })
+  @Prop({ type: String, required: true, enum: ROLE_VALUES })
   role!: Role;
 
   @Prop({

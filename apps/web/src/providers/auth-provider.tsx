@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useState, useEffect } fr
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { useTheme } from '@/providers/theme-provider';
 
@@ -107,12 +107,11 @@ export function AuthProvider({
     setIsLoggingOut(true);
     const toastId = toast.loading(
       locale === 'ar'
-        ? 'جاري تسجيل الخروج خلال 3 ثوان...'
-        : 'Signing out in 3 seconds...',
+        ? 'جاري تسجيل الخروج...'
+        : 'Signing out...',
     );
 
     try {
-      await wait(3000);
       await api.post('/auth/logout');
       toast.success(locale === 'ar' ? 'تم تسجيل الخروج' : 'Logged out', {
         id: toastId,
@@ -135,6 +134,75 @@ export function AuthProvider({
   }, [isLoggingOut, locale, queryClient, router]);
 
   const { setTheme, theme: currentTheme } = useTheme();
+
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (meQuery.isLoading) return;
+
+    const isPublicPath =
+      pathname === `/${locale}/login` ||
+      pathname === `/${locale}/login/student` ||
+      pathname === `/${locale}/login/admin` ||
+      pathname === `/${locale}/login/change-password` ||
+      pathname === '/login' ||
+      pathname === '/login/student' ||
+      pathname === '/login/admin' ||
+      pathname === '/login/change-password';
+
+    const user = meQuery.data || null;
+
+    if (!user) {
+      if (!isPublicPath && pathname !== `/${locale}` && pathname !== '/') {
+        router.push(`/${locale}/login`);
+      }
+      return;
+    }
+
+    if (user.mustChangePassword && pathname !== `/${locale}/login/change-password`) {
+      toast.warning(
+        locale === 'ar'
+          ? 'يجب تغيير كلمة المرور قبل المتابعة'
+          : 'You must change your password before proceeding',
+      );
+      router.push(`/${locale}/login/change-password`);
+      return;
+    }
+
+    if (!user.mustChangePassword && pathname === `/${locale}/login/change-password`) {
+      if (user.role === 'student') {
+        router.push(`/${locale}/dashboard`);
+      } else {
+        router.push(`/${locale}/admin`);
+      }
+      return;
+    }
+
+    if (isPublicPath && pathname !== `/${locale}/login/change-password` && pathname !== '/login/change-password') {
+      if (user.role === 'student') {
+        router.push(`/${locale}/dashboard`);
+      } else {
+        router.push(`/${locale}/admin`);
+      }
+      return;
+    }
+
+    if (pathname.startsWith(`/${locale}/admin`) && user.role === 'student') {
+      toast.error(
+        locale === 'ar' ? 'غير مصرح لك بدخول هذه الصفحة' : 'Unauthorized access',
+      );
+      router.push(`/${locale}/dashboard`);
+      return;
+    }
+
+    if (pathname.startsWith(`/${locale}/dashboard`) && user.role !== 'student') {
+      toast.error(
+        locale === 'ar' ? 'غير مصرح لك بدخول هذه الصفحة' : 'Unauthorized access',
+      );
+      router.push(`/${locale}/admin`);
+      return;
+    }
+  }, [meQuery.data, meQuery.isLoading, pathname, locale, router]);
 
   useEffect(() => {
     if (meQuery.data?.theme && meQuery.data.theme !== currentTheme) {

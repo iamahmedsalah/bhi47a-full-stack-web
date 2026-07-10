@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  baseStudentLoginSchema,
+  baseAdminLoginSchema,
+  baseChangePasswordSchema,
+} from '@student-portal/shared';
 
 // ==========================================
 // Authentication Schemas
@@ -8,8 +13,7 @@ export const getStudentLoginSchema = (t: (key: string) => string) =>
   z.object({
     studentCode: z
       .string()
-      .min(1, { message: t('validation.studentCodeRequired') })
-      .regex(/^\d{6}$/, { message: t('validation.studentCodeLength') }),
+      .min(1, { message: t('validation.studentCodeRequired') }),
     password: z
       .string()
       .min(1, { message: t('validation.passwordRequired') })
@@ -22,8 +26,7 @@ export const getAdminLoginSchema = (t: (key: string) => string) =>
   z.object({
     email: z
       .string()
-      .min(1, { message: t('validation.emailRequired') })
-      .email({ message: t('validation.emailInvalid') }),
+      .min(1, { message: t('validation.emailRequired') }),
     password: z
       .string()
       .min(1, { message: t('validation.passwordRequired') }),

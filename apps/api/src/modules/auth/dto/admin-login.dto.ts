@@ -6,7 +6,7 @@ export class AdminLoginDto {
     example: 'admin@institute.edu',
     description: 'Admin/Staff email',
   })
-  @IsEmail()
+  @IsString()
   @IsNotEmpty()
   email!: string;
 

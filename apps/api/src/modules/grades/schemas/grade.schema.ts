@@ -31,7 +31,7 @@ export class Grade {
   @Prop({ required: true })
   courseCode!: string;
 
-  @Prop({ required: true, enum: EXAM_TYPE_VALUES })
+  @Prop({ type: String, required: true, enum: EXAM_TYPE_VALUES })
   examType!: ExamType;
 
   @Prop({ required: true, default: 0 })
@@ -40,13 +40,13 @@ export class Grade {
   @Prop({ required: true, default: 100 })
   maxGrade!: number;
 
-  @Prop({ required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
+  @Prop({ type: String, required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
   status!: GradeStatus;
 
   @Prop({ required: true })
   academicYear!: string;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ default: true })

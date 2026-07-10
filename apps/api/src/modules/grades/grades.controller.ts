@@ -10,7 +10,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { GradesService } from './grades.service';
-import { SaveGradeDto, QueryGradeDto, PublishGradesDto, UpdateGradeDto } from './dto/grade.dto';
+import {
+  SaveGradeDto,
+  QueryGradeDto,
+  PublishGradesDto,
+  UpdateGradeDto,
+} from './dto/grade.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';

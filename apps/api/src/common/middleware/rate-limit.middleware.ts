@@ -74,10 +74,10 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
     en: 'Too many messaging requests. Please try again later.',
     ar: 'طلبات إرسال رسائل متكررة جداً. يرجى المحاولة مرة أخرى لاحقاً.',
   },
-  'unavailable': {
+  unavailable: {
     en: 'Rate limiting is temporarily unavailable. Please retry later.',
     ar: 'خدمة تحديد معدل الطلبات غير متاحة مؤقتاً. يرجى المحاولة مرة أخرى لاحقاً.',
-  }
+  },
 };
 
 async function applyRateLimit(
@@ -86,8 +86,12 @@ async function applyRateLimit(
   next: NextFunction,
   rule: RateLimitRule,
 ): Promise<void> {
-  const lang = (req.headers['accept-language'] || 'ar').toString().startsWith('en') ? 'en' : 'ar';
-  
+  const lang = (req.headers['accept-language'] || 'ar')
+    .toString()
+    .startsWith('en')
+    ? 'en'
+    : 'ar';
+
   try {
     const identity = rule.keyGenerator?.(req) || getClientIp(req);
     const key = `${rule.name}:${identity}`;

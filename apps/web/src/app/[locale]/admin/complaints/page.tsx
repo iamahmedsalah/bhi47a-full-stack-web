@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 
 import { motion } from 'framer-motion';
 import {
@@ -303,6 +303,15 @@ function AdminComplaintsContent() {
   const [windowOpenAt, setWindowOpenAt] = useState('');
   const [windowCloseAt, setWindowCloseAt] = useState('');
 
+  const searchParams = useSearchParams();
+  const ticketParam = searchParams ? searchParams.get('ticket') : null;
+
+  React.useEffect(() => {
+    if (ticketParam) {
+      setAdminFilter('search', ticketParam);
+    }
+  }, [ticketParam, setAdminFilter]);
+
   const [selectedTicket, setSelectedTicket] = useState<Complaint | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [internalNote, setInternalNote] = useState('');
@@ -352,6 +361,15 @@ function AdminComplaintsContent() {
   const total = complaintsQuery.data?.total ?? 0;
   const settings = settingsQuery.data ?? null;
   const assignees = assigneesQuery.data ?? [];
+
+  React.useEffect(() => {
+    if (ticketParam && complaints.length > 0) {
+      const match = complaints.find((c) => c.ticketNumber === ticketParam);
+      if (match) {
+        setSelectedTicket(match);
+      }
+    }
+  }, [ticketParam, complaints]);
 
   const stats = useMemo(() => {
     const allTickets = statsQuery.data ?? [];

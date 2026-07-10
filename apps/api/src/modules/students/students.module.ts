@@ -7,6 +7,7 @@ import {
 import { StudentsService } from './students.service';
 import { StudentsController } from './students.controller';
 import { UsersModule } from '../users/users.module';
+import { EmailsModule } from '../emails/emails.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { UsersModule } from '../users/users.module';
       { name: StudentProfile.name, schema: StudentProfileSchema },
     ]),
     UsersModule,
+    EmailsModule,
   ],
   controllers: [StudentsController],
   providers: [StudentsService],

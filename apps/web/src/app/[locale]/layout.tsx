@@ -7,6 +7,7 @@ import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { LanguageProvider } from '@/providers/language-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
 import { NetworkStatusOverlay } from '@/components/ui/NetworkStatusOverlay';
+import { AuthProvider } from '@/providers/auth-provider';
 
 const themeInitScript = `
 (() => {
@@ -58,7 +59,9 @@ export default async function LocaleLayout({
           <AppQueryProvider>
             <LanguageProvider>
               <ThemeProvider>
-                {children}
+                <AuthProvider locale={locale}>
+                  {children}
+                </AuthProvider>
                 <NetworkStatusOverlay locale={locale} />
                 <Toaster />
                 <SonnerToaster />

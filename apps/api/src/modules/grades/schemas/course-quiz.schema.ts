@@ -23,7 +23,7 @@ class QuizEntry {
   @Prop({ required: true, default: 10 })
   maxGrade!: number;
 
-  @Prop({ required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
+  @Prop({ type: String, required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
   status!: GradeStatus;
 
   @Prop()
@@ -55,7 +55,7 @@ export class CourseQuiz {
   @Prop({ required: true })
   academicYear!: string;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ type: [QuizEntrySchema], default: [] })

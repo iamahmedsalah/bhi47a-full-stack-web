@@ -17,7 +17,7 @@ export class AuthService {
   ) {}
 
   async studentLogin(dto: StudentLoginDto) {
-    const user = await this.usersService.findByStudentCode(dto.studentCode);
+    const user = await this.usersService.findByIdentifier(dto.studentCode);
     if (!user) {
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     }
@@ -33,7 +33,9 @@ export class AuthService {
     if (this.usersService.isAccountLocked(user)) {
       const remaining = this.usersService.getLockRemainingMinutes(user);
       const lockedUntil = user.lockUntil || user.lockedUntil;
-      const secondsLeft = lockedUntil ? Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000)) : remaining * 60;
+      const secondsLeft = lockedUntil
+        ? Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000))
+        : remaining * 60;
       throw new UnauthorizedException({
         message: `تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة. حاول بعد ${remaining} دقيقة`,
         locked: true,
@@ -48,7 +50,8 @@ export class AuthService {
     if (!isPasswordValid) {
       await this.usersService.incrementLoginAttempts(user._id.toString());
       const updatedUser = await this.usersService.findById(user._id.toString());
-      const currentAttempts = updatedUser.failedLoginAttempts ?? updatedUser.loginAttempts ?? 0;
+      const currentAttempts =
+        updatedUser.failedLoginAttempts ?? updatedUser.loginAttempts ?? 0;
       const attemptsLeft = Math.max(0, maxAttempts - currentAttempts);
 
       if (this.usersService.isAccountLocked(updatedUser)) {
@@ -66,11 +69,10 @@ export class AuthService {
       });
     }
 
-    // Successful login: reset attempts and update last login
-    await Promise.all([
-      this.usersService.resetLoginAttempts(user._id.toString()),
-      this.usersService.updateLastLogin(user._id.toString()),
-    ]);
+    // Successful login: reset attempts and update last login in a single write operation
+    await this.usersService.resetAttemptsAndUpdateLastLogin(
+      user._id.toString(),
+    );
 
     const token = this.generateToken(
       user._id.toString(),
@@ -95,7 +97,7 @@ export class AuthService {
   }
 
   async adminLogin(dto: AdminLoginDto) {
-    const user = await this.usersService.findByEmail(dto.email);
+    const user = await this.usersService.findByIdentifier(dto.email);
     if (!user) {
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     }
@@ -115,7 +117,9 @@ export class AuthService {
     if (this.usersService.isAccountLocked(user)) {
       const remaining = this.usersService.getLockRemainingMinutes(user);
       const lockedUntil = user.lockUntil || user.lockedUntil;
-      const secondsLeft = lockedUntil ? Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000)) : remaining * 60;
+      const secondsLeft = lockedUntil
+        ? Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000))
+        : remaining * 60;
       throw new UnauthorizedException({
         message: `تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة. حاول بعد ${remaining} دقيقة`,
         locked: true,
@@ -130,7 +134,8 @@ export class AuthService {
     if (!isPasswordValid) {
       await this.usersService.incrementLoginAttempts(user._id.toString());
       const updatedUser = await this.usersService.findById(user._id.toString());
-      const currentAttempts = updatedUser.failedLoginAttempts ?? updatedUser.loginAttempts ?? 0;
+      const currentAttempts =
+        updatedUser.failedLoginAttempts ?? updatedUser.loginAttempts ?? 0;
       const attemptsLeft = Math.max(0, maxAttempts - currentAttempts);
 
       if (this.usersService.isAccountLocked(updatedUser)) {
@@ -148,11 +153,10 @@ export class AuthService {
       });
     }
 
-    // Successful login: reset attempts and update last login
-    await Promise.all([
-      this.usersService.resetLoginAttempts(user._id.toString()),
-      this.usersService.updateLastLogin(user._id.toString()),
-    ]);
+    // Successful login: reset attempts and update last login in a single write operation
+    await this.usersService.resetAttemptsAndUpdateLastLogin(
+      user._id.toString(),
+    );
 
     const token = this.generateToken(
       user._id.toString(),

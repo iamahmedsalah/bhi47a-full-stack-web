@@ -44,18 +44,14 @@ function getTextContent(node: React.ReactNode): string {
 
 function getDropdownPosition(
   trigger: HTMLButtonElement,
-  options: CustomDropdownOption[],
+  optionsCount: number,
+  labelWidth: number,
   maxVisibleItems: number,
 ): DropdownPosition {
   const rect = trigger.getBoundingClientRect();
   const padding = 12;
-  const longestLabel = options.reduce(
-    (longest, option) => Math.max(longest, getTextContent(option.label).length),
-    0,
-  );
-  const labelWidth = longestLabel > 0 ? longestLabel * 7.5 + 72 : 0;
   const width = Math.min(Math.max(rect.width, 168, labelWidth), window.innerWidth - padding * 2);
-  const visibleItemCount = Math.min(Math.max(options.length, 1), maxVisibleItems);
+  const visibleItemCount = Math.min(Math.max(optionsCount, 1), maxVisibleItems);
   const desiredHeight = Math.max(120, visibleItemCount * 40 + 18);
   const availableBelow = window.innerHeight - rect.bottom - padding;
   const availableAbove = rect.top - padding;
@@ -98,11 +94,22 @@ export function CustomDropdown({
 
   const selected = options.find((option) => option.value === value);
 
+  // Memoize label width to avoid recalculating text content length on every scroll/resize event
+  const labelWidth = React.useMemo(() => {
+    const longestLabel = options.reduce(
+      (longest, option) => Math.max(longest, getTextContent(option.label).length),
+      0,
+    );
+    return longestLabel > 0 ? longestLabel * 7.5 + 72 : 0;
+  }, [options]);
+
+  const optionsLength = options.length;
+
   const updatePosition = React.useCallback(() => {
     if (!triggerRef.current || typeof window === 'undefined') return;
-    const next = getDropdownPosition(triggerRef.current, options, maxVisibleItems);
+    const next = getDropdownPosition(triggerRef.current, optionsLength, labelWidth, maxVisibleItems);
     setPosition((current) => (samePosition(current, next) ? current : next));
-  }, [maxVisibleItems, options]);
+  }, [maxVisibleItems, optionsLength, labelWidth]);
 
   const openMenu = React.useCallback(() => {
     if (disabled) return;

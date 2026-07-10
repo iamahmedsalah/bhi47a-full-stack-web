@@ -21,6 +21,7 @@ import {
   Loader2, 
   Clock
 } from 'lucide-react';
+import { useAuthStore } from '@/store/auth-store';
 import LangToggle from '@/components/ui/LangToggle';
 
 function StudentLoginContent() {
@@ -31,13 +32,17 @@ function StudentLoginContent() {
   const router = useRouter();
   const locale = params.locale as string;
 
-  const [loading, setLoading] = useState(false);
+  const {
+    loading,
+    remainingAttempts,
+    isLocked,
+    banExpiresAt,
+    banRemainingSeconds,
+    setLoading,
+    setLockoutState,
+    tickRemainingSeconds,
+  } = useAuthStore();
   
-  // Security lockout states (5 attempts, 30 minutes cooldown)
-  const [remainingAttempts, setRemainingAttempts] = useState<number>(5);
-  const [isLocked, setIsLocked] = useState(false);
-  const [banExpiresAt, setBanExpiresAt] = useState<string | null>(null);
-  const [banRemainingSeconds, setBanRemainingSeconds] = useState<number | null>(null);
   const studentCodeInputRef = useRef<HTMLInputElement>(null);
 
   const schema = getStudentLoginSchema((key) => {
@@ -71,15 +76,17 @@ function StudentLoginContent() {
   useEffect(() => {
     try {
       const storedRem = sessionStorage.getItem('remainingAttempts');
-      if (storedRem !== null) setRemainingAttempts(Number(storedRem));
+      if (storedRem !== null) setLockoutState({ remainingAttempts: Number(storedRem) });
       
       const storedBan = sessionStorage.getItem('banExpiresAt');
       if (storedBan) {
         const msLeft = new Date(storedBan).getTime() - Date.now();
         if (msLeft > 0) {
-          setBanExpiresAt(storedBan);
-          setIsLocked(true);
-          setBanRemainingSeconds(Math.ceil(msLeft / 1000));
+          setLockoutState({
+            banExpiresAt: storedBan,
+            isLocked: true,
+            banRemainingSeconds: Math.ceil(msLeft / 1000),
+          });
         } else {
           sessionStorage.removeItem('banExpiresAt');
           sessionStorage.removeItem('remainingAttempts');
@@ -88,33 +95,24 @@ function StudentLoginContent() {
     } catch (e) {
       // ignore sessionStorage security errors
     }
-  }, []);
+  }, [setLockoutState]);
 
   // Lockout countdown timer effect
   useEffect(() => {
     if (!banExpiresAt) return;
     
     const id = setInterval(() => {
-      const ms = new Date(banExpiresAt).getTime() - Date.now();
-      const secs = Math.max(0, Math.ceil(ms / 1000));
-      setBanRemainingSeconds(secs);
+      tickRemainingSeconds();
       
-      if (secs <= 0) {
+      const state = useAuthStore.getState();
+      if (!state.isLocked) {
         clearInterval(id);
-        setIsLocked(false);
-        setBanExpiresAt(null);
-        setBanRemainingSeconds(null);
-        setRemainingAttempts(5);
-        try {
-          sessionStorage.removeItem('banExpiresAt');
-          sessionStorage.removeItem('remainingAttempts');
-        } catch (e) { /* ignore */ }
         toast.info(locale === 'ar' ? 'تم رفع الحظر. يمكنك المحاولة مرة أخرى.' : 'Lockout lifted. You can try again.');
       }
     }, 1000);
     
     return () => clearInterval(id);
-  }, [banExpiresAt, locale]);
+  }, [banExpiresAt, locale, tickRemainingSeconds]);
 
   const onSubmit = async (data: StudentLoginInput) => {
     if (isLocked) {
@@ -139,9 +137,12 @@ function StudentLoginContent() {
       if (errorData?.locked) {
         const lockSecs = errorData.lockRemainingSeconds || 1800;
         const banExpiry = new Date(Date.now() + lockSecs * 1000).toISOString();
-        setBanExpiresAt(banExpiry);
-        setIsLocked(true);
-        setBanRemainingSeconds(lockSecs);
+        setLockoutState({
+          banExpiresAt: banExpiry,
+          isLocked: true,
+          banRemainingSeconds: lockSecs,
+          remainingAttempts: 0,
+        });
         
         try {
           sessionStorage.setItem('banExpiresAt', banExpiry);
@@ -156,7 +157,7 @@ function StudentLoginContent() {
         );
       } else if (typeof errorData?.attemptsLeft === 'number') {
         const left = errorData.attemptsLeft;
-        setRemainingAttempts(left);
+        setLockoutState({ remainingAttempts: left });
         try {
           sessionStorage.setItem('remainingAttempts', String(left));
         } catch (e) {}
