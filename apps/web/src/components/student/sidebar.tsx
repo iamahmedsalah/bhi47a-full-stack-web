@@ -166,7 +166,7 @@ export default function StudentSidebar() {
         </nav>
 
         <div className={cn("mt-3 shrink-0 space-y-3 border-t border-white/10 pt-3", !isSidebarOpen && "flex flex-col items-center")}>
-          <div className={cn("flex items-center justify-between lg:hidden", isSidebarOpen ? "w-full px-3 py-1" : "flex-col gap-2")}>
+          <div className={cn("flex items-center justify-between", isSidebarOpen ? "w-full px-3 py-1" : "flex-col gap-2")}>
             <LangToggle hideLabel={!isSidebarOpen} />
             <Themes />
           </div>

@@ -14,6 +14,10 @@ import {
   StudentProfile,
   StudentProfileDocument,
 } from '../students/schemas/student-profile.schema';
+import {
+  AcademicEmail,
+  AcademicEmailDocument,
+} from '../academic-emails/schemas/academic-email.schema';
 import { StudentLoginDto } from './dto/student-login.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -34,6 +38,16 @@ interface VerifiedGoogleAccount {
   picture?: string;
 }
 
+function maskEmail(email: string): string {
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;
+  const [local, domain] = parts;
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  return `${local[0]}***${local[local.length - 1]}@${domain}`;
+}
+
 @Injectable()
 export class AuthService {
   private readonly googleOAuthClient = new OAuth2Client();
@@ -45,6 +59,8 @@ export class AuthService {
     private emailsService: EmailsService,
     @InjectModel(StudentProfile.name)
     private studentProfileModel: Model<StudentProfileDocument>,
+    @InjectModel(AcademicEmail.name)
+    private academicEmailModel: Model<AcademicEmailDocument>,
   ) {}
 
   async studentLogin(dto: StudentLoginDto) {
@@ -495,93 +511,92 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(dto: ForgotPasswordDto) {
+  async forgotPassword(dto: ForgotPasswordDto, acceptLanguage?: string) {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
     const userLean = await this.usersService.findByIdentifier(dto.identifier);
     if (!userLean) {
-      throw new NotFoundException('الحساب غير موجود');
+      throw new NotFoundException(
+        isEn ? 'Account not found' : 'الحساب غير موجود',
+      );
     }
 
     const user = await this.usersService.findById(userLean._id.toString());
+    const emailTo = await this.getPasswordRecoveryEmail(user._id.toString());
+
+    if (!emailTo) {
+      throw new BadRequestException(
+        isEn
+          ? 'No email address registered for this account yet. Please contact institute administration to set an email for password recovery.'
+          : 'لا يوجد بريد إلكتروني مسجل لهذا الحساب حتى الآن. يرجى التواصل مع إدارة المعهد لتعيين بريد إلكتروني لاستعادة كلمة المرور.',
+      );
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     user.resetPasswordToken = await bcrypt.hash(otp, 12);
     user.resetPasswordExpireAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
     await user.save();
 
-    const emailTo = await this.getPasswordRecoveryEmail(user._id.toString());
+    const emailHtml = renderOtpEmailTemplate({
+      title: 'Password Recovery',
+      preheader:
+        'Use this verification code to reset your Student Portal password',
+      greetingName: user.name,
+      arabicMessage:
+        'لقد طلبت استعادة كلمة المرور الخاصة بك. استخدم رمز التحقق التالي لإكمال إعادة التعيين.',
+      englishMessage:
+        'You requested to recover your password. Use the verification code below to complete the reset.',
+      otp,
+    });
 
-    if (emailTo) {
-      let emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-          <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 20px; margin-bottom: 20px;">
-            <h2 style="color: #0f766e; margin: 0;">بوابة الطالب | Password Recovery</h2>
-          </div>
-          <div style="direction: rtl; text-align: right; margin-bottom: 25px;">
-            <p style="font-size: 16px; color: #1e293b; line-height: 1.6;">مرحباً <strong>${user.name}</strong>،</p>
-            <p style="font-size: 14px; color: #475569; line-height: 1.6;">لقد طلبت استعادة كلمة المرور الخاصة بك. رمز التحقق (OTP) الخاص بك هو:</p>
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
-              <span style="font-family: monospace; font-size: 24px; font-weight: bold; letter-spacing: 4px; color: #0f766e;">${otp}</span>
-            </div>
-            <p style="font-size: 12px; color: #64748b;">* ينتهي هذا الرمز بعد 15 دقيقة.</p>
-          </div>
-          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-          <div style="direction: ltr; text-align: left;">
-            <p style="font-size: 16px; color: #1e293b; line-height: 1.6;">Hello <strong>${user.name}</strong>,</p>
-            <p style="font-size: 14px; color: #475569; line-height: 1.6;">You requested to recover your password. Your verification OTP code is:</p>
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
-              <span style="font-family: monospace; font-size: 24px; font-weight: bold; letter-spacing: 4px; color: #0f766e;">${otp}</span>
-            </div>
-            <p style="font-size: 12px; color: #64748b;">* This code expires in 15 minutes.</p>
-          </div>
-        </div>
-      `;
-
-      emailHtml = renderOtpEmailTemplate({
-        title: 'Password Recovery',
-        preheader:
-          'Use this verification code to reset your Student Portal password',
-        greetingName: user.name,
-        arabicMessage:
-          'لقد طلبت استعادة كلمة المرور الخاصة بك. استخدم رمز التحقق التالي لإكمال إعادة التعيين.',
-        englishMessage:
-          'You requested to recover your password. Use the verification code below to complete the reset.',
-        otp,
+    try {
+      await this.emailsService.send({
+        to: [emailTo],
+        subject: 'رمز استعادة كلمة المرور | Password Recovery OTP',
+        html: emailHtml,
+        event: 'password_reset_otp',
       });
-
-      try {
-        await this.emailsService.send({
-          to: [emailTo],
-          subject: 'رمز استعادة كلمة المرور | Password Recovery OTP',
-          html: emailHtml,
-          event: 'password_reset_otp',
-        });
-      } catch (err) {
-        console.warn('Failed to send forgot password email:', err);
-      }
+    } catch (err) {
+      console.warn('Failed to send forgot password email:', err);
     }
 
     if (this.configService.get<string>('NODE_ENV') !== 'production') {
       console.log(
-        `[Forgot Password Simulation] OTP for ${dto.identifier}: ${otp}`,
+        `[Forgot Password Simulation] OTP for ${dto.identifier} sent to ${emailTo}: ${otp}`,
       );
     }
 
-    return { message: 'تم إرسال رمز التحقق إلى البريد الإلكتروني الخاص بك' };
+    const masked = maskEmail(emailTo);
+    return {
+      message: isEn
+        ? `Verification code sent to email: ${masked}`
+        : `تم إرسال رمز التحقق إلى البريد الإلكتروني: ${masked}`,
+      email: masked,
+    };
   }
 
-  async resetPasswordOtp(dto: ResetPasswordOtpDto) {
+  async resetPasswordOtp(dto: ResetPasswordOtpDto, acceptLanguage?: string) {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
     const userLean = await this.usersService.findByIdentifier(dto.identifier);
     if (!userLean) {
-      throw new NotFoundException('الحساب غير موجود');
+      throw new NotFoundException(
+        isEn ? 'Account not found' : 'الحساب غير موجود',
+      );
     }
 
     if (!userLean.resetPasswordToken || !userLean.resetPasswordExpireAt) {
       throw new BadRequestException(
-        'لم يتم طلب استعادة كلمة المرور أو انتهت صلاحية الرمز',
+        isEn
+          ? 'Password recovery was not requested or verification code expired'
+          : 'لم يتم طلب استعادة كلمة المرور أو انتهت صلاحية الرمز',
       );
     }
 
     if (userLean.resetPasswordExpireAt.getTime() < Date.now()) {
-      throw new BadRequestException('انتهت صلاحية رمز التحقق (OTP)');
+      throw new BadRequestException(
+        isEn
+          ? 'Verification code (OTP) expired'
+          : 'انتهت صلاحية رمز التحقق (OTP)',
+      );
     }
 
     const otpMatches = await bcrypt.compare(
@@ -589,7 +604,11 @@ export class AuthService {
       userLean.resetPasswordToken,
     );
     if (!otpMatches) {
-      throw new BadRequestException('رمز التحقق (OTP) غير صحيح');
+      throw new BadRequestException(
+        isEn
+          ? 'Invalid verification code (OTP)'
+          : 'رمز التحقق (OTP) غير صحيح',
+      );
     }
 
     await this.usersService.updatePassword(
@@ -682,14 +701,33 @@ export class AuthService {
     userId: string,
   ): Promise<string | undefined> {
     const user = await this.usersService.findById(userId);
-    if (user.email) return user.email;
+    if (user?.email && user.email.trim()) return user.email.trim();
+    if (user?.googleEmail && user.googleEmail.trim()) return user.googleEmail.trim();
 
     const profile = await this.studentProfileModel
       .findOne({ userId })
-      .select('academicEmail')
-      .lean<{ academicEmail?: string }>();
+      .select('academicEmail studentCode')
+      .lean<{ academicEmail?: string; studentCode?: string }>();
 
-    return profile?.academicEmail;
+    if (profile?.academicEmail && profile.academicEmail.trim()) {
+      return profile.academicEmail.trim();
+    }
+
+    const searchCode = profile?.studentCode || user?.username;
+    if (searchCode) {
+      const acadDoc = await this.academicEmailModel
+        .findOne({
+          $or: [{ studentId: userId }, { studentCode: searchCode }],
+        })
+        .select('academicEmail')
+        .lean<{ academicEmail?: string }>();
+
+      if (acadDoc?.academicEmail && acadDoc.academicEmail.trim()) {
+        return acadDoc.academicEmail.trim();
+      }
+    }
+
+    return undefined;
   }
 
   private getGoogleClientId(): string {
@@ -709,22 +747,53 @@ export class AuthService {
   private async verifyGoogleCredential(
     credential: string,
   ): Promise<VerifiedGoogleAccount> {
-    const ticket = await this.googleOAuthClient.verifyIdToken({
-      idToken: credential,
-      audience: this.getGoogleClientId(),
-    });
-    const payload = ticket.getPayload();
+    try {
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken: credential,
+        audience: this.getGoogleClientId(),
+      });
+      const payload = ticket.getPayload();
 
-    if (!payload?.sub || !payload.email || !payload.email_verified) {
+      if (!payload?.sub || !payload.email || !payload.email_verified) {
+        throw new UnauthorizedException('Google account is not verified');
+      }
+
+      return {
+        googleId: payload.sub,
+        email: payload.email.toLowerCase(),
+        name: payload.name,
+        picture: payload.picture,
+      };
+    } catch {
+      try {
+        const res = await fetch(
+          'https://www.googleapis.com/oauth2/v3/userinfo',
+          {
+            headers: { Authorization: `Bearer ${credential}` },
+          },
+        );
+        if (res.ok) {
+          const info = (await res.json()) as {
+            sub?: string;
+            email?: string;
+            email_verified?: boolean;
+            name?: string;
+            picture?: string;
+          };
+          if (info.sub && info.email && info.email_verified) {
+            return {
+              googleId: info.sub,
+              email: info.email.toLowerCase(),
+              name: info.name,
+              picture: info.picture,
+            };
+          }
+        }
+      } catch {
+        // ignore
+      }
       throw new UnauthorizedException('Google account is not verified');
     }
-
-    return {
-      googleId: payload.sub,
-      email: payload.email.toLowerCase(),
-      name: payload.name,
-      picture: payload.picture,
-    };
   }
 
   private generateToken(

@@ -15,11 +15,11 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { 
-  ArrowRight, 
-  UserCircle, 
-  IdCard, 
-  Loader2, 
+import {
+  ArrowRight,
+  UserCircle,
+  IdCard,
+  Loader2,
   Clock
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
@@ -55,7 +55,7 @@ function StudentLoginContent() {
     setLockoutState,
     tickRemainingSeconds,
   } = useAuthStore();
-  
+
   const studentCodeInputRef = useRef<HTMLInputElement>(null);
 
   const schema = getStudentLoginSchema((key) => {
@@ -81,19 +81,11 @@ function StudentLoginContent() {
   const passwordVal = watch('password');
   const googlePromptShownRef = useRef(false);
   const [isChrome, setIsChrome] = useState(false);
-  const [savedGoogleAccount, setSavedGoogleAccount] =
-    useState<SavedGoogleAccount | null>(null);
-
   const { renderButton, scriptLoaded, prompt } = useGoogleSignIn({
     locale,
     onSuccess: async (credential) => {
       setLoading(true);
       try {
-        const account = readGoogleAccountFromCredential(credential);
-        if (account) {
-          saveGoogleAccount(account);
-          setSavedGoogleAccount(account);
-        }
         await login('google', { credential });
       } catch (err: any) {
         toast.error(getApiErrorMessage(err, t('loginError')));
@@ -126,7 +118,7 @@ function StudentLoginContent() {
       renderButton('google-signin-btn', {
         theme: 'filled_black',
         size: 'large',
-        text: 'signin_with',
+        text: 'continue_with',
         shape: 'pill',
         width: buttonWidth,
       });
@@ -135,17 +127,6 @@ function StudentLoginContent() {
 
   useEffect(() => {
     setIsChrome(isChromeBrowser());
-    setSavedGoogleAccount(loadSavedGoogleAccount());
-
-    const handleAccountChange = (event: Event) => {
-      const customEvent = event as CustomEvent<SavedGoogleAccount | null>;
-      setSavedGoogleAccount(customEvent.detail ?? loadSavedGoogleAccount());
-    };
-
-    window.addEventListener(GOOGLE_ACCOUNT_CHANGED_EVENT, handleAccountChange);
-    return () => {
-      window.removeEventListener(GOOGLE_ACCOUNT_CHANGED_EVENT, handleAccountChange);
-    };
   }, []);
 
   useEffect(() => {
@@ -154,16 +135,6 @@ function StudentLoginContent() {
     googlePromptShownRef.current = true;
     prompt();
   }, [isChrome, prompt, scriptLoaded]);
-
-  const handleSavedGoogleClick = () => {
-    prompt();
-  };
-
-  const handleDifferentGoogleAccount = () => {
-    clearSavedGoogleAccount();
-    setSavedGoogleAccount(null);
-    prompt();
-  };
 
   // Auto-focus on student code input when component mounts
   useEffect(() => {
@@ -175,7 +146,7 @@ function StudentLoginContent() {
     try {
       const storedRem = sessionStorage.getItem('remainingAttempts');
       if (storedRem !== null) setLockoutState({ remainingAttempts: Number(storedRem) });
-      
+
       const storedBan = sessionStorage.getItem('banExpiresAt');
       if (storedBan) {
         const msLeft = new Date(storedBan).getTime() - Date.now();
@@ -198,17 +169,17 @@ function StudentLoginContent() {
   // Lockout countdown timer effect
   useEffect(() => {
     if (!banExpiresAt) return;
-    
+
     const id = setInterval(() => {
       tickRemainingSeconds();
-      
+
       const state = useAuthStore.getState();
       if (!state.isLocked) {
         clearInterval(id);
         toast.info(locale === 'ar' ? 'تم رفع الحظر. يمكنك المحاولة مرة أخرى.' : 'Lockout lifted. You can try again.');
       }
     }, 1000);
-    
+
     return () => clearInterval(id);
   }, [banExpiresAt, locale, tickRemainingSeconds]);
 
@@ -228,7 +199,7 @@ function StudentLoginContent() {
       try {
         sessionStorage.removeItem('remainingAttempts');
         sessionStorage.removeItem('banExpiresAt');
-      } catch (e) {}
+      } catch (e) { }
     } catch (err: any) {
       const errorData = err;
 
@@ -241,11 +212,11 @@ function StudentLoginContent() {
           banRemainingSeconds: lockSecs,
           remainingAttempts: 0,
         });
-        
+
         try {
           sessionStorage.setItem('banExpiresAt', banExpiry);
           sessionStorage.setItem('remainingAttempts', '0');
-        } catch (e) {}
+        } catch (e) { }
 
         const minutesLeft = Math.ceil(lockSecs / 60);
         toast.error(
@@ -258,7 +229,7 @@ function StudentLoginContent() {
         setLockoutState({ remainingAttempts: left });
         try {
           sessionStorage.setItem('remainingAttempts', String(left));
-        } catch (e) {}
+        } catch (e) { }
 
         const errMsg = errorData.message || t('loginError');
         toast.error(
@@ -294,9 +265,9 @@ function StudentLoginContent() {
 
       <Card className="w-full max-w-md bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] p-6 md:p-8 z-10">
         <div className="flex flex-col items-center gap-6">
-          <Button 
-            variant="ghost" 
-            onClick={() => router.push(`/${locale}/login`)} 
+          <Button
+            variant="ghost"
+            onClick={() => router.push(`/${locale}/login`)}
             className="self-start gap-2 text-muted-foreground hover:text-foreground cursor-pointer"
           >
             {locale === 'ar' ? (
@@ -332,7 +303,7 @@ function StudentLoginContent() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
             <div className="space-y-4">
-              
+
               {/* Academic Code */}
               <div className="relative">
                 <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
@@ -393,7 +364,7 @@ function StudentLoginContent() {
               {errors.password && (
                 <p className="text-xs text-red-500 text-center">{errors.password.message}</p>
               )}
-              
+
               {/* Forgot Password Link */}
               <div className="flex justify-end pt-1 px-1">
                 <Link
@@ -410,8 +381,8 @@ function StudentLoginContent() {
                 <Clock className="h-4 w-4" />
                 <AlertDescription className="space-y-3">
                   <div className="text-center font-semibold text-sm">
-                    {locale === 'ar' 
-                      ? 'الحساب محظور مؤقتاً بسبب محاولات الدخول الخاطئة' 
+                    {locale === 'ar'
+                      ? 'الحساب محظور مؤقتاً بسبب محاولات الدخول الخاطئة'
                       : 'Login locked temporarily due to failed attempts'}
                   </div>
                   <div className="text-center">
@@ -422,13 +393,13 @@ function StudentLoginContent() {
                       {locale === 'ar' ? 'الوقت المتبقي للحظر' : 'Remaining ban duration'}
                     </div>
                   </div>
-                  <Progress 
-                    value={((1800 - (banRemainingSeconds ?? 0)) / 1800) * 100} 
+                  <Progress
+                    value={((1800 - (banRemainingSeconds ?? 0)) / 1800) * 100}
                     className="h-2"
                   />
                   <div className="text-xs text-center text-muted-foreground">
-                    {locale === 'ar' 
-                      ? 'سيتم رفع الحظر تلقائياً بعد انتهاء المدة' 
+                    {locale === 'ar'
+                      ? 'سيتم رفع الحظر تلقائياً بعد انتهاء المدة'
                       : 'Ban will be automatically lifted after the countdown'}
                   </div>
                 </AlertDescription>
@@ -454,51 +425,11 @@ function StudentLoginContent() {
               </span>
             </div>
 
-            {!isChrome && savedGoogleAccount && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                <button
-                  type="button"
-                  onClick={handleSavedGoogleClick}
-                  disabled={loading}
-                  className="flex h-12 w-full items-center gap-3 overflow-hidden rounded-full border border-primary/30 bg-primary/90 pe-2 ps-3 text-start text-primary-foreground shadow-sm transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {savedGoogleAccount.avatarUrl ? (
-                    <img
-                      src={savedGoogleAccount.avatarUrl}
-                      alt=""
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-bold">
-                      {savedGoogleAccount.name.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold">
-                      {isEnglish ? `Continue as ${savedGoogleAccount.name}` : `المتابعة باسم ${savedGoogleAccount.name}`}
-                    </span>
-                    <span className="block truncate text-[11px] opacity-90" dir="ltr">
-                      {savedGoogleAccount.email}
-                    </span>
-                  </span>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold text-[#4285F4]">
-                    G
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDifferentGoogleAccount}
-                  disabled={loading}
-                  className="w-full text-center text-sm font-semibold text-primary transition hover:text-primary/80 disabled:opacity-60"
-                >
-                  {isEnglish ? 'Use a different account' : 'استخدام حساب آخر'}
-                </button>
-              </div>
-            )}
+
 
             {/* Google Login Button */}
             <div className="flex justify-center w-full min-h-[44px]">
-              <div id="google-signin-btn" className="w-full overflow-hidden rounded-full" />
+              <div id="google-signin-btn" className="w-full overflow-hidden rounded-full flex justify-center" />
             </div>
           </form>
         </div>

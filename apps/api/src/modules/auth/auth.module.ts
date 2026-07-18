@@ -18,6 +18,10 @@ import {
   StudentProfile,
   StudentProfileSchema,
 } from '../students/schemas/student-profile.schema';
+import {
+  AcademicEmail,
+  AcademicEmailSchema,
+} from '../academic-emails/schemas/academic-email.schema';
 
 @Module({
   imports: [
@@ -25,6 +29,7 @@ import {
     EmailsModule,
     MongooseModule.forFeature([
       { name: StudentProfile.name, schema: StudentProfileSchema },
+      { name: AcademicEmail.name, schema: AcademicEmailSchema },
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

@@ -63,9 +63,10 @@ function ForgotPasswordContent() {
 
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password', { identifier: identifier.trim() });
-      toast.success(t('otpSentSuccess'));
-      setSuccessMsg(t('otpSentSuccess'));
+      const res = await api.post<{ message: string; email?: string }>('/auth/forgot-password', { identifier: identifier.trim() });
+      const msg = res.data?.message || t('otpSentSuccess');
+      toast.success(msg);
+      setSuccessMsg(msg);
       setStep(2);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, isAr ? 'فشل إرسال رمز التحقق' : 'Failed to send OTP'));

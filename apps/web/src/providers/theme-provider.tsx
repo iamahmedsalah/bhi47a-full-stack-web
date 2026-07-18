@@ -15,6 +15,9 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     if (typeof args[0] === 'string') {
       if (args[0].includes('Encountered a script tag')) return;
       if (args[0].includes('The given origin is not allowed for the given client ID')) return;
+      if (args[0].includes('FedCM get() rejects with')) return;
+      if (args[0].includes('Cross-Origin-Opener-Policy')) return;
+      if (args[0].includes('Your client application uses one of the Google One Tap prompt UI status methods')) return;
     }
     orig.apply(console, args as Parameters<typeof console.error>);
   };

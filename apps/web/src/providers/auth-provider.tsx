@@ -120,6 +120,13 @@ export function AuthProvider({
     );
 
     try {
+      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.disableAutoSelect();
+        } catch {
+          // ignore if GIS not loaded
+        }
+      }
       await api.post('/auth/logout');
       toast.success(locale === 'ar' ? 'تم تسجيل الخروج' : 'Logged out', {
         id: toastId,

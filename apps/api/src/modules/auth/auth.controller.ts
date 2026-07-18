@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Res,
+  Headers,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -128,8 +129,11 @@ export class AuthController {
   @ApiOperation({
     summary: 'Send a 6-digit OTP code to student email for password recovery',
   })
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
+    return this.authService.forgotPassword(dto, acceptLanguage);
   }
 
   @Public()
@@ -138,10 +142,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Reset student password using OTP code' })
   async resetPasswordOtp(
     @Body() dto: ResetPasswordOtpDto,
-    @Res({ passthrough: true }) res: express.Response,
+    @Headers('accept-language') acceptLanguage?: string,
+    @Res({ passthrough: true }) res?: express.Response,
   ) {
-    const result = await this.authService.resetPasswordOtp(dto);
-    const csrfToken = this.authService.setCookieToken(res, result.token);
+    const result = await this.authService.resetPasswordOtp(dto, acceptLanguage);
+    const csrfToken = this.authService.setCookieToken(res!, result.token);
     return { user: result.user, csrfToken };
   }
 

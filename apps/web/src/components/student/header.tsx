@@ -155,7 +155,7 @@ export default function StudentHeader() {
   };
 
   return (
-    <header className="sticky top-2 z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-4 pe-16 md:pe-4 rounded-squircle mx-4 mt-4 md:mx-6 md:mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
+    <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-4 pe-16 md:pe-4 rounded-squircle mx-4 mt-4 md:mx-6 md:mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
       {/* Right/Start section: Logo & Institute Name */}
       <div className="flex items-center gap-4">
         <Image

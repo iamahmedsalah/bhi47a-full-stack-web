@@ -224,7 +224,7 @@ export default function AdminSidebar() {
         >
           <div
             className={cn(
-              "mb-4 flex items-center justify-center gap-3 lg:hidden",
+              "mb-4 flex items-center justify-center gap-3",
               isSidebarOpen
                 ? "flex-row w-full justify-between px-1"
                 : "flex-col",

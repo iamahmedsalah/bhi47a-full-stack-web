@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 type GoogleCredentialHandler = (credential: string) => void;
 type GoogleButtonOptions = {
@@ -23,12 +24,32 @@ declare global {
             client_id: string;
             callback: (response: { credential: string }) => void;
             auto_select?: boolean;
+            use_fedcm_for_prompt?: boolean;
           }) => void;
           renderButton: (
             element: HTMLElement | null,
             options: GoogleButtonOptions
           ) => void;
-          prompt: () => void;
+          prompt: (
+            notification?: (notification: {
+              isNotDisplayed: () => boolean;
+              getNotDisplayedReason: () => string;
+              isSkippedMoment: () => boolean;
+              getSkippedReason: () => string;
+              isDismissedMoment: () => boolean;
+              getDismissedReason: () => string;
+            }) => void
+          ) => void;
+          disableAutoSelect: () => void;
+        };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+          }) => {
+            requestAccessToken: () => void;
+          };
         };
       };
     };
@@ -101,6 +122,7 @@ export function useGoogleSignIn({
         callback: (response) => {
           activeGoogleCredentialHandler?.(response.credential);
         },
+        auto_select: false,
       });
       initializedGoogleClientId = clientId;
       setIsInitialized(true);
@@ -148,9 +170,33 @@ export function useGoogleSignIn({
     try {
       window.google.accounts.id.prompt();
     } catch (error) {
-      console.error('Error showing Google prompt:', error);
+      console.warn('Error showing Google prompt:', error);
     }
   }, [clientId, isInitialized, scriptLoaded]);
+
+  const loginWithPopup = useCallback(() => {
+    if (!clientId || typeof window === 'undefined') return;
+
+    if (!scriptLoaded || !window.google?.accounts?.oauth2) {
+      setTimeout(() => loginWithPopup(), 200);
+      return;
+    }
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        callback: (response) => {
+          if (response?.access_token) {
+            activeGoogleCredentialHandler?.(response.access_token);
+          }
+        },
+      });
+      client.requestAccessToken();
+    } catch (error) {
+      console.error('Error initiating Google OAuth popup:', error);
+    }
+  }, [clientId, scriptLoaded]);
 
   return {
     scriptLoaded,
@@ -158,5 +204,6 @@ export function useGoogleSignIn({
     isInitialized,
     renderButton,
     prompt,
+    loginWithPopup,
   };
 }
