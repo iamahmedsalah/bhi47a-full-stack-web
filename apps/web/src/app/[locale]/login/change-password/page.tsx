@@ -11,6 +11,7 @@ import { getChangePasswordSchema, type ChangePasswordInput } from '@/lib/validat
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { PasswordInput } from '@/components/ui/password-input';
 import { toast } from 'sonner';
 import { Lock, Loader2, KeyRound, Check } from 'lucide-react';
 import LangToggle from '@/components/ui/LangToggle';
@@ -113,18 +114,12 @@ export default function ChangePasswordPage() {
                 <label className="text-sm font-semibold text-foreground">
                   {locale === 'ar' ? 'كلمة المرور الحالية' : 'Current Password'}
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    disabled={loading}
-                    {...register('currentPassword')}
-                    className="h-11 ps-10 bg-secondary/50 border-border text-foreground rounded-lg"
-                  />
-                </div>
+                <PasswordInput
+                  placeholder="••••••••"
+                  disabled={loading}
+                  {...register('currentPassword')}
+                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
+                />
                 {errors.currentPassword && (
                   <p className="text-xs text-red-500">{errors.currentPassword.message}</p>
                 )}
@@ -135,18 +130,12 @@ export default function ChangePasswordPage() {
                 <label className="text-sm font-semibold text-foreground">
                   {locale === 'ar' ? 'كلمة المرور الجديدة' : 'New Password'}
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    disabled={loading}
-                    {...register('newPassword')}
-                    className="h-11 ps-10 bg-secondary/50 border-border text-foreground rounded-lg"
-                  />
-                </div>
+                <PasswordInput
+                  placeholder="••••••••"
+                  disabled={loading}
+                  {...register('newPassword')}
+                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
+                />
                 {errors.newPassword && (
                   <p className="text-xs text-red-500">{errors.newPassword.message}</p>
                 )}
@@ -157,18 +146,12 @@ export default function ChangePasswordPage() {
                 <label className="text-sm font-semibold text-foreground">
                   {locale === 'ar' ? 'تأكيد كلمة المرور الجديدة' : 'Confirm New Password'}
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    disabled={loading}
-                    {...register('confirmPassword')}
-                    className="h-11 ps-10 bg-secondary/50 border-border text-foreground rounded-lg"
-                  />
-                </div>
+                <PasswordInput
+                  placeholder="••••••••"
+                  disabled={loading}
+                  {...register('confirmPassword')}
+                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
+                />
                 {errors.confirmPassword && (
                   <p className="text-xs text-red-500">{errors.confirmPassword.message}</p>
                 )}

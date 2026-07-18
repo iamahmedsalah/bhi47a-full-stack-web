@@ -5,6 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams, useRouter } from 'next/navigation';
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BookOpen,
   Download,
   Edit2,
@@ -68,6 +71,7 @@ import { TableCell } from '@/components/ui/table';
 
 interface StudentUserRef {
   isActive?: boolean;
+  mustChangePassword?: boolean;
   lastLoginAt?: string;
   phone?: string;
   nationalIdMasked?: string;
@@ -95,6 +99,17 @@ interface Student {
   createdAt?: string;
   updatedAt?: string;
   userId?: StudentUserRef | string;
+  registrationSummary?: {
+    academicYear?: string;
+    semester?: string;
+    isTermOpen: boolean;
+    status: string;
+    registrationId?: string;
+    courseCount: number;
+    totalCreditHours: number;
+    advisingCaseId?: string;
+    advisingStatus: string;
+  };
 }
 
 interface Grade {
@@ -142,6 +157,7 @@ type StudentFormState = {
   examFloor: string;
   examBuilding: string;
   enrollmentStatus: string;
+  mustChangePassword: boolean;
 };
 
 const initialForm: StudentFormState = {
@@ -160,6 +176,7 @@ const initialForm: StudentFormState = {
   examFloor: '',
   examBuilding: '',
   enrollmentStatus: 'active',
+  mustChangePassword: false,
 };
 
 const studentImportColumns = [
@@ -177,6 +194,7 @@ const studentImportColumns = [
   'examRoom',
   'examFloor',
   'examBuilding',
+  'mustChangePassword',
 ];
 
 function getUserRef(student: Student): StudentUserRef | null {
@@ -272,11 +290,12 @@ function StudentsPageContent() {
   const t = useTranslations('students');
   const tCommon = useTranslations('common');
   const params = useParams();
+  const router = useRouter();
   const locale = params.locale as string;
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const { search, level, status, page, selectedKeys, setFilter, setSelectedKeys } = useStudentStore();
+  const { search, level, status, sortBy, sortOrder, page, selectedKeys, setFilter, setSelectedKeys } = useStudentStore();
   const limit = 10;
   const canViewSensitiveStudentData = user?.role === 'admin';
 
@@ -284,21 +303,25 @@ function StudentsPageContent() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isBulkDeactivateOpen, setIsBulkDeactivateOpen] = useState(false);
   const [profileStudent, setProfileStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState<StudentFormState>(initialForm);
   const [newPassword, setNewPassword] = useState('');
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
   const studentsQuery = useQuery({
-    queryKey: studentKeys.list({ page, limit, search, level, enrollmentStatus: status }),
+    queryKey: studentKeys.list({ page, limit, search, level, enrollmentStatus: status, sortBy, sortOrder: sortOrder as 'asc' | 'desc' }),
     queryFn: async () => {
       const queryParams: Record<string, string | number> = { page, limit };
       if (search.trim()) queryParams.search = search.trim();
       if (level !== 'all') queryParams.level = level;
       if (status !== 'all') queryParams.enrollmentStatus = status;
+      if (sortBy) queryParams.sortBy = sortBy;
+      if (sortOrder) queryParams.sortOrder = sortOrder;
 
       return listStudents(queryParams);
     },
@@ -345,7 +368,7 @@ function StudentsPageContent() {
   const profileComplaints = profileComplaintsQuery.data ?? [];
   const profileEmail = profileEmailQuery.data;
 
-  const setFormField = (key: keyof StudentFormState, value: string) => {
+  const setFormField = (key: keyof StudentFormState, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
@@ -374,6 +397,7 @@ function StudentsPageContent() {
       examFloor: student.examFloor ?? '',
       examBuilding: student.examBuilding ?? '',
       enrollmentStatus: student.enrollmentStatus ?? 'active',
+      mustChangePassword: getUserRef(student)?.mustChangePassword ?? false,
     });
     setFormError('');
     setIsEditOpen(true);
@@ -382,6 +406,7 @@ function StudentsPageContent() {
   const openResetModal = (student: Student) => {
     setSelectedStudent(student);
     setNewPassword('');
+    setForcePasswordChange(false);
     setFormError('');
     setIsResetOpen(true);
   };
@@ -412,6 +437,7 @@ function StudentsPageContent() {
         examRoom: form.examRoom || undefined,
         examFloor: form.examFloor || undefined,
         examBuilding: form.examBuilding || undefined,
+        mustChangePassword: form.mustChangePassword,
       });
       setIsAddOpen(false);
       toast.success(locale === 'ar' ? 'تمت إضافة الطالب بنجاح' : 'Student added successfully');
@@ -445,6 +471,7 @@ function StudentsPageContent() {
         examFloor: form.examFloor || undefined,
         examBuilding: form.examBuilding || undefined,
         enrollmentStatus: form.enrollmentStatus,
+        mustChangePassword: form.mustChangePassword,
       });
       setIsEditOpen(false);
       toast.success(locale === 'ar' ? 'تم تحديث بيانات الطالب بنجاح' : 'Student updated successfully');
@@ -464,7 +491,7 @@ function StudentsPageContent() {
     setFormLoading(true);
 
     try {
-      await resetStudentPassword(selectedStudent._id, newPassword);
+      await resetStudentPassword(selectedStudent._id, newPassword, forcePasswordChange);
       toast.success(locale === 'ar' ? 'تمت إعادة تعيين كلمة المرور' : 'Password reset successfully');
       setIsResetOpen(false);
     } catch (error) {
@@ -623,6 +650,31 @@ function StudentsPageContent() {
       ),
     },
     {
+      key: 'registration',
+      header: locale === 'ar' ? 'التسجيل' : 'Registration',
+      render: (student) => {
+        const summary = student.registrationSummary;
+        const registered = summary?.status === 'approved';
+        return (
+          <TableCell className="min-w-52 p-4">
+            <button
+              type="button"
+              onClick={() => router.push(`/${locale}/admin/academic-advising?student=${student.studentCode}`)}
+              className="text-start"
+            >
+              <StatusBadge
+                label={registered ? (locale === 'ar' ? 'مسجل' : 'Registered') : (locale === 'ar' ? 'غير مسجل' : 'Not registered')}
+                variant={registered ? 'success' : 'warning'}
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {summary?.academicYear ?? '—'} · {summary?.semester ?? '—'}
+              </span>
+            </button>
+          </TableCell>
+        );
+      },
+    },
+    {
       key: 'status',
       header: t('enrollmentStatus'),
       render: (student) => (
@@ -697,11 +749,11 @@ function StudentsPageContent() {
       >
         <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
           <UploadCloud className="h-4 w-4" />
-          Upload Students
+          {locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}
         </Button>
         <Button variant="outline" onClick={exportStudents} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Export
+          {locale === 'ar' ? 'تصدير' : 'Export'}
         </Button>
         <Button onClick={openAddModal}>
           <Plus className="h-4 w-4" />
@@ -760,10 +812,17 @@ function StudentsPageContent() {
 
       <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <p>
-          Showing <span className="font-bold text-foreground">{fromRow}-{toRow}</span> of{' '}
-          <span className="font-bold text-foreground">{total}</span>
+          {locale === 'ar' ? (
+            <>عرض <span className="font-bold text-foreground">{fromRow}-{toRow}</span> من إجمالي <span className="font-bold text-foreground">{total}</span> طالب</>
+          ) : (
+            <>Showing <span className="font-bold text-foreground">{fromRow}-{toRow}</span> of <span className="font-bold text-foreground">{total}</span></>
+          )}
         </p>
-        <p className="text-xs">Search supports student code and student name. Pagination is powered by the backend helper.</p>
+        <p className="text-xs">
+          {locale === 'ar'
+            ? 'البحث يدعم كود الطالب والاسم الكامل. الترقيم مدعوم من الخادم.'
+            : 'Search supports student code and student name. Pagination is powered by the backend helper.'}
+        </p>
       </div>
 
       <DataTableShell
@@ -792,7 +851,7 @@ function StudentsPageContent() {
             : []),
           {
             label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
-            onClick: handleBulkDeactivate,
+            onClick: () => setIsBulkDeactivateOpen(true),
             variant: 'destructive' as const,
             icon: <Trash2 className="h-3.5 w-3.5" />,
           },
@@ -878,6 +937,11 @@ function StudentsPageContent() {
                 placeholder="********"
               />
             </div>
+            <PasswordChangeToggle
+              checked={forcePasswordChange}
+              onCheckedChange={setForcePasswordChange}
+              locale={locale}
+            />
             <DialogFooter className="border-t border-border/70 pt-4">
               <Button variant="secondary" type="button" onClick={() => setIsResetOpen(false)}>
                 {tCommon('cancel')}
@@ -894,8 +958,12 @@ function StudentsPageContent() {
       <DataUploadDialog
         open={isUploadOpen}
         onOpenChange={setIsUploadOpen}
-        title="Bulk Upload Students"
-        description="Import or update student records from XLSX, XLS, or CSV. Existing student codes are updated."
+        title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'}
+        description={
+          locale === 'ar'
+            ? 'قم برفع ملف بصيغة xlsx أو xls أو csv لإنشاء أو تحديث سجلات الطلاب بموجب الكود الأكاديمي.'
+            : 'Import or update student records from XLSX, XLS, or CSV. Existing student codes are updated.'
+        }
         uploadType="students"
         expectedColumns={studentImportColumns}
         onSuccess={() => invalidateStudents()}
@@ -913,6 +981,23 @@ function StudentsPageContent() {
         complaintsLoading={profileComplaintsQuery.isLoading}
         locale={locale}
         canViewSensitiveStudentData={canViewSensitiveStudentData}
+      />
+
+      <ConfirmDialog
+        open={isBulkDeactivateOpen}
+        onOpenChange={setIsBulkDeactivateOpen}
+        title={t('deactivate')}
+        description={
+          locale === 'ar'
+            ? `هل أنت متأكد من تعطيل حسابات ${selectedKeys.length} من الطلاب المحددين؟`
+            : `Are you sure you want to suspend ${selectedKeys.length} selected student accounts?`
+        }
+        confirmLabel={t('deactivate')}
+        cancelLabel={tCommon('cancel')}
+        onConfirm={() => {
+          setIsBulkDeactivateOpen(false);
+          void handleBulkDeactivate(selectedKeys);
+        }}
       />
     </div>
   );
@@ -936,7 +1021,7 @@ function StudentFormDialog({
   onOpenChange: (open: boolean) => void;
   mode: 'add' | 'edit';
   form: StudentFormState;
-  setFormField: (key: keyof StudentFormState, value: string) => void;
+  setFormField: (key: keyof StudentFormState, value: string | boolean) => void;
   onSubmit: (event: React.FormEvent) => void;
   loading: boolean;
   error: string;
@@ -1083,6 +1168,12 @@ function StudentFormDialog({
             </Field>
           )}
 
+          <PasswordChangeToggle
+            checked={form.mustChangePassword}
+            onCheckedChange={(checked) => setFormField('mustChangePassword', checked)}
+            locale={locale}
+          />
+
           <DialogFooter className="border-t border-border/70 pt-4">
             <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>
               {tCommon('cancel')}
@@ -1095,6 +1186,48 @@ function StudentFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PasswordChangeToggle({
+  checked,
+  onCheckedChange,
+  locale,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  locale: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[20px] border border-border/70 bg-muted/25 px-4 py-3">
+      <div className="text-start">
+        <p className="text-sm font-semibold text-foreground">
+          {locale === 'ar' ? 'إلزام تغيير كلمة المرور عند الدخول التالي' : 'Require password change on next login'}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {locale === 'ar'
+            ? 'متوقف افتراضياً، ويمكن للمشرف تفعيله لهذا الطالب.'
+            : 'Off by default. The admin can enable it for this student.'}
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onCheckedChange(!checked)}
+        className={cn(
+          'relative h-7 w-12 shrink-0 rounded-full border transition-colors',
+          checked ? 'border-primary bg-primary' : 'border-border bg-muted',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-1 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform',
+            checked ? 'translate-x-6' : 'translate-x-1',
+          )}
+        />
+      </button>
+    </div>
   );
 }
 
@@ -1135,11 +1268,6 @@ function StudentProfileDialog({
   const router = useRouter();
   const [visibleComplaints, setVisibleComplaints] = useState(5);
 
-  React.useEffect(() => {
-    if (!open) {
-      setVisibleComplaints(5);
-    }
-  }, [open]);
   const userRef = student ? getUserRef(student) : null;
   const coursesFromGrades = useMemo(() => {
     const map = new Map<string, Grade>();
@@ -1147,17 +1275,42 @@ function StudentProfileDialog({
     return Array.from(map.values());
   }, [grades]);
 
+  const isAr = locale === 'ar';
+  const semesterMap: Record<string, string> = {
+    first: isAr ? 'الأول' : 'First',
+    second: isAr ? 'الثاني' : 'Second',
+    summer: isAr ? 'الصيفي' : 'Summer',
+  };
+  const enrollmentStatusMap: Record<string, string> = {
+    active: isAr ? 'نشط' : 'Active',
+    suspended: isAr ? 'موقوف' : 'Suspended',
+    graduated: isAr ? 'خريج' : 'Graduated',
+    withdrawn: isAr ? 'منسحب' : 'Withdrawn',
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl rounded-xl border border-border/70 bg-card/95 p-0 text-foreground shadow-[var(--shadow-glow)] backdrop-blur">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setVisibleComplaints(5);
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent className="max-w-5xl rounded-xl border border-border/70 bg-card/95 p-0 text-foreground shadow-[var(--shadow-glow)] backdrop-blur" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="border-b border-border/70 p-5">
           <DialogHeader className="text-start">
             <DialogTitle className="flex flex-wrap items-center gap-2 text-2xl">
               <GraduationCap className="h-6 w-6 text-primary" />
-              {student?.fullName || 'Student Profile'}
+              {student?.fullName || (isAr ? 'الملف الشخصي للطالب' : 'Student Profile')}
             </DialogTitle>
             <DialogDescription>
-              {student?.studentCode ? `Complete profile for ${student.studentCode}` : 'Loading student profile...'}
+              {student?.studentCode
+                ? isAr
+                  ? `تفاصيل الملف الكامل للطالب ${student.studentCode}`
+                  : `Complete profile for ${student.studentCode}`
+                : isAr
+                  ? 'جاري تحميل بيانات الطالب...'
+                  : 'Loading student profile...'}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -1167,20 +1320,20 @@ function StudentProfileDialog({
             <Loader2 className="h-7 w-7 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="max-h-[78vh] space-y-5 overflow-y-auto p-5">
+          <div className="max-h-[78vh] space-y-5 overflow-y-auto p-5 text-start">
             <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <InfoItem label="Student Code" value={<span className="font-mono text-primary">{student.studentCode}</span>} />
-              <InfoItem label="Enrollment Status" value={<StatusBadge label={student.enrollmentStatus} variant={student.enrollmentStatus === 'active' ? 'success' : 'warning'} />} />
-              <InfoItem label="Account Active" value={userRef?.isActive === false ? 'No' : 'Yes'} />
-              <InfoItem label="Last Login" value={formatDate(userRef?.lastLoginAt, locale)} />
+              <InfoItem label={isAr ? "كود الطالب" : "Student Code"} value={<span className="font-mono text-primary">{student.studentCode}</span>} />
+              <InfoItem label={isAr ? "حالة القيد" : "Enrollment Status"} value={<StatusBadge label={enrollmentStatusMap[student.enrollmentStatus] ?? student.enrollmentStatus} variant={student.enrollmentStatus === 'active' ? 'success' : 'warning'} />} />
+              <InfoItem label={isAr ? "حساب مفعل" : "Account Active"} value={userRef?.isActive === false ? (isAr ? 'لا' : 'No') : (isAr ? 'نعم' : 'Yes')} />
+              <InfoItem label={isAr ? "آخر تسجيل دخول" : "Last Login"} value={formatDate(userRef?.lastLoginAt, locale)} />
             </section>
 
             <section>
-              <SectionTitle icon={<Users className="h-4 w-4" />} title="Identity & Contact" />
+              <SectionTitle icon={<Users className="h-4 w-4" />} title={isAr ? "الهوية وبيانات التواصل" : "Identity & Contact"} />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoItem label="Full Name" value={student.fullName} />
+                <InfoItem label={isAr ? "الاسم الكامل" : "Full Name"} value={student.fullName} />
                 <InfoItem
-                  label="National ID"
+                  label={isAr ? "الرقم القومي" : "National ID"}
                   value={
                     <SensitiveNationalId
                       value={student.nationalIdMasked || userRef?.nationalIdMasked}
@@ -1189,42 +1342,42 @@ function StudentProfileDialog({
                     />
                   }
                 />
-                <InfoItem label="Academic Email" value={student.academicEmail || academicEmail?.academicEmail} />
-                <InfoItem label="Phone" value={userRef?.phone} />
+                <InfoItem label={isAr ? "البريد الأكاديمي" : "Academic Email"} value={student.academicEmail || academicEmail?.academicEmail} />
+                <InfoItem label={isAr ? "رقم الهاتف" : "Phone"} value={userRef?.phone} />
               </div>
             </section>
 
             <section>
-              <SectionTitle icon={<BookOpen className="h-4 w-4" />} title="Academic Profile" />
+              <SectionTitle icon={<BookOpen className="h-4 w-4" />} title={isAr ? "الملف الأكاديمي" : "Academic Profile"} />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoItem label="Level" value={`Level ${student.level}`} />
-                <InfoItem label="Department" value={student.department} />
-                <InfoItem label="Group" value={student.group} />
-                <InfoItem label="Section" value={student.section} />
-                <InfoItem label="Academic Year" value={student.academicYear} />
-                <InfoItem label="Semester" value={student.semester} />
-                <InfoItem label="Created At" value={formatDate(student.createdAt, locale)} />
-                <InfoItem label="Updated At" value={formatDate(student.updatedAt, locale)} />
+                <InfoItem label={isAr ? "المستوى الدراسي" : "Level"} value={isAr ? `المستوى ${student.level}` : `Level ${student.level}`} />
+                <InfoItem label={isAr ? "القسم" : "Department"} value={student.department} />
+                <InfoItem label={isAr ? "المجموعة" : "Group"} value={student.group} />
+                <InfoItem label={isAr ? "الفرقة" : "Section"} value={student.section} />
+                <InfoItem label={isAr ? "السنة الدراسية" : "Academic Year"} value={student.academicYear} />
+                <InfoItem label={isAr ? "الفصل الدراسي" : "Semester"} value={semesterMap[student.semester] ?? student.semester} />
+                <InfoItem label={isAr ? "تاريخ الإنشاء" : "Created At"} value={formatDate(student.createdAt, locale)} />
+                <InfoItem label={isAr ? "تاريخ التحديث" : "Updated At"} value={formatDate(student.updatedAt, locale)} />
               </div>
             </section>
 
             <section>
-              <SectionTitle icon={<MapPin className="h-4 w-4" />} title="Exam Placement" />
+              <SectionTitle icon={<MapPin className="h-4 w-4" />} title={isAr ? "مقر الامتحانات" : "Exam Placement"} />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoItem label="Seat Number" value={student.seatNumber} />
-                <InfoItem label="Building" value={student.examBuilding} />
-                <InfoItem label="Floor" value={student.examFloor} />
-                <InfoItem label="Room" value={student.examRoom} />
+                <InfoItem label={isAr ? "رقم الجلوس" : "Seat Number"} value={student.seatNumber} />
+                <InfoItem label={isAr ? "المبنى" : "Building"} value={student.examBuilding} />
+                <InfoItem label={isAr ? "الدور" : "Floor"} value={student.examFloor} />
+                <InfoItem label={isAr ? "القاعة" : "Room"} value={student.examRoom} />
               </div>
             </section>
 
             <section className="grid gap-4 xl:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-surface/25 p-4">
-                <SectionTitle icon={<FileSpreadsheet className="h-4 w-4" />} title="Courses & Grades" />
+                <SectionTitle icon={<FileSpreadsheet className="h-4 w-4" />} title={isAr ? "المقررات والدرجات" : "Courses & Grades"} />
                 {gradesLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 ) : coursesFromGrades.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No grades or courses recorded yet.</p>
+                  <p className="text-sm text-muted-foreground">{isAr ? "لا توجد درجات أو مقررات مسجلة بعد." : "No grades or courses recorded yet."}</p>
                 ) : (
                   <div className="mt-3 space-y-2">
                     {grades.slice(0, 8).map((grade) => (
@@ -1241,11 +1394,11 @@ function StudentProfileDialog({
               </div>
 
               <div className="rounded-xl border border-border/70 bg-surface/25 p-4">
-                <SectionTitle icon={<Mail className="h-4 w-4" />} title="Complaints & Tickets" />
+                <SectionTitle icon={<Mail className="h-4 w-4" />} title={isAr ? "الشكاوى والتذاكر" : "Complaints & Tickets"} />
                 {complaintsLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 ) : complaints.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No tickets found for this student.</p>
+                  <p className="text-sm text-muted-foreground">{isAr ? "لا توجد تذاكر أو شكاوى لهذا الطالب." : "No tickets found for this student."}</p>
                 ) : (
                   <div className="mt-3 space-y-2">
                     {complaints.slice(0, visibleComplaints).map((complaint) => (

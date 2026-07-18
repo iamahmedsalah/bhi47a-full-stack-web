@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import api, { getApiErrorDetails, getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingState, ErrorState, AlertMessage } from '@/components/ui/feedback';
+import { PasswordInput } from '@/components/ui/password-input';
+import { useGoogleSignIn } from '@/hooks/use-google-signin';
 import {
   User,
   Loader2,
@@ -22,6 +25,9 @@ import {
   Users2,
   Hash,
   Fingerprint,
+  Link2,
+  Unlink,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -44,6 +50,14 @@ interface StudentProfile {
   googleEmail: string;
   googleLinkedAt?: string;
   googleLinkPending: boolean;
+}
+
+interface GoogleLinkStartResponse {
+  googleEmail?: string;
+  googleLinkPending?: boolean;
+  emailDeliveryStatus?: 'sent' | 'failed';
+  devOtp?: string;
+  message?: string;
 }
 
 function isPasswordChangeRequiredError(error: unknown) {
@@ -72,6 +86,12 @@ export default function StudentProfilePage() {
   const [contactLoading, setContactLoading] = useState(false);
   const [contactError, setContactError] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleUnlinking, setGoogleUnlinking] = useState(false);
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [googleOtp, setGoogleOtp] = useState('');
+  const [verifyingGoogleOtp, setVerifyingGoogleOtp] = useState(false);
+  const [googleOtpError, setGoogleOtpError] = useState('');
+  const [googleDevOtp, setGoogleDevOtp] = useState('');
 
   const profileQuery = useQuery({
     queryKey: ['student-profile'],
@@ -80,6 +100,38 @@ export default function StudentProfilePage() {
       return res.data;
     },
   });
+
+  const { renderButton, scriptLoaded, isInitialized } = useGoogleSignIn({
+    locale: tCommon('search') === 'Search...' ? 'en' : 'ar',
+    onSuccess: async (credential) => {
+      setVerifyingGoogleOtp(true);
+      try {
+        await api.post('/auth/google/link/verify-oauth', { credential });
+        setGoogleDevOtp('');
+        toast.success(
+          tCommon('search') === 'Search...' ? 'Google account linked successfully' : 'تم ربط حساب Google بنجاح'
+        );
+        void profileQuery.refetch();
+      } catch (err: unknown) {
+        toast.error(getApiErrorMessage(err, tCommon('search') === 'Search...' ? 'Could not link Google account' : 'تعذر ربط حساب Google'));
+      } finally {
+        setVerifyingGoogleOtp(false);
+      }
+    },
+  });
+
+  useEffect(() => {
+    const pending = profileQuery.data?.googleLinkPending;
+    if (scriptLoaded && isInitialized && pending) {
+      renderButton('google-verify-oauth-btn', {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'pill',
+        width: '280',
+      });
+    }
+  }, [isInitialized, scriptLoaded, renderButton, profileQuery.data?.googleLinkPending]);
 
   const isEnglish = tCommon('search') === 'Search...';
   const email = emailDraft ?? profileQuery.data?.email ?? '';
@@ -97,6 +149,7 @@ export default function StudentProfilePage() {
       });
       setEmailDraft(undefined);
       setPhoneDraft(undefined);
+      setIsEditingContact(false);
       toast.success(isEnglish ? 'Contact information updated' : 'تم تحديث بيانات التواصل');
       void profileQuery.refetch();
     } catch (err: unknown) {
@@ -104,6 +157,12 @@ export default function StudentProfilePage() {
     } finally {
       setContactLoading(false);
     }
+  };
+
+  const handleCancelContactEdit = () => {
+    setEmailDraft(undefined);
+    setPhoneDraft(undefined);
+    setIsEditingContact(false);
   };
 
   const handleGoogleLink = async () => {
@@ -115,13 +174,68 @@ export default function StudentProfilePage() {
     setGoogleLoading(true);
     setContactError('');
     try {
-      await api.post('/auth/google/link/start', { email: email.trim() });
+      const res = await api.post<GoogleLinkStartResponse>('/auth/google/link/start', { email: email.trim() });
+      const response = res.data;
+      setGoogleOtp('');
+      setGoogleDevOtp(response.devOtp ?? '');
+      if (response.emailDeliveryStatus === 'failed' && response.devOtp) {
+        toast.warning(isEnglish ? 'Email delivery failed. Use the dev OTP shown below.' : 'تعذر إرسال البريد. استخدم رمز التطوير المعروض.');
+      }
       toast.success(isEnglish ? 'Google account saved for linking' : 'تم حفظ حساب Google للربط');
       void profileQuery.refetch();
     } catch (err: unknown) {
       setContactError(getApiErrorMessage(err, isEnglish ? 'Could not start Google linking' : 'تعذر بدء ربط Google'));
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleVerifyGoogleOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (googleOtp.length !== 6 || !/^\d+$/.test(googleOtp)) {
+      setGoogleOtpError(isEnglish ? 'OTP must be exactly 6 digits.' : 'يجب أن يتكون رمز التحقق من 6 أرقام.');
+      return;
+    }
+    setVerifyingGoogleOtp(true);
+    setGoogleOtpError('');
+    try {
+      await api.post('/auth/google/link/verify-otp', { otp: googleOtp });
+      setGoogleDevOtp('');
+      toast.success(isEnglish ? 'Google account linked successfully' : 'تم ربط حساب Google بنجاح');
+      setGoogleOtp('');
+      void profileQuery.refetch();
+    } catch (err: unknown) {
+      setGoogleOtpError(getApiErrorMessage(err, isEnglish ? 'Invalid OTP' : 'رمز التحقق غير صحيح'));
+    } finally {
+      setVerifyingGoogleOtp(false);
+    }
+  };
+
+  const handleUnlinkGoogle = async () => {
+    setGoogleUnlinking(true);
+    setContactError('');
+    setGoogleOtpError('');
+    try {
+      await api.delete('/auth/google/link');
+      setGoogleDevOtp('');
+      setGoogleOtp('');
+      toast.success(
+        isEnglish
+          ? 'Google account link removed'
+          : 'تم إلغاء ربط حساب Google'
+      );
+      void profileQuery.refetch();
+    } catch (err: unknown) {
+      setContactError(
+        getApiErrorMessage(
+          err,
+          isEnglish
+            ? 'Could not remove Google link'
+            : 'تعذر إلغاء ربط حساب Google'
+        )
+      );
+    } finally {
+      setGoogleUnlinking(false);
     }
   };
 
@@ -181,7 +295,7 @@ export default function StudentProfilePage() {
             </p>
           </div>
 
-          <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] space-y-5 rounded-2xl">
+          <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-5 rounded-2xl">
             {pwError && <AlertMessage tone="danger">{pwError}</AlertMessage>}
             {pwSuccess && <AlertMessage tone="success">{pwSuccess}</AlertMessage>}
 
@@ -190,12 +304,11 @@ export default function StudentProfilePage() {
                 <label className="text-xs font-bold text-foreground">
                   {tAuth('currentPassword')}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                  className="w-full h-11 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                 />
               </div>
 
@@ -203,13 +316,12 @@ export default function StudentProfilePage() {
                 <label className="text-xs font-bold text-foreground">
                   {tAuth('newPassword')}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                  className="w-full h-11 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                 />
               </div>
 
@@ -217,12 +329,11 @@ export default function StudentProfilePage() {
                 <label className="text-xs font-bold text-foreground">
                   {tAuth('confirmPassword')}
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                  className="w-full h-11 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                 />
               </div>
 
@@ -255,6 +366,12 @@ export default function StudentProfilePage() {
     return <ErrorState title={tCommon('noData')} />;
   }
 
+  const googleStatus = profile.googleLinkedAt
+    ? 'linked'
+    : profile.googleLinkPending
+      ? 'pending'
+      : 'unlinked';
+
   return (
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
       {/* Page Title */}
@@ -274,7 +391,7 @@ export default function StudentProfilePage() {
         {/* Profile Card */}
         <div className="lg:col-span-2 space-y-6">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-sm space-y-6 relative overflow-hidden rounded-2xl ">
+            <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-6 relative overflow-hidden rounded-2xl ">
               <div className="flex items-center gap-4 border-b border-border pb-5">
                 <div className="flex h-16 w-16 items-center justify-center rounded-squircle bg-primary/10 text-primary shrink-0">
                   <GraduationCap className="h-8 w-8" />
@@ -408,8 +525,8 @@ export default function StudentProfilePage() {
                       {isEnglish
                         ? profile.semester
                         : profile.semester === 'first'
-                        ? 'الفصل الدراسي الأول'
-                        : 'الفصل الدراسي الثاني'}
+                          ? 'الفصل الدراسي الأول'
+                          : 'الفصل الدراسي الثاني'}
                     </span>
                   </div>
                 </div>
@@ -423,7 +540,7 @@ export default function StudentProfilePage() {
         <div className="space-y-6">
           {/* Contact details card */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
-            <Card className="p-5 bg-card/45 backdrop-blur-sm border-border shadow-sm space-y-4 rounded-2xl">
+            <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-4 rounded-2xl">
               <div className="flex items-center gap-2 border-b border-border pb-3">
                 <Mail className="h-5 w-5 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
@@ -444,7 +561,8 @@ export default function StudentProfilePage() {
                     value={email}
                     onChange={(e) => setEmailDraft(e.target.value)}
                     placeholder="student@gmail.com"
-                    className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                    disabled={!isEditingContact}
+                    className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-75 disabled:cursor-not-allowed"
                     dir="ltr"
                   />
                 </div>
@@ -460,19 +578,41 @@ export default function StudentProfilePage() {
                     value={phone}
                     onChange={(e) => setPhoneDraft(e.target.value.replace(/[^\d+]/g, '').slice(0, 15))}
                     placeholder="01012345678"
-                    className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors"
+                    disabled={!isEditingContact}
+                    className="w-full rounded-squircle border border-border bg-secondary/50 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-75 disabled:cursor-not-allowed"
                     dir="ltr"
                   />
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={contactLoading}
-                  className="w-full h-10 text-xs font-bold bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5 rounded-squircle border border-border/60"
-                >
-                  {contactLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {isEnglish ? 'Save contact info' : 'حفظ بيانات التواصل'}
-                </Button>
+                {!isEditingContact ? (
+                  <Button
+                    type="button"
+                    onClick={() => setIsEditingContact(true)}
+                    className="w-full h-10 text-xs font-bold bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5 rounded-squircle border border-border/60"
+                  >
+                    {isEnglish ? 'Edit Contact Info' : 'تعديل بيانات التواصل'}
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={contactLoading}
+                      className="flex-1 h-10 text-xs font-bold bg-primary hover:bg-primary/85 text-primary-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5 rounded-squircle"
+                    >
+                      {contactLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {isEnglish ? 'Save' : 'حفظ'}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleCancelContactEdit}
+                      disabled={contactLoading}
+                      variant="outline"
+                      className="flex-1 h-10 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 rounded-squircle border border-border/60"
+                    >
+                      {isEnglish ? 'Cancel' : 'إلغاء'}
+                    </Button>
+                  </div>
+                )}
               </form>
 
               {/* Google Link Status */}
@@ -490,37 +630,159 @@ export default function StudentProfilePage() {
                         ? `Linked to ${profile.googleEmail || email}`
                         : `مرتبط بـ ${profile.googleEmail || email}`)
                       : profile.googleLinkPending
-                      ? (isEnglish
-                        ? `Pending Google setup for ${profile.googleEmail || email}`
-                        : `في انتظار تفعيل ربط Google لـ ${profile.googleEmail || email}`)
-                      : (isEnglish
-                        ? 'Save a Gmail address to configure faster Google login.'
-                        : 'احفظ بريد Gmail لبدء ربط تسجيل الدخول السريع عبر Google.')}
+                        ? (isEnglish
+                          ? `Pending Google setup for ${profile.googleEmail || email}`
+                          : `في انتظار تفعيل ربط Google لـ ${profile.googleEmail || email}`)
+                        : (isEnglish
+                          ? 'Save a Gmail address to configure faster Google login.'
+                          : 'احفظ بريد Gmail لبدء ربط تسجيل الدخول السريع عبر Google.')}
                   </span>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={googleLoading || !email.trim()}
-                  onClick={handleGoogleLink}
-                  className="w-full h-10 text-xs font-bold border-primary/20 bg-transparent text-primary hover:bg-primary/10 flex items-center justify-center gap-1.5 cursor-pointer rounded-squircle"
-                >
-                  {googleLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="currentColor" />
-                    </svg>
-                  )}
-                  {isEnglish ? 'Configure Google Link' : 'تجهيز ربط Google'}
-                </Button>
+                {googleStatus !== 'linked' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={googleLoading || !email.trim()}
+                    onClick={handleGoogleLink}
+                    className="w-full h-10 text-xs font-bold border-primary/20 bg-transparent text-primary hover:bg-primary/10 flex items-center justify-center gap-1.5 cursor-pointer rounded-squircle"
+                  >
+                    {googleLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4 shrink-0" />
+                    )}
+                    {googleStatus === 'pending'
+                      ? (isEnglish ? 'Resend or Change Google Email' : 'إعادة الإرسال أو تغيير البريد')
+                      : (isEnglish ? 'Start Google Link' : 'بدء ربط Google')}
+                  </Button>
+                )}
+
+                {profile.googleLinkPending && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22 }}
+                    className="border-t border-primary/15 pt-3.5 space-y-3.5"
+                  >
+                    {googleDevOtp && (
+                      <AlertMessage tone="warning">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span>{isEnglish ? 'Local dev OTP' : 'رمز التحقق المحلي'}</span>
+                          <span className="rounded-lg bg-background/60 px-2 py-1 font-mono text-sm font-bold tracking-[0.24em]" dir="ltr">
+                            {googleDevOtp}
+                          </span>
+                        </div>
+                      </AlertMessage>
+                    )}
+                    <form onSubmit={handleVerifyGoogleOtp} className="space-y-3">
+                      <div className="space-y-1 text-start">
+                        <label className="text-[10px] font-bold text-foreground block">
+                          {isEnglish ? 'Enter OTP Verification Code' : 'رمز التحقق (OTP) المرسل لبريدك'}
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          required
+                          value={googleOtp}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (/^\d*$/.test(val) && val.length <= 6) {
+                              setGoogleOtp(val);
+                            }
+                          }}
+                          placeholder="123456"
+                          className="w-full rounded-squircle border border-border bg-secondary/30 px-3.5 py-2 text-center text-sm font-mono text-foreground outline-none focus:border-primary/50 transition-colors"
+                          dir="ltr"
+                        />
+                        {googleOtpError && (
+                          <p className="text-[10px] font-semibold text-red-500 mt-1">
+                            {googleOtpError}
+                          </p>
+                        )}
+                      </div>
+
+                      <Button
+                        type="submit"
+                        disabled={verifyingGoogleOtp || googleOtp.length !== 6}
+                        className="w-full h-9 text-xs font-bold bg-primary hover:bg-primary/80 text-primary-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5 rounded-squircle"
+                      >
+                        {verifyingGoogleOtp && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        {isEnglish ? 'Verify OTP Code' : 'التحقق من رمز OTP'}
+                      </Button>
+                    </form>
+
+                    {/* OR Direct Google Link Verification */}
+                    <div className="relative flex items-center justify-center my-2">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-primary/10" />
+                      </div>
+                      <span className="relative px-2 bg-card text-[9px] font-bold text-muted-foreground uppercase">
+                        {isEnglish ? 'OR Link Directly' : 'أو الربط المباشر'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-center w-full min-h-[40px]">
+                      <div id="google-verify-oauth-btn" className="w-full overflow-hidden rounded-full animate-fade-in" />
+                    </div>
+
+                    <ConfirmDialog
+                      trigger={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={googleUnlinking}
+                          className="w-full h-9 text-xs font-bold border-danger/30 text-danger hover:bg-danger/10 flex items-center justify-center gap-1.5 cursor-pointer rounded-squircle"
+                        >
+                          {googleUnlinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                          {isEnglish ? 'Cancel Google Setup' : 'إلغاء إعداد Google'}
+                        </Button>
+                      }
+                      title={isEnglish ? 'Cancel Google setup?' : 'إلغاء إعداد Google؟'}
+                      description={
+                        isEnglish
+                          ? 'This removes the pending Google email and verification code. You can start again later.'
+                          : 'سيتم حذف بريد Google المعلق ورمز التحقق. يمكنك البدء مرة أخرى لاحقاً.'
+                      }
+                      confirmLabel={isEnglish ? 'Cancel setup' : 'إلغاء الإعداد'}
+                      cancelLabel={isEnglish ? 'Keep setup' : 'متابعة الإعداد'}
+                      onConfirm={handleUnlinkGoogle}
+                    />
+                  </motion.div>
+                )}
+
+                {googleStatus === 'linked' && (
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={googleUnlinking}
+                        className="w-full h-10 text-xs font-bold border-danger/30 text-danger hover:bg-danger/10 flex items-center justify-center gap-1.5 cursor-pointer rounded-squircle"
+                      >
+                        {googleUnlinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
+                        {isEnglish ? 'Unlink Google Account' : 'إلغاء ربط حساب Google'}
+                      </Button>
+                    }
+                    title={isEnglish ? 'Unlink Google account?' : 'إلغاء ربط حساب Google؟'}
+                    description={
+                      isEnglish
+                        ? 'Google sign-in will stop working for this student account. Password login will continue to work.'
+                        : 'سيتوقف تسجيل الدخول عبر Google لهذا الحساب. سيظل تسجيل الدخول بكلمة المرور يعمل.'
+                    }
+                    confirmLabel={isEnglish ? 'Unlink account' : 'إلغاء الربط'}
+                    cancelLabel={isEnglish ? 'Keep linked' : 'إبقاء الربط'}
+                    onConfirm={handleUnlinkGoogle}
+                  />
+                )}
               </div>
             </Card>
           </motion.div>
 
           {/* Change Password Card */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-            <Card className="p-5 bg-card/45 backdrop-blur-sm border-border shadow-sm space-y-4 rounded-2xl">
+            <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-4 rounded-2xl">
               <div className="flex items-center gap-2 border-b border-border pb-3">
                 <Lock className="h-5 w-5 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
@@ -536,12 +798,11 @@ export default function StudentProfilePage() {
                   <label className="text-xs font-bold text-foreground">
                     {tAuth('currentPassword')}
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground placeholder-muted-foreground focus:border-primary/50 outline-none transition-all text-sm"
+                    className="w-full h-10 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                   />
                 </div>
 
@@ -549,13 +810,12 @@ export default function StudentProfilePage() {
                   <label className="text-xs font-bold text-foreground">
                     {tAuth('newPassword')}
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     minLength={8}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground placeholder-muted-foreground focus:border-primary/50 outline-none transition-all text-sm"
+                    className="w-full h-10 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                   />
                 </div>
 
@@ -563,12 +823,11 @@ export default function StudentProfilePage() {
                   <label className="text-xs font-bold text-foreground">
                     {tAuth('confirmPassword')}
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground placeholder-muted-foreground focus:border-primary/50 outline-none transition-all text-sm"
+                    className="w-full h-10 bg-secondary/50 border-border text-foreground outline-none transition-colors"
                   />
                 </div>
 

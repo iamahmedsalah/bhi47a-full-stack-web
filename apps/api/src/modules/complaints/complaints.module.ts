@@ -8,6 +8,7 @@ import {
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintsController } from './complaints.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ComplaintsController } from './complaints.controller';
       { name: SystemSettings.name, schema: SystemSettingsSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [ComplaintsController],
   providers: [ComplaintsService],

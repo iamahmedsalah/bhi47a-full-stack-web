@@ -8,6 +8,8 @@ import {
   IsArray,
   IsIn,
   Min,
+  Max,
+  IsInt,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -22,6 +24,16 @@ export class CreateCourseDto {
   @IsString()
   @IsNotEmpty()
   name!: string;
+
+  @ApiProperty({ example: 'برمجة الحاسب الآلي' })
+  @IsString()
+  @IsNotEmpty()
+  nameAr!: string;
+
+  @ApiProperty({ example: 'Computer Programming' })
+  @IsString()
+  @IsNotEmpty()
+  nameEn!: string;
 
   @ApiProperty({ example: 'CS101' })
   @IsString()
@@ -60,10 +72,62 @@ export class CreateCourseDto {
   @IsString({ each: true })
   prerequisites?: string[];
 
-  @ApiPropertyOptional({ example: 'required', enum: ['required', 'elective'] })
+  @ApiPropertyOptional({ example: ['CS102'] })
   @IsOptional()
-  @IsIn(['required', 'elective'])
-  type?: 'required' | 'elective';
+  @IsArray()
+  @IsString({ each: true })
+  coRequisites?: string[];
+
+  @ApiPropertyOptional({ example: ['CS100'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  equivalentCourses?: string[];
+
+  @ApiPropertyOptional({ enum: SEMESTER_VALUES, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(SEMESTER_VALUES, { each: true })
+  offeredTerms?: Semester[];
+
+  @ApiPropertyOptional({
+    example: 'required',
+    enum: [
+      'required',
+      'elective',
+      'university_req',
+      'institute_req',
+      'specialization_req',
+    ],
+  })
+  @IsOptional()
+  @IsIn([
+    'required',
+    'elective',
+    'university_req',
+    'institute_req',
+    'specialization_req',
+  ])
+  type?:
+    | 'required'
+    | 'elective'
+    | 'university_req'
+    | 'institute_req'
+    | 'specialization_req';
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 8 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  recommendedSemester?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 4 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(4)
+  minimumGpa?: number;
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
@@ -76,6 +140,16 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameAr?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  nameEn?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -114,10 +188,61 @@ export class UpdateCourseDto {
   @IsString({ each: true })
   prerequisites?: string[];
 
-  @ApiPropertyOptional({ enum: ['required', 'elective'] })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsIn(['required', 'elective'])
-  type?: 'required' | 'elective';
+  @IsArray()
+  @IsString({ each: true })
+  coRequisites?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  equivalentCourses?: string[];
+
+  @ApiPropertyOptional({ enum: SEMESTER_VALUES, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(SEMESTER_VALUES, { each: true })
+  offeredTerms?: Semester[];
+
+  @ApiPropertyOptional({
+    enum: [
+      'required',
+      'elective',
+      'university_req',
+      'institute_req',
+      'specialization_req',
+    ],
+  })
+  @IsOptional()
+  @IsIn([
+    'required',
+    'elective',
+    'university_req',
+    'institute_req',
+    'specialization_req',
+  ])
+  type?:
+    | 'required'
+    | 'elective'
+    | 'university_req'
+    | 'institute_req'
+    | 'specialization_req';
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 8 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  recommendedSemester?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 4 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(4)
+  minimumGpa?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

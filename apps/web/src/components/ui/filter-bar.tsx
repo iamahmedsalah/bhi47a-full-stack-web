@@ -42,7 +42,7 @@ export function FilterBar({
         </div>
 
         {children && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:flex-nowrap lg:justify-end">
+          <div className="flex flex-row flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
             {children}
           </div>
         )}

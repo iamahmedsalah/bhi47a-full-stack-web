@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
@@ -12,10 +13,19 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { CsrfGuard } from './guards/csrf.guard';
 import { FirstLoginGuard } from './guards/first-login.guard';
 import { UsersModule } from '../users/users.module';
+import { EmailsModule } from '../emails/emails.module';
+import {
+  StudentProfile,
+  StudentProfileSchema,
+} from '../students/schemas/student-profile.schema';
 
 @Module({
   imports: [
     UsersModule,
+    EmailsModule,
+    MongooseModule.forFeature([
+      { name: StudentProfile.name, schema: StudentProfileSchema },
+    ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

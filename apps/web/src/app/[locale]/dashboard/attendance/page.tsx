@@ -61,7 +61,7 @@ export default function StudentAttendancePage() {
             <span>{t('attendance')}</span>
           </h2>
         </div>
-        <Card className="bg-card/45 backdrop-blur-sm border-border p-6 shadow-sm">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <EmptyState
             title={isEnglish ? 'No attendance records' : 'لا توجد سجلات حضور وغياب'}
             description={
@@ -99,7 +99,7 @@ export default function StudentAttendancePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Overall Percentage */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-32 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-xs font-bold text-muted-foreground">
                 {isEnglish ? 'Overall Attendance' : 'نسبة الحضور العامة'}
@@ -119,7 +119,7 @@ export default function StudentAttendancePage() {
 
         {/* Total Lectures */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-32 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-xs font-bold text-muted-foreground">
                 {isEnglish ? 'Total Lectures' : 'إجمالي المحاضرات'}
@@ -137,7 +137,7 @@ export default function StudentAttendancePage() {
 
         {/* Attended Sessions */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-32 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-xs font-bold text-muted-foreground">
                 {isEnglish ? 'Attended Sessions' : 'عدد مرات الحضور'}
@@ -155,7 +155,7 @@ export default function StudentAttendancePage() {
 
         {/* Absence Sessions */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.15 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-32 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-xs font-bold text-muted-foreground">
                 {isEnglish ? 'Absence Sessions' : 'عدد مرات الغياب'}
@@ -188,7 +188,7 @@ export default function StudentAttendancePage() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25, delay: index * 0.05 }}
               >
-                <Card className="p-5 bg-card/45 backdrop-blur-sm border-border shadow-sm hover:shadow-md transition-all space-y-4">
+                <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-4">
                   <div className="flex items-center justify-between border-b border-border pb-3">
                     <div>
                       <h4 className="font-bold text-foreground">

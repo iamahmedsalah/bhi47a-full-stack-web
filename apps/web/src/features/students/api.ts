@@ -3,6 +3,7 @@ import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
 
 export interface StudentUserRef {
   isActive?: boolean;
+  mustChangePassword?: boolean;
   lastLoginAt?: string;
   phone?: string;
   nationalIdMasked?: string;
@@ -30,6 +31,17 @@ export interface Student {
   createdAt?: string;
   updatedAt?: string;
   userId?: StudentUserRef | string;
+  registrationSummary?: {
+    academicYear?: string;
+    semester?: string;
+    isTermOpen: boolean;
+    status: string;
+    registrationId?: string;
+    courseCount: number;
+    totalCreditHours: number;
+    advisingCaseId?: string;
+    advisingStatus: string;
+  };
 }
 
 export interface GradeSummary {
@@ -67,6 +79,8 @@ export interface StudentListParams {
   search?: string;
   level?: string;
   enrollmentStatus?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface StudentWritePayload {
@@ -85,6 +99,7 @@ export interface StudentWritePayload {
   examFloor?: string;
   examBuilding?: string;
   enrollmentStatus?: string;
+  mustChangePassword?: boolean;
 }
 
 export const studentKeys = {
@@ -136,10 +151,10 @@ export function updateStudent(id: string, payload: StudentWritePayload) {
   return apiPatch<Student, StudentWritePayload>(`/admin/students/${id}`, payload);
 }
 
-export function resetStudentPassword(id: string, newPassword: string) {
-  return apiPost<{ message?: string }, { newPassword: string }>(
+export function resetStudentPassword(id: string, newPassword: string, mustChangePassword = false) {
+  return apiPost<{ message?: string }, { newPassword: string; mustChangePassword: boolean }>(
     `/admin/students/${id}/reset-password`,
-    { newPassword },
+    { newPassword, mustChangePassword },
   );
 }
 

@@ -32,6 +32,18 @@ export class StudentAcademicProfile {
   @Prop({ type: [String], default: [] })
   failedCourses!: string[];
 
+  @Prop({ type: [String], default: [] })
+  lowGradeCourses!: string[];
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  academicWarnings!: number;
+
+  @Prop({ type: Boolean, default: false })
+  isGraduatingThisYear!: boolean;
+
+  @Prop({ type: [String], default: [] })
+  approvedICCourseCompletions!: string[];
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   advisorId?: Types.ObjectId;
 }

@@ -57,7 +57,7 @@ export default function StudentExamPlacePage() {
             <span>{t('examPlace')}</span>
           </h2>
         </div>
-        <Card className="bg-card/45 backdrop-blur-sm border-border p-6 shadow-sm">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <EmptyState
             title={isEnglish ? 'No exam place assigned' : 'أماكن اللجان لم تعلن بعد'}
             description={
@@ -75,11 +75,11 @@ export default function StudentExamPlacePage() {
     <div className="mx-auto max-w-4xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
       {/* Title */}
       <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+        <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground text-start">
           <MapPin className="h-6 w-6 text-primary" />
           <span>{t('examPlace')}</span>
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground text-start">
           {isEnglish
             ? 'Find your assigned seat number, building, floor, and exam room/committee'
             : 'اعرف رقم جلوسك، مبنى الامتحان، الدور، واسم قاعة اللجنة المخصصة لك'}
@@ -90,7 +90,7 @@ export default function StudentExamPlacePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Seat Number */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-squircle text-start">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Seat Number' : 'رقم الجلوس'}
@@ -103,7 +103,7 @@ export default function StudentExamPlacePage() {
 
         {/* Committee/Room */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-squircle text-start">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Committee/Room' : 'اللجنة / القاعة'}
@@ -116,7 +116,7 @@ export default function StudentExamPlacePage() {
 
         {/* Building */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-squircle text-start">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Building' : 'المبنى'}
@@ -129,7 +129,7 @@ export default function StudentExamPlacePage() {
 
         {/* Floor */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.15 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-squircle text-start">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Floor' : 'الدور'}
@@ -141,14 +141,14 @@ export default function StudentExamPlacePage() {
         </motion.div>
       </div>
 
-      {/* Detailed Ticket Card */}
+      {/* Detailed Seating Ticket Card */}
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] space-y-6 relative overflow-hidden">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-6 relative overflow-hidden rounded-squircle">
           <div className="flex items-center gap-3 border-b border-border pb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <CheckCircle className="h-5 w-5" />
             </div>
-            <div>
+            <div className="text-start">
               <h3 className="text-base font-bold text-foreground">
                 {isEnglish ? 'Official Seating Ticket' : 'بطاقة تفاصيل مقر اللجنة'}
               </h3>
@@ -156,7 +156,7 @@ export default function StudentExamPlacePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 border-b border-border pb-5">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 border-b border-border pb-5 text-start">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground block font-semibold">
                 {isEnglish ? 'Allocated Building' : 'مقر مبنى الامتحان'}
@@ -179,9 +179,9 @@ export default function StudentExamPlacePage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-foreground">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-foreground text-start">
             <p className="font-bold text-primary mb-1 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
               {isEnglish ? 'Seating Seat Number:' : 'تأكيد رقم الجلوس:'}
             </p>
             <p className="text-muted-foreground">
@@ -196,7 +196,7 @@ export default function StudentExamPlacePage() {
 
       {/* Seating Regulations */}
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.25 }}>
-        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-sm space-y-4">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-4 rounded-squircle text-start">
           <div className="flex items-center gap-2 text-foreground font-bold text-sm border-b border-border pb-3">
             <HelpCircle className="h-5 w-5 text-primary" />
             <span>{isEnglish ? 'Student Exam Regulations' : 'تعليمات وتوجيهات لجان الامتحانات'}</span>

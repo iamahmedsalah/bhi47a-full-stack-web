@@ -89,7 +89,7 @@ export function TableError({
 
 export interface ColumnDef<T> {
   key: string;
-  header: string;
+  header: React.ReactNode;
   className?: string;
   render: (item: T, index: number) => React.ReactNode;
 }

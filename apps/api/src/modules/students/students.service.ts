@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import {
   StudentProfile,
   StudentProfileDocument,
@@ -23,12 +23,31 @@ import {
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
+import {
+  CourseRegistration,
+  CourseRegistrationDocument,
+} from '../registrations/schemas/course-registration.schema';
+import {
+  RegistrationTerm,
+  RegistrationTermDocument,
+} from '../registrations/schemas/registration-term.schema';
+import { isRegistrationTermCurrentlyOpen } from '../registrations/utils/registration-term.util';
+import {
+  AdvisingCase,
+  AdvisingCaseDocument,
+} from '../academic-advising/schemas/advising-case.schema';
 
 @Injectable()
 export class StudentsService {
   constructor(
     @InjectModel(StudentProfile.name)
     private studentProfileModel: Model<StudentProfileDocument>,
+    @InjectModel(CourseRegistration.name)
+    private registrationModel: Model<CourseRegistrationDocument>,
+    @InjectModel(RegistrationTerm.name)
+    private registrationTermModel: Model<RegistrationTermDocument>,
+    @InjectModel(AdvisingCase.name)
+    private advisingCaseModel: Model<AdvisingCaseDocument>,
     private usersService: UsersService,
     private emailsService: EmailsService,
   ) {}
@@ -47,8 +66,9 @@ export class StudentsService {
       studentCode: dto.studentCode,
       password: dto.nationalId,
       nationalId: dto.nationalId,
+      email: dto.academicEmail,
       phone: dto.phone,
-      mustChangePassword: true,
+      mustChangePassword: dto.mustChangePassword ?? false,
     });
 
     // Create student profile
@@ -105,18 +125,33 @@ export class StudentsService {
       filter.enrollmentStatus = query.enrollmentStatus;
     }
 
+    const sortField =
+      query.sortBy === 'studentCode' ? 'studentCode' : 'createdAt';
+    const sortDir: 1 | -1 =
+      query.sortOrder === 'asc'
+        ? 1
+        : query.sortOrder === 'desc'
+          ? -1
+          : query.sortBy === 'studentCode'
+            ? 1
+            : -1;
+
     const [items, total] = await Promise.all([
       this.studentProfileModel
         .find(filter)
-        .populate('userId', 'isActive nationalIdMasked nationalId lastLoginAt')
-        .sort({ createdAt: -1 })
+        .populate(
+          'userId',
+          'isActive nationalIdMasked nationalId lastLoginAt mustChangePassword',
+        )
+        .sort({ [sortField]: sortDir })
         .skip(skip)
         .limit(limit)
         .lean(),
       this.studentProfileModel.countDocuments(filter),
     ]);
 
-    return createPaginatedResult(items, total, page, limit);
+    const enrichedItems = await this.attachRegistrationSummaries(items);
+    return createPaginatedResult(enrichedItems, total, page, limit);
   }
 
   async findById(id: string) {
@@ -124,22 +159,137 @@ export class StudentsService {
       .findById(id)
       .populate(
         'userId',
-        'isActive nationalIdMasked nationalId phone lastLoginAt',
-      );
+        'isActive nationalIdMasked nationalId phone lastLoginAt mustChangePassword',
+      )
+      .lean();
     if (!profile) {
       throw new NotFoundException('الطالب غير موجود'); // Student not found
     }
-    return profile;
+    const [enriched] = await this.attachRegistrationSummaries([profile]);
+    return enriched;
   }
 
-  async findByUserId(userId: string) {
-    const profile = await this.studentProfileModel.findOne({ userId });
-    if (!profile) {
-      throw new NotFoundException('الملف الشخصي غير موجود'); // Profile not found
+  private async attachRegistrationSummaries<T extends Record<string, any>>(
+    profiles: T[],
+  ): Promise<Array<T & { registrationSummary: Record<string, unknown> }>> {
+    if (profiles.length === 0) return [];
+
+    const currentTerms = await this.registrationTermModel
+      .find({ isCurrent: true })
+      .sort({ updatedAt: -1, academicYear: -1 })
+      .lean();
+    const activeTerm =
+      currentTerms.find((term) => isRegistrationTermCurrentlyOpen(term)) ??
+      currentTerms[0];
+
+    const userIds = profiles
+      .map((profile) => this.getProfileUserId(profile))
+      .filter((id): id is Types.ObjectId => Boolean(id));
+
+    const termFilter = activeTerm
+      ? {
+          academicYear: activeTerm.academicYear,
+          semester: activeTerm.semester,
+        }
+      : null;
+    const [registrations, advisingCases] = termFilter
+      ? await Promise.all([
+          this.registrationModel
+            .find({ studentId: { $in: userIds }, ...termFilter })
+            .sort({ createdAt: -1 })
+            .lean(),
+          this.advisingCaseModel
+            .find({ studentId: { $in: userIds }, ...termFilter })
+            .sort({ updatedAt: -1 })
+            .lean(),
+        ])
+      : [[], []];
+
+    const registrationByStudent = new Map(
+      registrations.map((registration) => [
+        registration.studentId.toString(),
+        registration,
+      ]),
+    );
+    const advisingByStudent = new Map(
+      advisingCases.map((advisingCase) => [
+        advisingCase.studentId.toString(),
+        advisingCase,
+      ]),
+    );
+
+    return profiles.map((profile) => {
+      const key = this.getProfileUserId(profile)?.toHexString() ?? '';
+      const registration = registrationByStudent.get(key);
+      const advisingCase = advisingByStudent.get(key);
+
+      return {
+        ...profile,
+        registrationSummary: {
+          academicYear: activeTerm?.academicYear,
+          semester: activeTerm?.semester,
+          isTermOpen: isRegistrationTermCurrentlyOpen(activeTerm),
+          status: registration?.status ?? 'not_registered',
+          registrationId: registration?._id?.toString(),
+          courseCount: registration?.courses?.length ?? 0,
+          totalCreditHours: registration?.totalCreditHours ?? 0,
+          advisingCaseId: advisingCase?._id?.toString(),
+          advisingStatus: advisingCase?.status ?? 'NOT_STARTED',
+        },
+      };
+    });
+  }
+
+  private getProfileUserId(
+    profile: Record<string, unknown>,
+  ): Types.ObjectId | undefined {
+    const user = profile.userId;
+    if (user instanceof Types.ObjectId) return user;
+    if (typeof user === 'string' && Types.ObjectId.isValid(user)) {
+      return new Types.ObjectId(user);
     }
+    if (user && typeof user === 'object' && '_id' in user) {
+      const id = (user as { _id?: unknown })._id;
+      if (id instanceof Types.ObjectId) return id;
+      if (typeof id === 'string' && Types.ObjectId.isValid(id)) {
+        return new Types.ObjectId(id);
+      }
+    }
+    return undefined;
+  }
+
+  async findByUserId(userId: string): Promise<Record<string, any>> {
     const user = await this.usersService.findById(userId);
+    let profile = await this.studentProfileModel.findOne({
+      $or: [
+        { userId: new Types.ObjectId(userId) },
+        ...(user?.studentCode ? [{ studentCode: user.studentCode }] : []),
+      ],
+    });
+
+    if (!profile) {
+      profile = await this.studentProfileModel.create({
+        userId: new Types.ObjectId(userId),
+        studentCode: user.studentCode ?? user.userCode ?? userId,
+        fullName: user.name ?? 'Student',
+        nationalId: user.nationalId ?? '00000000000000',
+        academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+        level: '1',
+        semester: 'first',
+        enrollmentStatus: 'active',
+      });
+    } else if (!profile.userId || profile.userId.toString() !== userId) {
+      profile.userId = new Types.ObjectId(userId);
+      await profile.save();
+    }
+
+    const profileObj =
+      typeof (profile as any).toObject === 'function'
+        ? (profile as any).toObject()
+        : profile;
+
     return {
-      ...profile.toObject(),
+      ...profileObj,
       email: user.email ?? '',
       phone: user.phone ?? '',
       googleEmail: user.googleEmail ?? '',
@@ -148,13 +298,31 @@ export class StudentsService {
     };
   }
 
-  async updateMyContact(userId: string, dto: UpdateMyContactDto) {
+  async findUserIdsBySearch(search: string) {
+    const normalized = normalizeSearchTerm(search);
+    const profiles = await this.studentProfileModel
+      .find({
+        $or: [
+          { studentCode: { $regex: normalized, $options: 'i' } },
+          { fullName: { $regex: normalized, $options: 'i' } },
+          { nationalId: { $regex: normalized, $options: 'i' } },
+        ],
+      })
+      .select('userId')
+      .lean();
+    return profiles.map((profile) => profile.userId);
+  }
+
+  async updateMyContact(
+    userId: string,
+    dto: UpdateMyContactDto,
+  ): Promise<Record<string, any>> {
     await this.usersService.updateStudentContact(userId, dto);
     return this.findByUserId(userId);
   }
 
   async update(id: string, dto: UpdateStudentDto) {
-    const { nationalId, ...profileUpdates } = dto;
+    const { nationalId, mustChangePassword, ...profileUpdates } = dto;
     const profile = await this.studentProfileModel.findByIdAndUpdate(
       id,
       { $set: profileUpdates },
@@ -182,6 +350,12 @@ export class StudentsService {
       profile.nationalIdMasked = user.nationalIdMasked;
       profile.nationalId = nationalId;
       await profile.save();
+    }
+
+    if (mustChangePassword !== undefined) {
+      const user = await this.usersService.findById(profile.userId.toString());
+      user.mustChangePassword = mustChangePassword;
+      await user.save();
     }
 
     if (dto.enrollmentStatus === 'active') {
@@ -229,14 +403,13 @@ export class StudentsService {
       throw new NotFoundException('الطالب غير موجود');
     }
 
-    const user = await this.usersService.findById(profile.userId.toString());
-
     await this.usersService.updatePassword(
       profile.userId.toString(),
       dto.newPassword,
     );
 
-    user.mustChangePassword = true;
+    const user = await this.usersService.findById(profile.userId.toString());
+    user.mustChangePassword = dto.mustChangePassword ?? false;
     await user.save();
 
     const emailTo = profile.academicEmail || user.email;

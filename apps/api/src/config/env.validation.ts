@@ -50,6 +50,44 @@ function validateOptionalPort(config: Record<string, unknown>) {
   }
 }
 
+function validateGoogleClientIds(config: Record<string, unknown>) {
+  const apiClientId = readString(config, 'GOOGLE_CLIENT_ID');
+  const webClientId = readString(config, 'NEXT_PUBLIC_GOOGLE_CLIENT_ID');
+
+  if (apiClientId && webClientId && apiClientId !== webClientId) {
+    throw new Error(
+      'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID must match',
+    );
+  }
+}
+
+function validateEmailProvider(
+  config: Record<string, unknown>,
+  nodeEnv: string,
+) {
+  const hasResend = !!readString(config, 'RESEND_API_KEY');
+  const hasSmtpUser = !!readString(config, 'SMTP_USER');
+  const hasSmtpPass = !!readString(config, 'SMTP_PASS');
+
+  if (hasSmtpUser !== hasSmtpPass) {
+    throw new Error('SMTP_USER and SMTP_PASS must be configured together');
+  }
+
+  const smtpPort = readString(config, 'SMTP_PORT');
+  if (smtpPort) {
+    const parsed = Number(smtpPort);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error('SMTP_PORT must be a valid TCP port');
+    }
+  }
+
+  if (nodeEnv === 'production' && !hasResend && !(hasSmtpUser && hasSmtpPass)) {
+    throw new Error(
+      'Production requires SMTP_USER/SMTP_PASS or RESEND_API_KEY',
+    );
+  }
+}
+
 export function validateEnv(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -57,6 +95,8 @@ export function validateEnv(
 
   validateJwtSecret(config);
   validateOptionalPort(config);
+  validateGoogleClientIds(config);
+  validateEmailProvider(config, nodeEnv);
 
   if (nodeEnv === 'production') {
     requireValue(config, 'MONGODB_URI');

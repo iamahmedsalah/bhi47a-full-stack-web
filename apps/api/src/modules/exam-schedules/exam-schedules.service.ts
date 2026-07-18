@@ -20,6 +20,7 @@ import {
   UpdateExamScheduleDto,
   QueryExamScheduleDto,
 } from './dto/exam-schedule.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface ExamScheduleUploadFile {
   buffer: Buffer;
@@ -42,6 +43,7 @@ export class ExamSchedulesService {
     private examScheduleModel: Model<ExamScheduleDocument>,
     @InjectModel(StudentProfile.name)
     private studentModel: Model<StudentProfileDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   private getCloudinaryConfig() {
@@ -146,7 +148,24 @@ export class ExamSchedulesService {
 
   async create(dto: CreateExamScheduleDto): Promise<ExamScheduleDocument> {
     const created = new this.examScheduleModel(dto);
-    return created.save();
+    const saved = await created.save();
+
+    if (saved.isPublished) {
+      try {
+        await this.notificationsService.sendNotification(
+          {
+            targetType: 'all',
+            title: 'جدول الامتحانات | Exam Schedule Published',
+            body: `تم نشر جدول امتحانات جديد: ${saved.title}`,
+          },
+          'system',
+        );
+      } catch (err) {
+        console.error('Failed to send exam schedule notification:', err);
+      }
+    }
+
+    return saved;
   }
 
   async findAll(query: QueryExamScheduleDto): Promise<ExamSchedule[]> {
@@ -177,6 +196,22 @@ export class ExamSchedulesService {
     if (!updated) {
       throw new NotFoundException('جدول الامتحانات غير موجود');
     }
+
+    if (updated.isPublished) {
+      try {
+        await this.notificationsService.sendNotification(
+          {
+            targetType: 'all',
+            title: 'جدول الامتحانات | Exam Schedule Updated',
+            body: `تم تحديث جدول الامتحانات: ${updated.title}`,
+          },
+          'system',
+        );
+      } catch (err) {
+        console.error('Failed to send exam schedule notification:', err);
+      }
+    }
+
     return updated;
   }
 

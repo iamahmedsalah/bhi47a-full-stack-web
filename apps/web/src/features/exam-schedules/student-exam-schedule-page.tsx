@@ -159,7 +159,7 @@ export default function StudentExamSchedulePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
       >
-        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] space-y-6 relative overflow-hidden">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-6 relative overflow-hidden">
           {currentSchedule ? (
             <div className="space-y-6">
               <div className="flex flex-col gap-4 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
@@ -196,19 +196,19 @@ export default function StudentExamSchedulePage() {
 
                 <div className="space-y-4 rounded-2xl border border-border bg-secondary/20 p-5 flex flex-col justify-between">
                   <div className="space-y-3">
-                    <div className="bg-card p-4 rounded-xl border border-border/80">
+                    <div className="bg-card/45 backdrop-blur-sm p-4 rounded-xl border border-border/70 hover:border-primary/30 transition-all duration-300">
                       <p className="text-xs text-muted-foreground font-semibold">
                         {locale === 'ar' ? 'العنوان' : 'Title'}
                       </p>
                       <p className="mt-1 text-sm font-bold text-foreground">{currentSchedule.title}</p>
                     </div>
-                    <div className="bg-card p-4 rounded-xl border border-border/80">
+                    <div className="bg-card/45 backdrop-blur-sm p-4 rounded-xl border border-border/70 hover:border-primary/30 transition-all duration-300">
                       <p className="text-xs text-muted-foreground font-semibold">
                         {locale === 'ar' ? 'السنة الدراسية' : 'Academic year'}
                       </p>
                       <p className="mt-1 text-sm font-bold text-foreground font-mono">{currentSchedule.academicYear}</p>
                     </div>
-                    <div className="bg-card p-4 rounded-xl border border-border/80">
+                    <div className="bg-card/45 backdrop-blur-sm p-4 rounded-xl border border-border/70 hover:border-primary/30 transition-all duration-300">
                       <p className="text-xs text-muted-foreground font-semibold">
                         {locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}
                       </p>

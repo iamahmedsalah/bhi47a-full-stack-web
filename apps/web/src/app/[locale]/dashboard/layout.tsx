@@ -3,8 +3,11 @@
 import React from 'react';
 import { useParams } from 'next/navigation';
 import StudentSidebar from '@/components/student/sidebar';
+import StudentHeader from '@/components/student/header';
+import { Footer } from '@/components/ui/footer';
 import { useUIStore } from '@/store/ui-store';
 import { cn } from '@/lib/cn';
+import { FcmInitializer } from '@/providers/fcm-initializer';
 
 export default function StudentLayout({
   children,
@@ -17,19 +20,25 @@ export default function StudentLayout({
 
   return (
     <div className="min-h-screen">
-      {/* Sidebar */}
+      {/* FCM push notifications initializer */}
+      <FcmInitializer />
+      
+      {/* Sidebar — fixed to end (right in RTL, left in LTR) */}
       <StudentSidebar />
 
-      {/* Main Content */}
+      {/* Main Content — offset by sidebar width */}
       <div
         className={cn(
           'flex min-h-screen flex-col transition-all duration-300',
           sidebarOpen ? 'md:me-72' : 'md:me-26',
         )}
       >
-        <main className="flex-1 p-4 pt-20 md:p-6">
+        <StudentHeader />
+        <main className="flex-1 p-4 pt-6 md:p-6">
           {children}
         </main>
+
+        <Footer role="student" locale={locale} />
       </div>
     </div>
   );

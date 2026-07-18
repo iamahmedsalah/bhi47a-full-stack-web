@@ -10,6 +10,11 @@
     "notifications.read",
     "emails.read"
   ],
+  "staff": [
+    { "name": "Dr. Youssef Hassan", "email": "youssef.hassan@bis.edu.eg" },
+    { "name": "Dr. Salma Mahmoud", "email": "salma.mahmoud@bis.edu.eg" },
+    { "name": "Mr. Karim Adel", "email": "karim.adel@bis.edu.eg" }
+  ],
   "students": [
     {
       "studentCode": "202600001",
@@ -26,7 +31,12 @@
       "examBuilding": "A",
       "examFloor": "1",
       "examRoom": "101",
-      "phone": "01010000001"
+      "phone": "01010000001",
+      "gpa": 3.45,
+      "academicWarnings": 0,
+      "completedCourses": [],
+      "failedCourses": [],
+      "lowGradeCourses": []
     },
     {
       "studentCode": "202600002",
@@ -43,7 +53,12 @@
       "examBuilding": "A",
       "examFloor": "1",
       "examRoom": "102",
-      "phone": "01010000002"
+      "phone": "01010000002",
+      "gpa": 1.72,
+      "academicWarnings": 2,
+      "completedCourses": [],
+      "failedCourses": [],
+      "lowGradeCourses": []
     },
     {
       "studentCode": "202600003",
@@ -51,16 +66,21 @@
       "nationalId": "30103033456789",
       "academicEmail": "omar.ibrahim.2026@bis.edu.eg",
       "department": "Business Information Systems",
-      "level": "1",
+      "level": "2",
       "group": "B",
       "section": "1",
       "academicYear": "2026-2027",
-      "semester": "first",
+      "semester": "second",
       "seatNumber": "1003",
       "examBuilding": "B",
       "examFloor": "2",
       "examRoom": "205",
-      "phone": "01010000003"
+      "phone": "01010000003",
+      "gpa": 2.85,
+      "academicWarnings": 0,
+      "completedCourses": ["BIS101-2026", "CS101-2026", "MTH101-2026", "ENG101-2026", "ECO101", "ACC101", "BUS101", "LAW101"],
+      "failedCourses": [],
+      "lowGradeCourses": ["ACC101"]
     },
     {
       "studentCode": "202600004",
@@ -68,21 +88,54 @@
       "nationalId": "30104044567890",
       "academicEmail": "sara.mahmoud.2026@bis.edu.eg",
       "department": "Business Information Systems",
-      "level": "1",
+      "level": "2",
       "group": "B",
       "section": "2",
       "academicYear": "2026-2027",
-      "semester": "first",
+      "semester": "second",
       "seatNumber": "1004",
       "examBuilding": "B",
       "examFloor": "2",
       "examRoom": "206",
-      "phone": "01010000004"
+      "phone": "01010000004",
+      "gpa": 1.91,
+      "academicWarnings": 1,
+      "completedCourses": ["BIS101-2026", "CS101-2026", "ENG101-2026", "ECO101", "BUS101", "LAW101"],
+      "failedCourses": ["MTH101-2026", "ACC101"],
+      "lowGradeCourses": []
+    },
+    {
+      "studentCode": "202600005", "fullName": "Youssef Khaled Amin", "nationalId": "30105055678901", "academicEmail": "youssef.amin.2026@bis.edu.eg", "department": "Business Information Systems", "level": "3", "group": "A", "section": "1", "academicYear": "2026-2027", "semester": "first", "seatNumber": "3001", "examBuilding": "C", "examFloor": "1", "examRoom": "301", "phone": "01010000005",
+      "gpa": 3.12, "academicWarnings": 0,
+      "completedCourses": ["BIS101-2026", "CS101-2026", "MTH101-2026", "ENG101-2026", "ECO101", "ACC101", "BUS101", "LAW101", "ECO201", "ACC201", "MKT201", "LAW201", "ENG202", "ACC202", "BUS202", "FIN202", "MIS202"], "failedCourses": [], "lowGradeCourses": []
+    },
+    {
+      "studentCode": "202600006", "fullName": "Nourhan Wael Samir", "nationalId": "30106066789012", "academicEmail": "nourhan.samir.2026@bis.edu.eg", "department": "Business Information Systems", "level": "3", "group": "A", "section": "2", "academicYear": "2026-2027", "semester": "first", "seatNumber": "3002", "examBuilding": "C", "examFloor": "1", "examRoom": "302", "phone": "01010000006",
+      "gpa": 1.48, "academicWarnings": 3,
+      "completedCourses": ["BIS101-2026", "CS101-2026", "ENG101-2026", "ECO101", "BUS101", "LAW101", "MKT201", "LAW201", "ENG202", "BUS202", "MIS202"], "failedCourses": ["MTH101-2026", "ACC101", "ACC201", "ACC202", "FIN202"], "lowGradeCourses": ["ECO101"]
+    },
+    {
+      "studentCode": "202600007", "fullName": "Mostafa Tarek Fawzy", "nationalId": "30107077890123", "academicEmail": "mostafa.fawzy.2026@bis.edu.eg", "department": "Business Information Systems", "level": "1", "group": "C", "section": "1", "academicYear": "2026-2027", "semester": "first", "seatNumber": "1007", "examBuilding": "A", "examFloor": "2", "examRoom": "107", "phone": "01010000007",
+      "gpa": 2.21, "academicWarnings": 0, "completedCourses": [], "failedCourses": [], "lowGradeCourses": []
+    },
+    {
+      "studentCode": "202600008", "fullName": "Hana Ashraf Nabil", "nationalId": "30108088901234", "academicEmail": "hana.nabil.2026@bis.edu.eg", "department": "Business Information Systems", "level": "2", "group": "B", "section": "1", "academicYear": "2026-2027", "semester": "second", "seatNumber": "2008", "examBuilding": "B", "examFloor": "2", "examRoom": "208", "phone": "01010000008",
+      "gpa": 1.83, "academicWarnings": 1, "completedCourses": ["BIS101-2026", "CS101-2026", "ENG101-2026", "ECO101", "ACC101", "BUS101", "LAW101"], "failedCourses": ["MTH101-2026"], "lowGradeCourses": ["ACC101"]
+    },
+    {
+      "studentCode": "202600009", "fullName": "Mahmoud Emad Saeed", "nationalId": "30109099012345", "academicEmail": "mahmoud.saeed.2026@bis.edu.eg", "department": "Business Information Systems", "level": "3", "group": "B", "section": "1", "academicYear": "2026-2027", "semester": "second", "seatNumber": "3009", "examBuilding": "C", "examFloor": "2", "examRoom": "309", "phone": "01010000009",
+      "gpa": 2.67, "academicWarnings": 0, "completedCourses": ["BIS101-2026", "CS101-2026", "MTH101-2026", "ENG101-2026", "ECO101", "ACC101", "BUS101", "LAW101", "ECO201", "ACC201", "MKT201", "LAW201", "ENG202", "ACC202", "BUS202", "FIN202", "MIS202", "FIN301", "ECO301", "MIS301"], "failedCourses": [], "lowGradeCourses": []
+    },
+    {
+      "studentCode": "202600010", "fullName": "Reem Hany Galal", "nationalId": "30110100123456", "academicEmail": "reem.galal.2026@bis.edu.eg", "department": "Business Information Systems", "level": "3", "group": "B", "section": "2", "academicYear": "2026-2027", "semester": "second", "seatNumber": "3010", "examBuilding": "C", "examFloor": "2", "examRoom": "310", "phone": "01010000010",
+      "gpa": 1.36, "academicWarnings": 3, "completedCourses": ["BIS101-2026", "CS101-2026", "ENG101-2026", "ECO101", "BUS101", "LAW101", "MKT201", "LAW201", "ENG202", "BUS202", "MIS202"], "failedCourses": ["MTH101-2026", "ACC101", "ACC201", "ACC202", "FIN202", "ECO201"], "lowGradeCourses": ["CS101-2026"]
     }
   ],
   "courses": [
     {
       "name": "Introduction to Information Systems",
+      "nameAr": "مقدمة في نظم المعلومات",
+      "nameEn": "Introduction to Information Systems",
       "code": "BIS101-2026",
       "level": "1",
       "academicLevel": "1",
@@ -95,6 +148,8 @@
     },
     {
       "name": "Programming Fundamentals",
+      "nameAr": "أساسيات البرمجة",
+      "nameEn": "Programming Fundamentals",
       "code": "CS101-2026",
       "level": "1",
       "academicLevel": "1",
@@ -107,6 +162,8 @@
     },
     {
       "name": "Mathematics I",
+      "nameAr": "رياضيات الأعمال",
+      "nameEn": "Business Mathematics",
       "code": "MTH101-2026",
       "level": "1",
       "academicLevel": "1",
@@ -119,6 +176,8 @@
     },
     {
       "name": "English Language",
+      "nameAr": "لغة أجنبية 1",
+      "nameEn": "Foreign Language 1",
       "code": "ENG101-2026",
       "level": "1",
       "academicLevel": "1",
@@ -128,6 +187,33 @@
       "prerequisites": [],
       "type": "required",
       "isActive": true
-    }
+    },
+    { "name": "Principles of Economics", "nameAr": "مبادئ الاقتصاد", "nameEn": "Principles of Economics", "code": "ECO101", "level": "1", "academicLevel": "1", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": [], "type": "required", "isActive": true },
+    { "name": "Principles of Financial Accounting", "nameAr": "مبادئ المحاسبة المالية", "nameEn": "Principles of Financial Accounting", "code": "ACC101", "level": "1", "academicLevel": "1", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": [], "type": "required", "isActive": true },
+    { "name": "Principles of Business Administration", "nameAr": "مبادئ إدارة الأعمال", "nameEn": "Principles of Business Administration", "code": "BUS101", "level": "1", "academicLevel": "1", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": [], "type": "required", "isActive": true },
+    { "name": "Principles of Law", "nameAr": "مبادئ القانون", "nameEn": "Principles of Law", "code": "LAW101", "level": "1", "academicLevel": "1", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": [], "type": "required", "isActive": true },
+    { "name": "Microeconomics", "nameAr": "مبادئ الاقتصاد الجزئي", "nameEn": "Microeconomics", "code": "ECO201", "level": "2", "academicLevel": "2", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["ECO101"], "type": "required", "isActive": true },
+    { "name": "Cost Accounting", "nameAr": "مبادئ محاسبة التكاليف", "nameEn": "Cost Accounting", "code": "ACC201", "level": "2", "academicLevel": "2", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["ACC101"], "type": "required", "isActive": true },
+    { "name": "Principles of Marketing", "nameAr": "مبادئ التسويق", "nameEn": "Principles of Marketing", "code": "MKT201", "level": "2", "academicLevel": "2", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["BUS101"], "type": "required", "isActive": true },
+    { "name": "Commercial Law", "nameAr": "القانون التجاري", "nameEn": "Commercial Law", "code": "LAW201", "level": "2", "academicLevel": "2", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["LAW101"], "type": "required", "isActive": true },
+    { "name": "Foreign Language 2", "nameAr": "لغة أجنبية 2", "nameEn": "Foreign Language 2", "code": "ENG202", "level": "2", "academicLevel": "2", "semester": "second", "department": "General", "creditHours": 2, "prerequisites": ["ENG101-2026"], "type": "required", "isActive": true },
+    { "name": "Managerial Accounting", "nameAr": "مبادئ المحاسبة الإدارية", "nameEn": "Managerial Accounting", "code": "ACC202", "level": "2", "academicLevel": "2", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["ACC201"], "type": "required", "isActive": true },
+    { "name": "Production Management", "nameAr": "إدارة الإنتاج", "nameEn": "Production Management", "code": "BUS202", "level": "2", "academicLevel": "2", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["BUS101"], "type": "required", "isActive": true },
+    { "name": "Financial Management", "nameAr": "مبادئ الإدارة المالية", "nameEn": "Financial Management", "code": "FIN202", "level": "2", "academicLevel": "2", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["ACC101"], "type": "required", "isActive": true },
+    { "name": "Management Information Systems", "nameAr": "نظم المعلومات الإدارية", "nameEn": "Management Information Systems", "code": "MIS202", "level": "2", "academicLevel": "2", "semester": "second", "department": "BIS", "creditHours": 3, "prerequisites": ["BUS101"], "type": "required", "isActive": true },
+    { "name": "Financial Management 2", "nameAr": "مبادئ الإدارة المالية 2", "nameEn": "Financial Management 2", "code": "FIN301", "level": "3", "academicLevel": "3", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["FIN202"], "type": "required", "isActive": true },
+    { "name": "Macroeconomics", "nameAr": "مبادئ الاقتصاد الكلي", "nameEn": "Macroeconomics", "code": "ECO301", "level": "3", "academicLevel": "3", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["ECO201"], "type": "required", "isActive": true },
+    { "name": "Databases", "nameAr": "قواعد البيانات", "nameEn": "Databases", "code": "MIS301", "level": "3", "academicLevel": "3", "semester": "first", "department": "BIS", "creditHours": 3, "prerequisites": ["MIS202"], "type": "required", "isActive": true },
+    { "name": "Strategic Management", "nameAr": "الإدارة الاستراتيجية", "nameEn": "Strategic Management", "code": "BUS302", "level": "3", "academicLevel": "3", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["MKT201", "ACC202", "BUS202", "FIN301"], "type": "required", "isActive": true },
+    { "name": "Systems Analysis and Design", "nameAr": "تحليل وتصميم نظم المعلومات", "nameEn": "Systems Analysis and Design", "code": "MIS302", "level": "3", "academicLevel": "3", "semester": "second", "department": "BIS", "creditHours": 3, "prerequisites": ["BUS101", "MIS202"], "type": "required", "isActive": true },
+    { "name": "IT Infrastructure", "nameAr": "البنية التحتية لتكنولوجيا المعلومات", "nameEn": "IT Infrastructure", "code": "IT302", "level": "3", "academicLevel": "3", "semester": "second", "department": "BIS", "creditHours": 3, "prerequisites": ["MIS202"], "type": "required", "isActive": true },
+    { "name": "International Economics", "nameAr": "اقتصاد دولي", "nameEn": "International Economics", "code": "ECO302", "level": "3", "academicLevel": "3", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["ECO301"], "type": "required", "isActive": true },
+    { "name": "Public Finance", "nameAr": "مبادئ المالية العامة", "nameEn": "Public Finance", "code": "FIN401", "level": "4", "academicLevel": "4", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["ECO301"], "type": "required", "isActive": true },
+    { "name": "Enterprise Systems", "nameAr": "نظم معلومات المؤسسات", "nameEn": "Enterprise Systems", "code": "MIS401", "level": "4", "academicLevel": "4", "semester": "first", "department": "BIS", "creditHours": 3, "prerequisites": ["MIS202"], "type": "required", "isActive": true },
+    { "name": "Applications in Programming", "nameAr": "تطبيقات في برمجة الحاسب", "nameEn": "Applications in Programming", "code": "CS401", "level": "4", "academicLevel": "4", "semester": "first", "department": "BIS", "creditHours": 3, "prerequisites": ["CS101-2026"], "type": "required", "isActive": true },
+    { "name": "Applied Statistics", "nameAr": "الإحصاء التطبيقي", "nameEn": "Applied Statistics", "code": "STA401", "level": "4", "academicLevel": "4", "semester": "first", "department": "Business", "creditHours": 3, "prerequisites": ["MTH101-2026"], "type": "required", "isActive": true },
+    { "name": "Managerial Accounting 2", "nameAr": "مبادئ المحاسبة الإدارية 2", "nameEn": "Managerial Accounting 2", "code": "ACC402", "level": "4", "academicLevel": "4", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["ACC202"], "type": "required", "isActive": true },
+    { "name": "Project Feasibility Study", "nameAr": "دراسة جدوى المشروعات", "nameEn": "Project Feasibility Study", "code": "BUS402", "level": "4", "academicLevel": "4", "semester": "second", "department": "Business", "creditHours": 3, "prerequisites": ["FIN301", "MKT201", "ACC201", "BUS202"], "type": "required", "isActive": true },
+    { "name": "Information Systems Strategy", "nameAr": "إستراتيجية نظم المعلومات", "nameEn": "Information Systems Strategy", "code": "MIS402", "level": "4", "academicLevel": "4", "semester": "second", "department": "BIS", "creditHours": 3, "prerequisites": ["MIS202", "IT302", "MIS401"], "type": "required", "isActive": true }
   ]
 }

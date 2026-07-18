@@ -40,7 +40,12 @@ export class Grade {
   @Prop({ required: true, default: 100 })
   maxGrade!: number;
 
-  @Prop({ type: String, required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
+  @Prop({
+    type: String,
+    required: true,
+    enum: GRADE_STATUS_VALUES,
+    default: 'present',
+  })
   status!: GradeStatus;
 
   @Prop({ required: true })

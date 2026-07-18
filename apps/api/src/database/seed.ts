@@ -31,10 +31,22 @@ type MockStudent = {
   examFloor: string;
   examRoom: string;
   phone: string;
+  gpa: number;
+  academicWarnings: number;
+  completedCourses: string[];
+  failedCourses: string[];
+  lowGradeCourses: string[];
+};
+
+type MockStaff = {
+  name: string;
+  email: string;
 };
 
 type MockCourse = {
   name: string;
+  nameAr: string;
+  nameEn: string;
   code: string;
   level: string;
   academicLevel: string;
@@ -48,6 +60,7 @@ type MockCourse = {
 
 type SeedData = {
   staffPermissions: string[];
+  staff: MockStaff[];
   students: MockStudent[];
   courses: MockCourse[];
 };
@@ -128,7 +141,12 @@ async function upsertUser(
 
   const filter = data.email
     ? { email: data.email.toLowerCase() }
-    : { studentCode: data.studentCode };
+    : {
+        $or: [
+          { studentCode: data.studentCode },
+          { userCode: `STD-${data.studentCode}` },
+        ],
+      };
 
   const existing = await usersCollection.findOne(filter);
 
@@ -271,6 +289,11 @@ async function seed() {
       throw new Error('MongoDB database instance is undefined');
     }
 
+    if (process.argv.includes('--reset')) {
+      console.log(`Resetting database: ${db.databaseName}`);
+      await db.dropDatabase();
+    }
+
     const usersCollection = db.collection('users');
     const profilesCollection = db.collection('student_profiles');
     const coursesCollection = db.collection('courses');
@@ -278,6 +301,11 @@ async function seed() {
     const academicEmailsCollection = db.collection('academic_emails');
     const examSchedulesCollection = db.collection('exam_schedules');
     const complaintsCollection = db.collection('complaints');
+    const advisingRequestsCollection = db.collection(
+      'academic_advising_requests',
+    );
+    const gpaRulesCollection = db.collection('gpa_registration_rules');
+    const registrationTermsCollection = db.collection('registration_terms');
 
     const adminId = await upsertUser(usersCollection, {
       role: 'admin',
@@ -286,15 +314,64 @@ async function seed() {
       password: adminPassword,
     });
 
-    await upsertUser(usersCollection, {
-      role: 'staff',
-      name: 'Student Affairs Staff',
-      email: staffEmail,
-      password: staffPassword,
-      permissions: seedData.staffPermissions,
-    });
+    const staffIds: mongoose.Types.ObjectId[] = [];
+    for (const [index, staff] of seedData.staff.entries()) {
+      staffIds.push(
+        await upsertUser(usersCollection, {
+          role: 'staff',
+          name: staff.name,
+          email: index === 0 ? staffEmail : staff.email,
+          password: staffPassword,
+          permissions: seedData.staffPermissions,
+        }),
+      );
+    }
 
     const courseIds = new Map<string, mongoose.Types.ObjectId>();
+
+    for (const semester of ['first', 'second', 'summer']) {
+      await registrationTermsCollection.updateOne(
+        { academicYear: '2026-2027', semester },
+        {
+          $setOnInsert: {
+            academicYear: '2026-2027',
+            semester,
+            isOpen: false,
+            updatedBy: adminId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+    }
+
+    await gpaRulesCollection.insertMany([
+      {
+        minGpa: 0,
+        maxGpa: 1.99,
+        maxCreditHours: 18,
+        minCreditHours: 10,
+        minCourses: 4,
+        maxCourses: 6,
+        requiresAdvisor: true,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        minGpa: 2,
+        maxGpa: 4,
+        maxCreditHours: 18,
+        minCreditHours: 10,
+        minCourses: 4,
+        maxCourses: 6,
+        requiresAdvisor: false,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
 
     for (const course of seedData.courses) {
       const now = new Date();
@@ -307,6 +384,8 @@ async function seed() {
           },
           $set: {
             name: course.name,
+            nameAr: course.nameAr,
+            nameEn: course.nameEn,
             code: course.code,
             level: course.level,
             academicLevel: course.academicLevel,
@@ -314,6 +393,7 @@ async function seed() {
             department: course.department,
             creditHours: course.creditHours,
             prerequisites: course.prerequisites,
+            offeredTerms: [course.semester],
             type: course.type,
             isActive: course.isActive,
             updatedAt: now,
@@ -392,7 +472,66 @@ async function seed() {
         { upsert: true },
       );
 
-      for (const course of seedData.courses) {
+      // Seed Student Academic Profile
+      await db.collection('student_academic_profiles').updateOne(
+        { studentId: userId },
+        {
+          $setOnInsert: {
+            studentId: userId,
+            createdAt: now,
+          },
+          $set: {
+            academicLevel: student.level,
+            semester: student.semester,
+            gpa: student.gpa,
+            completedCourses: student.completedCourses,
+            failedCourses: student.failedCourses,
+            lowGradeCourses: student.lowGradeCourses,
+            academicWarnings: student.academicWarnings,
+            advisorId:
+              staffIds[seedData.students.indexOf(student) % staffIds.length],
+            isGraduatingThisYear: false,
+            approvedICCourseCompletions: [],
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+
+      if (student.gpa < 2) {
+        const suggestedCourses = [
+          ...student.failedCourses,
+          ...seedData.courses
+            .filter(
+              (course) =>
+                course.academicLevel === student.level &&
+                !student.completedCourses.includes(course.code),
+            )
+            .map((course) => course.code),
+        ].filter((code, index, values) => values.indexOf(code) === index);
+
+        await advisingRequestsCollection.insertOne({
+          studentId: userId,
+          assignedStaffId:
+            staffIds[seedData.students.indexOf(student) % staffIds.length],
+          reason: student.failedCourses.length ? 'failed_courses' : 'low_gpa',
+          autoSuggestedCourses: suggestedCourses.slice(0, 3),
+          staffApprovedCourses: suggestedCourses.slice(0, 3),
+          policyWarnings: ['GPA is below 2.00 and requires academic advising.'],
+          overridePrerequisites: false,
+          overrideMaxCreditHours: false,
+          approveIncompleteCompletion: false,
+          status: 'pending',
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      for (const course of seedData.courses.filter((item) =>
+        [...student.completedCourses, ...student.failedCourses].includes(
+          item.code,
+        ),
+      )) {
         const courseId = courseIds.get(course.code);
 
         if (!courseId) {
@@ -403,7 +542,7 @@ async function seed() {
           {
             studentCode: student.studentCode,
             courseCode: course.code,
-            examType: 'midterm',
+            examType: 'final',
           },
           {
             $setOnInsert: {
@@ -412,9 +551,9 @@ async function seed() {
               courseId,
               courseName: course.name,
               courseCode: course.code,
-              examType: 'midterm',
-              grade: student.studentCode === '111111' ? 42 : 38,
-              maxGrade: 50,
+              examType: 'final',
+              grade: student.failedCourses.includes(course.code) ? 42 : 72,
+              maxGrade: 100,
               status: 'present',
               academicYear: student.academicYear,
               semester: student.semester,
@@ -492,8 +631,10 @@ async function seed() {
 
     console.log('Seed complete');
     console.log(`Admin: ${adminEmail}`);
-    console.log(`Staff: ${staffEmail} / ${staffPassword}`);
-    console.log('Mock student login: 111111 / 11122233344455');
+    console.log(`Staff accounts: ${seedData.staff.length} / ${staffPassword}`);
+    console.log(
+      `Student accounts: ${seedData.students.length} (password is each national ID)`,
+    );
   } finally {
     await connection.close();
   }

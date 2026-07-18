@@ -28,6 +28,7 @@ import {
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
 import { AppLoggerService } from '../../core/logger/logger.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ComplaintsService {
@@ -38,6 +39,7 @@ export class ComplaintsService {
     private settingsModel: Model<SystemSettingsDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private logger: AppLoggerService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Resolves settings singleton, creates if not exists
@@ -447,6 +449,31 @@ export class ComplaintsService {
       hasInternalNote: Boolean(dto.internalNote?.trim()),
     });
 
+    if (dto.status) {
+      try {
+        const statusLabel =
+          dto.status === 'open'
+            ? 'مفتوحة'
+            : dto.status === 'in_progress'
+              ? 'قيد المعالجة'
+              : 'مغلقة';
+        await this.notificationsService.sendNotification(
+          {
+            targetType: 'student',
+            targetStudentCode: savedTicket.studentCode,
+            title: 'تحديث حالة الشكوى | Complaint Status',
+            body: `تم تحديث حالة الشكوى رقم #${savedTicket.ticketNumber} إلى: ${statusLabel}`,
+          },
+          String(actorId || 'system'),
+        );
+      } catch (err) {
+        this.logger.error(
+          'Failed to send status update notification',
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
+    }
+
     return savedTicket;
   }
 
@@ -511,6 +538,25 @@ export class ComplaintsService {
       replyCount: savedTicket.replies.length,
       status: savedTicket.status,
     });
+
+    if (senderRole !== 'student') {
+      try {
+        await this.notificationsService.sendNotification(
+          {
+            targetType: 'student',
+            targetStudentCode: savedTicket.studentCode,
+            title: 'رد جديد على الشكوى | Complaint Reply',
+            body: `تمت إضافة رد جديد على شكواك رقم #${savedTicket.ticketNumber}`,
+          },
+          senderId,
+        );
+      } catch (err) {
+        this.logger.error(
+          'Failed to send complaint reply notification',
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
+    }
 
     return savedTicket;
   }

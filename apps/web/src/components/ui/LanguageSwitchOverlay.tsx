@@ -48,7 +48,7 @@ export default function LanguageSwitchOverlay({ locale }: LanguageSwitchOverlayP
       </div>
 
       {/* Text Status Box with rounded-squircle class */}
-      <div className="relative overflow-hidden rounded-xl border border-primary/25 mt-2 px-6 py-4 shadow-2xl backdrop-blur-xl z-10 select-none min-w-50 bg-card/65">
+      <div className="relative overflow-hidden rounded-xl border border-primary/25 mt-2 px-6 py-4 shadow-2xl backdrop-blur-xl z-10 select-none min-w-50 bg-card/65" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="relative flex items-center justify-center gap-3 text-sm font-semibold text-primary">
           <span className="relative grid w-5 h-5 place-items-center rounded-full border border-primary/30">
             <span className="w-2 h-2 animate-pulse rounded-full bg-primary" />

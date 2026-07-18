@@ -10,6 +10,7 @@ import {
 } from '../students/schemas/student-profile.schema';
 import { ExamSchedulesService } from './exam-schedules.service';
 import { ExamSchedulesController } from './exam-schedules.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ExamSchedulesController } from './exam-schedules.controller';
       { name: ExamSchedule.name, schema: ExamScheduleSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [ExamSchedulesController],
   providers: [ExamSchedulesService],

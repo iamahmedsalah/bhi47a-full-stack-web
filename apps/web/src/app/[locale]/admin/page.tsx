@@ -174,6 +174,7 @@ export default function AdminDashboard() {
   const tStudents = useTranslations('students');
   const params = useParams();
   const locale = params.locale as string;
+  const isAr = locale === 'ar';
 
   // Fetch counts
   const studentsCountQuery = useQuery({
@@ -330,23 +331,23 @@ export default function AdminDashboard() {
           tone={urgentComplaints > 0 ? 'warning' : 'success'}
         />
         <InsightCard
-          label="Active Students"
+          label={isAr ? "الطلاب النشطون" : "Active Students"}
           value={String(activeStudents)}
-          helper="Students currently marked active in enrollment records."
+          helper={isAr ? "الطلاب المسجلون كنشطين في النظام حالياً." : "Students currently marked active in enrollment records."}
           tone="primary"
         />
         <InsightCard
-          label="Active Courses"
+          label={isAr ? "المقررات النشطة" : "Active Courses"}
           value={String(activeCourses)}
-          helper="Courses available or not explicitly disabled."
+          helper={isAr ? "المقررات المتاحة في الدليل الأكاديمي." : "Courses available or not explicitly disabled."}
           tone="success"
         />
       </div>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <ChartCard
-          title="Complaint Trend"
-          description="Tickets created over the last 7 days."
+          title={isAr ? "اتجاه الشكاوى" : "Complaint Trend"}
+          description={isAr ? "التذاكر والشكاوى التي تم إنشاؤها خلال آخر 7 أيام." : "Tickets created over the last 7 days."}
           icon={<TrendingUp className="h-5 w-5" />}
           isLoading={isAnalyticsLoading}
           isEmpty={complaintTrendData.every((day) => day.value === 0)}
@@ -374,7 +375,7 @@ export default function AdminDashboard() {
               <Area
                 type="monotone"
                 dataKey="value"
-                name="Tickets"
+                name={isAr ? "الشكاوى" : "Tickets"}
                 stroke="#22d3ee"
                 strokeWidth={3}
                 fill="url(#complaintTrendFill)"
@@ -384,8 +385,8 @@ export default function AdminDashboard() {
         </ChartCard>
 
         <ChartCard
-          title="Enrollment Status"
-          description="Distribution of student account states."
+          title={isAr ? "حالات القيد" : "Enrollment Status"}
+          description={isAr ? "توزيع حالات حسابات الطلاب المسجلة بالنظام." : "Distribution of student account states."}
           icon={<Users className="h-5 w-5" />}
           isLoading={isAnalyticsLoading}
           isEmpty={enrollmentStatusData.length === 0}
@@ -404,14 +405,14 @@ export default function AdminDashboard() {
                   color: '#fff',
                 }}
               />
-              <Bar dataKey="value" name="Students" radius={[8, 8, 0, 0]} fill="#16a34a" />
+              <Bar dataKey="value" name={isAr ? "عدد الطلاب" : "Students"} radius={[8, 8, 0, 0]} fill="#16a34a" />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
         <ChartCard
-          title="Complaint Status Mix"
-          description="Operational state of all visible tickets."
+          title={isAr ? "توزيع حالات الشكاوى" : "Complaint Status Mix"}
+          description={isAr ? "الحالة التشغيلية لجميع تذاكر الشكاوى الظاهرة." : "Operational state of all visible tickets."}
           icon={<CircleAlert className="h-5 w-5" />}
           isLoading={isAnalyticsLoading}
           isEmpty={complaintStatusData.length === 0}
@@ -443,8 +444,8 @@ export default function AdminDashboard() {
         </ChartCard>
 
         <ChartCard
-          title="Courses by Level"
-          description="Academic catalog coverage across study levels."
+          title={isAr ? "المقررات حسب المستوى" : "Courses by Level"}
+          description={isAr ? "توزيع المقررات المتاحة على المستويات الدراسية." : "Academic catalog coverage across study levels."}
           icon={<BarChart3 className="h-5 w-5" />}
           isLoading={isAnalyticsLoading}
           isEmpty={courseLevelData.length === 0}

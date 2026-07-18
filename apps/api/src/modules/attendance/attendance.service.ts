@@ -7,12 +7,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Attendance, AttendanceDocument } from './schemas/attendance.schema';
 import { UpdateAttendanceDto } from './dto/attendance.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AttendanceService {
   constructor(
     @InjectModel(Attendance.name)
     private attendanceModel: Model<AttendanceDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   async findOne(id: string): Promise<AttendanceDocument> {
@@ -82,6 +84,23 @@ export class AttendanceService {
     if (!updated) {
       throw new NotFoundException('سجل الحضور والغياب غير موجود');
     }
+
+    if (updated.isPublished) {
+      try {
+        await this.notificationsService.sendNotification(
+          {
+            targetType: 'student',
+            targetStudentCode: updated.studentCode,
+            title: 'تسجيل الحضور والغياب | Attendance Updated',
+            body: `تم تحديث سجل حضورك للعام الأكاديمي ${updated.academicYear} (نسبة الحضور الحالية: ${updated.attendancePercentage}%)`,
+          },
+          'system',
+        );
+      } catch (err) {
+        console.error('Failed to send attendance update notification:', err);
+      }
+    }
+
     return updated;
   }
 

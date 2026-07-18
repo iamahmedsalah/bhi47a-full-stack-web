@@ -50,6 +50,8 @@ export class CoursesService {
       const search = normalizeSearchTerm(query.search);
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
+        { nameAr: { $regex: search, $options: 'i' } },
+        { nameEn: { $regex: search, $options: 'i' } },
         { code: { $regex: search, $options: 'i' } },
       ];
     }

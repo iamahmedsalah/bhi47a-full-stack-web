@@ -113,23 +113,25 @@ export function CustomDropdown({
 
   const openMenu = React.useCallback(() => {
     if (disabled) return;
-    setOpen((current) => {
-      const nextOpen = !current;
-      if (nextOpen) {
-        window.dispatchEvent(
-          new CustomEvent(customDropdownOpenEvent, { detail: dropdownId }),
-        );
-        window.requestAnimationFrame(updatePosition);
-      }
-      return nextOpen;
-    });
-  }, [disabled, dropdownId, updatePosition]);
+    setOpen((current) => !current);
+  }, [disabled]);
+
+  React.useEffect(() => {
+    if (open) {
+      window.dispatchEvent(
+        new CustomEvent(customDropdownOpenEvent, { detail: dropdownId }),
+      );
+      updatePosition();
+    }
+  }, [open, dropdownId, updatePosition]);
 
   React.useEffect(() => {
     const closeSiblingDropdown = (event: Event) => {
       const detail = event instanceof CustomEvent ? event.detail : undefined;
       if (detail !== dropdownId) {
-        setOpen(false);
+        setTimeout(() => {
+          setOpen(false);
+        }, 0);
       }
     };
 

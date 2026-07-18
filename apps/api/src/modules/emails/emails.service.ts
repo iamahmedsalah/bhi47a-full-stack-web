@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Job } from 'bullmq';
 import { Model, Types } from 'mongoose';
 import { Resend } from 'resend';
+import { connect as connectTls, TLSSocket } from 'node:tls';
 import { QueueService } from '../../core/queues/queue.service';
 import {
   buildPaginationOptions,
@@ -19,12 +20,20 @@ interface EmailJob {
   html?: string;
 }
 
+type SmtpCode = 220 | 221 | 235 | 250 | 334 | 354;
+
 @Injectable()
 export class EmailsService implements OnModuleInit {
   private readonly resend?: Resend;
   private readonly fromEmail =
+    process.env.SMTP_FROM_EMAIL ||
+    process.env.EMAIL_FROM ||
     process.env.RESEND_FROM_EMAIL ||
     'Student Portal <noreply@student-portal.local>';
+  private readonly smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  private readonly smtpPort = Number(process.env.SMTP_PORT || 465);
+  private readonly smtpUser = process.env.SMTP_USER;
+  private readonly smtpPass = process.env.SMTP_PASS;
 
   constructor(
     @InjectModel(EmailLog.name)
@@ -65,7 +74,7 @@ export class EmailsService implements OnModuleInit {
 
     await this.queueService.add<EmailJob>(
       'emails',
-      'send-resend',
+      'send-email',
       {
         emailLogId: log._id.toString(),
         to: dto.to,
@@ -106,46 +115,15 @@ export class EmailsService implements OnModuleInit {
   }
 
   private async deliverEmail(data: EmailJob) {
-    if (!this.resend) {
-      await this.emailLogModel.findByIdAndUpdate(data.emailLogId, {
-        $set: {
-          status: 'skipped',
-          error: 'RESEND_API_KEY is not configured',
-          sentAt: new Date(),
-        },
-      });
-      console.log(
-        `[Email Simulation] To: ${data.to.join(', ')} | Subject: "${data.subject}"`,
-      );
-      return;
-    }
-
     try {
-      const payload = data.html
-        ? {
-            from: this.fromEmail,
-            to: data.to,
-            subject: data.subject,
-            html: data.html,
-            ...(data.text ? { text: data.text } : {}),
-          }
-        : {
-            from: this.fromEmail,
-            to: data.to,
-            subject: data.subject,
-            text: data.text || '',
-          };
-
-      const response = await this.resend.emails.send(payload);
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
+      const providerId = this.isSmtpConfigured()
+        ? await this.deliverWithSmtp(data)
+        : await this.deliverWithResend(data);
 
       await this.emailLogModel.findByIdAndUpdate(data.emailLogId, {
         $set: {
-          status: 'sent',
-          providerId: response.data?.id,
+          status: providerId === 'simulation' ? 'skipped' : 'sent',
+          providerId,
           sentAt: new Date(),
         },
       });
@@ -160,5 +138,215 @@ export class EmailsService implements OnModuleInit {
       });
       throw err;
     }
+  }
+
+  private async deliverWithResend(data: EmailJob) {
+    if (!this.resend) {
+      console.log(
+        `[Email Simulation] To: ${data.to.join(', ')} | Subject: "${data.subject}"`,
+      );
+      return 'simulation';
+    }
+
+    const payload = data.html
+      ? {
+          from: this.fromEmail,
+          to: data.to,
+          subject: data.subject,
+          html: data.html,
+          ...(data.text ? { text: data.text } : {}),
+        }
+      : {
+          from: this.fromEmail,
+          to: data.to,
+          subject: data.subject,
+          text: data.text || '',
+        };
+
+    const response = await this.resend.emails.send(payload);
+
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+
+    return response.data?.id || 'resend';
+  }
+
+  private async deliverWithSmtp(data: EmailJob) {
+    if (!this.smtpUser || !this.smtpPass) {
+      throw new Error('SMTP_USER and SMTP_PASS are required for SMTP delivery');
+    }
+
+    const socket = await this.createSmtpSocket();
+    let buffer = '';
+
+    const readResponse = (expected: SmtpCode[]) =>
+      new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('SMTP response timed out'));
+        }, 20000);
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+          socket.off('data', onData);
+          socket.off('error', onError);
+        };
+
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+
+        const onData = (chunk: Buffer | string) => {
+          buffer += chunk.toString();
+          const lines = buffer.split(/\r?\n/).filter(Boolean);
+          const lastLine = lines[lines.length - 1];
+          const complete = !!lastLine && /^\d{3} /.test(lastLine);
+          if (!complete) return;
+
+          const response = buffer;
+          buffer = '';
+          cleanup();
+
+          const code = Number.parseInt(lastLine.slice(0, 3), 10);
+          if (!expected.includes(code as SmtpCode)) {
+            reject(
+              new Error(
+                `SMTP expected ${expected.join('/')} but received ${response.trim()}`,
+              ),
+            );
+            return;
+          }
+          resolve(response);
+        };
+
+        socket.on('data', onData);
+        socket.on('error', onError);
+      });
+
+    const sendCommand = async (command: string, expected: SmtpCode[]) => {
+      socket.write(`${command}\r\n`);
+      return readResponse(expected);
+    };
+
+    const quit = () => {
+      socket.write('QUIT\r\n');
+      socket.end();
+    };
+
+    try {
+      await readResponse([220]);
+      await sendCommand('EHLO student-portal.local', [250]);
+      await sendCommand('AUTH LOGIN', [334]);
+      await sendCommand(Buffer.from(this.smtpUser).toString('base64'), [334]);
+      await sendCommand(Buffer.from(this.smtpPass).toString('base64'), [235]);
+      await sendCommand(
+        `MAIL FROM:<${this.extractEmailAddress(this.fromEmail)}>`,
+        [250],
+      );
+      for (const recipient of data.to) {
+        await sendCommand(`RCPT TO:<${recipient}>`, [250]);
+      }
+      await sendCommand('DATA', [354]);
+      socket.write(`${this.buildMimeMessage(data)}\r\n.\r\n`);
+      await readResponse([250]);
+      quit();
+      return `smtp:${this.smtpHost}`;
+    } catch (error) {
+      socket.destroy();
+      throw error;
+    }
+  }
+
+  private createSmtpSocket() {
+    return new Promise<TLSSocket>((resolve, reject) => {
+      const socket = connectTls({
+        host: this.smtpHost,
+        port: this.smtpPort,
+        servername: this.smtpHost,
+      });
+
+      const timeout = setTimeout(() => {
+        socket.destroy();
+        reject(new Error('SMTP connection timed out'));
+      }, 20000);
+
+      socket.once('secureConnect', () => {
+        clearTimeout(timeout);
+        resolve(socket);
+      });
+      socket.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+  }
+
+  private buildMimeMessage(data: EmailJob) {
+    const boundary = `student-portal-${Date.now()}`;
+    const headers = [
+      `From: ${this.fromEmail}`,
+      `To: ${data.to.join(', ')}`,
+      `Subject: ${this.encodeHeader(data.subject)}`,
+      'MIME-Version: 1.0',
+    ];
+
+    if (data.html) {
+      return this.dotStuff(
+        [
+          ...headers,
+          `Content-Type: multipart/alternative; boundary="${boundary}"`,
+          '',
+          `--${boundary}`,
+          'Content-Type: text/plain; charset=UTF-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          data.text || this.htmlToText(data.html),
+          `--${boundary}`,
+          'Content-Type: text/html; charset=UTF-8',
+          'Content-Transfer-Encoding: 8bit',
+          '',
+          data.html,
+          `--${boundary}--`,
+        ].join('\r\n'),
+      );
+    }
+
+    return this.dotStuff(
+      [
+        ...headers,
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        data.text || '',
+      ].join('\r\n'),
+    );
+  }
+
+  private isSmtpConfigured() {
+    return Boolean(this.smtpUser && this.smtpPass);
+  }
+
+  private extractEmailAddress(value: string) {
+    const match = value.match(/<([^>]+)>/);
+    return (match?.[1] || value).trim();
+  }
+
+  private encodeHeader(value: string) {
+    return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+  }
+
+  private dotStuff(value: string) {
+    return value.replace(/^\./gm, '..');
+  }
+
+  private htmlToText(value: string) {
+    return value
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 }

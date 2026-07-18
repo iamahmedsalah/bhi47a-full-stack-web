@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Res,
   HttpCode,
@@ -16,6 +17,12 @@ import { AdminLoginDto } from './dto/admin-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { StartGoogleLinkDto } from './dto/google-link.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
+import {
+  ForgotPasswordDto,
+  ResetPasswordOtpDto,
+  VerifyGoogleOtpDto,
+  VerifyGoogleOAuthDto,
+} from './dto/forgot-password.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 
@@ -96,6 +103,15 @@ export class AuthController {
     return this.authService.startGoogleLink(userId, dto.email);
   }
 
+  @Delete('google/link')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Remove or cancel Google account linking for current student',
+  })
+  async unlinkGoogle(@CurrentUser('_id') userId: string) {
+    return this.authService.unlinkGoogle(userId);
+  }
+
   @Patch('theme')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update current user theme preference' })
@@ -104,5 +120,65 @@ export class AuthController {
     @Body() dto: UpdateThemeDto,
   ) {
     return this.authService.updateTheme(userId, dto.theme);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Send a 6-digit OTP code to student email for password recovery',
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset student password using OTP code' })
+  async resetPasswordOtp(
+    @Body() dto: ResetPasswordOtpDto,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const result = await this.authService.resetPasswordOtp(dto);
+    const csrfToken = this.authService.setCookieToken(res, result.token);
+    return { user: result.user, csrfToken };
+  }
+
+  @Post('google/link/verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify Google linking using the OTP sent to Gmail',
+  })
+  async verifyGoogleOtp(
+    @CurrentUser('_id') userId: string,
+    @Body() dto: VerifyGoogleOtpDto,
+  ) {
+    return this.authService.verifyGoogleOtp(userId, dto.otp);
+  }
+
+  @Post('google/link/verify-oauth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify Google linking directly using Google ID Token',
+  })
+  async verifyGoogleOAuth(
+    @CurrentUser('_id') userId: string,
+    @Body() dto: VerifyGoogleOAuthDto,
+  ) {
+    return this.authService.verifyGoogleOAuth(userId, dto.credential);
+  }
+
+  @Public()
+  @Post('google/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Student login using Google OAuth ID Token' })
+  async googleLogin(
+    @Body() dto: VerifyGoogleOAuthDto,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const result = await this.authService.googleLogin(dto.credential);
+    const csrfToken = this.authService.setCookieToken(res, result.token);
+    return { user: result.user, csrfToken };
   }
 }

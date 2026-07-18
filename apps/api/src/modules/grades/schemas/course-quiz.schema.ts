@@ -23,7 +23,12 @@ class QuizEntry {
   @Prop({ required: true, default: 10 })
   maxGrade!: number;
 
-  @Prop({ type: String, required: true, enum: GRADE_STATUS_VALUES, default: 'present' })
+  @Prop({
+    type: String,
+    required: true,
+    enum: GRADE_STATUS_VALUES,
+    default: 'present',
+  })
   status!: GradeStatus;
 
   @Prop()
@@ -76,8 +81,8 @@ export class CourseQuiz {
 
 export const CourseQuizSchema = SchemaFactory.createForClass(CourseQuiz);
 
-// Indexes
-CourseQuizSchema.index({ studentCode: 1, courseCode: 1 }, { unique: true });
+// Indexes. The compound unique term index is reconciled by GradesService
+// because older installations used a two-field unique index.
 CourseQuizSchema.index({ studentId: 1 });
 CourseQuizSchema.index({ courseId: 1 });
 CourseQuizSchema.index({ isPublished: 1 });

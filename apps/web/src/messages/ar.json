@@ -1,5 +1,6 @@
 {
   "nav": {
+    "academicAdvising": "الإرشاد الأكاديمي",
     "dashboard": "لوحة التحكم",
     "students": "الطلاب",
     "courses": "المواد",
@@ -72,7 +73,19 @@
     "currentPassword": "كلمة المرور الحالية",
     "newPassword": "كلمة المرور الجديدة",
     "confirmPassword": "تأكيد كلمة المرور",
-    "mustChangePassword": "يجب تغيير كلمة المرور"
+    "mustChangePassword": "يجب تغيير كلمة المرور",
+    "forgotPasswordLink": "نسيت كلمة المرور؟",
+    "forgotPasswordTitle": "استعادة كلمة المرور",
+    "forgotPasswordDesc": "أدخل كودك الأكاديمي لإرسال رمز استعادة كلمة المرور إلى بريدك الإلكتروني",
+    "sendOtp": "إرسال رمز التحقق",
+    "verifyOtp": "التحقق من الرمز",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "enterOtp": "رمز التحقق (OTP)",
+    "otpPlaceholder": "أدخل الرمز المكون من 6 أرقام",
+    "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+    "backToLogin": "الرجوع لتسجيل الدخول",
+    "otpSentSuccess": "تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح",
+    "passwordResetSuccess": "تمت إعادة تعيين كلمة المرور بنجاح وتم تسجيل دخولك"
   },
   "dashboard": {
     "title": "لوحة التحكم",
@@ -144,6 +157,8 @@
     "status_present": "حاضر",
     "status_absent": "غائب",
     "status_banned": "محجوب/محروم",
+    "status_active": "نشط",
+    "status_inactive": "غير نشط",
     "publishBtn": "نشر الدرجات للموقع",
     "unpublishBtn": "حجب الدرجات عن الموقع"
   },
@@ -165,6 +180,7 @@
     "dashboard": "الرئيسية",
     "profile": "الملف الشخصي",
     "attendance": "الحضور والغياب",
+    "registration": "تسجيل المواد",
     "quizzes": "درجات الكويزات",
     "results": "النتائج",
     "academicEmail": "البريد الأكاديمي",

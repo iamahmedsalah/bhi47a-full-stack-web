@@ -29,7 +29,11 @@ interface AdminLoginPayload {
   password: string;
 }
 
-type LoginPayload = StudentLoginPayload | AdminLoginPayload;
+interface GoogleLoginPayload {
+  credential: string;
+}
+
+type LoginPayload = StudentLoginPayload | AdminLoginPayload | GoogleLoginPayload;
 
 interface LoginResponse {
   user: User;
@@ -39,7 +43,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isLoggingOut: boolean;
-  login: (type: 'student' | 'admin', data: LoginPayload) => Promise<void>;
+  login: (type: 'student' | 'admin' | 'google', data: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -75,9 +79,13 @@ export function AuthProvider({
     retry: false,
   });
 
-  const login = useCallback(async (type: 'student' | 'admin', data: LoginPayload) => {
+  const login = useCallback(async (type: 'student' | 'admin' | 'google', data: LoginPayload) => {
     const endpoint =
-      type === 'student' ? '/auth/student/login' : '/auth/admin/login';
+      type === 'student'
+        ? '/auth/student/login'
+        : type === 'admin'
+        ? '/auth/admin/login'
+        : '/auth/google/login';
     const toastId = toast.loading(
       locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing you in...',
     );
@@ -145,10 +153,12 @@ export function AuthProvider({
       pathname === `/${locale}/login/student` ||
       pathname === `/${locale}/login/admin` ||
       pathname === `/${locale}/login/change-password` ||
+      pathname === `/${locale}/forgot-password` ||
       pathname === '/login' ||
       pathname === '/login/student' ||
       pathname === '/login/admin' ||
-      pathname === '/login/change-password';
+      pathname === '/login/change-password' ||
+      pathname === '/forgot-password';
 
     const user = meQuery.data || null;
 

@@ -16,7 +16,6 @@ import {
   ShieldAlert, 
   Users, 
   ShieldCheck, 
-  Lock, 
   CheckSquare, 
   Square 
 } from 'lucide-react';
@@ -42,8 +41,105 @@ interface GpaRule {
   minGpa: number;
   maxGpa: number;
   maxCreditHours: number;
+  minCreditHours: number;
+  minCourses: number;
+  maxCourses: number;
   requiresAdvisor: boolean;
+  requireForFailedCourses: boolean;
+  requireForAcademicWarnings: boolean;
+  academicWarningThreshold: number;
+  requireForIncompleteCourses: boolean;
+  requireForGraduationPlans: boolean;
+  requireForSummerRegistration: boolean;
+  exemptNewStudentsFromGpaRule: boolean;
   isActive: boolean;
+}
+
+interface StaffUser {
+  _id: string;
+  userCode?: string;
+  name: string;
+  email?: string;
+  permissions?: string[];
+}
+
+interface AdvisingRuleControlsProps {
+  locale: string;
+  minCreditHours: string;
+  setMinCreditHours: (value: string) => void;
+  maxCreditHours: string;
+  setMaxCreditHours: (value: string) => void;
+  minCourses: string;
+  setMinCourses: (value: string) => void;
+  maxCourses: string;
+  setMaxCourses: (value: string) => void;
+  requiresAdvisor: boolean;
+  setRequiresAdvisor: (value: boolean) => void;
+  requireForFailedCourses: boolean;
+  setRequireForFailedCourses: (value: boolean) => void;
+  requireForAcademicWarnings: boolean;
+  setRequireForAcademicWarnings: (value: boolean) => void;
+  academicWarningThreshold: string;
+  setAcademicWarningThreshold: (value: string) => void;
+  requireForIncompleteCourses: boolean;
+  setRequireForIncompleteCourses: (value: boolean) => void;
+  requireForGraduationPlans: boolean;
+  setRequireForGraduationPlans: (value: boolean) => void;
+  requireForSummerRegistration: boolean;
+  setRequireForSummerRegistration: (value: boolean) => void;
+  exemptNewStudentsFromGpaRule: boolean;
+  setExemptNewStudentsFromGpaRule: (value: boolean) => void;
+}
+
+function AdvisingRuleControls(props: AdvisingRuleControlsProps) {
+  const isArabic = props.locale === 'ar';
+  const toggles = [
+    { checked: props.requiresAdvisor, set: props.setRequiresAdvisor, en: 'GPA range requires advisor approval', ar: 'نطاق المعدل يتطلب موافقة المرشد' },
+    { checked: props.requireForFailedCourses, set: props.setRequireForFailedCourses, en: 'Failed courses require advising', ar: 'المقررات الراسبة تتطلب الإرشاد' },
+    { checked: props.requireForAcademicWarnings, set: props.setRequireForAcademicWarnings, en: 'Academic warnings require advising', ar: 'الإنذارات الأكاديمية تتطلب الإرشاد' },
+    { checked: props.requireForIncompleteCourses, set: props.setRequireForIncompleteCourses, en: 'Incomplete/IC courses require advising', ar: 'المقررات غير المكتملة IC تتطلب الإرشاد' },
+    { checked: props.requireForGraduationPlans, set: props.setRequireForGraduationPlans, en: 'Graduation-plan exceptions require advising', ar: 'استثناءات خطة التخرج تتطلب الإرشاد' },
+    { checked: props.requireForSummerRegistration, set: props.setRequireForSummerRegistration, en: 'All summer registration requires advising', ar: 'كل التسجيل الصيفي يتطلب الإرشاد' },
+    { checked: props.exemptNewStudentsFromGpaRule, set: props.setExemptNewStudentsFromGpaRule, en: 'Exempt new students from the GPA trigger', ar: 'إعفاء الطلاب الجدد من شرط المعدل' },
+  ];
+
+  return (
+    <div className="space-y-4 rounded-xl border border-border/70 bg-surface/20 p-4">
+      <div>
+        <h4 className="text-sm font-bold text-foreground">{isArabic ? 'حدود التسجيل' : 'Registration limits'}</h4>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          {[
+            { label: isArabic ? 'أقل ساعات' : 'Min hours', value: props.minCreditHours, set: props.setMinCreditHours },
+            { label: isArabic ? 'أقصى ساعات' : 'Max hours', value: props.maxCreditHours, set: props.setMaxCreditHours },
+            { label: isArabic ? 'أقل مقررات' : 'Min courses', value: props.minCourses, set: props.setMinCourses },
+            { label: isArabic ? 'أقصى مقررات' : 'Max courses', value: props.maxCourses, set: props.setMaxCourses },
+          ].map((field) => (
+            <label key={field.label} className="space-y-1 text-xs font-semibold text-muted-foreground">
+              <span>{field.label}</span>
+              <Input type="number" min="1" required value={field.value} onChange={(event) => field.set(event.target.value)} className="font-mono" />
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="border-t border-border/70 pt-4">
+        <h4 className="text-sm font-bold text-foreground">{isArabic ? 'متى يظهر إرشاد أكاديمي مطلوب؟' : 'When is Advising Required?'}</h4>
+        <div className="mt-3 space-y-2">
+          {toggles.map((item) => (
+            <label key={item.en} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={item.checked} onChange={(event) => item.set(event.target.checked)} className="h-4 w-4 accent-primary" />
+              <span>{isArabic ? item.ar : item.en}</span>
+            </label>
+          ))}
+        </div>
+        {props.requireForAcademicWarnings && (
+          <label className="mt-3 block space-y-1 text-xs font-semibold text-muted-foreground">
+            <span>{isArabic ? 'يبدأ الإرشاد من عدد إنذارات' : 'Require advising from this warning count'}</span>
+            <Input type="number" min="1" required value={props.academicWarningThreshold} onChange={(event) => props.setAcademicWarningThreshold(event.target.value)} className="max-w-32 font-mono" />
+          </label>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const ALL_PERMISSIONS_GROUPS = [
@@ -121,7 +217,17 @@ function SettingsPageContent() {
   const [minGpa, setMinGpa] = useState<string>('0');
   const [maxGpa, setMaxGpa] = useState<string>('4');
   const [maxCreditHours, setMaxCreditHours] = useState<string>('18');
+  const [minCreditHours, setMinCreditHours] = useState<string>('12');
+  const [minCourses, setMinCourses] = useState<string>('4');
+  const [maxCourses, setMaxCourses] = useState<string>('6');
   const [requiresAdvisor, setRequiresAdvisor] = useState<boolean>(false);
+  const [requireForFailedCourses, setRequireForFailedCourses] = useState(true);
+  const [requireForAcademicWarnings, setRequireForAcademicWarnings] = useState(true);
+  const [academicWarningThreshold, setAcademicWarningThreshold] = useState('1');
+  const [requireForIncompleteCourses, setRequireForIncompleteCourses] = useState(true);
+  const [requireForGraduationPlans, setRequireForGraduationPlans] = useState(true);
+  const [requireForSummerRegistration, setRequireForSummerRegistration] = useState(false);
+  const [exemptNewStudentsFromGpaRule, setExemptNewStudentsFromGpaRule] = useState(true);
   const [ruleActive, setRuleActive] = useState<boolean>(true);
   const [ruleError, setRuleError] = useState<string>('');
   const [ruleLoading, setRuleLoading] = useState<boolean>(false);
@@ -136,7 +242,7 @@ function SettingsPageContent() {
 
   // Staff Permissions States
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
-  const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [selectedStaff, setSelectedStaff] = useState<StaffUser | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [savePermissionsLoading, setSavePermissionsLoading] = useState(false);
 
@@ -153,7 +259,7 @@ function SettingsPageContent() {
   const staffQuery = useQuery({
     queryKey: ['admin-staff-users'],
     queryFn: async () => {
-      const res = await api.get<any[]>('/admin/staff');
+      const res = await api.get<StaffUser[]>('/admin/staff');
       return res.data;
     },
     enabled: user?.role === 'admin' && activeTab === 'staffPermissions',
@@ -166,7 +272,17 @@ function SettingsPageContent() {
     setMinGpa('0');
     setMaxGpa('4');
     setMaxCreditHours('18');
+    setMinCreditHours('12');
+    setMinCourses('4');
+    setMaxCourses('6');
     setRequiresAdvisor(false);
+    setRequireForFailedCourses(true);
+    setRequireForAcademicWarnings(true);
+    setAcademicWarningThreshold('1');
+    setRequireForIncompleteCourses(true);
+    setRequireForGraduationPlans(true);
+    setRequireForSummerRegistration(false);
+    setExemptNewStudentsFromGpaRule(true);
     setRuleActive(true);
     setRuleError('');
     setIsAddOpen(true);
@@ -177,7 +293,17 @@ function SettingsPageContent() {
     setMinGpa(rule.minGpa.toString());
     setMaxGpa(rule.maxGpa.toString());
     setMaxCreditHours(rule.maxCreditHours.toString());
+    setMinCreditHours((rule.minCreditHours ?? 12).toString());
+    setMinCourses((rule.minCourses ?? 4).toString());
+    setMaxCourses((rule.maxCourses ?? 6).toString());
     setRequiresAdvisor(rule.requiresAdvisor);
+    setRequireForFailedCourses(rule.requireForFailedCourses ?? true);
+    setRequireForAcademicWarnings(rule.requireForAcademicWarnings ?? true);
+    setAcademicWarningThreshold((rule.academicWarningThreshold ?? 1).toString());
+    setRequireForIncompleteCourses(rule.requireForIncompleteCourses ?? true);
+    setRequireForGraduationPlans(rule.requireForGraduationPlans ?? true);
+    setRequireForSummerRegistration(rule.requireForSummerRegistration ?? false);
+    setExemptNewStudentsFromGpaRule(rule.exemptNewStudentsFromGpaRule ?? true);
     setRuleActive(rule.isActive);
     setRuleError('');
     setIsEditOpen(true);
@@ -189,6 +315,10 @@ function SettingsPageContent() {
     const minGpaNum = parseFloat(minGpa);
     const maxGpaNum = parseFloat(maxGpa);
     const maxHoursNum = parseInt(maxCreditHours);
+    const minHoursNum = parseInt(minCreditHours);
+    const minCoursesNum = parseInt(minCourses);
+    const maxCoursesNum = parseInt(maxCourses);
+    const warningThresholdNum = parseInt(academicWarningThreshold);
 
     if (isNaN(minGpaNum) || minGpaNum < 0 || minGpaNum > 4) {
       setRuleError(locale === 'ar' ? 'المعدل الأدنى غير صحيح (0-4)' : 'Invalid Min GPA (0-4)');
@@ -206,6 +336,18 @@ function SettingsPageContent() {
       setRuleError(locale === 'ar' ? 'يجب ألا يقل عدد الساعات عن 1' : 'Credit Hours must be at least 1');
       return;
     }
+    if (
+      isNaN(minHoursNum) ||
+      isNaN(minCoursesNum) ||
+      isNaN(maxCoursesNum) ||
+      minHoursNum < 1 ||
+      minHoursNum > maxHoursNum ||
+      minCoursesNum < 1 ||
+      minCoursesNum > maxCoursesNum
+    ) {
+      setRuleError(locale === 'ar' ? 'حدود الساعات أو عدد المقررات غير صحيحة' : 'Invalid credit-hour or course-count limits');
+      return;
+    }
 
     setRuleLoading(true);
     try {
@@ -213,7 +355,17 @@ function SettingsPageContent() {
         minGpa: minGpaNum,
         maxGpa: maxGpaNum,
         maxCreditHours: maxHoursNum,
+        minCreditHours: minHoursNum,
+        minCourses: minCoursesNum,
+        maxCourses: maxCoursesNum,
         requiresAdvisor,
+        requireForFailedCourses,
+        requireForAcademicWarnings,
+        academicWarningThreshold: Math.max(1, warningThresholdNum || 1),
+        requireForIncompleteCourses,
+        requireForGraduationPlans,
+        requireForSummerRegistration,
+        exemptNewStudentsFromGpaRule,
         isActive: ruleActive,
       });
       setIsAddOpen(false);
@@ -234,6 +386,10 @@ function SettingsPageContent() {
     const minGpaNum = parseFloat(minGpa);
     const maxGpaNum = parseFloat(maxGpa);
     const maxHoursNum = parseInt(maxCreditHours);
+    const minHoursNum = parseInt(minCreditHours);
+    const minCoursesNum = parseInt(minCourses);
+    const maxCoursesNum = parseInt(maxCourses);
+    const warningThresholdNum = parseInt(academicWarningThreshold);
 
     if (isNaN(minGpaNum) || minGpaNum < 0 || minGpaNum > 4) {
       setRuleError(locale === 'ar' ? 'المعدل الأدنى غير صحيح (0-4)' : 'Invalid Min GPA (0-4)');
@@ -251,6 +407,18 @@ function SettingsPageContent() {
       setRuleError(locale === 'ar' ? 'يجب ألا يقل عدد الساعات عن 1' : 'Credit Hours must be at least 1');
       return;
     }
+    if (
+      isNaN(minHoursNum) ||
+      isNaN(minCoursesNum) ||
+      isNaN(maxCoursesNum) ||
+      minHoursNum < 1 ||
+      minHoursNum > maxHoursNum ||
+      minCoursesNum < 1 ||
+      minCoursesNum > maxCoursesNum
+    ) {
+      setRuleError(locale === 'ar' ? 'حدود الساعات أو عدد المقررات غير صحيحة' : 'Invalid credit-hour or course-count limits');
+      return;
+    }
 
     setRuleLoading(true);
     try {
@@ -258,7 +426,17 @@ function SettingsPageContent() {
         minGpa: minGpaNum,
         maxGpa: maxGpaNum,
         maxCreditHours: maxHoursNum,
+        minCreditHours: minHoursNum,
+        minCourses: minCoursesNum,
+        maxCourses: maxCoursesNum,
         requiresAdvisor,
+        requireForFailedCourses,
+        requireForAcademicWarnings,
+        academicWarningThreshold: Math.max(1, warningThresholdNum || 1),
+        requireForIncompleteCourses,
+        requireForGraduationPlans,
+        requireForSummerRegistration,
+        exemptNewStudentsFromGpaRule,
         isActive: ruleActive,
       });
       setIsEditOpen(false);
@@ -364,10 +542,11 @@ function SettingsPageContent() {
     },
     {
       key: 'maxCreditHours',
-      header: t('maxCreditHours'),
+      header: locale === 'ar' ? 'حدود التسجيل' : 'Registration Limits',
       render: (r) => (
         <TableCell className="p-4 font-mono font-semibold text-primary">
-          {r.maxCreditHours} {locale === 'ar' ? 'ساعة' : 'Hrs'}
+          <div>{r.minCreditHours ?? 12}–{r.maxCreditHours} {locale === 'ar' ? 'ساعة' : 'hours'}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{r.minCourses ?? 4}–{r.maxCourses ?? 6} {locale === 'ar' ? 'مقررات' : 'courses'}</div>
         </TableCell>
       ),
     },
@@ -382,6 +561,24 @@ function SettingsPageContent() {
           />
         </TableCell>
       ),
+    },
+    {
+      key: 'advisingTriggers',
+      header: locale === 'ar' ? 'أسباب الإرشاد المفعّلة' : 'Enabled Advising Triggers',
+      render: (r) => {
+        const triggers = [
+          r.requireForFailedCourses && (locale === 'ar' ? 'رسوب' : 'Failed courses'),
+          r.requireForAcademicWarnings && (locale === 'ar' ? `إنذار ≥ ${r.academicWarningThreshold ?? 1}` : `Warnings ≥ ${r.academicWarningThreshold ?? 1}`),
+          r.requireForIncompleteCourses && (locale === 'ar' ? 'مقرر غير مكتمل' : 'Incomplete courses'),
+          r.requireForGraduationPlans && (locale === 'ar' ? 'خطة تخرج' : 'Graduation plan'),
+          r.requireForSummerRegistration && (locale === 'ar' ? 'تسجيل صيفي' : 'Summer registration'),
+        ].filter(Boolean) as string[];
+        return (
+          <TableCell className="min-w-64 p-4 text-xs text-muted-foreground">
+            {triggers.length > 0 ? triggers.join(' · ') : (locale === 'ar' ? 'لا توجد أسباب إضافية' : 'No additional triggers')}
+          </TableCell>
+        );
+      },
     },
     {
       key: 'isActive',
@@ -430,7 +627,7 @@ function SettingsPageContent() {
   ];
 
   // Staff Table columns definitions
-  const staffColumns: ColumnDef<any>[] = [
+  const staffColumns: ColumnDef<StaffUser>[] = [
     {
       key: 'userCode',
       header: locale === 'ar' ? 'كود المستخدم' : 'User Code',
@@ -547,8 +744,8 @@ function SettingsPageContent() {
           <div className="flex justify-between items-center gap-4 flex-col sm:flex-row">
             <p className="text-sm text-muted">
               {locale === 'ar'
-                ? 'تحكم في القواعد المنظمة لعدد الساعات المعتمدة التي يسجلها الطالب بناءً على معدله التراكمي'
-                : 'Configure GPA registration rules which regulate course registration hourly limits based on GPA.'}
+                ? 'تحكم في حدود الساعات والمقررات وجميع الأسباب التي تجعل الإرشاد الأكاديمي مطلوبًا لكل نطاق معدل.'
+                : 'Configure credit/course limits and every Advising Required trigger for each GPA range.'}
             </p>
             <Button
               onClick={openAddModal}
@@ -672,7 +869,7 @@ function SettingsPageContent() {
 
       {/* GPA Rule Add Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="glass max-w-md border border-white/10 rounded-2xl">
+        <DialogContent className="glass max-h-[90vh] max-w-2xl overflow-y-auto border border-white/10 rounded-2xl">
           <DialogHeader className="border-b border-border pb-4">
             <DialogTitle className="text-foreground">{t('addRule')}</DialogTitle>
             <DialogDescription className="sr-only">
@@ -716,30 +913,33 @@ function SettingsPageContent() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted">{t('maxCreditHours')} *</label>
-              <Input
-                type="number"
-                min="1"
-                required
-                value={maxCreditHours}
-                onChange={(e) => setMaxCreditHours(e.target.value)}
-                className="font-mono text-sm"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <input
-                type="checkbox"
-                id="requiresAdvisorAdd"
-                checked={requiresAdvisor}
-                onChange={(e) => setRequiresAdvisor(e.target.checked)}
-                className="h-4 w-4 rounded-full border-input-border bg-input text-primary focus:ring-primary cursor-pointer"
-              />
-              <label htmlFor="requiresAdvisorAdd" className="text-sm font-semibold text-foreground cursor-pointer">
-                {t('requiresAdvisor')}
-              </label>
-            </div>
+            <AdvisingRuleControls
+              locale={locale}
+              minCreditHours={minCreditHours}
+              setMinCreditHours={setMinCreditHours}
+              maxCreditHours={maxCreditHours}
+              setMaxCreditHours={setMaxCreditHours}
+              minCourses={minCourses}
+              setMinCourses={setMinCourses}
+              maxCourses={maxCourses}
+              setMaxCourses={setMaxCourses}
+              requiresAdvisor={requiresAdvisor}
+              setRequiresAdvisor={setRequiresAdvisor}
+              requireForFailedCourses={requireForFailedCourses}
+              setRequireForFailedCourses={setRequireForFailedCourses}
+              requireForAcademicWarnings={requireForAcademicWarnings}
+              setRequireForAcademicWarnings={setRequireForAcademicWarnings}
+              academicWarningThreshold={academicWarningThreshold}
+              setAcademicWarningThreshold={setAcademicWarningThreshold}
+              requireForIncompleteCourses={requireForIncompleteCourses}
+              setRequireForIncompleteCourses={setRequireForIncompleteCourses}
+              requireForGraduationPlans={requireForGraduationPlans}
+              setRequireForGraduationPlans={setRequireForGraduationPlans}
+              requireForSummerRegistration={requireForSummerRegistration}
+              setRequireForSummerRegistration={setRequireForSummerRegistration}
+              exemptNewStudentsFromGpaRule={exemptNewStudentsFromGpaRule}
+              setExemptNewStudentsFromGpaRule={setExemptNewStudentsFromGpaRule}
+            />
 
             <div className="flex items-center gap-2">
               <input
@@ -774,7 +974,7 @@ function SettingsPageContent() {
       {/* GPA Rule Edit Modal */}
       {selectedRule && (
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="glass max-w-md border border-white/10 rounded-2xl">
+          <DialogContent className="glass max-h-[90vh] max-w-2xl overflow-y-auto border border-white/10 rounded-2xl">
             <DialogHeader className="border-b border-border pb-4">
               <DialogTitle className="text-foreground">{t('editRule')}</DialogTitle>
               <DialogDescription className="sr-only">
@@ -818,30 +1018,33 @@ function SettingsPageContent() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-muted">{t('maxCreditHours')} *</label>
-                <Input
-                  type="number"
-                  min="1"
-                  required
-                  value={maxCreditHours}
-                  onChange={(e) => setMaxCreditHours(e.target.value)}
-                  className="font-mono text-sm"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="requiresAdvisorEdit"
-                  checked={requiresAdvisor}
-                  onChange={(e) => setRequiresAdvisor(e.target.checked)}
-                  className="h-4 w-4 rounded-full border-input-border bg-input text-primary focus:ring-primary cursor-pointer"
-                />
-                <label htmlFor="requiresAdvisorEdit" className="text-sm font-semibold text-foreground cursor-pointer">
-                  {t('requiresAdvisor')}
-                </label>
-              </div>
+              <AdvisingRuleControls
+                locale={locale}
+                minCreditHours={minCreditHours}
+                setMinCreditHours={setMinCreditHours}
+                maxCreditHours={maxCreditHours}
+                setMaxCreditHours={setMaxCreditHours}
+                minCourses={minCourses}
+                setMinCourses={setMinCourses}
+                maxCourses={maxCourses}
+                setMaxCourses={setMaxCourses}
+                requiresAdvisor={requiresAdvisor}
+                setRequiresAdvisor={setRequiresAdvisor}
+                requireForFailedCourses={requireForFailedCourses}
+                setRequireForFailedCourses={setRequireForFailedCourses}
+                requireForAcademicWarnings={requireForAcademicWarnings}
+                setRequireForAcademicWarnings={setRequireForAcademicWarnings}
+                academicWarningThreshold={academicWarningThreshold}
+                setAcademicWarningThreshold={setAcademicWarningThreshold}
+                requireForIncompleteCourses={requireForIncompleteCourses}
+                setRequireForIncompleteCourses={setRequireForIncompleteCourses}
+                requireForGraduationPlans={requireForGraduationPlans}
+                setRequireForGraduationPlans={setRequireForGraduationPlans}
+                requireForSummerRegistration={requireForSummerRegistration}
+                setRequireForSummerRegistration={setRequireForSummerRegistration}
+                exemptNewStudentsFromGpaRule={exemptNewStudentsFromGpaRule}
+                setExemptNewStudentsFromGpaRule={setExemptNewStudentsFromGpaRule}
+              />
 
               <div className="flex items-center gap-2">
                 <input

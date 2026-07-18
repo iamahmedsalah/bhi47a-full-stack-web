@@ -115,11 +115,16 @@ export class NotificationsService implements OnModuleInit {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter = await this.buildStudentNotificationFilter(userId);
 
+    // Always exclude notifications hidden by the user
+    filter.$and = [
+      ...(filter.$and || []),
+      { 'hiddenBy.userId': { $ne: new Types.ObjectId(userId) } },
+    ];
+
     if (query.unreadOnly) {
-      filter.$and = [
-        ...(filter.$and || []),
-        { 'readBy.userId': { $ne: new Types.ObjectId(userId) } },
-      ];
+      filter.$and.push({
+        'readBy.userId': { $ne: new Types.ObjectId(userId) },
+      });
     }
 
     const [items, total] = await Promise.all([
@@ -205,6 +210,58 @@ export class NotificationsService implements OnModuleInit {
     return { modifiedCount: result.modifiedCount };
   }
 
+  async hideNotification(userId: string, notificationId: string) {
+    await this.ensureStudentCanAccessNotification(userId, notificationId);
+
+    const updated = await this.notificationModel.findByIdAndUpdate(
+      notificationId,
+      {
+        $addToSet: {
+          hiddenBy: {
+            userId: new Types.ObjectId(userId),
+            hiddenAt: new Date(),
+          },
+        },
+      },
+      { new: true },
+    );
+
+    return this.withReadState(updated?.toObject(), userId);
+  }
+
+  async hideAllReadNotifications(userId: string) {
+    const filter = await this.buildStudentNotificationFilter(userId);
+
+    const readNotifications = await this.notificationModel
+      .find({
+        ...filter,
+        'readBy.userId': new Types.ObjectId(userId),
+        'hiddenBy.userId': { $ne: new Types.ObjectId(userId) },
+      })
+      .select('_id')
+      .lean();
+
+    if (readNotifications.length === 0) {
+      return { modifiedCount: 0 };
+    }
+
+    const ids = readNotifications.map((n) => n._id);
+
+    const result = await this.notificationModel.updateMany(
+      { _id: { $in: ids } },
+      {
+        $push: {
+          hiddenBy: {
+            userId: new Types.ObjectId(userId),
+            hiddenAt: new Date(),
+          },
+        },
+      },
+    );
+
+    return { modifiedCount: result.modifiedCount };
+  }
+
   async sendNotification(
     dto: SendNotificationDto,
     senderId: string,
@@ -239,6 +296,7 @@ export class NotificationsService implements OnModuleInit {
       targetLevel: dto.targetLevel,
       targetStudentId,
       sentBy: new Types.ObjectId(String(senderId)),
+      meta: (dto as any).meta || {},
     });
 
     await notification.save();
@@ -435,14 +493,16 @@ export class NotificationsService implements OnModuleInit {
     return notification;
   }
 
-  private withReadState(item: any, userId: string) {
+  private withReadState(item: any, userId: string | Types.ObjectId) {
     if (!item) {
       return item;
     }
 
+    const userIdStr = String(userId);
+
     const readEntry = item.readBy?.find(
       (entry: { userId: Types.ObjectId | string; readAt: Date }) =>
-        entry.userId.toString() === userId,
+        entry.userId.toString() === userIdStr,
     );
 
     return {

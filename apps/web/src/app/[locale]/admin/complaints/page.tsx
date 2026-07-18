@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { getApiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/cn';
 import {
   complaintKeys,
@@ -800,12 +801,22 @@ function AdminComplaintsContent() {
                   {isAr ? 'عرض التفاصيل / الرد' : 'View Details / Reply'}
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={async () => {
-                  const confirmText = isAr ? 'هل أنت متأكد من إغلاق البلاغات المحددة؟' : 'Are you sure you want to close the selected tickets?';
-                  if (!confirm(confirmText)) return;
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="gap-1.5 cursor-pointer text-xs disabled:cursor-not-allowed"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    {isAr ? 'إغلاق المحدد' : 'Close Selected'}
+                  </Button>
+                }
+                title={isAr ? 'إغلاق البلاغات المحددة' : 'Close Selected Tickets'}
+                description={isAr ? 'هل أنت متأكد من إغلاق البلاغات المحددة؟' : 'Are you sure you want to close the selected tickets?'}
+                confirmLabel={isAr ? 'إغلاق' : 'Close'}
+                cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+                onConfirm={async () => {
                   const toastId = toast.loading(isAr ? 'جاري إغلاق البلاغات...' : 'Closing tickets...');
                   try {
                     await Promise.all(
@@ -821,11 +832,7 @@ function AdminComplaintsContent() {
                     toast.error(isAr ? 'فشل إغلاق بعض البلاغات' : 'Failed to close some tickets', { id: toastId });
                   }
                 }}
-                className="gap-1.5 cursor-pointer text-xs disabled:cursor-not-allowed"
-              >
-                <Lock className="h-3.5 w-3.5" />
-                {isAr ? 'إغلاق المحدد' : 'Close Selected'}
-              </Button>
+              />
             </div>
           </div>
         )}

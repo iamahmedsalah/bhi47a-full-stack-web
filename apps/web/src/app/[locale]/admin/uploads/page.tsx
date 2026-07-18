@@ -63,13 +63,11 @@ function UploadsPageContent() {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (
-        droppedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-        droppedFile.type === 'application/vnd.ms-excel'
-      ) {
+      if (/\.(xlsx|xls|csv)$/i.test(droppedFile.name)) {
         setFile(droppedFile);
+        setErrorMsg('');
       } else {
-        setErrorMsg('يرجى اختيار ملف اكسل صالح (xlsx أو xls) فقط');
+        setErrorMsg('يرجى اختيار ملف صالح بصيغة xlsx أو xls أو csv');
       }
     }
   };
@@ -119,6 +117,7 @@ function UploadsPageContent() {
           { ar: 'رقم الجلوس', en: 'seatNumber' },
           { ar: 'المجموعة', en: 'group' },
           { ar: 'السكشن', en: 'section' },
+          { ar: 'إلزام تغيير كلمة المرور', en: 'mustChangePassword' },
         ];
       case 'courses':
         return [
@@ -128,6 +127,13 @@ function UploadsPageContent() {
           { ar: 'الفصل الدراسي', en: 'semester' },
           { ar: 'القسم العلمي', en: 'department' },
           { ar: 'الساعات المعتمدة', en: 'creditHours' },
+          { ar: 'المتطلبات السابقة', en: 'prerequisites' },
+          { ar: 'المتطلبات المتزامنة', en: 'coRequisites' },
+          { ar: 'المقررات المعادلة', en: 'equivalentCourses' },
+          { ar: 'فصول الطرح', en: 'offeredTerms' },
+          { ar: 'نوع المقرر', en: 'type' },
+          { ar: 'الفصل المقترح', en: 'recommendedSemester' },
+          { ar: 'الحد الأدنى للمعدل', en: 'minimumGpa' },
         ];
       case 'grades':
         return [
@@ -213,7 +219,7 @@ function UploadsPageContent() {
               onDragLeave={handleDrag}
               onDrop={handleDrop}
               onClick={() => document.getElementById('excelFileInput')?.click()}
-              className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`border-2 border-dashed rounded-squircle p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
                 dragActive
                   ? 'border-primary bg-primary/5'
                   : file
@@ -224,7 +230,7 @@ function UploadsPageContent() {
               <input
                 id="excelFileInput"
                 type="file"
-                accept=".xlsx, .xls"
+                accept=".xlsx,.xls,.csv"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -239,7 +245,7 @@ function UploadsPageContent() {
                 <div className="flex flex-col items-center space-y-2">
                   <UploadCloud className="w-12 h-12 text-muted" />
                   <p className="text-foreground text-sm font-semibold text-center">{t('dropzoneText')}</p>
-                  <p className="text-muted text-xs">Excel Files (*.xlsx, *.xls)</p>
+                  <p className="text-muted text-xs">Excel or CSV (*.xlsx, *.xls, *.csv)</p>
                 </div>
               )}
             </div>

@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query-keys';
+import { listStudentNotifications } from '@/lib/features/notifications';
 import {
   Award,
   Bell,
@@ -46,6 +49,17 @@ export default function StudentSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { sidebarOpen, toggleSidebar } = useUIStore();
 
+  const notificationsQuery = useQuery({
+    queryKey: queryKeys.notifications.studentList,
+    queryFn: listStudentNotifications,
+    enabled: !!user && user.role === 'student',
+    refetchInterval: 30 * 1000,
+  });
+
+  const unreadCount = useMemo(() => {
+    return notificationsQuery.data?.items?.filter((n) => !n.isRead).length || 0;
+  }, [notificationsQuery.data]);
+
   const navItems: NavItem[] = [
     { key: 'dashboard', href: `/${locale}/dashboard`, icon: <Home className="h-5 w-5" /> },
     { key: 'profile', href: `/${locale}/dashboard/profile`, icon: <User className="h-5 w-5" /> },
@@ -57,13 +71,15 @@ export default function StudentSidebar() {
     { key: 'examSchedule', href: `/${locale}/dashboard/exam-schedule`, icon: <Calendar className="h-5 w-5" /> },
     { key: 'examPlace', href: `/${locale}/dashboard/exam-place`, icon: <MapPin className="h-5 w-5" /> },
     { key: 'complaints', href: `/${locale}/dashboard/complaints`, icon: <MessageCircle className="h-5 w-5" /> },
-    { key: 'notifications', href: `/${locale}/dashboard/notifications`, icon: <Bell className="h-5 w-5" /> },
   ];
 
   const renderContent = (isForceOpen: boolean) => {
     const isSidebarOpen = isForceOpen || sidebarOpen;
     return (
-      <div className="flex h-full flex-col rounded-2xl border border-white/5 bg-card/95 p-4 shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all duration-300">
+      <div className={cn(
+        "flex h-full flex-col border border-white/5 bg-card/95 p-4 shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all duration-300",
+        isSidebarOpen ? "rounded-3xl" : "rounded-squircle"
+      )}>
         {/* Sidebar Header with Toggle Icon */}
         <div className={cn("flex items-center mb-5", isSidebarOpen ? "justify-between" : "flex-col justify-center gap-3")}>
           {isSidebarOpen ? (
@@ -108,7 +124,7 @@ export default function StudentSidebar() {
           )}
         </div>
 
-        <nav className={cn("custom-scroll flex-1 w-full  space-y-1.5 overflow-y-auto", !isSidebarOpen && "flex w-fit flex-col items-center")}>
+        <nav className={cn("custom-scroll min-h-0 flex-1 w-full space-y-1.5 overflow-y-auto overscroll-contain", !isSidebarOpen && "flex w-fit flex-col items-center")}>
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -120,22 +136,28 @@ export default function StudentSidebar() {
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  'flex items-center rounded-squircle text-sm transition-colors cursor-pointer',
+                  'relative flex items-center rounded-squircle text-sm transition-colors cursor-pointer',
                   isSidebarOpen ? 'w-full gap-3 px-3 py-3' : 'justify-center w-12 h-12',
                   isActive
                     ? 'border border-white/15 bg-secondary/60 font-semibold text-white shadow-sm'
                     : 'text-white/70 hover:bg-secondary/35 hover:text-white',
                 )}
-                title={!isSidebarOpen ? (item.key === 'registration' ? (locale === 'ar' ? 'تسجيل المواد' : 'Registration') : t(item.key)) : undefined}
+                title={!isSidebarOpen ? t(item.key) : undefined}
               >
                 <div className="shrink-0">{item.icon}</div>
                 {isSidebarOpen && (
                   <span className="truncate">
-                    {item.key === 'registration'
-                      ? locale === 'ar'
-                        ? 'تسجيل المواد'
-                        : 'Registration'
-                      : t(item.key)}
+                    {t(item.key)}
+                  </span>
+                )}
+                {isSidebarOpen && item.key === 'notifications' && unreadCount > 0 && (
+                  <span className="ms-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white shadow-sm animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+                {!isSidebarOpen && item.key === 'notifications' && unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white animate-pulse">
+                    {unreadCount}
                   </span>
                 )}
               </Link>
@@ -143,8 +165,8 @@ export default function StudentSidebar() {
           })}
         </nav>
 
-        <div className={cn("mt-4 space-y-3 border-t border-white/10 pt-4", !isSidebarOpen && "flex flex-col items-center")}>
-          <div className={cn("flex items-center justify-between", isSidebarOpen ? "w-full px-3 py-1" : "flex-col gap-2")}>
+        <div className={cn("mt-3 shrink-0 space-y-3 border-t border-white/10 pt-3", !isSidebarOpen && "flex flex-col items-center")}>
+          <div className={cn("flex items-center justify-between lg:hidden", isSidebarOpen ? "w-full px-3 py-1" : "flex-col gap-2")}>
             <LangToggle hideLabel={!isSidebarOpen} />
             <Themes />
           </div>
@@ -159,7 +181,7 @@ export default function StudentSidebar() {
           >
             {isSidebarOpen ? (
               <>
-                <span>{isLoggingOut ? (locale === 'ar' ? 'جاري الخروج...' : 'Logging out...') : tNav('logout')}</span>
+                <span>{isLoggingOut ? (locale === 'ar' ? 'جاري تسجيل الخروج...' : 'Logging out...') : tNav('logout')}</span>
                 {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
               </>
             ) : (
@@ -216,7 +238,9 @@ export default function StudentSidebar() {
           >
             <X className="h-5 w-5" />
           </button>
-          {renderContent(true)}
+          <div className="h-[calc(100%-3.25rem)] min-h-0">
+            {renderContent(true)}
+          </div>
         </div>
       </div>
     </>

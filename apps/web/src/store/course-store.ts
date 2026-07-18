@@ -3,8 +3,12 @@ import { create } from 'zustand';
 interface CourseState {
   search: string;
   activeLevel: string;
+  activeSemester: string;
   selectedKeys: string[];
-  setFilter: (key: 'search' | 'activeLevel', value: string) => void;
+  setFilter: (
+    key: 'search' | 'activeLevel' | 'activeSemester',
+    value: string,
+  ) => void;
   setSelectedKeys: (keys: string[]) => void;
   reset: () => void;
 }
@@ -12,6 +16,7 @@ interface CourseState {
 export const useCourseStore = create<CourseState>((set) => ({
   search: '',
   activeLevel: 'all',
+  activeSemester: 'all',
   selectedKeys: [],
   setFilter: (key, value) =>
     set((state) => ({
@@ -19,5 +24,11 @@ export const useCourseStore = create<CourseState>((set) => ({
       selectedKeys: [], // Reset selections automatically
     })),
   setSelectedKeys: (keys) => set({ selectedKeys: keys }),
-  reset: () => set({ search: '', activeLevel: 'all', selectedKeys: [] }),
+  reset: () =>
+    set({
+      search: '',
+      activeLevel: 'all',
+      activeSemester: 'all',
+      selectedKeys: [],
+    }),
 }));

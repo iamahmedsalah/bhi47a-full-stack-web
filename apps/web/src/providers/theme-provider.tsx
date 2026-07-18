@@ -12,7 +12,10 @@ import React, {
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const orig = console.error;
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('Encountered a script tag')) return;
+    if (typeof args[0] === 'string') {
+      if (args[0].includes('Encountered a script tag')) return;
+      if (args[0].includes('The given origin is not allowed for the given client ID')) return;
+    }
     orig.apply(console, args as Parameters<typeof console.error>);
   };
 }

@@ -14,6 +14,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import {
+  AdminProxyRegistrationDto,
+  CreateAcademicYearDto,
   CreateGpaRegistrationRuleDto,
   QueryAdvisingRequestDto,
   QueryRegistrationDto,
@@ -21,8 +23,10 @@ import {
   SubmitRegistrationDto,
   UpdateGpaRegistrationRuleDto,
   UpsertStudentAcademicProfileDto,
+  UpsertRegistrationTermDto,
 } from './dto/registration.dto';
 import { RegistrationsService } from './registrations.service';
+import type { AdvisingCourseMapResponse } from './registrations.service';
 
 @ApiTags('Course Registration')
 @Controller()
@@ -34,6 +38,14 @@ export class RegistrationsController {
   @ApiOperation({ summary: 'Student registration eligibility and GPA rule' })
   getEligibility(@CurrentUser() user: AuthenticatedUser) {
     return this.registrationsService.getEligibility(user._id);
+  }
+
+  @Get('registration/term')
+  @Roles('student', 'staff', 'admin')
+  getRegistrationTerm(@CurrentUser() user: AuthenticatedUser) {
+    return this.registrationsService
+      .getEligibility(user._id)
+      .then((eligibility) => eligibility.registrationTerm);
   }
 
   @Get('registration/available-courses')
@@ -53,6 +65,25 @@ export class RegistrationsController {
     return this.registrationsService.submitDirectRegistration(user._id, dto);
   }
 
+  @Post('registration/request-advising')
+  @Roles('student')
+  @ApiOperation({ summary: 'Request advising instead of incomplete registration' })
+  requestRegistrationAdvising(@CurrentUser() user: AuthenticatedUser) {
+    return this.registrationsService.requestIncompleteRegistrationAdvising(
+      user._id,
+    );
+  }
+
+  @Post('registration/submit-approved-plan')
+  @Roles('student')
+  @ApiOperation({
+    summary:
+      'Convert the acknowledged advisor-approved plan into final registration',
+  })
+  submitApprovedPlan(@CurrentUser() user: AuthenticatedUser) {
+    return this.registrationsService.submitApprovedAdvisingPlan(user._id);
+  }
+
   @Get('registration/advising-status')
   @Roles('student')
   @ApiOperation({
@@ -67,6 +98,13 @@ export class RegistrationsController {
   @ApiOperation({ summary: 'Latest student registration' })
   getLatestRegistration(@CurrentUser() user: AuthenticatedUser) {
     return this.registrationsService.getLatestStudentRegistration(user._id);
+  }
+
+  @Get('registration/history')
+  @Roles('student')
+  @ApiOperation({ summary: 'All saved registrations for the current student' })
+  getRegistrationHistory(@CurrentUser() user: AuthenticatedUser) {
+    return this.registrationsService.listStudentRegistrationHistory(user._id);
   }
 
   @Get('registrations/:id/print')
@@ -107,6 +145,22 @@ export class RegistrationsController {
       user._id,
       user.role,
       dto,
+    );
+  }
+
+  @Get('staff/advising-requests/:id/course-map')
+  @Roles('staff', 'admin')
+  @ApiOperation({
+    summary: 'Student-specific course map with grades for advising',
+  })
+  getAdvisingCourseMap(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+  ): Promise<AdvisingCourseMapResponse> {
+    return this.registrationsService.getAdvisingCourseMap(
+      id,
+      user._id,
+      user.role,
     );
   }
 
@@ -167,5 +221,81 @@ export class RegistrationsController {
   @ApiOperation({ summary: 'List course registrations' })
   listRegistrations(@Query() query: QueryRegistrationDto) {
     return this.registrationsService.listRegistrations(query);
+  }
+
+  @Patch('admin/registrations/:id')
+  @Roles('admin', 'staff')
+  @ApiOperation({ summary: 'Edit student course registration (Admin/Staff)' })
+  editRegistration(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: SubmitRegistrationDto,
+  ) {
+    return this.registrationsService.adminEditRegistration(id, dto, user._id);
+  }
+
+  @Post('admin/registrations/proxy')
+  @Roles('admin', 'staff')
+  @ApiOperation({ summary: 'Register courses on behalf of a student (Proxy Registration)' })
+  proxyRegistration(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AdminProxyRegistrationDto,
+  ) {
+    return this.registrationsService.adminProxyRegistration(dto, user._id);
+  }
+
+  @Get('admin/registrations/roster')
+  @Roles('admin', 'staff')
+  @ApiOperation({ summary: 'Student registration roster: Registered vs Not Registered with level filter' })
+  getRegistrationRoster(@Query() query: QueryRegistrationDto) {
+    return this.registrationsService.getStudentRegistrationRoster(query);
+  }
+
+  @Get('admin/registration-terms')
+  @Roles('admin', 'staff')
+  @ApiOperation({ summary: 'List registration semester open/close settings' })
+  listRegistrationTerms() {
+    return this.registrationsService.listRegistrationTerms();
+  }
+
+  @Get('admin/academic-years')
+  @Roles('admin', 'staff')
+  @ApiOperation({ summary: 'List managed academic years and usage counts' })
+  listAcademicYears() {
+    return this.registrationsService.listAcademicYears();
+  }
+
+  @Post('admin/academic-years')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Create an academic year with all three semesters' })
+  createAcademicYear(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateAcademicYearDto,
+  ) {
+    return this.registrationsService.createAcademicYear(dto, user._id);
+  }
+
+  @Patch('admin/academic-years/:academicYear/current')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Make an academic year authoritative/current' })
+  setCurrentAcademicYear(@Param('academicYear') academicYear: string) {
+    return this.registrationsService.setCurrentAcademicYear(academicYear);
+  }
+
+  @Delete('admin/academic-years/:academicYear')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Delete an unused, non-current academic year' })
+  deleteAcademicYear(@Param('academicYear') academicYear: string) {
+    return this.registrationsService.deleteAcademicYear(academicYear);
+  }
+
+  @Post('admin/registration-terms')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Open, close, or schedule a registration semester' })
+  upsertRegistrationTerm(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpsertRegistrationTermDto,
+  ) {
+    return this.registrationsService.upsertRegistrationTerm(dto, user._id);
   }
 }

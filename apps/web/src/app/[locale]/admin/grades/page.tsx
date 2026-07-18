@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import api, { getApiErrorMessage, PaginatedResponse } from '@/lib/api';
-import { Award, Download, Edit2, Loader2, Plus, Trash2, UploadCloud, Eye, EyeOff } from 'lucide-react';
+import { Award, Download, Edit2, Loader2, Plus, Trash2, UploadCloud, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { EXAM_TYPE_VALUES, GRADE_STATUS_VALUES, SEMESTER_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
 import { downloadExcel } from '@/lib/utils';
@@ -32,6 +32,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface Course {
   _id: string;
   name: string;
+  nameAr?: string;
+  nameEn?: string;
   code: string;
 }
 
@@ -68,6 +70,22 @@ function GradesPageContent() {
   const params = useParams();
   const locale = params.locale as string;
   const queryClient = useQueryClient();
+  const gradeStatusLabel = (value: string) => {
+    switch (value) {
+      case 'present':
+        return t('status_present');
+      case 'absent':
+        return t('status_absent');
+      case 'banned':
+        return t('status_banned');
+      case 'active':
+        return t('status_active');
+      case 'inactive':
+        return t('status_inactive');
+      default:
+        return value;
+    }
+  };
 
   // Active Tab & Filters
   const [activeTab, setActiveTab] = useState<string>('midterm');
@@ -82,6 +100,7 @@ function GradesPageContent() {
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<Grade | null>(null);
 
   // Form states
@@ -91,13 +110,16 @@ function GradesPageContent() {
   const [grade, setGrade] = useState<number>(0);
   const [maxGrade, setMaxGrade] = useState<number>(100);
   const [status, setStatus] = useState('present');
-  const [academicYear, setAcademicYear] = useState('2024-2025');
+  const defaultAcademicYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  const [academicYear, setAcademicYear] = useState(defaultAcademicYear);
   const [semester, setSemester] = useState('first');
   const [isPublished, setIsPublished] = useState(true);
 
   // Bulk publish form states
   const [bulkCourse, setBulkCourse] = useState('all');
   const [bulkExamType, setBulkExamType] = useState('midterm');
+  const [bulkAcademicYear, setBulkAcademicYear] = useState(defaultAcademicYear);
+  const [bulkSemester, setBulkSemester] = useState('first');
   const [bulkPublishState, setBulkPublishState] = useState(true);
 
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -157,7 +179,7 @@ function GradesPageContent() {
     setGrade(0);
     setMaxGrade(activeTab === 'quiz' ? 15 : activeTab === 'midterm' ? 30 : 60);
     setStatus('present');
-    setAcademicYear('2024-2025');
+    setAcademicYear(defaultAcademicYear);
     setSemester('first');
     setIsPublished(true);
     setFormError('');
@@ -241,9 +263,9 @@ function GradesPageContent() {
 
     try {
       await api.post('/admin/grades/publish', {
-        academicYear,
-        semester,
-        examType: bulkExamType,
+        academicYear: bulkAcademicYear === 'all' ? undefined : bulkAcademicYear,
+        semester: bulkSemester === 'all' ? undefined : bulkSemester,
+        examType: bulkExamType === 'all' ? undefined : bulkExamType,
         courseCode: bulkCourse === 'all' ? undefined : bulkCourse,
         isPublished: bulkPublishState,
       });
@@ -254,6 +276,25 @@ function GradesPageContent() {
       setFormError(getApiErrorMessage(err, 'فشل تحديث حالة نشر الدرجات'));
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleRecalculateProgress = async () => {
+    setIsRecalculating(true);
+    try {
+      const response = await api.post<{
+        processed: number;
+        promoted: number;
+      }>('/admin/grades/recalculate-progress', {});
+      toast.success(
+        locale === 'ar'
+          ? `تمت مراجعة ${response.data.processed} طالب وترقية ${response.data.promoted}`
+          : `Reviewed ${response.data.processed} students and promoted ${response.data.promoted}`,
+      );
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsRecalculating(false);
     }
   };
 
@@ -386,7 +427,7 @@ function GradesPageContent() {
       render: (g) => (
         <TableCell className="p-4">
           <StatusBadge
-            label={t(`status_${g.status}`)}
+            label={gradeStatusLabel(g.status)}
             variant={
               g.status === 'present'
                 ? 'success'
@@ -459,6 +500,18 @@ function GradesPageContent() {
         <Button variant="outline" onClick={exportGrades} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Export
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleRecalculateProgress}
+          disabled={isRecalculating}
+        >
+          {isRecalculating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {locale === 'ar' ? 'مراجعة المستويات' : 'Recalculate levels'}
         </Button>
         <Button
           variant="outline"
@@ -546,7 +599,7 @@ function GradesPageContent() {
             <SelectItem value="all">{tCourses('title')}: {tCommon('all')}</SelectItem>
             {courses.map((course) => (
               <SelectItem key={course._id} value={course.code}>
-                {course.name} ({course.code})
+                {locale === 'ar' ? (course.nameAr || course.name) : (course.nameEn || course.name)} ({course.code})
               </SelectItem>
             ))}
           </SelectContent>
@@ -630,7 +683,7 @@ function GradesPageContent() {
                   <SelectContent className="border-border bg-card">
                     {courses.map((course) => (
                       <SelectItem key={course._id} value={course.code}>
-                        {course.name} ({course.code})
+                        {locale === 'ar' ? (course.nameAr || course.name) : (course.nameEn || course.name)} ({course.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -927,6 +980,9 @@ function GradesPageContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-border bg-card">
+                    <SelectItem value="all">
+                      {locale === 'ar' ? 'كل أنواع النتائج' : 'All result types'}
+                    </SelectItem>
                     {EXAM_TYPE_VALUES.map((tp) => (
                       <SelectItem key={tp} value={tp}>
                         {t(`examType_${tp}`)}
@@ -953,21 +1009,38 @@ function GradesPageContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted">{tCommon('search') === 'Search...' ? 'Academic Year' : 'السنة الدراسية'} *</label>
-                <Input
-                  type="text"
-                  required
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
-                />
+                <div className="space-y-2">
+                  <Input
+                    type="text"
+                    required={bulkAcademicYear !== 'all'}
+                    value={bulkAcademicYear === 'all' ? '' : bulkAcademicYear}
+                    disabled={bulkAcademicYear === 'all'}
+                    placeholder={defaultAcademicYear}
+                    onChange={(e) => setBulkAcademicYear(e.target.value)}
+                  />
+                  <label className="flex items-center gap-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={bulkAcademicYear === 'all'}
+                      onChange={(e) =>
+                        setBulkAcademicYear(e.target.checked ? 'all' : defaultAcademicYear)
+                      }
+                    />
+                    {locale === 'ar' ? 'كل السنوات الدراسية' : 'All academic years'}
+                  </label>
+                </div>
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted">{tCommon('search') === 'Search...' ? 'Semester' : 'الفصل الدراسي'} *</label>
-                <Select value={semester} onValueChange={setSemester}>
+                <Select value={bulkSemester} onValueChange={setBulkSemester}>
                   <SelectTrigger className="border-border bg-secondary/50">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-border bg-card">
+                    <SelectItem value="all">
+                      {locale === 'ar' ? 'كل الفصول الدراسية' : 'All semesters'}
+                    </SelectItem>
                     {SEMESTER_VALUES.map((sem) => (
                       <SelectItem key={sem} value={sem}>
                         {tCourses(`semester_${sem}`)}

@@ -22,6 +22,14 @@ export const PERMISSIONS = {
   EXAM_SCHEDULES_READ: 'exam_schedules.read',
   EXAM_SCHEDULES_WRITE: 'exam_schedules.write',
   DANGER_ZONE_DELETE_ALL: 'danger_zone.delete_all',
+  REGISTRATION_READ: 'registration.read',
+  REGISTRATION_WRITE: 'registration.write',
+  REGISTRATION_PROXY: 'registration.proxy',
+  ADVISING_READ: 'advising.read',
+  ADVISING_WRITE: 'advising.write',
+  ADVISING_OVERRIDE_PREREQUISITES: 'advising.override_prerequisites',
+  ADVISING_OVERRIDE_MAX_HOURS: 'advising.override_max_hours',
+  STUDY_PLAN_MANAGE: 'study_plan.manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

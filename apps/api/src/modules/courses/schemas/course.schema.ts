@@ -17,6 +17,12 @@ export class Course {
   @Prop({ required: true })
   name!: string;
 
+  @Prop({ required: true })
+  nameAr!: string;
+
+  @Prop({ required: true })
+  nameEn!: string;
+
   @Prop({ required: true, unique: true })
   code!: string;
 
@@ -29,17 +35,53 @@ export class Course {
   @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
+  @Prop({ trim: true, maxlength: 2000 })
+  description?: string;
+
   @Prop()
   department?: string;
 
-  @Prop()
+  @Prop({ min: 0 })
   creditHours?: number;
+
+  @Prop({ type: Number, min: 1, max: 8 })
+  recommendedSemester?: number;
 
   @Prop({ type: [String], default: [] })
   prerequisites!: string[];
 
-  @Prop({ required: true, enum: ['required', 'elective'], default: 'required' })
-  type!: 'required' | 'elective';
+  @Prop({ type: [String], default: [] })
+  coRequisites!: string[];
+
+  @Prop({ type: [String], default: [] })
+  equivalentCourses!: string[];
+
+  @Prop({ type: [String], enum: SEMESTER_VALUES, default: [] })
+  offeredTerms!: Semester[];
+
+  @Prop({
+    required: true,
+    enum: [
+      'required',
+      'elective',
+      'university_req',
+      'institute_req',
+      'specialization_req',
+    ],
+    default: 'required',
+  })
+  type!:
+    | 'required'
+    | 'elective'
+    | 'university_req'
+    | 'institute_req'
+    | 'specialization_req';
+
+  @Prop({ type: Number, min: 0, max: 4 })
+  minimumGpa?: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  registrationPriority!: number;
 
   @Prop({ default: true })
   isActive!: boolean;
@@ -48,7 +90,12 @@ export class Course {
 export const CourseSchema = SchemaFactory.createForClass(Course);
 
 // Indexes
-CourseSchema.index({ name: 'text' });
+CourseSchema.index({
+  name: 'text',
+  nameAr: 'text',
+  nameEn: 'text',
+  code: 'text',
+});
 CourseSchema.index({ level: 1 });
 CourseSchema.index({ academicLevel: 1, semester: 1 });
 CourseSchema.index({ isActive: 1 });

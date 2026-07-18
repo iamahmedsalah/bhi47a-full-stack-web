@@ -14,7 +14,12 @@ export class Notification {
   @Prop({ required: true })
   body!: string;
 
-  @Prop({ type: String, required: true, enum: ['all', 'level', 'student'], default: 'all' })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['all', 'level', 'student'],
+    default: 'all',
+  })
   targetType!: 'all' | 'level' | 'student';
 
   @Prop()
@@ -61,6 +66,23 @@ export class Notification {
     userId: Types.ObjectId;
     readAt: Date;
   }>;
+
+  @Prop({ type: Object, default: {} })
+  meta?: Record<string, any>;
+
+  @Prop({
+    type: [
+      {
+        userId: { type: Types.ObjectId, ref: 'User', required: true },
+        hiddenAt: { type: Date, required: true },
+      },
+    ],
+    default: [],
+  })
+  hiddenBy!: Array<{
+    userId: Types.ObjectId;
+    hiddenAt: Date;
+  }>;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
@@ -70,3 +92,4 @@ NotificationSchema.index({ targetStudentId: 1 });
 NotificationSchema.index({ targetLevel: 1 });
 NotificationSchema.index({ createdAt: -1 });
 NotificationSchema.index({ 'readBy.userId': 1 });
+NotificationSchema.index({ 'hiddenBy.userId': 1 });

@@ -16,7 +16,11 @@ import { cn } from '@/lib/cn';
 
 interface ConfirmDialogProps {
   /** The trigger element (e.g. a delete button) */
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
+  /** Controlled open state */
+  open?: boolean;
+  /** Controlled open state handler */
+  onOpenChange?: (open: boolean) => void;
   /** Dialog title */
   title: string;
   /** Dialog description / body */
@@ -39,6 +43,8 @@ interface ConfirmDialogProps {
  */
 export function ConfirmDialog({
   trigger,
+  open,
+  onOpenChange,
   title,
   description,
   confirmLabel,
@@ -48,8 +54,8 @@ export function ConfirmDialog({
   disabled,
 }: ConfirmDialogProps) {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent className="w-[95vw] max-w-md border-border bg-card">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-start text-foreground">

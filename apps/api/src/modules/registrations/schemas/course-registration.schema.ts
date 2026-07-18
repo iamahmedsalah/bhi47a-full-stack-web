@@ -17,6 +17,19 @@ export class CourseRegistration {
   @Prop({ type: [String], default: [] })
   courses!: string[];
 
+  @Prop({ type: Types.ObjectId, ref: 'AdvisingPlan' })
+  academicPlanId?: Types.ObjectId;
+
+  @Prop({ required: true, default: '2026-2027' })
+  academicYear!: string;
+
+  @Prop({
+    required: true,
+    enum: ['first', 'second', 'summer'],
+    default: 'first',
+  })
+  semester!: 'first' | 'second' | 'summer';
+
   @Prop({ required: true, min: 0 })
   totalCreditHours!: number;
 
@@ -34,12 +47,31 @@ export class CourseRegistration {
   @Prop()
   advisorNotes?: string;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy?: Types.ObjectId;
+
+  @Prop()
+  approvedAt?: Date;
+
   @Prop()
   printableFormUrl?: string;
+
+  @Prop({ default: 0 })
+  editCount!: number;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  lastEditedBy?: Types.ObjectId;
+
+  @Prop()
+  lastEditedAt?: Date;
 }
 
 export const CourseRegistrationSchema =
   SchemaFactory.createForClass(CourseRegistration);
 
 CourseRegistrationSchema.index({ studentId: 1, createdAt: -1 });
+CourseRegistrationSchema.index(
+  { studentId: 1, academicYear: 1, semester: 1 },
+  { unique: true },
+);
 CourseRegistrationSchema.index({ status: 1 });

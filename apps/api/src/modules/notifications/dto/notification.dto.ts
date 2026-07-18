@@ -61,4 +61,9 @@ export class QueryNotificationDto {
   @IsBoolean()
   @IsOptional()
   unreadOnly?: boolean;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  _t?: string;
 }

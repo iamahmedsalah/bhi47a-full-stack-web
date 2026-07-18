@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -119,6 +120,23 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark all own notifications as read' })
   async markAllNotificationsRead(@CurrentUser('_id') studentId: string) {
     return this.notificationsService.markAllAsRead(studentId);
+  }
+
+  @Delete('students/me/notifications/clear-read')
+  @Roles('student')
+  @ApiOperation({ summary: 'Clear/hide all read notifications' })
+  async clearAllReadNotifications(@CurrentUser('_id') studentId: string) {
+    return this.notificationsService.hideAllReadNotifications(studentId);
+  }
+
+  @Delete('students/me/notifications/:id')
+  @Roles('student')
+  @ApiOperation({ summary: 'Hide/delete one notification for current student' })
+  async deleteStudentNotification(
+    @CurrentUser('_id') studentId: string,
+    @Param('id', ParseObjectIdPipe) id: string,
+  ) {
+    return this.notificationsService.hideNotification(studentId, id);
   }
 
   // ─── Admin Endpoints ─────────────────────────────────────────────

@@ -30,7 +30,9 @@ export class UsersService {
   async findById(id: string): Promise<UserDocument> {
     const user = await this.userModel
       .findById(id)
-      .select('+passwordHash +nationalIdHash');
+      .select(
+        '+passwordHash +nationalIdHash +resetPasswordToken +googleLinkOtp',
+      );
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
@@ -60,7 +62,7 @@ export class UsersService {
           { username: trimmed.toLowerCase() },
         ],
       })
-      .select('+passwordHash +nationalIdHash')
+      .select('+passwordHash +nationalIdHash +resetPasswordToken')
       .lean()) as unknown as UserDocument | null;
   }
 
@@ -190,11 +192,12 @@ export class UsersService {
   async resetPasswordToNationalId(
     userId: string,
     nationalId: string,
+    mustChangePassword = false,
   ): Promise<void> {
     const passwordHash = await bcrypt.hash(nationalId, 12);
     await this.userModel.findByIdAndUpdate(userId, {
       passwordHash,
-      mustChangePassword: true,
+      mustChangePassword,
       passwordChangedAt: new Date(Date.now() - 1000),
       $inc: { tokenVersion: 1 },
     });
@@ -252,12 +255,37 @@ export class UsersService {
       throw new ConflictException('حساب Google مرتبط بطالب آخر');
     }
 
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await bcrypt.hash(otp, 12);
+    const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
         $set: {
           googleEmail: normalizedEmail,
           googleLinkPending: true,
+          googleLinkOtp: hashedOtp,
+          googleLinkOtpExpiresAt: otpExpires,
+        },
+      },
+      { new: true },
+    );
+    if (!user) throw new NotFoundException('User not found');
+    return { user, otp };
+  }
+
+  async clearGoogleLink(userId: string): Promise<UserDocument> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: { googleLinkPending: false },
+        $unset: {
+          googleId: 1,
+          googleEmail: 1,
+          googleLinkedAt: 1,
+          googleLinkOtp: 1,
+          googleLinkOtpExpiresAt: 1,
         },
       },
       { new: true },
@@ -385,5 +413,27 @@ export class UsersService {
     }
     user.permissions = permissions;
     return user.save();
+  }
+
+  async findByGoogleEmail(googleEmail: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({
+      googleEmail: googleEmail.trim().toLowerCase(),
+    });
+  }
+
+  async findByGoogleId(googleId: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ googleId: googleId.trim() });
+  }
+
+  async findLinkedGoogleAccount(data: {
+    googleId: string;
+    googleEmail: string;
+  }): Promise<UserDocument | null> {
+    return this.userModel.findOne({
+      $or: [
+        { googleId: data.googleId.trim() },
+        { googleEmail: data.googleEmail.trim().toLowerCase() },
+      ],
+    });
   }
 }

@@ -21,9 +21,15 @@ import {
   AcademicEmail,
   AcademicEmailSchema,
 } from '../academic-emails/schemas/academic-email.schema';
+import {
+  StudentAcademicProfile,
+  StudentAcademicProfileSchema,
+} from '../registrations/schemas/student-academic-profile.schema';
+import { GradesModule } from '../grades/grades.module';
 
 @Module({
   imports: [
+    GradesModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
@@ -32,6 +38,10 @@ import {
       { name: CourseQuiz.name, schema: CourseQuizSchema },
       { name: Attendance.name, schema: AttendanceSchema },
       { name: AcademicEmail.name, schema: AcademicEmailSchema },
+      {
+        name: StudentAcademicProfile.name,
+        schema: StudentAcademicProfileSchema,
+      },
     ]),
   ],
   controllers: [UploadsController],

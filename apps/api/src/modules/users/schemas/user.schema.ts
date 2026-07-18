@@ -52,6 +52,12 @@ export class User {
   @Prop({ default: false })
   googleLinkPending!: boolean;
 
+  @Prop({ select: false })
+  googleLinkOtp?: string;
+
+  @Prop()
+  googleLinkOtpExpiresAt?: Date;
+
   @Prop({ trim: true, unique: true, sparse: true })
   userCode?: string;
 
@@ -148,7 +154,6 @@ export const UserSchema = SchemaFactory.createForClass(User);
 // Indexes
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
-UserSchema.index({ userCode: 1 }, { unique: true, sparse: true });
 UserSchema.index({ lockUntil: 1 });
 UserSchema.index({ deactivatedAt: 1 });
 
@@ -159,6 +164,7 @@ UserSchema.set('toJSON', {
         | 'passwordHash'
         | 'nationalIdHash'
         | 'resetPasswordToken'
+        | 'googleLinkOtp'
         | 'refreshTokenHash'
         | '__v',
         unknown
@@ -167,6 +173,7 @@ UserSchema.set('toJSON', {
     delete sanitized.passwordHash;
     delete sanitized.nationalIdHash;
     delete sanitized.resetPasswordToken;
+    delete sanitized.googleLinkOtp;
     delete sanitized.refreshTokenHash;
     delete sanitized.__v;
     return ret;

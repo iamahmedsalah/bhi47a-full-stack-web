@@ -1,5 +1,6 @@
 {
   "nav": {
+    "academicAdvising": "Academic Advising",
     "dashboard": "Dashboard",
     "students": "Students",
     "courses": "Courses",
@@ -72,7 +73,19 @@
     "currentPassword": "Current Password",
     "newPassword": "New Password",
     "confirmPassword": "Confirm Password",
-    "mustChangePassword": "You must change your password"
+    "mustChangePassword": "You must change your password",
+    "forgotPasswordLink": "Forgot Password?",
+    "forgotPasswordTitle": "Password Recovery",
+    "forgotPasswordDesc": "Enter your Academic Code to request a password recovery OTP to your email",
+    "sendOtp": "Send OTP Code",
+    "verifyOtp": "Verify Code",
+    "resetPassword": "Reset Password",
+    "enterOtp": "Verification OTP",
+    "otpPlaceholder": "Enter 6-digit code",
+    "confirmNewPassword": "Confirm New Password",
+    "backToLogin": "Back to Login",
+    "otpSentSuccess": "Verification OTP sent to your email successfully",
+    "passwordResetSuccess": "Password reset successfully and you are logged in"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -144,6 +157,8 @@
     "status_present": "Present",
     "status_absent": "Absent",
     "status_banned": "Banned/Hidden",
+    "status_active": "Active",
+    "status_inactive": "Inactive",
     "publishBtn": "Publish to Portal",
     "unpublishBtn": "Hide from Portal"
   },
@@ -165,6 +180,7 @@
     "dashboard": "Home",
     "profile": "Profile",
     "attendance": "Attendance",
+    "registration": "Registration",
     "quizzes": "Quiz Grades",
     "results": "Results",
     "academicEmail": "Academic Email",

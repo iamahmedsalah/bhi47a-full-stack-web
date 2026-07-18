@@ -36,7 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Session has expired');
     }
     return {
-      _id: user._id,
+      _id: user._id.toString(),
       role: user.role,
       name: user.name,
       email: user.email,

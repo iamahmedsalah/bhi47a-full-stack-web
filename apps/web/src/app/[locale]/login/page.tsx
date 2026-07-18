@@ -8,6 +8,7 @@ import { GraduationCap, MessageSquare, Shield } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import LangToggle from '@/components/ui/LangToggle';
+import { Footer } from '@/components/ui/footer';
 
 export default function LoginPage() {
   const params = useParams();
@@ -95,19 +96,7 @@ export default function LoginPage() {
           {isAr ? 'دخول الإدارة والموظفين' : 'Admin and staff login'}
         </Link>
 
-        <footer className="text-center text-[11px] leading-relaxed text-muted-foreground">
-          {isAr ? (
-            <>
-              جميع الحقوق محفوظة، 2026 © <br />
-              قسم تكنولوجيا المعلومات - المعهد العالي للعلوم الإدارية المتقدمة والحاسبات
-            </>
-          ) : (
-            <>
-              All Rights Reserved, 2026 © <br />
-              IT Department - High Institute for Advanced Management Sciences and Computer
-            </>
-          )}
-        </footer>
+        <Footer role="student" locale={locale} />
       </div>
     </div>
   );

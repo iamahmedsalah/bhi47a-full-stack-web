@@ -33,7 +33,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border border-border/70 bg-card/90 p-4 shadow-[var(--shadow-glow)] backdrop-blur transition-all duration-300 hover:border-primary/40 hover:bg-card-hover/70',
+        'overflow-hidden rounded-squircle border border-border/70 bg-card/90 p-4 shadow-[var(--shadow-glow)] backdrop-blur transition-all duration-300 hover:border-primary/40 hover:bg-card-hover/70',
         className,
       )}
     >

@@ -56,7 +56,7 @@ export default function StudentAcademicEmailPage() {
               <span>{t('academicEmail')}</span>
             </h2>
           </div>
-          <Card className="bg-card/45 backdrop-blur-sm border-border p-6 shadow-sm">
+          <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <EmptyState
               title={tEmails('noEmail')}
               description={
@@ -90,7 +90,7 @@ export default function StudentAcademicEmailPage() {
             <span>{t('academicEmail')}</span>
           </h2>
         </div>
-        <Card className="bg-card/45 backdrop-blur-sm border-border p-6 shadow-sm">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <EmptyState
             title={tEmails('noEmail')}
             description={
@@ -125,7 +125,7 @@ export default function StudentAcademicEmailPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] space-y-6 relative overflow-hidden">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-6 relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">

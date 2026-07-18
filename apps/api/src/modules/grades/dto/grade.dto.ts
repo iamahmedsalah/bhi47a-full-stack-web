@@ -100,20 +100,20 @@ export class QueryGradeDto {
 }
 
 export class PublishGradesDto {
-  @ApiProperty({ example: '2024-2025' })
+  @ApiPropertyOptional({ example: '2026-2027', description: 'Omit to affect all academic years' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  academicYear!: string;
+  academicYear?: string;
 
-  @ApiProperty({ example: 'first', enum: SEMESTER_VALUES })
+  @ApiPropertyOptional({ example: 'first', enum: SEMESTER_VALUES, description: 'Omit to affect every semester' })
+  @IsOptional()
   @IsEnum(SEMESTER_VALUES)
-  @IsNotEmpty()
-  semester!: Semester;
+  semester?: Semester;
 
-  @ApiProperty({ example: 'midterm', enum: EXAM_TYPE_VALUES })
+  @ApiPropertyOptional({ example: 'midterm', enum: EXAM_TYPE_VALUES, description: 'Omit to affect final, midterm, and quiz results' })
+  @IsOptional()
   @IsEnum(EXAM_TYPE_VALUES)
-  @IsNotEmpty()
-  examType!: ExamType;
+  examType?: ExamType;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -123,6 +123,17 @@ export class PublishGradesDto {
   @ApiProperty({ example: true })
   @IsBoolean()
   isPublished!: boolean;
+}
+
+export class RecalculateAcademicProgressDto {
+  @ApiPropertyOptional({
+    example: '260001',
+    description: 'Omit to recalculate every student with published grades',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  studentCode?: string;
 }
 
 export class UpdateGradeDto {

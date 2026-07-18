@@ -6,6 +6,7 @@ import {
   IsEmail,
   Matches,
   IsIn,
+  IsBoolean,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -89,6 +90,11 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   examBuilding?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  mustChangePassword?: boolean;
 }
 
 export class UpdateStudentDto {
@@ -173,6 +179,11 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsString()
   examBuilding?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  mustChangePassword?: boolean;
 }
 
 export class SearchStudentQuery {
@@ -193,6 +204,16 @@ export class SearchStudentQuery {
   @IsString()
   enrollmentStatus?: string;
 
+  @ApiPropertyOptional({ enum: ['studentCode', 'createdAt'] })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsString()
+  sortOrder?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   page?: number;
@@ -207,6 +228,11 @@ export class ResetPasswordDto {
   @IsString()
   @IsNotEmpty()
   newPassword!: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  mustChangePassword?: boolean;
 }
 
 export class UpdateMyContactDto {

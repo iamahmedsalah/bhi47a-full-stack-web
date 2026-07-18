@@ -20,7 +20,12 @@ export class AcademicEmail {
   @Prop({ required: true, unique: true })
   academicEmail!: string;
 
-  @Prop({ type: String, required: true, enum: ['active', 'inactive'], default: 'active' })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['active', 'inactive'],
+    default: 'active',
+  })
   status!: 'active' | 'inactive';
 
   @Prop({ type: Types.ObjectId, ref: 'User' })

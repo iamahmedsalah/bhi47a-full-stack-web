@@ -4,6 +4,7 @@ import React from 'react';
 import { useParams } from 'next/navigation';
 import AdminSidebar from '@/components/admin/sidebar';
 import AdminHeader from '@/components/admin/header';
+import { Footer } from '@/components/ui/footer';
 import { useUIStore } from '@/store/ui-store';
 import { cn } from '@/lib/cn';
 
@@ -32,6 +33,8 @@ export default function AdminLayout({
         <main className="flex-1 p-4 pt-6 md:p-6">
           {children}
         </main>
+        
+        <Footer role="admin" locale={locale} />
       </div>
     </div>
   );

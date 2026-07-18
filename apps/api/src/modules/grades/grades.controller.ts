@@ -14,6 +14,7 @@ import {
   SaveGradeDto,
   QueryGradeDto,
   PublishGradesDto,
+  RecalculateAcademicProgressDto,
   UpdateGradeDto,
 } from './dto/grade.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -88,5 +89,16 @@ export class GradesController {
   })
   async publishGrades(@Body() dto: PublishGradesDto) {
     return this.gradesService.publishGrades(dto);
+  }
+
+  @Post('admin/grades/recalculate-progress')
+  @Roles('admin')
+  @ApiOperation({
+    summary: 'Recalculate GPA, completed courses, and automatic level promotion',
+  })
+  async recalculateAcademicProgress(
+    @Body() dto: RecalculateAcademicProgressDto,
+  ) {
+    return this.gradesService.recalculateAcademicProgress(dto.studentCode);
   }
 }

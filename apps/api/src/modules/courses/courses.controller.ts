@@ -46,14 +46,16 @@ export class CoursesController {
   }
 
   @Post('admin/courses')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({ summary: 'Create new course (Admin)' })
   async create(@Body() dto: CreateCourseDto) {
     return this.coursesService.create(dto);
   }
 
   @Patch('admin/courses/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({ summary: 'Update course (Admin)' })
   async update(
     @Param('id', ParseObjectIdPipe) id: string,

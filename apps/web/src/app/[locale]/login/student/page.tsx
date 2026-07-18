@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/providers/auth-provider';
 import { getApiErrorMessage } from '@/lib/api';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getStudentLoginSchema, type StudentLoginInput } from '@/lib/validations';
@@ -22,7 +23,18 @@ import {
   Clock
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
+import { Footer } from '@/components/ui/footer';
 import LangToggle from '@/components/ui/LangToggle';
+import { useGoogleSignIn } from '@/hooks/use-google-signin';
+import { isChromeBrowser } from '@/utils/browser-check';
+import {
+  clearSavedGoogleAccount,
+  GOOGLE_ACCOUNT_CHANGED_EVENT,
+  loadSavedGoogleAccount,
+  readGoogleAccountFromCredential,
+  saveGoogleAccount,
+  type SavedGoogleAccount,
+} from '@/utils/google-account-storage';
 
 function StudentLoginContent() {
   const t = useTranslations('auth');
@@ -31,6 +43,7 @@ function StudentLoginContent() {
   const params = useParams();
   const router = useRouter();
   const locale = params.locale as string;
+  const isEnglish = locale === 'en';
 
   const {
     loading,
@@ -66,6 +79,91 @@ function StudentLoginContent() {
 
   const studentCodeVal = watch('studentCode');
   const passwordVal = watch('password');
+  const googlePromptShownRef = useRef(false);
+  const [isChrome, setIsChrome] = useState(false);
+  const [savedGoogleAccount, setSavedGoogleAccount] =
+    useState<SavedGoogleAccount | null>(null);
+
+  const { renderButton, scriptLoaded, prompt } = useGoogleSignIn({
+    locale,
+    onSuccess: async (credential) => {
+      setLoading(true);
+      try {
+        const account = readGoogleAccountFromCredential(credential);
+        if (account) {
+          saveGoogleAccount(account);
+          setSavedGoogleAccount(account);
+        }
+        await login('google', { credential });
+      } catch (err: any) {
+        toast.error(getApiErrorMessage(err, t('loginError')));
+      } finally {
+        setLoading(false);
+      }
+    },
+  });
+
+  const [buttonWidth, setButtonWidth] = useState<string>('320');
+
+  useEffect(() => {
+    const handleResize = () => {
+      const container = document.getElementById('google-signin-btn');
+      if (container) {
+        // Parent container width minus some safe padding (e.g. 8px on each side)
+        const parentW = container.parentElement?.clientWidth || 320;
+        const finalW = Math.max(200, Math.min(400, parentW));
+        setButtonWidth(String(finalW));
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (scriptLoaded) {
+      renderButton('google-signin-btn', {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: buttonWidth,
+      });
+    }
+  }, [scriptLoaded, renderButton, locale, buttonWidth]);
+
+  useEffect(() => {
+    setIsChrome(isChromeBrowser());
+    setSavedGoogleAccount(loadSavedGoogleAccount());
+
+    const handleAccountChange = (event: Event) => {
+      const customEvent = event as CustomEvent<SavedGoogleAccount | null>;
+      setSavedGoogleAccount(customEvent.detail ?? loadSavedGoogleAccount());
+    };
+
+    window.addEventListener(GOOGLE_ACCOUNT_CHANGED_EVENT, handleAccountChange);
+    return () => {
+      window.removeEventListener(GOOGLE_ACCOUNT_CHANGED_EVENT, handleAccountChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isChrome || !scriptLoaded || googlePromptShownRef.current) return;
+
+    googlePromptShownRef.current = true;
+    prompt();
+  }, [isChrome, prompt, scriptLoaded]);
+
+  const handleSavedGoogleClick = () => {
+    prompt();
+  };
+
+  const handleDifferentGoogleAccount = () => {
+    clearSavedGoogleAccount();
+    setSavedGoogleAccount(null);
+    prompt();
+  };
 
   // Auto-focus on student code input when component mounts
   useEffect(() => {
@@ -244,17 +342,17 @@ function StudentLoginContent() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
+                  maxLength={10}
                   placeholder={locale === 'ar' ? 'الكود الاكاديمي (6 أرقام)' : 'Academic Code (6 digits)'}
                   disabled={loading}
                   {...register('studentCode', {
                     onChange: (e) => {
                       const val = e.target.value;
-                      if (/^\d*$/.test(val) && val.length <= 6) {
+                      if (/^\d*$/.test(val) && val.length <= 10) {
                         setValue('studentCode', val);
                       } else {
                         // revert
-                        setValue('studentCode', val.replace(/\D/g, '').slice(0, 6));
+                        setValue('studentCode', val.replace(/\D/g, '').slice(0, 10));
                       }
                     }
                   })}
@@ -295,6 +393,16 @@ function StudentLoginContent() {
               {errors.password && (
                 <p className="text-xs text-red-500 text-center">{errors.password.message}</p>
               )}
+              
+              {/* Forgot Password Link */}
+              <div className="flex justify-end pt-1 px-1">
+                <Link
+                  href={`/${locale}/forgot-password`}
+                  className="text-xs font-semibold text-primary hover:underline hover:text-primary/80 transition-colors"
+                >
+                  {t('forgotPasswordLink')}
+                </Link>
+              </div>
             </div>
 
             {isLocked && banRemainingSeconds !== null && (
@@ -335,23 +443,68 @@ function StudentLoginContent() {
               {loading ? (locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing in...') : (locale === 'ar' ? 'تسجيل الدخول' : 'Sign In')}
               {loading && <Loader2 className="h-5 w-5 animate-spin" />}
             </Button>
+
+            {/* OR Divider */}
+            <div className="relative flex items-center justify-center my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <span className="relative px-3 bg-card/95 text-xs text-muted-foreground uppercase">
+                {locale === 'ar' ? 'أو' : 'OR'}
+              </span>
+            </div>
+
+            {!isChrome && savedGoogleAccount && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                <button
+                  type="button"
+                  onClick={handleSavedGoogleClick}
+                  disabled={loading}
+                  className="flex h-12 w-full items-center gap-3 overflow-hidden rounded-full border border-primary/30 bg-primary/90 pe-2 ps-3 text-start text-primary-foreground shadow-sm transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {savedGoogleAccount.avatarUrl ? (
+                    <img
+                      src={savedGoogleAccount.avatarUrl}
+                      alt=""
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-xs font-bold">
+                      {savedGoogleAccount.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold">
+                      {isEnglish ? `Continue as ${savedGoogleAccount.name}` : `المتابعة باسم ${savedGoogleAccount.name}`}
+                    </span>
+                    <span className="block truncate text-[11px] opacity-90" dir="ltr">
+                      {savedGoogleAccount.email}
+                    </span>
+                  </span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold text-[#4285F4]">
+                    G
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDifferentGoogleAccount}
+                  disabled={loading}
+                  className="w-full text-center text-sm font-semibold text-primary transition hover:text-primary/80 disabled:opacity-60"
+                >
+                  {isEnglish ? 'Use a different account' : 'استخدام حساب آخر'}
+                </button>
+              </div>
+            )}
+
+            {/* Google Login Button */}
+            <div className="flex justify-center w-full min-h-[44px]">
+              <div id="google-signin-btn" className="w-full overflow-hidden rounded-full" />
+            </div>
           </form>
         </div>
       </Card>
 
-      <footer className="mt-8 text-center text-[10px] text-muted-foreground z-10 leading-relaxed">
-        {locale === 'ar' ? (
-          <>
-            جميع الحقوق محفوظة، 2026 © <br />
-            قسم تكنولوجيا المعلومات - المعهد العالي للعلوم الإدارية المتقدمة والحاسبات
-          </>
-        ) : (
-          <>
-            All Rights Reserved, 2026 © <br />
-            IT Department - High Institute for Advanced Management Sciences and Computer
-          </>
-        )}
-      </footer>
+      <Footer role="student" locale={locale} className="mt-8" />
     </div>
   );
 }

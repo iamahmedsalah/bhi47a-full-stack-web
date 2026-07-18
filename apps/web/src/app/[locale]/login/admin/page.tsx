@@ -11,6 +11,7 @@ import { getAdminLoginSchema, type AdminLoginInput } from '@/lib/validations';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
@@ -22,8 +23,10 @@ import {
   Clock, 
   Eye, 
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert
 } from 'lucide-react';
+import { Footer } from '@/components/ui/footer';
 import LangToggle from '@/components/ui/LangToggle';
 
 interface AdminLoginFormProps {
@@ -47,8 +50,6 @@ function AdminLoginForm({
   tValidation,
   adminCodeInputRef,
 }: AdminLoginFormProps) {
-  const [showPassword, setShowPassword] = useState(false);
-
   const schema = getAdminLoginSchema((key) => {
     const translationKey = key.replace('validation.', '');
     return tValidation(translationKey);
@@ -96,26 +97,12 @@ function AdminLoginForm({
         )}
 
         {/* Password */}
-        <div className="relative">
-          <div className="absolute inset-y-0 start-3 flex items-center text-muted-foreground pointer-events-none">
-            <Lock className="w-5 h-5" />
-          </div>
-          <Input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="••••••••"
-            disabled={loading}
-            {...register('password')}
-            className="h-12 ps-11 pe-10 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
-            dir="ltr"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute inset-y-0 end-3 flex items-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-          >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-          </button>
-        </div>
+        <PasswordInput
+          placeholder="••••••••"
+          disabled={loading}
+          {...register('password')}
+          className="h-12 ps-11 pe-10 text-center bg-secondary/50 border-border text-foreground placeholder:text-muted-foreground placeholder:font-semibold placeholder:text-sm md:placeholder:font-bold md:placeholder:text-base font-semibold md:font-bold text-base md:text-lg rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all"
+        />
         {errors.password && (
           <p className="text-xs text-red-500 text-center">{errors.password.message}</p>
         )}
@@ -371,19 +358,7 @@ function AdminLoginContent() {
         </div>
       </Card>
 
-      <footer className="mt-8 text-center text-[10px] text-muted-foreground z-10 leading-relaxed">
-        {locale === 'ar' ? (
-          <>
-            جميع الحقوق محفوظة، 2026 © <br />
-            قسم تكنولوجيا المعلومات - المعهد العالي للعلوم الإدارية المتقدمة والحاسبات
-          </>
-        ) : (
-          <>
-            All Rights Reserved, 2026 © <br />
-            IT Department - High Institute for Advanced Management Sciences and Computer
-          </>
-        )}
-      </footer>
+      <Footer role="admin" locale={locale} className="mt-8" />
 
       {/* Floating Expiry Notification Toast */}
       {showExpiredToast && (

@@ -77,7 +77,7 @@ export default function StudentQuizzesPage() {
             <span>{t('quizzes')}</span>
           </h2>
         </div>
-        <Card className="bg-card/45 backdrop-blur-sm border-border p-6 shadow-sm">
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <EmptyState
             title={isEnglish ? 'No quiz records found' : 'لا توجد سجلات اختبارات'}
             description={
@@ -115,7 +115,7 @@ export default function StudentQuizzesPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Overall Performance */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Overall Performance' : 'معدل الأداء العام'}
@@ -128,7 +128,7 @@ export default function StudentQuizzesPage() {
 
         {/* Total Points */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Total Points Earned' : 'مجموع الدرجات'}
@@ -141,7 +141,7 @@ export default function StudentQuizzesPage() {
 
         {/* Graded Courses */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border flex flex-col justify-between h-28 relative overflow-hidden shadow-sm">
+          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Graded Courses' : 'المواد المقيمة'}
@@ -164,7 +164,7 @@ export default function StudentQuizzesPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: idx * 0.04 }}
             >
-              <Card className="bg-card/45 backdrop-blur-sm border-border shadow-sm overflow-hidden p-0">
+              <Card className="bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 overflow-hidden p-0">
                 {/* Header block */}
                 <div
                   onClick={() => toggleExpand(course._id)}
@@ -230,17 +230,16 @@ export default function StudentQuizzesPage() {
                                     <td className="py-3 text-start font-bold text-foreground">{quiz.title}</td>
                                     <td className="py-3 text-center">
                                       <span
-                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                          quiz.status === 'present'
+                                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${quiz.status === 'present'
                                             ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                                             : 'bg-red-500/10 text-red-500 border-red-500/20'
-                                        }`}
+                                          }`}
                                       >
                                         {isEnglish
                                           ? quiz.status
                                           : quiz.status === 'present'
-                                          ? 'حاضر'
-                                          : 'غائب'}
+                                            ? 'حاضر'
+                                            : 'غائب'}
                                       </span>
                                     </td>
                                     <td className="py-3 text-center font-mono font-bold text-foreground">

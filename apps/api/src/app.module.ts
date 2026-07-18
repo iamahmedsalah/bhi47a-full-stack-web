@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { EmailsModule } from './modules/emails/emails.module';
 import { FaqsModule } from './modules/faqs/faqs.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
+import { AcademicAdvisingModule } from './modules/academic-advising/academic-advising.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -44,6 +45,7 @@ import { HealthController } from './health.controller';
     EmailsModule,
     FaqsModule,
     RegistrationsModule,
+    AcademicAdvisingModule,
   ],
   controllers: [HealthController],
 })

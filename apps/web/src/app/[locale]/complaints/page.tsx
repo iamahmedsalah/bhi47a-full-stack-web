@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Footer } from '@/components/ui/footer';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -526,19 +527,7 @@ function PublicComplaintsContent() {
           </div>
         </Card>
 
-        <footer className="mt-auto text-center text-[11px] leading-relaxed text-muted-foreground">
-          {isAr ? (
-            <>
-              جميع الحقوق محفوظة، 2026 © <br />
-              قسم تكنولوجيا المعلومات - المعهد العالي للعلوم الإدارية المتقدمة والحاسبات
-            </>
-          ) : (
-            <>
-              All Rights Reserved, 2026 © <br />
-              IT Department - High Institute for Advanced Management Sciences and Computer
-            </>
-          )}
-        </footer>
+        <Footer role="student" locale={locale} className="mt-auto" />
       </div>
     </div>
   );

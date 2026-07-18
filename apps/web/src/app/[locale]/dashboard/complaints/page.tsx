@@ -190,7 +190,7 @@ export default function StudentComplaintsPage() {
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary hover:bg-primary/85 text-primary-foreground font-semibold transition-all duration-300 shadow-md cursor-pointer shrink-0 text-sm"
+          className="flex items-center justify-center gap-2 px-5 py-3 rounded-squircle bg-primary hover:bg-primary/85 text-primary-foreground font-semibold transition-all duration-300 shadow-md cursor-pointer shrink-0 text-sm"
         >
           <Plus className="w-5 h-5" />
           {isEnglish ? 'New Complaint' : 'تقديم شكوى جديدة'}
@@ -198,7 +198,7 @@ export default function StudentComplaintsPage() {
       </div>
 
       {/* Search Widget */}
-      <Card className="p-4 bg-card/45 backdrop-blur-sm border-border shadow-sm">
+      <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
         <label className="mb-2 block text-xs font-bold text-foreground">
           {isEnglish ? 'Search your tickets' : 'الاستعلام عن تذكرة'}
         </label>
@@ -212,7 +212,7 @@ export default function StudentComplaintsPage() {
                 ? 'Search by ticket number, subject, status, or type'
                 : 'ابحث برقم التذكرة أو الموضوع أو الحالة أو النوع'
             }
-            className="w-full rounded-xl border border-border bg-secondary/50 px-10 py-3 text-sm text-foreground outline-none transition-all focus:border-primary/50"
+            className="w-full rounded-squircle border border-border bg-secondary/50 px-10 py-3 text-sm text-foreground outline-none transition-all focus:border-primary/50"
           />
           {searchQuery && (
             <button
@@ -233,14 +233,14 @@ export default function StudentComplaintsPage() {
           <p className="text-muted-foreground text-sm">{tCommon('loading')}</p>
         </div>
       ) : tickets.length === 0 ? (
-        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border">
+        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <Inbox className="w-12 h-12 text-muted mx-auto mb-3" />
           <span className="text-muted-foreground text-sm">
             {isEnglish ? 'No complaints registered yet.' : 'لم تقم بتقديم أي شكاوى بعد.'}
           </span>
         </Card>
       ) : filteredTickets.length === 0 ? (
-        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border">
+        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <Search className="w-12 h-12 text-muted mx-auto mb-3" />
           <span className="text-muted-foreground text-sm">
             {isEnglish ? 'No tickets match your search.' : 'لا توجد تذاكر مطابقة لبحثك.'}
@@ -255,7 +255,7 @@ export default function StudentComplaintsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: idx * 0.04 }}
             >
-              <Card className="p-5 bg-card/45 backdrop-blur-sm border-border hover:border-primary/50 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-2 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-bold text-primary font-mono">{tkt.ticketNumber}</span>
@@ -295,7 +295,7 @@ export default function StudentComplaintsPage() {
 
                   <button
                     onClick={() => openReplyModal(tkt)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-secondary hover:bg-primary/10 text-foreground hover:text-primary transition-all text-xs font-bold cursor-pointer"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-squircle bg-secondary hover:bg-primary/10 text-foreground hover:text-primary transition-all text-xs font-bold cursor-pointer"
                   >
                     <MessageCircle className="w-4 h-4" />
                     {isEnglish ? 'Open Chat' : 'فتح المحادثة'}
@@ -340,7 +340,7 @@ export default function StudentComplaintsPage() {
               </div>
 
               {formError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl p-3 flex gap-2 text-xs items-start">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-squircle p-3 flex gap-2 text-xs items-start">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">{formError}</span>
                 </div>
@@ -350,7 +350,7 @@ export default function StudentComplaintsPage() {
                 <div className="space-y-1.5 text-start">
                   <label className="text-xs font-bold text-foreground">{t('type')} *</label>
                   <Select value={type} onValueChange={(val) => setType(val as Complaint['type'])}>
-                    <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-xl cursor-pointer">
+                    <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-squircle cursor-pointer">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="border-border bg-card">
@@ -367,7 +367,7 @@ export default function StudentComplaintsPage() {
                 <div className="space-y-1.5 text-start">
                   <label className="text-xs font-bold text-foreground">القسم الموجه إليه *</label>
                   <Select value={department} onValueChange={(val) => setDepartment(val as ComplaintDepartment)}>
-                    <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-xl cursor-pointer">
+                    <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-squircle cursor-pointer">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="border-border bg-card">
@@ -390,7 +390,7 @@ export default function StudentComplaintsPage() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
                     placeholder="عنوان مختصر للشكوى..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm"
                   />
                 </div>
 
@@ -398,7 +398,7 @@ export default function StudentComplaintsPage() {
                   <label className="text-xs font-bold text-foreground">{isEnglish ? 'Attach Screenshot' : 'إرفاق صورة (اختياري)'}</label>
                   <label
                     htmlFor="screenshot-dash"
-                    className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-secondary/30 px-3 text-sm text-muted-foreground transition-all hover:border-primary hover:text-foreground"
+                    className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-squircle border border-dashed border-border bg-secondary/30 px-3 text-sm text-muted-foreground transition-all hover:border-primary hover:text-foreground"
                   >
                     <Upload className="h-4 w-4" />
                     <span className="truncate">
@@ -433,7 +433,7 @@ export default function StudentComplaintsPage() {
                     }}
                   />
                   {screenshotBase64 && (
-                    <div className="relative mt-2 overflow-hidden rounded-xl border border-border/80 bg-secondary p-2">
+                    <div className="relative mt-2 overflow-hidden rounded-squircle border border-border/80 bg-secondary p-2">
                       <img
                         src={screenshotBase64}
                         alt="Screenshot preview"
@@ -463,7 +463,7 @@ export default function StudentComplaintsPage() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
                     placeholder="اكتب شرحاً تفصيلياً للمشكلة هنا..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm leading-relaxed"
+                    className="w-full px-3.5 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm leading-relaxed"
                   />
                   <p className="text-end text-[10px] text-muted-foreground font-mono">
                     {description.length}/{DESCRIPTION_MAX_LENGTH}
@@ -474,14 +474,14 @@ export default function StudentComplaintsPage() {
                   <button
                     type="button"
                     onClick={() => setIsAddOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-secondary text-sm font-semibold transition-all cursor-pointer"
+                    className="px-4 py-2.5 rounded-squircle border border-border text-muted-foreground hover:text-foreground hover:bg-secondary text-sm font-semibold transition-all cursor-pointer"
                   >
                     {tCommon('cancel')}
                   </button>
                   <button
                     type="submit"
                     disabled={!canSubmitComplaint}
-                    className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-5 py-2.5 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     {formLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                     {tCommon('confirm')}
@@ -508,7 +508,7 @@ export default function StudentComplaintsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-xl bg-card border border-border p-6 rounded-2xl shadow-2xl z-10 flex flex-col max-h-[85vh] space-y-4"
+              className="relative w-full max-w-xl bg-card border border-border p-6 rounded-squircle shadow-2xl z-10 flex flex-col max-h-[85vh] space-y-4"
             >
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <div>
@@ -524,9 +524,9 @@ export default function StudentComplaintsPage() {
               </div>
 
               {/* Chat list */}
-              <div className="flex-1 overflow-y-auto space-y-4 p-3 bg-secondary/50 rounded-xl border border-border/80 min-h-[220px]">
+              <div className="flex-1 overflow-y-auto space-y-4 p-3 bg-secondary/50 rounded-squircle border border-border/80 min-h-[220px]">
                 {/* Main Ticket Desc */}
-                <div className="p-4 border border-border/70 bg-card rounded-xl space-y-1">
+                <div className="p-4 border border-border/70 bg-card rounded-squircle space-y-1">
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold">
                     <span>تاريخ التقديم</span>
                     <span>{new Date(selectedTicket.createdAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG')}</span>
@@ -553,7 +553,7 @@ export default function StudentComplaintsPage() {
                           }`}
                         >
                           <div
-                            className={`p-3.5 rounded-2xl text-sm leading-relaxed ${
+                            className={`p-3.5 rounded-squircle text-sm leading-relaxed ${
                               isMyReply
                                 ? 'bg-primary text-primary-foreground rounded-te-none'
                                 : 'bg-card border border-border text-foreground rounded-ts-none shadow-sm'
@@ -576,14 +576,14 @@ export default function StudentComplaintsPage() {
               </div>
 
               {formError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl px-4 py-2 text-xs">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-squircle px-4 py-2 text-xs">
                   {formError}
                 </div>
               )}
 
               {/* Send Message Form */}
               {selectedTicket.status === 'closed' ? (
-                <div className="bg-secondary border border-border text-muted-foreground rounded-xl p-3.5 text-center text-xs font-bold">
+                <div className="bg-secondary border border-border text-muted-foreground rounded-squircle p-3.5 text-center text-xs font-bold">
                   تم إغلاق هذه الشكوى ولا يمكن إضافة ردود إضافية.
                 </div>
               ) : (
@@ -596,12 +596,12 @@ export default function StudentComplaintsPage() {
                     value={replyMsg}
                     onChange={(e) => setReplyMsg(e.target.value.slice(0, REPLY_MAX_LENGTH))}
                     placeholder="اكتب رسالتك أو استفسارك هنا..."
-                    className="flex-1 px-4 py-3 rounded-xl bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 transition-all text-sm"
+                    className="flex-1 px-4 py-3 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 transition-all text-sm"
                   />
                   <button
                     type="submit"
                     disabled={!canSendReply}
-                    className="px-5 py-3 rounded-xl bg-primary hover:bg-primary/80 text-primary-foreground transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 text-sm font-bold cursor-pointer"
+                    className="px-5 py-3 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 text-sm font-bold cursor-pointer"
                   >
                     {formLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />

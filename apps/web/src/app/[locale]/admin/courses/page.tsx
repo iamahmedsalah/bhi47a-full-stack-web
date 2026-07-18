@@ -32,9 +32,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* ─── Types ───────────────────────────────────────────── */
+type CourseType =
+  | 'required'
+  | 'elective'
+  | 'university_req'
+  | 'institute_req'
+  | 'specialization_req';
+
 interface Course {
   _id: string;
   name: string;
+  nameAr: string;
+  nameEn: string;
   code: string;
   level: string;
   academicLevel?: string;
@@ -42,17 +51,35 @@ interface Course {
   department?: string;
   creditHours?: number;
   prerequisites?: string[];
-  type?: 'required' | 'elective';
+  coRequisites?: string[];
+  equivalentCourses?: string[];
+  offeredTerms?: string[];
+  type?: CourseType;
+  recommendedSemester?: number;
+  minimumGpa?: number;
+  registrationPriority?: number;
+  description?: string;
   isActive: boolean;
 }
 
 const courseImportColumns = [
   'courseCode',
   'courseName',
+  'courseNameAr',
+  'courseNameEn',
   'level',
   'semester',
   'department',
   'creditHours',
+  'type',
+  'prerequisites',
+  'coRequisites',
+  'equivalentCourses',
+  'offeredTerms',
+  'recommendedSemester',
+  'minimumGpa',
+  'registrationPriority',
+  'description',
 ];
 
 /* ─── Course Form Dialog (Reusable for Add/Edit) ─────── */
@@ -76,13 +103,15 @@ function CourseFormDialog({
   tCommon,
 }: CourseFormDialogProps) {
   const [name, setName] = useState(initialValues.name || '');
+  const [nameAr, setNameAr] = useState(initialValues.nameAr || initialValues.name || '');
+  const [nameEn, setNameEn] = useState(initialValues.nameEn || initialValues.name || '');
   const [code, setCode] = useState(initialValues.code || '');
   const [level, setLevel] = useState(initialValues.level || '1');
   const [semester, setSemester] = useState(initialValues.semester || 'first');
   const [creditHours, setCreditHours] = useState(initialValues.creditHours || 3);
   const [department, setDepartment] = useState(initialValues.department || '');
   const [prerequisites, setPrerequisites] = useState((initialValues.prerequisites || []).join(', '));
-  const [courseType, setCourseType] = useState<'required' | 'elective'>(initialValues.type || 'required');
+  const [courseType, setCourseType] = useState<CourseType>(initialValues.type || 'required');
   const [isActive, setIsActive] = useState(initialValues.isActive ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -123,6 +152,8 @@ function CourseFormDialog({
 
     if (open) {
       setName(initialValues.name || '');
+      setNameAr(initialValues.nameAr || initialValues.name || '');
+      setNameEn(initialValues.nameEn || initialValues.name || '');
       setCode(initialValues.code || '');
       setLevel(initialValues.level || '1');
       setSemester(initialValues.semester || 'first');
@@ -142,6 +173,8 @@ function CourseFormDialog({
     try {
       await onSubmit({
         name,
+        nameAr,
+        nameEn,
         code,
         level,
         academicLevel: level,
@@ -179,9 +212,15 @@ function CourseFormDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">{t('courseName')} *</label>
-            <Input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder={t('courseName')} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted">اسم المادة بالعربية *</label>
+              <Input type="text" dir="rtl" required value={nameAr} onChange={(e) => { setNameAr(e.target.value); setName(e.target.value || nameEn); }} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted">Course name in English *</label>
+              <Input type="text" dir="ltr" required value={nameEn} onChange={(e) => { setNameEn(e.target.value); if (!nameAr) setName(e.target.value); }} />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -238,11 +277,14 @@ function CourseFormDialog({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">Course type</label>
-              <Select value={courseType} onValueChange={(value) => setCourseType(value as 'required' | 'elective')}>
+              <Select value={courseType} onValueChange={(value) => setCourseType(value as CourseType)}>
                 <SelectTrigger className="bg-secondary/50 border-border"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="required">Required</SelectItem>
                   <SelectItem value="elective">Elective</SelectItem>
+                  <SelectItem value="university_req">University requirement</SelectItem>
+                  <SelectItem value="institute_req">Institute requirement</SelectItem>
+                  <SelectItem value="specialization_req">Specialization requirement</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -277,6 +319,7 @@ function CoursesPageContent() {
   const {
     search,
     activeLevel,
+    activeSemester,
     selectedKeys,
     setFilter,
     setSelectedKeys,
@@ -287,16 +330,18 @@ function CoursesPageContent() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [page, setPage] = useState(1);
   const limit = 10;
 
   const coursesQuery = useQuery({
-    queryKey: ['courses', search, activeLevel, page, limit],
+    queryKey: ['courses', search, activeLevel, activeSemester, page, limit],
     queryFn: async () => {
       const params: Record<string, string | number> = { page, limit };
       if (search) params.search = search;
       if (activeLevel !== 'all') params.level = activeLevel;
+      if (activeSemester !== 'all') params.semester = activeSemester;
       const res = await api.get<PaginatedResponse<Course>>('/admin/courses', { params });
       return res.data;
     },
@@ -322,7 +367,6 @@ function CoursesPageContent() {
   };
 
   const handleBulkDelete = async (ids: string[]) => {
-    if (!confirm(locale === 'ar' ? 'هل أنت متأكد من حذف المواد المحددة؟' : 'Are you sure you want to delete the selected courses?')) return;
     const toastId = toast.loading(locale === 'ar' ? 'جاري حذف المواد...' : 'Deleting courses...');
     try {
       await Promise.all(ids.map((id) => api.delete(`/admin/courses/${id}`)));
@@ -363,6 +407,7 @@ function CoursesPageContent() {
         const queryParams: Record<string, string | number> = { page: exportPage, limit: 100 };
         if (search) queryParams.search = search;
         if (activeLevel !== 'all') queryParams.level = activeLevel;
+        if (activeSemester !== 'all') queryParams.semester = activeSemester;
 
         const res = await api.get<PaginatedResponse<Course>>('/admin/courses', {
           params: queryParams,
@@ -376,15 +421,43 @@ function CoursesPageContent() {
         allCourses.map((course) => ({
           code: course.code,
           name: course.name,
+          nameAr: course.nameAr || '',
+          nameEn: course.nameEn || '',
           level: course.level,
           semester: course.semester,
           department: course.department || '',
-          creditHours: course.creditHours || '',
-          type: course.type || '',
+          creditHours: course.creditHours || 3,
+          type: course.type || 'required',
           prerequisites: course.prerequisites?.join(', ') || '',
+          coRequisites: course.coRequisites?.join(', ') || '',
+          equivalentCourses: course.equivalentCourses?.join(', ') || '',
+          offeredTerms: course.offeredTerms?.join(', ') || course.semester,
+          recommendedSemester: course.recommendedSemester || '',
+          minimumGpa: course.minimumGpa ?? '',
+          registrationPriority: course.registrationPriority ?? 0,
+          description: course.description || '',
           status: course.isActive ? 'Active' : 'Inactive',
         })),
-        ['Course Code', 'Course Name', 'Level', 'Semester', 'Department', 'Credit Hours', 'Type', 'Prerequisites', 'Status'],
+        [
+          'courseCode',
+          'courseName',
+          'courseNameAr',
+          'courseNameEn',
+          'level',
+          'semester',
+          'department',
+          'creditHours',
+          'type',
+          'prerequisites',
+          'coRequisites',
+          'equivalentCourses',
+          'offeredTerms',
+          'recommendedSemester',
+          'minimumGpa',
+          'registrationPriority',
+          'description',
+          'status',
+        ],
         `courses_export_${new Date().toISOString().slice(0, 10)}`,
       );
       toast.success(locale === 'ar' ? 'تم تجهيز ملف المواد' : 'Courses export is ready');
@@ -395,6 +468,11 @@ function CoursesPageContent() {
     }
   };
 
+  const getCourseName = (course: Course) =>
+    locale === 'ar'
+      ? course.nameAr || course.name
+      : course.nameEn || course.name;
+
   /* ─── Column Definitions ──────────────────────────── */
   const columns: ColumnDef<Course>[] = [
     {
@@ -404,7 +482,7 @@ function CoursesPageContent() {
         <TableCell className="p-4 font-medium text-foreground">
           <div className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 shrink-0 text-muted" />
-            <span>{course.name}</span>
+            <span>{getCourseName(course)}</span>
           </div>
         </TableCell>
       ),
@@ -419,6 +497,28 @@ function CoursesPageContent() {
           </span>
         </TableCell>
       ),
+    },
+    {
+      key: 'semester',
+      header: locale === 'ar' ? 'الفصل الدراسي' : 'Semester',
+      render: (course) => {
+        const semesterLabel =
+          course.semester === 'first'
+            ? locale === 'ar' ? 'الترم الأول' : 'First Term'
+            : course.semester === 'second'
+              ? locale === 'ar' ? 'الترم الثاني' : 'Second Term'
+              : course.semester === 'summer'
+                ? locale === 'ar' ? 'الترم الصيفي' : 'Summer Term'
+                : course.semester;
+
+        return (
+          <TableCell className="p-4">
+            <span className="inline-flex rounded-md border border-border/80 bg-surface/50 px-2.5 py-1 text-xs font-semibold text-foreground">
+              {semesterLabel}
+            </span>
+          </TableCell>
+        );
+      },
     },
     {
       key: 'status',
@@ -457,7 +557,7 @@ function CoursesPageContent() {
               description={
                 <>
                   {tCommon('deleteConfirmMessage')}{' '}
-                  <span className="font-bold text-danger">&quot;{course.name}&quot;</span>
+                  <span className="font-bold text-danger">&quot;{getCourseName(course)}&quot;</span>
                 </>
               }
               confirmLabel={tCommon('delete')}
@@ -480,11 +580,11 @@ function CoursesPageContent() {
       >
         <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
           <UploadCloud className="h-4 w-4" />
-          Upload Courses
+          {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
         </Button>
         <Button variant="outline" onClick={exportCourses} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Export
+          {locale === 'ar' ? 'تصدير' : 'Export'}
         </Button>
         <Button
           onClick={() => setIsAddOpen(true)}
@@ -511,15 +611,36 @@ function CoursesPageContent() {
             setPage(1);
           }}
         >
-
-          <SelectTrigger className="w-[200px] border-border bg-secondary/50">
-            <SelectValue placeholder={t('level_all')} />
+          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-[170px]">
+            <SelectValue placeholder={locale === 'ar' ? 'المستوى: الكل' : 'Level: All'} />
           </SelectTrigger>
           <SelectContent className="border-border bg-card">
-            <SelectItem value="all">{t('level_all')}</SelectItem>
+            <SelectItem value="all">
+              {locale === 'ar' ? 'المستوى: الكل' : 'Level: All'}
+            </SelectItem>
             {COURSE_LEVEL_VALUES.map((l) => (
               <SelectItem key={l} value={l}>{t(`level_${l}`)}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={activeSemester}
+          onValueChange={(val) => {
+            setFilter('activeSemester', val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-[180px]">
+            <SelectValue placeholder={locale === 'ar' ? 'الفصل: الكل' : 'Semester: All'} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-card">
+            <SelectItem value="all">
+              {locale === 'ar' ? 'الفصل: الكل' : 'Semester: All'}
+            </SelectItem>
+            <SelectItem value="first">{locale === 'ar' ? 'الترم الأول' : 'First Semester'}</SelectItem>
+            <SelectItem value="second">{locale === 'ar' ? 'الترم الثاني' : 'Second Semester'}</SelectItem>
+            <SelectItem value="summer">{locale === 'ar' ? 'الترم الصيفي' : 'Summer Semester'}</SelectItem>
           </SelectContent>
         </Select>
       </FilterBar>
@@ -559,7 +680,7 @@ function CoursesPageContent() {
             : []),
           {
             label: locale === 'ar' ? 'حذف المادة' : 'Delete',
-            onClick: handleBulkDelete,
+            onClick: () => setIsBulkDeleteOpen(true),
             variant: 'destructive',
             icon: <Trash2 className="w-3.5 h-3.5" />,
           },
@@ -593,14 +714,26 @@ function CoursesPageContent() {
         {courses.map((course) => (
           <div key={course._id} className="rounded-xl border border-border bg-card/95 p-4 backdrop-blur-sm">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-lg font-bold text-foreground">{course.name}</span>
+              <span className="text-lg font-bold text-foreground">{getCourseName(course)}</span>
               <StatusBadge
                 label={course.isActive ? tCommon('active') : tCommon('inactive')}
                 variant={course.isActive ? 'success' : 'danger'}
                 onClick={() => toggleStatus(course)}
               />
             </div>
-            <p className="mb-3 text-sm text-muted-foreground">{t(`level_${course.level}`)}</p>
+            <p className="mb-3 text-sm text-muted-foreground flex items-center gap-2">
+              <span>{t(`level_${course.level}`)}</span>
+              <span>•</span>
+              <span>
+                {course.semester === 'first'
+                  ? locale === 'ar' ? 'الترم الأول' : 'First Term'
+                  : course.semester === 'second'
+                    ? locale === 'ar' ? 'الترم الثاني' : 'Second Term'
+                    : course.semester === 'summer'
+                      ? locale === 'ar' ? 'الترم الصيفي' : 'Summer Term'
+                      : course.semester}
+              </span>
+            </p>
             <div className="flex gap-2 border-t border-border/50 pt-3">
               <TableActionButton
                 onClick={() => { setSelectedCourse(course); setIsEditOpen(true); }}
@@ -648,12 +781,34 @@ function CoursesPageContent() {
       <DataUploadDialog
         open={isUploadOpen}
         onOpenChange={setIsUploadOpen}
-        title="Upload Courses"
-        description="Upload an xlsx, xls, or csv file. Existing course codes are updated; new course codes are created."
+        title={locale === 'ar' ? 'رفع ملف المقررات' : 'Upload Courses'}
+        description={
+          locale === 'ar'
+            ? 'قم برفع ملف بصيغة xlsx أو xls أو csv. يتم تحديث كود المقرر إن وجد أو إنشاؤه من جديد.'
+            : 'Upload an xlsx, xls, or csv file. Existing course codes are updated; new course codes are created.'
+        }
         uploadType="courses"
         expectedColumns={courseImportColumns}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
+        }}
+      />
+
+      {/* Bulk Delete Confirm Dialog */}
+      <ConfirmDialog
+        open={isBulkDeleteOpen}
+        onOpenChange={setIsBulkDeleteOpen}
+        title={locale === 'ar' ? 'حذف المواد المحددة' : 'Delete Selected Courses'}
+        description={
+          locale === 'ar'
+            ? `هل أنت متأكد من حذف ${selectedKeys.length} من المواد المحددة؟`
+            : `Are you sure you want to delete ${selectedKeys.length} selected courses?`
+        }
+        confirmLabel={tCommon('delete')}
+        cancelLabel={tCommon('cancel')}
+        onConfirm={() => {
+          setIsBulkDeleteOpen(false);
+          void handleBulkDelete(selectedKeys);
         }}
       />
     </div>

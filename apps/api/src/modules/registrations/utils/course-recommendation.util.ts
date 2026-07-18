@@ -1,5 +1,7 @@
 import type { CourseDocument } from '../../courses/schemas/course.schema';
 import type { CourseLevel, Semester } from '@student-portal/shared';
+import { RulesBasedRecommendationProvider } from '../recommendations/rules-based-recommendation.provider';
+import { isCourseOfferedForTerm } from './term-availability.util';
 
 export interface RecommendationInput {
   courses: CourseDocument[];
@@ -45,9 +47,9 @@ export function buildEligibleCourseList({
       if (completed.has(code)) return false;
       if (!hasPassedPrerequisites(course, completed)) return false;
       const courseLevel = course.academicLevel ?? course.level;
-      const inCurrentPlan =
-        courseLevel === academicLevel && course.semester === semester;
-      return failed.has(code) || inCurrentPlan;
+      const offered = isCourseOfferedForTerm(course, semester);
+      const inCurrentPlan = courseLevel === academicLevel && offered;
+      return offered && (failed.has(code) || inCurrentPlan);
     })
     .sort((a, b) => {
       const aFailed = failed.has(a.code.toUpperCase()) ? 0 : 1;
@@ -63,16 +65,11 @@ export function buildEligibleCourseList({
 }
 
 export function recommendCourses(input: RecommendationInput): string[] {
-  let total = 0;
-  const selected: string[] = [];
-
-  for (const course of buildEligibleCourseList(input)) {
-    const hours = course.creditHours ?? 0;
-    if (hours <= 0) continue;
-    if (total + hours > input.maxCreditHours) continue;
-    selected.push(course.code.toUpperCase());
-    total += hours;
-  }
-
-  return selected;
+  return new RulesBasedRecommendationProvider()
+    .generate(input)
+    .filter(
+      (recommendation) =>
+        recommendation.eligible && recommendation.creditHours > 0,
+    )
+    .map((recommendation) => recommendation.courseCode);
 }
