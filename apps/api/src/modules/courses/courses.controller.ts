@@ -31,7 +31,6 @@ export class CoursesController {
   @Roles('student', 'admin', 'staff')
   @ApiOperation({ summary: 'List active courses' })
   async findActive(@Query() query: QueryCourseDto) {
-    // Force isActive filter to true for regular listings if not admin/staff
     return this.coursesService.findAll({ ...query, isActive: true });
   }
 
@@ -66,6 +65,7 @@ export class CoursesController {
 
   @Delete('admin/courses/:id')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({ summary: 'Delete course (Admin)' })
   async remove(@Param('id', ParseObjectIdPipe) id: string) {
     return this.coursesService.remove(id);

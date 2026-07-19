@@ -60,6 +60,7 @@ export class GradesController {
 
   @Post('admin/grades')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({ summary: 'Add or update single grade manually (Admin)' })
   async saveGrade(@Body() dto: SaveGradeDto) {
     return this.gradesService.saveGrade(dto);
@@ -67,6 +68,7 @@ export class GradesController {
 
   @Patch('admin/grades/:id')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({ summary: 'Edit specific grade (Admin)' })
   async update(
     @Param('id', ParseObjectIdPipe) id: string,
@@ -77,6 +79,7 @@ export class GradesController {
 
   @Delete('admin/grades/:id')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.GRADES_DELETE)
   @ApiOperation({ summary: 'Delete specific grade (Admin)' })
   async remove(@Param('id', ParseObjectIdPipe) id: string) {
     return this.gradesService.remove(id);
@@ -84,6 +87,7 @@ export class GradesController {
 
   @Post('admin/grades/publish')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({
     summary: 'Publish or hide midterm/final results in bulk (Admin)',
   })
@@ -93,6 +97,7 @@ export class GradesController {
 
   @Post('admin/grades/recalculate-progress')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({
     summary: 'Recalculate GPA, completed courses, and automatic level promotion',
   })

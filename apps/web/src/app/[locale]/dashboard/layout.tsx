@@ -8,6 +8,7 @@ import { Footer } from '@/components/ui/footer';
 import { useUIStore } from '@/store/ui-store';
 import { cn } from '@/lib/cn';
 import { FcmInitializer } from '@/providers/fcm-initializer';
+import { StudentChatWidget } from '@/features/ai/components/student-chat-widget';
 
 export default function StudentLayout({
   children,
@@ -40,6 +41,9 @@ export default function StudentLayout({
 
         <Footer role="student" locale={locale} />
       </div>
+
+      {/* Student AI Chatbot Assistant */}
+      <StudentChatWidget />
     </div>
   );
 }

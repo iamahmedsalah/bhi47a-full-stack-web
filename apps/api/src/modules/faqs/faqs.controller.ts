@@ -51,6 +51,7 @@ export class FaqsController {
 
   @Post('admin/faqs')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.FAQS_WRITE)
   @ApiOperation({ summary: 'Create FAQ' })
   async create(@Body() dto: CreateFaqDto, @CurrentUser('_id') userId: string) {
     return this.faqsService.create(dto, userId);
@@ -58,6 +59,7 @@ export class FaqsController {
 
   @Patch('admin/faqs/:id')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.FAQS_WRITE)
   @ApiOperation({ summary: 'Update FAQ' })
   async update(
     @Param('id', ParseObjectIdPipe) id: string,
@@ -69,6 +71,7 @@ export class FaqsController {
 
   @Delete('admin/faqs/:id')
   @Roles('admin')
+  @RequirePermissions(PERMISSIONS.FAQS_WRITE)
   @ApiOperation({ summary: 'Delete FAQ' })
   async remove(@Param('id', ParseObjectIdPipe) id: string) {
     return this.faqsService.remove(id);

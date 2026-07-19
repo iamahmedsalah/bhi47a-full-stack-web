@@ -34,6 +34,9 @@ import {
   AdvisingCase,
   AdvisingCaseSchema,
 } from '../academic-advising/schemas/advising-case.schema';
+import { GpaRuleService } from './services/gpa-rule.service';
+import { AcademicProfileService } from './services/academic-profile.service';
+import { RegistrationTermService } from './services/registration-term.service';
 
 @Module({
   imports: [
@@ -58,7 +61,17 @@ import {
     UsersModule,
   ],
   controllers: [RegistrationsController],
-  providers: [RegistrationsService],
-  exports: [RegistrationsService],
+  providers: [
+    RegistrationsService,
+    GpaRuleService,
+    AcademicProfileService,
+    RegistrationTermService,
+  ],
+  exports: [
+    RegistrationsService,
+    GpaRuleService,
+    AcademicProfileService,
+    RegistrationTermService,
+  ],
 })
 export class RegistrationsModule {}

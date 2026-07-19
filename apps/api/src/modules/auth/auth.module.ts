@@ -5,6 +5,9 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
+import { AuthLoginService } from './services/auth-login.service';
+import { AuthPasswordService } from './services/auth-password.service';
+import { AuthSessionService } from './services/auth-session.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -46,6 +49,9 @@ import {
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthLoginService,
+    AuthPasswordService,
+    AuthSessionService,
     JwtStrategy,
     // Global guards - applied to all routes
     {
@@ -69,6 +75,11 @@ import {
       useClass: PermissionsGuard,
     },
   ],
-  exports: [AuthService],
+  exports: [
+    AuthService,
+    AuthLoginService,
+    AuthPasswordService,
+    AuthSessionService,
+  ],
 })
 export class AuthModule {}

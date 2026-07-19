@@ -246,10 +246,11 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       setSelected((current) =>
         current ? { ...current, advisingStatus: "AUTO_RECOMMENDED" } : current,
       );
+      const eligibleCount = generated.filter((item: any) => item.eligible).length;
       toast.success(
         isArabic
-          ? `تم إنشاء ${generated.length} توصية`
-          : `${generated.length} recommendations generated`,
+          ? `تم إنشاء ${eligibleCount} توصيات لمسار التخرج`
+          : `${eligibleCount} recommended courses generated for graduation path`,
       );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -773,9 +774,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                   ["GPA", active.gpa],
                   [
                     isArabic ? "ناجح" : "Passed",
-                    courseMap.data?.summary.passedCourses ?? 0,
+                    courseMap.data?.summary?.passedCourses ?? 0,
                   ],
-                  [isArabic ? "راسب" : "Failed", courseMap.data?.summary.failedCourses ?? 0],
+                  [isArabic ? "راسب" : "Failed", courseMap.data?.summary?.failedCourses ?? 0],
                   [
                     isArabic ? "الخطة" : "Plan",
                     courseMap.data?.registration?.courses.length ?? selectedCourseIds.length,
@@ -790,7 +791,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                   ],
                   [
                     isArabic ? "المتبقي" : "Remaining",
-                    courseMap.data?.summary.remainingCredits ?? 0,
+                    courseMap.data?.summary?.remainingCredits ?? 0,
                   ],
                   [isArabic ? "الإنذارات" : "Warnings", active.warningCount],
                 ].map(([label, value], index) => (
@@ -964,7 +965,10 @@ function Canvas({
     );
   }
   const recommendationByCode = new Map(
-    recommendations.map((item) => [item.courseId.code.toUpperCase(), item]),
+    recommendations.map((item: any) => {
+      const code = typeof item.courseId === 'object' && item.courseId ? item.courseId.code : item.courseId;
+      return [code ? String(code).toUpperCase() : '', item];
+    }),
   );
   const completedCodes = courseMap.courses
     .filter((course) => course.progressStatus === "passed")

@@ -2,6 +2,12 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UploadsService } from './uploads.service';
 import { UploadsController } from './uploads.controller';
+import { StudentImporter } from './importers/student.importer';
+import { CourseImporter } from './importers/course.importer';
+import { GradeImporter } from './importers/grade.importer';
+import { QuizImporter } from './importers/quiz.importer';
+import { AttendanceImporter } from './importers/attendance.importer';
+import { AcademicEmailImporter } from './importers/academic-email.importer';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import {
   StudentProfile,
@@ -45,7 +51,15 @@ import { GradesModule } from '../grades/grades.module';
     ]),
   ],
   controllers: [UploadsController],
-  providers: [UploadsService],
+  providers: [
+    UploadsService,
+    StudentImporter,
+    CourseImporter,
+    GradeImporter,
+    QuizImporter,
+    AttendanceImporter,
+    AcademicEmailImporter,
+  ],
   exports: [UploadsService],
 })
 export class UploadsModule {}
