@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 type GoogleCredentialHandler = (credential: string) => void;
 type GoogleButtonOptions = {
@@ -12,48 +11,84 @@ type GoogleButtonOptions = {
   locale?: string;
 };
 
-let initializedGoogleClientId: string | undefined;
-let activeGoogleCredentialHandler: GoogleCredentialHandler | undefined;
+type GoogleIdentityState = {
+  scriptPromise?: Promise<void>;
+  initializedClientId?: string;
+  credentialHandler?: GoogleCredentialHandler;
+};
+
+type GoogleIdConfiguration = {
+  client_id: string;
+  callback: (response: { credential?: string }) => void;
+  ux_mode?: 'popup' | 'redirect';
+  auto_select?: boolean;
+  cancel_on_tap_outside?: boolean;
+  itp_support?: boolean;
+  use_fedcm_for_button?: boolean;
+  button_auto_select?: boolean;
+};
 
 declare global {
   interface Window {
     google?: {
       accounts: {
         id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string }) => void;
-            auto_select?: boolean;
-            use_fedcm_for_prompt?: boolean;
-          }) => void;
+          initialize: (config: GoogleIdConfiguration) => void;
           renderButton: (
             element: HTMLElement | null,
-            options: GoogleButtonOptions
+            options: GoogleButtonOptions,
           ) => void;
-          prompt: (
-            notification?: (notification: {
-              isNotDisplayed: () => boolean;
-              getNotDisplayedReason: () => string;
-              isSkippedMoment: () => boolean;
-              getSkippedReason: () => string;
-              isDismissedMoment: () => boolean;
-              getDismissedReason: () => string;
-            }) => void
-          ) => void;
+          prompt: () => void;
           disableAutoSelect: () => void;
-        };
-        oauth2?: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-          }) => {
-            requestAccessToken: () => void;
-          };
+          cancel?: () => void;
         };
       };
     };
+    __bhiGoogleIdentityState?: GoogleIdentityState;
   }
+}
+
+const GOOGLE_SCRIPT_ID = 'google-gsi-client';
+
+function getGoogleIdentityState(): GoogleIdentityState {
+  window.__bhiGoogleIdentityState ??= {};
+  return window.__bhiGoogleIdentityState;
+}
+
+function loadGoogleIdentityScript(): Promise<void> {
+  if (window.google?.accounts?.id) return Promise.resolve();
+
+  const state = getGoogleIdentityState();
+  if (state.scriptPromise) return state.scriptPromise;
+
+  state.scriptPromise = new Promise<void>((resolve, reject) => {
+    const existingScript = document.getElementById(
+      GOOGLE_SCRIPT_ID,
+    ) as HTMLScriptElement | null;
+
+    const handleLoad = () => resolve();
+    const handleError = () => {
+      state.scriptPromise = undefined;
+      reject(new Error('Google Identity Services failed to load'));
+    };
+
+    if (existingScript) {
+      existingScript.addEventListener('load', handleLoad, { once: true });
+      existingScript.addEventListener('error', handleError, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.id = GOOGLE_SCRIPT_ID;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', handleLoad, { once: true });
+    script.addEventListener('error', handleError, { once: true });
+    document.head.appendChild(script);
+  });
+
+  return state.scriptPromise;
 }
 
 export function useGoogleSignIn({
@@ -65,138 +100,115 @@ export function useGoogleSignIn({
 }) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || '';
   const onSuccessRef = useRef(onSuccess);
-  const [scriptLoaded, setScriptLoaded] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return !!document.getElementById('google-gsi-client');
-    }
-    return false;
-  });
+  const [scriptLoaded, setScriptLoaded] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     onSuccessRef.current = onSuccess;
-    activeGoogleCredentialHandler = (credential) => {
-      onSuccessRef.current(credential);
-    };
-
-    return () => {
-      activeGoogleCredentialHandler = undefined;
-    };
   }, [onSuccess]);
 
   useEffect(() => {
-    if (scriptLoaded) return;
+    const state = getGoogleIdentityState();
+    const handler: GoogleCredentialHandler = (credential) => {
+      onSuccessRef.current(credential);
+    };
+    state.credentialHandler = handler;
 
-    const existingScript = document.getElementById('google-gsi-client');
-    if (existingScript) {
-      setScriptLoaded(true);
+    return () => {
+      if (state.credentialHandler === handler) {
+        state.credentialHandler = undefined;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void loadGoogleIdentityScript()
+      .then(() => {
+        if (active) setScriptLoaded(true);
+      })
+      .catch((error: unknown) => {
+        if (active) setScriptLoaded(false);
+        console.error('Error loading Google GIS:', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!scriptLoaded || !window.google?.accounts?.id) return;
+
+    if (!clientId) {
+      console.warn(
+        'Google Client ID is missing. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID environment variable.',
+      );
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.id = 'google-gsi-client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setScriptLoaded(true);
-    document.body.appendChild(script);
-  }, [scriptLoaded]);
-
-  useEffect(() => {
-    if (!scriptLoaded || !window.google) return;
-
-    if (!clientId) {
-      console.warn('Google Client ID is missing. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID environment variable.');
-      setIsInitialized(false);
+    const state = getGoogleIdentityState();
+    if (state.initializedClientId === clientId) {
+      queueMicrotask(() => setIsInitialized(true));
       return;
     }
 
     try {
-      if (initializedGoogleClientId === clientId) {
-        setIsInitialized(true);
-        return;
-      }
-
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: (response) => {
-          activeGoogleCredentialHandler?.(response.credential);
+          if (response.credential) {
+            getGoogleIdentityState().credentialHandler?.(response.credential);
+          }
         },
+        ux_mode: 'popup',
         auto_select: false,
+        cancel_on_tap_outside: true,
+        itp_support: true,
+        use_fedcm_for_button: true,
+        button_auto_select: false,
       });
-      initializedGoogleClientId = clientId;
-      setIsInitialized(true);
+      state.initializedClientId = clientId;
+      queueMicrotask(() => setIsInitialized(true));
     } catch (error) {
-      setIsInitialized(false);
       console.error('Error initializing Google GIS:', error);
     }
   }, [clientId, scriptLoaded]);
 
-  const renderButton = useCallback(function renderGoogleButton(
-    elementId: string,
-    options: GoogleButtonOptions = {},
-  ) {
-    if (!clientId) return;
+  const renderButton = useCallback(
+    (elementId: string, options: GoogleButtonOptions = {}) => {
+      if (!clientId || !scriptLoaded || !isInitialized) return;
 
-    if (!scriptLoaded || !window.google || !isInitialized) {
-      setTimeout(() => renderGoogleButton(elementId, options), 200);
-      return;
-    }
-    const element = document.getElementById(elementId);
-    if (!element) return;
+      const element = document.getElementById(elementId);
+      if (!element || !window.google?.accounts?.id) return;
 
-    try {
-      window.google.accounts.id.renderButton(element, {
-        theme: 'outline',
-        size: 'large',
-        shape: 'pill',
-        width: '100%',
-        locale,
-        ...options,
-      });
-    } catch (error) {
-      console.error('Error rendering Google button:', error);
-    }
-  }, [clientId, isInitialized, locale, scriptLoaded]);
+      try {
+        element.replaceChildren();
+        window.google.accounts.id.renderButton(element, {
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          width: '100%',
+          locale,
+          ...options,
+        });
+      } catch (error) {
+        console.error('Error rendering Google button:', error);
+      }
+    },
+    [clientId, isInitialized, locale, scriptLoaded],
+  );
 
   const prompt = useCallback(() => {
-    if (!clientId) return;
-
-    if (!scriptLoaded || !window.google || !isInitialized) {
-      setTimeout(() => prompt(), 200);
-      return;
-    }
+    if (!clientId || !scriptLoaded || !isInitialized) return;
 
     try {
-      window.google.accounts.id.prompt();
+      window.google?.accounts?.id.prompt();
     } catch (error) {
       console.warn('Error showing Google prompt:', error);
     }
   }, [clientId, isInitialized, scriptLoaded]);
-
-  const loginWithPopup = useCallback(() => {
-    if (!clientId || typeof window === 'undefined') return;
-
-    if (!scriptLoaded || !window.google?.accounts?.oauth2) {
-      setTimeout(() => loginWithPopup(), 200);
-      return;
-    }
-
-    try {
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: 'openid email profile',
-        callback: (response) => {
-          if (response?.access_token) {
-            activeGoogleCredentialHandler?.(response.access_token);
-          }
-        },
-      });
-      client.requestAccessToken();
-    } catch (error) {
-      console.error('Error initiating Google OAuth popup:', error);
-    }
-  }, [clientId, scriptLoaded]);
 
   return {
     scriptLoaded,
@@ -204,6 +216,5 @@ export function useGoogleSignIn({
     isInitialized,
     renderButton,
     prompt,
-    loginWithPopup,
   };
 }

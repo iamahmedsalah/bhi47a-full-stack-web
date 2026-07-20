@@ -3,6 +3,7 @@ import axios, {
   type AxiosError,
   type InternalAxiosRequestConfig,
 } from 'axios';
+import { isPublicRoute } from '@/lib/public-routes';
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -179,7 +180,10 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       // Redirect to login on auth failure (client-side only), but check to prevent infinite loop
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+      if (
+        typeof window !== 'undefined' &&
+        !isPublicRoute(window.location.pathname)
+      ) {
         const locale = window.location.pathname.split('/')[1] || 'ar';
         window.location.href = `/${locale}/login`;
       }

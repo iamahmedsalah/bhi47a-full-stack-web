@@ -34,6 +34,7 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { getPublicComplaintSchema } from '@/lib/validations';
 import { cn } from '@/lib/cn';
 import { useComplaintStore } from '@/store/complaint-store';
+import { useAuth } from '@/providers/auth-provider';
 
 type ComplaintType = 'complaint' | 'technical_issue' | 'academic' | 'financial' | 'facility' | 'other';
 type ComplaintDepartment = 'student_affairs' | 'technical_support' | 'finance' | 'control' | 'academic_advising';
@@ -62,6 +63,8 @@ function PublicComplaintsContent() {
   const params = useParams();
   const locale = params.locale as string;
   const isAr = locale === 'ar';
+  const { user, loading: authLoading } = useAuth();
+  const isAuthenticatedStudent = user?.role === 'student';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ticketNumber, setTicketNumber] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState('');
@@ -171,10 +174,19 @@ function PublicComplaintsContent() {
   const validationResult = useMemo(() => {
     const dummyT = (key: string) => key;
     const schema = getPublicComplaintSchema(dummyT);
-    return schema.safeParse(form);
-  }, [form]);
+    const activeSchema = isAuthenticatedStudent
+      ? schema.omit({
+          requesterName: true,
+          studentCode: true,
+          contactPhone: true,
+          nationalId: true,
+          contactEmail: true,
+        })
+      : schema;
+    return activeSchema.safeParse(form);
+  }, [form, isAuthenticatedStudent]);
 
-  const canSubmit = validationResult.success && !isSubmitting;
+  const canSubmit = !authLoading && validationResult.success && !isSubmitting;
 
   const updateField = <Key extends keyof typeof form>(
     key: Key,
@@ -191,18 +203,27 @@ function PublicComplaintsContent() {
     setTicketNumber(null);
 
     try {
-      const res = await api.post<PublicComplaintResponse>('/public/complaints', {
-        requesterName: form.requesterName.trim(),
-        studentCode: form.studentCode.trim(),
-        contactPhone: form.contactPhone.trim(),
-        nationalId: form.nationalId.trim(),
-        contactEmail: form.contactEmail.trim() || undefined,
+      const complaint = {
         type: form.type,
         department: form.department,
         title: form.title.trim(),
         description: form.description.trim(),
         screenshotUrl: screenshotBase64,
-      });
+      };
+      const endpoint = isAuthenticatedStudent
+        ? '/students/complaints'
+        : '/public/complaints';
+      const payload = isAuthenticatedStudent
+        ? complaint
+        : {
+            ...complaint,
+            requesterName: form.requesterName.trim(),
+            studentCode: form.studentCode.trim(),
+            contactPhone: form.contactPhone.trim(),
+            nationalId: form.nationalId.trim(),
+            contactEmail: form.contactEmail.trim() || undefined,
+          };
+      const res = await api.post<PublicComplaintResponse>(endpoint, payload);
 
       setTicketNumber(res.data.ticketNumber);
       resetDraft();
@@ -232,6 +253,12 @@ function PublicComplaintsContent() {
     }
   };
 
+  const backHref = isAuthenticatedStudent
+    ? `/${locale}/dashboard/complaints`
+    : user
+      ? `/${locale}/admin`
+      : `/${locale}/login`;
+
   return (
     <div
       className="flex min-h-screen flex-col p-4 sm:p-6 md:p-8"
@@ -244,7 +271,7 @@ function PublicComplaintsContent() {
 
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5">
         <Button asChild variant="ghost" className="w-fit gap-2 text-muted-foreground hover:text-foreground">
-          <Link href={`/${locale}/login`}>
+          <Link href={backHref}>
             <ArrowRight className={isAr ? 'h-4 w-4' : 'h-4 w-4 rotate-180'} />
             {isAr ? 'الرجوع' : 'Back'}
           </Link>
@@ -279,8 +306,20 @@ function PublicComplaintsContent() {
                     {isAr ? 'نسخ الرقم' : 'Copy'}
                   </Button>
                   <Button asChild variant="secondary">
-                    <Link href={`/${locale}/login/student`}>
-                      {isAr ? 'تسجيل الدخول للمتابعة' : 'Sign in to track'}
+                    <Link
+                      href={
+                        isAuthenticatedStudent
+                          ? `/${locale}/dashboard/complaints`
+                          : `/${locale}/login/student`
+                      }
+                    >
+                      {isAuthenticatedStudent
+                        ? isAr
+                          ? 'عرض التذاكر'
+                          : 'View tickets'
+                        : isAr
+                          ? 'تسجيل الدخول للمتابعة'
+                          : 'Sign in to track'}
                     </Link>
                   </Button>
                 </div>
@@ -350,11 +389,23 @@ function PublicComplaintsContent() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border bg-surface/35 p-4">
-                <h2 className="mb-4 text-sm font-bold text-foreground">
+              {isAuthenticatedStudent ? (
+                <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+                  <p className="text-sm font-semibold text-foreground">
+                    {isAr ? `يتم الإرسال باسم ${user.name}` : `Submitting as ${user.name}`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isAr
+                      ? 'ستظهر هذه التذكرة في لوحة الطالب ويمكنك متابعة الردود هناك.'
+                      : 'This ticket will appear in your student dashboard, where you can track replies.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border bg-surface/35 p-4">
+                  <h2 className="mb-4 text-sm font-bold text-foreground">
                   {isAr ? 'معلومات التواصل' : 'Contact Information'}
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-2">
+                  </h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="requesterName">{isAr ? 'الاسم *' : 'Name *'}</Label>
                     <Input
@@ -470,8 +521,9 @@ function PublicComplaintsContent() {
                       {isAr ? 'PNG, JPG, WebP حتى 3MB' : 'PNG, JPG, WebP up to 3MB'}
                     </p>
                   </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="title">{isAr ? 'الموضوع *' : 'Subject *'}</Label>

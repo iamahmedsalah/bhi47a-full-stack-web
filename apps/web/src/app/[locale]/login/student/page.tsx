@@ -27,14 +27,13 @@ import { Footer } from '@/components/ui/footer';
 import LangToggle from '@/components/ui/LangToggle';
 import { useGoogleSignIn } from '@/hooks/use-google-signin';
 import { isChromeBrowser } from '@/utils/browser-check';
-import {
-  clearSavedGoogleAccount,
-  GOOGLE_ACCOUNT_CHANGED_EVENT,
-  loadSavedGoogleAccount,
-  readGoogleAccountFromCredential,
-  saveGoogleAccount,
-  type SavedGoogleAccount,
-} from '@/utils/google-account-storage';
+
+type StudentLoginError = {
+  locked?: boolean;
+  lockRemainingSeconds?: number;
+  attemptsLeft?: number;
+  message?: string;
+};
 
 function StudentLoginContent() {
   const t = useTranslations('auth');
@@ -43,11 +42,9 @@ function StudentLoginContent() {
   const params = useParams();
   const router = useRouter();
   const locale = params.locale as string;
-  const isEnglish = locale === 'en';
 
   const {
     loading,
-    remainingAttempts,
     isLocked,
     banExpiresAt,
     banRemainingSeconds,
@@ -81,13 +78,13 @@ function StudentLoginContent() {
   const passwordVal = watch('password');
   const googlePromptShownRef = useRef(false);
   const [isChrome, setIsChrome] = useState(false);
-  const { renderButton, scriptLoaded, prompt } = useGoogleSignIn({
+  const { renderButton, scriptLoaded, isInitialized, prompt } = useGoogleSignIn({
     locale,
     onSuccess: async (credential) => {
       setLoading(true);
       try {
         await login('google', { credential });
-      } catch (err: any) {
+      } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, t('loginError')));
       } finally {
         setLoading(false);
@@ -114,7 +111,7 @@ function StudentLoginContent() {
   }, []);
 
   useEffect(() => {
-    if (scriptLoaded) {
+    if (scriptLoaded && isInitialized) {
       renderButton('google-signin-btn', {
         theme: 'filled_black',
         size: 'large',
@@ -123,18 +120,18 @@ function StudentLoginContent() {
         width: buttonWidth,
       });
     }
-  }, [scriptLoaded, renderButton, locale, buttonWidth]);
+  }, [scriptLoaded, isInitialized, renderButton, locale, buttonWidth]);
 
   useEffect(() => {
     setIsChrome(isChromeBrowser());
   }, []);
 
   useEffect(() => {
-    if (!isChrome || !scriptLoaded || googlePromptShownRef.current) return;
+    if (!isChrome || !scriptLoaded || !isInitialized || googlePromptShownRef.current) return;
 
     googlePromptShownRef.current = true;
     prompt();
-  }, [isChrome, prompt, scriptLoaded]);
+  }, [isChrome, isInitialized, prompt, scriptLoaded]);
 
   // Auto-focus on student code input when component mounts
   useEffect(() => {
@@ -200,8 +197,8 @@ function StudentLoginContent() {
         sessionStorage.removeItem('remainingAttempts');
         sessionStorage.removeItem('banExpiresAt');
       } catch (e) { }
-    } catch (err: any) {
-      const errorData = err;
+    } catch (err: unknown) {
+      const errorData = err as StudentLoginError;
 
       if (errorData?.locked) {
         const lockSecs = errorData.lockRemainingSeconds || 1800;

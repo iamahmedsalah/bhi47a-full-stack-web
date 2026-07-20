@@ -10,13 +10,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { rateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { AppLoggerService } from './core/logger/logger.service';
-
-function parseAllowedOrigins(rawOrigins: string) {
-  return rawOrigins
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
+import { isOriginAllowed, parseAllowedOrigins } from './config/cors-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -42,7 +36,7 @@ async function bootstrap() {
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
     ) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }

@@ -29,6 +29,7 @@ import {
 import { normalizeSearchTerm } from '../../common/utils/search.util';
 import { AppLoggerService } from '../../core/logger/logger.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class ComplaintsService {
@@ -115,18 +116,31 @@ export class ComplaintsService {
   async createPublic(
     dto: PublicCreateComplaintDto,
   ): Promise<ComplaintDocument> {
-    const student = await this.userModel.findOne({
-      role: 'student',
-      studentCode: dto.studentCode.trim(),
-      isActive: true,
-    });
+    const student = await this.userModel
+      .findOne({
+        role: 'student',
+        studentCode: dto.studentCode.trim(),
+        isActive: true,
+      })
+      .select('+nationalIdHash');
 
-    if (!student) {
-      this.logger.warn('Public complaint rejected: unknown student code', {
-        context: ComplaintsService.name,
-        studentCode: dto.studentCode,
-      });
-      throw new BadRequestException('Student code was not found');
+    const nationalIdMatches = student
+      ? student.nationalIdHash
+        ? await bcrypt.compare(dto.nationalId, student.nationalIdHash)
+        : student.nationalId === dto.nationalId
+      : false;
+
+    if (!student || !nationalIdMatches) {
+      this.logger.warn(
+        'Public complaint rejected: identity verification failed',
+        {
+          context: ComplaintsService.name,
+          studentCode: dto.studentCode,
+        },
+      );
+      throw new BadRequestException(
+        'Student information could not be verified',
+      );
     }
 
     return this.createForStudent(dto, student, {

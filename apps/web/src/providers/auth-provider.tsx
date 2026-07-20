@@ -7,6 +7,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { useTheme } from '@/providers/theme-provider';
+import { isAuthEntryRoute, isPublicRoute } from '@/lib/public-routes';
 
 interface User {
   _id: string;
@@ -155,22 +156,13 @@ export function AuthProvider({
   useEffect(() => {
     if (meQuery.isLoading) return;
 
-    const isPublicPath =
-      pathname === `/${locale}/login` ||
-      pathname === `/${locale}/login/student` ||
-      pathname === `/${locale}/login/admin` ||
-      pathname === `/${locale}/login/change-password` ||
-      pathname === `/${locale}/forgot-password` ||
-      pathname === '/login' ||
-      pathname === '/login/student' ||
-      pathname === '/login/admin' ||
-      pathname === '/login/change-password' ||
-      pathname === '/forgot-password';
+    const isPublicPath = isPublicRoute(pathname);
+    const isAuthEntryPath = isAuthEntryRoute(pathname);
 
     const user = meQuery.data || null;
 
     if (!user) {
-      if (!isPublicPath && pathname !== `/${locale}` && pathname !== '/') {
+      if (!isPublicPath) {
         router.push(`/${locale}/login`);
       }
       return;
@@ -195,7 +187,7 @@ export function AuthProvider({
       return;
     }
 
-    if (isPublicPath && pathname !== `/${locale}/login/change-password` && pathname !== '/login/change-password') {
+    if (isAuthEntryPath && pathname !== `/${locale}/login/change-password` && pathname !== '/login/change-password') {
       if (user.role === 'student') {
         router.push(`/${locale}/dashboard`);
       } else {
