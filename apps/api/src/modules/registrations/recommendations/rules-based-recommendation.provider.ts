@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import type { CourseDocument } from '../../courses/schemas/course.schema';
 import {
   type AcademicCourseRecommendation,
   type AcademicRecommendationContext,
@@ -7,13 +6,14 @@ import {
   type RecommendationCategory,
   type RecommendationPriority,
   type RecommendationReasonCode,
+  type RecommendationCourse,
 } from './recommendation-provider.interface';
 import { isCourseOfferedForTerm } from '../utils/term-availability.util';
 
 const normalize = (codes: readonly string[] = []): Set<string> =>
   new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean));
 
-const codeOf = (course: Pick<CourseDocument, 'code'>): string =>
+const codeOf = (course: Pick<RecommendationCourse, 'code'>): string =>
   course.code.trim().toUpperCase();
 
 @Injectable()
@@ -25,7 +25,6 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     const failed = normalize(context.failedCourses);
     const inProgress = normalize(context.inProgressCourses);
     const unlockCounts = this.buildUnlockCounts(context.courses);
-    const criticalPathDepths = this.buildCriticalPathDepths(context.courses);
 
     const evaluated = context.courses
       .filter((course) => course.isActive)
@@ -37,14 +36,17 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
           failed,
           inProgress,
           unlockCounts.get(codeOf(course)) ?? 0,
-          criticalPathDepths.get(codeOf(course)) ?? 0,
         ),
       )
       .sort((left, right) => {
-        // 1. Failed courses first
+        // Eligible failed courses are always the first re-registration choices.
         const leftFailed = failed.has(left.courseCode) && left.eligible ? 1 : 0;
-        const rightFailed = failed.has(right.courseCode) && right.eligible ? 1 : 0;
+        const rightFailed =
+          failed.has(right.courseCode) && right.eligible ? 1 : 0;
         if (leftFailed !== rightFailed) return rightFailed - leftFailed;
+
+        // Keep every academically eligible course ahead of blocked records.
+        if (left.eligible !== right.eligible) return left.eligible ? -1 : 1;
 
         // 2. High score first
         if (right.score !== left.score) return right.score - left.score;
@@ -61,29 +63,29 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         context.maxCreditHours
       ) {
         allocatedCredits += recommendation.creditHours;
-        return recommendation;
+        return { ...recommendation, isRecommendedForSemester: true };
       }
       return {
         ...recommendation,
-        eligible: false,
-        priority: 'BLOCKED' as const,
-        reasonCodes: [...recommendation.reasonCodes, 'CREDIT_LIMIT_EXCEEDED' as const],
-        blockedReasons: [
-          ...recommendation.blockedReasons,
-          `Adding this course would exceed the ${context.maxCreditHours}-credit limit for this term.`,
+        reasonCodes: [
+          ...recommendation.reasonCodes,
+          'CREDIT_LIMIT_EXCEEDED' as const,
+        ],
+        warnings: [
+          ...recommendation.warnings,
+          `Not included in the recommended semester plan because it would exceed the ${context.maxCreditHours}-credit limit.`,
         ],
       };
     });
   }
 
   private evaluateCourse(
-    course: CourseDocument,
+    course: RecommendationCourse,
     context: AcademicRecommendationContext,
     completed: Set<string>,
     failed: Set<string>,
     inProgress: Set<string>,
     unlockCount: number,
-    criticalPathDepth: number,
   ): AcademicCourseRecommendation {
     const courseCode = codeOf(course);
     const courseName = course.name;
@@ -93,11 +95,9 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       code.toUpperCase(),
     );
 
-    // Consider both completed and in-progress for prerequisite chain evaluation
-    const missing = prerequisites.filter(
-      (code) => !completed.has(code) && !inProgress.has(code),
+    const missingOnlyCompleted = prerequisites.filter(
+      (code) => !completed.has(code),
     );
-    const missingOnlyCompleted = prerequisites.filter((code) => !completed.has(code));
 
     const offered = isCourseOfferedForTerm(course, context.semester);
     const alreadyPassed = completed.has(courseCode);
@@ -116,21 +116,16 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     const warnings: string[] = [];
     let score = 0;
 
-    // 1. Failed Courses First (+100 score boost)
+    // Failed courses receive an exact score of 100 once re-registration is valid.
     if (previouslyFailed) {
-      score += 100;
       reasonCodes.push('FAILED_PREVIOUSLY');
     }
 
-    // 2. Critical Path / Minimum Semesters to Graduate (+15 per depth step, max 60)
-    if (criticalPathDepth > 0) {
-      score += Math.min(criticalPathDepth * 15, 60);
-      reasonCodes.push('UNLOCKS_FUTURE_COURSES');
-    }
-
-    // 3. Direct unlock count (+5 per unlock, max 20)
+    // Failed prerequisite courses that unlock later courses receive an
+    // additional signal, while every eligible failed course still scores 100.
     if (unlockCount > 0) {
       score += Math.min(unlockCount * 5, 20);
+      reasonCodes.push('UNLOCKS_FUTURE_COURSES');
     }
 
     // 4. Current level requirement (+15)
@@ -173,7 +168,9 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     }
     if (missingOnlyCompleted.length > 0) {
       reasonCodes.push('MISSING_PREREQUISITE');
-      const inProgressPrereqs = missingOnlyCompleted.filter((code) => inProgress.has(code));
+      const inProgressPrereqs = missingOnlyCompleted.filter((code) =>
+        inProgress.has(code),
+      );
       if (inProgressPrereqs.length > 0) {
         warnings.push(
           `Prerequisite ${inProgressPrereqs.join(', ')} is currently in-progress and must be completed first.`,
@@ -193,9 +190,13 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     }
 
     const eligible =
-      offered && !alreadyPassed && !alreadyInProgress && missingOnlyCompleted.length === 0;
+      offered &&
+      !alreadyPassed &&
+      !alreadyInProgress &&
+      missingOnlyCompleted.length === 0;
 
-    score = Math.max(0, Math.min(100, score));
+    score =
+      previouslyFailed && eligible ? 100 : Math.max(0, Math.min(99, score));
     const priority: RecommendationPriority = !eligible
       ? 'BLOCKED'
       : score >= 75
@@ -205,7 +206,9 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
           : 'LOW';
 
     const category: RecommendationCategory = previouslyFailed
-      ? (missingOnlyCompleted.length > 0 ? 'FAILED_PREREQUISITE' : 'FAILED_COURSE')
+      ? missingOnlyCompleted.length > 0
+        ? 'FAILED_PREREQUISITE'
+        : 'FAILED_COURSE'
       : required && currentLevel
         ? 'REQUIRED_CURRENT_SEMESTER'
         : required && !currentLevel && score > 10
@@ -214,20 +217,19 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
             ? 'ELECTIVE'
             : 'REQUIRED_NEXT_SEMESTER';
 
-    const nameDisplay = courseNameEn && courseNameAr
-      ? `${courseCode} — ${courseNameEn} / ${courseNameAr}`
-      : `${courseCode} — ${courseNameEn ?? courseName}`;
+    const nameDisplay =
+      courseNameEn && courseNameAr
+        ? `${courseCode} — ${courseNameEn} / ${courseNameAr}`
+        : `${courseCode} — ${courseNameEn ?? courseName}`;
 
     const explanation = previouslyFailed
       ? `Priority #1: ${nameDisplay} was previously failed and must be retaken first for graduation.`
-      : criticalPathDepth > 0
-        ? `Shortest Path: ${nameDisplay} is on a ${criticalPathDepth}-step critical prerequisite path to graduation.`
-        : required
-          ? `${nameDisplay} is a required course for level ${course.academicLevel ?? course.level}.`
-          : `${nameDisplay} is an elective course fitting the student plan.`;
+      : required
+        ? `${nameDisplay} is a required course for level ${course.academicLevel ?? course.level}.`
+        : `${nameDisplay} is an elective course fitting the student plan.`;
 
     return {
-      courseId: course._id?.toString(),
+      courseId: course._id == null ? undefined : String(course._id),
       courseCode,
       courseName,
       courseNameAr,
@@ -236,6 +238,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       score,
       priority,
       eligible,
+      isRecommendedForSemester: false,
       reasonCodes,
       explanation,
       warnings,
@@ -251,7 +254,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
   }
 
   private buildUnlockCounts(
-    courses: readonly CourseDocument[],
+    courses: readonly RecommendationCourse[],
   ): Map<string, number> {
     const counts = new Map<string, number>();
     courses.forEach((course) =>
@@ -261,45 +264,5 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       }),
     );
     return counts;
-  }
-
-  /**
-   * Computes the longest downstream prerequisite depth (critical path to graduation)
-   * for each course using a directed graph.
-   */
-  private buildCriticalPathDepths(
-    courses: readonly CourseDocument[],
-  ): Map<string, number> {
-    const adj = new Map<string, string[]>(); // prerequisite -> courses that require it
-    const depths = new Map<string, number>();
-
-    courses.forEach((course) => {
-      const code = codeOf(course);
-      if (!adj.has(code)) adj.set(code, []);
-      (course.prerequisites ?? []).forEach((prereq) => {
-        const pCode = prereq.toUpperCase();
-        if (!adj.has(pCode)) adj.set(pCode, []);
-        adj.get(pCode)!.push(code);
-      });
-    });
-
-    const getDepth = (code: string, visited: Set<string>): number => {
-      if (depths.has(code)) return depths.get(code)!;
-      if (visited.has(code)) return 0; // Cycle safety
-
-      visited.add(code);
-      const dependents = adj.get(code) ?? [];
-      let maxChildDepth = 0;
-
-      for (const child of dependents) {
-        maxChildDepth = Math.max(maxChildDepth, 1 + getDepth(child, new Set(visited)));
-      }
-
-      depths.set(code, maxChildDepth);
-      return maxChildDepth;
-    };
-
-    courses.forEach((course) => getDepth(codeOf(course), new Set()));
-    return depths;
   }
 }

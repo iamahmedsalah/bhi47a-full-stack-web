@@ -37,10 +37,42 @@ describe('RulesBasedRecommendationProvider', () => {
     expect(recommendation).toMatchObject({
       courseCode: 'ACC201',
       eligible: true,
+      score: 100,
       priority: 'HIGH',
+      isRecommendedForSemester: true,
     });
     expect(recommendation.reasonCodes).toContain('FAILED_PREVIOUSLY');
     expect(recommendation.explanation).toContain('previously failed');
+  });
+
+  it('keeps a failed prerequisite course ahead of new courses it unlocks', () => {
+    const recommendations = provider.generate({
+      courses: [
+        course('NEW201'),
+        course('FAIL201'),
+        course('NEXT301', {
+          academicLevel: '3',
+          level: '3',
+          prerequisites: ['FAIL201'],
+        }),
+      ],
+      completedCourses: [],
+      failedCourses: ['FAIL201'],
+      academicLevel: '2',
+      semester: 'first',
+      maxCreditHours: 6,
+    });
+
+    expect(recommendations[0]).toMatchObject({
+      courseCode: 'FAIL201',
+      score: 100,
+      isRecommendedForSemester: true,
+    });
+    expect(recommendations[0].reasonCodes).toContain('UNLOCKS_FUTURE_COURSES');
+    expect(recommendations[1]).toMatchObject({
+      courseCode: 'NEW201',
+      isRecommendedForSemester: true,
+    });
   });
 
   it('returns blocked recommendations with prerequisite evidence', () => {
@@ -76,8 +108,8 @@ describe('RulesBasedRecommendationProvider', () => {
     expect(
       recommendations.find(({ courseCode }) => courseCode === 'NEW201'),
     ).toMatchObject({
-      eligible: false,
-      priority: 'BLOCKED',
+      eligible: true,
+      isRecommendedForSemester: false,
     });
   });
 
@@ -96,5 +128,30 @@ describe('RulesBasedRecommendationProvider', () => {
     expect(recommendations.flatMap(({ reasonCodes }) => reasonCodes)).toEqual(
       expect.arrayContaining(['ALREADY_PASSED', 'ALREADY_IN_PROGRESS']),
     );
+  });
+
+  it('flags only top eligible courses within the semester credit cap', () => {
+    const recommendations = provider.generate({
+      courses: [course('A201'), course('B201'), course('C201')],
+      completedCourses: [],
+      failedCourses: [],
+      academicLevel: '2',
+      semester: 'first',
+      maxCreditHours: 6,
+    });
+
+    expect(
+      recommendations.filter(
+        ({ isRecommendedForSemester }) => isRecommendedForSemester,
+      ),
+    ).toHaveLength(2);
+    expect(
+      recommendations
+        .filter(({ isRecommendedForSemester }) => isRecommendedForSemester)
+        .reduce(
+          (total, recommendation) => total + recommendation.creditHours,
+          0,
+        ),
+    ).toBe(6);
   });
 });

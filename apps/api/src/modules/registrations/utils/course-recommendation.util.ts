@@ -69,7 +69,8 @@ export function recommendCourses(input: RecommendationInput): string[] {
     .generate(input)
     .filter(
       (recommendation) =>
-        recommendation.eligible && recommendation.creditHours > 0,
+        recommendation.isRecommendedForSemester &&
+        recommendation.creditHours > 0,
     )
     .map((recommendation) => recommendation.courseCode);
 }

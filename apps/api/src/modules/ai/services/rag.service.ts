@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Faq } from '../../faqs/schemas/faq.schema';
 import { Course } from '../../courses/schemas/course.schema';
 import { GeminiProvider } from '../providers/gemini.provider';
@@ -42,10 +42,7 @@ export class RagService {
       ]),
     };
 
-    const faqs = await this.faqModel
-      .find(regexFilter)
-      .limit(limit)
-      .lean();
+    const faqs = await this.faqModel.find(regexFilter).limit(limit).lean();
 
     if (faqs.length === 0) return '';
 
@@ -62,7 +59,11 @@ export class RagService {
   /**
    * Retrieve course information relevant to a query.
    */
-  async retrieveCourses(query: string, limit = 10): Promise<string> {
+  async retrieveCourses(
+    query: string,
+    limit = 10,
+    locale: 'ar' | 'en' = 'en',
+  ): Promise<string> {
     const terms = query
       .toLowerCase()
       .split(/[^\p{L}\p{N}]+/u)
@@ -80,22 +81,29 @@ export class RagService {
           { nameEn: { $regex: term, $options: 'i' } },
         ]),
       })
-      .select('code name nameAr nameEn creditHours prerequisites level semester type')
+      .select(
+        'code name nameAr nameEn creditHours prerequisites level semester type',
+      )
       .limit(limit)
       .lean();
 
     if (courses.length === 0) return '';
 
     return courses
-      .map(
-        (c) =>
-          `Course: ${c.code} - ${c.nameAr || c.name}${c.nameEn ? ` (${c.nameEn})` : ''}\n` +
+      .map((c) => {
+        const localizedName =
+          locale === 'ar'
+            ? c.nameAr || c.name || c.nameEn
+            : c.nameEn || c.name || c.nameAr;
+        return (
+          `Course: ${localizedName}\n` +
           `Level: ${c.level}, Semester: ${c.semester}, Credits: ${c.creditHours ?? 0}\n` +
           `Type: ${c.type ?? 'N/A'}` +
           (c.prerequisites?.length
             ? `\nPrerequisites: ${c.prerequisites.join(', ')}`
-            : ''),
-      )
+            : '')
+        );
+      })
       .join('\n\n');
   }
 
@@ -104,7 +112,11 @@ export class RagService {
    */
   async buildContext(
     query: string,
-    options?: { includeFaqs?: boolean; includeCourses?: boolean },
+    options?: {
+      includeFaqs?: boolean;
+      includeCourses?: boolean;
+      locale?: 'ar' | 'en';
+    },
   ): Promise<string> {
     const parts: string[] = [];
 
@@ -116,7 +128,11 @@ export class RagService {
     }
 
     if (options?.includeCourses !== false) {
-      const courseContext = await this.retrieveCourses(query);
+      const courseContext = await this.retrieveCourses(
+        query,
+        10,
+        options?.locale,
+      );
       if (courseContext) {
         parts.push(`## Relevant Courses\n${courseContext}`);
       }

@@ -9,12 +9,21 @@ import { StudentChatController } from './controllers/student-chat.controller';
 import { AdminAiController } from './controllers/admin-ai.controller';
 import { ChatSession, ChatSessionSchema } from './schemas/chat-session.schema';
 import { AiUsageLog, AiUsageLogSchema } from './schemas/ai-usage-log.schema';
+import { AiSettings, AiSettingsSchema } from './schemas/ai-settings.schema';
 import { Faq, FaqSchema } from '../faqs/schemas/faq.schema';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { Grade, GradeSchema } from '../grades/schemas/grade.schema';
-import { StudentProfile, StudentProfileSchema } from '../students/schemas/student-profile.schema';
-import { StudentAcademicProfile, StudentAcademicProfileSchema } from '../registrations/schemas/student-academic-profile.schema';
+import {
+  StudentProfile,
+  StudentProfileSchema,
+} from '../students/schemas/student-profile.schema';
+import {
+  StudentAcademicProfile,
+  StudentAcademicProfileSchema,
+} from '../registrations/schemas/student-academic-profile.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { ChatAuditService } from './services/chat-audit.service';
+import { AiSettingsService } from './services/ai-settings.service';
 
 @Module({
   imports: [
@@ -22,11 +31,15 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     MongooseModule.forFeature([
       { name: ChatSession.name, schema: ChatSessionSchema },
       { name: AiUsageLog.name, schema: AiUsageLogSchema },
+      { name: AiSettings.name, schema: AiSettingsSchema },
       { name: Faq.name, schema: FaqSchema },
       { name: Course.name, schema: CourseSchema },
       { name: Grade.name, schema: GradeSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
-      { name: StudentAcademicProfile.name, schema: StudentAcademicProfileSchema },
+      {
+        name: StudentAcademicProfile.name,
+        schema: StudentAcademicProfileSchema,
+      },
       { name: User.name, schema: UserSchema },
     ]),
   ],
@@ -36,11 +49,9 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     RagService,
     StudentChatbotService,
     AdminAiAdvisorService,
+    ChatAuditService,
+    AiSettingsService,
   ],
-  exports: [
-    StudentChatbotService,
-    AdminAiAdvisorService,
-    RagService,
-  ],
+  exports: [StudentChatbotService, AdminAiAdvisorService, RagService],
 })
 export class AiModule {}

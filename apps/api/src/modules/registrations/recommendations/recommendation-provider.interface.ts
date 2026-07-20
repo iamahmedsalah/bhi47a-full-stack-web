@@ -1,4 +1,4 @@
-import type { CourseDocument } from '../../courses/schemas/course.schema';
+import type { Course } from '../../courses/schemas/course.schema';
 import type { CourseLevel, Semester } from '@student-portal/shared';
 
 export type RecommendationPriority = 'HIGH' | 'MEDIUM' | 'LOW' | 'BLOCKED';
@@ -16,8 +16,10 @@ export type RecommendationReasonCode =
   | 'NOT_OFFERED_THIS_SEMESTER'
   | 'CREDIT_LIMIT_EXCEEDED';
 
+export type RecommendationCourse = Course & { _id?: unknown };
+
 export interface AcademicRecommendationContext {
-  courses: readonly CourseDocument[];
+  courses: readonly RecommendationCourse[];
   completedCourses: readonly string[];
   failedCourses: readonly string[];
   inProgressCourses?: readonly string[];
@@ -57,6 +59,7 @@ export interface AcademicCourseRecommendation {
   score: number;
   priority: RecommendationPriority;
   eligible: boolean;
+  isRecommendedForSemester: boolean;
   reasonCodes: RecommendationReasonCode[];
   explanation: string;
   warnings: string[];

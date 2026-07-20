@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,8 @@ import { AdvisingCase } from '../schemas/advising-case.schema';
 import { CourseRecommendation } from '../schemas/course-recommendation.schema';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { StudentAcademicProfile } from '../../registrations/schemas/student-academic-profile.schema';
+import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
+import { Grade } from '../../grades/schemas/grade.schema';
 import { RulesBasedRecommendationProvider } from '../../registrations/recommendations/rules-based-recommendation.provider';
 import { AdvisingAuditService } from './advising-audit.service';
 import type {
@@ -28,6 +31,9 @@ export class AdvisingRecommendationService {
     @InjectModel(Course.name) private readonly courses: Model<CourseDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private readonly academicProfiles: Model<StudentAcademicProfile>,
+    @InjectModel(CourseRegistration.name)
+    private readonly registrations: Model<CourseRegistration>,
+    @InjectModel(Grade.name) private readonly grades: Model<Grade>,
     private readonly audit: AdvisingAuditService,
   ) {}
 
@@ -39,13 +45,19 @@ export class AdvisingRecommendationService {
   ) {
     const caseItem = await this.cases.findById(caseId);
     if (!caseItem) throw new NotFoundException('Advising case not found');
-    this.assertCaseAccess(caseItem.assignedAdvisorId?.toString(), actorId, role);
+    this.assertCaseAccess(
+      caseItem.assignedAdvisorId?.toString(),
+      actorId,
+      role,
+    );
 
     const student = await this.academicProfiles
       .findOne({ studentId: caseItem.studentId })
       .lean();
     if (!student)
       throw new NotFoundException('Student academic profile not found');
+
+    await this.assertPreviousSemesterReady(caseItem, student);
 
     const activeCourses = await this.courses.find({ isActive: true });
 
@@ -60,6 +72,9 @@ export class AdvisingRecommendationService {
       courses: activeCourses,
     });
 
+    const recommended = recs.filter((rec) => rec.isRecommendedForSemester);
+    const generationKey = `gen_${Date.now()}`;
+
     await this.recommendations.deleteMany({ advisingCaseId: caseItem._id });
     const docs = await this.recommendations.insertMany(
       recs.map((rec) => ({
@@ -69,13 +84,14 @@ export class AdvisingRecommendationService {
         score: rec.score,
         priority: rec.priority,
         eligible: rec.eligible,
+        isRecommendedForSemester: rec.isRecommendedForSemester,
         reasonCodes: rec.reasonCodes,
-        explanation: (rec as any).explanation ?? rec.reasonCodes.join('. '),
+        explanation: rec.explanation,
         warnings: rec.warnings,
         blockedReasons: rec.blockedReasons,
         accepted: false,
         rejected: false,
-        generationKey: `gen_${Date.now()}`,
+        generationKey,
       })),
     );
 
@@ -85,9 +101,22 @@ export class AdvisingRecommendationService {
       'RECOMMENDATIONS_GENERATED',
       'AdvisingCase',
       caseItem._id.toString(),
-      { newValue: { count: docs.length } },
+      {
+        newValue: {
+          count: docs.length,
+          recommendedCount: recommended.length,
+        },
+      },
     );
-    return docs;
+    return {
+      recommendations: docs,
+      recommendedCount: recommended.length,
+      recommendedCreditHours: recommended.reduce(
+        (total, rec) => total + rec.creditHours,
+        0,
+      ),
+      maxCreditHours: dto.maxCredits ?? 18,
+    };
   }
 
   async listRecommendations(caseId: string, actorId: string, role: Role) {
@@ -101,7 +130,10 @@ export class AdvisingRecommendationService {
 
     return this.recommendations
       .find({ advisingCaseId: new Types.ObjectId(caseId) })
-      .populate('courseId', 'name nameAr nameEn code creditHours level semester')
+      .populate(
+        'courseId',
+        'name nameAr nameEn code creditHours level semester',
+      )
       .sort({ score: -1 })
       .lean();
   }
@@ -148,6 +180,52 @@ export class AdvisingRecommendationService {
   ) {
     if (role === 'staff' && advisorId !== actorId) {
       throw new ForbiddenException('You do not have access to this case');
+    }
+  }
+
+  private async assertPreviousSemesterReady(
+    caseItem: AdvisingCase,
+    student: StudentAcademicProfile,
+  ) {
+    if (caseItem.semester !== 'second') return;
+
+    const firstSemesterRegistration = await this.registrations
+      .findOne({
+        studentId: caseItem.studentId,
+        academicYear: caseItem.academicYear,
+        semester: 'first',
+        status: { $ne: 'rejected' },
+      })
+      .lean();
+
+    if (!firstSemesterRegistration?.courses.length) {
+      throw new BadRequestException(
+        'Cannot generate second-semester recommendations until the student has a first-semester registration for this academic year.',
+      );
+    }
+
+    const publishedFinalCourseCodes = await this.grades.distinct('courseCode', {
+      studentId: caseItem.studentId,
+      academicYear: caseItem.academicYear,
+      semester: 'first',
+      examType: 'final',
+      isPublished: true,
+    });
+    const finalized = new Set(
+      [
+        ...student.completedCourses,
+        ...student.failedCourses,
+        ...publishedFinalCourseCodes,
+      ].map((code) => code.trim().toUpperCase()),
+    );
+    const missingResults = firstSemesterRegistration.courses.filter(
+      (code) => !finalized.has(code.trim().toUpperCase()),
+    );
+
+    if (missingResults.length > 0) {
+      throw new BadRequestException(
+        `Cannot generate second-semester recommendations until first-semester final grades are published and added to the student profile. Missing results: ${missingResults.join(', ')}.`,
+      );
     }
   }
 }

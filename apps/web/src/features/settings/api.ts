@@ -1,4 +1,4 @@
-import api from '@/lib/api';
+import api from "@/lib/api";
 
 export interface GpaRuleItem {
   _id: string;
@@ -33,52 +33,106 @@ export interface StaffUserItem {
   userCode?: string;
   name: string;
   email?: string;
-  role: 'admin' | 'staff';
+  role: "admin" | "staff";
   permissions?: string[];
 }
 
+export interface AiSettingsItem {
+  studentAdvisorEnabled: boolean;
+  provider: string;
+  model: string;
+  apiKeyConfigured: boolean;
+  usage: {
+    allTimeTokens: number;
+    allTimeRequests: number;
+    allTimeErrors: number;
+    currentMonthTokens: number;
+    currentMonthRequests: number;
+    monthlyTokenBudget: number | null;
+    remainingTokens: number | null;
+    usagePercent: number | null;
+    periodStart: string;
+  };
+}
+
 export const settingsKeys = {
-  gpaRules: ['admin-gpa-rules'] as const,
-  registrationTerms: ['admin-registration-terms'] as const,
-  staffUsers: ['admin-staff-users'] as const,
+  gpaRules: ["admin-gpa-rules"] as const,
+  registrationTerms: ["admin-registration-terms"] as const,
+  staffUsers: ["admin-staff-users"] as const,
+  aiSettings: ["admin-ai-settings"] as const,
 };
 
 export async function listGpaRules(): Promise<GpaRuleItem[]> {
-  const response = await api.get<GpaRuleItem[]>('/admin/gpa-rules');
+  const response = await api.get<GpaRuleItem[]>("/admin/gpa-rules");
   return response.data;
 }
 
-export async function createGpaRule(dto: Partial<GpaRuleItem>): Promise<GpaRuleItem> {
-  const response = await api.post<GpaRuleItem>('/admin/gpa-rules', dto);
+export async function createGpaRule(
+  dto: Partial<GpaRuleItem>,
+): Promise<GpaRuleItem> {
+  const response = await api.post<GpaRuleItem>("/admin/gpa-rules", dto);
   return response.data;
 }
 
-export async function updateGpaRule(id: string, dto: Partial<GpaRuleItem>): Promise<GpaRuleItem> {
+export async function updateGpaRule(
+  id: string,
+  dto: Partial<GpaRuleItem>,
+): Promise<GpaRuleItem> {
   const response = await api.patch<GpaRuleItem>(`/admin/gpa-rules/${id}`, dto);
   return response.data;
 }
 
 export async function deleteGpaRule(id: string): Promise<{ message: string }> {
-  const response = await api.delete<{ message: string }>(`/admin/gpa-rules/${id}`);
+  const response = await api.delete<{ message: string }>(
+    `/admin/gpa-rules/${id}`,
+  );
   return response.data;
 }
 
 export async function listRegistrationTerms(): Promise<RegistrationTermItem[]> {
-  const response = await api.get<RegistrationTermItem[]>('/admin/registration-terms');
+  const response = await api.get<RegistrationTermItem[]>(
+    "/admin/registration-terms",
+  );
   return response.data;
 }
 
-export async function toggleRegistrationTerm(id: string, isOpen: boolean): Promise<RegistrationTermItem> {
-  const response = await api.patch<RegistrationTermItem>(`/admin/registration-terms/${id}`, { isOpen });
+export async function toggleRegistrationTerm(
+  id: string,
+  isOpen: boolean,
+): Promise<RegistrationTermItem> {
+  const response = await api.patch<RegistrationTermItem>(
+    `/admin/registration-terms/${id}`,
+    { isOpen },
+  );
   return response.data;
 }
 
 export async function listStaffUsers(): Promise<StaffUserItem[]> {
-  const response = await api.get<StaffUserItem[]>('/admin/staff');
+  const response = await api.get<StaffUserItem[]>("/admin/staff");
   return response.data;
 }
 
-export async function updateStaffPermissions(staffId: string, permissions: string[]): Promise<StaffUserItem> {
-  const response = await api.patch<StaffUserItem>(`/admin/staff/${staffId}/permissions`, { permissions });
+export async function updateStaffPermissions(
+  staffId: string,
+  permissions: string[],
+): Promise<StaffUserItem> {
+  const response = await api.patch<StaffUserItem>(
+    `/admin/staff/${staffId}/permissions`,
+    { permissions },
+  );
+  return response.data;
+}
+
+export async function getAiSettings(): Promise<AiSettingsItem> {
+  const response = await api.get<AiSettingsItem>("/admin/ai/settings");
+  return response.data;
+}
+
+export async function updateAiSettings(
+  studentAdvisorEnabled: boolean,
+): Promise<AiSettingsItem> {
+  const response = await api.patch<AiSettingsItem>("/admin/ai/settings", {
+    studentAdvisorEnabled,
+  });
   return response.data;
 }

@@ -26,6 +26,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocale } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -54,8 +55,20 @@ import type {
   AdvisingStudent,
   CourseRecommendation,
 } from "../types/advising.types";
+import {
+  advisingStatusLabel,
+  auditActionLabel,
+  entityTypeLabel,
+  noteVisibilityLabel,
+  recommendationBlockedReasons,
+  recommendationExplanation,
+  registrationSourceLabel,
+  semesterLabel,
+  type AdvisingLocale,
+} from "../advising-i18n";
 
-export function AdvisingWorkspace({ locale }: { locale: string }) {
+export function AdvisingWorkspace() {
+  const locale = useLocale() as AdvisingLocale;
   const isArabic = locale === "ar";
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -74,7 +87,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
     Record<string, string[]>
   >({});
   useEffect(() => {
-    const requestedStudent = new URLSearchParams(window.location.search).get("student");
+    const requestedStudent = new URLSearchParams(window.location.search).get(
+      "student",
+    );
     if (!requestedStudent) return undefined;
     const timer = window.setTimeout(() => setSearch(requestedStudent), 0);
     return () => window.clearTimeout(timer);
@@ -128,7 +143,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       setManagedYear(newAcademicYear.trim());
       setNewAcademicYear("");
       refreshAcademicManagement();
-      toast.success(isArabic ? "تمت إضافة السنة الأكاديمية" : "Academic year added");
+      toast.success(
+        isArabic ? "تمت إضافة السنة الأكاديمية" : "Academic year added",
+      );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -136,7 +153,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
     mutationFn: advisingApi.setCurrentAcademicYear,
     onSuccess: () => {
       refreshAcademicManagement();
-      toast.success(isArabic ? "تم تعيين السنة الحالية" : "Current academic year updated");
+      toast.success(
+        isArabic ? "تم تعيين السنة الحالية" : "Current academic year updated",
+      );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -145,7 +164,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
     onSuccess: () => {
       setManagedYear("");
       refreshAcademicManagement();
-      toast.success(isArabic ? "تم حذف السنة الأكاديمية" : "Academic year removed");
+      toast.success(
+        isArabic ? "تم حذف السنة الأكاديمية" : "Academic year removed",
+      );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -161,7 +182,13 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       setSelectedStudentIds([]);
       queryClient.invalidateQueries({ queryKey: advisingKeys.advisors });
       queryClient.invalidateQueries({
-        queryKey: advisingKeys.students(search, statusFilter, levelFilter, academicYear, advisingSemester),
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
       });
       toast.success(
         isArabic
@@ -183,7 +210,13 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       queryClient.invalidateQueries({ queryKey: advisingKeys.terms });
       queryClient.invalidateQueries({ queryKey: advisingKeys.academicYears });
       queryClient.invalidateQueries({
-        queryKey: advisingKeys.students(search, statusFilter, levelFilter, academicYear, advisingSemester),
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
       });
       toast.success(
         isArabic ? "تم تحديث حالة الفصل" : "Semester status updated",
@@ -231,7 +264,6 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
   const run = useMutation({
     mutationFn: () => advisingApi.generate(caseId!),
     onSuccess: (generated) => {
-      queryClient.setQueryData(advisingKeys.recommendations(caseId), generated);
       queryClient.invalidateQueries({
         queryKey: advisingKeys.recommendations(caseId),
       });
@@ -241,30 +273,37 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       queryClient.invalidateQueries({ queryKey: advisingKeys.case(caseId) });
       queryClient.invalidateQueries({ queryKey: advisingKeys.audit(caseId) });
       queryClient.invalidateQueries({
-        queryKey: advisingKeys.students(search, statusFilter, levelFilter, academicYear, advisingSemester),
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
       });
       setSelected((current) =>
         current ? { ...current, advisingStatus: "AUTO_RECOMMENDED" } : current,
       );
-      const eligibleCount = generated.filter((item: any) => item.eligible).length;
       toast.success(
         isArabic
-          ? `تم إنشاء ${eligibleCount} توصيات لمسار التخرج`
-          : `${eligibleCount} recommended courses generated for graduation path`,
+          ? `تم إنشاء ${generated.recommendedCount} مقررات موصى بها، مع أولوية المقررات الراسبة`
+          : `${generated.recommendedCount} recommended courses generated, with failed courses first`,
       );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
   const openCase = useMutation({
     mutationFn: () =>
-      advisingApi.createCase(
-        active!.id,
-        academicYear,
-        advisingSemester,
-      ),
+      advisingApi.createCase(active!.id, academicYear, advisingSemester),
     onSuccess: async (createdCase) => {
       await queryClient.invalidateQueries({
-        queryKey: advisingKeys.students(search, statusFilter, levelFilter, academicYear, advisingSemester),
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
       });
       setSelected((current) => {
         const base = current ?? active;
@@ -306,15 +345,25 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
       queryClient.setQueryData(advisingKeys.case(caseId), updatedCase);
       queryClient.invalidateQueries({ queryKey: advisingKeys.cases });
       queryClient.invalidateQueries({
-        queryKey: advisingKeys.students(search, statusFilter, levelFilter, academicYear, advisingSemester),
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
       });
       setSelected((current) =>
         current ? { ...current, advisingStatus: updatedCase.status } : current,
       );
       toast.success(
         updatedCase.status === "CLOSED"
-          ? "Advising case closed"
-          : "Advising case reopened",
+          ? isArabic
+            ? "تم إغلاق حالة الإرشاد"
+            : "Advising case closed"
+          : isArabic
+            ? "تمت إعادة فتح حالة الإرشاد"
+            : "Advising case reopened",
       );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -411,7 +460,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
             {isArabic ? "فترة الإرشاد النشطة" : "Active advising period"}
           </p>
           <CustomDropdown
-            ariaLabel="Advising academic year"
+            ariaLabel={
+              isArabic ? "السنة الأكاديمية للإرشاد" : "Advising academic year"
+            }
             value={academicYear}
             onValueChange={(value) => {
               setManagedYear(value);
@@ -424,7 +475,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
             }))}
           />
           <CustomDropdown
-            ariaLabel="Advising semester"
+            ariaLabel={isArabic ? "فصل الإرشاد" : "Advising semester"}
             value={advisingSemester}
             onValueChange={(value) => {
               setAdvisingSemester(value as "first" | "second" | "summer");
@@ -432,9 +483,18 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
             }}
             className="h-9 text-xs"
             options={[
-              { value: "first", label: isArabic ? "الفصل الأول" : "First Semester" },
-              { value: "second", label: isArabic ? "الفصل الثاني" : "Second Semester" },
-              { value: "summer", label: isArabic ? "الفصل الصيفي" : "Summer Semester" },
+              {
+                value: "first",
+                label: isArabic ? "الفصل الأول" : "First Semester",
+              },
+              {
+                value: "second",
+                label: isArabic ? "الفصل الثاني" : "Second Semester",
+              },
+              {
+                value: "summer",
+                label: isArabic ? "الفصل الصيفي" : "Summer Semester",
+              },
             ]}
           />
         </div>
@@ -453,7 +513,9 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
               />
               <Button
                 size="sm"
-                disabled={createYear.isPending || !/^\d{4}-\d{4}$/.test(newAcademicYear)}
+                disabled={
+                  createYear.isPending || !/^\d{4}-\d{4}$/.test(newAcademicYear)
+                }
                 onClick={() => createYear.mutate()}
               >
                 +
@@ -485,9 +547,13 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                 size="sm"
                 variant="outline"
                 className="h-8 text-red-300"
-                disabled={deleteYear.isPending || selectedYearSummary?.isCurrent}
+                disabled={
+                  deleteYear.isPending || selectedYearSummary?.isCurrent
+                }
                 onClick={() => deleteYear.mutate(academicYear)}
-                aria-label="Delete academic year"
+                aria-label={
+                  isArabic ? "حذف السنة الأكاديمية" : "Delete academic year"
+                }
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -513,7 +579,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                         : "border-red-500/20 bg-red-500/5 text-red-200",
                     )}
                   >
-                    <span className="capitalize">{semester}</span>
+                    <span>{semesterLabel(semester, locale)}</span>
                     <span className="flex items-center gap-1">
                       {open ? (
                         <UnlockKeyhole className="h-3.5 w-3.5" />
@@ -535,7 +601,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
           </div>
         ) : null}
         <div className="relative mb-3">
-          <Search className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute inset-s-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -547,29 +613,44 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
         </div>
         <div className="mb-3 grid grid-cols-2 gap-2">
           <CustomDropdown
-            ariaLabel="Filter by advising status"
+            ariaLabel={
+              isArabic ? "تصفية حسب حالة الإرشاد" : "Filter by advising status"
+            }
             value={statusFilter}
             onValueChange={setStatusFilter}
             className="h-9 text-xs"
             options={[
-              { value: "", label: "All statuses" },
-              { value: "NOT_STARTED", label: "Not started" },
-              { value: "AUTO_RECOMMENDED", label: "Recommended" },
-              { value: "DRAFT", label: "Draft" },
-              { value: "APPROVED", label: "Approved" },
-              { value: "CLOSED", label: "Closed" },
+              { value: "", label: isArabic ? "كل الحالات" : "All statuses" },
+              {
+                value: "NOT_STARTED",
+                label: advisingStatusLabel("NOT_STARTED", locale),
+              },
+              {
+                value: "AUTO_RECOMMENDED",
+                label: advisingStatusLabel("AUTO_RECOMMENDED", locale),
+              },
+              { value: "DRAFT", label: advisingStatusLabel("DRAFT", locale) },
+              {
+                value: "APPROVED",
+                label: advisingStatusLabel("APPROVED", locale),
+              },
+              { value: "CLOSED", label: advisingStatusLabel("CLOSED", locale) },
             ]}
           />
           <CustomDropdown
-            ariaLabel="Filter by academic level"
+            ariaLabel={
+              isArabic
+                ? "تصفية حسب المستوى الأكاديمي"
+                : "Filter by academic level"
+            }
             value={levelFilter}
             onValueChange={setLevelFilter}
             className="h-9 text-xs"
             options={[
-              { value: "", label: "All levels" },
+              { value: "", label: isArabic ? "كل المستويات" : "All levels" },
               ...["1", "2", "3", "4"].map((level) => ({
                 value: level,
-                label: `Level ${level}`,
+                label: isArabic ? `المستوى ${level}` : `Level ${level}`,
               })),
             ]}
           />
@@ -581,7 +662,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
               {isArabic ? "تعيين المرشد الأكاديمي" : "Advisor assignment"}
             </div>
             <CustomDropdown
-              ariaLabel="Select advisor"
+              ariaLabel={isArabic ? "اختيار المرشد" : "Select advisor"}
               value={selectedAdvisorId}
               onValueChange={setSelectedAdvisorId}
               className="mb-2 h-9 text-xs"
@@ -619,7 +700,8 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                 tabIndex={0}
                 onClick={() => setSelected(student)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") setSelected(student);
+                  if (event.key === "Enter" || event.key === " ")
+                    setSelected(student);
                 }}
                 className={cn(
                   "w-full rounded-2xl border p-3 text-start transition",
@@ -630,10 +712,28 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
               >
                 <div className="flex justify-between gap-2">
                   <div className="flex items-center gap-2">
+                    <div
+                      role="img"
+                      aria-label={student.name}
+                      style={
+                        student.avatarUrl
+                          ? { backgroundImage: `url(${student.avatarUrl})` }
+                          : undefined
+                      }
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500/15 bg-cover bg-center text-xs font-bold text-sky-200"
+                    >
+                      {!student.avatarUrl
+                        ? student.name.trim().charAt(0)
+                        : null}
+                    </div>
                     {user?.role === "admin" ? (
                       <input
                         type="checkbox"
-                        aria-label={`Select ${student.name}`}
+                        aria-label={
+                          isArabic
+                            ? `اختيار ${student.name}`
+                            : `Select ${student.name}`
+                        }
                         checked={selectedStudentIds.includes(student.id)}
                         onClick={(event) => event.stopPropagation()}
                         onChange={(event) =>
@@ -660,7 +760,8 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                   <p className="mt-1 text-[10px] text-sky-300">
                     {isArabic ? "المرشد: " : "Advisor: "}
                     {advisors.data?.find(
-                      (advisor) => advisor._id === String(student.assignedAdvisorId),
+                      (advisor) =>
+                        advisor._id === String(student.assignedAdvisorId),
                     )?.name ?? (isArabic ? "معيّن" : "Assigned")}
                   </p>
                 ) : null}
@@ -686,32 +787,33 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
           <>
             <header className="sticky top-2 z-20 rounded-3xl border border-white/10 bg-card/95 p-4 backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground">
-                    {active.studentCode}
-                  </p>
-                  <h2 className="text-xl font-bold">{active.name}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    {active.department ?? "—"} ·{" "}
-                    {isArabic ? "الفصل الدراسي " : "Semester "}
-                    {(active.semester === "first" ? (isArabic ? "الأول" : "First") : active.semester === "second" ? (isArabic ? "الثاني" : "Second") : active.semester === "summer" ? (isArabic ? "الصيفي" : "Summer") : active.semester)} ·{" "}
-                    {(() => {
-                      const st = caseDetails.data?.status ?? active.advisingStatus;
-                      const statusMap: Record<string, string> = {
-                        NOT_STARTED: isArabic ? "لم يبدأ" : "Not Started",
-                        AUTO_RECOMMENDED: isArabic ? "موصى به آلياً" : "Recommended",
-                        ASSIGNED: isArabic ? "تم تعيين مرشد" : "Assigned",
-                        UNDER_REVIEW: isArabic ? "قيد المراجعة" : "Under Review",
-                        DRAFT: isArabic ? "مسودة" : "Draft",
-                        WAITING_FOR_STUDENT: isArabic ? "في انتظار الطالب" : "Waiting for Student",
-                        REVISION_REQUESTED: isArabic ? "طلب تعديل" : "Revision Requested",
-                        APPROVED: isArabic ? "معتمد" : "Approved",
-                        REGISTERED: isArabic ? "تم التسجيل" : "Registered",
-                        CLOSED: isArabic ? "مغلق" : "Closed",
-                      };
-                      return statusMap[st] ?? st;
-                    })()}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div
+                    role="img"
+                    aria-label={active.name}
+                    style={
+                      active.avatarUrl
+                        ? { backgroundImage: `url(${active.avatarUrl})` }
+                        : undefined
+                    }
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-sky-500/15 bg-cover bg-center font-bold text-sky-200"
+                  >
+                    {!active.avatarUrl ? active.name.trim().charAt(0) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">
+                      {active.studentCode}
+                    </p>
+                    <h2 className="text-xl font-bold">{active.name}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {active.department ?? "—"} ·{" "}
+                      {semesterLabel(active.semester, locale)} ·{" "}
+                      {advisingStatusLabel(
+                        caseDetails.data?.status ?? active.advisingStatus,
+                        locale,
+                      )}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {!caseId ? (
@@ -724,8 +826,29 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                   ) : null}
                   <Button
                     variant="outline"
-                    disabled={!caseId || isCaseClosed || hasFinalRegistration || run.isPending}
-                    onClick={() => run.mutate()}
+                    disabled={
+                      !caseId ||
+                      isCaseClosed ||
+                      hasFinalRegistration ||
+                      run.isPending
+                    }
+                    onClick={() => {
+                      const readiness = courseMap.data?.generationReadiness;
+                      if (readiness && !readiness.canGenerate) {
+                        toast.warning(
+                          readiness.reason ===
+                            "FIRST_SEMESTER_REGISTRATION_REQUIRED"
+                            ? isArabic
+                              ? "لا يمكن إنشاء توصيات الفصل الثاني قبل تسجيل الطالب في الفصل الأول."
+                              : "Second-semester recommendations require a first-semester registration."
+                            : isArabic
+                              ? `أضف درجات الفصل الأول النهائية أولًا: ${readiness.missingCourseCodes.join(", ")}`
+                              : `Publish the missing first-semester final grades first: ${readiness.missingCourseCodes.join(", ")}`,
+                        );
+                        return;
+                      }
+                      run.mutate();
+                    }}
                   >
                     <Sparkles className="me-2 h-4 w-4" />
                     {isArabic ? "إنشاء التوصيات" : "Generate"}
@@ -743,7 +866,12 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                     {isArabic ? "حفظ مسودة" : "Save draft"}
                   </Button>
                   <Button
-                    disabled={!draft || isCaseClosed || hasFinalRegistration || approve.isPending}
+                    disabled={
+                      !draft ||
+                      isCaseClosed ||
+                      hasFinalRegistration ||
+                      approve.isPending
+                    }
                     onClick={() => approve.mutate()}
                   >
                     <Check className="me-2 h-4 w-4" />
@@ -764,7 +892,13 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                       ) : (
                         <Archive className="me-2 h-4 w-4" />
                       )}
-                      {isCaseClosed ? "Reopen case" : "Close case"}
+                      {isCaseClosed
+                        ? isArabic
+                          ? "إعادة فتح الحالة"
+                          : "Reopen case"
+                        : isArabic
+                          ? "إغلاق الحالة"
+                          : "Close case"}
                     </Button>
                   ) : null}
                 </div>
@@ -776,10 +910,14 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                     isArabic ? "ناجح" : "Passed",
                     courseMap.data?.summary?.passedCourses ?? 0,
                   ],
-                  [isArabic ? "راسب" : "Failed", courseMap.data?.summary?.failedCourses ?? 0],
+                  [
+                    isArabic ? "راسب" : "Failed",
+                    courseMap.data?.summary?.failedCourses ?? 0,
+                  ],
                   [
                     isArabic ? "الخطة" : "Plan",
-                    courseMap.data?.registration?.courses.length ?? selectedCourseIds.length,
+                    courseMap.data?.registration?.courses.length ??
+                      selectedCourseIds.length,
                   ],
                   [
                     isArabic ? "المقررات" : "Courses",
@@ -787,7 +925,7 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                   ],
                   [
                     isArabic ? "الساعات" : "Credits",
-                    `${selectedCredits} selected`,
+                    `${courseMap.data?.summary?.completedCredits ?? 0} ${isArabic ? "مكتملة" : "completed"} · ${selectedCredits} ${isArabic ? "مختارة" : "selected"}`,
                   ],
                   [
                     isArabic ? "المتبقي" : "Remaining",
@@ -814,15 +952,39 @@ export function AdvisingWorkspace({ locale }: { locale: string }) {
                 ))}
               </div>
             </header>
+            {courseMap.data?.generationReadiness &&
+            !courseMap.data.generationReadiness.canGenerate ? (
+              <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <strong>
+                    {isArabic
+                      ? "بيانات الفصل الأول غير مكتملة"
+                      : "First-semester data is incomplete"}
+                  </strong>
+                  <p className="mt-1 text-xs">
+                    {courseMap.data.generationReadiness.reason ===
+                    "FIRST_SEMESTER_REGISTRATION_REQUIRED"
+                      ? isArabic
+                        ? "سجّل الطالب في الفصل الأول قبل إنشاء توصيات الفصل الثاني."
+                        : "Register the student for the first semester before generating second-semester recommendations."
+                      : isArabic
+                        ? `انشر الدرجات النهائية وحدّث ملف الطالب للمقررات: ${courseMap.data.generationReadiness.missingCourseCodes.join(", ")}`
+                        : `Publish final grades and update the student profile for: ${courseMap.data.generationReadiness.missingCourseCodes.join(", ")}`}
+                  </p>
+                </div>
+              </div>
+            ) : null}
             {hasFinalRegistration ? (
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
                 <strong>
                   {isArabic
-                    ? `يوجد تسجيل نهائي للفترة ${caseDetails.data?.academicYear ?? academicYear} - ${advisingSemester}`
-                    : `${caseDetails.data?.academicYear ?? academicYear} ${advisingSemester} already has a final registration`}
+                    ? `يوجد تسجيل نهائي للفترة ${caseDetails.data?.academicYear ?? academicYear} - ${semesterLabel(advisingSemester, locale)}`
+                    : `${caseDetails.data?.academicYear ?? academicYear} ${semesterLabel(advisingSemester, locale)} already has a final registration`}
                 </strong>
                 <p className="mt-1 text-xs">
-                  {courseMap.data?.registration?.courses.join(", ")} · {isArabic
+                  {courseMap.data?.registration?.courses.join(", ")} ·{" "}
+                  {isArabic
                     ? "هذه الفترة فقط للعرض. اختر عامًا أو فصلًا آخر من فترة الإرشاد النشطة لإنشاء الخطة التالية."
                     : "Only this period is read-only. Select another year or semester under Active advising period to create the next plan."}
                 </p>
@@ -965,10 +1127,7 @@ function Canvas({
     );
   }
   const recommendationByCode = new Map(
-    recommendations.map((item: any) => {
-      const code = typeof item.courseId === 'object' && item.courseId ? item.courseId.code : item.courseId;
-      return [code ? String(code).toUpperCase() : '', item];
-    }),
+    recommendations.map((item) => [item.courseId.code.toUpperCase(), item]),
   );
   const completedCodes = courseMap.courses
     .filter((course) => course.progressStatus === "passed")
@@ -1083,7 +1242,9 @@ function RecommendationList({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-card/50 p-2">
         <span className="px-2 text-xs text-muted-foreground">
-          {items.length} recommendations
+          {isArabic
+            ? `${items.length} توصية`
+            : `${items.length} recommendations`}
         </span>
         <div className="w-48">
           <CustomDropdown
@@ -1091,13 +1252,19 @@ function RecommendationList({
             onValueChange={(value) =>
               setFilter(value as "ALL" | "ELIGIBLE" | "ADDED" | "BLOCKED")
             }
-            ariaLabel="Filter recommendations"
+            ariaLabel={isArabic ? "تصفية التوصيات" : "Filter recommendations"}
             className="h-9 text-xs"
             options={[
-              { value: "ALL", label: "All recommendations" },
-              { value: "ELIGIBLE", label: "Eligible" },
-              { value: "ADDED", label: "Added to plan" },
-              { value: "BLOCKED", label: "Blocked" },
+              {
+                value: "ALL",
+                label: isArabic ? "كل التوصيات" : "All recommendations",
+              },
+              { value: "ELIGIBLE", label: isArabic ? "المتاح" : "Eligible" },
+              {
+                value: "ADDED",
+                label: isArabic ? "المضاف إلى الخطة" : "Added to plan",
+              },
+              { value: "BLOCKED", label: isArabic ? "غير المتاح" : "Blocked" },
             ]}
           />
         </div>
@@ -1114,7 +1281,13 @@ function RecommendationList({
         ))}
       </div>
       {!filteredItems.length ? (
-        <Empty text="No recommendations match this filter" />
+        <Empty
+          text={
+            isArabic
+              ? "لا توجد توصيات مطابقة لهذا المرشح"
+              : "No recommendations match this filter"
+          }
+        />
       ) : null}
     </div>
   );
@@ -1133,6 +1306,7 @@ function CourseCard({
     decision: "ACCEPTED" | "REJECTED" | "PENDING",
   ) => void;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   const statusText = item.accepted
     ? isArabic
       ? "مضاف"
@@ -1174,8 +1348,15 @@ function CourseCard({
           {statusText} · {item.score}
         </span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{item.explanation}</p>
-      {item.blockedReasons.map((reason) => (
+      {item.isRecommendedForSemester ? (
+        <p className="mt-2 text-xs font-semibold text-emerald-300">
+          {isArabic ? "موصى به لهذا الفصل" : "Recommended for this semester"}
+        </p>
+      ) : null}
+      <p className="mt-2 text-xs text-muted-foreground">
+        {recommendationExplanation(item, locale)}
+      </p>
+      {recommendationBlockedReasons(item, locale).map((reason) => (
         <p key={reason} className="mt-2 flex gap-1 text-xs text-red-300">
           <ShieldAlert className="h-4 w-4 shrink-0" />
           {reason}
@@ -1227,15 +1408,19 @@ function OverviewPanel({
   draft?: AdvisingPlan;
   isArabic: boolean;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <InfoCard
         icon={<ClipboardCheck className="h-5 w-5 text-sky-300" />}
         label={isArabic ? "حالة الإرشاد" : "Advising status"}
-        value={advisingCase?.status ?? student.advisingStatus}
+        value={advisingStatusLabel(
+          advisingCase?.status ?? student.advisingStatus,
+          locale,
+        )}
         meta={
           advisingCase
-            ? `${advisingCase.academicYear} · ${advisingCase.semester}`
+            ? `${advisingCase.academicYear} · ${semesterLabel(advisingCase.semester, locale)}`
             : isArabic
               ? "لم يتم فتح حالة بعد"
               : "No case opened yet"
@@ -1250,8 +1435,22 @@ function OverviewPanel({
       <InfoCard
         icon={<FileText className="h-5 w-5 text-amber-300" />}
         label={isArabic ? "المسودة الحالية" : "Current draft"}
-        value={draft ? `${draft.selectedCourses.length} courses` : "None"}
-        meta={draft ? `${draft.totalCredits} credits · v${draft.version}` : ""}
+        value={
+          draft
+            ? isArabic
+              ? `${draft.selectedCourses.length} مقررات`
+              : `${draft.selectedCourses.length} courses`
+            : isArabic
+              ? "لا توجد"
+              : "None"
+        }
+        meta={
+          draft
+            ? isArabic
+              ? `${draft.totalCredits} ساعة معتمدة · الإصدار ${draft.version}`
+              : `${draft.totalCredits} credits · v${draft.version}`
+            : ""
+        }
       />
     </div>
   );
@@ -1264,6 +1463,7 @@ function HistoryPanel({
   advisingCase?: AdvisingCase;
   isArabic: boolean;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   const timeline = advisingCase?.timeline ?? [];
   if (!timeline.length) {
     return (
@@ -1281,9 +1481,9 @@ function HistoryPanel({
         >
           <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
           <div>
-            <strong>{item.status}</strong>
+            <strong>{advisingStatusLabel(item.status, locale)}</strong>
             <p className="text-xs text-muted-foreground">
-              {formatDate(item.changedAt)}
+              {formatDate(item.changedAt, locale)}
             </p>
           </div>
         </article>
@@ -1303,6 +1503,7 @@ function NotesPanel({
   isArabic: boolean;
   onSaved: () => void;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   const [content, setContent] = useState("");
   const [visibility, setVisibility] = useState<"INTERNAL" | "STUDENT_VISIBLE">(
     "INTERNAL",
@@ -1374,10 +1575,10 @@ function NotesPanel({
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="rounded-full bg-sky-500/10 px-2 py-1 text-[10px] font-bold text-sky-300">
-                {note.visibility}
+                {noteVisibilityLabel(note.visibility, locale)}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatDate(note.createdAt)}
+                {formatDate(note.createdAt, locale)}
               </span>
             </div>
             <p className="whitespace-pre-wrap text-sm">{note.content}</p>
@@ -1395,6 +1596,7 @@ function AuditPanel({
   items: AdvisingAuditLog[];
   isArabic: boolean;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   if (!items.length) {
     return (
       <Empty text={isArabic ? "لا توجد عمليات بعد" : "No audit records yet"} />
@@ -1408,13 +1610,13 @@ function AuditPanel({
           className="rounded-2xl border border-white/10 bg-card/60 p-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <strong>{item.action}</strong>
+            <strong>{auditActionLabel(item.action, locale)}</strong>
             <span className="text-xs text-muted-foreground">
-              {formatDate(item.createdAt)}
+              {formatDate(item.createdAt, locale)}
             </span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {item.entityType} · {item.entityId}
+            {entityTypeLabel(item.entityType, locale)} · {item.entityId}
           </p>
         </article>
       ))}
@@ -1445,9 +1647,9 @@ function InfoCard({
   );
 }
 
-function formatDate(value?: string) {
+function formatDate(value: string | undefined, locale: AdvisingLocale) {
   if (!value) return "";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -1469,6 +1671,7 @@ function RegistrationSummary({
   registrations: AdminRegistration[];
   isArabic: boolean;
 }) {
+  const locale: AdvisingLocale = isArabic ? "ar" : "en";
   const print = async (registrationId: string) => {
     try {
       const form = await apiGet<PrintableRegistrationForm>(
@@ -1508,16 +1711,17 @@ function RegistrationSummary({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <strong>
-                {registration.academicYear} · {registration.semester}
+                {registration.academicYear} ·{" "}
+                {semesterLabel(registration.semester, locale)}
               </strong>
               <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-300">
-                {registration.status}
+                {advisingStatusLabel(registration.status, locale)}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {registration.courses.join(", ")} ·{" "}
               {registration.totalCreditHours} {isArabic ? "ساعة" : "credits"} ·{" "}
-              {registration.source}
+              {registrationSourceLabel(registration.source, locale)}
             </p>
           </div>
           <Button variant="outline" onClick={() => print(registration._id)}>

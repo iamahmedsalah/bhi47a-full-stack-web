@@ -44,9 +44,29 @@ export interface AdvisingCourseMapResponse {
   student: {
     name?: string;
     studentCode?: string;
+    avatarUrl?: string;
     gpa: number;
     academicLevel: string;
     semester: string;
+  };
+  summary: {
+    passedCourses: number;
+    failedCourses: number;
+    completedCredits: number;
+    remainingCredits: number;
+    totalProgramCredits: number;
+  };
+  registration: {
+    id: string;
+    status: string;
+    source: string;
+    courses: string[];
+  } | null;
+  generationReadiness: {
+    canGenerate: boolean;
+    reason?:
+      'FIRST_SEMESTER_REGISTRATION_REQUIRED' | 'FIRST_SEMESTER_GRADES_REQUIRED';
+    missingCourseCodes: string[];
   };
   selectedCourses: string[];
   suggestedCourses: string[];
@@ -107,7 +127,9 @@ export class AdvisingQueryService {
             .find({
               assignedAdvisorId: new Types.ObjectId(actorId),
               ...(query.status ? { status: query.status } : {}),
-              ...(query.academicYear ? { academicYear: query.academicYear } : {}),
+              ...(query.academicYear
+                ? { academicYear: query.academicYear }
+                : {}),
               ...(query.semester ? { semester: query.semester } : {}),
             })
             .sort({ updatedAt: -1 })
@@ -176,7 +198,9 @@ export class AdvisingQueryService {
               .find({
                 studentId: { $in: ids },
                 ...(query.status ? { status: query.status } : {}),
-                ...(query.academicYear ? { academicYear: query.academicYear } : {}),
+                ...(query.academicYear
+                  ? { academicYear: query.academicYear }
+                  : {}),
                 ...(query.semester ? { semester: query.semester } : {}),
               })
               .sort({ updatedAt: -1 })
@@ -366,7 +390,7 @@ export class AdvisingQueryService {
   ): Promise<AdvisingCourseMapResponse> {
     const caseItem = await this.cases
       .findById(caseId)
-      .populate('studentId', 'name studentCode')
+      .populate('studentId', 'name studentCode avatarUrl')
       .lean();
     if (!caseItem) throw new NotFoundException('Advising case not found');
     this.assertCaseAccess(
@@ -379,10 +403,19 @@ export class AdvisingQueryService {
       _id: Types.ObjectId;
       name?: string;
       studentCode?: string;
+      avatarUrl?: string;
     };
     const studentId = studentObj._id;
 
-    const [profile, courses, grades, approvedPlan, recs] = await Promise.all([
+    const [
+      profile,
+      courses,
+      grades,
+      approvedPlan,
+      recs,
+      registration,
+      firstRegistration,
+    ] = await Promise.all([
       this.academicProfiles.findOne({ studentId }).lean(),
       this.courses.find({ isActive: true }).sort({ code: 1 }).lean(),
       this.grades
@@ -393,31 +426,127 @@ export class AdvisingQueryService {
         ? this.plans.findById(caseItem.approvedPlanId).lean()
         : null,
       this.recommendations.find({ advisingCaseId: caseItem._id }).lean(),
+      this.registrations
+        .findOne({
+          studentId,
+          academicYear: caseItem.academicYear,
+          semester: caseItem.semester,
+          status: { $ne: 'rejected' },
+        })
+        .lean(),
+      caseItem.semester === 'second'
+        ? this.registrations
+            .findOne({
+              studentId,
+              academicYear: caseItem.academicYear,
+              semester: 'first',
+              status: { $ne: 'rejected' },
+            })
+            .lean()
+        : null,
     ]);
 
     if (!profile)
       throw new NotFoundException('Student academic profile not found');
 
     const gradeSummaryByCourse = this.summarizeGradesByCourse(grades);
-    const completed = new Set(profile.completedCourses.map((c) => c.toUpperCase()));
-    const failed = new Set(profile.failedCourses.map((c) => c.toUpperCase()));
-    const lowGrade = new Set(profile.lowGradeCourses.map((c) => c.toUpperCase()));
+    const courseCredits = Object.fromEntries(
+      courses.map((course) => [
+        course.code.trim().toUpperCase(),
+        course.creditHours ?? 0,
+      ]),
+    );
+    const progress = mergeAcademicCourseProgress({
+      completedCourses: profile.completedCourses,
+      failedCourses: profile.failedCourses,
+      lowGradeCourses: profile.lowGradeCourses,
+      grades,
+      courseCredits,
+    });
+    const completed = new Set(progress.completedCourses);
+    const failed = new Set(progress.failedCourses);
+    const lowGrade = new Set(progress.lowGradeCourses);
+    const completedCredits = progress.completedCourses.reduce(
+      (total, code) => total + (courseCredits[code] ?? 0),
+      0,
+    );
+    const totalProgramCredits = courses.reduce(
+      (total, course) => total + (course.creditHours ?? 0),
+      0,
+    );
+
+    const firstSemesterFinalized = new Set(
+      [
+        ...progress.completedCourses,
+        ...progress.failedCourses,
+        ...grades
+          .filter(
+            (grade) =>
+              grade.academicYear === caseItem.academicYear &&
+              grade.semester === 'first' &&
+              grade.examType === 'final',
+          )
+          .map((grade) => grade.courseCode),
+      ].map((code) => code.trim().toUpperCase()),
+    );
+    const missingFirstSemesterResults = (
+      firstRegistration?.courses ?? []
+    ).filter((code) => !firstSemesterFinalized.has(code.trim().toUpperCase()));
+    const generationReadiness =
+      caseItem.semester !== 'second'
+        ? { canGenerate: true as const, missingCourseCodes: [] }
+        : !firstRegistration?.courses.length
+          ? {
+              canGenerate: false as const,
+              reason: 'FIRST_SEMESTER_REGISTRATION_REQUIRED' as const,
+              missingCourseCodes: [],
+            }
+          : missingFirstSemesterResults.length > 0
+            ? {
+                canGenerate: false as const,
+                reason: 'FIRST_SEMESTER_GRADES_REQUIRED' as const,
+                missingCourseCodes: missingFirstSemesterResults,
+              }
+            : { canGenerate: true as const, missingCourseCodes: [] };
 
     const planCourseIds = new Set(
       (approvedPlan?.selectedCourses ?? []).map((id) => id.toString()),
     );
     const suggestedCourseIds = new Set(
-      recs.filter((r) => r.eligible).map((r) => r.courseId.toString()),
+      recs
+        .filter(
+          (rec) =>
+            rec.isRecommendedForSemester ||
+            (rec.isRecommendedForSemester == null && rec.eligible),
+        )
+        .map((rec) => rec.courseId.toString()),
     );
 
     return {
       student: {
         name: studentObj.name,
         studentCode: studentObj.studentCode,
-        gpa: profile.gpa,
+        avatarUrl: studentObj.avatarUrl,
+        gpa: progress.calculatedGpa ?? profile.gpa,
         academicLevel: profile.academicLevel,
         semester: caseItem.semester,
       },
+      summary: {
+        passedCourses: progress.completedCourses.length,
+        failedCourses: progress.failedCourses.length,
+        completedCredits,
+        remainingCredits: Math.max(0, totalProgramCredits - completedCredits),
+        totalProgramCredits,
+      },
+      registration: registration
+        ? {
+            id: registration._id.toString(),
+            status: registration.status,
+            source: registration.source,
+            courses: registration.courses,
+          }
+        : null,
+      generationReadiness,
       selectedCourses: approvedPlan
         ? courses
             .filter((c) => planCourseIds.has(c._id.toString()))
@@ -485,7 +614,10 @@ export class AdvisingQueryService {
       caseItem.approvedPlanId
         ? this.plans
             .findById(caseItem.approvedPlanId)
-            .populate('selectedCourses', 'code nameAr nameEn creditHours semester')
+            .populate(
+              'selectedCourses',
+              'code nameAr nameEn creditHours semester',
+            )
             .lean()
         : null,
       this.recommendations

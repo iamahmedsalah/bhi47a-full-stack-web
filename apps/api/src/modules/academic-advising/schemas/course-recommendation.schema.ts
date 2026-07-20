@@ -14,6 +14,7 @@ export class CourseRecommendation {
   @Prop({ enum: ['HIGH', 'MEDIUM', 'LOW', 'BLOCKED'], required: true })
   priority!: string;
   @Prop({ required: true }) eligible!: boolean;
+  @Prop({ default: false, index: true }) isRecommendedForSemester!: boolean;
   @Prop({ type: [String], default: [] }) reasonCodes!: string[];
   @Prop({ required: true }) explanation!: string;
   @Prop({ type: [String], default: [] }) warnings!: string[];

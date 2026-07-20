@@ -15,6 +15,7 @@ import {
   Mail,
   Menu,
   MessageSquareWarning,
+  MessagesSquare,
   Settings,
   Upload,
   Users,
@@ -80,6 +81,15 @@ export default function AdminSidebar() {
       href: `/${locale}/admin/complaints`,
       icon: <MessageSquareWarning className="h-5 w-5" />,
     },
+    ...(user?.role === "admin"
+      ? [
+          {
+            key: "chatAudit",
+            href: `/${locale}/admin/chat-audit`,
+            icon: <MessagesSquare className="h-5 w-5" />,
+          },
+        ]
+      : []),
     {
       key: "uploads",
       href: `/${locale}/admin/uploads`,
@@ -102,7 +112,7 @@ export default function AdminSidebar() {
     return (
       <div
         className={cn(
-          "flex h-full flex-col border border-white/5 bg-card/95 p-4 shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all duration-300",
+          "flex h-full flex-col border border-white/5 bg-card/95 p-4 shadow-(--shadow-glow) backdrop-blur-sm transition-all duration-300",
           isSidebarOpen ? "rounded-2xl" : "rounded-squircle",
         )}
       >
@@ -275,7 +285,7 @@ export default function AdminSidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="fixed end-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground shadow-[var(--shadow-glow)] backdrop-blur md:hidden cursor-pointer"
+        className="fixed inset-e-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground shadow-(--shadow-glow) backdrop-blur md:hidden cursor-pointer"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -283,7 +293,7 @@ export default function AdminSidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 end-0 z-40 hidden p-4 md:block transition-all duration-300",
+          "fixed inset-y-0 inset-e-0 z-40 hidden p-4 md:block transition-all duration-300",
           sidebarOpen ? "w-72" : "w-28",
         )}
       >
@@ -292,7 +302,7 @@ export default function AdminSidebar() {
 
       <div
         className={cn(
-          "fixed inset-0 z-[100] md:hidden",
+          "fixed inset-0 z-100 md:hidden",
           mobileOpen ? "pointer-events-auto" : "pointer-events-none",
         )}
         aria-hidden={!mobileOpen}
@@ -308,7 +318,7 @@ export default function AdminSidebar() {
         />
         <div
           className={cn(
-            "absolute inset-y-0 end-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform",
+            "absolute inset-y-0 inset-e-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform",
             mobileOpen
               ? "translate-x-0"
               : "translate-x-full rtl:-translate-x-full",

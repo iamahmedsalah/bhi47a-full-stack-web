@@ -7,6 +7,7 @@ import type {
   AdvisingPlan,
   AdvisingStudent,
   CourseRecommendation,
+  GenerateRecommendationsResponse,
   StudentAdvising,
 } from "../types/advising.types";
 export interface StudentPage {
@@ -58,7 +59,13 @@ interface RegistrationPage {
   totalPages: number;
 }
 export const advisingApi = {
-  students: (search = "", status = "", level = "", academicYear = "", semester = "") =>
+  students: (
+    search = "",
+    status = "",
+    level = "",
+    academicYear = "",
+    semester = "",
+  ) =>
     apiGet<StudentPage>("/admin/advising/students", {
       params: {
         search,
@@ -90,7 +97,7 @@ export const advisingApi = {
       `/admin/advising/cases/${caseId}/recommendations`,
     ),
   generate: (caseId: string) =>
-    apiPost<CourseRecommendation[], { maxCredits: number }>(
+    apiPost<GenerateRecommendationsResponse, { maxCredits: number }>(
       `/admin/advising/cases/${caseId}/generate-recommendations`,
       { maxCredits: 18 },
     ),
@@ -139,13 +146,12 @@ export const advisingApi = {
       "/admin/registration-terms",
       term,
     ),
-  academicYears: () =>
-    apiGet<AcademicYearSummary[]>("/admin/academic-years"),
+  academicYears: () => apiGet<AcademicYearSummary[]>("/admin/academic-years"),
   createAcademicYear: (academicYear: string, makeCurrent = false) =>
-    apiPost<AcademicYearSummary[], { academicYear: string; makeCurrent: boolean }>(
-      "/admin/academic-years",
-      { academicYear, makeCurrent },
-    ),
+    apiPost<
+      AcademicYearSummary[],
+      { academicYear: string; makeCurrent: boolean }
+    >("/admin/academic-years", { academicYear, makeCurrent }),
   setCurrentAcademicYear: (academicYear: string) =>
     apiPatch<AcademicYearSummary[]>(
       `/admin/academic-years/${academicYear}/current`,
@@ -174,20 +180,42 @@ export const advisingApi = {
       "/admin/registrations/proxy",
       { studentId, courseCodes },
     ),
-  roster: (params: { search?: string; status?: string; academicLevel?: string; semester?: string }) =>
-    apiGet<{ items: AdvisingStudent[]; total: number }>("/admin/registrations/roster", {
-      params: {
-        limit: 100,
-        search: params.search || undefined,
-        status: params.status || undefined,
-        academicLevel: params.academicLevel || undefined,
-        semester: params.semester || undefined,
+  roster: (params: {
+    search?: string;
+    status?: string;
+    academicLevel?: string;
+    semester?: string;
+  }) =>
+    apiGet<{ items: AdvisingStudent[]; total: number }>(
+      "/admin/registrations/roster",
+      {
+        params: {
+          limit: 100,
+          search: params.search || undefined,
+          status: params.status || undefined,
+          academicLevel: params.academicLevel || undefined,
+          semester: params.semester || undefined,
+        },
       },
-    }),
+    ),
 };
 export const advisingKeys = {
-  students: (search: string, status = "", level = "", academicYear = "", semester = "") =>
-    ["advising", "students", search, status, level, academicYear, semester] as const,
+  students: (
+    search: string,
+    status = "",
+    level = "",
+    academicYear = "",
+    semester = "",
+  ) =>
+    [
+      "advising",
+      "students",
+      search,
+      status,
+      level,
+      academicYear,
+      semester,
+    ] as const,
   cases: ["advising", "cases"] as const,
   case: (id?: string) => ["advising", "case", id] as const,
   courseMap: (id?: string) => ["advising", "course-map", id] as const,

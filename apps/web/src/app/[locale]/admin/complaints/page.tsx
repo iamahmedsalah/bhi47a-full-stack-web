@@ -102,7 +102,7 @@ function AdminComplaintsContent() {
     <div className="animate-fade-in space-y-6 p-2 md:p-6">
       <PageTitleBanner title={isAr ? 'إدارة الشكاوى والمقترحات' : 'Complaints Management'} icon={<ClipboardList className="h-5 w-5" />} subtitle="Manage student support tickets, triage technical issues, and reply to complaints." />
 
-      <div className="rounded-xl border border-border/70 bg-card/90 p-6 text-start shadow-[var(--shadow-glow)]">
+      <div className="rounded-xl border border-border/70 bg-card/90 p-6 text-start shadow-(--shadow-glow)">
         <h2 className="text-lg font-bold text-foreground mb-4">{isAr ? 'قائمة الشكاوى الحالية' : 'Current Complaints List'}</h2>
         {complaintsQuery.isLoading ? (
           <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>

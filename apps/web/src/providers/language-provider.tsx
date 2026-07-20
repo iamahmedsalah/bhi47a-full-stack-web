@@ -1,7 +1,16 @@
-'use client';
+"use client";
 
-import React, { createContext, useCallback, useContext, useMemo, useState, useEffect, type ReactNode } from "react";
-import { usePathname, useRouter, useParams } from "next/navigation";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useEffect,
+  type ReactNode,
+} from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
 import { AnimatePresence } from "framer-motion";
 import LanguageSwitchOverlay from "@/components/ui/LanguageSwitchOverlay";
 
@@ -18,7 +27,9 @@ type LanguageProviderProps = {
   children: ReactNode;
 };
 
-const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
+const LanguageContext = createContext<LanguageContextValue | undefined>(
+  undefined,
+);
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -27,26 +38,14 @@ function wait(ms: number) {
 export function LanguageProvider({ children }: LanguageProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const params = useParams();
-
-  // Retrieve current language from params, default to "ar"
-  const currentLocale = (params?.locale as LanguagePref) || "ar";
-  const [language, setLanguageState] = useState<LanguagePref>(currentLocale);
+  const routeLocale = useLocale();
+  const language: LanguagePref = routeLocale === "en" ? "en" : "ar";
   const [isLanguageChanging, setIsLanguageChanging] = useState(false);
 
   const [targetPath, setTargetPath] = useState<string | null>(null);
-  const [targetLanguage, setTargetLanguage] = useState<LanguagePref | null>(null);
-
-  // Sync state if locale param changes externally
-  useEffect(() => {
-    if (params?.locale && params.locale !== language) {
-      const timeout = window.setTimeout(() => {
-        setLanguageState(params.locale as LanguagePref);
-      }, 0);
-
-      return () => window.clearTimeout(timeout);
-    }
-  }, [params?.locale, language]);
+  const [targetLanguage, setTargetLanguage] = useState<LanguagePref | null>(
+    null,
+  );
 
   // Listen for route changes to dismiss the language switch overlay smoothly after route loads
   useEffect(() => {
@@ -82,10 +81,14 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
       setTargetPath(newPath);
 
       // Trigger redirect with custom wait overlay simulation
-      await wait(1200); // Allow showing the rotating BHI logo animation for a brief moment
-      router.push(newPath);
+      await wait(150);
+      const suffix =
+        typeof window === "undefined"
+          ? ""
+          : `${window.location.search}${window.location.hash}`;
+      router.replace(`${newPath}${suffix}`);
     },
-    [isLanguageChanging, language, pathname, router]
+    [isLanguageChanging, language, pathname, router],
   );
 
   const direction = language === "ar" ? "rtl" : "ltr";
@@ -105,7 +108,7 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
       direction,
       isLanguageChanging,
     }),
-    [language, setLanguage, direction, isLanguageChanging]
+    [language, setLanguage, direction, isLanguageChanging],
   );
 
   return (

@@ -30,6 +30,7 @@ export interface AdvisingCourseMap {
   student: {
     name?: string;
     studentCode?: string;
+    avatarUrl?: string;
     gpa: number;
     academicLevel: string;
     semester: string;
@@ -49,6 +50,12 @@ export interface AdvisingCourseMap {
     source: string;
     courses: string[];
   } | null;
+  generationReadiness: {
+    canGenerate: boolean;
+    reason?:
+      "FIRST_SEMESTER_REGISTRATION_REQUIRED" | "FIRST_SEMESTER_GRADES_REQUIRED";
+    missingCourseCodes: string[];
+  };
   courses: Array<
     AdvisingCourse & {
       name: string;
@@ -117,11 +124,19 @@ export interface CourseRecommendation {
   score: number;
   priority: "HIGH" | "MEDIUM" | "LOW" | "BLOCKED";
   eligible: boolean;
+  isRecommendedForSemester: boolean;
+  reasonCodes?: string[];
   explanation: string;
   warnings: string[];
   blockedReasons: string[];
   accepted: boolean;
   rejected: boolean;
+}
+export interface GenerateRecommendationsResponse {
+  recommendations: CourseRecommendation[];
+  recommendedCount: number;
+  recommendedCreditHours: number;
+  maxCreditHours: number;
 }
 export interface AdvisingPlan {
   _id: string;
@@ -135,8 +150,14 @@ export interface AdvisingPlan {
   studentVisibleNotes?: string;
   validationResult?: {
     valid: boolean;
-    errors: Array<{ code: string; message: string; severity: string; courseIds: string[] } | string>;
-    warnings: Array<{ code: string; message: string; severity: string; courseIds: string[] } | string>;
+    errors: Array<
+      | { code: string; message: string; severity: string; courseIds: string[] }
+      | string
+    >;
+    warnings: Array<
+      | { code: string; message: string; severity: string; courseIds: string[] }
+      | string
+    >;
     requiredOverrides: string[];
     totalCredits: number;
   };
