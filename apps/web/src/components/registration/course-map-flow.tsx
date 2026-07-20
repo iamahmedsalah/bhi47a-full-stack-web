@@ -508,7 +508,10 @@ export function CourseMapFlow({
     const leftColumnX = 0;
     const rightColumnX = NODE_WIDTH + SEMESTER_BRANCH_GAP;
     levels.forEach((level, levelIndex) => {
-      const levelX = levelIndex * (branchWidth + LEVEL_COLUMN_GAP);
+      const visualLevelIndex = isEnglish
+        ? levelIndex
+        : levels.length - 1 - levelIndex;
+      const levelX = visualLevelIndex * (branchWidth + LEVEL_COLUMN_GAP);
       const termGroups = SEMESTERS.map((semester) => ({
         semester,
         courses: normalizedCourses
@@ -827,7 +830,7 @@ export function CourseMapFlow({
                 return STATUS_STYLES[status].dot;
               }}
             />
-            <Panel position="top-right" className="!m-3">
+            <Panel position={isEnglish ? "top-right" : "top-left"} className="!m-3">
               <div className="hidden rounded-squircle border border-white/10 bg-background/90 p-2 text-[9px] text-muted-foreground shadow-xl backdrop-blur md:flex md:flex-wrap md:gap-2">
                 {(["passed", "planned", "recommended", "failed", "not_taken"] as CourseProgressStatus[]).map((status) => (
                   <span key={status} className="inline-flex items-center gap-1.5">
