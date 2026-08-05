@@ -11,6 +11,7 @@
     "uploads": "Upload Data",
     "examSchedules": "Exam Schedules",
     "settings": "Settings",
+    "staff": "Staff",
     "logout": "Logout"
   },
   "common": {
@@ -329,6 +330,10 @@
     "ruleActive": "Active",
     "ruleInactive": "Inactive",
     "saveSuccess": "Settings saved successfully",
+    "tabs": {
+      "gpa": "GPA & Course Rules",
+      "terms": "Registration Terms"
+    },
     "ai": {
       "tab": "AI Advisor",
       "advisorTitle": "Student AI Advisor",
@@ -356,6 +361,129 @@
       "budgetMissing": "No monthly budget configured",
       "usageNote": "Usage includes every portal AI feature recorded during the current UTC month.",
       "configureBudget": "Set AI_MONTHLY_TOKEN_BUDGET in the API environment to calculate available tokens. Gemini does not provide an API-key remaining-token balance."
+    }
+  },
+  "staff": {
+    "pageTitle": "Staff Management",
+    "pageDescription": "Create staff accounts, manage access, reset passwords, and deactivate accounts safely.",
+    "adminOnlyTitle": "Administrator access required",
+    "adminOnlyDescription": "Only administrators can manage staff accounts and permissions.",
+    "addStaff": "Add staff member",
+    "createTitle": "Create staff account",
+    "editTitle": "Edit staff account",
+    "create": "Create account",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "active": "Active",
+    "inactive": "Inactive",
+    "never": "Never",
+    "loading": "Loading staff accounts...",
+    "empty": "No staff accounts match these filters.",
+    "loadFailed": "Could not load staff accounts.",
+    "retry": "Try again",
+    "searchPlaceholder": "Search by name, email, username, or code...",
+    "previous": "Previous",
+    "next": "Next",
+    "pagination": "Page {page} of {totalPages} · {total} accounts",
+    "filters": { "all": "All accounts" },
+    "fields": {
+      "name": "Full name",
+      "email": "Email",
+      "username": "Username (optional)",
+      "phone": "Phone (optional)",
+      "temporaryPassword": "Temporary password"
+    },
+    "table": {
+      "staff": "Staff member",
+      "status": "Status",
+      "permissions": "Permissions",
+      "lastLogin": "Last login",
+      "actions": "Actions"
+    },
+    "actions": {
+      "edit": "Edit profile",
+      "permissions": "Edit permissions",
+      "resetPassword": "Reset password",
+      "deactivate": "Deactivate account",
+      "activate": "Activate account"
+    },
+    "validation": {
+      "passwordLength": "Password must contain at least 12 characters.",
+      "passwordMismatch": "Passwords do not match."
+    },
+    "resetPassword": {
+      "title": "Reset password for {name}",
+      "description": "Existing sessions will be revoked and the staff member must change this password after signing in.",
+      "newPassword": "New temporary password",
+      "confirmPassword": "Confirm temporary password",
+      "action": "Reset password"
+    },
+    "deactivate": {
+      "title": "Deactivate {name}",
+      "description": "The account will no longer be able to sign in. Historical records will be preserved.",
+      "reason": "Reason (optional)",
+      "action": "Deactivate account"
+    },
+    "toasts": {
+      "created": "Staff account created.",
+      "updated": "Staff profile updated.",
+      "permissionsUpdated": "Staff permissions updated.",
+      "passwordReset": "Password reset and existing sessions revoked.",
+      "deactivated": "Staff account deactivated.",
+      "activated": "Staff account activated.",
+      "failed": "Could not complete the staff management action."
+    },
+    "permissions": {
+      "title": "Permissions for {name}",
+      "description": "Only the selected capabilities will be available to this staff account.",
+      "selectAll": "Select all",
+      "clearAll": "Clear all",
+      "groups": {
+        "students": "Students",
+        "courses": "Courses",
+        "grades": "Grades",
+        "academicEmails": "Academic emails",
+        "complaints": "Complaints",
+        "communications": "Email & notifications",
+        "faqs": "FAQs",
+        "uploads": "Data imports",
+        "exams": "Exam schedules",
+        "registration": "Registration",
+        "advising": "Academic advising"
+      },
+      "labels": {
+        "students_read": "View students",
+        "students_write": "Create and update students",
+        "students_reset_password": "Reset student passwords",
+        "courses_read": "View courses",
+        "courses_write": "Create and update courses",
+        "grades_read": "View grades",
+        "grades_write": "Create and update grades",
+        "grades_delete": "Delete grades",
+        "academic_emails_read": "View academic emails",
+        "academic_emails_write": "Update academic emails",
+        "complaints_read": "View complaints",
+        "complaints_reply": "Reply to complaints",
+        "complaints_write": "Update complaint status and assignment",
+        "complaints_manage_settings": "Manage complaint settings",
+        "emails_read": "View sent email history",
+        "emails_send": "Send email",
+        "notifications_read": "View notification history",
+        "notifications_send": "Send notifications",
+        "faqs_read": "View FAQ management",
+        "faqs_write": "Create, update, and delete FAQs",
+        "uploads_import": "Import data files",
+        "exam_schedules_read": "View exam schedules",
+        "exam_schedules_write": "Manage exam schedules",
+        "registration_read": "View registrations",
+        "registration_write": "Edit registrations",
+        "registration_proxy": "Register on behalf of students",
+        "advising_read": "View advising cases",
+        "advising_write": "Manage advising cases",
+        "advising_override_prerequisites": "Override prerequisites",
+        "advising_override_max_hours": "Override maximum hours",
+        "study_plan_manage": "Manage study plans"
+      }
     }
   },
   "chatAudit": {

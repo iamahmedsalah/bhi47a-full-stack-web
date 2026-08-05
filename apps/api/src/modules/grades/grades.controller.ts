@@ -59,7 +59,7 @@ export class GradesController {
   }
 
   @Post('admin/grades')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({ summary: 'Add or update single grade manually (Admin)' })
   async saveGrade(@Body() dto: SaveGradeDto) {
@@ -67,7 +67,7 @@ export class GradesController {
   }
 
   @Patch('admin/grades/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({ summary: 'Edit specific grade (Admin)' })
   async update(
@@ -78,7 +78,7 @@ export class GradesController {
   }
 
   @Delete('admin/grades/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_DELETE)
   @ApiOperation({ summary: 'Delete specific grade (Admin)' })
   async remove(@Param('id', ParseObjectIdPipe) id: string) {
@@ -86,7 +86,7 @@ export class GradesController {
   }
 
   @Post('admin/grades/publish')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({
     summary: 'Publish or hide midterm/final results in bulk (Admin)',
@@ -96,10 +96,11 @@ export class GradesController {
   }
 
   @Post('admin/grades/recalculate-progress')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({
-    summary: 'Recalculate GPA, completed courses, and automatic level promotion',
+    summary:
+      'Recalculate GPA, completed courses, and automatic level promotion',
   })
   async recalculateAcademicProgress(
     @Body() dto: RecalculateAcademicProgressDto,

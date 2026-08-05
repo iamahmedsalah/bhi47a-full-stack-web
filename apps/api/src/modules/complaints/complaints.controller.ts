@@ -88,6 +88,7 @@ export class ComplaintsController {
 
   @Get('admin/complaints')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_READ)
   @ApiOperation({ summary: 'List and filter all complaints (Admin/Staff)' })
   async findAll(@Query() query: QueryComplaintDto) {
     return this.complaintsService.findAll(query);
@@ -95,6 +96,7 @@ export class ComplaintsController {
 
   @Get('admin/complaints/assignees')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_READ)
   @ApiOperation({ summary: 'List active staff/admin users for assignment' })
   async assignees() {
     return this.complaintsService.findAssignableStaff();
@@ -111,7 +113,8 @@ export class ComplaintsController {
   }
 
   @Post('admin/complaints/settings')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS)
   @ApiOperation({
     summary: 'Update complaints portal settings and blacklist (Admin)',
   })
@@ -124,6 +127,7 @@ export class ComplaintsController {
 
   @Patch('admin/complaints/:id')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_WRITE)
   @ApiOperation({
     summary: 'Update complaint status and priority (Admin/Staff)',
   })
@@ -137,6 +141,7 @@ export class ComplaintsController {
 
   @Post('admin/complaints/:id/reply')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_REPLY)
   @ApiOperation({ summary: 'Reply to complaint ticket (Admin/Staff)' })
   async adminReply(
     @Param('id', ParseObjectIdPipe) id: string,

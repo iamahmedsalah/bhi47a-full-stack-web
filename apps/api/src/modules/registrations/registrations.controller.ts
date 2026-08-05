@@ -11,6 +11,8 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { PERMISSIONS } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import {
@@ -67,7 +69,9 @@ export class RegistrationsController {
 
   @Post('registration/request-advising')
   @Roles('student')
-  @ApiOperation({ summary: 'Request advising instead of incomplete registration' })
+  @ApiOperation({
+    summary: 'Request advising instead of incomplete registration',
+  })
   requestRegistrationAdvising(@CurrentUser() user: AuthenticatedUser) {
     return this.registrationsService.requestIncompleteRegistrationAdvising(
       user._id,
@@ -119,6 +123,7 @@ export class RegistrationsController {
 
   @Get('staff/advising-requests')
   @Roles('staff')
+  @RequirePermissions(PERMISSIONS.ADVISING_READ)
   @ApiOperation({ summary: 'Assigned academic advising requests' })
   listAssignedRequests(
     @CurrentUser() user: AuthenticatedUser,
@@ -132,6 +137,7 @@ export class RegistrationsController {
 
   @Patch('staff/advising-requests/:id/review')
   @Roles('staff', 'admin')
+  @RequirePermissions(PERMISSIONS.ADVISING_WRITE)
   @ApiOperation({
     summary: 'Review, edit, approve, or reject advising request',
   })
@@ -150,6 +156,7 @@ export class RegistrationsController {
 
   @Get('staff/advising-requests/:id/course-map')
   @Roles('staff', 'admin')
+  @RequirePermissions(PERMISSIONS.ADVISING_READ)
   @ApiOperation({
     summary: 'Student-specific course map with grades for advising',
   })
@@ -166,6 +173,7 @@ export class RegistrationsController {
 
   @Get('admin/academic-profiles')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.ADVISING_READ)
   @ApiOperation({ summary: 'List student academic profiles' })
   listAcademicProfiles() {
     return this.registrationsService.listAcademicProfiles();
@@ -173,6 +181,7 @@ export class RegistrationsController {
 
   @Post('admin/academic-profiles')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.ADVISING_WRITE)
   @ApiOperation({ summary: 'Create or update student academic profile' })
   upsertAcademicProfile(@Body() dto: UpsertStudentAcademicProfileDto) {
     return this.registrationsService.upsertAcademicProfile(dto);
@@ -218,6 +227,7 @@ export class RegistrationsController {
 
   @Get('admin/registrations')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_READ)
   @ApiOperation({ summary: 'List course registrations' })
   listRegistrations(@Query() query: QueryRegistrationDto) {
     return this.registrationsService.listRegistrations(query);
@@ -225,6 +235,7 @@ export class RegistrationsController {
 
   @Patch('admin/registrations/:id')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
   @ApiOperation({ summary: 'Edit student course registration (Admin/Staff)' })
   editRegistration(
     @CurrentUser() user: AuthenticatedUser,
@@ -236,7 +247,10 @@ export class RegistrationsController {
 
   @Post('admin/registrations/proxy')
   @Roles('admin', 'staff')
-  @ApiOperation({ summary: 'Register courses on behalf of a student (Proxy Registration)' })
+  @RequirePermissions(PERMISSIONS.REGISTRATION_PROXY)
+  @ApiOperation({
+    summary: 'Register courses on behalf of a student (Proxy Registration)',
+  })
   proxyRegistration(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: AdminProxyRegistrationDto,
@@ -246,13 +260,18 @@ export class RegistrationsController {
 
   @Get('admin/registrations/roster')
   @Roles('admin', 'staff')
-  @ApiOperation({ summary: 'Student registration roster: Registered vs Not Registered with level filter' })
+  @RequirePermissions(PERMISSIONS.REGISTRATION_READ)
+  @ApiOperation({
+    summary:
+      'Student registration roster: Registered vs Not Registered with level filter',
+  })
   getRegistrationRoster(@Query() query: QueryRegistrationDto) {
     return this.registrationsService.getStudentRegistrationRoster(query);
   }
 
   @Get('admin/registration-terms')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_READ)
   @ApiOperation({ summary: 'List registration semester open/close settings' })
   listRegistrationTerms() {
     return this.registrationsService.listRegistrationTerms();
@@ -260,6 +279,7 @@ export class RegistrationsController {
 
   @Get('admin/academic-years')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_READ)
   @ApiOperation({ summary: 'List managed academic years and usage counts' })
   listAcademicYears() {
     return this.registrationsService.listAcademicYears();

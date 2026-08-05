@@ -19,6 +19,7 @@ import {
   Settings,
   Upload,
   Users,
+  UserCog,
   X,
   Sidebar,
   LayoutDashboard,
@@ -28,11 +29,14 @@ import { cn } from "@/lib/cn";
 import { useUIStore } from "@/store/ui-store";
 import Themes from "@/components/ui/Themes";
 import LangToggle from "@/components/ui/LangToggle";
+import { PERMISSIONS, type Permission } from "@student-portal/shared";
 
 interface NavItem {
   key: string;
   href: string;
   icon: React.ReactNode;
+  permission?: Permission;
+  adminOnly?: boolean;
 }
 
 export default function AdminSidebar() {
@@ -55,38 +59,51 @@ export default function AdminSidebar() {
       key: "students",
       href: `/${locale}/admin/students`,
       icon: <Users className="h-5 w-5" />,
+      permission: PERMISSIONS.STUDENTS_READ,
     },
     {
       key: "courses",
       href: `/${locale}/admin/courses`,
       icon: <BookOpen className="h-5 w-5" />,
+      permission: PERMISSIONS.COURSES_READ,
     },
     {
       key: "registrations",
       href: `/${locale}/admin/academic-advising`,
       icon: <BookOpenCheck className="h-5 w-5" />,
+      permission: PERMISSIONS.ADVISING_READ,
     },
     {
       key: "grades",
       href: `/${locale}/admin/grades`,
       icon: <Award className="h-5 w-5" />,
+      permission: PERMISSIONS.GRADES_READ,
     },
     {
       key: "academicEmails",
       href: `/${locale}/admin/academic-emails`,
       icon: <Mail className="h-5 w-5" />,
+      permission: PERMISSIONS.ACADEMIC_EMAILS_READ,
     },
     {
       key: "complaints",
       href: `/${locale}/admin/complaints`,
       icon: <MessageSquareWarning className="h-5 w-5" />,
+      permission: PERMISSIONS.COMPLAINTS_READ,
     },
     ...(user?.role === "admin"
       ? [
           {
+            key: "staff",
+            href: `/${locale}/admin/staff`,
+            icon: <UserCog className="h-5 w-5" />,
+            adminOnly: true,
+          },
+          {
             key: "chatAudit",
             href: `/${locale}/admin/chat-audit`,
             icon: <MessagesSquare className="h-5 w-5" />,
+            adminOnly: true,
           },
         ]
       : []),
@@ -94,18 +111,24 @@ export default function AdminSidebar() {
       key: "uploads",
       href: `/${locale}/admin/uploads`,
       icon: <Upload className="h-5 w-5" />,
+      permission: PERMISSIONS.UPLOADS_IMPORT,
     },
     {
       key: "examSchedules",
       href: `/${locale}/admin/exam-schedules`,
       icon: <Calendar className="h-5 w-5" />,
+      permission: PERMISSIONS.EXAM_SCHEDULES_READ,
     },
     {
       key: "settings",
       href: `/${locale}/admin/settings`,
       icon: <Settings className="h-5 w-5" />,
+      permission: PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS,
     },
-  ];
+  ].filter((item) =>
+    user?.role === "admin" ||
+    (!item.adminOnly && (!item.permission || user?.permissions?.includes(item.permission))),
+  );
 
   const renderContent = (isForceOpen: boolean) => {
     const isSidebarOpen = isForceOpen || sidebarOpen;

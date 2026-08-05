@@ -47,7 +47,8 @@ export class StudentsController {
   }
 
   @Post('admin/students')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
   @ApiOperation({ summary: 'Create new student (admin)' })
   async create(@Body() dto: CreateStudentDto) {
     return this.studentsService.create(dto);

@@ -34,9 +34,10 @@ export class AcademicEmailsController {
   }
 
   @Patch('admin/academic-emails/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.ACADEMIC_EMAILS_WRITE)
   @ApiOperation({
-    summary: 'Update or activate/deactivate academic email (Admin)',
+    summary: 'Update or activate/deactivate academic email (Admin/Staff)',
   })
   async update(
     @Param('id', ParseObjectIdPipe) id: string,

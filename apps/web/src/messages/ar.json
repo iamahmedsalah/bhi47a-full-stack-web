@@ -11,6 +11,7 @@
     "uploads": "رفع البيانات",
     "examSchedules": "جدول الامتحانات",
     "settings": "الإعدادات",
+    "staff": "الموظفون",
     "logout": "تسجيل الخروج"
   },
   "common": {
@@ -329,6 +330,10 @@
     "ruleActive": "نشطة",
     "ruleInactive": "معطلة",
     "saveSuccess": "تم حفظ الإعدادات بنجاح",
+    "tabs": {
+      "gpa": "قواعد المعدل والمقررات",
+      "terms": "فترات التسجيل"
+    },
     "ai": {
       "tab": "المساعد الذكي",
       "advisorTitle": "المساعد الأكاديمي الذكي للطلاب",
@@ -356,6 +361,129 @@
       "budgetMissing": "لم يتم تحديد ميزانية شهرية",
       "usageNote": "يشمل الاستخدام جميع خصائص الذكاء الاصطناعي المسجلة في البوابة خلال الشهر الحالي بتوقيت UTC.",
       "configureBudget": "حدد AI_MONTHLY_TOKEN_BUDGET في بيئة API لحساب الرموز المتاحة. لا توفر Gemini رصيد الرموز المتبقية لمفتاح API."
+    }
+  },
+  "staff": {
+    "pageTitle": "إدارة الموظفين",
+    "pageDescription": "إنشاء حسابات الموظفين وإدارة صلاحياتهم وكلمات المرور وحالة الحساب بأمان.",
+    "adminOnlyTitle": "هذه الصفحة للمدير فقط",
+    "adminOnlyDescription": "يمكن لمدير النظام فقط إدارة حسابات الموظفين وصلاحياتهم.",
+    "addStaff": "إضافة موظف",
+    "createTitle": "إنشاء حساب موظف",
+    "editTitle": "تعديل حساب الموظف",
+    "create": "إنشاء الحساب",
+    "save": "حفظ التغييرات",
+    "cancel": "إلغاء",
+    "active": "نشط",
+    "inactive": "معطل",
+    "never": "لم يسجل الدخول",
+    "loading": "جارٍ تحميل حسابات الموظفين...",
+    "empty": "لا توجد حسابات موظفين مطابقة.",
+    "loadFailed": "تعذر تحميل حسابات الموظفين.",
+    "retry": "إعادة المحاولة",
+    "searchPlaceholder": "البحث بالاسم أو البريد أو اسم المستخدم أو الكود...",
+    "previous": "السابق",
+    "next": "التالي",
+    "pagination": "الصفحة {page} من {totalPages} · إجمالي {total}",
+    "filters": { "all": "كل الحسابات" },
+    "fields": {
+      "name": "الاسم الكامل",
+      "email": "البريد الإلكتروني",
+      "username": "اسم المستخدم (اختياري)",
+      "phone": "الهاتف (اختياري)",
+      "temporaryPassword": "كلمة المرور المؤقتة"
+    },
+    "table": {
+      "staff": "الموظف",
+      "status": "الحالة",
+      "permissions": "الصلاحيات",
+      "lastLogin": "آخر دخول",
+      "actions": "الإجراءات"
+    },
+    "actions": {
+      "edit": "تعديل البيانات",
+      "permissions": "تعديل الصلاحيات",
+      "resetPassword": "إعادة تعيين كلمة المرور",
+      "deactivate": "تعطيل الحساب",
+      "activate": "تفعيل الحساب"
+    },
+    "validation": {
+      "passwordLength": "يجب ألا تقل كلمة المرور عن 12 حرفًا.",
+      "passwordMismatch": "كلمتا المرور غير متطابقتين."
+    },
+    "resetPassword": {
+      "title": "إعادة تعيين كلمة مرور {name}",
+      "description": "سيتم إنهاء الجلسات الحالية وإلزام الموظف بتغيير كلمة المرور بعد تسجيل الدخول.",
+      "newPassword": "كلمة المرور المؤقتة الجديدة",
+      "confirmPassword": "تأكيد كلمة المرور المؤقتة",
+      "action": "إعادة التعيين"
+    },
+    "deactivate": {
+      "title": "تعطيل حساب {name}",
+      "description": "لن يتمكن الحساب من تسجيل الدخول، مع الاحتفاظ بكل السجلات السابقة.",
+      "reason": "سبب التعطيل (اختياري)",
+      "action": "تعطيل الحساب"
+    },
+    "toasts": {
+      "created": "تم إنشاء حساب الموظف.",
+      "updated": "تم تحديث بيانات الموظف.",
+      "permissionsUpdated": "تم تحديث صلاحيات الموظف.",
+      "passwordReset": "تم تغيير كلمة المرور وإنهاء الجلسات الحالية.",
+      "deactivated": "تم تعطيل حساب الموظف.",
+      "activated": "تم تفعيل حساب الموظف.",
+      "failed": "تعذر إكمال إجراء إدارة الموظف."
+    },
+    "permissions": {
+      "title": "صلاحيات {name}",
+      "description": "لن تتاح لهذا الحساب إلا الإمكانات المحددة.",
+      "selectAll": "تحديد الكل",
+      "clearAll": "إلغاء الكل",
+      "groups": {
+        "students": "الطلاب",
+        "courses": "المقررات",
+        "grades": "الدرجات",
+        "academicEmails": "البريد الأكاديمي",
+        "complaints": "الشكاوى",
+        "communications": "البريد والإشعارات",
+        "faqs": "الأسئلة الشائعة",
+        "uploads": "استيراد البيانات",
+        "exams": "جداول الامتحانات",
+        "registration": "التسجيل",
+        "advising": "الإرشاد الأكاديمي"
+      },
+      "labels": {
+        "students_read": "عرض الطلاب",
+        "students_write": "إنشاء الطلاب وتعديلهم",
+        "students_reset_password": "إعادة تعيين كلمات مرور الطلاب",
+        "courses_read": "عرض المقررات",
+        "courses_write": "إنشاء المقررات وتعديلها",
+        "grades_read": "عرض الدرجات",
+        "grades_write": "إنشاء الدرجات وتعديلها",
+        "grades_delete": "حذف الدرجات",
+        "academic_emails_read": "عرض البريد الأكاديمي",
+        "academic_emails_write": "تعديل البريد الأكاديمي",
+        "complaints_read": "عرض الشكاوى",
+        "complaints_reply": "الرد على الشكاوى",
+        "complaints_write": "تعديل حالة الشكاوى وتعيينها",
+        "complaints_manage_settings": "إدارة إعدادات الشكاوى",
+        "emails_read": "عرض سجل البريد",
+        "emails_send": "إرسال البريد",
+        "notifications_read": "عرض سجل الإشعارات",
+        "notifications_send": "إرسال الإشعارات",
+        "faqs_read": "عرض إدارة الأسئلة الشائعة",
+        "faqs_write": "إدارة الأسئلة الشائعة",
+        "uploads_import": "استيراد ملفات البيانات",
+        "exam_schedules_read": "عرض جداول الامتحانات",
+        "exam_schedules_write": "إدارة جداول الامتحانات",
+        "registration_read": "عرض التسجيلات",
+        "registration_write": "تعديل التسجيلات",
+        "registration_proxy": "التسجيل نيابة عن الطلاب",
+        "advising_read": "عرض حالات الإرشاد",
+        "advising_write": "إدارة حالات الإرشاد",
+        "advising_override_prerequisites": "تجاوز المتطلبات السابقة",
+        "advising_override_max_hours": "تجاوز الحد الأقصى للساعات",
+        "study_plan_manage": "إدارة الخطط الدراسية"
+      }
     }
   },
   "chatAudit": {

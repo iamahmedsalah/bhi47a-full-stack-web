@@ -28,15 +28,6 @@ export interface RegistrationTermItem {
   endDate?: string;
 }
 
-export interface StaffUserItem {
-  _id: string;
-  userCode?: string;
-  name: string;
-  email?: string;
-  role: "admin" | "staff";
-  permissions?: string[];
-}
-
 export interface AiSettingsItem {
   studentAdvisorEnabled: boolean;
   provider: string;
@@ -58,7 +49,6 @@ export interface AiSettingsItem {
 export const settingsKeys = {
   gpaRules: ["admin-gpa-rules"] as const,
   registrationTerms: ["admin-registration-terms"] as const,
-  staffUsers: ["admin-staff-users"] as const,
   aiSettings: ["admin-ai-settings"] as const,
 };
 
@@ -103,22 +93,6 @@ export async function toggleRegistrationTerm(
   const response = await api.patch<RegistrationTermItem>(
     `/admin/registration-terms/${id}`,
     { isOpen },
-  );
-  return response.data;
-}
-
-export async function listStaffUsers(): Promise<StaffUserItem[]> {
-  const response = await api.get<StaffUserItem[]>("/admin/staff");
-  return response.data;
-}
-
-export async function updateStaffPermissions(
-  staffId: string,
-  permissions: string[],
-): Promise<StaffUserItem> {
-  const response = await api.patch<StaffUserItem>(
-    `/admin/staff/${staffId}/permissions`,
-    { permissions },
   );
   return response.data;
 }

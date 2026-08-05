@@ -67,7 +67,7 @@ export class ExamSchedulesController {
   }
 
   @Post('admin/exam-schedules')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.EXAM_SCHEDULES_WRITE)
   @ApiOperation({ summary: 'Create new exam schedule upload (Admin)' })
   async create(@Body() dto: CreateExamScheduleDto) {
@@ -75,7 +75,7 @@ export class ExamSchedulesController {
   }
 
   @Post('admin/exam-schedules/upload-image')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.EXAM_SCHEDULES_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -125,7 +125,7 @@ export class ExamSchedulesController {
   }
 
   @Patch('admin/exam-schedules/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.EXAM_SCHEDULES_WRITE)
   @ApiOperation({ summary: 'Update exam schedule status or link (Admin)' })
   async update(
@@ -136,7 +136,7 @@ export class ExamSchedulesController {
   }
 
   @Delete('admin/exam-schedules/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.EXAM_SCHEDULES_WRITE)
   @ApiOperation({ summary: 'Delete specific exam schedule (Admin)' })
   async remove(@Param('id', ParseObjectIdPipe) id: string) {

@@ -20,6 +20,7 @@ import { FaqsModule } from './modules/faqs/faqs.module';
 import { RegistrationsModule } from './modules/registrations/registrations.module';
 import { AcademicAdvisingModule } from './modules/academic-advising/academic-advising.module';
 import { AiModule } from './modules/ai/ai.module';
+import { StaffManagementModule } from './modules/staff-management/staff-management.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -48,6 +49,7 @@ import { HealthController } from './health.controller';
     RegistrationsModule,
     AcademicAdvisingModule,
     AiModule,
+    StaffManagementModule,
   ],
   controllers: [HealthController],
 })

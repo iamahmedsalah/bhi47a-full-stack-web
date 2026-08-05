@@ -30,7 +30,7 @@ export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post()
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -51,7 +51,9 @@ export class UploadsController {
     }),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload and import Excel or CSV data file (Admin)' })
+  @ApiOperation({
+    summary: 'Upload and import Excel or CSV data file (Admin/Staff)',
+  })
   @ApiBody({
     schema: {
       type: 'object',

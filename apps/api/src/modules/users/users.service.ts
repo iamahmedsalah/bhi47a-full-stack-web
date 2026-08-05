@@ -397,24 +397,6 @@ export class UsersService {
     return user;
   }
 
-  async listStaff(): Promise<UserDocument[]> {
-    return (await this.userModel
-      .find({ role: 'staff' })
-      .lean()) as unknown as UserDocument[];
-  }
-
-  async updateStaffPermissions(
-    id: string,
-    permissions: string[],
-  ): Promise<UserDocument> {
-    const user = await this.userModel.findOne({ _id: id, role: 'staff' });
-    if (!user) {
-      throw new NotFoundException('Staff member not found');
-    }
-    user.permissions = permissions;
-    return user.save();
-  }
-
   async findByGoogleEmail(googleEmail: string): Promise<UserDocument | null> {
     return this.userModel.findOne({
       googleEmail: googleEmail.trim().toLowerCase(),
