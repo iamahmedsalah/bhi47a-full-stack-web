@@ -85,7 +85,7 @@ docker compose ps
 Optional seed:
 
 ```bash
-docker compose exec api npm run seed
+docker compose exec api npm run seed:prod
 ```
 
 Smoke checks:

@@ -66,8 +66,20 @@ type SeedData = {
 };
 
 function loadSeedData(): SeedData {
-  const seedDataPath = path.resolve(__dirname, './seed.data.json');
-  const raw = fs.readFileSync(seedDataPath, 'utf8');
+  const candidatePaths = [
+    path.resolve(__dirname, './seed.data.json'),
+    path.resolve(__dirname, '../../src/database/seed.data.json'),
+    path.resolve(process.cwd(), 'src/database/seed.data.json'),
+    path.resolve(process.cwd(), 'dist/database/seed.data.json'),
+    path.resolve(process.cwd(), 'apps/api/src/database/seed.data.json'),
+  ];
+  const foundPath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+  if (!foundPath) {
+    throw new Error(
+      `seed.data.json not found in candidate paths:\n${candidatePaths.join('\n')}`,
+    );
+  }
+  const raw = fs.readFileSync(foundPath, 'utf8');
 
   return JSON.parse(raw) as SeedData;
 }
@@ -142,21 +154,24 @@ async function upsertUser(
   const filter = data.email
     ? { email: data.email.toLowerCase() }
     : {
-        $or: [
-          { studentCode: data.studentCode },
-          { userCode: `STD-${data.studentCode}` },
-        ],
-      };
+      $or: [
+        { studentCode: data.studentCode },
+        { userCode: `STD-${data.studentCode}` },
+      ],
+    };
 
   const existing = await usersCollection.findOne(filter);
 
   if (existing?._id) {
     const updateSet: Record<string, any> = {
       name: data.name,
-      phone: data.phone,
       permissions: data.permissions ?? existing.permissions ?? [],
       updatedAt: now,
     };
+
+    if (data.phone) {
+      updateSet.phone = data.phone;
+    }
 
     if (!existing.userCode) {
       updateSet.userCode = await generateSeedUserCode(
@@ -174,7 +189,30 @@ async function upsertUser(
       }
     }
 
-    await usersCollection.updateOne({ _id: existing._id }, { $set: updateSet });
+    // Clean up any existing null values on sparse unique indexed fields to prevent E11000 duplicate key errors
+    const unsetFields: Record<string, 1> = {};
+    if (existing.studentCode === null && !data.studentCode) {
+      unsetFields.studentCode = 1;
+    }
+    if (existing.nationalId === null && !data.nationalId) {
+      unsetFields.nationalId = 1;
+    }
+    if (existing.nationalIdHash === null && !data.nationalId) {
+      unsetFields.nationalIdHash = 1;
+    }
+    if (existing.nationalIdMasked === null && !data.nationalId) {
+      unsetFields.nationalIdMasked = 1;
+    }
+    if (existing.phone === null && !data.phone) {
+      unsetFields.phone = 1;
+    }
+
+    const updateDoc: Record<string, any> = { $set: updateSet };
+    if (Object.keys(unsetFields).length > 0) {
+      updateDoc.$unset = unsetFields;
+    }
+
+    await usersCollection.updateOne({ _id: existing._id }, updateDoc);
 
     return existing._id;
   }
@@ -191,20 +229,12 @@ async function upsertUser(
     data.studentCode,
   );
 
-  const result = await usersCollection.insertOne({
+  const docToInsert: Record<string, any> = {
     role: data.role,
     userCode: generatedUserCode,
     username: usernameFromUser(data),
     name: data.name,
-    email: data.email?.toLowerCase(),
-    phone: data.phone,
-    studentCode: data.studentCode,
     passwordHash,
-    nationalIdHash,
-    nationalIdMasked: data.nationalId
-      ? maskNationalId(data.nationalId)
-      : undefined,
-    nationalId: data.nationalId,
     mustChangePassword: data.mustChangePassword ?? false,
     tokenVersion: 0,
     isActive: true,
@@ -215,7 +245,26 @@ async function upsertUser(
     theme: 'system',
     createdAt: now,
     updatedAt: now,
-  });
+  };
+
+  if (data.email) {
+    docToInsert.email = data.email.toLowerCase();
+  }
+  if (data.phone) {
+    docToInsert.phone = data.phone;
+  }
+  if (data.studentCode) {
+    docToInsert.studentCode = data.studentCode;
+  }
+  if (data.nationalId) {
+    docToInsert.nationalId = data.nationalId;
+    docToInsert.nationalIdMasked = maskNationalId(data.nationalId);
+    if (nationalIdHash) {
+      docToInsert.nationalIdHash = nationalIdHash;
+    }
+  }
+
+  const result = await usersCollection.insertOne(docToInsert);
 
   return result.insertedId;
 }
@@ -267,12 +316,18 @@ async function seed() {
 
   const seedData = loadSeedData();
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@institute.edu';
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  const adminName = process.env.ADMIN_NAME || 'System Admin';
+  const adminEmail = (
+    process.env.ADMIN_EMAIL || 'admin@institute.edu'
+  ).trim();
+  const adminPassword = process.env.ADMIN_PASSWORD?.trim();
+  const adminName = (process.env.ADMIN_NAME || 'System Admin').trim();
 
-  const staffEmail = process.env.STAFF_EMAIL || 'staff@institute.edu';
-  const staffPassword = process.env.STAFF_PASSWORD || 'StaffPass12345!';
+  const staffEmail = (
+    process.env.STAFF_EMAIL || 'staff@institute.edu'
+  ).trim();
+  const staffPassword = (
+    process.env.STAFF_PASSWORD || 'StaffPass12345!'
+  ).trim();
 
   if (!adminPassword || adminPassword.length < 12) {
     throw new Error(
@@ -346,32 +401,35 @@ async function seed() {
       );
     }
 
-    await gpaRulesCollection.insertMany([
-      {
-        minGpa: 0,
-        maxGpa: 1.99,
-        maxCreditHours: 18,
-        minCreditHours: 10,
-        minCourses: 4,
-        maxCourses: 6,
-        requiresAdvisor: true,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        minGpa: 2,
-        maxGpa: 4,
-        maxCreditHours: 18,
-        minCreditHours: 10,
-        minCourses: 4,
-        maxCourses: 6,
-        requiresAdvisor: false,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ]);
+    const existingGpaRules = await gpaRulesCollection.countDocuments();
+    if (existingGpaRules === 0) {
+      await gpaRulesCollection.insertMany([
+        {
+          minGpa: 0,
+          maxGpa: 1.99,
+          maxCreditHours: 18,
+          minCreditHours: 10,
+          minCourses: 4,
+          maxCourses: 6,
+          requiresAdvisor: true,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          minGpa: 2,
+          maxGpa: 4,
+          maxCreditHours: 18,
+          minCreditHours: 10,
+          minCourses: 4,
+          maxCourses: 6,
+          requiresAdvisor: false,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+    }
 
     for (const course of seedData.courses) {
       const now = new Date();
@@ -408,6 +466,32 @@ async function seed() {
       if (result?._id) {
         courseIds.set(course.code, result._id);
       }
+    }
+
+    // Seed Active Registration Terms (Open 2026-2027 First Semester by default)
+    const now = new Date();
+    const termSemesters: ('first' | 'second' | 'summer')[] = [
+      'first',
+      'second',
+      'summer',
+    ];
+    for (const sem of termSemesters) {
+      await registrationTermsCollection.updateOne(
+        { academicYear: '2026-2027', semester: sem },
+        {
+          $setOnInsert: {
+            academicYear: '2026-2027',
+            semester: sem,
+            createdAt: now,
+          },
+          $set: {
+            isOpen: sem === 'first',
+            isCurrent: sem === 'first',
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
     }
 
     for (const student of seedData.students) {
@@ -490,8 +574,44 @@ async function seed() {
             academicWarnings: student.academicWarnings,
             advisorId:
               staffIds[seedData.students.indexOf(student) % staffIds.length],
-            isGraduatingThisYear: false,
+            isGraduatingThisYear:
+              student.level === '4' || student.studentCode === '202600011',
             approvedICCourseCompletions: [],
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+
+      // Seed Advising Case for the new advising workspace
+      const assignedAdvisorId =
+        staffIds[seedData.students.indexOf(student) % staffIds.length];
+      await db.collection('advising_cases').updateOne(
+        {
+          studentId: userId,
+          academicYear: student.academicYear,
+          semester: student.semester,
+        },
+        {
+          $setOnInsert: {
+            studentId: userId,
+            academicYear: student.academicYear,
+            semester: student.semester,
+            status:
+              student.failedCourses.length > 0
+                ? 'UNDER_REVIEW'
+                : 'IN_PROGRESS',
+            timeline: [
+              {
+                status: 'IN_PROGRESS',
+                changedAt: now,
+                actorId: adminId,
+              },
+            ],
+            createdAt: now,
+          },
+          $set: {
+            assignedAdvisorId,
             updatedAt: now,
           },
         },
@@ -510,21 +630,28 @@ async function seed() {
             .map((course) => course.code),
         ].filter((code, index, values) => values.indexOf(code) === index);
 
-        await advisingRequestsCollection.insertOne({
+        const existingAdvising = await advisingRequestsCollection.findOne({
           studentId: userId,
-          assignedStaffId:
-            staffIds[seedData.students.indexOf(student) % staffIds.length],
-          reason: student.failedCourses.length ? 'failed_courses' : 'low_gpa',
-          autoSuggestedCourses: suggestedCourses.slice(0, 3),
-          staffApprovedCourses: suggestedCourses.slice(0, 3),
-          policyWarnings: ['GPA is below 2.00 and requires academic advising.'],
-          overridePrerequisites: false,
-          overrideMaxCreditHours: false,
-          approveIncompleteCompletion: false,
           status: 'pending',
-          createdAt: now,
-          updatedAt: now,
         });
+
+        if (!existingAdvising) {
+          await advisingRequestsCollection.insertOne({
+            studentId: userId,
+            assignedStaffId:
+              staffIds[seedData.students.indexOf(student) % staffIds.length],
+            reason: student.failedCourses.length ? 'failed_courses' : 'low_gpa',
+            autoSuggestedCourses: suggestedCourses.slice(0, 3),
+            staffApprovedCourses: suggestedCourses.slice(0, 3),
+            policyWarnings: ['GPA is below 2.00 and requires academic advising.'],
+            overridePrerequisites: false,
+            overrideMaxCreditHours: false,
+            approveIncompleteCompletion: false,
+            status: 'pending',
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       }
 
       for (const course of seedData.courses.filter((item) =>
@@ -538,6 +665,52 @@ async function seed() {
           continue;
         }
 
+        const isFailed = student.failedCourses.includes(course.code);
+        // Deterministic pseudo-random variation based on course code
+        const codeHash = course.code.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const midtermGrade = isFailed ? (5 + (codeHash % 3)) : (16 + (codeHash % 4)); // 5-7/20 or 16-19/20
+        const finalGrade = isFailed ? (28 + (codeHash % 8)) : (62 + (codeHash % 15)); // 28-35/80 or 62-76/80
+
+        const priorAcademicYear =
+          course.academicLevel === '1'
+            ? student.level === '2'
+              ? '2025-2026'
+              : '2024-2025'
+            : course.academicLevel === '2'
+              ? '2025-2026'
+              : '2025-2026';
+
+        // 1. Midterm Grade
+        await gradesCollection.updateOne(
+          {
+            studentCode: student.studentCode,
+            courseCode: course.code,
+            examType: 'midterm',
+          },
+          {
+            $setOnInsert: {
+              studentId: userId,
+              studentCode: student.studentCode,
+              courseId,
+              courseName: course.name,
+              courseCode: course.code,
+              examType: 'midterm',
+              academicYear: priorAcademicYear,
+              semester: course.semester,
+              createdAt: now,
+            },
+            $set: {
+              grade: midtermGrade,
+              maxGrade: 20,
+              status: 'present',
+              isPublished: true,
+              updatedAt: now,
+            },
+          },
+          { upsert: true },
+        );
+
+        // 2. Final Grade
         await gradesCollection.updateOne(
           {
             studentCode: student.studentCode,
@@ -552,15 +725,15 @@ async function seed() {
               courseName: course.name,
               courseCode: course.code,
               examType: 'final',
-              grade: student.failedCourses.includes(course.code) ? 42 : 72,
-              maxGrade: 100,
-              status: 'present',
-              academicYear: student.academicYear,
-              semester: student.semester,
-              isPublished: true,
+              academicYear: priorAcademicYear,
+              semester: course.semester,
               createdAt: now,
             },
             $set: {
+              grade: finalGrade,
+              maxGrade: 80,
+              status: 'present',
+              isPublished: true,
               updatedAt: now,
             },
           },

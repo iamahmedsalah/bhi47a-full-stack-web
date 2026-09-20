@@ -1,5 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import * as XLSX from 'xlsx';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+import * as ExcelJS from 'exceljs';
+import * as JSZipLib from 'jszip';
+const JSZip = (JSZipLib as any).default || JSZipLib;
 import { AppLoggerService } from '../../core/logger/logger.service';
 import type { Importer } from './importer.interface';
 import { normalizeRowKeys } from './upload-utils';
@@ -13,13 +17,13 @@ import { AcademicEmailImporter } from './importers/academic-email.importer';
 const MAX_UPLOAD_ROWS = 5000;
 
 /**
- * Thin orchestrator that delegates import work to type-specific importers.
+ * Orchestrator for data uploads and data reset / clean operations.
  *
  * Responsibilities:
- * 1. Parse the uploaded Excel/CSV buffer.
+ * 1. Parse Excel (.xlsx) via ExcelJS and CSV buffers securely without xlsx vulnerabilities.
  * 2. Normalize header keys (bilingual).
  * 3. Route to the correct importer based on the `type` parameter.
- * 4. Return a unified result with success/error counts.
+ * 4. Provide data wipe/reset capabilities for admins before fresh imports.
  */
 @Injectable()
 export class UploadsService {
@@ -27,6 +31,7 @@ export class UploadsService {
 
   constructor(
     private readonly logger: AppLoggerService,
+    @InjectConnection() private readonly connection: Connection,
     studentImporter: StudentImporter,
     courseImporter: CourseImporter,
     gradeImporter: GradeImporter,
@@ -56,7 +61,7 @@ export class UploadsService {
       'UploadsService',
     );
 
-    const rows = this.parseWorkbook(fileBuffer);
+    const rows = await this.parseWorkbook(fileBuffer);
     const { validRows, errors: validationErrors } = importer.validate(rows);
     const commitResult = await importer.commit(validRows, adminId);
 
@@ -76,28 +81,466 @@ export class UploadsService {
     };
   }
 
-  private parseWorkbook(fileBuffer: Buffer): Record<string, unknown>[] {
-    const workbook = XLSX.read(fileBuffer, {
-      type: 'buffer',
-      cellFormula: false,
-      cellHTML: false,
-    });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) {
-      throw new BadRequestException(
-        'Uploaded workbook does not contain sheets',
-      );
+  async getWipeSummary() {
+    const db = this.connection.db;
+    if (!db) {
+      throw new BadRequestException('Database connection is not available');
     }
-    const sheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(sheet);
-    if (rawData.length > MAX_UPLOAD_ROWS) {
-      throw new BadRequestException(
-        `Uploaded file exceeds the ${MAX_UPLOAD_ROWS} row limit`,
-      );
+
+    const [
+      studentsCount,
+      gradesCount,
+      attendanceCount,
+      registrationsCount,
+      advisingCasesCount,
+      quizzesCount,
+    ] = await Promise.all([
+      db.collection('users').countDocuments({ role: 'student' }),
+      db.collection('grades').countDocuments({}),
+      db.collection('attendance').countDocuments({}),
+      db.collection('course_registrations').countDocuments({}),
+      db.collection('advising_cases').countDocuments({}),
+      db.collection('course_quizzes').countDocuments({}),
+    ]);
+
+    return {
+      studentsCount,
+      gradesCount,
+      attendanceCount,
+      registrationsCount,
+      advisingCasesCount,
+      quizzesCount,
+    };
+  }
+
+  async wipeData(target: 'students' | 'grades' | 'attendance' | 'all', adminId: string) {
+    const db = this.connection.db;
+    if (!db) {
+      throw new BadRequestException('Database connection is not available');
     }
-    if (rawData.length === 0) {
+
+    this.logger.warn(`Admin ${adminId} initiated data wipe for: ${target}`, 'UploadsService');
+    const result: Record<string, number> = {};
+
+    if (target === 'grades') {
+      const [deletedGrades, deletedQuizzes] = await Promise.all([
+        db.collection('grades').deleteMany({}),
+        db.collection('course_quizzes').deleteMany({}),
+      ]);
+      result.grades = deletedGrades.deletedCount;
+      result.quizzes = deletedQuizzes.deletedCount;
+      return { success: true, target, deletedCounts: result };
+    }
+
+    if (target === 'attendance') {
+      const deletedAttendance = await db.collection('attendance').deleteMany({});
+      result.attendance = deletedAttendance.deletedCount;
+      return { success: true, target, deletedCounts: result };
+    }
+
+    if (target === 'students' || target === 'all') {
+      const students = await db
+        .collection('users')
+        .find({ role: 'student' }, { projection: { _id: 1, studentCode: 1, email: 1 } })
+        .toArray();
+      const studentIds = students.map((s) => s._id);
+      const studentCodes = students.map((s) => s.studentCode).filter(Boolean);
+
+      const advisingCases = await db
+        .collection('advising_cases')
+        .find({ studentId: { $in: studentIds } }, { projection: { _id: 1 } })
+        .toArray();
+      const caseIds = advisingCases.map((c) => c._id);
+
+      const advisingPlans = await db
+        .collection('advising_plans')
+        .find({ studentId: { $in: studentIds } }, { projection: { _id: 1 } })
+        .toArray();
+      const planIds = advisingPlans.map((p) => p._id);
+
+      const [
+        delUsers,
+        delProfiles,
+        delAcademicProfiles,
+        delGrades,
+        delQuizzes,
+        delAttendance,
+        delRegistrations,
+        delCases,
+        delPlans,
+        delGraphs,
+        delNotes,
+        delAuditLogs,
+        delRecommendations,
+        delRequests,
+        delEmails,
+      ] = await Promise.all([
+        db.collection('users').deleteMany({
+          role: 'student',
+          $or: [{ _id: { $in: studentIds } }, { studentCode: { $in: studentCodes } }],
+        }),
+        db.collection('student_profiles').deleteMany({ userId: { $in: studentIds } }),
+        db.collection('student_academic_profiles').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('grades').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('course_quizzes').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('attendance').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('course_registrations').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('advising_cases').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('advising_plans').deleteMany({
+          $or: [{ studentId: { $in: studentIds } }, { _id: { $in: planIds } }],
+        }),
+        db.collection('advising_graphs').deleteMany({ planId: { $in: planIds } }),
+        db.collection('advising_notes').deleteMany({ caseId: { $in: caseIds } }),
+        db.collection('advising_audit_logs').deleteMany({ caseId: { $in: caseIds } }),
+        db.collection('course_recommendations').deleteMany({
+          $or: [{ studentId: { $in: studentIds } }, { caseId: { $in: caseIds } }],
+        }),
+        db.collection('academic_advising_requests').deleteMany({ studentId: { $in: studentIds } }),
+        db.collection('academic_emails').deleteMany({ studentId: { $in: studentIds } }),
+      ]);
+
+      // Cleanup notifications
+      await db.collection('notifications').deleteMany({ targetStudentId: { $in: studentIds } });
+      await db.collection('notifications').updateMany(
+        {},
+        {
+          $pull: {
+            readBy: { userId: { $in: studentIds } },
+            hiddenBy: { userId: { $in: studentIds } },
+          },
+        } as any,
+      );
+
+      result.students = delUsers.deletedCount;
+      result.studentProfiles = delProfiles.deletedCount;
+      result.academicProfiles = delAcademicProfiles.deletedCount;
+      result.grades = delGrades.deletedCount;
+      result.quizzes = delQuizzes.deletedCount;
+      result.attendance = delAttendance.deletedCount;
+      result.registrations = delRegistrations.deletedCount;
+      result.advisingCases = delCases.deletedCount;
+      result.advisingPlans = delPlans.deletedCount;
+      result.academicEmails = delEmails.deletedCount;
+
+      this.logger.log(
+        `Student data wipe completed: ${delUsers.deletedCount} students removed`,
+        'UploadsService',
+      );
+      return { success: true, target, deletedCounts: result };
+    }
+
+    return { success: false, message: 'No action taken' };
+  }
+
+  private decodeXml(str: string): string {
+    return str
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+  }
+
+  private async normalizeZipXml(fileBuffer: Buffer): Promise<Buffer> {
+    try {
+      const zip = await JSZip.loadAsync(fileBuffer);
+      let modified = false;
+
+      const fileNames = Object.keys(zip.files);
+      for (const fileName of fileNames) {
+        const file = zip.files[fileName];
+        if (!file || file.dir) continue;
+
+        const normalizedName = fileName.replace(/\\/g, '/');
+        if (normalizedName.endsWith('.xml') || normalizedName.endsWith('.rels')) {
+          const content = await file.async('string');
+          const stripped = content.replace(/<(\/)?([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)([\s>])/g, '<$1$3$4');
+          if (stripped !== content || normalizedName !== fileName) {
+            if (normalizedName !== fileName) {
+              zip.remove(fileName);
+            }
+            zip.file(normalizedName, stripped);
+            modified = true;
+          }
+        } else if (normalizedName !== fileName) {
+          const data = await file.async('uint8array');
+          zip.remove(fileName);
+          zip.file(normalizedName, data);
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        return await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+      }
+    } catch {
+      // Fall through to original buffer
+    }
+    return fileBuffer;
+  }
+
+  private async parseZipWorksheetFallback(fileBuffer: Buffer): Promise<Record<string, unknown>[]> {
+    const zip = await JSZip.loadAsync(fileBuffer);
+
+    // 1. Shared strings
+    const sharedStrings: string[] = [];
+    const sharedStringsFile =
+      zip.file(/xl\/sharedStrings\.xml$/i)[0] || zip.file(/sharedStrings\.xml$/i)[0];
+    if (sharedStringsFile) {
+      const ssXml = await sharedStringsFile.async('string');
+      const siMatches = ssXml.match(/<si\b[\s\S]*?<\/si>/gi) || [];
+      for (const si of siMatches) {
+        const tMatches = (si.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) || []) as string[];
+        const str = tMatches.map((m: string) => m.replace(/<[^>]+>/g, '')).join('');
+        sharedStrings.push(this.decodeXml(str));
+      }
+    }
+
+    // 2. Worksheet
+    const sheetFiles = Object.keys(zip.files).filter((k) =>
+      /xl\/worksheets\/sheet\d+\.xml$/i.test(k.replace(/\\/g, '/')),
+    );
+    const targetSheetKey =
+      sheetFiles[0] || Object.keys(zip.files).find((k) => /sheet\d+\.xml$/i.test(k));
+    if (!targetSheetKey) {
+      throw new BadRequestException('الملف المرفوع لا يحتوي على صفحات عمل صالحة');
+    }
+
+    const sheetXml = await zip.files[targetSheetKey].async('string');
+    const rowMatches = sheetXml.match(/<row\b[\s\S]*?<\/row>/gi) || [];
+    if (rowMatches.length === 0) {
+      throw new BadRequestException('الملف المرفوع فارغ أو لا يحتوي على صفوف بيانات');
+    }
+
+    const colIndexFromRef = (ref: string): number => {
+      const letters = ref.replace(/[^A-Za-z]/g, '').toUpperCase();
+      let index = 0;
+      for (let i = 0; i < letters.length; i++) {
+        index = index * 26 + (letters.charCodeAt(i) - 64);
+      }
+      return index > 0 ? index - 1 : 0;
+    };
+
+    let headers: string[] = [];
+    const rows: Record<string, unknown>[] = [];
+
+    for (let rIdx = 0; rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS; rIdx++) {
+      const rowXml = rowMatches[rIdx];
+      const cellMatches = rowXml.match(/<c\b[\s\S]*?<\/c>|<c\b[^>]*\/>/gi) || [];
+      const rowValues: string[] = [];
+
+      for (const cellXml of cellMatches) {
+        const rMatch = cellXml.match(/\br="([A-Za-z0-9]+)"/i);
+        const cellRef = rMatch ? rMatch[1] : '';
+        const colIdx = cellRef ? colIndexFromRef(cellRef) : rowValues.length;
+
+        const tMatch = cellXml.match(/\bt="([a-zA-Z0-9]+)"/i);
+        const cellType = tMatch ? tMatch[1] : '';
+
+        let val = '';
+        if (cellType === 's') {
+          const vMatch = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/i);
+          if (vMatch) {
+            const ssIdx = parseInt(vMatch[1].trim(), 10);
+            val = sharedStrings[ssIdx] ?? '';
+          }
+        } else if (cellType === 'inlineStr') {
+          const tMatches = (cellXml.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) || []) as string[];
+          val = this.decodeXml(tMatches.map((m: string) => m.replace(/<[^>]+>/g, '')).join(''));
+        } else {
+          const vMatch = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/i);
+          val = vMatch ? this.decodeXml(vMatch[1].trim()) : '';
+        }
+
+        rowValues[colIdx] = val.trim();
+      }
+
+      if (rIdx === 0) {
+        headers = rowValues.map((v) => (v ? v.trim() : ''));
+      } else {
+        const rowData: Record<string, unknown> = {};
+        let hasData = false;
+        headers.forEach((header, index) => {
+          if (!header) return;
+          const cellVal = rowValues[index] ?? '';
+          if (cellVal !== '') {
+            hasData = true;
+            rowData[header] = cellVal;
+          } else {
+            rowData[header] = '';
+          }
+        });
+        if (hasData) {
+          rows.push(normalizeRowKeys(rowData));
+        }
+      }
+    }
+
+    if (rows.length === 0) {
+      throw new BadRequestException('الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة');
+    }
+
+    return rows;
+  }
+
+  private parseXmlSpreadsheet(xmlText: string): Record<string, unknown>[] {
+    const rowMatches = xmlText.match(/<Row\b[\s\S]*?<\/Row>/gi) || [];
+    if (rowMatches.length === 0) {
+      throw new BadRequestException('الملف المرفوع فارغ أو غير صالح');
+    }
+
+    let headers: string[] = [];
+    const rows: Record<string, unknown>[] = [];
+
+    for (let rIdx = 0; rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS; rIdx++) {
+      const rowXml = rowMatches[rIdx];
+      const cellMatches = rowXml.match(/<Cell\b[\s\S]*?<\/Cell>|<Cell\b[^>]*\/>/gi) || [];
+      const rowValues = cellMatches.map((cellXml) => {
+        const dataMatch = cellXml.match(/<Data\b[^>]*>([\s\S]*?)<\/Data>/i);
+        return dataMatch ? this.decodeXml(dataMatch[1].trim()) : '';
+      });
+
+      if (rIdx === 0) {
+        headers = rowValues.map((v) => v.trim());
+      } else {
+        const rowData: Record<string, unknown> = {};
+        let hasData = false;
+        headers.forEach((header, index) => {
+          if (!header) return;
+          const cellVal = rowValues[index] ?? '';
+          if (cellVal !== '') {
+            hasData = true;
+            rowData[header] = cellVal;
+          } else {
+            rowData[header] = '';
+          }
+        });
+        if (hasData) {
+          rows.push(normalizeRowKeys(rowData));
+        }
+      }
+    }
+
+    if (rows.length === 0) {
+      throw new BadRequestException('الملف المرفوع فارغ أو غير صالح');
+    }
+
+    return rows;
+  }
+
+  private async parseWorkbook(fileBuffer: Buffer): Promise<Record<string, unknown>[]> {
+    const isZipArchive =
+      fileBuffer.length >= 2 && fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b; // 'PK'
+
+    // 1. Binary Excel (.xlsx)
+    if (isZipArchive) {
+      const cleanBuffer = await this.normalizeZipXml(fileBuffer);
+      try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(cleanBuffer as any);
+        const worksheet = workbook.worksheets[0];
+        if (worksheet && worksheet.rowCount > 0) {
+          const rows: Record<string, unknown>[] = [];
+          let headers: string[] = [];
+
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) {
+              const values = row.values as (string | number | undefined)[];
+              headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
+                v !== null && v !== undefined ? String(v).trim() : '',
+              );
+              return;
+            }
+
+            if (rows.length >= MAX_UPLOAD_ROWS) return;
+
+            const values = row.values as (string | number | boolean | Date | undefined)[];
+            if (!Array.isArray(values)) return;
+
+            const rowData: Record<string, unknown> = {};
+            let hasData = false;
+
+            headers.forEach((header, index) => {
+              if (!header) return;
+              const cellVal = values[index + 1];
+              if (cellVal !== null && cellVal !== undefined && String(cellVal).trim() !== '') {
+                hasData = true;
+                if (cellVal instanceof Date) {
+                  rowData[header] = cellVal.toISOString().split('T')[0];
+                } else if (
+                  typeof cellVal === 'object' &&
+                  cellVal !== null &&
+                  'text' in (cellVal as any)
+                ) {
+                  rowData[header] = String((cellVal as any).text).trim();
+                } else {
+                  rowData[header] = typeof cellVal === 'string' ? cellVal.trim() : cellVal;
+                }
+              } else {
+                rowData[header] = '';
+              }
+            });
+
+            if (hasData) {
+              rows.push(normalizeRowKeys(rowData));
+            }
+          });
+
+          if (rows.length > 0) {
+            return rows;
+          }
+        }
+      } catch (excelError: any) {
+        this.logger.warn(
+          `ExcelJS load failed (${excelError?.message || excelError}), falling back to raw zip worksheet parser`,
+          'UploadsService',
+        );
+      }
+
+      // Fallback: parse raw zip worksheet directly
+      return await this.parseZipWorksheetFallback(fileBuffer);
+    }
+
+    // 2. XML Spreadsheet 2003 format
+    const text = fileBuffer.toString('utf-8');
+    if (text.includes('<Workbook') || text.includes('<?xml')) {
+      return this.parseXmlSpreadsheet(text);
+    }
+
+    // 3. Plain text CSV / TSV
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) {
+      throw new BadRequestException('الملف المرفوع فارغ أو غير صالح');
+    }
+
+    const headers = lines[0]
+      .split(/[,;\t]/)
+      .map((h) => h.trim().replace(/^["']|["']$/g, ''));
+
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 1; i < lines.length && rows.length < MAX_UPLOAD_ROWS; i++) {
+      const line = lines[i];
+      const cells = line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, ''));
+      if (cells.some((c) => c.length > 0)) {
+        const rowData: Record<string, unknown> = {};
+        headers.forEach((header, index) => {
+          if (header) {
+            rowData[header] = cells[index] ?? '';
+          }
+        });
+        rows.push(normalizeRowKeys(rowData));
+      }
+    }
+
+    if (rows.length === 0) {
       throw new BadRequestException('الملف المرفوع فارغ');
     }
-    return rawData.map((r) => normalizeRowKeys(r as Record<string, unknown>));
+
+    return rows;
   }
 }

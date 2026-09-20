@@ -7,7 +7,6 @@ import {
   Controls,
   Handle,
   MarkerType,
-  MiniMap,
   Panel,
   Position,
   ReactFlow,
@@ -46,6 +45,7 @@ export interface CourseGradeSummary {
   percentage: number;
   hasFinal: boolean;
   gradePoints?: number;
+  letterGrade?: string;
   exams: Array<{
     examType: string;
     grade: number;
@@ -263,12 +263,12 @@ const CourseNode = memo(function CourseNode({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-mono text-xs font-black tracking-wide text-primary-light">
+              <span className="font-mono text-sm font-black tracking-wide text-primary-light">
                 {course.code}
               </span>
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border border-current/15 bg-black/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                  "inline-flex items-center gap-1 rounded-full border border-current/20 bg-black/25 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide",
                   style.text,
                 )}
               >
@@ -276,7 +276,7 @@ const CourseNode = memo(function CourseNode({
                 {statusLabel}
               </span>
             </div>
-            <p className="mt-2 line-clamp-2 text-xs font-bold leading-5 text-foreground">
+            <p className="mt-2 line-clamp-2 text-xs font-black leading-snug text-foreground drop-shadow-xs">
               {title}
             </p>
           </div>
@@ -284,7 +284,7 @@ const CourseNode = memo(function CourseNode({
             <button
               type="button"
               className={cn(
-                "nodrag nopan grid h-8 w-8 shrink-0 place-items-center rounded-squircle border transition",
+                "nodrag nopan grid h-8 w-8 shrink-0 place-items-center rounded-squircle border transition-all cursor-pointer",
                 selectedForPlan
                   ? "border-sky-400/50 bg-sky-400/20 text-sky-100 hover:bg-sky-400/30"
                   : "border-white/15 bg-white/5 text-muted-foreground hover:border-primary/60 hover:text-primary-light",
@@ -326,17 +326,17 @@ const CourseNode = memo(function CourseNode({
             </div>
           ) : null}
         </div>
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[10px] text-muted-foreground">
-          <span>{course.creditHours ?? 0} {isEnglish ? "credits" : "ساعات"}</span>
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[11px] font-bold text-muted-foreground">
+          <span className="font-bold text-foreground/80">{course.creditHours ?? 0} {isEnglish ? "credits" : "ساعات"}</span>
           {course.gradeSummary?.percentage != null ? (
-            <strong className={style.text}>{course.gradeSummary.percentage}%</strong>
+            <strong className={cn("font-mono font-black text-xs", style.text)}>{course.gradeSummary.percentage}%</strong>
           ) : course.prerequisites?.length ? (
-            <span className="inline-flex max-w-[165px] items-center gap-1 truncate">
-              <GitBranch className="h-3 w-3 shrink-0" />
+            <span className="inline-flex max-w-[165px] items-center gap-1 truncate font-semibold text-foreground/75">
+              <GitBranch className="h-3 w-3 shrink-0 text-primary" />
               {course.prerequisites.join(", ")}
             </span>
           ) : (
-            <span>{isEnglish ? "No prerequisites" : "بلا متطلبات"}</span>
+            <span className="text-foreground/60 font-medium">{isEnglish ? "No prerequisites" : "بلا متطلبات"}</span>
           )}
         </div>
       </div>
@@ -354,8 +354,8 @@ const TermNode = memo(function TermNode({ data }: NodeProps<TermFlowNode>) {
     <div
       dir={data.isEnglish ? "ltr" : "rtl"}
       className={cn(
-        "relative flex h-12 w-[276px] items-center justify-between rounded-squircle border border-white/10 bg-secondary/50 px-4 text-start shadow-lg backdrop-blur",
-        data.current && "border-primary/50 bg-primary/15",
+        "relative flex h-12 w-[276px] items-center justify-between rounded-xl border border-white/15 bg-card/80 px-4 text-start shadow-lg backdrop-blur",
+        data.current && "border-primary/60 bg-primary/20 ring-1 ring-primary/40",
       )}
     >
       <Handle
@@ -363,10 +363,10 @@ const TermNode = memo(function TermNode({ data }: NodeProps<TermFlowNode>) {
         position={Position.Top}
         className="!h-2 !w-2 !border-2 !border-background !bg-primary"
       />
-      <span className="text-xs font-black uppercase tracking-wide text-foreground">
+      <span className="text-xs font-black uppercase tracking-wider text-foreground">
         {data.label}
       </span>
-      <span className="rounded-full bg-black/20 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+      <span className="rounded-md bg-black/30 px-2 py-0.5 font-mono text-xs font-bold text-foreground">
         {data.courseCount}
       </span>
     </div>
@@ -375,7 +375,7 @@ const TermNode = memo(function TermNode({ data }: NodeProps<TermFlowNode>) {
 
 const LevelNode = memo(function LevelNode({ data }: NodeProps<LevelFlowNode>) {
   return (
-    <div className="relative grid h-11 w-40 place-items-center rounded-squircle border border-primary/50 bg-primary px-5 text-xs font-black text-primary-foreground shadow-[0_10px_35px_rgba(14,165,233,0.25)]">
+    <div className="relative grid h-11 w-44 place-items-center rounded-xl border-2 border-primary bg-primary px-5 text-xs font-black text-primary-foreground shadow-[0_10px_35px_rgba(14,165,233,0.35)] tracking-wider uppercase">
       {data.label}
       <Handle
         type="source"
@@ -426,11 +426,6 @@ export function CourseMapFlow({
     () => new Set(failedCodes.map(normalizeCode)),
     [failedCodes],
   );
-  const selectable = useMemo(
-    () => new Set(selectableCodes.map(normalizeCode)),
-    [selectableCodes],
-  );
-
   const normalizedCourses = useMemo(
     () =>
       courses
@@ -438,6 +433,21 @@ export function CourseMapFlow({
         .map((course) => ({ ...course, code: normalizeCode(course.code) })),
     [courses],
   );
+
+  const selectable = useMemo(() => {
+    const set = new Set(selectableCodes.map(normalizeCode));
+    normalizedCourses.forEach((course) => {
+      const isPassed = completed.has(course.code);
+      if (!isPassed || course.progressStatus === 'low_grade') {
+        const prereqs = (course.prerequisites ?? []).map(normalizeCode);
+        const prereqsMet = prereqs.every((p) => completed.has(p));
+        if (prereqsMet && (failed.has(course.code) || course.progressStatus === 'failed')) {
+          set.add(course.code);
+        }
+      }
+    });
+    return set;
+  }, [selectableCodes, normalizedCourses, completed, failed]);
 
   const statusByCode = useMemo(
     () =>
@@ -732,53 +742,56 @@ export function CourseMapFlow({
             <Metric label={isEnglish ? "Total" : "الإجمالي"} value={stats.total} />
           </div>
         </div>
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-xs">
-            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {/* Unified Search Input on Same Line */}
+          <div className="relative w-48 sm:w-56 shrink-0">
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={isEnglish ? "Find a course or code" : "ابحث باسم المقرر أو الكود"}
-              className="h-10 w-full rounded-squircle border border-white/10 bg-background/60 ps-9 pe-9 text-start text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+              placeholder={isEnglish ? "Find course or code..." : "ابحث باسم المقرر أو الكود..."}
+              className="h-8 w-full rounded-lg border border-white/15 bg-background/60 ps-8 pe-7 text-start text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary/60 focus:ring-1 focus:ring-primary/30 font-medium"
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="absolute end-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-squircle text-muted-foreground hover:text-foreground"
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 grid h-5 w-5 place-items-center text-muted-foreground hover:text-foreground cursor-pointer"
                 aria-label={isEnglish ? "Clear search" : "مسح البحث"}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={isEnglish ? "Filter courses" : "تصفية المقررات"}>
-            <div className="w-36">
-              <CustomDropdown
-                value={levelView}
-                onValueChange={setLevelView}
-                ariaLabel={isEnglish ? "Filter by level" : "تصفية حسب المستوى"}
-                className="h-8 border-white/10 bg-background/70 text-[10px] font-bold"
-                options={[
-                  { value: "all", label: isEnglish ? "All levels" : "كل المستويات" },
-                  ...[...new Set(normalizedCourses.map((course) => course.academicLevel ?? course.level ?? "1"))]
-                    .sort((a, b) => Number(a) - Number(b))
-                    .map((level) => ({ value: level, label: isEnglish ? `Level ${level}` : `المستوى ${level}` })),
-                ]}
-              />
-            </div>
-            <div className="w-40">
-              <CustomDropdown
-                value={semesterView}
-                onValueChange={setSemesterView}
-                ariaLabel={isEnglish ? "Filter by semester" : "تصفية حسب الفصل"}
-                className="h-8 border-white/10 bg-background/70 text-[10px] font-bold"
-                options={[
-                  { value: "all", label: isEnglish ? "All semesters" : "كل الفصول" },
-                  ...SEMESTERS.map((semester) => ({ value: semester, label: getSemesterLabel(semester, isEnglish) })),
-                ]}
-              />
-            </div>
+
+          <div className="w-32 shrink-0">
+            <CustomDropdown
+              value={levelView}
+              onValueChange={setLevelView}
+              ariaLabel={isEnglish ? "Filter by level" : "تصفية حسب المستوى"}
+              className="h-8 border-white/15 bg-background/70 text-xs font-semibold"
+              options={[
+                { value: "all", label: isEnglish ? "All levels" : "كل المستويات" },
+                ...[...new Set(normalizedCourses.map((course) => course.academicLevel ?? course.level ?? "1"))]
+                  .sort((a, b) => Number(a) - Number(b))
+                  .map((level) => ({ value: level, label: isEnglish ? `Level ${level}` : `المستوى ${level}` })),
+              ]}
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <CustomDropdown
+              value={semesterView}
+              onValueChange={setSemesterView}
+              ariaLabel={isEnglish ? "Filter by semester" : "تصفية حسب الفصل"}
+              className="h-8 border-white/15 bg-background/70 text-xs font-semibold"
+              options={[
+                { value: "all", label: isEnglish ? "All semesters" : "كل الفصول" },
+                ...SEMESTERS.map((semester) => ({ value: semester, label: getSemesterLabel(semester, isEnglish) })),
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label={isEnglish ? "Filter courses" : "تصفية المقررات"}>
             {filters.map((item) => (
               <button
                 key={item.value}
@@ -786,7 +799,7 @@ export function CourseMapFlow({
                 onClick={() => setFilter(item.value)}
                 aria-pressed={filter === item.value}
                 className={cn(
-                  "rounded-squircle border px-3 py-2 text-[10px] font-bold transition",
+                  "h-8 rounded-lg border px-3 text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap",
                   filter === item.value
                     ? "border-primary/60 bg-primary/20 text-primary-light"
                     : "border-white/10 bg-white/5 text-muted-foreground hover:border-white/20 hover:text-foreground",
@@ -815,21 +828,11 @@ export function CourseMapFlow({
             nodesConnectable={false}
             elementsSelectable
             colorMode="dark"
+            proOptions={{ hideAttribution: true }}
             aria-label={isEnglish ? "Interactive student course prerequisite map" : "خريطة متطلبات مقررات الطالب التفاعلية"}
           >
             <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="rgba(148, 163, 184, 0.16)" />
             <Controls position={isEnglish ? "bottom-left" : "bottom-right"} showInteractive={false} />
-            <MiniMap
-              position={isEnglish ? "bottom-right" : "bottom-left"}
-              pannable
-              zoomable
-              maskColor="rgba(8, 28, 36, 0.76)"
-              nodeColor={(node) => {
-                if (node.type === "term") return "#365766";
-                const status = (node.data as CourseNodeData).status;
-                return STATUS_STYLES[status].dot;
-              }}
-            />
             <Panel position={isEnglish ? "top-right" : "top-left"} className="!m-3">
               <div className="hidden rounded-squircle border border-white/10 bg-background/90 p-2 text-[9px] text-muted-foreground shadow-xl backdrop-blur md:flex md:flex-wrap md:gap-2">
                 {(["passed", "planned", "recommended", "failed", "not_taken"] as CourseProgressStatus[]).map((status) => (
@@ -854,45 +857,117 @@ export function CourseMapFlow({
         )}
 
         {focusedCourse ? (
-          <aside className="absolute inset-x-3 bottom-3 z-10 rounded-squircle border border-primary/25 bg-card/95 p-3 text-start shadow-2xl backdrop-blur sm:inset-x-auto sm:end-3 sm:w-[330px]">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-mono text-xs font-black text-primary-light">{focusedCourse.code}</p>
-                <p className="mt-1 text-xs font-bold leading-5 text-foreground">{getCourseTitle(focusedCourse, isEnglish)}</p>
+          <aside className="absolute inset-x-3 bottom-3 z-20 rounded-xl border border-primary/30 bg-card/95 p-4 text-start shadow-2xl backdrop-blur-md sm:inset-x-auto sm:end-4 sm:w-[350px]">
+            {/* Header: Code Pill, Status Pill, Close Button */}
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-xs font-black text-primary-light bg-primary/15 border border-primary/25 px-2.5 py-1 rounded-md shrink-0">
+                  {focusedCourse.code}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold border shrink-0",
+                    STATUS_STYLES[statusByCode.get(focusedCourse.code) ?? "not_taken"].bg,
+                    STATUS_STYLES[statusByCode.get(focusedCourse.code) ?? "not_taken"].border,
+                    STATUS_STYLES[statusByCode.get(focusedCourse.code) ?? "not_taken"].text,
+                  )}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: STATUS_STYLES[statusByCode.get(focusedCourse.code) ?? "not_taken"].dot }}
+                  />
+                  {getStatusLabel(statusByCode.get(focusedCourse.code) ?? "not_taken", isEnglish)}
+                </span>
               </div>
-              <button type="button" onClick={() => setFocusedCourseCode(undefined)} className="grid h-7 w-7 shrink-0 place-items-center rounded-squircle text-muted-foreground hover:bg-white/10 hover:text-foreground" aria-label={isEnglish ? "Close course details" : "إغلاق تفاصيل المقرر"}>
+              <button
+                type="button"
+                onClick={() => setFocusedCourseCode(undefined)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-white/10 hover:text-foreground transition"
+                aria-label={isEnglish ? "Close course details" : "إغلاق تفاصيل المقرر"}
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-              <span className="rounded-squircle bg-black/15 px-2 py-1">{focusedCourse.creditHours ?? 0} {isEnglish ? "credits" : "ساعات"}</span>
-              <span className="rounded-squircle bg-black/15 px-2 py-1">{getStatusLabel(statusByCode.get(focusedCourse.code) ?? "not_taken", isEnglish)}</span>
-              {focusedCourse.prerequisites?.length ? (
-                <span className="rounded-squircle bg-black/15 px-2 py-1">{isEnglish ? "Requires" : "يتطلب"}: {focusedCourse.prerequisites.join(", ")}</span>
-              ) : null}
+
+            {/* Course Title */}
+            <h4 className="mt-3 text-sm font-bold text-foreground leading-snug">
+              {getCourseTitle(focusedCourse, isEnglish)}
+            </h4>
+
+            {/* Simple Grid: Credits & Prerequisites */}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
+                <span className="text-[10px] font-medium text-muted-foreground block">
+                  {isEnglish ? "Credit Hours" : "الساعات المعتمدة"}
+                </span>
+                <span className="font-bold text-foreground">
+                  {focusedCourse.creditHours ?? 0} {isEnglish ? "Credits" : "ساعات"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
+                <span className="text-[10px] font-medium text-muted-foreground block">
+                  {isEnglish ? "Prerequisites" : "المتطلب السابق"}
+                </span>
+                <span className="font-bold text-foreground truncate block" title={focusedCourse.prerequisites?.join(", ") || (isEnglish ? "None" : "لا يوجد")}>
+                  {focusedCourse.prerequisites?.length ? focusedCourse.prerequisites.join(", ") : (isEnglish ? "None" : "لا يوجد")}
+                </span>
+              </div>
             </div>
+
+            {/* Grade Breakdown Grid if available */}
             {focusedCourse.gradeSummary ? (
-              <div className="mt-3 rounded-squircle border border-white/10 bg-black/15 p-3">
-                <div className="mb-2 flex items-center justify-between text-[10px]">
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-2.5 space-y-2">
+                <div className="flex items-center justify-between text-xs pb-1.5 border-b border-white/10">
                   <span className="font-bold text-muted-foreground">
-                    {isEnglish ? "Published grade details" : "تفاصيل الدرجات المنشورة"}
+                    {isEnglish ? "Published Grade" : "الدرجة المنشورة"}
                   </span>
-                  <strong className="text-primary-light">
-                    {focusedCourse.gradeSummary.percentage}% · GPA {focusedCourse.gradeSummary.gradePoints?.toFixed(2) ?? "0.00"}
-                  </strong>
+                  <span className="font-mono font-black text-primary-light">
+                    {focusedCourse.gradeSummary.percentage}% {focusedCourse.gradeSummary.letterGrade ? `· ${focusedCourse.gradeSummary.letterGrade}` : ""}
+                    {typeof focusedCourse.gradeSummary.gradePoints === "number" ? ` (GPA ${focusedCourse.gradeSummary.gradePoints.toFixed(2)})` : ""}
+                  </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {focusedCourse.gradeSummary.exams.map((exam) => (
-                    <div key={exam.examType} className="flex items-center justify-between rounded-lg bg-white/5 px-2 py-1.5 text-[10px]">
-                      <span className="capitalize">{exam.examType} · {exam.status}</span>
-                      <strong className="font-mono">{exam.grade} / {exam.maxGrade}</strong>
+                    <div key={exam.examType} className="rounded border border-white/5 bg-white/[0.03] p-1.5">
+                      <div className="text-[10px] text-muted-foreground capitalize font-medium">{exam.examType}</div>
+                      <div className="font-mono text-xs font-bold text-foreground">{exam.grade} <span className="text-[10px] text-muted-foreground">/ {exam.maxGrade}</span></div>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between border-t border-white/10 pt-2 text-[10px]">
-                    <span>{isEnglish ? "Total" : "الإجمالي"}</span>
-                    <strong className="font-mono">{focusedCourse.gradeSummary.totalGrade} / {focusedCourse.gradeSummary.totalMaxGrade}</strong>
-                  </div>
                 </div>
+                <div className="flex items-center justify-between pt-1 text-xs border-t border-white/10">
+                  <span className="font-medium text-muted-foreground">{isEnglish ? "Total Score" : "المجموع الكلي"}</span>
+                  <span className="font-mono font-black text-foreground">
+                    {focusedCourse.gradeSummary.totalGrade} / {focusedCourse.gradeSummary.totalMaxGrade}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Action button: Add / Remove from Plan */}
+            {!readonly && onToggleCourse && (selectable.has(focusedCourse.code) || selected.has(focusedCourse.code)) ? (
+              <div className="mt-3 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => onToggleCourse(focusedCourse.code)}
+                  className={cn(
+                    "w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm",
+                    selected.has(focusedCourse.code)
+                      ? "bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  )}
+                >
+                  {selected.has(focusedCourse.code) ? (
+                    <>
+                      <Minus className="h-3.5 w-3.5" />
+                      {isEnglish ? "Remove from Plan" : "إزالة من الخطة"}
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5" />
+                      {isEnglish ? "Add to Plan" : "إضافة إلى الخطة"}
+                    </>
+                  )}
+                </button>
               </div>
             ) : null}
           </aside>

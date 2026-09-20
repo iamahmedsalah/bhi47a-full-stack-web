@@ -38,6 +38,14 @@ export class StudentsController {
     return this.studentsService.findAll(query);
   }
 
+  @Get('admin/students-stats')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @ApiOperation({ summary: 'Get student count statistics (admin/staff)' })
+  async getStats() {
+    return this.studentsService.getStats();
+  }
+
   @Get('admin/students/:id')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)

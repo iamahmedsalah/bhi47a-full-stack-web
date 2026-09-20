@@ -52,8 +52,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isLoggingOut: false,
-  login: async () => {},
-  logout: async () => {},
+  login: async () => { },
+  logout: async () => { },
 });
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -85,8 +85,8 @@ export function AuthProvider({
       type === 'student'
         ? '/auth/student/login'
         : type === 'admin'
-        ? '/auth/admin/login'
-        : '/auth/google/login';
+          ? '/auth/admin/login'
+          : '/auth/google/login';
     const toastId = toast.loading(
       locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing you in...',
     );

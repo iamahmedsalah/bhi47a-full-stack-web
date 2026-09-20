@@ -79,9 +79,48 @@ export async function deleteGpaRule(id: string): Promise<{ message: string }> {
   return response.data;
 }
 
+export interface AcademicYearGroup {
+  academicYear: string;
+  isCurrent: boolean;
+  terms: RegistrationTermItem[];
+  registrationCount: number;
+  advisingCaseCount: number;
+}
+
 export async function listRegistrationTerms(): Promise<RegistrationTermItem[]> {
   const response = await api.get<RegistrationTermItem[]>(
     "/admin/registration-terms",
+  );
+  return response.data;
+}
+
+export async function listAcademicYears(): Promise<AcademicYearGroup[]> {
+  const response = await api.get<AcademicYearGroup[]>('/admin/academic-years');
+  return response.data;
+}
+
+export async function createAcademicYear(dto: {
+  academicYear: string;
+  makeCurrent?: boolean;
+}): Promise<AcademicYearGroup[]> {
+  const response = await api.post<AcademicYearGroup[]>('/admin/academic-years', dto);
+  return response.data;
+}
+
+export async function setCurrentAcademicYear(
+  academicYear: string,
+): Promise<AcademicYearGroup[]> {
+  const response = await api.patch<AcademicYearGroup[]>(
+    `/admin/academic-years/${academicYear}/current`,
+  );
+  return response.data;
+}
+
+export async function deleteAcademicYear(
+  academicYear: string,
+): Promise<{ deleted: boolean; academicYear: string }> {
+  const response = await api.delete<{ deleted: boolean; academicYear: string }>(
+    `/admin/academic-years/${academicYear}`,
   );
   return response.data;
 }

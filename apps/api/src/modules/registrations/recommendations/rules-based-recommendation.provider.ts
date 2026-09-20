@@ -25,6 +25,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     const failed = normalize(context.failedCourses);
     const inProgress = normalize(context.inProgressCourses);
     const unlockCounts = this.buildUnlockCounts(context.courses);
+    const courseByCode = new Map(context.courses.map((c) => [codeOf(c), c]));
 
     const evaluated = context.courses
       .filter((course) => course.isActive)
@@ -39,19 +40,62 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         ),
       )
       .sort((left, right) => {
-        // Eligible failed courses are always the first re-registration choices.
+        // 1. Eligible failed courses that unlock/block future courses are the absolute first priority!
+        const leftFailedUnlock =
+          failed.has(left.courseCode) &&
+          left.eligible &&
+          (unlockCounts.get(left.courseCode) ?? 0) > 0
+            ? 1
+            : 0;
+        const rightFailedUnlock =
+          failed.has(right.courseCode) &&
+          right.eligible &&
+          (unlockCounts.get(right.courseCode) ?? 0) > 0
+            ? 1
+            : 0;
+        if (leftFailedUnlock !== rightFailedUnlock)
+          return rightFailedUnlock - leftFailedUnlock;
+
+        // 2. If both are failed unlocking courses, sort by higher unlock count
+        if (leftFailedUnlock && rightFailedUnlock) {
+          const leftCount = unlockCounts.get(left.courseCode) ?? 0;
+          const rightCount = unlockCounts.get(right.courseCode) ?? 0;
+          if (leftCount !== rightCount) return rightCount - leftCount;
+        }
+
+        // 3. Other eligible failed courses
         const leftFailed = failed.has(left.courseCode) && left.eligible ? 1 : 0;
         const rightFailed =
           failed.has(right.courseCode) && right.eligible ? 1 : 0;
         if (leftFailed !== rightFailed) return rightFailed - leftFailed;
 
-        // Keep every academically eligible course ahead of blocked records.
+        // 4. Keep every academically eligible course ahead of blocked records.
         if (left.eligible !== right.eligible) return left.eligible ? -1 : 1;
 
-        // 2. High score first
+        // 5. Available courses in the student's current academic year (level) AND semester!
+        const leftCourse = courseByCode.get(left.courseCode);
+        const rightCourse = courseByCode.get(right.courseCode);
+        const leftSameYearSem =
+          left.eligible &&
+          leftCourse &&
+          (leftCourse.academicLevel ?? leftCourse.level) === context.academicLevel &&
+          isCourseOfferedForTerm(leftCourse, context.semester)
+            ? 1
+            : 0;
+        const rightSameYearSem =
+          right.eligible &&
+          rightCourse &&
+          (rightCourse.academicLevel ?? rightCourse.level) === context.academicLevel &&
+          isCourseOfferedForTerm(rightCourse, context.semester)
+            ? 1
+            : 0;
+        if (leftSameYearSem !== rightSameYearSem)
+          return rightSameYearSem - leftSameYearSem;
+
+        // 6. High score first
         if (right.score !== left.score) return right.score - left.score;
 
-        // 3. Alphabetical tie-breaker
+        // 7. Alphabetical tie-breaker
         return left.courseCode.localeCompare(right.courseCode);
       });
 
@@ -190,7 +234,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     }
 
     const eligible =
-      offered &&
+      (offered || previouslyFailed) &&
       !alreadyPassed &&
       !alreadyInProgress &&
       missingOnlyCompleted.length === 0;
@@ -206,7 +250,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
           : 'LOW';
 
     const category: RecommendationCategory = previouslyFailed
-      ? missingOnlyCompleted.length > 0
+      ? unlockCount > 0
         ? 'FAILED_PREREQUISITE'
         : 'FAILED_COURSE'
       : required && currentLevel
@@ -223,7 +267,9 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         : `${courseCode} — ${courseNameEn ?? courseName}`;
 
     const explanation = previouslyFailed
-      ? `Priority #1: ${nameDisplay} was previously failed and must be retaken first for graduation.`
+      ? unlockCount > 0
+        ? `Priority #1 (Critical Blocker): ${nameDisplay} was previously failed and blocks ${unlockCount} upcoming course${unlockCount > 1 ? 's' : ''}! Must be retaken to unblock future registrations.`
+        : `Priority #1: ${nameDisplay} was previously failed and must be retaken first for graduation.`
       : required
         ? `${nameDisplay} is a required course for level ${course.academicLevel ?? course.level}.`
         : `${nameDisplay} is an elective course fitting the student plan.`;

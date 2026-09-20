@@ -27,6 +27,7 @@ COPY apps/api ./apps/api
 # Build dependencies and target app
 RUN pnpm --filter @student-portal/shared run build
 RUN pnpm --filter @student-portal/api run build
+RUN cp -r apps/api/src/database/*.json apps/api/dist/database/ 2>/dev/null || true
 
 # Deploy only the api package with production dependencies to a separate folder
 RUN pnpm --filter @student-portal/api deploy --prod --legacy /app/pruned

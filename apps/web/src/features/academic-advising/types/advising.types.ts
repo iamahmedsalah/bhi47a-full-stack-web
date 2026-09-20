@@ -104,6 +104,8 @@ export interface AdvisingCourse {
   code: string;
   nameAr: string;
   nameEn: string;
+  academicLevel?: string;
+  level?: string;
   creditHours?: number;
   prerequisites?: string[];
   offeredTerms?: string[];

@@ -53,7 +53,7 @@ export function StatusBadge({
     <Component
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-7 items-center rounded-squircle border px-2.5 py-1 text-xs font-semibold transition-all',
+        'inline-flex min-h-7 items-center rounded-squircle border px-2.5 py-1 text-xs font-semibold whitespace-nowrap shrink-0 transition-all',
         variantStyles[variant],
         onClick && 'cursor-pointer hover:opacity-80',
         className,

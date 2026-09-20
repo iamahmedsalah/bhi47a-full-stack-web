@@ -126,13 +126,6 @@ interface SystemSettings {
   updatedAt?: string;
 }
 
-interface AssignableStaff {
-  _id: string;
-  name: string;
-  email?: string;
-  role: 'admin' | 'staff';
-}
-
 const statusLabels: Record<ComplaintStatus, string> = {
   open: 'قيد الانتظار',
   in_review: 'قيد المراجعة',
@@ -313,7 +306,7 @@ function AdminComplaintsContent() {
     }
   }, [ticketParam, setAdminFilter]);
 
-  const [selectedTicket, setSelectedTicket] = useState<Complaint | null>(null);
+  const [selectedTicketOverride, setSelectedTicketOverride] = useState<Complaint | null | 'CLOSED'>('CLOSED');
   const [replyMessage, setReplyMessage] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [drawerLoading, setDrawerLoading] = useState(false);
@@ -363,14 +356,30 @@ function AdminComplaintsContent() {
   const settings = settingsQuery.data ?? null;
   const assignees = assigneesQuery.data ?? [];
 
-  React.useEffect(() => {
-    if (ticketParam && complaints.length > 0) {
-      const match = complaints.find((c) => c.ticketNumber === ticketParam);
-      if (match) {
-        setSelectedTicket(match);
-      }
+  const selectedTicket = useMemo(() => {
+    if (selectedTicketOverride === 'CLOSED') {
+      return null;
     }
-  }, [ticketParam, complaints]);
+    if (selectedTicketOverride) {
+      return selectedTicketOverride;
+    }
+    if (ticketParam && complaints.length > 0) {
+      return complaints.find((c) => c.ticketNumber === ticketParam) ?? null;
+    }
+    return null;
+  }, [selectedTicketOverride, ticketParam, complaints]);
+
+  const setSelectedTicket = (ticket: Complaint | null | ((prev: Complaint | null) => Complaint | null)) => {
+    if (typeof ticket === 'function') {
+      setSelectedTicketOverride((prev) => {
+        const current = prev === 'CLOSED' ? null : prev;
+        const next = ticket(current);
+        return next ?? 'CLOSED';
+      });
+    } else {
+      setSelectedTicketOverride(ticket ?? 'CLOSED');
+    }
+  };
 
   const stats = useMemo(() => {
     const allTickets = statsQuery.data ?? [];
@@ -396,7 +405,7 @@ function AdminComplaintsContent() {
       high: allTickets.filter((ticket) => ticket.priority === 'high' || ticket.priority === 'urgent').length,
       avgResolution: avgHours ? (locale === 'ar' ? `${avgHours} ساعة` : `${avgHours} hours`) : (locale === 'ar' ? 'غير متاح' : 'N/A'),
     };
-  }, [statsQuery.data]);
+  }, [statsQuery.data, locale]);
 
   const updateCachesAfterTicket = (ticket: Complaint) => {
     setSelectedTicket((current) => (current?._id === ticket._id ? ticket : current));
@@ -553,6 +562,14 @@ function AdminComplaintsContent() {
               className="gap-2 cursor-pointer rounded-squircle border border-border bg-card text-foreground/70 hover:border-primary/30 hover:bg-accent/10 hover:text-foreground transition-all duration-300 h-10 px-4"
             >
               {isAr ? 'تصدير Excel' : 'Export Excel'}
+              <FileSpreadsheet className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportCsv}
+              className="gap-2 cursor-pointer rounded-squircle border border-border bg-card text-foreground/70 hover:border-primary/30 hover:bg-accent/10 hover:text-foreground transition-all duration-300 h-10 px-4"
+            >
+              {isAr ? 'تصدير CSV' : 'Export CSV'}
               <FileSpreadsheet className="h-4 w-4" />
             </Button>
             <Button
@@ -828,7 +845,7 @@ function AdminComplaintsContent() {
                     setSelectedTicketIds([]);
                     void queryClient.invalidateQueries({ queryKey: complaintKeys.adminLists() });
                     void queryClient.invalidateQueries({ queryKey: complaintKeys.stats() });
-                  } catch (err) {
+                  } catch {
                     toast.error(isAr ? 'فشل إغلاق بعض البلاغات' : 'Failed to close some tickets', { id: toastId });
                   }
                 }}

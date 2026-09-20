@@ -35,6 +35,11 @@ export class SendNotificationDto {
   @IsString()
   @IsOptional()
   targetStudentCode?: string;
+
+  @ApiPropertyOptional({ example: false, description: 'Forward notification to students via WhatsApp automation' })
+  @IsBoolean()
+  @IsOptional()
+  sendWhatsApp?: boolean;
 }
 
 export class RegisterFcmTokenDto {

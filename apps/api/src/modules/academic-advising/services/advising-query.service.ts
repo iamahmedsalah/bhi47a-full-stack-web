@@ -624,7 +624,8 @@ export class AdvisingQueryService {
         .find({ advisingCaseId: caseItem._id })
         .populate('courseId', 'code nameAr nameEn creditHours semester')
         .sort({ score: -1 })
-        .lean(),
+        .lean()
+        .then((items) => items.filter((item) => item.courseId != null)),
       this.notes
         .find({ caseId: caseItem._id, visibility: 'STUDENT' })
         .populate('authorId', 'name role')

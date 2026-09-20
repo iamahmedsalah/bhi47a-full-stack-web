@@ -1,73 +1,162 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/providers/auth-provider';
 import { getApiErrorMessage } from '@/lib/api';
 import { useParams, useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { getChangePasswordSchema, type ChangePasswordInput } from '@/lib/validations';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { toast } from 'sonner';
-import { Lock, Loader2, KeyRound, Check } from 'lucide-react';
+import {
+  Lock,
+  Loader2,
+  KeyRound,
+  Check,
+  CheckCircle2,
+  ArrowLeft,
+  ArrowRight,
+  ShieldCheck,
+  Sparkles,
+  AlertCircle,
+  AlertTriangle,
+  X,
+} from 'lucide-react';
 import LangToggle from '@/components/ui/LangToggle';
 import api from '@/lib/api';
 
 export default function ChangePasswordPage() {
   const t = useTranslations('auth');
-  const tValidation = useTranslations('validation');
   const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
-  const locale = params.locale as string;
+  const locale = (params.locale as string) || 'ar';
+  const isArabic = locale.startsWith('ar');
 
+  // Multi-step state: 1 = Current Password, 2 = New Password & Confirm, 3 = Success
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
 
-  const schema = getChangePasswordSchema((key) => {
-    const translationKey = key.replace('validation.', '');
-    return tValidation(translationKey);
-  });
+  // Form values
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ChangePasswordInput>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    },
-  });
+  // Validation errors
+  const [step1Error, setStep1Error] = useState('');
+  const [step2Error, setStep2Error] = useState('');
 
-  const onSubmit = async (data: ChangePasswordInput) => {
+  // Password strength calculation
+  const strengthChecks = useMemo(() => {
+    return {
+      length: newPassword.length >= 8,
+      hasUpper: /[A-Z]/.test(newPassword),
+      hasLower: /[a-z]/.test(newPassword),
+      hasNumber: /[0-9]/.test(newPassword),
+      hasSpecial: /[^A-Za-z0-9]/.test(newPassword),
+    };
+  }, [newPassword]);
+
+  const strengthScore = useMemo(() => {
+    let score = 0;
+    if (strengthChecks.length) score += 25;
+    if (strengthChecks.hasUpper && strengthChecks.hasLower) score += 25;
+    if (strengthChecks.hasNumber) score += 25;
+    if (strengthChecks.hasSpecial) score += 25;
+    return score;
+  }, [strengthChecks]);
+
+  const strengthLabel = useMemo(() => {
+    if (!newPassword) return '';
+    if (strengthScore <= 25) return isArabic ? 'ضعيفة' : 'Weak';
+    if (strengthScore <= 50) return isArabic ? 'مقبولة' : 'Fair';
+    if (strengthScore <= 75) return isArabic ? 'جيدة ومناسبة' : 'Good';
+    return isArabic ? 'قوية ومحمية ممتاز' : 'Very Strong';
+  }, [strengthScore, newPassword, isArabic]);
+
+  const strengthColor = useMemo(() => {
+    if (strengthScore <= 25) return 'bg-rose-500';
+    if (strengthScore <= 50) return 'bg-amber-500';
+    if (strengthScore <= 75) return 'bg-yellow-400';
+    return 'bg-emerald-500';
+  }, [strengthScore]);
+
+  const isMatching = useMemo(() => {
+    if (!confirmPassword) return null;
+    return newPassword === confirmPassword;
+  }, [newPassword, confirmPassword]);
+
+  const handleStep1Next = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStep1Error('');
+    if (!currentPassword.trim()) {
+      setStep1Error(
+        isArabic
+          ? 'يرجى إدخال كلمة المرور الحالية أو الافتراضية للمتابعة'
+          : 'Please enter your current default password to continue',
+      );
+      return;
+    }
+    setCurrentStep(2);
+  };
+
+  const handleFinalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStep2Error('');
+
+    if (newPassword.length < 8) {
+      setStep2Error(
+        isArabic
+          ? 'يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف'
+          : 'New password must be at least 8 characters long',
+      );
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setStep2Error(
+        isArabic
+          ? 'كلمتا المرور غير متطابقتين، يرجى التأكد من تطابقهما'
+          : 'Passwords do not match. Please verify and retry',
+      );
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setStep2Error(
+        isArabic
+          ? 'يجب أن تكون كلمة المرور الجديدة مختلفة عن كلمة المرور الحالية'
+          : 'New password must be different from your current password',
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       await api.post('/auth/change-password', {
-        currentPassword: data.currentPassword,
-        newPassword: data.newPassword,
+        currentPassword,
+        newPassword,
       });
 
+      setCurrentStep(3);
       toast.success(
-        locale === 'ar'
-          ? 'تم تغيير كلمة المرور بنجاح. جاري توجيهك...'
-          : 'Password changed successfully. Redirecting...',
+        isArabic
+          ? 'تم تغيير وتأمين كلمة المرور بنجاح!'
+          : 'Password secured and changed successfully!',
       );
 
-      // Force session refetch/reload and redirect
       if (user) {
         user.mustChangePassword = false;
       }
+
       setTimeout(() => {
         window.location.reload();
-      }, 1500);
+      }, 1600);
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t('error')));
+      const msg = getApiErrorMessage(err, isArabic ? 'تعذر حفظ كلمة المرور' : 'Error updating password');
+      setStep2Error(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -75,14 +164,14 @@ export default function ChangePasswordPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden bg-background"
       style={{ background: 'var(--gradient-primary)' }}
-      dir={locale === 'ar' ? 'rtl' : 'ltr'}
+      dir={isArabic ? 'rtl' : 'ltr'}
     >
-      {/* Background Gradients */}
+      {/* Ambient background glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-1/2 -right-1/2 w-full h-full rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-1/2 -left-1/2 w-full h-full rounded-full bg-accent/5 blur-3xl" />
+        <div className="absolute -top-1/3 -right-1/3 w-full h-full rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute -bottom-1/3 -left-1/3 w-full h-full rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
       {/* Language Switcher */}
@@ -90,93 +179,306 @@ export default function ChangePasswordPage() {
         <LangToggle />
       </div>
 
-      <Card className="w-full max-w-md bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] p-6 md:p-8 z-10">
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary shadow-[var(--shadow-glow)]">
-            <KeyRound className="w-8 h-8" />
+      <Card className="w-full max-w-lg bg-card/95 backdrop-blur-md border border-primary/20 shadow-2xl p-6 md:p-9 z-10 rounded-3xl">
+        {/* Step Indicator Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-sm">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-lg md:text-xl font-bold text-foreground truncate">
+                  {isArabic ? 'تغيير وتأمين كلمة المرور' : 'Secure Your Account Password'}
+                </h1>
+                <p className="text-xs text-muted-foreground truncate">
+                  {isArabic
+                    ? 'يلزم تحديث كلمة المرور الافتراضية لحماية بياناتك الأكاديمية'
+                    : 'Mandatory password update before accessing the student portal'}
+                </p>
+              </div>
+            </div>
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-primary/10 border border-primary/30 px-3 py-1 text-xs font-bold text-primary inline-flex items-center gap-1">
+              {currentStep === 3 ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                  <span>{isArabic ? 'مكتمل' : 'Done'}</span>
+                </>
+              ) : (
+                isArabic ? `الخطوة ${currentStep} من 2` : `Step ${currentStep} of 2`
+              )}
+            </span>
           </div>
 
-          <div className="text-center space-y-2">
-            <h1 className="text-xl md:text-2xl font-bold text-foreground">
-              {locale === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {locale === 'ar'
-                ? 'يجب عليك تغيير كلمة المرور الافتراضية لحماية حسابك قبل المتابعة'
-                : 'You must change your default password to secure your account before proceeding'}
-            </p>
+          {/* Stepper Progress Line */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <div
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                currentStep >= 1 ? 'bg-primary' : 'bg-muted'
+              }`}
+            />
+            <div
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                currentStep >= 2 ? 'bg-primary' : 'bg-muted'
+              }`}
+            />
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
-            <div className="space-y-4">
-              {/* Current Password */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-foreground">
-                  {locale === 'ar' ? 'كلمة المرور الحالية' : 'Current Password'}
-                </label>
-                <PasswordInput
-                  placeholder="••••••••"
-                  disabled={loading}
-                  {...register('currentPassword')}
-                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
-                />
-                {errors.currentPassword && (
-                  <p className="text-xs text-red-500">{errors.currentPassword.message}</p>
-                )}
+        {/* STEP 1: Current Password */}
+        {currentStep === 1 && (
+          <form onSubmit={handleStep1Next} className="space-y-5 animate-fade-in">
+            <div className="rounded-2xl border border-border/80 bg-background/60 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <Lock className="h-4 w-4 text-primary" />
+                <span>{isArabic ? 'الخطوة الأولى: التحقق من الهوية' : 'Step 1: Verify Current Identity'}</span>
               </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isArabic
+                  ? 'أدخل كلمة المرور الحالية المسجلة لحسابك (غالباً ما تكون الرقم القومي أو المعطاة من إدارة المعهد) للتحقق من هويتك.'
+                  : 'Enter your current temporary password (commonly your National ID or the one assigned by the institute).'}
+              </p>
+            </div>
 
-              {/* New Password */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-foreground">
-                  {locale === 'ar' ? 'كلمة المرور الجديدة' : 'New Password'}
-                </label>
-                <PasswordInput
-                  placeholder="••••••••"
-                  disabled={loading}
-                  {...register('newPassword')}
-                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
-                />
-                {errors.newPassword && (
-                  <p className="text-xs text-red-500">{errors.newPassword.message}</p>
-                )}
-              </div>
-
-              {/* Confirm Password */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-foreground">
-                  {locale === 'ar' ? 'تأكيد كلمة المرور الجديدة' : 'Confirm New Password'}
-                </label>
-                <PasswordInput
-                  placeholder="••••••••"
-                  disabled={loading}
-                  {...register('confirmPassword')}
-                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg"
-                />
-                {errors.confirmPassword && (
-                  <p className="text-xs text-red-500">{errors.confirmPassword.message}</p>
-                )}
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>{isArabic ? 'كلمة المرور الحالية أو الافتراضية *' : 'Current / Default Password *'}</span>
+              </label>
+              <PasswordInput
+                placeholder="••••••••••••"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  setStep1Error('');
+                }}
+                className="h-12 bg-secondary/40 border-border text-foreground rounded-xl text-sm"
+                autoFocus
+              />
+              {step1Error && (
+                <p className="text-xs text-rose-500 flex items-center gap-1 mt-1 font-medium">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{step1Error}</span>
+                </p>
+              )}
             </div>
 
             <Button
               type="submit"
-              className="w-full h-11 gap-2 text-base bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer mt-2"
-              disabled={loading}
+              className="w-full h-12 gap-2 text-sm font-bold bg-primary hover:bg-primary/85 text-primary-foreground rounded-xl transition-all cursor-pointer shadow-md"
             >
-              {loading ? (
-                <>
-                  {locale === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </>
-              ) : (
-                <>
-                  {locale === 'ar' ? 'حفظ و متابعة' : 'Save & Continue'}
-                  <Check className="h-4 w-4" />
-                </>
-              )}
+              <span>{isArabic ? 'المتابعة لتعيين كلمة المرور الجديدة' : 'Continue to Set New Password'}</span>
+              {isArabic ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
             </Button>
           </form>
-        </div>
+        )}
+
+        {/* STEP 2: New Password, Strength Meter & Confirmation */}
+        {currentStep === 2 && (
+          <form onSubmit={handleFinalSubmit} className="space-y-5 animate-fade-in">
+            {step2Error && (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-400 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{step2Error}</span>
+              </div>
+            )}
+
+            {/* New Password Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-foreground">
+                {isArabic ? 'كلمة المرور الجديدة *' : 'New Password *'}
+              </label>
+              <PasswordInput
+                placeholder="••••••••••••"
+                disabled={loading}
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setStep2Error('');
+                }}
+                className="h-12 bg-secondary/40 border-border text-foreground rounded-xl text-sm"
+                autoFocus
+              />
+
+              {/* Password Strength Meter */}
+              {newPassword && (
+                <div className="space-y-2 pt-1.5 animate-fade-in">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground">
+                      {isArabic ? 'قوة كلمة المرور:' : 'Password Strength:'}
+                    </span>
+                    <span className="font-bold text-foreground">{strengthLabel}</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/80">
+                    <div
+                      className={`h-full ${strengthColor} transition-all duration-300 rounded-full`}
+                      style={{ width: `${strengthScore}%` }}
+                    />
+                  </div>
+
+                  {/* Requirements checklist */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        strengthChecks.length ? 'text-emerald-400 font-semibold' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {strengthChecks.length ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span>{isArabic ? '8 أحرف كحد أدنى' : '8+ characters'}</span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        strengthChecks.hasUpper && strengthChecks.hasLower
+                          ? 'text-emerald-400 font-semibold'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {strengthChecks.hasUpper && strengthChecks.hasLower ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <span>{isArabic ? 'أحرف كبيرة وصغيرة' : 'Upper & lowercase'}</span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        strengthChecks.hasNumber ? 'text-emerald-400 font-semibold' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {strengthChecks.hasNumber ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span>{isArabic ? 'رقم واحد على الأقل' : 'At least 1 number'}</span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 ${
+                        strengthChecks.hasSpecial ? 'text-emerald-400 font-semibold' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {strengthChecks.hasSpecial ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <X className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span>{isArabic ? 'رمز خاص (@#$)' : 'Special symbol'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password Input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                <span>{isArabic ? 'تأكيد كلمة المرور الجديدة *' : 'Confirm New Password *'}</span>
+                {isMatching !== null && (
+                  <span
+                    className={`text-[11px] font-bold inline-flex items-center gap-1 shrink-0 ${
+                      isMatching ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {isMatching ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>{isArabic ? 'كلمتا المرور متطابقتان' : 'Passwords match'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span>{isArabic ? 'غير متطابقتين بعد' : 'Passwords do not match'}</span>
+                      </>
+                    )}
+                  </span>
+                )}
+              </label>
+              <PasswordInput
+                placeholder="••••••••••••"
+                disabled={loading}
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setStep2Error('');
+                }}
+                className={`h-12 bg-secondary/40 rounded-xl text-sm transition-colors ${
+                  isMatching === true
+                    ? 'border-emerald-500/50 focus:border-emerald-500'
+                    : isMatching === false
+                    ? 'border-rose-500/50 focus:border-rose-500'
+                    : 'border-border'
+                }`}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setStep2Error('');
+                  setCurrentStep(1);
+                }}
+                disabled={loading}
+                className="h-12 px-4 rounded-xl border border-border"
+              >
+                {isArabic ? <ArrowRight className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
+                <span>{isArabic ? 'السابق' : 'Back'}</span>
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={loading || strengthScore < 25 || isMatching !== true}
+                className="flex-1 h-12 gap-2 text-sm font-bold bg-primary hover:bg-primary/85 text-primary-foreground rounded-xl transition-all cursor-pointer shadow-md"
+              >
+                {loading ? (
+                  <>
+                    <span>{isArabic ? 'جاري التحديث...' : 'Saving...'}</span>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </>
+                ) : (
+                  <>
+                    <span>{isArabic ? 'حفظ وتأمين الحساب' : 'Save & Secure Account'}</span>
+                    <Check className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* STEP 3: Success State */}
+        {currentStep === 3 && (
+          <div className="py-8 text-center space-y-4 animate-fade-in">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
+              <CheckCircle2 className="h-10 w-10 animate-bounce" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl md:text-2xl font-extrabold text-foreground">
+                {isArabic ? 'تم تغيير كلمة المرور بنجاح!' : 'Password Changed Successfully!'}
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                {isArabic
+                  ? 'تم تأمين حسابك بكلمة المرور الجديدة. جاري توجيهك الآن إلى لوحة التحكم...'
+                  : 'Your account is now secured. Redirecting you to your portal dashboard...'}
+              </p>
+            </div>
+
+            <div className="flex justify-center pt-2">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          </div>
+        )}
+
+        {/* Security Note Footer */}
+        {currentStep !== 3 && (
+          <div className="mt-6 pt-4 border-t border-border/50 text-center">
+            <p className="text-[11px] text-muted-foreground flex items-center justify-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span>
+                {isArabic
+                  ? 'تشفير أحادي آمن (Bcrypt Salted Hash) لحماية قصوى لحسابك الأكاديمي.'
+                  : 'End-to-end Bcrypt salted hashing ensures maximum privacy and security.'}
+              </span>
+            </p>
+          </div>
+        )}
       </Card>
     </div>
   );

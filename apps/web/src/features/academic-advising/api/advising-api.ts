@@ -96,10 +96,10 @@ export const advisingApi = {
     apiGet<CourseRecommendation[]>(
       `/admin/advising/cases/${caseId}/recommendations`,
     ),
-  generate: (caseId: string) =>
-    apiPost<GenerateRecommendationsResponse, { maxCredits: number }>(
+  generate: (caseId: string, maxCredits?: number) =>
+    apiPost<GenerateRecommendationsResponse, { maxCredits?: number }>(
       `/admin/advising/cases/${caseId}/generate-recommendations`,
-      { maxCredits: 18 },
+      maxCredits ? { maxCredits } : {},
     ),
   decide: (id: string, decision: "ACCEPTED" | "REJECTED" | "PENDING") =>
     apiPatch<CourseRecommendation, { decision: string }>(

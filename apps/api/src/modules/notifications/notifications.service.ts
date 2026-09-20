@@ -296,8 +296,17 @@ export class NotificationsService implements OnModuleInit {
       targetLevel: dto.targetLevel,
       targetStudentId,
       sentBy: new Types.ObjectId(String(senderId)),
-      meta: (dto as any).meta || {},
+      meta: {
+        ...((dto as any).meta || {}),
+        sendWhatsApp: Boolean(dto.sendWhatsApp),
+      },
     });
+
+    if (dto.sendWhatsApp) {
+      console.log(
+        `[WhatsApp Automation] Notification queued for student phone number WhatsApp delivery. Target: ${dto.targetType}`,
+      );
+    }
 
     await notification.save();
 

@@ -30,7 +30,20 @@ function loadWorkspacePublicEnv() {
 
 loadWorkspacePublicEnv();
 
+const appEnv = (process.env.NODE_ENV || "development").toUpperCase();
+const appVersion = process.env.npm_package_version || "1.0.0";
+
+console.log(`\n────────────────────────────────────────────────────────`);
+console.log(`  STUDENT PORTAL FRONTEND (WEB)`);
+console.log(`  • Environment : [ ${appEnv} ]`);
+console.log(`  • Version     : v${appVersion}`);
+console.log(`────────────────────────────────────────────────────────\n`);
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: appVersion,
+    NEXT_PUBLIC_APP_ENV: process.env.NODE_ENV || "development",
+  },
   reactCompiler: true,
   output: "standalone",
   transpilePackages: ["@student-portal/shared"],

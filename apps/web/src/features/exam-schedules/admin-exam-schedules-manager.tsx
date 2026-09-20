@@ -524,16 +524,8 @@ function AdminExamSchedulesManagerContent() {
             </div>
           )}
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setSelectedType(selectedType === 'final' ? 'midterm' : 'final')}
-              className="flex-1 gap-2"
-            >
-              {locale === 'ar' ? 'تبديل النوع' : 'Switch type'}
-            </Button>
-            <Button type="button" onClick={() => void handleSave()} disabled={formLoading || imageUploading} className="flex-1 gap-2 bg-primary text-white hover:bg-primary-hover">
+          <div className="flex flex-col gap-3">
+            <Button type="button" onClick={() => void handleSave()} disabled={formLoading || imageUploading} className="w-full gap-2 bg-primary text-white hover:bg-primary-hover">
               {formLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {currentSchedule ? (locale === 'ar' ? 'حفظ التحديث' : 'Save changes') : (locale === 'ar' ? 'إنشاء الجدول' : 'Create schedule')}
             </Button>

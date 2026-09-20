@@ -8,6 +8,7 @@ import { LanguageProvider } from '@/providers/language-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
 import { NetworkStatusOverlay } from '@/components/ui/NetworkStatusOverlay';
 import { AuthProvider } from '@/providers/auth-provider';
+import { ConsoleBanner } from '@/providers/console-banner';
 
 const themeInitScript = `
 (() => {
@@ -57,6 +58,7 @@ export default async function LocaleLayout({
       <body className={`min-h-screen ${fontClass}`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AppQueryProvider>
+            <ConsoleBanner />
             <LanguageProvider>
               <ThemeProvider>
                 <AuthProvider locale={locale}>

@@ -20,6 +20,10 @@ import {
   AdvisingCase,
   AdvisingCaseSchema,
 } from '../academic-advising/schemas/advising-case.schema';
+import {
+  AcademicEmail,
+  AcademicEmailSchema,
+} from '../academic-emails/schemas/academic-email.schema';
 
 @Module({
   imports: [
@@ -28,6 +32,7 @@ import {
       { name: CourseRegistration.name, schema: CourseRegistrationSchema },
       { name: RegistrationTerm.name, schema: RegistrationTermSchema },
       { name: AdvisingCase.name, schema: AdvisingCaseSchema },
+      { name: AcademicEmail.name, schema: AcademicEmailSchema },
     ]),
     UsersModule,
     EmailsModule,

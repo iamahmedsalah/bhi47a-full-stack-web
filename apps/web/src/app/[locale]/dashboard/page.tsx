@@ -162,7 +162,7 @@ export default function StudentDashboard() {
             <h1 className="text-balance text-2xl font-bold leading-tight text-foreground drop-shadow md:text-3xl">
               {locale === 'ar'
                 ? `مرحباً بك، ${displayName || '...'}`
-                : `Welcome, ${displayName || '...'}`} 👋
+                : `Welcome, ${displayName || '...'}`}
             </h1>
             <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
               {locale === 'ar'

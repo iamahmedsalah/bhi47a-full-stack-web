@@ -11,6 +11,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileDocument,
 } from '../../registrations/schemas/student-academic-profile.schema';
+import {
+  AcademicEmail,
+  AcademicEmailDocument,
+} from '../../academic-emails/schemas/academic-email.schema';
 import type { Importer, ImportResult } from '../importer.interface';
 import { normalizeStudentLevel, normalizeStudentSemester } from '../upload-utils';
 
@@ -45,6 +49,8 @@ export class StudentImporter implements Importer {
     private readonly studentModel: Model<StudentProfileDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private readonly academicProfileModel: Model<StudentAcademicProfileDocument>,
+    @InjectModel(AcademicEmail.name)
+    private readonly academicEmailModel: Model<AcademicEmailDocument>,
   ) {}
 
   validate(rows: Record<string, unknown>[]) {
@@ -225,6 +231,39 @@ export class StudentImporter implements Importer {
 
       if (academicProfileOps.length > 0) {
         await this.academicProfileModel.bulkWrite(academicProfileOps as any, {
+          ordered: false,
+        });
+      }
+
+      // Sync to AcademicEmail collection so all imported students appear on Academic Emails page
+      const emailOps = profileOps.map((op) => {
+        const studentCode = op.updateOne.filter.studentCode;
+        const studentId = updatedUserMap.get(studentCode);
+        const fullName =
+          (op.updateOne.update.$set.fullName as string) || `Student ${studentCode}`;
+        const academicEmail =
+          (op.updateOne.update.$set.academicEmail as string)?.trim() ||
+          `${studentCode}.bhi47@bhiasc.org`;
+
+        return {
+          updateOne: {
+            filter: { studentCode },
+            update: {
+              $set: {
+                studentCode,
+                studentName: fullName,
+                academicEmail,
+                status: 'active',
+                ...(studentId ? { studentId } : {}),
+              },
+            },
+            upsert: true,
+          },
+        };
+      });
+
+      if (emailOps.length > 0) {
+        await this.academicEmailModel.bulkWrite(emailOps as any, {
           ordered: false,
         });
       }

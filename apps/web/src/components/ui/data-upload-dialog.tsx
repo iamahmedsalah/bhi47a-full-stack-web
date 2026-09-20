@@ -54,6 +54,41 @@ interface DataUploadDialogProps {
   onSuccess?: (result: UploadResult) => void;
 }
 
+function parseXmlSpreadsheet(xmlText: string): { headers: string[]; rows: string[][] } | null {
+  try {
+    if (!xmlText.includes('<Workbook') && !xmlText.includes('<?xml')) {
+      return null;
+    }
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'text/xml');
+    const parserError = doc.getElementsByTagName('parsererror');
+    if (parserError.length > 0) return null;
+
+    const rowElements = Array.from(doc.getElementsByTagName('Row'));
+    if (!rowElements.length) return null;
+
+    const parsedRows: string[][] = [];
+    for (const rowEl of rowElements) {
+      const cellElements = Array.from(rowEl.getElementsByTagName('Cell'));
+      const rowData = cellElements.map((c) => {
+        const dataEl = c.getElementsByTagName('Data')[0];
+        return (dataEl?.textContent ?? c.textContent ?? '').trim();
+      });
+      if (rowData.some((val) => val.length > 0)) {
+        parsedRows.push(rowData);
+      }
+    }
+
+    if (parsedRows.length === 0) return null;
+    return {
+      headers: parsedRows[0],
+      rows: parsedRows.slice(1),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function DataUploadDialog({
   open,
   onOpenChange,
@@ -110,23 +145,52 @@ export function DataUploadDialog({
   const parseFilePreview = async (selectedFile: File) => {
     setIsParsingPreview(true);
     try {
-      const rows = await readXlsxFile(selectedFile);
-      if (rows && rows.length > 0) {
-        const headers = rows[0].map((h) => String(h ?? '').trim());
-        const dataRows = rows.slice(1).map((r) =>
-          r.map((cell) => (cell === null || cell === undefined ? '' : String(cell))),
-        );
-        setPreview({
-          headers,
-          rows: dataRows.slice(0, 15), // Preview top 15 rows
-          totalRows: dataRows.length,
-        });
+      const isExcelByName = /\.(xlsx|xls|xlsb|ods)$/i.test(selectedFile.name);
+      const buffer = await selectedFile.arrayBuffer();
+      const firstBytes = new Uint8Array(buffer.slice(0, 4));
+      const isZipArchive = firstBytes[0] === 0x50 && firstBytes[1] === 0x4b; // 'PK' magic bytes
+
+      // 1. Try reading binary Excel or Zip archive via read-excel-file
+      if (isExcelByName || isZipArchive) {
+        try {
+          const rows = await readXlsxFile(selectedFile);
+          if (rows && rows.length > 0) {
+            const headers = rows[0].map((h) => String(h ?? '').trim());
+            const dataRows = rows.slice(1).map((r) =>
+              r.map((cell) => (cell === null || cell === undefined ? '' : String(cell).trim())),
+            );
+            setPreview({
+              headers,
+              rows: dataRows.slice(0, 15),
+              totalRows: dataRows.length,
+            });
+            setActiveTab('preview');
+            return;
+          }
+        } catch {
+          // If readXlsxFile fails (e.g. password-protected or XML disguised as xls), proceed to XML check
+        }
       }
-    } catch {
-      // Fallback for CSV or unparseable XLSX
-      try {
-        const text = await selectedFile.text();
-        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+
+      // 2. Try XML Spreadsheet 2003 (only if text is real XML, NOT a binary zip)
+      const text = new TextDecoder('utf-8').decode(buffer);
+      if ((text.includes('<Workbook') || text.includes('<?xml')) && !text.startsWith('PK')) {
+        const xmlParsed = parseXmlSpreadsheet(text);
+        if (xmlParsed && xmlParsed.headers.length > 0) {
+          setPreview({
+            headers: xmlParsed.headers,
+            rows: xmlParsed.rows.slice(0, 15),
+            totalRows: xmlParsed.rows.length,
+          });
+          return;
+        }
+      }
+
+      // 3. Fallback for plain text CSV/TSV only if not binary
+      if (!isZipArchive && !text.startsWith('PK')) {
+        const lines = text
+          .split(/\r?\n/)
+          .filter((l) => l.trim().length > 0 && !l.trim().startsWith('<?xml') && !l.trim().startsWith('<Workbook'));
         if (lines.length > 0) {
           const headers = lines[0]
             .split(/[,;\t]/)
@@ -141,10 +205,13 @@ export function DataUploadDialog({
             rows: dataRows.slice(0, 15),
             totalRows: dataRows.length,
           });
+          return;
         }
-      } catch {
-        setPreview(null);
       }
+
+      setPreview(null);
+    } catch {
+      setPreview(null);
     } finally {
       setIsParsingPreview(false);
     }
@@ -321,8 +388,8 @@ export function DataUploadDialog({
         if (!nextOpen) resetState();
       }}
     >
-      <DialogContent className="max-w-3xl rounded-2xl border border-border/70 bg-card/95 text-foreground shadow-[var(--shadow-glow)] backdrop-blur max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="border-b border-border/70 pb-4 text-start">
+      <DialogContent className="w-[95vw] sm:max-w-4xl rounded-2xl border border-border/70 bg-card/95 text-foreground shadow-[var(--shadow-glow)] backdrop-blur max-h-[90vh] overflow-y-auto overflow-x-hidden min-w-0">
+        <DialogHeader className="border-b border-border/70 pb-4 text-start min-w-0 w-full">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <DialogTitle className="text-lg font-bold text-foreground">{title}</DialogTitle>
@@ -342,7 +409,7 @@ export function DataUploadDialog({
         </DialogHeader>
 
         {/* Upload Zone & Header Column Info */}
-        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] min-w-0 w-full">
           <label
             onDragEnter={(event) => {
               event.preventDefault();
@@ -356,7 +423,7 @@ export function DataUploadDialog({
               selectFile(event.dataTransfer.files[0]);
             }}
             className={cn(
-              'flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/35 p-6 text-center transition-all hover:border-primary/60 hover:bg-primary/5',
+              'flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/35 p-6 text-center transition-all hover:border-primary/60 hover:bg-primary/5 min-w-0 w-full',
               isDragging && 'border-primary bg-primary/10',
               file && 'border-success/50 bg-success/5',
             )}
@@ -395,7 +462,7 @@ export function DataUploadDialog({
           </label>
 
           {/* Expected Columns Info & Header Match */}
-          <div className="flex flex-col rounded-xl border border-border/70 bg-surface/30 p-4 text-start">
+          <div className="flex flex-col rounded-xl border border-border/70 bg-surface/30 p-4 text-start min-w-0 w-full overflow-hidden">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-foreground">
                 {isAr ? 'الأعمدة المتوقعة' : 'Expected Columns'}
@@ -436,7 +503,7 @@ export function DataUploadDialog({
 
         {/* Excel Preview Section */}
         {file && (
-          <div className="rounded-xl border border-border/70 bg-card/60 p-3 text-start">
+          <div className="rounded-xl border border-border/70 bg-card/60 p-3 text-start min-w-0 w-full max-w-full overflow-hidden">
             <div className="flex items-center justify-between border-b border-border/60 pb-2">
               <div className="flex items-center gap-2">
                 <button
@@ -479,14 +546,35 @@ export function DataUploadDialog({
               )}
             </div>
 
+            {activeTab === 'columns' && (
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs font-mono">
+                <div className="rounded-lg border border-border/60 bg-surface/40 p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-sans">{isAr ? 'عدد الصفوف' : 'Total Rows'}</span>
+                  <span className="text-base font-bold text-foreground">{preview?.totalRows ?? 0}</span>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-surface/40 p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-sans">{isAr ? 'الأعمدة المكتشفة' : 'Detected Columns'}</span>
+                  <span className="text-base font-bold text-foreground">{preview?.headers.length ?? 0}</span>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-surface/40 p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-sans">{isAr ? 'الأعمدة المتطابقة' : 'Matched Columns'}</span>
+                  <span className="text-base font-bold text-success">{headerMatchInfo?.matched.length ?? 0}</span>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-surface/40 p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-sans">{isAr ? 'الأعمدة الناقصة' : 'Missing Columns'}</span>
+                  <span className="text-base font-bold text-warning">{headerMatchInfo?.missing.length ?? 0}</span>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'preview' && preview && (
-              <div className="mt-3 overflow-x-auto max-h-56 rounded-lg border border-border/50">
-                <table className="w-full text-xs text-start">
-                  <thead className="bg-surface sticky top-0 border-b border-border text-foreground font-semibold">
+              <div className="mt-3 w-full min-w-0 max-w-full overflow-x-auto max-h-60 rounded-lg border border-border/50 overscroll-x-contain">
+                <table className="w-full text-xs text-start border-collapse table-auto min-w-max">
+                  <thead className="bg-surface sticky top-0 border-b border-border text-foreground font-semibold z-10">
                     <tr>
-                      <th className="p-2 border-r border-border/50 text-center w-10">#</th>
+                      <th className="p-2 border-r border-border/50 text-center w-12 shrink-0 bg-surface">#</th>
                       {preview.headers.map((h, i) => (
-                        <th key={`${h}-${i}`} className="p-2 border-r border-border/50 font-mono">
+                        <th key={`${h}-${i}`} className="p-2 border-r border-border/50 font-mono whitespace-nowrap text-xs bg-surface">
                           {h || `Col ${i + 1}`}
                         </th>
                       ))}
@@ -495,11 +583,15 @@ export function DataUploadDialog({
                   <tbody className="divide-y divide-border/40 font-mono">
                     {preview.rows.map((row, rIdx) => (
                       <tr key={`r-${rIdx}`} className="hover:bg-surface/50">
-                        <td className="p-2 text-center text-muted-foreground border-r border-border/50">
+                        <td className="p-2 text-center text-muted-foreground border-r border-border/50 bg-surface/30 font-medium">
                           {rIdx + 1}
                         </td>
                         {row.map((cell, cIdx) => (
-                          <td key={`c-${rIdx}-${cIdx}`} className="p-2 truncate max-w-[160px] border-r border-border/50">
+                          <td
+                            key={`c-${rIdx}-${cIdx}`}
+                            className="p-2 truncate max-w-[180px] border-r border-border/50 whitespace-nowrap"
+                            title={cell}
+                          >
                             {cell || <span className="text-muted-foreground/40 italic">-</span>}
                           </td>
                         ))}
@@ -563,7 +655,7 @@ export function DataUploadDialog({
 
         {/* Import Results & Structured Error Handling */}
         {result && (
-          <div className="rounded-xl border border-border/70 bg-surface/35 p-4 text-start space-y-3">
+          <div className="rounded-xl border border-border/70 bg-surface/35 p-4 text-start space-y-3 min-w-0 w-full overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
               <div className="flex items-center gap-2">
                 {result.failedCount === 0 ? (
@@ -684,7 +776,7 @@ export function DataUploadDialog({
           </div>
         )}
 
-        <DialogFooter className="border-t border-border/70 pt-4 flex gap-2 justify-end">
+        <DialogFooter className="border-t border-border/70 pt-4 flex gap-2 justify-end min-w-0 w-full">
           <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>
             {isAr ? 'إغلاق' : 'Close'}
           </Button>

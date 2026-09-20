@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/ui/feedback';
@@ -213,9 +213,23 @@ export default function CourseRegistrationPage() {
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
       <div className="relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-teal-950/40 via-teal-900/20 to-transparent p-6 shadow-lg md:flex-row md:items-center">
         <div className="z-10 space-y-1.5">
-          <div className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 font-semibold text-xs text-primary">
-            <Sparkles className="h-3 w-3" />
-            {isEnglish ? 'Academic Advising & Course Registration' : 'تسجيل المواد والإرشاد الأكاديمي'}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 font-semibold text-xs text-primary">
+              <Sparkles className="h-3 w-3" />
+              {isEnglish ? 'Academic Advising & Course Registration' : 'تسجيل المواد والإرشاد الأكاديمي'}
+            </div>
+            {eligibility && !eligibility.requiresAdvisor && (
+              <div className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 font-medium text-xs text-emerald-400">
+                <CheckCircle2 className="h-3 w-3" />
+                {isEnglish ? 'Direct Registration Active' : 'مؤهل للتسجيل المباشر (وضع أكاديمي متميز)'}
+              </div>
+            )}
+            {eligibility && eligibility.requiresAdvisor && (
+              <div className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 font-medium text-xs text-amber-400">
+                <ShieldAlert className="h-3 w-3" />
+                {isEnglish ? 'Advising Required' : 'يتطلب مراجعة المرشد الأكاديمي'}
+              </div>
+            )}
           </div>
           <h2 className="font-bold text-foreground text-xl">
             {isEnglish ? 'GPA' : 'المعدل التراكمي'}: {eligibility?.gpa?.toFixed(2) ?? '-'} ·{' '}

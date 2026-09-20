@@ -8,13 +8,14 @@ interface ModalProps {
   children: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 const sizeClass = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 };
 
 export function Modal({

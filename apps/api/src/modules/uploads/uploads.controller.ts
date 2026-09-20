@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   UseInterceptors,
   UploadedFile,
   Body,
@@ -28,6 +29,28 @@ const ALLOWED_MIME_TYPES = new Set([
 @Controller('admin/uploads')
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
+
+  @Get('wipe-summary')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({ summary: 'Get counts of students and academic records for data reset (Admin)' })
+  getWipeSummary() {
+    return this.uploadsService.getWipeSummary();
+  }
+
+  @Post('wipe')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({ summary: 'Wipe/Reset student and academic data before uploading fresh datasets (Admin)' })
+  wipeData(
+    @Body('target') target: 'students' | 'grades' | 'attendance' | 'all',
+    @CurrentUser('_id') adminId: string,
+  ) {
+    if (!['students', 'grades', 'attendance', 'all'].includes(target)) {
+      throw new BadRequestException('Invalid wipe target');
+    }
+    return this.uploadsService.wipeData(target, adminId);
+  }
 
   @Post()
   @Roles('admin', 'staff')

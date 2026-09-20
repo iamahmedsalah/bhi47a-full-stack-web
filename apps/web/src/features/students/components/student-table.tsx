@@ -2,12 +2,14 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { Edit2, Lock, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Edit2, ExternalLink, Eye, Lock, MoreVertical, Trash2, UserCheck, UserX } from 'lucide-react';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TableCell } from '@/components/ui/table';
 import { CopyButton } from '@/components/ui/copy-button';
+import { Button } from '@/components/ui/button';
+import { CustomDropdown, type CustomDropdownOption } from '@/components/ui/custom-dropdown';
 import { cn } from '@/lib/cn';
 
 export interface StudentUserRef {
@@ -55,38 +57,6 @@ export interface Student {
 
 function getUserRef(student: Student): StudentUserRef | null {
   return typeof student.userId === 'object' && student.userId ? student.userId : null;
-}
-
-function ActionButton({
-  children,
-  variant = 'neutral',
-  onClick,
-  disabled,
-  title,
-}: {
-  children: React.ReactNode;
-  variant?: 'neutral' | 'primary' | 'danger' | 'success';
-  onClick?: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        'inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-squircle border px-3 py-1.5 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-45',
-        variant === 'primary' && 'border-primary/30 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground',
-        variant === 'danger' && 'border-danger/30 bg-danger/10 text-danger hover:bg-danger hover:text-danger-foreground',
-        variant === 'success' && 'border-success/30 bg-success/10 text-success hover:bg-success hover:text-white',
-        variant === 'neutral' && 'border-border bg-surface/50 text-muted-foreground hover:border-primary/35 hover:bg-primary/10 hover:text-primary',
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 function SensitiveNationalId({
@@ -167,13 +137,15 @@ export function StudentTable({
   tCommon,
 }: StudentTableProps) {
   const router = useRouter();
+  const [studentToDeactivate, setStudentToDeactivate] = React.useState<Student | null>(null);
 
   const columns: ColumnDef<Student>[] = [
     {
       key: 'studentCode',
       header: t('studentCode'),
+      className: 'w-28 text-start',
       render: (student) => (
-        <TableCell className="min-w-44 p-4 font-mono">
+        <TableCell className="w-28 py-2.5 px-3 font-mono">
           <button
             type="button"
             onClick={() => onViewStudent(student)}
@@ -187,10 +159,11 @@ export function StudentTable({
     {
       key: 'fullName',
       header: t('studentName'),
+      className: 'min-w-[180px] text-start',
       render: (student) => (
-        <TableCell className="min-w-56 p-4">
-          <div className="font-semibold text-foreground">{student.fullName}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
+        <TableCell className="min-w-[180px] py-2.5 px-3">
+          <div className="font-semibold text-foreground leading-tight">{student.fullName}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-[220px]">
             {student.academicEmail || 'No academic email'}
           </div>
         </TableCell>
@@ -198,24 +171,26 @@ export function StudentTable({
     },
     {
       key: 'academic',
-      header: 'Academic Info',
+      header: locale === 'ar' ? 'المستوى والقسم' : 'Academic Info',
+      className: 'min-w-[140px] text-start',
       render: (student) => (
-        <TableCell className="min-w-52 p-4 text-sm">
+        <TableCell className="min-w-[140px] py-2.5 px-3 text-xs">
           <div className="font-semibold text-foreground">Level {student.level} · {student.academicYear}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {student.department || 'No department'} · {student.group || 'No group'} · {student.section || 'No section'}
+          <div className="mt-0.5 text-muted-foreground">
+            {[student.department, student.group, student.section].filter(Boolean).join(' · ') || '—'}
           </div>
         </TableCell>
       ),
     },
     {
       key: 'exam',
-      header: 'Exam / Seat',
+      header: locale === 'ar' ? 'اللجنة / المقر' : 'Exam / Seat',
+      className: 'min-w-[120px] text-start',
       render: (student) => (
-        <TableCell className="min-w-44 p-4 text-sm">
-          <div className="font-mono text-foreground">{student.seatNumber || 'No seat'}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {[student.examBuilding, student.examFloor, student.examRoom].filter(Boolean).join(' / ') || 'No exam place'}
+        <TableCell className="min-w-[120px] py-2.5 px-3 text-xs">
+          <div className="font-mono font-semibold text-foreground">{student.seatNumber || '—'}</div>
+          <div className="mt-0.5 text-muted-foreground">
+            {[student.examBuilding, student.examRoom].filter(Boolean).join(' / ') || '—'}
           </div>
         </TableCell>
       ),
@@ -223,8 +198,9 @@ export function StudentTable({
     {
       key: 'nationalId',
       header: t('nationalId'),
+      className: 'min-w-[130px] text-start',
       render: (student) => (
-        <TableCell className="p-4">
+        <TableCell className="min-w-[130px] py-2.5 px-3">
           <SensitiveNationalId
             value={student.nationalIdMasked || getUserRef(student)?.nationalIdMasked}
             realValue={getUserRef(student)?.nationalId}
@@ -236,11 +212,12 @@ export function StudentTable({
     {
       key: 'registration',
       header: locale === 'ar' ? 'التسجيل' : 'Registration',
+      className: 'min-w-[110px] text-start',
       render: (student) => {
         const summary = student.registrationSummary;
         const registered = summary?.status === 'approved';
         return (
-          <TableCell className="min-w-52 p-4">
+          <TableCell className="min-w-[110px] py-2.5 px-3">
             <button
               type="button"
               onClick={() => router.push(`/${locale}/admin/academic-advising?student=${student.studentCode}`)}
@@ -250,7 +227,7 @@ export function StudentTable({
                 label={registered ? (locale === 'ar' ? 'مسجل' : 'Registered') : (locale === 'ar' ? 'غير مسجل' : 'Not registered')}
                 variant={registered ? 'success' : 'warning'}
               />
-              <span className="mt-1 block text-xs text-muted-foreground">
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
                 {summary?.academicYear ?? '—'} · {summary?.semester ?? '—'}
               </span>
             </button>
@@ -261,8 +238,9 @@ export function StudentTable({
     {
       key: 'status',
       header: t('enrollmentStatus'),
+      className: 'w-24 text-center',
       render: (student) => (
-        <TableCell className="p-4">
+        <TableCell className="w-24 py-2.5 px-2 text-center">
           <StatusBadge
             label={t(`status_${student.enrollmentStatus}`)}
             variant={
@@ -279,83 +257,147 @@ export function StudentTable({
     {
       key: 'actions',
       header: tCommon('actions'),
-      className: 'min-w-[300px] text-center',
-      render: (student) => (
-        <TableCell className="min-w-[300px] p-4 text-center">
-          <div className="flex flex-nowrap items-center justify-center gap-2">
-            <ActionButton onClick={() => onEditStudent(student)} title={tCommon('edit')}>
-              <Edit2 className="h-3.5 w-3.5" />
-              {tCommon('edit')}
-            </ActionButton>
-            <ActionButton onClick={() => onResetPassword(student)} title={t('resetPassword')}>
-              <Lock className="h-3.5 w-3.5" />
-              Reset
-            </ActionButton>
-            {student.enrollmentStatus === 'active' ? (
-              <ConfirmDialog
-                trigger={
-                  <span>
-                    <ActionButton variant="danger" title={t('deactivate')}>
-                      <UserX className="h-3.5 w-3.5" />
-                      {t('deactivate')}
-                    </ActionButton>
-                  </span>
-                }
-                title={t('deactivate')}
-                description={
-                  <>
-                    {locale === 'ar' ? 'هل أنت متأكد من تعطيل حساب هذا الطالب؟' : 'Are you sure you want to suspend this student?'}{' '}
-                    <span className="font-bold text-danger">&quot;{student.fullName}&quot;</span>
-                  </>
-                }
-                confirmLabel={t('deactivate')}
-                cancelLabel={tCommon('cancel')}
-                onConfirm={() => onDeactivateStudent([student._id])}
+      className: 'w-14 text-center',
+      render: (student) => {
+        const actionOptions: CustomDropdownOption[] = [
+          {
+            value: 'profile',
+            label: (
+              <div className="flex items-center gap-2 text-xs py-0.5">
+                <Eye className="h-3.5 w-3.5 text-primary" />
+                <span>{locale === 'ar' ? 'عرض الملف الكامل' : 'View Full Profile'}</span>
+              </div>
+            ),
+          },
+          {
+            value: 'edit',
+            label: (
+              <div className="flex items-center gap-2 text-xs py-0.5">
+                <Edit2 className="h-3.5 w-3.5 text-primary" />
+                <span>{tCommon('edit')}</span>
+              </div>
+            ),
+          },
+          {
+            value: 'resetPassword',
+            label: (
+              <div className="flex items-center gap-2 text-xs py-0.5">
+                <Lock className="h-3.5 w-3.5 text-warning" />
+                <span>{t('resetPassword')}</span>
+              </div>
+            ),
+          },
+          {
+            value: 'advising',
+            label: (
+              <div className="flex items-center gap-2 text-xs py-0.5">
+                <ExternalLink className="h-3.5 w-3.5 text-info" />
+                <span>{locale === 'ar' ? 'التسجيل والإرشاد الأكاديمي' : 'Academic Advising'}</span>
+              </div>
+            ),
+          },
+          ...(student.enrollmentStatus === 'active'
+            ? [{
+                value: 'deactivate',
+                label: (
+                  <div className="flex items-center gap-2 text-xs py-0.5 text-danger font-medium">
+                    <UserX className="h-3.5 w-3.5 text-danger" />
+                    <span>{t('deactivate')}</span>
+                  </div>
+                ),
+              }]
+            : [{
+                value: 'activate',
+                label: (
+                  <div className="flex items-center gap-2 text-xs py-0.5 text-success font-medium">
+                    <UserCheck className="h-3.5 w-3.5 text-success" />
+                    <span>{locale === 'ar' ? 'تفعيل الحساب' : 'Activate'}</span>
+                  </div>
+                ),
+              }]),
+        ];
+
+        return (
+          <TableCell className="w-14 py-2.5 px-2 text-center">
+            <div className="inline-flex justify-center" onClick={(e) => e.stopPropagation()}>
+              <CustomDropdown
+                value=""
+                ariaLabel={tCommon('actions')}
+                placeholder={<MoreVertical className="h-4 w-4 text-muted-foreground hover:text-primary transition-colors" />}
+                options={actionOptions}
+                onValueChange={(val) => {
+                  if (val === 'profile') onViewStudent(student);
+                  else if (val === 'edit') onEditStudent(student);
+                  else if (val === 'resetPassword') onResetPassword(student);
+                  else if (val === 'advising') router.push(`/${locale}/admin/academic-advising?student=${student.studentCode}`);
+                  else if (val === 'deactivate') setStudentToDeactivate(student);
+                  else if (val === 'activate') onActivateStudent(student);
+                }}
+                className="h-8 w-8 min-w-8 p-0 justify-center rounded-lg border border-border/60 hover:bg-primary/10 hover:border-primary/40 [&>svg]:hidden cursor-pointer"
+                menuClassName="w-52"
               />
-            ) : (
-              <ActionButton variant="success" onClick={() => onActivateStudent(student)} title="Activate">
-                <UserCheck className="h-3.5 w-3.5" />
-                Activate
-              </ActionButton>
-            )}
-          </div>
-        </TableCell>
-      ),
+            </div>
+          </TableCell>
+        );
+      },
     },
   ];
 
   return (
-    <DataTableShell
-      columns={columns}
-      data={students}
-      keyExtractor={(student) => student._id}
-      isLoading={isLoading}
-      isError={isError}
-      error={error}
-      errorMessage={tCommon('errorLoading')}
-      emptyMessage={tCommon('noData')}
-      loadingMessage={tCommon('loading')}
-      onRetry={onRetry}
-      retryLabel={tCommon('retry')}
-      enableSelection={canViewSensitiveStudentData}
-      selectedKeys={selectedKeys}
-      onSelectedKeysChange={onSelectedKeysChange}
-      bulkActions={[
-        ...(selectedKeys.length === 1
-          ? [{
-              label: locale === 'ar' ? 'تعديل' : 'Edit',
-              onClick: onBulkEdit,
-              variant: 'default' as const,
-              icon: <Edit2 className="h-3.5 w-3.5" />,
-            }]
-          : []),
-        {
-          label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
-          onClick: onOpenBulkDeactivate,
-          variant: 'destructive' as const,
-          icon: <Trash2 className="h-3.5 w-3.5" />,
-        },
-      ]}
-    />
+    <>
+      <DataTableShell
+        columns={columns}
+        data={students}
+        keyExtractor={(student) => student._id}
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        errorMessage={tCommon('errorLoading')}
+        emptyMessage={tCommon('noData')}
+        loadingMessage={tCommon('loading')}
+        onRetry={onRetry}
+        retryLabel={tCommon('retry')}
+        enableSelection={canViewSensitiveStudentData}
+        selectedKeys={selectedKeys}
+        onSelectedKeysChange={onSelectedKeysChange}
+        bulkActions={[
+          ...(selectedKeys.length === 1
+            ? [{
+                label: locale === 'ar' ? 'تعديل' : 'Edit',
+                onClick: onBulkEdit,
+                variant: 'default' as const,
+                icon: <Edit2 className="h-3.5 w-3.5" />,
+              }]
+            : []),
+          {
+            label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
+            onClick: onOpenBulkDeactivate,
+            variant: 'destructive' as const,
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+          },
+        ]}
+      />
+      <ConfirmDialog
+        open={studentToDeactivate != null}
+        onOpenChange={(open) => {
+          if (!open) setStudentToDeactivate(null);
+        }}
+        title={t('deactivate')}
+        description={
+          <>
+            {locale === 'ar' ? 'هل أنت متأكد من تعطيل حساب هذا الطالب؟' : 'Are you sure you want to suspend this student?'}{' '}
+            <span className="font-bold text-danger">&quot;{studentToDeactivate?.fullName}&quot;</span>
+          </>
+        }
+        confirmLabel={t('deactivate')}
+        cancelLabel={tCommon('cancel')}
+        onConfirm={() => {
+          if (studentToDeactivate) {
+            onDeactivateStudent([studentToDeactivate._id]);
+            setStudentToDeactivate(null);
+          }
+        }}
+      />
+    </>
   );
 }

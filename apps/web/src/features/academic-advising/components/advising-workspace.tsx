@@ -3,27 +3,37 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertCircle,
   AlertTriangle,
-  Check,
-  GraduationCap,
-  Loader2,
-  Search,
-  ShieldAlert,
-  Sparkles,
-  X,
+  Archive,
+  BookOpen,
   CalendarClock,
+  Check,
+  CheckCircle2,
   ClipboardCheck,
   Clock3,
   FileText,
+  FolderOpen,
+  GitBranch,
+  GraduationCap,
+  Layers,
+  LayoutGrid,
+  Loader2,
   LockKeyhole,
   MessageSquarePlus,
-  UnlockKeyhole,
+  Minus,
+  Plus,
   Printer,
-  Archive,
-  FolderOpen,
+  Search,
+  ShieldAlert,
+  Sparkles,
   Trash2,
+  UnlockKeyhole,
   UserPlus,
   Users,
+  Workflow,
+  X,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale } from "next-intl";
@@ -37,6 +47,8 @@ import { cn } from "@/lib/cn";
 import { getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { apiGet } from "@/lib/api-client";
+import { RestrictedFeature } from "@/components/admin/restricted-feature";
+import { PERMISSIONS } from "@student-portal/shared";
 import {
   openRegistrationPrintView,
   type PrintableRegistrationForm,
@@ -371,7 +383,13 @@ export function AdvisingWorkspace() {
   const acceptedIds = useMemo(
     () =>
       (recommendations.data ?? [])
-        .filter((item) => item.accepted && item.eligible && !item.rejected)
+        .filter(
+          (item) =>
+            item.accepted &&
+            item.eligible &&
+            !item.rejected &&
+            Boolean(item.courseId?._id),
+        )
         .map((item) => item.courseId._id),
     [recommendations.data],
   );
@@ -442,6 +460,19 @@ export function AdvisingWorkspace() {
         ),
       ),
   });
+
+  if (
+    (user?.role === "staff" && !user?.permissions?.includes(PERMISSIONS.ADVISING_READ)) ||
+    (students.isError && ((students.error as any)?.response?.status === 403 || (students.error as any)?.status === 403))
+  ) {
+    return (
+      <RestrictedFeature
+        permission={PERMISSIONS.ADVISING_READ}
+        featureName={isArabic ? "الإرشاد والتسجيل الأكاديمي" : "Academic Advising & Course Registration"}
+      />
+    );
+  }
+
   return (
     <div className="grid min-h-[76vh] gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="rounded-3xl border border-white/10 bg-card/80 p-4">
@@ -455,151 +486,220 @@ export function AdvisingWorkspace() {
               : "Select a student to begin advising"}
           </p>
         </div>
-        <div className="mb-4 grid grid-cols-1 gap-2 rounded-2xl border border-sky-500/20 bg-sky-500/5 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-sky-300">
-            {isArabic ? "فترة الإرشاد النشطة" : "Active advising period"}
-          </p>
-          <CustomDropdown
-            ariaLabel={
-              isArabic ? "السنة الأكاديمية للإرشاد" : "Advising academic year"
-            }
-            value={academicYear}
-            onValueChange={(value) => {
-              setManagedYear(value);
-              setSelected(undefined);
-            }}
-            className="h-9 text-xs"
-            options={(academicYears.data ?? []).map((year) => ({
-              value: year.academicYear,
-              label: year.academicYear,
-            }))}
-          />
-          <CustomDropdown
-            ariaLabel={isArabic ? "فصل الإرشاد" : "Advising semester"}
-            value={advisingSemester}
-            onValueChange={(value) => {
-              setAdvisingSemester(value as "first" | "second" | "summer");
-              setSelected(undefined);
-            }}
-            className="h-9 text-xs"
-            options={[
-              {
-                value: "first",
-                label: isArabic ? "الفصل الأول" : "First Semester",
-              },
-              {
-                value: "second",
-                label: isArabic ? "الفصل الثاني" : "Second Semester",
-              },
-              {
-                value: "summer",
-                label: isArabic ? "الفصل الصيفي" : "Summer Semester",
-              },
-            ]}
-          />
-        </div>
-        {user?.role === "admin" ? (
-          <div className="mb-4 rounded-2xl border border-white/10 bg-secondary/20 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold">
-              <CalendarClock className="h-4 w-4 text-sky-300" />
-              {isArabic ? "فتح وإغلاق التسجيل" : "Registration semesters"}
-            </div>
-            <div className="mb-2 flex gap-2">
-              <Input
-                value={newAcademicYear}
-                onChange={(event) => setNewAcademicYear(event.target.value)}
-                placeholder="2027-2028"
-                className="h-9 text-xs"
-              />
-              <Button
-                size="sm"
-                disabled={
-                  createYear.isPending || !/^\d{4}-\d{4}$/.test(newAcademicYear)
-                }
-                onClick={() => createYear.mutate()}
-              >
-                +
-              </Button>
-            </div>
-            <p className="mb-2 text-[10px] text-muted-foreground">
-              {academicYear} · {selectedYearSummary?.registrationCount ?? 0}{" "}
-              {isArabic ? "تسجيل" : "registrations"} ·{" "}
-              {selectedYearSummary?.advisingCaseCount ?? 0}{" "}
-              {isArabic ? "حالة إرشاد" : "advising cases"}
-            </p>
-            <div className="mb-3 flex gap-2">
-              {!selectedYearSummary?.isCurrent ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 flex-1 text-[10px]"
-                  disabled={setCurrentYear.isPending}
-                  onClick={() => setCurrentYear.mutate(academicYear)}
-                >
-                  {isArabic ? "تعيين كسنة حالية" : "Make current"}
-                </Button>
-              ) : (
-                <span className="flex-1 rounded-lg bg-emerald-500/10 px-2 py-2 text-center text-[10px] font-bold text-emerald-300">
-                  {isArabic ? "السنة الحالية" : "Current year"}
-                </span>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-red-300"
-                disabled={
-                  deleteYear.isPending || selectedYearSummary?.isCurrent
-                }
-                onClick={() => deleteYear.mutate(academicYear)}
-                aria-label={
-                  isArabic ? "حذف السنة الأكاديمية" : "Delete academic year"
-                }
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="space-y-1.5">
-              {(["first", "second", "summer"] as const).map((semester) => {
+        {/* Unified Academic Period & Registration Control Card */}
+        <div className="mb-4 rounded-2xl border border-sky-500/20 bg-card/60 p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-sky-400 min-w-0 truncate">
+              <CalendarClock className="h-4 w-4 shrink-0" />
+              <span className="truncate">{isArabic ? "الفترة الأكاديمية والتسجيل" : "Academic Period & Terms"}</span>
+            </span>
+            {selectedYearSummary?.isCurrent ? (
+              <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                {isArabic ? "العام الحالي" : "Current Year"}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Academic Year Selection */}
+          <div className="mb-2.5">
+            <label className="mb-1 block text-[10px] text-muted-foreground">
+              {isArabic ? "العام الأكاديمي النشط" : "Active Academic Year"}
+            </label>
+            <CustomDropdown
+              ariaLabel={
+                isArabic ? "السنة الأكاديمية للإرشاد" : "Advising academic year"
+              }
+              value={academicYear}
+              onValueChange={(value) => {
+                setManagedYear(value);
+                setSelected(undefined);
+              }}
+              className="h-8 text-xs"
+              options={(academicYears.data ?? []).map((year) => ({
+                value: year.academicYear,
+                label: `${year.academicYear}${year.isCurrent ? (isArabic ? " (الحالي)" : " (Current)") : ""}`,
+              }))}
+            />
+          </div>
+
+          {/* Semester Pills (Instant 1-Click Switcher - prevents overlapping dropdowns) */}
+          <div className="mb-3">
+            <label className="mb-1 block text-[10px] text-muted-foreground">
+              {isArabic ? "الفصل الدراسي للإرشاد" : "Advising Semester"}
+            </label>
+            <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary/40 p-1">
+              {(["first", "second", "summer"] as const).map((sem) => {
+                const isSelected = advisingSemester === sem;
                 const term = terms.data?.find(
                   (item) =>
-                    item.academicYear === academicYear &&
-                    item.semester === semester,
+                    item.academicYear === academicYear && item.semester === sem,
                 );
-                const open = term?.isOpen ?? false;
+                const isOpen = term?.isOpen ?? false;
                 return (
                   <button
-                    key={semester}
+                    key={sem}
                     type="button"
-                    disabled={saveTerm.isPending}
-                    onClick={() => saveTerm.mutate({ semester, isOpen: !open })}
+                    onClick={() => {
+                      setAdvisingSemester(sem);
+                      setSelected(undefined);
+                    }}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-xs transition",
-                      open
-                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                        : "border-red-500/20 bg-red-500/5 text-red-200",
+                      "relative flex flex-col items-center justify-center rounded-lg py-1.5 text-center transition-all",
+                      isSelected
+                        ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                     )}
                   >
-                    <span>{semesterLabel(semester, locale)}</span>
-                    <span className="flex items-center gap-1">
-                      {open ? (
-                        <UnlockKeyhole className="h-3.5 w-3.5" />
-                      ) : (
-                        <LockKeyhole className="h-3.5 w-3.5" />
-                      )}
-                      {open
+                    <span className="text-[11px] leading-tight">
+                      {sem === "first"
                         ? isArabic
-                          ? "مفتوح"
-                          : "Open"
-                        : isArabic
-                          ? "مغلق"
-                          : "Closed"}
+                          ? "الأول"
+                          : "1st"
+                        : sem === "second"
+                          ? isArabic
+                            ? "الثاني"
+                            : "2nd"
+                          : isArabic
+                            ? "صيفي"
+                            : "Summer"}
                     </span>
+                    <span
+                      className={cn(
+                        "mt-0.5 inline-block h-1.5 w-1.5 rounded-full",
+                        isOpen ? "bg-emerald-400" : "bg-red-400/50",
+                      )}
+                      title={
+                        isOpen
+                          ? isArabic
+                            ? "التسجيل مفتوح"
+                            : "Registration open"
+                          : isArabic
+                            ? "التسجيل مغلق"
+                            : "Registration closed"
+                      }
+                    />
                   </button>
                 );
               })}
             </div>
           </div>
-        ) : null}
+
+          {/* Term Registration Status & Admin Controls */}
+          {user?.role === "admin" ? (
+            <div className="space-y-2 border-t border-white/10 pt-2.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">
+                  {isArabic ? "حالة تسجيل الفصل:" : "Semester Registration:"}
+                </span>
+                {(() => {
+                  const currentTerm = terms.data?.find(
+                    (item) =>
+                      item.academicYear === academicYear &&
+                      item.semester === advisingSemester,
+                  );
+                  const open = currentTerm?.isOpen ?? false;
+                  return (
+                    <button
+                      type="button"
+                      disabled={saveTerm.isPending}
+                      onClick={() =>
+                        saveTerm.mutate({
+                          semester: advisingSemester,
+                          isOpen: !open,
+                        })
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-medium transition",
+                        open
+                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                          : "border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25",
+                      )}
+                      title={
+                        isArabic
+                          ? "اضغط لتبديل حالة التسجيل"
+                          : "Click to toggle registration status"
+                      }
+                    >
+                      {open ? (
+                        <UnlockKeyhole className="h-3 w-3" />
+                      ) : (
+                        <LockKeyhole className="h-3 w-3" />
+                      )}
+                      <span>
+                        {open
+                          ? isArabic
+                            ? "مفتوح (تبديل)"
+                            : "Open"
+                          : isArabic
+                            ? "مغلق (تبديل)"
+                            : "Closed"}
+                      </span>
+                    </button>
+                  );
+                })()}
+              </div>
+
+              {/* Year Metadata & Current Year Setter */}
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {selectedYearSummary?.registrationCount ?? 0}{" "}
+                  {isArabic ? "تسجيل" : "reg"} ·{" "}
+                  {selectedYearSummary?.advisingCaseCount ?? 0}{" "}
+                  {isArabic ? "حالة" : "cases"}
+                </span>
+                <div className="flex items-center gap-1">
+                  {!selectedYearSummary?.isCurrent ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1.5 text-[10px] text-sky-300 hover:text-sky-200"
+                      disabled={setCurrentYear.isPending}
+                      onClick={() => setCurrentYear.mutate(academicYear)}
+                    >
+                      {isArabic ? "تعيين كحالية" : "Make current"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-[10px] text-red-400 hover:text-red-300"
+                    disabled={
+                      deleteYear.isPending || selectedYearSummary?.isCurrent
+                    }
+                    onClick={() => deleteYear.mutate(academicYear)}
+                    title={
+                      isArabic ? "حذف السنة الأكاديمية" : "Delete academic year"
+                    }
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Compact Year Creation */}
+              <div className="flex gap-1.5 pt-1">
+                <Input
+                  value={newAcademicYear}
+                  onChange={(e) => setNewAcademicYear(e.target.value)}
+                  placeholder="2027-2028"
+                  className="h-7 text-[11px]"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={
+                    createYear.isPending ||
+                    !/^\d{4}-\d{4}$/.test(newAcademicYear)
+                  }
+                  onClick={() => createYear.mutate()}
+                  title={isArabic ? "إضافة سنة أكاديمية" : "Add academic year"}
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
         <div className="relative mb-3">
           <Search className="absolute inset-s-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -903,54 +1003,6 @@ export function AdvisingWorkspace() {
                   ) : null}
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                {[
-                  ["GPA", active.gpa],
-                  [
-                    isArabic ? "ناجح" : "Passed",
-                    courseMap.data?.summary?.passedCourses ?? 0,
-                  ],
-                  [
-                    isArabic ? "راسب" : "Failed",
-                    courseMap.data?.summary?.failedCourses ?? 0,
-                  ],
-                  [
-                    isArabic ? "الخطة" : "Plan",
-                    courseMap.data?.registration?.courses.length ??
-                      selectedCourseIds.length,
-                  ],
-                  [
-                    isArabic ? "المقررات" : "Courses",
-                    courseMap.data?.courses.length ?? 0,
-                  ],
-                  [
-                    isArabic ? "الساعات" : "Credits",
-                    `${courseMap.data?.summary?.completedCredits ?? 0} ${isArabic ? "مكتملة" : "completed"} · ${selectedCredits} ${isArabic ? "مختارة" : "selected"}`,
-                  ],
-                  [
-                    isArabic ? "المتبقي" : "Remaining",
-                    courseMap.data?.summary?.remainingCredits ?? 0,
-                  ],
-                  [isArabic ? "الإنذارات" : "Warnings", active.warningCount],
-                ].map(([label, value], index) => (
-                  <div
-                    key={String(label)}
-                    className={cn(
-                      "rounded-xl border p-2",
-                      index === 2
-                        ? "border-red-500/30 bg-red-500/10"
-                        : index === 7
-                          ? "border-amber-500/30 bg-amber-500/10"
-                          : "border-white/10 bg-secondary/20",
-                    )}
-                  >
-                    <p className="text-[10px] uppercase text-muted-foreground">
-                      {label}
-                    </p>
-                    <strong>{value}</strong>
-                  </div>
-                ))}
-              </div>
             </header>
             {courseMap.data?.generationReadiness &&
             !courseMap.data.generationReadiness.canGenerate ? (
@@ -1026,6 +1078,7 @@ export function AdvisingWorkspace() {
                   locale={locale}
                   isArabic={isArabic}
                   disabled={isCaseClosed || hasFinalRegistration}
+                  activeStudent={active}
                   onDecision={(id, decision) => decide.mutate({ id, decision })}
                   onToggleManual={(courseId) =>
                     updateManualSelectedIds((current) =>
@@ -1034,6 +1087,15 @@ export function AdvisingWorkspace() {
                         : [...current, courseId],
                     )
                   }
+                  onStartCase={() => openCase.mutate()}
+                  isStartingCase={openCase.isPending}
+                  onSaveDraft={() => createDraft.mutate()}
+                  isSavingDraft={createDraft.isPending}
+                  onApprove={() => approve.mutate()}
+                  isApproving={approve.isPending}
+                  hasDraft={Boolean(draft)}
+                  selectedCredits={selectedCredits}
+                  advisingSemester={advisingSemester}
                 />
               </TabsContent>
               <TabsContent value="recommended">
@@ -1093,6 +1155,22 @@ export function AdvisingWorkspace() {
     </div>
   );
 }
+function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
+  if (course.academicLevel) {
+    const num = parseInt(course.academicLevel.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= 1 && num <= 4) return num;
+  }
+  if (course.level) {
+    const num = parseInt(course.level.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num >= 1 && num <= 4) return num;
+  }
+  const match = course.code.match(/([1-4])\d{2}/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return 1;
+}
+
 function Canvas({
   courseMap,
   recommendations,
@@ -1100,8 +1178,18 @@ function Canvas({
   locale,
   isArabic,
   disabled,
+  activeStudent,
   onDecision,
   onToggleManual,
+  onStartCase,
+  isStartingCase,
+  onSaveDraft,
+  isSavingDraft,
+  onApprove,
+  isApproving,
+  hasDraft,
+  selectedCredits,
+  advisingSemester,
 }: {
   courseMap?: AdvisingCourseMap;
   recommendations: CourseRecommendation[];
@@ -1109,77 +1197,731 @@ function Canvas({
   locale: string;
   isArabic: boolean;
   disabled: boolean;
+  activeStudent?: AdvisingStudent;
   onDecision: (
     id: string,
     decision: "ACCEPTED" | "REJECTED" | "PENDING",
   ) => void;
   onToggleManual: (courseId: string) => void;
+  onStartCase?: () => void;
+  isStartingCase?: boolean;
+  onSaveDraft?: () => void;
+  isSavingDraft?: boolean;
+  onApprove?: () => void;
+  isApproving?: boolean;
+  hasDraft?: boolean;
+  selectedCredits: number;
+  advisingSemester: "first" | "second" | "summer";
 }) {
+  const [viewMode, setViewMode] = useState<"grid" | "flow">("grid");
+  const [gridLevelFilter, setGridLevelFilter] = useState<string>("all");
+  const [courseSearch, setCourseSearch] = useState<string>("");
+
   if (!courseMap) {
+    if (activeStudent) {
+      return (
+        <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-sky-500/30 bg-card/40 p-8 text-center">
+          <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sky-500/10 text-sky-400">
+            <Sparkles className="h-8 w-8" />
+          </div>
+          <h3 className="text-base font-bold">
+            {isArabic
+              ? `طالب محدد: ${activeStudent.name}`
+              : `Selected Student: ${activeStudent.name}`}
+          </h3>
+          <p className="mt-1.5 max-w-md text-xs text-muted-foreground">
+            {isArabic
+              ? "لم يتم فتح ملف إرشاد بعد لهذا الطالب في الفترة المحددة. اضغط على الزر أدناه لبدء جلسة الإرشاد وتوليد خريطة المقررات والتوصيات تلقائياً."
+              : "No advising case exists for this student in the selected period. Click below to start advising and generate the course map."}
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button
+              disabled={isStartingCase}
+              onClick={onStartCase}
+              className="gap-2"
+            >
+              {isStartingCase ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderOpen className="h-4 w-4" />
+              )}
+              {isArabic
+                ? "بدء جلسة الإرشاد وعرض الخريطة"
+                : "Open Advising Case & View Map"}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <Empty
         text={
           isArabic
-            ? "افتح حالة الإرشاد لعرض المسار"
-            : "Open an advising case to load the academic course map"
+            ? "اختر طالباً من القائمة الجانبية لبدء جلسة الإرشاد وعرض الخريطة"
+            : "Select a student from the sidebar to open the advising canvas"
         }
       />
     );
   }
-  const recommendationByCode = new Map(
-    recommendations.map((item) => [item.courseId.code.toUpperCase(), item]),
-  );
-  const completedCodes = courseMap.courses
-    .filter((course) => course.progressStatus === "passed")
-    .map((course) => course.code.toUpperCase());
-  const completedSet = new Set(completedCodes);
-  const selectableCourses = courseMap.courses.filter(
-    (course) =>
-      course.progressStatus !== "passed" &&
-      course.progressStatus !== "low_grade" &&
-      (course.offeredTerms?.length
-        ? course.offeredTerms.includes(courseMap.student.semester)
-        : course.semester === courseMap.student.semester) &&
-      (course.prerequisites ?? []).every((code) =>
-        completedSet.has(code.toUpperCase()),
+
+  const recommendationByCode = useMemo(
+    () =>
+      new Map(
+        recommendations
+          .filter((item) => Boolean(item?.courseId?.code))
+          .map((item) => [item.courseId.code.toUpperCase(), item]),
       ),
+    [recommendations],
   );
-  const selectedSet = new Set(selectedCourseIds);
-  const selectedCodes = courseMap.courses
-    .filter((course) => selectedSet.has(course._id))
-    .map((course) => course.code);
-  const visibleSelectedCodes = [
-    ...new Set([...courseMap.selectedCourses, ...selectedCodes]),
-  ];
-  return (
-    <CourseMapFlow
-      courses={courseMap.courses}
-      locale={locale}
-      selectedCodes={visibleSelectedCodes}
-      suggestedCodes={courseMap.suggestedCourses}
-      completedCodes={completedCodes}
-      failedCodes={courseMap.courses
+
+  const completedCodes = useMemo(
+    () =>
+      courseMap.courses
+        .filter((course) => course.progressStatus === "passed")
+        .map((course) => course.code.toUpperCase()),
+    [courseMap.courses],
+  );
+  const completedSet = useMemo(() => new Set(completedCodes), [completedCodes]);
+
+  const selectedSet = useMemo(
+    () => new Set(selectedCourseIds),
+    [selectedCourseIds],
+  );
+  const selectedCodes = useMemo(
+    () =>
+      courseMap.courses
+        .filter((course) => selectedSet.has(course._id))
+        .map((course) => course.code),
+    [courseMap.courses, selectedSet],
+  );
+  const visibleSelectedCodes = useMemo(
+    () => [...new Set([...courseMap.selectedCourses, ...selectedCodes])],
+    [courseMap.selectedCourses, selectedCodes],
+  );
+  const visibleSelectedSet = useMemo(
+    () => new Set(visibleSelectedCodes.map((c) => c.toUpperCase())),
+    [visibleSelectedCodes],
+  );
+
+  const failedCodes = useMemo(
+    () =>
+      courseMap.courses
         .filter((course) => course.progressStatus === "failed")
-        .map((course) => course.code)}
-      selectableCodes={selectableCourses.map((course) => course.code)}
-      readonly={disabled}
-      studentName={courseMap.student.name}
-      studentCode={courseMap.student.studentCode}
-      gpa={courseMap.student.gpa}
-      currentSemester={courseMap.student.semester}
-      onToggleCourse={(code) => {
-        const recommendation = recommendationByCode.get(code.toUpperCase());
-        if (disabled) return;
-        if (recommendation?.accepted) {
-          onDecision(recommendation._id, "PENDING");
-          return;
+        .map((course) => course.code),
+    [courseMap.courses],
+  );
+
+  const selectableCourses = useMemo(
+    () =>
+      courseMap.courses.filter((course) => {
+        const codeUpper = course.code.toUpperCase();
+        const isPassed =
+          completedSet.has(codeUpper) || course.progressStatus === "passed";
+        const isLowGrade = course.progressStatus === "low_grade";
+        if (isPassed && !isLowGrade) {
+          return false;
         }
-        const course = courseMap.courses.find(
-          (item) => item.code.toUpperCase() === code.toUpperCase(),
-        );
-        if (course) onToggleManual(course._id);
-      }}
-    />
+
+        const prereqs = course.prerequisites ?? [];
+        return prereqs.every((code) => completedSet.has(code.toUpperCase()));
+      }),
+    [courseMap.courses, completedSet],
+  );
+
+  // Credit limits computation
+  const isSummer = advisingSemester === "summer";
+  const isProbation =
+    (activeStudent?.warningCount ?? 0) >= 2 || (activeStudent?.gpa ?? 0) < 2.0;
+  const isGraduating =
+    Boolean(activeStudent?.expectedGraduation) ||
+    (courseMap.summary?.remainingCredits ?? 100) <= 21;
+  const maxAllowedCredits = isSummer
+    ? isProbation
+      ? 6
+      : 9
+    : isProbation
+      ? 12
+      : isGraduating
+        ? 21
+        : 18;
+
+  const isOverCreditLimit = selectedCredits > maxAllowedCredits;
+  const creditUsagePercent = Math.min(
+    100,
+    Math.round((selectedCredits / maxAllowedCredits) * 100),
+  );
+
+  // Course Grid filtering and grouping
+  const filteredCourses = useMemo(() => {
+    return courseMap.courses.filter((course) => {
+      const level = getCourseLevel(course);
+      if (gridLevelFilter !== "all" && String(level) !== gridLevelFilter) {
+        return false;
+      }
+      if (!courseSearch.trim()) return true;
+      const q = courseSearch.toLowerCase();
+      return (
+        course.code.toLowerCase().includes(q) ||
+        (course.nameAr && course.nameAr.toLowerCase().includes(q)) ||
+        (course.nameEn && course.nameEn.toLowerCase().includes(q)) ||
+        (course.name && course.name.toLowerCase().includes(q))
+      );
+    });
+  }, [courseMap.courses, gridLevelFilter, courseSearch]);
+
+  const coursesByLevel = useMemo(() => {
+    const map = new Map<number, AdvisingCourseMap["courses"]>();
+    for (let l = 1; l <= 4; l++) map.set(l, []);
+    for (const course of filteredCourses) {
+      const lvl = getCourseLevel(course);
+      const list = map.get(lvl) ?? [];
+      list.push(course);
+      map.set(lvl, list);
+    }
+    return map;
+  }, [filteredCourses]);
+
+  const blockedCoursesCountByPrereq = useMemo(() => {
+    const map = new Map<string, string[]>();
+    courseMap.courses.forEach((c) => {
+      (c.prerequisites ?? []).forEach((prereqCode) => {
+        const pUpper = prereqCode.trim().toUpperCase();
+        const current = map.get(pUpper) ?? [];
+        current.push(c.code);
+        map.set(pUpper, current);
+      });
+    });
+    return map;
+  }, [courseMap.courses]);
+
+  const handleToggleCourse = (course: AdvisingCourseMap["courses"][0]) => {
+    if (disabled) return;
+    const recommendation = recommendationByCode.get(course.code.toUpperCase());
+    if (recommendation?.accepted) {
+      onDecision(recommendation._id, "PENDING");
+      return;
+    }
+    onToggleManual(course._id);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Top Bar: View Mode Switcher, Level Filter, Search */}
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-white/10 bg-card/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1.5 rounded-xl bg-secondary/40 p-1">
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
+              viewMode === "grid"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span>{isArabic ? "شبكة المقررات (Grid)" : "Curriculum Grid"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("flow")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition",
+              viewMode === "flow"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            <Workflow className="h-3.5 w-3.5" />
+            <span>
+              {isArabic ? "المسار التفاعلي (XYZ Flow)" : "Interactive Flow"}
+            </span>
+          </button>
+        </div>
+
+        {viewMode === "grid" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Level Quick Filter */}
+            <div className="flex items-center gap-1 rounded-lg bg-secondary/30 p-0.5 text-[11px]">
+              {[
+                { id: "all", label: isArabic ? "كل المستويات" : "All" },
+                { id: "1", label: isArabic ? "مستوى 1" : "L1" },
+                { id: "2", label: isArabic ? "مستوى 2" : "L2" },
+                { id: "3", label: isArabic ? "مستوى 3" : "L3" },
+                { id: "4", label: isArabic ? "مستوى 4" : "L4" },
+              ].map((lvl) => (
+                <button
+                  key={lvl.id}
+                  type="button"
+                  onClick={() => setGridLevelFilter(lvl.id)}
+                  className={cn(
+                    "rounded-md px-2 py-1 transition",
+                    gridLevelFilter === lvl.id
+                      ? "bg-primary/20 text-primary font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {lvl.label}
+                </button>
+              ))}
+            </div>
+
+            {/* In-Canvas Search */}
+            <div className="relative">
+              <Search className="absolute inset-s-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={courseSearch}
+                onChange={(e) => setCourseSearch(e.target.value)}
+                placeholder={
+                  isArabic ? "بحث في المقررات..." : "Search courses..."
+                }
+                className="h-8 w-36 ps-8 text-xs sm:w-48"
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Main Content Area: Either Grid Matrix or Interactive Flow Chart */}
+      {viewMode === "grid" ? (
+        <div className="space-y-6">
+          {[1, 2, 3, 4].map((levelNum) => {
+            const levelCourses = coursesByLevel.get(levelNum) ?? [];
+            if (!levelCourses.length && gridLevelFilter !== "all") return null;
+
+            const levelNames = {
+              1: {
+                ar: "المستوى الأول (السنة الأولى)",
+                en: "Level 1 (Freshman)",
+              },
+              2: {
+                ar: "المستوى الثاني (السنة الثانية)",
+                en: "Level 2 (Sophomore)",
+              },
+              3: {
+                ar: "المستوى الثالث (السنة الثالثة)",
+                en: "Level 3 (Junior)",
+              },
+              4: {
+                ar: "المستوى الرابع (سنة التخرج)",
+                en: "Level 4 (Senior)",
+              },
+            }[levelNum as 1 | 2 | 3 | 4];
+
+            const completedInLevel = levelCourses.filter((c) =>
+              completedSet.has(c.code.toUpperCase()),
+            ).length;
+
+            return (
+              <section key={levelNum} className="space-y-3">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-lg bg-sky-500/10 text-xs font-bold text-sky-400">
+                      {levelNum}
+                    </span>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {isArabic ? levelNames.ar : levelNames.en}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>
+                      {levelCourses.length}{" "}
+                      {isArabic ? "مقرر" : "courses"}
+                    </span>
+                    <span>·</span>
+                    <span className="text-emerald-400">
+                      {completedInLevel} {isArabic ? "مجتاز" : "passed"}
+                    </span>
+                  </div>
+                </div>
+
+                {!levelCourses.length ? (
+                  <p className="py-4 text-center text-xs text-muted-foreground">
+                    {isArabic
+                      ? "لا توجد مقررات مطابقة للبحث في هذا المستوى"
+                      : "No courses matching filter in this level"}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {levelCourses.map((course) => {
+                      const codeUpper = course.code.toUpperCase();
+                      const isPassed =
+                        completedSet.has(codeUpper) ||
+                        course.progressStatus === "passed";
+                      const isFailed = course.progressStatus === "failed";
+                      const isLowGrade = course.progressStatus === "low_grade";
+                      const isInPlan =
+                        visibleSelectedSet.has(codeUpper) ||
+                        selectedSet.has(course._id);
+                      const rec = recommendationByCode.get(codeUpper);
+                      const isRecommended =
+                        !isPassed &&
+                        (Boolean(
+                          courseMap.suggestedCourses?.includes(course.code),
+                        ) ||
+                          Boolean(rec?.isRecommendedForSemester));
+
+                      const blockedFutureCourses =
+                        blockedCoursesCountByPrereq.get(codeUpper) ?? [];
+                      const isCriticalBlocker =
+                        isFailed && blockedFutureCourses.length > 0;
+
+                      const prereqs = course.prerequisites ?? [];
+                      const prereqsMet = prereqs.every((p) =>
+                        completedSet.has(p.toUpperCase()),
+                      );
+                      const canSelect =
+                        (!isPassed || isLowGrade) && prereqsMet && !disabled;
+
+                      return (
+                        <div
+                          key={course._id ?? course.code}
+                          className={cn(
+                            "relative flex flex-col justify-between rounded-2xl border p-3.5 transition-all shadow-sm",
+                            isInPlan
+                              ? "border-sky-500/40 bg-sky-500/10"
+                              : isCriticalBlocker
+                                ? "border-red-500/50 bg-red-500/15 ring-1 ring-red-500/30 shadow-sm shadow-red-500/10"
+                                : isPassed
+                                  ? "border-emerald-500/20 bg-emerald-500/5"
+                                  : isFailed
+                                    ? "border-red-500/30 bg-red-500/10"
+                                    : isLowGrade
+                                      ? "border-amber-500/30 bg-amber-500/10"
+                                      : isRecommended
+                                        ? "border-purple-500/30 bg-purple-500/5"
+                                        : "border-white/10 bg-card/60 hover:border-white/20",
+                          )}
+                        >
+                          <div>
+                            {/* Card Top: Code & Credit Hours */}
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-xs font-bold text-foreground">
+                                {course.code}
+                              </span>
+                              <span className="rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {course.creditHours ?? 3}{" "}
+                                {isArabic ? "ساعات" : "cr"}
+                              </span>
+                            </div>
+
+                            {/* Card Title */}
+                            <h4 className="mt-1.5 text-xs font-bold leading-tight text-foreground line-clamp-2">
+                              {isArabic
+                                ? course.nameAr || course.name
+                                : course.nameEn || course.name}
+                            </h4>
+
+                            {/* Prerequisites List */}
+                            <div className="mt-2 text-[10px]">
+                              {prereqs.length ? (
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="text-muted-foreground">
+                                    {isArabic ? "المتطلب:" : "Prereq:"}
+                                  </span>
+                                  {prereqs.map((p) => {
+                                    const pPassed = completedSet.has(
+                                      p.toUpperCase(),
+                                    );
+                                    return (
+                                      <span
+                                        key={p}
+                                        className={cn(
+                                          "inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono",
+                                          pPassed
+                                            ? "bg-emerald-500/15 text-emerald-300"
+                                            : "bg-red-500/15 text-red-300",
+                                        )}
+                                      >
+                                        {pPassed ? (
+                                          <CheckCircle2 className="h-2.5 w-2.5" />
+                                        ) : (
+                                          <LockKeyhole className="h-2.5 w-2.5" />
+                                        )}
+                                        {p}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/60">
+                                  {isArabic
+                                    ? "بدون متطلبات"
+                                    : "No prerequisites"}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Status Badge */}
+                            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                              {isInPlan ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2 py-0.5 font-semibold text-sky-300">
+                                  <Check className="h-3 w-3" />
+                                  {isArabic
+                                    ? "محدد للتسجيل"
+                                    : "Selected in plan"}
+                                </span>
+                              ) : isPassed ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 font-semibold text-emerald-300">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  {isArabic ? "مجتاز" : "Passed"}
+                                </span>
+                              ) : (
+                                <>
+                                  {isFailed ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 font-semibold text-red-300">
+                                      <AlertCircle className="h-3 w-3" />
+                                      {isArabic
+                                        ? "راسب (إعادة)"
+                                        : "Failed (Repeat)"}
+                                    </span>
+                                  ) : isLowGrade ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 font-semibold text-amber-300">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {isArabic ? "درجة منخفضة" : "Low Grade"}
+                                    </span>
+                                  ) : null}
+
+                                  {isCriticalBlocker ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full bg-red-500/25 border border-red-500/40 px-2 py-0.5 font-bold text-red-200"
+                                      title={
+                                        isArabic
+                                          ? `يعطل المقررات القادمة: ${blockedFutureCourses.join(", ")}`
+                                          : `Blocks future courses: ${blockedFutureCourses.join(", ")}`
+                                      }
+                                    >
+                                      <AlertTriangle className="h-3 w-3 text-red-400" />
+                                      {isArabic
+                                        ? `يعطل ${blockedFutureCourses.length} مقرر قادم`
+                                        : `Blocks ${blockedFutureCourses.length} future`}
+                                    </span>
+                                  ) : !isFailed &&
+                                    !isPassed &&
+                                    blockedFutureCourses.length > 0 ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 text-[9px] font-medium text-sky-300/90"
+                                      title={
+                                        isArabic
+                                          ? `متطلب سابق لـ: ${blockedFutureCourses.join(", ")}`
+                                          : `Prerequisite for: ${blockedFutureCourses.join(", ")}`
+                                      }
+                                    >
+                                      <GitBranch className="h-2.5 w-2.5" />
+                                      {isArabic
+                                        ? `يفتح ${blockedFutureCourses.length} مقرر`
+                                        : `Unlocks ${blockedFutureCourses.length}`}
+                                    </span>
+                                  ) : null}
+
+                                  {isRecommended ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 font-semibold text-purple-300">
+                                      <Sparkles className="h-3 w-3 text-purple-400" />
+                                      {isArabic ? "موصى به" : "Recommended"}
+                                    </span>
+                                  ) : !isFailed && !isLowGrade ? (
+                                    prereqsMet ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
+                                        {isArabic ? "متاح" : "Available"}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-red-400">
+                                        <LockKeyhole className="h-3 w-3" />
+                                        {isArabic ? "مقفل" : "Locked"}
+                                      </span>
+                                    )
+                                  ) : null}
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="mt-3 border-t border-white/10 pt-2">
+                            {isInPlan ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={disabled}
+                                onClick={() => handleToggleCourse(course)}
+                                className="h-7 w-full border-red-500/30 text-[11px] text-red-300 hover:bg-red-500/15"
+                              >
+                                <Minus className="me-1 h-3.5 w-3.5" />
+                                {isArabic ? "إزالة من الخطة" : "Remove"}
+                              </Button>
+                            ) : canSelect ? (
+                              <Button
+                                size="sm"
+                                disabled={disabled}
+                                onClick={() => handleToggleCourse(course)}
+                                className="h-7 w-full text-[11px] bg-primary/90 hover:bg-primary"
+                              >
+                                <Plus className="me-1 h-3.5 w-3.5" />
+                                {isArabic ? "إضافة إلى الخطة" : "Add to Plan"}
+                              </Button>
+                            ) : isPassed ? (
+                              <div className="text-center text-[10px] text-emerald-400 font-medium py-1">
+                                {isArabic ? "مكتمل بنجاح" : "Completed"}
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1 text-center text-[10px] text-muted-foreground/80 py-1">
+                                <LockKeyhole className="h-3 w-3" />
+                                <span>
+                                  {isArabic
+                                    ? "غير مستوفٍ للمتطلبات"
+                                    : "Prereqs missing"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <CourseMapFlow
+          courses={courseMap.courses}
+          locale={locale}
+          selectedCodes={visibleSelectedCodes}
+          suggestedCodes={courseMap.suggestedCourses}
+          completedCodes={completedCodes}
+          failedCodes={failedCodes}
+          selectableCodes={selectableCourses.map((course) => course.code)}
+          readonly={disabled}
+          studentName={courseMap.student.name}
+          studentCode={courseMap.student.studentCode}
+          gpa={courseMap.student.gpa}
+          currentSemester={courseMap.student.semester}
+          onToggleCourse={(code) => {
+            const recommendation = recommendationByCode.get(code.toUpperCase());
+            if (disabled) return;
+            if (recommendation?.accepted) {
+              onDecision(recommendation._id, "PENDING");
+              return;
+            }
+            const course = courseMap.courses.find(
+              (item) => item.code.toUpperCase() === code.toUpperCase(),
+            );
+            if (course) onToggleManual(course._id);
+          }}
+        />
+      )}
+
+      {/* Live Registration & Credit Limits Summary Dock */}
+      <div className="sticky bottom-2 z-10 rounded-2xl border border-white/15 bg-card/95 p-4 shadow-xl backdrop-blur-md">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {/* Left: Credit Hours Capacity Gauge */}
+          <div className="space-y-1.5 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-foreground">
+                  {isArabic
+                    ? "الساعات المختارة للتسجيل:"
+                    : "Selected Registration Credits:"}
+                </strong>
+                <span
+                  className={cn(
+                    "rounded-md px-2 py-0.5 font-mono text-xs font-bold",
+                    isOverCreditLimit
+                      ? "bg-red-500/20 text-red-300"
+                      : "bg-emerald-500/20 text-emerald-300",
+                  )}
+                >
+                  {selectedCredits} / {maxAllowedCredits}{" "}
+                  {isArabic ? "ساعة معتمدة" : "credits"}
+                </span>
+                {isProbation ? (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                    {isArabic
+                      ? "تحت الملاحظة (حد أقصى 12 ساعة)"
+                      : "Probation (Max 12 cr)"}
+                  </span>
+                ) : isGraduating ? (
+                  <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+                    {isArabic
+                      ? "طالب خريج (سماح حتى 21 ساعة)"
+                      : "Graduating Senior (Max 21 cr)"}
+                  </span>
+                ) : null}
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {selectedCodes.length}{" "}
+                {isArabic ? "مقررات محددة" : "courses selected"}
+              </span>
+            </div>
+
+            {/* Visual Progress Bar */}
+            <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/60">
+              <div
+                className={cn(
+                  "h-full transition-all duration-300 rounded-full",
+                  isOverCreditLimit
+                    ? "bg-red-500"
+                    : creditUsagePercent > 85
+                      ? "bg-amber-400"
+                      : "bg-emerald-400",
+                )}
+                style={{
+                  width: `${Math.min(100, (selectedCredits / maxAllowedCredits) * 100)}%`,
+                }}
+              />
+            </div>
+
+            {isOverCreditLimit ? (
+              <p className="flex items-center gap-1 text-[11px] font-medium text-red-400">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {isArabic
+                  ? `تنبيه: تجاوزت الحد الأقصى (${maxAllowedCredits} ساعة). يرجى إزالة مقرر ليتوافق مع اللائحة الأكاديمية.`
+                  : `Warning: Selected credits exceed the maximum limit (${maxAllowedCredits} cr). Please remove a course.`}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Right: Quick Action Buttons */}
+          <div className="flex items-center gap-2">
+            {onSaveDraft ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disabled || isSavingDraft || !selectedCourseIds.length}
+                onClick={onSaveDraft}
+                className="gap-1.5 text-xs"
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ClipboardCheck className="h-3.5 w-3.5" />
+                )}
+                {isArabic ? "حفظ المسودة" : "Save Draft"}
+              </Button>
+            ) : null}
+            {onApprove ? (
+              <Button
+                size="sm"
+                disabled={
+                  disabled || !hasDraft || isApproving || isOverCreditLimit
+                }
+                onClick={onApprove}
+                className="gap-1.5 text-xs"
+              >
+                {isApproving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                {isArabic ? "اعتماد التسجيل" : "Approve & Register"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 function RecommendationList({
@@ -1338,10 +2080,12 @@ function CourseCard({
       <div className="flex justify-between">
         <div>
           <span className="font-mono text-sm font-bold text-sky-300">
-            {item.courseId.code}
+            {item.courseId?.code ?? "N/A"}
           </span>
           <h3 className="font-semibold">
-            {isArabic ? item.courseId.nameAr : item.courseId.nameEn}
+            {isArabic
+              ? item.courseId?.nameAr || item.courseId?.nameEn || "مقرر غير متوفر"
+              : item.courseId?.nameEn || item.courseId?.nameAr || "Unavailable Course"}
           </h3>
         </div>
         <span className="h-fit rounded-full bg-black/20 px-2 py-1 text-xs">

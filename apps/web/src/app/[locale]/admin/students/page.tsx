@@ -39,6 +39,7 @@ import { Input } from '@/components/ui/input';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CustomDropdown } from '@/components/ui/custom-dropdown';
 
 const initialForm = {
   fullName: '',
@@ -86,7 +87,7 @@ function StudentsPageContent() {
   const { user } = useAuth();
 
   const { search, level, status, sortBy, sortOrder, page, selectedKeys, setFilter, setSelectedKeys } = useStudentStore();
-  const limit = 10;
+  const [limit, setLimit] = useState(20);
   const canViewSensitiveStudentData = user?.role === 'admin';
 
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -216,6 +217,59 @@ function StudentsPageContent() {
         t={t}
         tCommon={tCommon}
       />
+
+      {/* Pagination Bar */}
+      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {locale === 'ar'
+              ? `عرض ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} من إجمالي ${total} طالب`
+              : `Showing ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} of ${total} students`}
+          </span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{locale === 'ar' ? 'لكل صفحة:' : 'Per page:'}</span>
+            <CustomDropdown
+              ariaLabel={locale === 'ar' ? 'عدد العناصر لكل صفحة' : 'Items per page'}
+              value={String(limit)}
+              onValueChange={(val) => {
+                setLimit(Number(val));
+                setFilter('page', 1);
+              }}
+              options={[
+                { value: '10', label: '10' },
+                { value: '20', label: '20' },
+                { value: '50', label: '50' },
+                { value: '100', label: '100' },
+              ]}
+              className="w-18 h-8 text-xs py-1"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFilter('page', Math.max(1, page - 1))}
+            disabled={page <= 1 || studentsQuery.isLoading}
+            className="cursor-pointer text-xs"
+          >
+            {tCommon('previous')}
+          </Button>
+          <span className="font-mono text-xs text-muted-foreground px-2">
+            {locale === 'ar' ? `الصفحة ${page} من ${totalPages}` : `Page ${page} of ${totalPages}`}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFilter('page', Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages || studentsQuery.isLoading}
+            className="cursor-pointer text-xs"
+          >
+            {tCommon('next')}
+          </Button>
+        </div>
+      </div>
 
       <StudentFormDialog open={isAddOpen} onOpenChange={setIsAddOpen} isEditing={false} onSubmit={handleAddSubmit} isSubmitting={formLoading} />
       <StudentFormDialog open={isEditOpen} onOpenChange={setIsEditOpen} isEditing={true} onSubmit={handleEditSubmit} isSubmitting={formLoading} defaultValues={selectedStudent ? { fullName: selectedStudent.fullName, studentCode: selectedStudent.studentCode, level: selectedStudent.level, department: selectedStudent.department } : undefined} />

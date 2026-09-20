@@ -42,6 +42,14 @@ export interface Student {
     advisingCaseId?: string;
     advisingStatus: string;
   };
+  gpa?: number;
+  academicWarnings?: number;
+  academicProfile?: {
+    gpa?: number;
+    academicWarnings?: number;
+    completedCourses?: string[];
+    failedCourses?: string[];
+  };
 }
 
 export interface GradeSummary {

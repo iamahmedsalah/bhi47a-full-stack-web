@@ -154,4 +154,47 @@ describe('RulesBasedRecommendationProvider', () => {
         ),
     ).toBe(6);
   });
+
+  it('prioritizes failed blocker courses first, then available courses in the same level and semester', () => {
+    const recommendations = provider.generate({
+      courses: [
+        course('FUTURE301', {
+          academicLevel: '3',
+          level: '3',
+          semester: 'first',
+          offeredTerms: ['first'],
+        }),
+        course('CURRENT201', {
+          academicLevel: '2',
+          level: '2',
+          semester: 'second',
+          offeredTerms: ['second'],
+        }),
+        course('FAIL_BLOCKER', {
+          academicLevel: '1',
+          level: '1',
+          semester: 'first',
+          offeredTerms: ['first', 'second'],
+        }),
+        course('OTHER_L3', {
+          academicLevel: '3',
+          level: '3',
+          semester: 'second',
+          offeredTerms: ['second'],
+          prerequisites: ['FAIL_BLOCKER'],
+        }),
+      ],
+      completedCourses: [],
+      failedCourses: ['FAIL_BLOCKER'],
+      academicLevel: '2',
+      semester: 'second',
+      maxCreditHours: 6,
+    });
+
+    expect(recommendations[0].courseCode).toBe('FAIL_BLOCKER');
+    expect(recommendations[0].isRecommendedForSemester).toBe(true);
+
+    expect(recommendations[1].courseCode).toBe('CURRENT201');
+    expect(recommendations[1].isRecommendedForSemester).toBe(true);
+  });
 });

@@ -16,6 +16,7 @@ import {
 } from '../schemas/advising-graph.schema';
 import { Course } from '../../courses/schemas/course.schema';
 import { StudentAcademicProfile } from '../../registrations/schemas/student-academic-profile.schema';
+import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
 import { AdvisingAuditService } from './advising-audit.service';
 import { PlanValidationService } from './plan-validation.service';
 import type {
@@ -34,6 +35,8 @@ export class AdvisingPlanService {
     @InjectModel(Course.name) private readonly courses: Model<Course>,
     @InjectModel(StudentAcademicProfile.name)
     private readonly academicProfiles: Model<StudentAcademicProfile>,
+    @InjectModel(CourseRegistration.name)
+    private readonly registrations: Model<CourseRegistration>,
     private readonly validation: PlanValidationService,
     private readonly audit: AdvisingAuditService,
   ) {}
@@ -269,6 +272,45 @@ export class AdvisingPlanService {
       actorId: new Types.ObjectId(actorId),
     });
     await caseItem.save();
+
+    // Relational Integration: Automatically upsert approved CourseRegistration
+    const courseCodes = selectedCourseObjs.map((c) => c.code);
+    const totalCreditHours = selectedCourseObjs.reduce(
+      (sum, c) => sum + (c.creditHours || 3),
+      0,
+    );
+
+    await this.registrations.findOneAndUpdate(
+      {
+        studentId: plan.studentId,
+        academicYear: caseItem.academicYear,
+        semester: caseItem.semester,
+      },
+      {
+        $set: {
+          studentId: plan.studentId,
+          courses: courseCodes,
+          academicPlanId: plan._id,
+          academicYear: caseItem.academicYear,
+          semester: caseItem.semester,
+          totalCreditHours,
+          source: 'advisor',
+          status: 'approved',
+          approvedBy: new Types.ObjectId(actorId),
+          approvedAt: new Date(),
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    // Sync to StudentAcademicProfile registeredCourses
+    await this.academicProfiles.updateOne(
+      { studentId: plan.studentId },
+      {
+        $addToSet: { registeredCourses: { $each: courseCodes } },
+        $set: { currentTermCredits: totalCreditHours },
+      },
+    );
 
     await this.audit.record(
       caseItem._id,

@@ -36,6 +36,10 @@ import {
   AdvisingCase,
   AdvisingCaseDocument,
 } from '../academic-advising/schemas/advising-case.schema';
+import {
+  AcademicEmail,
+  AcademicEmailDocument,
+} from '../academic-emails/schemas/academic-email.schema';
 
 @Injectable()
 export class StudentsService {
@@ -48,6 +52,8 @@ export class StudentsService {
     private registrationTermModel: Model<RegistrationTermDocument>,
     @InjectModel(AdvisingCase.name)
     private advisingCaseModel: Model<AdvisingCaseDocument>,
+    @InjectModel(AcademicEmail.name)
+    private academicEmailModel: Model<AcademicEmailDocument>,
     private usersService: UsersService,
     private emailsService: EmailsService,
   ) {}
@@ -92,6 +98,22 @@ export class StudentsService {
     });
 
     await profile.save();
+
+    const academicEmail =
+      dto.academicEmail?.trim() || `${dto.studentCode}.bhi47@bhiasc.org`;
+    await this.academicEmailModel.updateOne(
+      { studentCode: dto.studentCode },
+      {
+        $set: {
+          studentCode: dto.studentCode,
+          studentName: dto.fullName,
+          academicEmail,
+          status: 'active',
+          studentId: user._id,
+        },
+      },
+      { upsert: true },
+    );
 
     return {
       user: {
@@ -192,18 +214,24 @@ export class StudentsService {
           semester: activeTerm.semester,
         }
       : null;
-    const [registrations, advisingCases] = termFilter
-      ? await Promise.all([
-          this.registrationModel
+    const [registrations, advisingCases, academicProfiles] = await Promise.all([
+      termFilter
+        ? this.registrationModel
             .find({ studentId: { $in: userIds }, ...termFilter })
             .sort({ createdAt: -1 })
-            .lean(),
-          this.advisingCaseModel
+            .lean()
+        : Promise.resolve([]),
+      termFilter
+        ? this.advisingCaseModel
             .find({ studentId: { $in: userIds }, ...termFilter })
             .sort({ updatedAt: -1 })
-            .lean(),
-        ])
-      : [[], []];
+            .lean()
+        : Promise.resolve([]),
+      this.studentProfileModel.db
+        .collection('student_academic_profiles')
+        .find({ studentId: { $in: userIds } })
+        .toArray(),
+    ]);
 
     const registrationByStudent = new Map(
       registrations.map((registration) => [
@@ -217,14 +245,28 @@ export class StudentsService {
         advisingCase,
       ]),
     );
+    const academicByStudent = new Map(
+      academicProfiles.map((ap) => [ap.studentId.toString(), ap]),
+    );
 
     return profiles.map((profile) => {
       const key = this.getProfileUserId(profile)?.toHexString() ?? '';
       const registration = registrationByStudent.get(key);
       const advisingCase = advisingByStudent.get(key);
+      const academicProfile = academicByStudent.get(key);
 
       return {
         ...profile,
+        gpa: academicProfile?.gpa ?? 0,
+        academicWarnings: academicProfile?.academicWarnings ?? 0,
+        academicProfile: academicProfile
+          ? {
+              gpa: academicProfile.gpa,
+              academicWarnings: academicProfile.academicWarnings,
+              completedCourses: academicProfile.completedCourses ?? [],
+              failedCourses: academicProfile.failedCourses ?? [],
+            }
+          : undefined,
         registrationSummary: {
           academicYear: activeTerm?.academicYear,
           semester: activeTerm?.semester,
@@ -367,6 +409,26 @@ export class StudentsService {
       await this.usersService.deactivateUser(profile.userId.toString());
     }
 
+    if (dto.academicEmail || dto.fullName) {
+      const email =
+        dto.academicEmail?.trim() ||
+        profile.academicEmail ||
+        `${profile.studentCode}.bhi47@bhiasc.org`;
+      await this.academicEmailModel.updateOne(
+        { studentCode: profile.studentCode },
+        {
+          $set: {
+            studentCode: profile.studentCode,
+            studentName: profile.fullName,
+            academicEmail: email,
+            status: 'active',
+            studentId: profile.userId,
+          },
+        },
+        { upsert: true },
+      );
+    }
+
     return profile;
   }
 
@@ -460,6 +522,33 @@ export class StudentsService {
     }
 
     return { message: 'تم إعادة تعيين كلمة المرور بنجاح' };
+  }
+
+  async getStats() {
+    const [total, active, suspended, graduated, withdrawn, byLevel] =
+      await Promise.all([
+        this.studentProfileModel.countDocuments(),
+        this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
+        this.studentProfileModel.countDocuments({ enrollmentStatus: 'suspended' }),
+        this.studentProfileModel.countDocuments({ enrollmentStatus: 'graduated' }),
+        this.studentProfileModel.countDocuments({ enrollmentStatus: 'withdrawn' }),
+        this.studentProfileModel.aggregate([
+          { $group: { _id: '$level', count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+        ]),
+      ]);
+
+    return {
+      total,
+      active,
+      suspended,
+      graduated,
+      withdrawn,
+      byLevel: byLevel.map((item) => ({
+        level: item._id || 'unknown',
+        count: item.count,
+      })),
+    };
   }
 
   async getDashboard(userId: string) {

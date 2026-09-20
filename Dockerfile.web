@@ -26,10 +26,15 @@ COPY apps/web ./apps/web
 
 # Setup build-time environment variables
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+ARG NEXT_PUBLIC_APP_ENV=production
+ARG NEXT_PUBLIC_APP_VERSION=1.0.0
+
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
+ENV NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION}
 # Next.js compiles pages and pre-renders static pages during build time.
-# Production configurations can be overwritten at runtime, but NEXT_PUBLIC_ variables
-# are baked in unless handled dynamically.
 ENV PORT=3000
 ENV NODE_ENV=production
 

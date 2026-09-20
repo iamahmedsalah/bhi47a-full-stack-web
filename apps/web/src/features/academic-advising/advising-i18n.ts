@@ -95,7 +95,19 @@ export function recommendationExplanation(
   item: CourseRecommendation,
   locale: AdvisingLocale,
 ) {
-  const name = locale === "ar" ? item.courseId.nameAr : item.courseId.nameEn;
+  const name =
+    locale === "ar"
+      ? item.courseId?.nameAr || item.courseId?.nameEn || "المقرر"
+      : item.courseId?.nameEn || item.courseId?.nameAr || "The course";
+  if (
+    item.reasonCodes?.includes("FAILED_PREVIOUSLY") &&
+    (item.category === "FAILED_PREREQUISITE" ||
+      item.reasonCodes?.includes("UNLOCKS_FUTURE_COURSES"))
+  ) {
+    return locale === "ar"
+      ? `أولوية حرجة: سبق الرسوب في ${name} وهو متطلب أساسي يعطل تسجيل مقررات لاحقة، يجب تسجيله أولاً لفتح المقررات.`
+      : `Critical Priority: ${name} was previously failed and blocks upcoming prerequisite courses! Must be retaken first.`;
+  }
   if (item.reasonCodes?.includes("FAILED_PREVIOUSLY")) {
     return locale === "ar"
       ? `أولوية أولى: سبق الرسوب في ${name} ويجب إعادة تسجيله أولاً.`
@@ -115,7 +127,10 @@ export function recommendationBlockedReasons(
   item: CourseRecommendation,
   locale: AdvisingLocale,
 ) {
-  const name = locale === "ar" ? item.courseId.nameAr : item.courseId.nameEn;
+  const name =
+    locale === "ar"
+      ? item.courseId?.nameAr || item.courseId?.nameEn || "المقرر"
+      : item.courseId?.nameEn || item.courseId?.nameAr || "The course";
   const codes = item.reasonCodes ?? [];
   const reasons: string[] = [];
   if (codes.includes("NOT_OFFERED_THIS_SEMESTER")) {
@@ -140,7 +155,7 @@ export function recommendationBlockedReasons(
     );
   }
   if (codes.includes("MISSING_PREREQUISITE")) {
-    const prerequisites = item.courseId.prerequisites?.join(", ");
+    const prerequisites = item.courseId?.prerequisites?.join(", ");
     reasons.push(
       locale === "ar"
         ? `لم تكتمل المتطلبات السابقة${prerequisites ? `: ${prerequisites}` : "."}`

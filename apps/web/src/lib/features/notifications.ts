@@ -45,6 +45,7 @@ export interface SendNotificationInput {
   targetType: NotificationTarget;
   targetLevel?: string;
   targetStudentCode?: string;
+  sendWhatsApp?: boolean;
 }
 
 export async function listAdminNotifications() {

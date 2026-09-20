@@ -14,6 +14,7 @@ import { StudentAcademicProfile } from '../../registrations/schemas/student-acad
 import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { RulesBasedRecommendationProvider } from '../../registrations/recommendations/rules-based-recommendation.provider';
+import { mergeAcademicCourseProgress } from '../../registrations/utils/academic-course-progress.util';
 import { AdvisingAuditService } from './advising-audit.service';
 import type {
   DecideRecommendationDto,
@@ -61,14 +62,52 @@ export class AdvisingRecommendationService {
 
     const activeCourses = await this.courses.find({ isActive: true });
 
-    const recs = this.provider.generate({
-      academicLevel: student.academicLevel,
-      semester: (caseItem.semester as Semester) || 'first',
+    const grades = await this.grades
+      .find({ studentId: caseItem.studentId })
+      .lean();
+    const courseCredits = Object.fromEntries(
+      activeCourses.map((course) => [
+        course.code.trim().toUpperCase(),
+        course.creditHours ?? 0,
+      ]),
+    );
+    const progress = mergeAcademicCourseProgress({
       completedCourses: student.completedCourses,
       failedCourses: student.failedCourses,
+      lowGradeCourses: student.lowGradeCourses,
+      grades,
+      courseCredits,
+    });
+
+    const semester = (caseItem.semester as Semester) || 'first';
+    const isSummer = semester === 'summer';
+    const studentGpa = progress.calculatedGpa ?? student.gpa ?? 0;
+    const warningCount = student.academicWarnings ?? 0;
+    const isProbation = warningCount >= 2 || studentGpa < 2.0;
+    const isGraduating =
+      student.academicLevel === '4' ||
+      (progress.completedCourses?.length ?? 0) >= 30;
+
+    const defaultMaxCredits = isSummer
+      ? isProbation
+        ? 6
+        : 9
+      : isProbation
+        ? 12
+        : isGraduating
+          ? 21
+          : 18;
+
+    const maxCredits = dto.maxCredits ?? defaultMaxCredits;
+
+    const recs = this.provider.generate({
+      academicLevel: student.academicLevel,
+      semester,
+      completedCourses: progress.completedCourses,
+      failedCourses: progress.failedCourses,
       inProgressCourses: [],
-      maxCreditHours: dto.maxCredits ?? 18,
-      academicWarningCount: student.academicWarnings ?? 0,
+      maxCreditHours: maxCredits,
+      academicWarningCount: warningCount,
       courses: activeCourses,
     });
 
@@ -115,7 +154,7 @@ export class AdvisingRecommendationService {
         (total, rec) => total + rec.creditHours,
         0,
       ),
-      maxCreditHours: dto.maxCredits ?? 18,
+      maxCreditHours: maxCredits,
     };
   }
 
