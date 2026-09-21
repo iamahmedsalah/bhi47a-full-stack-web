@@ -49,8 +49,15 @@ Do not put production secrets in `.env`, Git, screenshots, or
 The root `postinstall` script builds `@student-portal/shared`, ensuring its
 runtime `dist` output exists before Vercel bundles the API.
 
+NestJS 12 publishes its framework packages as ESM while this API currently
+emits CommonJS. Vercel disables Node's `require(esm)` support by default, so
+`apps/api/vercel.json` supplies the documented compatibility setting
+`NODE_OPTIONS=--experimental-require-module` to the deployed function. Keep
+that setting until the API is migrated fully to ESM.
+
 For the existing frontend Vercel project, set its Root Directory to `apps/web`.
-Its app-level `vercel.json` uses `.next` relative to that directory.
+Its app-level `vercel.json` clears stale Build Command and Output Directory
+overrides so Vercel's Next.js adapter owns the build output and routing.
 
 ## 3. Add API environment variables
 
@@ -60,21 +67,22 @@ should connect to a non-production database.
 
 ### Required
 
-| Variable | Production value |
-| --- | --- |
-| `NODE_ENV` | `production` |
-| `MONGODB_URI` | MongoDB Atlas SRV connection string |
-| `JWT_SECRET` | Random secret of at least 32 bytes |
-| `JWT_EXPIRES_IN` | `7d` |
-| `CLIENT_URL` | Comma-separated allowed web origins |
-| `COOKIE_SAME_SITE` | `none` when web and API use separate `*.vercel.app` hosts |
-| `COOKIE_DOMAIN` | Leave unset for `*.vercel.app` deployments |
-| `RATE_LIMIT_STORE` | `mongo` |
-| `QUEUE_REQUIRED` | `false` |
-| `QUEUE_WORKERS_ENABLED` | `false` |
-| `RUN_STARTUP_TASKS` | `false` |
-| `RESEND_API_KEY` | Resend API key, unless SMTP is configured |
-| `RESEND_FROM_EMAIL` | A verified sender such as `Portal <portal@example.com>` |
+| Variable                | Production value                                                               |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `NODE_OPTIONS`          | Automatically set to `--experimental-require-module` by `apps/api/vercel.json` |
+| `NODE_ENV`              | `production`                                                                   |
+| `MONGODB_URI`           | MongoDB Atlas SRV connection string                                            |
+| `JWT_SECRET`            | Random secret of at least 32 bytes                                             |
+| `JWT_EXPIRES_IN`        | `7d`                                                                           |
+| `CLIENT_URL`            | Comma-separated allowed web origins                                            |
+| `COOKIE_SAME_SITE`      | `none` when web and API use separate `*.vercel.app` hosts                      |
+| `COOKIE_DOMAIN`         | Leave unset for `*.vercel.app` deployments                                     |
+| `RATE_LIMIT_STORE`      | `mongo`                                                                        |
+| `QUEUE_REQUIRED`        | `false`                                                                        |
+| `QUEUE_WORKERS_ENABLED` | `false`                                                                        |
+| `RUN_STARTUP_TASKS`     | `false`                                                                        |
+| `RESEND_API_KEY`        | Resend API key, unless SMTP is configured                                      |
+| `RESEND_FROM_EMAIL`     | A verified sender such as `Portal <portal@example.com>`                        |
 
 Generate `JWT_SECRET` locally and paste only its output into Vercel:
 
@@ -115,8 +123,10 @@ converts them to real newlines at runtime.
 
 ## 4. Deploy and verify the API
 
-Deploy from the Vercel dashboard or push the branch. After Vercel assigns the
-API URL, verify:
+Production Git deployments are disabled in the app-level Vercel configurations
+to avoid deploying before CI finishes. Push to `main` and let
+`.github/workflows/ci-cd.yml` validate and deploy the API, or run that workflow
+manually against `main`. After Vercel assigns the API URL, verify:
 
 ```text
 GET https://student-portal-api.vercel.app/api/health
@@ -133,8 +143,15 @@ Check the first invocation logs for:
 
 - successful MongoDB connection;
 - no missing environment-variable error;
+- no `ERR_REQUIRE_ESM` error while loading `@nestjs/core`;
 - no CORS error for the exact web origin;
 - no repeated BullMQ worker registrations.
+
+If an older deployment still reports `ERR_REQUIRE_ESM`, redeploy it after the
+updated `apps/api/vercel.json` reaches `main`; changing a Vercel environment or
+configuration value does not modify an already-built deployment. The same
+setting can be confirmed in **API project -> Settings -> Environment
+Variables** as `NODE_OPTIONS=--experimental-require-module`.
 
 ## 5. Point the web project to the API
 

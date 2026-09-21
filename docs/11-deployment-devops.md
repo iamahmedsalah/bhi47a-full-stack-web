@@ -1,238 +1,199 @@
-# 11 - Deployment & DevOps Guide
+# 11 - Deployment and DevOps Guide
 
-This project is a pnpm monorepo with:
+This pnpm monorepo deploys both applications to separate Vercel projects:
 
-- `apps/web`: Next.js frontend.
-- `apps/api`: NestJS backend API.
-- `packages/shared`: shared contracts and constants.
+- `apps/web`: Next.js frontend;
+- `apps/api`: NestJS backend API;
+- `packages/shared`: workspace dependency used by both applications.
 
-Use three deployment lanes:
+Production deployments are controlled by GitHub Actions after validation. The
+Vercel Git integration is disabled in each app's `vercel.json` to prevent a
+second, ungated deployment for the same commit.
 
-1. Local tester lane: Docker Compose on one machine.
-2. QA URL lane: frontend on Vercel, backend on Railway, database on MongoDB Atlas, Redis on Upstash or Railway Redis.
-3. Kubernetes lane: retained for later production-style cluster deployment.
+## 1. Deployment structure
 
----
-
-## 1. Recommended Deployment Structure
-
-### Local test
-
-Use this for testers and before QA releases.
+### Local testing
 
 - Web: `http://localhost:3000`
 - API: `http://localhost:4000/api`
-- MongoDB: Docker Compose service `mongodb`
-- Redis: Docker Compose service `redis`
-- Auth cookies: `COOKIE_SAME_SITE=lax`, no `COOKIE_DOMAIN`
-
-Command:
+- MongoDB and Redis: Docker Compose
+- Cookies: `COOKIE_SAME_SITE=lax`, with no `COOKIE_DOMAIN`
 
 ```bash
 docker compose up --build -d
 ```
 
-### QA URL
+### Vercel production
 
-Use this for stakeholder QA.
+Create two projects from this Git repository:
 
-- Frontend: Vercel project connected to `apps/web`
-- Backend: Railway service using `Dockerfile.api`
-- Database: MongoDB Atlas
-- Redis: Upstash Redis or Railway Redis
-- Health check: `https://api-qa.example.com/api/health`
+| Project | Root Directory | Framework | Config                 |
+| ------- | -------------- | --------- | ---------------------- |
+| API     | `apps/api`     | NestJS    | `apps/api/vercel.json` |
+| Web     | `apps/web`     | Next.js   | `apps/web/vercel.json` |
 
-Recommended domains:
+Keep **Include source files outside the Root Directory** enabled for both
+projects because both import `packages/shared`.
 
-- Web: `https://qa.example.com`
-- API: `https://api-qa.example.com`
+For the Web project, leave the dashboard Build Command and Output Directory
+empty. `apps/web/vercel.json` explicitly clears stale overrides and lets the
+Next.js adapter generate the Build Output API routes. A platform-level
+`404 NOT_FOUND` on every path usually means this Root Directory is not
+`apps/web`, the web project has no successful production deployment, or the
+web project ID points at the API project.
 
-Keep the web and API on the same parent domain. The app uses httpOnly auth cookies plus a readable `csrf_token` cookie; same-parent domains let the frontend read the CSRF cookie when `COOKIE_DOMAIN=.example.com`.
+Recommended custom domains:
 
-Avoid using only the default `*.vercel.app` and `*.railway.app` domains for authenticated QA, because those are cross-site and the CSRF cookie flow is less reliable.
+- Web: `https://portal.example.com`
+- API: `https://api.example.com`
 
-### Kubernetes
+For separate default `*.vercel.app` domains, configure the API with
+`COOKIE_SAME_SITE=none` and leave `COOKIE_DOMAIN` unset.
 
-Keep `/k8s` as the scalable deployment lane, but treat it as a template. Replace image names, hostnames, TLS secret names, and secret values per environment before applying.
+The Kubernetes and Docker files remain available for local testing or a future
+always-on deployment, but the production GitHub Actions workflow does not build
+or deploy container images.
 
----
+## 2. GitHub Actions CI/CD
 
-## 2. Local Test Setup
+Workflow: `.github/workflows/ci-cd.yml`
 
-Create `.env` from `.env.example` and set at minimum:
+The validation job runs for pull requests and pushes to `main`, `staging`, and
+`release/*`. It:
 
-```bash
-JWT_SECRET=replace-with-at-least-32-random-bytes
-MONGODB_URI=mongodb://localhost:27017/student-portal
-REDIS_URL=redis://localhost:6379
-CLIENT_URL=http://localhost:3000
-NEXT_PUBLIC_API_URL=http://localhost:4000/api
-API_PORT=4000
-PORT=4000
-NODE_ENV=development
-QUEUE_REQUIRED=false
-COOKIE_SAME_SITE=lax
-COOKIE_DOMAIN=
-```
+1. installs Node.js 24 and pnpm 10.28.0;
+2. installs the frozen workspace lockfile;
+3. runs workspace linting;
+4. runs API unit and end-to-end tests with MongoDB and Redis services;
+5. builds `packages/shared`, the NestJS API, and the Next.js web app.
 
-Start the full local test stack:
+Lint and test steps are currently advisory (`continue-on-error`) because the
+repository has known ESLint 10/React-plugin and Jest/NestJS ESM compatibility
+failures. They still run and remain visible in every workflow. The three
+production builds are blocking release gates. Restore strict lint/test gating
+after those toolchain issues are corrected.
 
-```bash
-docker compose up --build -d
-docker compose ps
-```
+After validation succeeds on `main`:
 
-Optional seed:
+1. the API project is pulled, built, and deployed with Vercel CLI;
+2. `/api/health` is checked on the new production deployment;
+3. the web project is pulled, built, and deployed;
+4. the web deployment root is checked.
 
-```bash
-docker compose exec api npm run seed:prod
-```
+The workflow pins Vercel CLI `59.23.2` so CI behavior does not change without
+a reviewed repository update.
 
-Smoke checks:
+The API deploy intentionally completes before the web deploy. A failed API
+deployment or health check prevents a new frontend release.
 
-```bash
-curl http://localhost:4000/api/health
-curl http://localhost:3000
-```
+`workflow_dispatch` can also deploy production when the workflow is manually
+run against the `main` branch.
 
----
+## 3. Required GitHub secrets
 
-## 3. QA: Vercel Frontend
+Add these under **GitHub repository -> Settings -> Secrets and variables ->
+Actions -> New repository secret**:
 
-Use the root `vercel.json`.
+| Secret                  | Value                                       |
+| ----------------------- | ------------------------------------------- |
+| `VERCEL_TOKEN`          | Vercel account/team access token            |
+| `VERCEL_ORG_ID`         | Vercel user or team ID owning both projects |
+| `VERCEL_API_PROJECT_ID` | Project ID for the NestJS API project       |
+| `VERCEL_WEB_PROJECT_ID` | Project ID for the Next.js web project      |
 
-Expected Vercel settings:
+Create the token in Vercel account settings under **Tokens**. Project IDs are
+shown in each Vercel project's **Settings -> General** page. The organization
+ID can be read from a locally linked project's `.vercel/project.json` or from
+the Vercel team settings.
 
-- Framework Preset: Next.js
-- Install Command: `pnpm install --frozen-lockfile`
-- Build Command: `pnpm --filter @student-portal/web build`
-- Output Directory: `apps/web/.next`
+Do not add application secrets such as `MONGODB_URI` or `JWT_SECRET` to GitHub
+for deployment. Store runtime and build environment variables in the matching
+Vercel project. `vercel pull` retrieves them securely for the CI build.
 
-Required Vercel environment variables:
+Optionally create GitHub environments named `production-api` and
+`production-web` and add required reviewers for manual production approval.
 
-```bash
-NEXT_PUBLIC_API_URL=https://api-qa.example.com/api
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_FIREBASE_APP_ID=
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
-```
+## 4. API Vercel environment
 
-If using a custom QA domain, set it in Vercel and also include it in the Railway `CLIENT_URL`.
-
----
-
-## 4. QA: Railway Backend
-
-Use the root `railway.json`. Railway should build `Dockerfile.api` and check `/api/health`.
-
-Required Railway variables:
+Set these in the API Vercel project for Production:
 
 ```bash
 NODE_ENV=production
-CLIENT_URL=https://qa.example.com
-COOKIE_DOMAIN=.example.com
-COOKIE_SAME_SITE=lax
+NODE_OPTIONS=--experimental-require-module
+MONGODB_URI=mongodb+srv://...
 JWT_SECRET=replace-with-at-least-32-random-bytes
 JWT_EXPIRES_IN=7d
-MONGODB_URI=mongodb+srv://...
-REDIS_URL=rediss://...
-QUEUE_REQUIRED=true
-DNS_SERVERS=8.8.8.8,1.1.1.1
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=no-reply@example.com
-FIREBASE_PROJECT_ID=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY=
-AUTH_MAX_FAILED_ATTEMPTS=5
-AUTH_LOCK_MINUTES=30
-RATE_LIMIT_STORE=mongo
-STUDENT_LOGIN_RATE_LIMIT=8
-ADMIN_LOGIN_RATE_LIMIT=8
-CHANGE_PASSWORD_RATE_LIMIT=8
-STUDENT_COMPLAINT_DAILY_RATE_LIMIT=3
-STUDENT_COMPLAINT_REPLY_DAILY_RATE_LIMIT=3
-PUBLIC_COMPLAINT_DAILY_RATE_LIMIT=3
-FAQ_CHAT_RATE_LIMIT=20
-ADMIN_UPLOAD_RATE_LIMIT=20
-ADMIN_MESSAGE_RATE_LIMIT=30
-```
-
-Railway provides `PORT`; the API supports it. You do not need to set `API_PORT` on Railway unless you want to.
-
-If you cannot use same-parent custom domains and must test with `*.vercel.app` plus `*.railway.app`, set:
-
-```bash
+CLIENT_URL=https://your-web-project.vercel.app
 COOKIE_SAME_SITE=none
 COOKIE_DOMAIN=
+RATE_LIMIT_STORE=mongo
+QUEUE_REQUIRED=false
+QUEUE_WORKERS_ENABLED=false
+RUN_STARTUP_TASKS=false
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
 ```
 
-This is acceptable for QA smoke testing, but custom same-parent domains are still preferred for authenticated flows.
+`NODE_OPTIONS` is already committed as a non-secret runtime setting in
+`apps/api/vercel.json`. It enables Node's `require(esm)` bridge because NestJS
+12 is ESM-only and Vercel disables that bridge by default. The validation job
+checks this setting before a production deploy, and the API deploy command also
+passes it explicitly as a runtime variable.
 
----
+Add Cloudinary, Firebase Admin, Gemini, Google sign-in, SMTP, and rate-limit
+variables from `.env.example` only when those integrations are used.
 
-## 5. Kubernetes
+Do not set `PORT` or `API_PORT` in Vercel. Vercel supplies the runtime port.
 
-Apply order:
+Persistent BullMQ consumers do not run inside the Vercel API. Email and push
+jobs use the inline fallback. Use a separate always-on worker before enabling
+durable Redis queues.
+
+## 5. Web Vercel environment
+
+Set the API address in the web Vercel project:
 
 ```bash
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/redis-deployment.yaml
-kubectl apply -f k8s/api-deployment.yaml
-kubectl apply -f k8s/web-deployment.yaml
-kubectl apply -f k8s/ingress.yaml
+NEXT_PUBLIC_API_URL=https://your-api-project.vercel.app/api
 ```
 
-Before applying:
+Add the public Firebase browser variables from `.env.example` if notifications
+are enabled. `NEXT_PUBLIC_*` values are embedded into the client during build.
 
-- Replace `ghcr.io/student-portal/api:latest` and `ghcr.io/student-portal/web:latest` with real immutable tags.
-- Replace `student-portal.local` with the real cluster hostname.
-- Replace all values in `k8s/secrets.yaml`.
-- Ensure the TLS secret exists or is created by cert-manager.
-- For subdomain deployments, set `COOKIE_DOMAIN` to the shared parent domain, for example `.example.com`.
+Whenever the final web hostname changes, update the API project's `CLIENT_URL`
+and redeploy the API.
 
-The API and web deployments use HTTP readiness/liveness probes:
+## 6. First deployment
 
-- API: `/api/health`
-- Web: `/`
+1. Configure both Vercel projects and their Root Directories.
+2. Add all API and web environment variables in Vercel.
+3. Add the four GitHub Actions secrets.
+4. Push the workflow and app-level Vercel configurations to `main`.
+5. Open **GitHub -> Actions -> CI/CD - Vercel** and follow the three jobs.
+6. Confirm the API deployment returns HTTP 200 at `/api/health`.
+7. Confirm the web deployment serves `/` and `/ar/login` instead of Vercel's
+   platform-level `404 NOT_FOUND` page.
+8. Confirm web login, cookie persistence, CSRF requests, logout, uploads,
+   email/notifications, and attendance updates.
 
----
+The expected job order is:
 
-## 6. Pre-deployment Checks
-
-Run before opening a QA URL:
-
-```bash
-pnpm run build
-pnpm --filter @student-portal/api run test
+```text
+Validate monorepo
+  -> Deploy API to Vercel
+    -> Deploy web to Vercel
 ```
 
-For a faster frontend-only check:
+## 7. Rollback and operational checks
 
-```bash
-pnpm --filter @student-portal/web build
-```
+- Use Vercel's deployment history to promote the previous healthy API or web
+  deployment when rollback is required.
+- Review Vercel Function logs for environment validation, CORS, and MongoDB
+  connection failures.
+- Review MongoDB Atlas connection counts after bursts of cold starts.
+- Keep production environment changes in Vercel, not committed `.env` files.
+- Rotate `VERCEL_TOKEN`, database credentials, JWT secrets, and integration
+  keys immediately if they appear in logs or source control.
 
-For Docker parity:
-
-```bash
-docker compose up --build -d
-curl http://localhost:4000/api/health
-```
-
----
-
-## 7. Deployment Notes
-
-- `MONGODB_URI` is the canonical database variable. Do not use `DB_URI` for runtime deployments.
-- `CLIENT_URL` may contain comma-separated allowed frontend origins.
-- `NEXT_PUBLIC_API_URL` must include the API origin and may include `/api`; the frontend normalizes it.
-- `NEXT_PUBLIC_*` values are baked into the Next.js client bundle at build time.
-- Never commit real secrets into `k8s/secrets.yaml`, `.env`, Vercel, or Railway logs.
+For detailed API deployment and serverless constraints, see
+`docs/deploy-api-to-vercel.md`.

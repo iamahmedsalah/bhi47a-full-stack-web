@@ -4,5 +4,11 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": null,
   "outputDirectory": null,
-  "fluid": true
+  "fluid": true,
+  "env": {
+    "NODE_OPTIONS": "--experimental-require-module"
+  },
+  "git": {
+    "deploymentEnabled": false
+  }
 }

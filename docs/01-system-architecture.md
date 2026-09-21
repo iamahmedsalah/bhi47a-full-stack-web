@@ -9,12 +9,12 @@ Browser
 Next.js Web App - Vercel
   |
   v
-NestJS API - Render/Railway
+NestJS API - Vercel Functions
   |
   +-- MongoDB Atlas
   +-- Cloudinary
-  +-- Redis / Upstash
-  +-- BullMQ Worker
+  +-- Redis / Upstash (optional)
+  +-- Inline email/push jobs on Vercel
   +-- Resend
   +-- Firebase Cloud Messaging
   +-- OpenAI later

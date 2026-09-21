@@ -46,6 +46,7 @@ const nextConfig: NextConfig = {
   },
   reactCompiler: true,
   output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
   transpilePackages: ["@student-portal/shared"],
   turbopack: {
     root: workspaceRoot,
@@ -53,19 +54,19 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
+        protocol: "https",
+        hostname: "res.cloudinary.com",
       },
     ],
   },
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: "/:path*",
         headers: [
           {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin-allow-popups',
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
           },
         ],
       },
