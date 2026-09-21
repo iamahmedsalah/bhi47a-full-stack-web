@@ -60,7 +60,7 @@ jobs:
         continue-on-error: true
 
       - name: Test API
-        run: pnpm --filter @student-portal/api run test -- --runInBand
+        run: pnpm --filter @student-portal/api run test --runInBand
         continue-on-error: true
         env:
           NODE_ENV: test
@@ -71,7 +71,7 @@ jobs:
           RUN_STARTUP_TASKS: "false"
 
       - name: Test API end to end
-        run: pnpm --filter @student-portal/api run test:e2e -- --runInBand
+        run: pnpm --filter @student-portal/api run test:e2e --runInBand
         continue-on-error: true
         env:
           NODE_ENV: test
@@ -122,6 +122,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -186,6 +192,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+          run_install: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
