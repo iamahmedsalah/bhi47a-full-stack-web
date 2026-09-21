@@ -61,14 +61,12 @@ function getUserRef(student: Student): StudentUserRef | null {
 
 function SensitiveNationalId({
   value,
-  realValue,
   canView,
 }: {
   value?: string;
-  realValue?: string;
   canView: boolean;
 }) {
-  if (!canView) {
+  if (!canView || !value) {
     return (
       <span className="rounded-squircle border border-border/70 bg-surface/50 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
         Restricted
@@ -76,17 +74,11 @@ function SensitiveNationalId({
     );
   }
 
-  const displayValue = realValue || value;
-
-  if (!displayValue) {
-    return <span className="text-sm text-muted-foreground">N/A</span>;
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-sm text-muted-foreground">{displayValue}</span>
+      <span className="font-mono text-sm font-medium text-foreground">{value}</span>
       <CopyButton
-        value={realValue || displayValue}
+        value={value}
         label="Copy"
         successMessage="National ID copied"
         className="rounded-squircle px-2 py-1"
@@ -202,8 +194,7 @@ export function StudentTable({
       render: (student) => (
         <TableCell className="min-w-[130px] py-2.5 px-3">
           <SensitiveNationalId
-            value={student.nationalIdMasked || getUserRef(student)?.nationalIdMasked}
-            realValue={getUserRef(student)?.nationalId}
+            value={student.nationalId || getUserRef(student)?.nationalId}
             canView={canViewSensitiveStudentData}
           />
         </TableCell>
@@ -385,8 +376,13 @@ export function StudentTable({
         title={t('deactivate')}
         description={
           <>
-            {locale === 'ar' ? 'هل أنت متأكد من تعطيل حساب هذا الطالب؟' : 'Are you sure you want to suspend this student?'}{' '}
+            {locale === 'ar'
+              ? 'هل أنت متأكد من تعطيل حساب الطالب '
+              : 'Are you sure you want to suspend the account of student '}
             <span className="font-bold text-danger">&quot;{studentToDeactivate?.fullName}&quot;</span>
+            {locale === 'ar'
+              ? '؟ سيتم إيقاف دخوله إلى البوابة.'
+              : '? Their portal access will be deactivated.'}
           </>
         }
         confirmLabel={t('deactivate')}

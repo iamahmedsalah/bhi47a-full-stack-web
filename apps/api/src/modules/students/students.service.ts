@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -40,6 +41,7 @@ import {
   AcademicEmail,
   AcademicEmailDocument,
 } from '../academic-emails/schemas/academic-email.schema';
+import { StudentQueryService } from './services/student-query.service';
 
 @Injectable()
 export class StudentsService {
@@ -56,6 +58,7 @@ export class StudentsService {
     private academicEmailModel: Model<AcademicEmailDocument>,
     private usersService: UsersService,
     private emailsService: EmailsService,
+    private readonly studentQueryService: StudentQueryService,
   ) {}
 
   async create(dto: CreateStudentDto) {
@@ -126,178 +129,12 @@ export class StudentsService {
     };
   }
 
-  async findAll(query: SearchStudentQuery) {
-    const { page, limit, skip } = buildPaginationOptions(query);
-
-    const filter: any = {};
-
-    if (query.search) {
-      const search = normalizeSearchTerm(query.search);
-      filter.$or = [
-        { studentCode: { $regex: search, $options: 'i' } },
-        { fullName: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    if (query.level) {
-      filter.level = query.level;
-    }
-
-    if (query.enrollmentStatus) {
-      filter.enrollmentStatus = query.enrollmentStatus;
-    }
-
-    const sortField =
-      query.sortBy === 'studentCode' ? 'studentCode' : 'createdAt';
-    const sortDir: 1 | -1 =
-      query.sortOrder === 'asc'
-        ? 1
-        : query.sortOrder === 'desc'
-          ? -1
-          : query.sortBy === 'studentCode'
-            ? 1
-            : -1;
-
-    const [items, total] = await Promise.all([
-      this.studentProfileModel
-        .find(filter)
-        .populate(
-          'userId',
-          'isActive nationalIdMasked nationalId lastLoginAt mustChangePassword',
-        )
-        .sort({ [sortField]: sortDir })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.studentProfileModel.countDocuments(filter),
-    ]);
-
-    const enrichedItems = await this.attachRegistrationSummaries(items);
-    return createPaginatedResult(enrichedItems, total, page, limit);
+  async findAll(query: SearchStudentQuery, caller?: any) {
+    return this.studentQueryService.findAll(query, caller);
   }
 
-  async findById(id: string) {
-    const profile = await this.studentProfileModel
-      .findById(id)
-      .populate(
-        'userId',
-        'isActive nationalIdMasked nationalId phone lastLoginAt mustChangePassword',
-      )
-      .lean();
-    if (!profile) {
-      throw new NotFoundException('الطالب غير موجود'); // Student not found
-    }
-    const [enriched] = await this.attachRegistrationSummaries([profile]);
-    return enriched;
-  }
-
-  private async attachRegistrationSummaries<T extends Record<string, any>>(
-    profiles: T[],
-  ): Promise<Array<T & { registrationSummary: Record<string, unknown> }>> {
-    if (profiles.length === 0) return [];
-
-    const currentTerms = await this.registrationTermModel
-      .find({ isCurrent: true })
-      .sort({ updatedAt: -1, academicYear: -1 })
-      .lean();
-    const activeTerm =
-      currentTerms.find((term) => isRegistrationTermCurrentlyOpen(term)) ??
-      currentTerms[0];
-
-    const userIds = profiles
-      .map((profile) => this.getProfileUserId(profile))
-      .filter((id): id is Types.ObjectId => Boolean(id));
-
-    const termFilter = activeTerm
-      ? {
-          academicYear: activeTerm.academicYear,
-          semester: activeTerm.semester,
-        }
-      : null;
-    const [registrations, advisingCases, academicProfiles] = await Promise.all([
-      termFilter
-        ? this.registrationModel
-            .find({ studentId: { $in: userIds }, ...termFilter })
-            .sort({ createdAt: -1 })
-            .lean()
-        : Promise.resolve([]),
-      termFilter
-        ? this.advisingCaseModel
-            .find({ studentId: { $in: userIds }, ...termFilter })
-            .sort({ updatedAt: -1 })
-            .lean()
-        : Promise.resolve([]),
-      this.studentProfileModel.db
-        .collection('student_academic_profiles')
-        .find({ studentId: { $in: userIds } })
-        .toArray(),
-    ]);
-
-    const registrationByStudent = new Map(
-      registrations.map((registration) => [
-        registration.studentId.toString(),
-        registration,
-      ]),
-    );
-    const advisingByStudent = new Map(
-      advisingCases.map((advisingCase) => [
-        advisingCase.studentId.toString(),
-        advisingCase,
-      ]),
-    );
-    const academicByStudent = new Map(
-      academicProfiles.map((ap) => [ap.studentId.toString(), ap]),
-    );
-
-    return profiles.map((profile) => {
-      const key = this.getProfileUserId(profile)?.toHexString() ?? '';
-      const registration = registrationByStudent.get(key);
-      const advisingCase = advisingByStudent.get(key);
-      const academicProfile = academicByStudent.get(key);
-
-      return {
-        ...profile,
-        gpa: academicProfile?.gpa ?? 0,
-        academicWarnings: academicProfile?.academicWarnings ?? 0,
-        academicProfile: academicProfile
-          ? {
-              gpa: academicProfile.gpa,
-              academicWarnings: academicProfile.academicWarnings,
-              completedCourses: academicProfile.completedCourses ?? [],
-              failedCourses: academicProfile.failedCourses ?? [],
-            }
-          : undefined,
-        registrationSummary: {
-          academicYear: activeTerm?.academicYear,
-          semester: activeTerm?.semester,
-          isTermOpen: isRegistrationTermCurrentlyOpen(activeTerm),
-          status: registration?.status ?? 'not_registered',
-          registrationId: registration?._id?.toString(),
-          courseCount: registration?.courses?.length ?? 0,
-          totalCreditHours: registration?.totalCreditHours ?? 0,
-          advisingCaseId: advisingCase?._id?.toString(),
-          advisingStatus: advisingCase?.status ?? 'NOT_STARTED',
-        },
-      };
-    });
-  }
-
-  private getProfileUserId(
-    profile: Record<string, unknown>,
-  ): Types.ObjectId | undefined {
-    const user = profile.userId;
-    if (user instanceof Types.ObjectId) return user;
-    if (typeof user === 'string' && Types.ObjectId.isValid(user)) {
-      return new Types.ObjectId(user);
-    }
-    if (user && typeof user === 'object' && '_id' in user) {
-      const id = (user as { _id?: unknown })._id;
-      if (id instanceof Types.ObjectId) return id;
-      if (typeof id === 'string' && Types.ObjectId.isValid(id)) {
-        return new Types.ObjectId(id);
-      }
-    }
-    return undefined;
+  async findById(id: string, caller?: any) {
+    return this.studentQueryService.findById(id, caller);
   }
 
   async findByUserId(userId: string): Promise<Record<string, any>> {
@@ -459,23 +296,54 @@ export class StudentsService {
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
 
-  async resetPassword(id: string, dto: ResetPasswordDto) {
-    const profile = await this.studentProfileModel.findById(id);
+  async resetPassword(id: string, dto: ResetPasswordDto, actor?: any) {
+    const profile = await this.studentProfileModel
+      .findById(id)
+      .select('+nationalId');
     if (!profile) {
       throw new NotFoundException('الطالب غير موجود');
     }
 
+    const user = await this.usersService.findByIdWithNationalId(
+      profile.userId.toString(),
+    );
+    if (!user) {
+      throw new NotFoundException('المستخدم غير موجود');
+    }
+
+    // Determine temporary password: provided explicitly or defaulted to student's 14-digit National ID
+    let temporaryPassword = dto.newPassword?.trim();
+    if (!temporaryPassword) {
+      temporaryPassword = profile.nationalId || user.nationalId;
+    }
+
+    if (!temporaryPassword) {
+      throw new BadRequestException({
+        code: 'NATIONAL_ID_NOT_AVAILABLE',
+        message:
+          'لا يوجد رقم قومي محفوظ لهذا الطالب. اختر كلمة مرور مؤقتة مخصصة.',
+      });
+    }
+
+    const mustChange = dto.mustChangePassword ?? true;
+
+    // Update password, set mustChangePassword and increment tokenVersion (revoking old sessions)
     await this.usersService.updatePassword(
       profile.userId.toString(),
-      dto.newPassword,
+      temporaryPassword,
+      mustChange,
     );
-
-    const user = await this.usersService.findById(profile.userId.toString());
-    user.mustChangePassword = dto.mustChangePassword ?? false;
-    await user.save();
 
     const emailTo = profile.academicEmail || user.email;
     if (emailTo) {
+      const isNationalIdDefault = !dto.newPassword?.trim();
+      const displayPasswordHint = isNationalIdDefault
+        ? 'الرقم القومي الخاص بك (14 رقم)'
+        : dto.newPassword;
+      const displayPasswordHintEn = isNationalIdDefault
+        ? 'Your 14-digit National ID'
+        : dto.newPassword;
+
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
           <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 20px; margin-bottom: 20px;">
@@ -486,7 +354,7 @@ export class StudentsService {
             <p style="font-size: 14px; color: #475569; line-height: 1.6;">تمت إعادة تعيين كلمة المرور الخاصة بحسابك على البوابة الإلكترونية بنجاح.</p>
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-right: 4px solid #0f766e; margin: 20px 0;">
               <p style="margin: 5px 0; font-size: 14px;"><strong>الكود الأكاديمي:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${profile.studentCode}</span></p>
-              <p style="margin: 5px 0; font-size: 14px;"><strong>كلمة المرور الجديدة:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${dto.newPassword}</span></p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>كلمة المرور المؤقتة:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${displayPasswordHint}</span></p>
             </div>
             <p style="font-size: 12px; color: #ef4444;">* يرجى تسجيل الدخول وتغيير كلمة المرور فوراً لحماية حسابك.</p>
           </div>
@@ -496,7 +364,7 @@ export class StudentsService {
             <p style="font-size: 14px; color: #475569; line-height: 1.6;">Your student portal account password has been successfully reset.</p>
             <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #0f766e; margin: 20px 0;">
               <p style="margin: 5px 0; font-size: 14px;"><strong>Student Code:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${profile.studentCode}</span></p>
-              <p style="margin: 5px 0; font-size: 14px;"><strong>New Password:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${dto.newPassword}</span></p>
+              <p style="margin: 5px 0; font-size: 14px;"><strong>Temporary Password:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${displayPasswordHintEn}</span></p>
             </div>
             <p style="font-size: 12px; color: #ef4444;">* Please log in and change your password immediately to secure your account.</p>
           </div>
@@ -511,17 +379,20 @@ export class StudentsService {
           to: [emailTo],
           subject: 'إعادة تعيين كلمة المرور | Password Reset',
           html: emailHtml,
-          event: 'password_reset',
         });
       } catch (emailErr) {
         console.warn(
-          `[Email Dispatch Failed] Student password reset succeeded but email notification could not be delivered:`,
+          'Failed to send password reset email:',
           emailErr instanceof Error ? emailErr.message : emailErr,
         );
       }
     }
 
-    return { message: 'تم إعادة تعيين كلمة المرور بنجاح' };
+    return {
+      message:
+        'تمت إعادة تعيين كلمة المرور بنجاح وإلزام الطالب بتعيين كلمة مرور جديدة عند تسجيل الدخول',
+      mustChangePassword: mustChange,
+    };
   }
 
   async getStats() {
@@ -529,9 +400,15 @@ export class StudentsService {
       await Promise.all([
         this.studentProfileModel.countDocuments(),
         this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
-        this.studentProfileModel.countDocuments({ enrollmentStatus: 'suspended' }),
-        this.studentProfileModel.countDocuments({ enrollmentStatus: 'graduated' }),
-        this.studentProfileModel.countDocuments({ enrollmentStatus: 'withdrawn' }),
+        this.studentProfileModel.countDocuments({
+          enrollmentStatus: 'suspended',
+        }),
+        this.studentProfileModel.countDocuments({
+          enrollmentStatus: 'graduated',
+        }),
+        this.studentProfileModel.countDocuments({
+          enrollmentStatus: 'withdrawn',
+        }),
         this.studentProfileModel.aggregate([
           { $group: { _id: '$level', count: { $sum: 1 } } },
           { $sort: { _id: 1 } },

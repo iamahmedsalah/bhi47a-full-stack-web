@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
+import { Resolver, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { EXAM_TYPE_VALUES, GRADE_STATUS_VALUES } from "@student-portal/shared";
 import {
@@ -52,8 +53,9 @@ export function GradeFormDialog({
 }: GradeFormDialogProps) {
   const t = useTranslations("grades.form");
   const locale = useLocale();
+
   const form = useForm<GradeFormValues>({
-    resolver: zodResolver(gradeFormSchema),
+    resolver: zodResolver(gradeFormSchema) as Resolver<GradeFormValues>,
     defaultValues: {
       studentCode: defaultValues?.studentCode ?? "",
       courseCode: defaultValues?.courseCode ?? "",
@@ -65,6 +67,37 @@ export function GradeFormDialog({
       semester: defaultValues?.semester ?? "first",
       isPublished: defaultValues?.isPublished ?? true,
     },
+  });
+
+  // 1. Synchronize form state when editing target changes or modal re-opens
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        studentCode: defaultValues?.studentCode ?? "",
+        courseCode: defaultValues?.courseCode ?? "",
+        examType: defaultValues?.examType ?? "midterm",
+        grade: defaultValues?.grade ?? 0,
+        maxGrade: defaultValues?.maxGrade ?? 100,
+        status: defaultValues?.status ?? "present",
+        academicYear: defaultValues?.academicYear ?? "2024-2025",
+        semester: defaultValues?.semester ?? "first",
+        isPublished: defaultValues?.isPublished ?? true,
+      });
+    }
+  }, [open, defaultValues, form]);
+
+  // 2. Extract values via useWatch to satisfy React Compiler
+  const watchedCourseCode = useWatch({
+    control: form.control,
+    name: "courseCode",
+  });
+  const watchedExamType = useWatch({
+    control: form.control,
+    name: "examType",
+  });
+  const watchedStatus = useWatch({
+    control: form.control,
+    name: "status",
   });
 
   const handleSubmit = form.handleSubmit(async (values) => {
@@ -82,8 +115,10 @@ export function GradeFormDialog({
             {isEditing ? t("editDescription") : t("addDescription")}
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Student Code */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("studentCode")} *
@@ -99,13 +134,20 @@ export function GradeFormDialog({
                 </p>
               )}
             </div>
+
+            {/* Course Code */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("course")} *
               </label>
               <Select
-                value={form.watch("courseCode")}
-                onValueChange={(val) => form.setValue("courseCode", val)}
+                value={watchedCourseCode}
+                onValueChange={(val) =>
+                  form.setValue("courseCode", val, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
               >
                 <SelectTrigger disabled={isEditing}>
                   <SelectValue placeholder={t("selectCourse")} />
@@ -121,14 +163,26 @@ export function GradeFormDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {form.formState.errors.courseCode && (
+                <p className="text-xs text-danger mt-1">
+                  {form.formState.errors.courseCode.message}
+                </p>
+              )}
             </div>
+
+            {/* Exam Type */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("examType")} *
               </label>
               <Select
-                value={form.watch("examType")}
-                onValueChange={(val) => form.setValue("examType", val)}
+                value={watchedExamType}
+                onValueChange={(val) =>
+                  form.setValue("examType", val, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t("examType")} />
@@ -142,13 +196,20 @@ export function GradeFormDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Status */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("status")}
               </label>
               <Select
-                value={form.watch("status")}
-                onValueChange={(val) => form.setValue("status", val)}
+                value={watchedStatus}
+                onValueChange={(val) =>
+                  form.setValue("status", val, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t("status")} />
@@ -162,19 +223,42 @@ export function GradeFormDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Grade */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("grade")} *
               </label>
-              <Input type="number" {...form.register("grade")} />
+              <Input
+                type="number"
+                step="any"
+                {...form.register("grade", { valueAsNumber: true })}
+              />
+              {form.formState.errors.grade && (
+                <p className="text-xs text-danger mt-1">
+                  {form.formState.errors.grade.message}
+                </p>
+              )}
             </div>
+
+            {/* Max Grade */}
             <div>
               <label className="text-xs font-semibold mb-1 block">
                 {t("maxGrade")} *
               </label>
-              <Input type="number" {...form.register("maxGrade")} />
+              <Input
+                type="number"
+                step="any"
+                {...form.register("maxGrade", { valueAsNumber: true })}
+              />
+              {form.formState.errors.maxGrade && (
+                <p className="text-xs text-danger mt-1">
+                  {form.formState.errors.maxGrade.message}
+                </p>
+              )}
             </div>
           </div>
+
           <DialogFooter className="pt-4 border-t">
             <Button
               type="button"

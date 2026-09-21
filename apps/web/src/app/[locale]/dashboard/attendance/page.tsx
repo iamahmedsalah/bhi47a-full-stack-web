@@ -1,274 +1,743 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
-import api, { getApiErrorMessage } from '@/lib/api';
-import { Card } from '@/components/ui/card';
-import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { ClipboardList, Calendar, CheckCircle, AlertTriangle, ArrowUpRight } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { Progress } from '@/components/ui/progress';
-
-interface AttendanceRecord {
-  _id: string;
-  studentId: string;
-  studentCode: string;
-  academicYear: string;
-  semester: 'first' | 'second' | 'summer';
-  totalLectures: number;
-  attendedLectures: number;
-  absenceLectures: number;
-  attendancePercentage: number;
-}
+import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { useParams } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ClipboardList,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  ShieldCheck,
+  QrCode,
+  BookOpen,
+  Calendar,
+  Filter,
+  Search,
+  ChevronRight,
+  Info,
+  XCircle,
+  HelpCircle,
+  Play,
+  Sparkles,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui/feedback";
+import {
+  CustomDropdown,
+  type CustomDropdownOption,
+} from "@/components/ui/custom-dropdown";
+import {
+  attendanceApi,
+  type AttendanceRecordDto,
+  type CourseAttendanceSummary,
+  type StudentLiveSessionItem,
+} from "@/features/attendance/api/attendance-api";
+import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
 
 export default function StudentAttendancePage() {
-  const t = useTranslations('studentPortal');
-  const tCommon = useTranslations('common');
+  const tCommon = useTranslations("common");
+  const params = useParams();
+  const locale = (params.locale as string) || "ar";
+  const isAr = locale.startsWith("ar");
 
-  const attendanceQuery = useQuery({
-    queryKey: ['student-attendance'],
-    queryFn: async () => {
-      const res = await api.get<AttendanceRecord[]>('/students/me/attendance');
-      return res.data;
-    },
+  // Filters state
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeCourseDetail, setActiveCourseDetail] =
+    useState<CourseAttendanceSummary | null>(null);
+  const [showScanDialog, setShowScanDialog] = useState<boolean>(false);
+
+  // Fetch student active/live sessions
+  const liveSessionsQuery = useQuery({
+    queryKey: ["student-live-attendance-sessions"],
+    queryFn: () => attendanceApi.getStudentLiveSessions(),
+    refetchInterval: 12000,
   });
 
-  const isEnglish = tCommon('search') === 'Search...';
+  // Fetch real-time attendance history & summaries
+  const historyQuery = useQuery({
+    queryKey: ["my-student-attendance-history"],
+    queryFn: () => attendanceApi.getMyAttendanceHistory(),
+    refetchInterval: 15000,
+  });
 
-  if (attendanceQuery.isLoading) {
-    return <LoadingState title={tCommon('loading')} />;
-  }
+  const isLoading = historyQuery.isLoading;
+  const isError = historyQuery.isError;
+  const data = historyQuery.data;
 
-  if (attendanceQuery.isError) {
+  const summary = data?.summary || {
+    totalSessions: 0,
+    presentCount: 0,
+    lateCount: 0,
+    excusedCount: 0,
+    absentCount: 0,
+    attendanceRate: 100,
+  };
+
+  const courses = data?.courses || [];
+  const records = data?.records || [];
+
+  // Filtered session records
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (selectedCourse !== "all" && r.courseCode !== selectedCourse)
+        return false;
+      if (selectedStatus !== "all" && r.status !== selectedStatus) return false;
+      if (searchQuery.trim()) {
+        const query = searchQuery.trim().toLowerCase();
+        const code = r.courseCode.toLowerCase();
+        const type = r.sessionType.toLowerCase();
+        if (!code.includes(query) && !type.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [records, selectedCourse, selectedStatus, searchQuery]);
+
+  if (isLoading) {
     return (
-      <ErrorState
-        description={getApiErrorMessage(attendanceQuery.error)}
-        error={attendanceQuery.error}
-        onRetry={() => attendanceQuery.refetch()}
+      <LoadingState
+        title={
+          isAr ? "جاري تحميل سجلات الحضور..." : "Loading attendance records..."
+        }
       />
     );
   }
 
-  const records = attendanceQuery.data || [];
-
-  if (records.length === 0) {
+  if (isError) {
     return (
-      <div className="mx-auto max-w-4xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
-        <div>
-          <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-            <ClipboardList className="h-6 w-6 text-primary" />
-            <span>{t('attendance')}</span>
-          </h2>
-        </div>
-        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-          <EmptyState
-            title={isEnglish ? 'No attendance records' : 'لا توجد سجلات حضور وغياب'}
-            description={
-              isEnglish
-                ? 'Your attendance statistics have not been uploaded by the administration yet.'
-                : 'لم يتم رفع إحصائيات الغياب والحضور الخاصة بك من قبل الإدارة بعد.'
-            }
-          />
-        </Card>
-      </div>
+      <ErrorState
+        description={
+          isAr
+            ? "تعذر تحميل سجل الحضور. يرجى إعادة المحاولة."
+            : "Failed to load attendance history."
+        }
+        onRetry={() => historyQuery.refetch()}
+      />
     );
   }
 
-  const totalLecs = records.reduce((acc, curr) => acc + curr.totalLectures, 0);
-  const totalAtt = records.reduce((acc, curr) => acc + curr.attendedLectures, 0);
-  const totalAbs = records.reduce((acc, curr) => acc + curr.absenceLectures, 0);
-  const avgPercentage = totalLecs > 0 ? Math.round((totalAtt / totalLecs) * 100) : 100;
-
   return (
-    <div className="mx-auto max-w-5xl space-y-8" dir={isEnglish ? 'ltr' : 'rtl'}>
-      {/* Title */}
-      <div className="space-y-1">
-        <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-          <ClipboardList className="h-6 w-6 text-primary" />
-          <span>{t('attendance')}</span>
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {isEnglish
-            ? 'Track your lecture attendance and view details by semester'
-            : 'تابع غيابك وحضورك للمحاضرات بالتفصيل حسب كل فصل دراسي'}
-        </p>
+    <div
+      className="mx-auto max-w-6xl space-y-8 pb-12"
+      dir={isAr ? "rtl" : "ltr"}
+    >
+      {/* Page Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              {isAr ? "سجل الحضور والغياب الذكي" : "Smart Attendance Dashboard"}
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            {isAr
+              ? "متابعة حية لنسبة الحضور وسجلات المحاضرات والسكاشن المسجلة عبر البوابة"
+              : "Live overview of your lecture and lab attendance recorded via QR check-ins"}
+          </p>
+        </div>
+
+        {/* Actions & Status Badge */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-center">
+          <Button
+            onClick={() => setShowScanDialog(true)}
+            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
+          >
+            <QrCode className="h-4 w-4" />
+            <span>{isAr ? "تسجيل الحضور (QR / كود)" : "Check In Now"}</span>
+          </Button>
+
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+              summary.attendanceRate >= 75
+                ? "bg-primary/10 text-primary border-primary/20"
+                : summary.attendanceRate >= 60
+                  ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                  : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                summary.attendanceRate >= 75
+                  ? "bg-primary"
+                  : summary.attendanceRate >= 60
+                    ? "bg-amber-400"
+                    : "bg-rose-400"
+              }`}
+            />
+            {summary.attendanceRate >= 75
+              ? isAr
+                ? "حالة أكاديمية منتظمة"
+                : "Good Academic Standing"
+              : summary.attendanceRate >= 60
+                ? isAr
+                  ? "تنبيه: انخفاض نسبة الحضور"
+                  : "Warning: Low Attendance"
+                : isAr
+                  ? "خطر الحرمان من الامتحانات"
+                  : "At Risk: Below 75%"}
+          </span>
+        </div>
       </div>
 
-      {/* Aggregate Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Overall Percentage */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? 'Overall Attendance' : 'نسبة الحضور العامة'}
-              </span>
-              <CheckCircle className={`h-5 w-5 ${avgPercentage >= 75 ? 'text-emerald-500' : 'text-red-500'}`} />
+      {/* Live Attendance Sessions Section */}
+      {liveSessionsQuery.data?.sessions &&
+        liveSessionsQuery.data.sessions.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
+                </span>
+                <span>
+                  {isAr
+                    ? "محاضرات وسكاشن منعقدة الآن (حضور مباشر)"
+                    : "Live Sessions in Progress"}
+                </span>
+              </h2>
             </div>
-            <div className="mt-2">
-              <span className="text-3xl font-black font-mono text-foreground">{avgPercentage}%</span>
-              <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">
-                {avgPercentage >= 75
-                  ? (isEnglish ? 'Good standing' : 'حالة ممتازة')
-                  : (isEnglish ? 'Warning: Under 75%' : 'تنبيه: أقل من 75%')}
-              </p>
-            </div>
-          </Card>
-        </motion.div>
 
-        {/* Total Lectures */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? 'Total Lectures' : 'إجمالي المحاضرات'}
-              </span>
-              <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <div className="mt-2">
-              <span className="text-3xl font-black font-mono text-foreground">{totalLecs}</span>
-              <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">
-                {isEnglish ? 'Registered sessions' : 'المحاضرات المسجلة'}
-              </p>
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* Attended Sessions */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? 'Attended Sessions' : 'عدد مرات الحضور'}
-              </span>
-              <CheckCircle className="h-5 w-5 text-emerald-500" />
-            </div>
-            <div className="mt-2">
-              <span className="text-3xl font-black font-mono text-emerald-500">{totalAtt}</span>
-              <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">
-                {isEnglish ? 'Confirmed attendance' : 'المحاضرات التي تم حضورها'}
-              </p>
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* Absence Sessions */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.15 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-32 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? 'Absence Sessions' : 'عدد مرات الغياب'}
-              </span>
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-            </div>
-            <div className="mt-2">
-              <span className="text-3xl font-black font-mono text-red-500">{totalAbs}</span>
-              <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">
-                {isEnglish ? 'Missed lectures' : 'المحاضرات الفائتة'}
-              </p>
-            </div>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Semester details list */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold text-foreground">
-          {isEnglish ? 'Semester Breakdown' : 'التفاصيل حسب الفصل الدراسي'}
-        </h3>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {records.map((record, index) => {
-            const isWarning = record.attendancePercentage < 75;
-            return (
-              <motion.div
-                key={record._id}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.25, delay: index * 0.05 }}
-              >
-                <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 space-y-4">
-                  <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {liveSessionsQuery.data.sessions.map((session) => (
+                <Card
+                  key={session._id}
+                  className="p-4 bg-card border border-border/70 hover:border-primary/40 flex flex-col justify-between gap-3 shadow-sm transition-all rounded-2xl"
+                >
+                  <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="font-bold text-foreground">
-                        {isEnglish
-                          ? record.semester === 'first'
-                            ? 'First Semester'
-                            : 'Second Semester'
-                          : record.semester === 'first'
-                          ? 'الفصل الدراسي الأول'
-                          : 'الفصل الدراسي الثاني'}
-                      </h4>
-                      <p className="text-xs text-muted-foreground font-mono">{record.academicYear}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                          {session.courseCode}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {session.sessionType === "lecture"
+                            ? isAr
+                              ? "محاضرة"
+                              : "Lecture"
+                            : isAr
+                              ? "سكشن"
+                              : "Section"}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-foreground mt-1">
+                        {session.courseName || session.courseCode}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {isAr
+                          ? `المحاضر: ${session.createdByName}`
+                          : `Instructor: ${session.createdByName}`}
+                      </p>
+                    </div>
+
+                    {session.alreadyCheckedIn ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>{isAr ? "تم تسجيل حضورك" : "Checked In"}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>
+                          {isAr
+                            ? `متبقي ${Math.ceil(session.remainingSeconds / 60)} دقيقة`
+                            : `${Math.ceil(session.remainingSeconds / 60)}m left`}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {!session.alreadyCheckedIn && (
+                    <Button
+                      onClick={() => setShowScanDialog(true)}
+                      className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
+                    >
+                      <QrCode className="h-3.5 w-3.5" />
+                      <span>
+                        {isAr
+                          ? "مسح الرمز لتسجيل الحضور"
+                          : "Scan QR to Check In"}
+                      </span>
+                    </Button>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+      {/* Aggregate Statistics Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {/* Overall Percentage */}
+        <Card className="col-span-2 sm:col-span-1 p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between relative overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isAr ? "النسبة العامة" : "Overall Rate"}
+            </span>
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-black font-mono text-foreground tracking-tight">
+                {summary.attendanceRate}
+              </span>
+              <span className="text-sm font-bold text-primary">%</span>
+            </div>
+            <Progress value={summary.attendanceRate} className="h-1.5 mt-2.5" />
+          </div>
+        </Card>
+
+        {/* Present Sessions */}
+        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isAr ? "حضور" : "Present"}
+            </span>
+            <div className="h-2 w-2 rounded-full bg-primary" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black font-mono text-primary">
+              {summary.presentCount}
+            </span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isAr ? "جلسة مؤكدة" : "Confirmed"}
+            </p>
+          </div>
+        </Card>
+
+        {/* Late Sessions */}
+        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isAr ? "تأخير" : "Late"}
+            </span>
+            <div className="h-2 w-2 rounded-full bg-amber-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black font-mono text-amber-400">
+              {summary.lateCount}
+            </span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isAr ? "بعد الموعد" : "After threshold"}
+            </p>
+          </div>
+        </Card>
+
+        {/* Excused Sessions */}
+        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isAr ? "غياب بعذر" : "Excused"}
+            </span>
+            <div className="h-2 w-2 rounded-full bg-blue-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black font-mono text-blue-400">
+              {summary.excusedCount}
+            </span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isAr ? "مقبول رسمياً" : "Approved"}
+            </p>
+          </div>
+        </Card>
+
+        {/* Absent Sessions */}
+        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              {isAr ? "غياب" : "Absent"}
+            </span>
+            <div className="h-2 w-2 rounded-full bg-rose-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black font-mono text-rose-400">
+              {summary.absentCount}
+            </span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isAr ? "جلسة فائتة" : "Missed"}
+            </p>
+          </div>
+        </Card>
+      </div>
+
+      {/* Course Breakdown Section */}
+      {courses.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-primary" />
+              <h2 className="text-base font-bold text-foreground">
+                {isAr
+                  ? "نسبة الحضور حسب المقررات الدراسية"
+                  : "Attendance by Course"}
+              </h2>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {courses.length} {isAr ? "مقررات مسجلة" : "courses enrolled"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {courses.map((course) => {
+              const isWarning = course.attendanceRate < 75;
+              return (
+                <Card
+                  key={course.courseCode}
+                  className={`p-4 bg-card/45 border-border/70 hover:border-primary/40 transition-all shadow-sm space-y-3 ${
+                    isWarning ? "border-amber-500/30" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="font-mono text-sm font-bold text-foreground">
+                        {course.courseCode}
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {course.totalSessions}{" "}
+                        {isAr ? "جلسات منعقدة" : "sessions held"}
+                      </p>
                     </div>
                     <span
-                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${
-                        record.attendancePercentage >= 75
-                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                          : record.attendancePercentage >= 60
-                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                          : 'bg-red-500/10 text-red-500 border-red-500/20'
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                        course.attendanceRate >= 75
+                          ? "bg-primary/10 text-primary border-primary/20"
+                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                       }`}
                     >
-                      {record.attendancePercentage}%
+                      {course.attendanceRate}%
                     </span>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{isEnglish ? 'Progress Indicator' : 'مؤشر التقدم'}</span>
-                      <span className="font-mono">{record.attendedLectures} / {record.totalLectures}</span>
-                    </div>
-                    <Progress value={record.attendancePercentage} className="h-2" />
-                  </div>
+                  <Progress value={course.attendanceRate} className="h-1.5" />
 
-                  <div className="grid grid-cols-3 gap-2 text-center text-sm pt-2">
-                    <div className="bg-secondary/40 p-2 rounded-lg border border-border/50">
-                      <span className="text-[10px] text-muted-foreground block font-bold">
-                        {isEnglish ? 'Total' : 'المحاضرات'}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                    <div className="flex items-center gap-3 font-mono text-[11px]">
+                      <span className="text-primary">
+                        {course.presentCount} {isAr ? "حضور" : "pres"}
                       </span>
-                      <span className="font-bold text-foreground font-mono mt-0.5 block">
-                        {record.totalLectures}
+                      <span className="text-amber-400">
+                        {course.lateCount} {isAr ? "تأخير" : "late"}
                       </span>
-                    </div>
-                    <div className="bg-secondary/40 p-2 rounded-lg border border-border/50">
-                      <span className="text-[10px] text-muted-foreground block font-bold">
-                        {isEnglish ? 'Attended' : 'حضور'}
-                      </span>
-                      <span className="font-bold text-emerald-500 font-mono mt-0.5 block">
-                        {record.attendedLectures}
+                      <span className="text-rose-400">
+                        {course.absentCount} {isAr ? "غياب" : "abs"}
                       </span>
                     </div>
-                    <div className="bg-secondary/40 p-2 rounded-lg border border-border/50">
-                      <span className="text-[10px] text-muted-foreground block font-bold">
-                        {isEnglish ? 'Absent' : 'غياب'}
-                      </span>
-                      <span className="font-bold text-red-500 font-mono mt-0.5 block">
-                        {record.absenceLectures}
-                      </span>
-                    </div>
-                  </div>
 
-                  {isWarning && (
-                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs leading-normal">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 animate-pulse" />
-                      <div>
-                        <p className="font-bold">{isEnglish ? 'Exam Suspension Risk' : 'خطر الحرمان من الامتحان'}</p>
-                        <p className="mt-0.5 text-muted-foreground/90">
-                          {isEnglish
-                            ? 'Warning: High absence rate. You must maintain at least 75% attendance to take the final exams.'
-                            : 'تنبيه: تجاوزت نسبة الغياب المسموح بها. يجب الحفاظ على 75% حضور على الأقل لدخول الامتحانات.'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCourse(course.courseCode);
+                      }}
+                      className="text-primary hover:text-primary/80 font-medium flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <span>{isAr ? "تصفية السجل" : "Filter"}</span>
+                      <ChevronRight className="h-3 w-3 rtl:rotate-180" />
+                    </button>
+                  </div>
                 </Card>
-              </motion.div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
+      )}
+
+      {/* Session History Log Section */}
+      <div className="space-y-4 pt-4 border-t border-border/60">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary" />
+              <span>
+                {isAr
+                  ? "سجل المحاضرات والسكاشن التفصيلي"
+                  : "Session History Log"}
+              </span>
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isAr
+                ? "تفاصيل كل جلسة وموعد المسح وحالة الحضور المسجلة"
+                : "Complete list of all checked-in sessions with exact server timestamps"}
+            </p>
+          </div>
+
+          {/* Quick Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filter by course */}
+            <div className="w-44">
+              <CustomDropdown
+                value={selectedCourse}
+                onValueChange={setSelectedCourse}
+                ariaLabel={isAr ? "تصفية حسب المقرر" : "Filter by course"}
+                options={[
+                  {
+                    value: "all",
+                    label: isAr ? "جميع المقررات" : "All Courses",
+                  },
+                  ...courses.map((c) => ({
+                    value: c.courseCode,
+                    label: c.courseName
+                      ? `${c.courseCode} - ${c.courseName}`
+                      : c.courseCode,
+                  })),
+                ]}
+                className="h-8 text-xs bg-secondary/50 border-border/70"
+              />
+            </div>
+
+            {/* Filter by status */}
+            <div className="w-36">
+              <CustomDropdown
+                value={selectedStatus}
+                onValueChange={setSelectedStatus}
+                ariaLabel={isAr ? "تصفية حسب الحالة" : "Filter by status"}
+                options={[
+                  {
+                    value: "all",
+                    label: isAr ? "كافة الحالات" : "All Statuses",
+                  },
+                  {
+                    value: "present",
+                    label: isAr ? "حاضر (في الموعد)" : "Present",
+                  },
+                  { value: "late", label: isAr ? "متأخر" : "Late" },
+                  { value: "excused", label: isAr ? "معذور" : "Excused" },
+                  { value: "absent", label: isAr ? "غائب" : "Absent" },
+                ]}
+                className="h-8 text-xs bg-secondary/50 border-border/70"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Empty State */}
+        {filteredRecords.length === 0 ? (
+          <Card className="p-8 text-center bg-card/35 border-border/70 space-y-3">
+            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary">
+              <QrCode className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-foreground">
+                {records.length === 0
+                  ? isAr
+                    ? "لا توجد جلسات حضور مسجلة بعد"
+                    : "No attendance sessions recorded yet"
+                  : isAr
+                    ? "لا توجد نتائج مطابقة للتصفية"
+                    : "No records match selected filters"}
+              </h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+                {records.length === 0
+                  ? isAr
+                    ? "سيتم تسجيل حضورك تلقائياً عند مسح رمز الاستجابة السريعة (QR) الذي يعرضه الدكتور أو المعيد أثناء المحاضرة أو السكشن."
+                    : "Your attendance will automatically appear here when you scan the rotating QR code presented during lectures or sections."
+                  : isAr
+                    ? "جرب تغيير خيارات التصفية أو اختيار مقرر آخر لعرض سجلاته."
+                    : "Try selecting a different course or status filter to see sessions."}
+              </p>
+            </div>
+            {selectedCourse !== "all" || selectedStatus !== "all" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedCourse("all");
+                  setSelectedStatus("all");
+                }}
+                className="text-xs cursor-pointer"
+              >
+                {isAr ? "إعادة ضبط التصفية" : "Reset Filters"}
+              </Button>
+            ) : null}
+          </Card>
+        ) : (
+          /* Responsive Table / Cards View */
+          <div className="space-y-3">
+            {/* Desktop Table */}
+            <div className="hidden sm:block overflow-hidden rounded-xl border border-border/70 bg-card/40 backdrop-blur-sm">
+              <table className="w-full text-xs text-start">
+                <thead className="bg-secondary/40 border-b border-border/60 text-muted-foreground font-semibold">
+                  <tr>
+                    <th className="p-3.5 text-start">
+                      {isAr ? "المقرر" : "Course"}
+                    </th>
+                    <th className="p-3.5 text-center">
+                      {isAr ? "النوع" : "Session Type"}
+                    </th>
+                    <th className="p-3.5 text-center">
+                      {isAr ? "توقيت التسجيل" : "Check-In Time"}
+                    </th>
+                    <th className="p-3.5 text-center">
+                      {isAr ? "وسيلة التحقق" : "Method"}
+                    </th>
+                    <th className="p-3.5 text-end">
+                      {isAr ? "الحالة" : "Status"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-mono">
+                  {filteredRecords.map((record) => (
+                    <tr
+                      key={record._id}
+                      className="hover:bg-secondary/20 transition-colors"
+                    >
+                      <td className="p-3.5 text-start font-bold text-foreground">
+                        {record.courseCode}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-secondary/70 text-muted-foreground border border-border/50 font-sans">
+                          {record.sessionType === "lecture"
+                            ? isAr
+                              ? "محاضرة"
+                              : "Lecture"
+                            : record.sessionType === "section"
+                              ? isAr
+                                ? "سكشن"
+                                : "Section"
+                              : isAr
+                                ? "معمل"
+                                : "Lab"}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-center text-muted-foreground text-[11px]">
+                        {new Date(record.checkedInAt).toLocaleString(
+                          isAr ? "ar-EG" : "en-US",
+                          {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          },
+                        )}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-sans">
+                          {record.method === "qr" ? (
+                            <>
+                              <QrCode className="h-3 w-3 text-primary" />
+                              <span>QR Code</span>
+                            </>
+                          ) : (
+                            <span>{isAr ? "تسجيل يدوي" : "Manual"}</span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-end">
+                        <AttendanceStatusBadge
+                          status={record.status}
+                          isAr={isAr}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards (Visible only on phone screens) */}
+            <div className="grid grid-cols-1 gap-2.5 sm:hidden">
+              {filteredRecords.map((record) => (
+                <Card
+                  key={record._id}
+                  className="p-3.5 bg-card/45 border-border/70 space-y-2.5 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-sm font-bold text-foreground">
+                      {record.courseCode}
+                    </span>
+                    <AttendanceStatusBadge status={record.status} isAr={isAr} />
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
+                    <span className="font-sans">
+                      {record.sessionType === "lecture"
+                        ? isAr
+                          ? "محاضرة"
+                          : "Lecture"
+                        : isAr
+                          ? "سكشن"
+                          : "Section"}
+                    </span>
+                    <span className="font-mono text-[11px]">
+                      {new Date(record.checkedInAt).toLocaleTimeString(
+                        isAr ? "ar-EG" : "en-US",
+                        { hour: "2-digit", minute: "2-digit" },
+                      )}
+                    </span>
+                    <span className="text-[11px]">
+                      {record.method === "qr"
+                        ? "QR Code"
+                        : isAr
+                          ? "يدوي"
+                          : "Manual"}
+                    </span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Student QR Scanner Dialog */}
+      <StudentQrScannerDialog
+        open={showScanDialog}
+        onOpenChange={setShowScanDialog}
+        onSuccess={() => {
+          historyQuery.refetch();
+          liveSessionsQuery.refetch();
+        }}
+        locale={locale}
+      />
     </div>
+  );
+}
+
+function AttendanceStatusBadge({
+  status,
+  isAr,
+}: {
+  status: string;
+  isAr: boolean;
+}) {
+  if (status === "present") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+        <CheckCircle2 className="h-3 w-3" />
+        <span>{isAr ? "حاضر" : "Present"}</span>
+      </span>
+    );
+  }
+
+  if (status === "late") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+        <Clock className="h-3 w-3" />
+        <span>{isAr ? "متأخر" : "Late"}</span>
+      </span>
+    );
+  }
+
+  if (status === "excused") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+        <ShieldCheck className="h-3 w-3" />
+        <span>{isAr ? "معذور" : "Excused"}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+      <XCircle className="h-3 w-3" />
+      <span>{isAr ? "غائب" : "Absent"}</span>
+    </span>
   );
 }

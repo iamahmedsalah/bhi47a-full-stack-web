@@ -1,43 +1,43 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { useTranslations } from 'next-intl';
-import api, { getApiErrorMessage } from '@/lib/api';
-import { useParams, useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/query-keys';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { AlertMessage } from '@/components/ui/feedback';
-import { PasswordInput } from '@/components/ui/password-input';
-import { toast } from 'sonner';
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import { useTranslations } from "next-intl";
+import api, { getApiErrorMessage } from "@/lib/api";
+import { useParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { AlertMessage } from "@/components/ui/feedback";
+import { PasswordInput } from "@/components/ui/password-input";
+import { toast } from "sonner";
+import { ArrowRight, Loader2, KeyRound, MailWarning } from "lucide-react";
+import LangToggle from "@/components/ui/LangToggle";
+import { Footer } from "@/components/ui/footer";
 import {
-  ArrowRight,
-  Loader2,
-  KeyRound,
-  MailWarning
-} from 'lucide-react';
-import LangToggle from '@/components/ui/LangToggle';
-import { Footer } from '@/components/ui/footer';
+  isValidStudentPassword,
+  STUDENT_PASSWORD_MAX_LENGTH,
+  STUDENT_PASSWORD_MIN_LENGTH,
+} from "@student-portal/shared";
 
 function ForgotPasswordContent() {
-  const t = useTranslations('auth');
+  const t = useTranslations("auth");
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
   const locale = params.locale as string;
-  const isAr = locale === 'ar';
+  const isAr = locale === "ar";
 
   const [step, setStep] = useState<1 | 2>(1);
-  const [identifier, setIdentifier] = useState('');
-  const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [identifier, setIdentifier] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const identifierInputRef = useRef<HTMLInputElement>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
@@ -53,23 +53,31 @@ function ForgotPasswordContent() {
 
   const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccessMsg('');
+    setError("");
+    setSuccessMsg("");
 
     if (!identifier.trim()) {
-      setError(isAr ? 'الكود الأكاديمي مطلوب' : 'Academic Code is required');
+      setError(isAr ? "الكود الأكاديمي مطلوب" : "Academic Code is required");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await api.post<{ message: string; email?: string }>('/auth/forgot-password', { identifier: identifier.trim() });
-      const msg = res.data?.message || t('otpSentSuccess');
+      const res = await api.post<{ message: string; email?: string }>(
+        "/auth/forgot-password",
+        { identifier: identifier.trim() },
+      );
+      const msg = res.data?.message || t("otpSentSuccess");
       toast.success(msg);
       setSuccessMsg(msg);
       setStep(2);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, isAr ? 'فشل إرسال رمز التحقق' : 'Failed to send OTP'));
+      setError(
+        getApiErrorMessage(
+          err,
+          isAr ? "فشل إرسال رمز التحقق" : "Failed to send OTP",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -77,37 +85,51 @@ function ForgotPasswordContent() {
 
   const handleStep2Submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccessMsg('');
+    setError("");
+    setSuccessMsg("");
 
     if (otp.length !== 6 || !/^\d+$/.test(otp)) {
-      setError(isAr ? 'رمز التحقق يجب أن يتكون من 6 أرقام' : 'OTP must be 6 digits');
+      setError(
+        isAr ? "رمز التحقق يجب أن يتكون من 6 أرقام" : "OTP must be 6 digits",
+      );
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError(isAr ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters');
+    if (!isValidStudentPassword(newPassword)) {
+      setError(
+        isAr
+          ? "يجب أن تتكون كلمة المرور من 8 إلى 100 حرف، وتحتوي على حرف إنجليزي ورقم واحد على الأقل، وبدون مسافات"
+          : "Use 8-100 characters with at least one letter and one number, without spaces",
+      );
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError(isAr ? 'كلمتا المرور غير متطابقتين' : 'Passwords do not match');
+      setError(isAr ? "كلمتا المرور غير متطابقتين" : "Passwords do not match");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await api.post<{ user: any; csrfToken: string }>('/auth/reset-password-otp', {
-        identifier: identifier.trim(),
-        otp,
-        newPassword,
-      });
+      const res = await api.post<{ user: any; csrfToken: string }>(
+        "/auth/reset-password-otp",
+        {
+          identifier: identifier.trim(),
+          otp,
+          newPassword,
+        },
+      );
 
       queryClient.setQueryData(queryKeys.auth.me, res.data.user);
-      toast.success(t('passwordResetSuccess'));
+      toast.success(t("passwordResetSuccess"));
       router.push(`/${locale}/dashboard`);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, isAr ? 'فشل إعادة تعيين كلمة المرور' : 'Failed to reset password'));
+      setError(
+        getApiErrorMessage(
+          err,
+          isAr ? "فشل إعادة تعيين كلمة المرور" : "Failed to reset password",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -116,8 +138,8 @@ function ForgotPasswordContent() {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden"
-      style={{ background: 'var(--gradient-primary)' }}
-      dir={isAr ? 'rtl' : 'ltr'}
+      style={{ background: "var(--gradient-primary)" }}
+      dir={isAr ? "rtl" : "ltr"}
     >
       {/* Background Gradients */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -137,7 +159,7 @@ function ForgotPasswordContent() {
             onClick={() => {
               if (step === 2) {
                 setStep(1);
-                setError('');
+                setError("");
               } else {
                 router.push(`/${locale}/login/student`);
               }
@@ -147,12 +169,12 @@ function ForgotPasswordContent() {
             {isAr ? (
               <>
                 <ArrowRight className="w-4 h-4" />
-                {t('backToLogin')}
+                {t("backToLogin")}
               </>
             ) : (
               <>
                 <ArrowRight className="w-4 h-4 rotate-180" />
-                {t('backToLogin')}
+                {t("backToLogin")}
               </>
             )}
           </Button>
@@ -168,21 +190,27 @@ function ForgotPasswordContent() {
 
           <div className="text-center space-y-2">
             <h1 className="text-xl font-bold text-foreground">
-              {t('forgotPasswordTitle')}
+              {t("forgotPasswordTitle")}
             </h1>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-              {step === 1 ? t('forgotPasswordDesc') : (isAr ? 'أدخل الرمز وكلمة المرور الجديدة لإكمال الاستعادة' : 'Enter verification code and your new password')}
+              {step === 1
+                ? t("forgotPasswordDesc")
+                : isAr
+                  ? "أدخل الرمز وكلمة المرور الجديدة لإكمال الاستعادة"
+                  : "Enter verification code and your new password"}
             </p>
           </div>
 
           {error && <AlertMessage tone="danger">{error}</AlertMessage>}
-          {successMsg && <AlertMessage tone="success">{successMsg}</AlertMessage>}
+          {successMsg && (
+            <AlertMessage tone="success">{successMsg}</AlertMessage>
+          )}
 
           {step === 1 ? (
             <form onSubmit={handleStep1Submit} className="w-full space-y-4">
               <div className="space-y-1 text-start">
                 <label className="text-xs font-bold text-foreground">
-                  {t('studentCode')}
+                  {t("studentCode")}
                 </label>
                 <Input
                   ref={identifierInputRef}
@@ -191,7 +219,11 @@ function ForgotPasswordContent() {
                   pattern="[0-9]*"
                   maxLength={6}
                   required
-                  placeholder={isAr ? 'الكود الاكاديمي (6 أرقام)' : 'Academic Code (6 digits)'}
+                  placeholder={
+                    isAr
+                      ? "الكود الاكاديمي (6 أرقام)"
+                      : "Academic Code (6 digits)"
+                  }
                   value={identifier}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -210,15 +242,23 @@ function ForgotPasswordContent() {
                 disabled={loading || identifier.length < 4}
                 className="w-full h-11 gap-2 text-sm bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
-                {loading ? (isAr ? 'جاري الإرسال...' : 'Sending...') : t('sendOtp')}
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailWarning className="h-4 w-4" />}
+                {loading
+                  ? isAr
+                    ? "جاري الإرسال..."
+                    : "Sending..."
+                  : t("sendOtp")}
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MailWarning className="h-4 w-4" />
+                )}
               </Button>
             </form>
           ) : (
             <form onSubmit={handleStep2Submit} className="w-full space-y-4">
               <div className="space-y-1 text-start">
                 <label className="text-xs font-bold text-foreground">
-                  {t('enterOtp')}
+                  {t("enterOtp")}
                 </label>
                 <Input
                   ref={otpInputRef}
@@ -227,7 +267,7 @@ function ForgotPasswordContent() {
                   pattern="[0-9]*"
                   maxLength={6}
                   required
-                  placeholder={t('otpPlaceholder')}
+                  placeholder={t("otpPlaceholder")}
                   value={otp}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -243,12 +283,18 @@ function ForgotPasswordContent() {
 
               <div className="space-y-1 text-start">
                 <label className="text-xs font-bold text-foreground">
-                  {t('newPassword')}
+                  {t("newPassword")}
                 </label>
                 <PasswordInput
                   required
-                  minLength={8}
-                  placeholder={isAr ? 'كلمة المرور الجديدة (8 أحرف كحد أدنى)' : 'New password (min 8 chars)'}
+                  minLength={STUDENT_PASSWORD_MIN_LENGTH}
+                  maxLength={STUDENT_PASSWORD_MAX_LENGTH}
+                  autoComplete="new-password"
+                  placeholder={
+                    isAr
+                      ? "8 أحرف مع حرف إنجليزي ورقم"
+                      : "8+ characters with a letter and number"
+                  }
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   disabled={loading}
@@ -258,11 +304,15 @@ function ForgotPasswordContent() {
 
               <div className="space-y-1 text-start">
                 <label className="text-xs font-bold text-foreground">
-                  {t('confirmNewPassword')}
+                  {t("confirmNewPassword")}
                 </label>
                 <PasswordInput
                   required
-                  placeholder={isAr ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'}
+                  maxLength={STUDENT_PASSWORD_MAX_LENGTH}
+                  autoComplete="new-password"
+                  placeholder={
+                    isAr ? "تأكيد كلمة المرور الجديدة" : "Confirm new password"
+                  }
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   disabled={loading}
@@ -272,11 +322,24 @@ function ForgotPasswordContent() {
 
               <Button
                 type="submit"
-                disabled={loading || otp.length !== 6 || newPassword.length < 8}
+                disabled={
+                  loading ||
+                  otp.length !== 6 ||
+                  !isValidStudentPassword(newPassword) ||
+                  newPassword !== confirmPassword
+                }
                 className="w-full h-11 gap-2 text-sm bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center"
               >
-                {loading ? (isAr ? 'جاري إعادة التعيين...' : 'Resetting...') : t('resetPassword')}
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                {loading
+                  ? isAr
+                    ? "جاري إعادة التعيين..."
+                    : "Resetting..."
+                  : t("resetPassword")}
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <KeyRound className="h-4 w-4" />
+                )}
               </Button>
             </form>
           )}
@@ -290,11 +353,13 @@ function ForgotPasswordContent() {
 
 export default function ForgotPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#0a1c22]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#0a1c22]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
       <ForgotPasswordContent />
     </Suspense>
   );

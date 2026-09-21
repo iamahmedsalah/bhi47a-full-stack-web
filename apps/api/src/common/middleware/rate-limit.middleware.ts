@@ -8,7 +8,13 @@ import type {
   RateLimiterStore,
 } from '../rate-limit/rate-limit.types';
 
-const store: RateLimiterStore =
+let activeRateLimiterService: { apply: (req: Request, res: Response, next: NextFunction) => Promise<void> } | undefined;
+
+export function setGlobalRateLimiterService(service: { apply: (req: Request, res: Response, next: NextFunction) => Promise<void> }) {
+  activeRateLimiterService = service;
+}
+
+const fallbackStore: RateLimiterStore =
   process.env.RATE_LIMIT_STORE === 'memory'
     ? new MemoryRateLimiterStore()
     : new MongoRateLimiterStore();
@@ -28,6 +34,11 @@ export function rateLimitMiddleware(
   res: Response,
   next: NextFunction,
 ) {
+  if (activeRateLimiterService) {
+    void activeRateLimiterService.apply(req, res, next);
+    return;
+  }
+
   const rule = findRateLimitRule(req);
   if (!rule) {
     next();
@@ -95,7 +106,7 @@ async function applyRateLimit(
   try {
     const identity = rule.keyGenerator?.(req) || getClientIp(req);
     const key = `${rule.name}:${identity}`;
-    const hit = await store.increment(key, rule.windowMs, rule.max);
+    const hit = await fallbackStore.increment(key, rule.windowMs, rule.max);
 
     setRateLimitHeaders(res, rule, hit);
 

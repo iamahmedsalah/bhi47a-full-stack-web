@@ -11,11 +11,12 @@ import { toast } from 'sonner';
 import { downloadExcel } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
-import { useStudentStore } from '@/store/student-store';
+import { useTableState } from '@/hooks/use-table-state';
 import {
   activateStudent,
   createStudent,
   deactivateStudent,
+  exportStudentsStreamingExcel,
   getStudent,
   getStudentAcademicEmail,
   listAllStudentsForExport,
@@ -29,6 +30,7 @@ import {
 
 import { StudentFormDialog } from '@/features/students/components/student-form-dialog';
 import { StudentDetailDialog } from '@/features/students/components/student-detail-dialog';
+import { ResetStudentPasswordDialog } from '@/features/students/components/reset-student-password-dialog';
 import { StudentTable, type Student } from '@/features/students/components/student-table';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -86,9 +88,43 @@ function StudentsPageContent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const { search, level, status, sortBy, sortOrder, page, selectedKeys, setFilter, setSelectedKeys } = useStudentStore();
-  const [limit, setLimit] = useState(20);
-  const canViewSensitiveStudentData = user?.role === 'admin';
+  const {
+    page,
+    limit,
+    search,
+    filters,
+    selectedKeys,
+    setSelectedKeys,
+    setPage,
+    setLimit,
+    setSearch,
+    setFilter: setTableFilter,
+  } = useTableState({
+    defaultFilters: {
+      level: 'all',
+      status: 'all',
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+    },
+    defaultPage: 1,
+    defaultLimit: 20,
+  });
+
+  const level = filters.level;
+  const status = filters.status;
+  const sortBy = filters.sortBy;
+  const sortOrder = filters.sortOrder;
+
+  const setFilter = (key: string, value: string | number | undefined) => {
+    if (key === 'search') setSearch(String(value ?? ''));
+    else if (key === 'page') setPage(Number(value) || 1);
+    else setTableFilter(key as any, value !== undefined ? String(value) : undefined);
+  };
+
+  const canViewSensitiveStudentData = Boolean(
+    user?.role === 'admin' ||
+    user?.permissions?.includes('students.view_national_id'),
+  );
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -173,6 +209,19 @@ function StudentsPageContent() {
   return (
     <div className="animate-fade-in space-y-6 p-2 md:p-6">
       <PageTitleBanner title={t('title')} icon={<Users className="h-5 w-5" />} subtitle="Manage student identities, academic placement, exam seats, imports, and exports.">
+        <Button
+          variant="outline"
+          onClick={() =>
+            void exportStudentsStreamingExcel({
+              search: search || undefined,
+              level: level !== 'all' ? level : undefined,
+              enrollmentStatus: status !== 'all' ? status : undefined,
+            })
+          }
+        >
+          <Download className="h-4 w-4" />
+          {locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+        </Button>
         <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
           <UploadCloud className="h-4 w-4" />
           {locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}
@@ -276,6 +325,34 @@ function StudentsPageContent() {
 
       <DataUploadDialog open={isUploadOpen} onOpenChange={setIsUploadOpen} title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'} description="Upload XLSX, XLS or CSV to import students." uploadType="students" expectedColumns={studentImportColumns} onSuccess={() => invalidateStudents()} />
       <StudentDetailDialog open={Boolean(profileStudent)} onOpenChange={(open) => !open && setProfileStudent(null)} student={profileQuery.data ?? profileStudent} grades={profileGradesQuery.data ?? []} complaints={profileComplaintsQuery.data ?? []} academicEmail={profileEmailQuery.data} isLoading={profileQuery.isLoading} gradesLoading={profileGradesQuery.isLoading} complaintsLoading={profileComplaintsQuery.isLoading} locale={locale} canViewSensitiveStudentData={canViewSensitiveStudentData} />
+      <ResetStudentPasswordDialog
+        open={isResetOpen}
+        onOpenChange={(open) => {
+          setIsResetOpen(open);
+          if (!open) setSelectedStudent(null);
+        }}
+        student={selectedStudent}
+        onSuccess={() => invalidateStudents()}
+        locale={locale}
+      />
+      <ConfirmDialog
+        open={isBulkDeactivateOpen}
+        onOpenChange={setIsBulkDeactivateOpen}
+        title={t('deactivate')}
+        description={
+          locale === 'ar'
+            ? `هل أنت متأكد من تعطيل حسابات ${selectedKeys.length} طالب محدد؟ سيتم إيقاف وصولهم إلى البوابة.`
+            : `Are you sure you want to suspend the accounts of ${selectedKeys.length} selected students? Their portal access will be deactivated.`
+        }
+        confirmLabel={t('deactivate')}
+        cancelLabel={tCommon('cancel')}
+        onConfirm={async () => {
+          await Promise.all(selectedKeys.map((id) => deactivateStudent(id)));
+          setSelectedKeys([]);
+          setIsBulkDeactivateOpen(false);
+          invalidateStudents();
+        }}
+      />
     </div>
   );
 }

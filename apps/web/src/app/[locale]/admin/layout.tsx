@@ -39,6 +39,12 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
     nameEn: 'Students Management',
   },
   {
+    pattern: /^\/[^/]+\/admin\/attendance/,
+    permission: PERMISSIONS.ATTENDANCE_READ,
+    nameAr: 'الحضور والغياب الذكي',
+    nameEn: 'Smart QR Attendance',
+  },
+  {
     pattern: /^\/[^/]+\/admin\/courses/,
     permission: PERMISSIONS.COURSES_READ,
     nameAr: 'إدارة المواد والمقررات الدراسية',

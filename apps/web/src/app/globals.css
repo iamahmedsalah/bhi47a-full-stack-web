@@ -28,6 +28,41 @@
 /* -------------------------------------------------------------------------- */
 
 @theme {
+  /* Keep legacy green/teal utility classes visually aligned with the blue UI. */
+  --color-green-50: var(--color-sky-50);
+  --color-green-100: var(--color-sky-100);
+  --color-green-200: var(--color-sky-200);
+  --color-green-300: var(--color-sky-300);
+  --color-green-400: var(--color-sky-400);
+  --color-green-500: var(--color-sky-500);
+  --color-green-600: var(--color-sky-600);
+  --color-green-700: var(--color-sky-700);
+  --color-green-800: var(--color-sky-800);
+  --color-green-900: var(--color-sky-900);
+  --color-green-950: var(--color-sky-950);
+  --color-emerald-50: var(--color-sky-50);
+  --color-emerald-100: var(--color-sky-100);
+  --color-emerald-200: var(--color-sky-200);
+  --color-emerald-300: var(--color-sky-300);
+  --color-emerald-400: var(--color-sky-400);
+  --color-emerald-500: var(--color-sky-500);
+  --color-emerald-600: var(--color-sky-600);
+  --color-emerald-700: var(--color-sky-700);
+  --color-emerald-800: var(--color-sky-800);
+  --color-emerald-900: var(--color-sky-900);
+  --color-emerald-950: var(--color-sky-950);
+  --color-teal-50: var(--color-sky-50);
+  --color-teal-100: var(--color-sky-100);
+  --color-teal-200: var(--color-sky-200);
+  --color-teal-300: var(--color-sky-300);
+  --color-teal-400: var(--color-sky-400);
+  --color-teal-500: var(--color-sky-500);
+  --color-teal-600: var(--color-sky-600);
+  --color-teal-700: var(--color-sky-700);
+  --color-teal-800: var(--color-sky-800);
+  --color-teal-900: var(--color-sky-900);
+  --color-teal-950: var(--color-sky-950);
+
   --animate-spin-slow: spin 6s linear infinite;
   --animate-orbit: orbit 40s linear infinite;
   --animate-orbit-reverse: orbit-reverse 30s linear infinite;
@@ -39,8 +74,10 @@
   --font-sans: var(--font-primary), ui-sans-serif, system-ui, sans-serif;
   --font-cairo: var(--next-font-cairo), ui-sans-serif, system-ui, sans-serif;
   --font-dmsans: var(--next-font-dmsans), ui-sans-serif, system-ui, sans-serif;
-  --font-iceland: var(--next-font-iceland), ui-sans-serif, system-ui, sans-serif;
-  --font-audiowide: var(--next-font-audiowide), ui-sans-serif, system-ui, sans-serif;
+  --font-iceland:
+    var(--next-font-iceland), ui-sans-serif, system-ui, sans-serif;
+  --font-audiowide:
+    var(--next-font-audiowide), ui-sans-serif, system-ui, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -181,8 +218,8 @@
 
   --header: #102c37;
 
-  --success: #16a34a;
-  --success-hover: #15803d;
+  --success: #0ea5e9;
+  --success-hover: #0284c7;
   --success-foreground: #ffffff;
 
   --warning: #eab308;
@@ -221,7 +258,7 @@
   --scroll-track: transparent;
 
   --gradient-primary: linear-gradient(180deg, #0c2731, #17343f);
-  --shadow-glow: 0 4px 24px rgb(14 165 233 / 15%);
+  --shadow-glow: none;
 }
 
 .dark,
@@ -266,8 +303,8 @@
 
   --header: #1a1f23;
 
-  --success: #22c55e;
-  --success-hover: #16a34a;
+  --success: #31a6c7;
+  --success-hover: #2388a5;
   --success-foreground: #ffffff;
 
   --warning: #facc15;
@@ -305,7 +342,7 @@
   --scroll-track: transparent;
 
   --gradient-primary: linear-gradient(180deg, #11191d, #0c1114);
-  --shadow-glow: 0 8px 40px rgb(49 166 199 / 7%);
+  --shadow-glow: none;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -313,7 +350,6 @@
 /* -------------------------------------------------------------------------- */
 
 @layer base {
-
   *,
   ::before,
   ::after,
@@ -466,16 +502,22 @@
   max-width: 72rem;
   height: 1px;
   margin-inline: auto;
-  background: linear-gradient(90deg,
-      transparent 0%,
-      rgb(14 165 233 / 20%) 20%,
-      rgb(14 165 233 / 20%) 80%,
-      transparent 100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(14 165 233 / 20%) 20%,
+    rgb(14 165 233 / 20%) 80%,
+    transparent 100%
+  );
   opacity: 0.2;
 }
 
 @utility bg-gradient-radial {
-  background: radial-gradient(circle at center, var(--card) 0%, var(--background) 100%);
+  background: radial-gradient(
+    circle at center,
+    var(--card) 0%,
+    var(--background) 100%
+  );
 }
 
 @utility badge-success {
@@ -623,7 +665,12 @@
 
   .beam {
     position: absolute;
-    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--primary),
+      transparent
+    );
     opacity: 0.05;
     transform-origin: center;
     pointer-events: none;
@@ -683,18 +730,21 @@
     overflow: hidden;
     border-radius: var(--radius-squircle) !important;
     border-color: color-mix(in srgb, var(--border) 75%, transparent) !important;
-    background:
-      linear-gradient(135deg,
-        var(--toast-accent-bg),
-        color-mix(in srgb, var(--card) 94%, transparent),
-        color-mix(in srgb, var(--surface) 88%, transparent)) !important;
+    background: linear-gradient(
+      135deg,
+      var(--toast-accent-bg),
+      color-mix(in srgb, var(--card) 94%, transparent),
+      color-mix(in srgb, var(--surface) 88%, transparent)
+    ) !important;
     color: var(--foreground) !important;
     box-shadow: 0 18px 60px rgb(0 0 0 / 0.28);
   }
 
   [data-theme="dark"] [data-sonner-toast] {
     border-color: rgb(255 255 255 / 0.1) !important;
-    box-shadow: 0 22px 80px rgb(0 0 0 / 0.48), 0 0 28px rgb(49 168 201 / 0.12);
+    box-shadow:
+      0 22px 80px rgb(0 0 0 / 0.48),
+      0 0 28px rgb(49 168 201 / 0.12);
   }
 
   [data-sonner-toast] [data-close-button] {
@@ -739,7 +789,11 @@
   [data-sonner-toast][data-type="error"] {
     --toast-accent: var(--danger);
     --toast-accent-bg: color-mix(in srgb, var(--danger) 12%, transparent);
-    border-color: color-mix(in srgb, var(--danger) 45%, var(--border)) !important;
+    border-color: color-mix(
+      in srgb,
+      var(--danger) 45%,
+      var(--border)
+    ) !important;
   }
 
   [data-sonner-toast][data-type="success"]::after {
@@ -749,7 +803,11 @@
   [data-sonner-toast][data-type="success"] {
     --toast-accent: var(--success);
     --toast-accent-bg: color-mix(in srgb, var(--success) 14%, transparent);
-    border-color: color-mix(in srgb, var(--success) 45%, var(--border)) !important;
+    border-color: color-mix(
+      in srgb,
+      var(--success) 45%,
+      var(--border)
+    ) !important;
   }
 
   [data-sonner-toast][data-type="warning"]::after {
@@ -759,7 +817,11 @@
   [data-sonner-toast][data-type="warning"] {
     --toast-accent: var(--warning);
     --toast-accent-bg: color-mix(in srgb, var(--warning) 14%, transparent);
-    border-color: color-mix(in srgb, var(--warning) 45%, var(--border)) !important;
+    border-color: color-mix(
+      in srgb,
+      var(--warning) 45%,
+      var(--border)
+    ) !important;
   }
 
   [data-sonner-toast][data-type="info"]::after {

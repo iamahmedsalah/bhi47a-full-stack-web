@@ -37,6 +37,16 @@ export class UsersService {
     return user;
   }
 
+  async findByIdWithNationalId(id: string): Promise<UserDocument> {
+    const user = await this.userModel
+      .findById(id)
+      .select(
+        '+passwordHash +nationalIdHash +nationalId +resetPasswordToken +googleLinkOtp',
+      );
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
   async findByEmail(email: string): Promise<UserDocument | null> {
     return (await this.userModel
       .findOne({ email: email.toLowerCase() })
@@ -155,13 +165,14 @@ export class UsersService {
   async updatePassword(
     userId: string,
     newPassword: string,
+    mustChangePassword: boolean = false,
   ): Promise<UserDocument> {
     const passwordHash = await bcrypt.hash(newPassword, 12);
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
         passwordHash,
-        mustChangePassword: false,
+        mustChangePassword,
         passwordChangedAt: new Date(Date.now() - 1000),
         $inc: { tokenVersion: 1 },
       },

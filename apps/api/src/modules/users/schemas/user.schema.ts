@@ -73,7 +73,7 @@ export class User {
   @Prop()
   nationalIdMasked?: string;
 
-  @Prop()
+  @Prop({ select: false })
   nationalId?: string;
 
   @Prop({ default: false })

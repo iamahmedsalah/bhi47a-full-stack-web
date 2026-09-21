@@ -9,7 +9,8 @@ import { json, urlencoded, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { rateLimitMiddleware } from './common/middleware/rate-limit.middleware';
+import { rateLimitMiddleware, setGlobalRateLimiterService } from './common/middleware/rate-limit.middleware';
+import { RateLimiterService } from './common/rate-limit/rate-limit.service';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { AppLoggerService } from './core/logger/logger.service';
 import { isOriginAllowed, parseAllowedOrigins } from './config/cors-origins';
@@ -70,6 +71,8 @@ async function bootstrap() {
   });
   const configService = app.get(ConfigService);
   const logger = app.get(AppLoggerService);
+  const rateLimiterService = app.get(RateLimiterService);
+  setGlobalRateLimiterService(rateLimiterService);
   const port = Number(
     configService.get<string>('PORT') ??
     configService.get<string>('API_PORT') ??

@@ -1,5 +1,16 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  STUDENT_PASSWORD_MAX_LENGTH,
+  STUDENT_PASSWORD_MIN_LENGTH,
+  STUDENT_PASSWORD_PATTERN,
+} from '@student-portal/shared';
 
 export class ChangePasswordDto {
   @ApiProperty({ description: 'Current password' })
@@ -7,9 +18,17 @@ export class ChangePasswordDto {
   @IsNotEmpty()
   currentPassword!: string;
 
-  @ApiProperty({ description: 'New password (min 8 chars)' })
+  @ApiProperty({
+    description:
+      'New password (8-100 characters, with at least one Latin letter and one number, and no spaces)',
+  })
   @IsString()
-  @MinLength(8)
+  @MinLength(STUDENT_PASSWORD_MIN_LENGTH)
+  @MaxLength(STUDENT_PASSWORD_MAX_LENGTH)
+  @Matches(STUDENT_PASSWORD_PATTERN, {
+    message:
+      'Password must contain at least one Latin letter and one number, without spaces',
+  })
   @IsNotEmpty()
   newPassword!: string;
 }

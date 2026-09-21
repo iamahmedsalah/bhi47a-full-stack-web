@@ -1,12 +1,14 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - apps/*
+  - packages/*
+
 allowBuilds:
   '@firebase/util': false
   '@parcel/watcher': true
   '@scarf/scarf': true
   '@swc/core': true
   bcrypt: true
+  core-js: false
   msgpackr-extract: false
   protobufjs: false
   sharp: true

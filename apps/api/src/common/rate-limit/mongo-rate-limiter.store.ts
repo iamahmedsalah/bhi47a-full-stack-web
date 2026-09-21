@@ -1,3 +1,4 @@
+import type { Connection } from 'mongoose';
 import { ConnectionHolder } from './connection-holder';
 import type { RateLimitHit, RateLimiterStore } from './rate-limit.types';
 
@@ -13,6 +14,8 @@ type MongoRateLimitDocument = {
 export class MongoRateLimiterStore implements RateLimiterStore {
   private readonly collectionName = 'rate_limits';
   private indexReady?: Promise<void>;
+
+  constructor(private readonly injectedConnection?: Connection) {}
 
   async increment(
     key: string,
@@ -72,7 +75,7 @@ export class MongoRateLimiterStore implements RateLimiterStore {
   }
 
   private get collection() {
-    const db = ConnectionHolder.connection?.db;
+    const db = this.injectedConnection?.db || ConnectionHolder.connection?.db;
     if (!db) {
       throw new Error('MongoDB connection is not ready for rate limiting.');
     }

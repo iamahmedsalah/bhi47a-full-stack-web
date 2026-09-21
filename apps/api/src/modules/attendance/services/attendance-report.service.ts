@@ -1,0 +1,357 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
+import {
+  AttendanceRecord,
+  AttendanceRecordDocument,
+} from '../schemas/attendance-record.schema';
+import {
+  AttendanceSession,
+  AttendanceSessionDocument,
+} from '../schemas/attendance-session.schema';
+import { User, UserDocument } from '../../users/schemas/user.schema';
+import {
+  ManualMarkAttendanceDto,
+  ManualStudentCheckInDto,
+  QueryAttendanceRecordsDto,
+} from '../dto/attendance-session.dto';
+import { AttendanceRealtimeService } from './attendance-realtime.service';
+
+@Injectable()
+export class AttendanceReportService {
+  constructor(
+    @InjectModel(AttendanceRecord.name)
+    private recordModel: Model<AttendanceRecordDocument>,
+    @InjectModel(AttendanceSession.name)
+    private sessionModel: Model<AttendanceSessionDocument>,
+    @InjectModel(User.name)
+    private userModel: Model<UserDocument>,
+    private realtimeService: AttendanceRealtimeService,
+  ) {}
+
+  /**
+   * Retrieves paginated attendee records for a specific session.
+   */
+  async getSessionRecords(
+    sessionId: string,
+    query: QueryAttendanceRecordsDto,
+  ) {
+    if (!Types.ObjectId.isValid(sessionId)) {
+      throw new BadRequestException('معرّف الجلسة غير صالح');
+    }
+
+    const filter: FilterQuery<AttendanceRecordDocument> = {
+      sessionId: new Types.ObjectId(sessionId),
+    };
+
+    if (query.status && query.status !== 'all') {
+      filter.status = query.status;
+    }
+
+    if (query.search?.trim()) {
+      const searchRegex = new RegExp(
+        query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      );
+      filter.$or = [{ studentName: searchRegex }, { studentCode: searchRegex }];
+    }
+
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(200, Math.max(1, query.limit || 50));
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.recordModel
+        .find(filter)
+        .sort({ checkedInAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.recordModel.countDocuments(filter),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Staff manual correction of student attendance status with complete audit log.
+   */
+  async manualUpdateRecord(
+    recordId: string,
+    staffUser: { _id: string; name: string },
+    dto: ManualMarkAttendanceDto,
+  ) {
+    if (!Types.ObjectId.isValid(recordId)) {
+      throw new BadRequestException('معرّف السجل غير صالح');
+    }
+
+    const record = await this.recordModel.findById(recordId);
+    if (!record) {
+      throw new NotFoundException('سجل الحضور غير موجود');
+    }
+
+    const previousStatus = record.status;
+    record.status = dto.status;
+    if (dto.note) {
+      record.note = dto.note;
+    }
+    record.markedBy = new Types.ObjectId(staffUser._id);
+    record.markedByName = staffUser.name;
+
+    record.auditTrail.push({
+      action: 'MANUAL_STATUS_OVERRIDE',
+      modifiedBy: new Types.ObjectId(staffUser._id),
+      modifiedByName: staffUser.name,
+      previousStatus,
+      newStatus: dto.status,
+      reason: dto.reason || 'Manual modification by academic staff',
+      timestamp: new Date(),
+    });
+
+    await record.save();
+
+    // Broadcast change
+    this.realtimeService.publishEvent(record.sessionId.toString(), {
+      type: 'STATUS_CHANGE',
+      record: {
+        id: record._id.toString(),
+        studentId: record.studentId.toString(),
+        studentCode: record.studentCode,
+        studentName: record.studentName,
+        status: record.status,
+        method: record.method,
+        checkedInAt: record.checkedInAt,
+        note: record.note,
+      },
+      timestamp: new Date(),
+    });
+
+    return record;
+  }
+
+  /**
+   * Allows staff to manually mark a student present when phone/camera fails.
+   */
+  async manualStudentCheckIn(
+    sessionId: string,
+    staffUser: { _id: string; name: string },
+    dto: ManualStudentCheckInDto,
+  ) {
+    if (!Types.ObjectId.isValid(sessionId)) {
+      throw new BadRequestException('معرّف الجلسة غير صالح');
+    }
+
+    const session = await this.sessionModel.findById(sessionId).lean();
+    if (!session) {
+      throw new NotFoundException('جلسة الحضور غير موجودة');
+    }
+
+    const studentUser = await this.userModel
+      .findOne({
+        role: 'student',
+        $or: [
+          { studentCode: dto.studentCode.trim() },
+          { userCode: dto.studentCode.trim() },
+        ],
+      })
+      .lean();
+
+    if (!studentUser) {
+      throw new NotFoundException(
+        `لم يتم العثور على طالب بالكود [${dto.studentCode}]`,
+      );
+    }
+
+    // Check duplicate
+    const existing = await this.recordModel.findOne({
+      sessionId: session._id,
+      studentId: studentUser._id,
+    });
+
+    const now = new Date();
+
+    if (existing) {
+      existing.status = dto.status;
+      existing.note = dto.reason;
+      existing.markedBy = new Types.ObjectId(staffUser._id);
+      existing.markedByName = staffUser.name;
+      existing.auditTrail.push({
+        action: 'MANUAL_OVERRIDE_EXISTING',
+        modifiedBy: new Types.ObjectId(staffUser._id),
+        modifiedByName: staffUser.name,
+        newStatus: dto.status,
+        reason: dto.reason || 'Manual registration by staff member',
+        timestamp: now,
+      });
+      await existing.save();
+      return existing;
+    }
+
+    const newRecord = await this.recordModel.create({
+      sessionId: session._id,
+      studentId: studentUser._id,
+      studentCode: studentUser.studentCode || dto.studentCode,
+      studentName: studentUser.name,
+      courseCode: session.courseCode,
+      sessionType: session.sessionType,
+      status: dto.status,
+      method: 'manual',
+      checkedInAt: now,
+      markedBy: new Types.ObjectId(staffUser._id),
+      markedByName: staffUser.name,
+      note: dto.reason,
+      auditTrail: [
+        {
+          action: 'MANUAL_STAFF_REGISTRATION',
+          modifiedBy: new Types.ObjectId(staffUser._id),
+          modifiedByName: staffUser.name,
+          newStatus: dto.status,
+          reason: dto.reason || 'Manual registration by staff member',
+          timestamp: now,
+        },
+      ],
+    });
+
+    this.realtimeService.publishEvent(session._id.toString(), {
+      type: 'CHECK_IN',
+      record: {
+        id: newRecord._id.toString(),
+        studentId: studentUser._id.toString(),
+        studentCode: newRecord.studentCode,
+        studentName: newRecord.studentName,
+        status: newRecord.status,
+        method: newRecord.method,
+        checkedInAt: newRecord.checkedInAt,
+        note: newRecord.note,
+      },
+      timestamp: now,
+    });
+
+    return newRecord;
+  }
+
+  /**
+   * Retrieves individual session-by-session history for a student.
+   */
+  async getStudentAttendanceHistory(studentId: string) {
+    const records = await this.recordModel
+      .find({ studentId: new Types.ObjectId(studentId) })
+      .sort({ checkedInAt: -1 })
+      .lean();
+
+    const totalSessions = records.length;
+    const presentCount = records.filter((r) => r.status === 'present').length;
+    const lateCount = records.filter((r) => r.status === 'late').length;
+    const excusedCount = records.filter((r) => r.status === 'excused').length;
+    const absentCount = records.filter((r) => r.status === 'absent').length;
+
+    const attendanceRate =
+      totalSessions > 0
+        ? Math.round(((presentCount + lateCount) / totalSessions) * 100)
+        : 100;
+
+    // Aggregate course-by-course attendance
+    const coursesMap = new Map<
+      string,
+      {
+        courseCode: string;
+        totalSessions: number;
+        presentCount: number;
+        lateCount: number;
+        absentCount: number;
+        excusedCount: number;
+        attendanceRate: number;
+      }
+    >();
+
+    for (const r of records) {
+      const code = r.courseCode;
+      if (!coursesMap.has(code)) {
+        coursesMap.set(code, {
+          courseCode: code,
+          totalSessions: 0,
+          presentCount: 0,
+          lateCount: 0,
+          absentCount: 0,
+          excusedCount: 0,
+          attendanceRate: 100,
+        });
+      }
+      const entry = coursesMap.get(code)!;
+      entry.totalSessions += 1;
+      if (r.status === 'present') entry.presentCount += 1;
+      else if (r.status === 'late') entry.lateCount += 1;
+      else if (r.status === 'excused') entry.excusedCount += 1;
+      else if (r.status === 'absent') entry.absentCount += 1;
+    }
+
+    for (const entry of coursesMap.values()) {
+      entry.attendanceRate =
+        entry.totalSessions > 0
+          ? Math.round(
+              ((entry.presentCount + entry.lateCount) / entry.totalSessions) *
+                100,
+            )
+          : 100;
+    }
+
+    return {
+      summary: {
+        totalSessions,
+        presentCount,
+        lateCount,
+        excusedCount,
+        absentCount,
+        attendanceRate,
+      },
+      courses: Array.from(coursesMap.values()),
+      records,
+    };
+  }
+
+  /**
+   * Retrieves summary report for a course across sessions.
+   */
+  async getCourseReport(courseCode: string) {
+    const sessions = await this.sessionModel
+      .find({ courseCode: courseCode.trim().toUpperCase() })
+      .sort({ startsAt: -1 })
+      .limit(30)
+      .lean();
+
+    const sessionIds = sessions.map((s) => s._id);
+
+    const records = await this.recordModel
+      .find({ sessionId: { $in: sessionIds } })
+      .lean();
+
+    return {
+      courseCode,
+      totalSessionsHeld: sessions.length,
+      sessions: sessions.map((s) => {
+        const sessionRecords = records.filter(
+          (r) => r.sessionId.toString() === s._id.toString(),
+        );
+        return {
+          id: s._id,
+          date: s.startsAt,
+          sessionType: s.sessionType,
+          status: s.status,
+          totalAttendees: sessionRecords.length,
+          present: sessionRecords.filter((r) => r.status === 'present').length,
+          late: sessionRecords.filter((r) => r.status === 'late').length,
+        };
+      }),
+    };
+  }
+}

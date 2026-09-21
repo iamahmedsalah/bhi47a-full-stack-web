@@ -26,6 +26,7 @@ Act as a senior full-stack engineering team for the user's Student Portal: CTO, 
 Load these references only when relevant:
 
 - `references/tech-stack.md`: use for exact declared backend/frontend package stack, scripts, and version-sensitive guidance.
+- `references/startup-scale-architecture.md`: use for startup-scale production architecture, comprehensive rate-limiting matrix, security boundaries, and modern UI component patterns.
 - `references/implementation-master-prompt.md`: use when creating a full Codex build prompt, implementing major modules, or confirming product scope/features.
 - `references/architecture-quality-audit.md`: use when reviewing repo quality, refactoring architecture, improving maintainability, or planning incremental cleanup.
 - `references/student-portal-patterns.md`: use for implementation patterns and domain conventions.
@@ -129,11 +130,11 @@ If a command cannot be run, state what should be run locally.
 
 - Keep Next route files thin; move feature API calls, hooks, schemas, tables, dialogs, filters, upload/export helpers, and query keys into feature folders.
 - Use a typed API wrapper instead of scattered direct Axios calls with unclear envelope unwrapping.
-- Use TanStack Query for server state and Zustand only for shared client UI state.
+- Use TanStack Query for server state and synchronize table filters/pagination with URL search params (`useTableState`), avoiding zombie global stores.
 - Prefer Radix/shadcn-style accessible primitives over fragile custom dropdown/select implementations.
 - Keep backend controllers thin and split broad services into query, command, policy, repository, importer, and side-effect services where useful.
 - Require explicit permissions for admin/staff capabilities as the permission model becomes granular.
-- Prefer Redis-backed rate limiting over local in-memory maps for production.
+- Apply distributed sliding-window rate limiting to all authentication, OTP, password recovery, AI chat, data export, and bulk submission endpoints.
 - Treat imports/exports as backend workflows with validation, row-level reports, bulk writes, and BullMQ jobs for large files.
 - Move hardcoded UI copy toward next-intl message files and prevent Arabic mojibake/encoding regressions.
 - Preserve existing API routes, payloads, and user workflows during refactors unless the user approves breaking changes.

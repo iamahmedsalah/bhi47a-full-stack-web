@@ -22,6 +22,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { PERMISSIONS } from '@student-portal/shared';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 
 @ApiTags('Students')
 @Controller()
@@ -34,8 +35,11 @@ export class StudentsController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)
   @ApiOperation({ summary: 'List all students (admin/staff)' })
-  async findAll(@Query() query: SearchStudentQuery) {
-    return this.studentsService.findAll(query);
+  async findAll(
+    @Query() query: SearchStudentQuery,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.studentsService.findAll(query, user);
   }
 
   @Get('admin/students-stats')
@@ -50,8 +54,11 @@ export class StudentsController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)
   @ApiOperation({ summary: 'Get student full profile (admin/staff)' })
-  async findOne(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.studentsService.findById(id);
+  async findOne(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.studentsService.findById(id, user);
   }
 
   @Post('admin/students')
@@ -96,8 +103,9 @@ export class StudentsController {
   async resetPassword(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: ResetPasswordDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.studentsService.resetPassword(id, dto);
+    return this.studentsService.resetPassword(id, dto, user);
   }
 
   // ─── Student Routes ──────────────────────────────────────

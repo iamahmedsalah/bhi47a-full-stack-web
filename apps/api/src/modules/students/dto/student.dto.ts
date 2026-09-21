@@ -7,9 +7,16 @@ import {
   Matches,
   IsIn,
   IsBoolean,
+  MinLength,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  STUDENT_PASSWORD_MAX_LENGTH,
+  STUDENT_PASSWORD_MIN_LENGTH,
+  STUDENT_PASSWORD_PATTERN,
+} from '@student-portal/shared';
 
 export class CreateStudentDto {
   @ApiProperty({ example: '20231001' })
@@ -224,12 +231,27 @@ export class SearchStudentQuery {
 }
 
 export class ResetPasswordDto {
-  @ApiProperty({ description: 'New password or nationalId to reset to' })
+  @ApiPropertyOptional({
+    description:
+      'Custom temporary password. If omitted, the stored 14-digit National ID is used when available.',
+    example: 'TempPass2026',
+  })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  newPassword!: string;
+  @MinLength(STUDENT_PASSWORD_MIN_LENGTH)
+  @MaxLength(STUDENT_PASSWORD_MAX_LENGTH)
+  @Matches(STUDENT_PASSWORD_PATTERN, {
+    message:
+      'Password must contain at least one Latin letter and one number, without spaces',
+  })
+  newPassword?: string;
 
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   mustChangePassword?: boolean;

@@ -23,6 +23,7 @@ import {
   X,
   Sidebar,
   LayoutDashboard,
+  QrCode,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
@@ -54,6 +55,12 @@ export default function AdminSidebar() {
       key: "dashboard",
       href: `/${locale}/admin`,
       icon: <LayoutDashboard className="h-5 w-5" />,
+    },
+    {
+      key: "attendance",
+      href: `/${locale}/admin/attendance`,
+      icon: <QrCode className="h-5 w-5" />,
+      permission: PERMISSIONS.ATTENDANCE_READ,
     },
     {
       key: "students",

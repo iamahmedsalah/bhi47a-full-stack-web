@@ -25,6 +25,13 @@ import {
   AcademicEmailSchema,
 } from '../academic-emails/schemas/academic-email.schema';
 
+import {
+  StudentAcademicProfile,
+  StudentAcademicProfileSchema,
+} from '../registrations/schemas/student-academic-profile.schema';
+import { StudentQueryService } from './services/student-query.service';
+import { StudentsExportController } from './controllers/students-export.controller';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -33,12 +40,16 @@ import {
       { name: RegistrationTerm.name, schema: RegistrationTermSchema },
       { name: AdvisingCase.name, schema: AdvisingCaseSchema },
       { name: AcademicEmail.name, schema: AcademicEmailSchema },
+      {
+        name: StudentAcademicProfile.name,
+        schema: StudentAcademicProfileSchema,
+      },
     ]),
     UsersModule,
     EmailsModule,
   ],
-  controllers: [StudentsController],
-  providers: [StudentsService],
-  exports: [StudentsService],
+  controllers: [StudentsController, StudentsExportController],
+  providers: [StudentsService, StudentQueryService],
+  exports: [StudentsService, StudentQueryService],
 })
 export class StudentsModule {}

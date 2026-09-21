@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import readXlsxFile from 'read-excel-file';
+import { readSheet as readXlsxFile } from 'read-excel-file/browser';
 
 import api, { getApiErrorMessage } from '@/lib/api';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';

@@ -116,6 +116,58 @@ export const rateLimitRules: RateLimitRule[] = [
     max: readLimit('ADMIN_MESSAGE_RATE_LIMIT', 30),
     message: 'Too many messaging requests. Please try again later.',
   },
+  {
+    name: 'forgot-password',
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/forgot-password$/,
+    windowMs: 15 * minute,
+    max: readLimit('FORGOT_PASSWORD_RATE_LIMIT', 5),
+    message: 'Too many password recovery attempts. Please try again later.',
+    keyGenerator: (req) =>
+      identityKey(readBodyString(req, 'studentCode'), readBodyString(req, 'email'), getClientIp(req)),
+  },
+  {
+    name: 'reset-password-otp',
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/reset-password-otp$/,
+    windowMs: 15 * minute,
+    max: readLimit('RESET_PASSWORD_OTP_RATE_LIMIT', 5),
+    message: 'Too many OTP verification attempts. Please wait 15 minutes.',
+    keyGenerator: (req) =>
+      identityKey(readBodyString(req, 'studentCode'), readBodyString(req, 'email'), getClientIp(req)),
+  },
+  {
+    name: 'google-verify-otp',
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/google\/link\/verify-otp$/,
+    windowMs: 15 * minute,
+    max: readLimit('GOOGLE_OTP_RATE_LIMIT', 5),
+    message: 'Too many Google OTP attempts. Please try again later.',
+  },
+  {
+    name: 'student-ai-chat',
+    methods: ['POST'],
+    pattern: /^\/api\/student\/chat\/messages?$/,
+    windowMs: 10 * minute,
+    max: readLimit('STUDENT_AI_CHAT_RATE_LIMIT', 25),
+    message: 'Too many AI chat messages. Please wait a moment.',
+  },
+  {
+    name: 'admin-exports',
+    methods: ['GET'],
+    pattern: /^\/api\/admin\/.+\/export(\/excel)?$/,
+    windowMs: 10 * minute,
+    max: readLimit('ADMIN_EXPORT_RATE_LIMIT', 15),
+    message: 'Too many data export requests. Please wait a moment.',
+  },
+  {
+    name: 'quiz-submit',
+    methods: ['POST'],
+    pattern: /^\/api\/courses\/[^/]+\/quizzes\/[^/]+\/submit$/,
+    windowMs: minute,
+    max: readLimit('QUIZ_SUBMIT_RATE_LIMIT', 10),
+    message: 'Too many quiz submissions. Please wait a moment.',
+  },
 ];
 
 export function findRateLimitRule(req: Request): RateLimitRule | undefined {

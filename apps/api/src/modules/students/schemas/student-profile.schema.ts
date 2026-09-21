@@ -24,7 +24,7 @@ export class StudentProfile {
   @Prop()
   nationalIdMasked?: string;
 
-  @Prop()
+  @Prop({ select: false })
   nationalId?: string;
 
   @Prop()

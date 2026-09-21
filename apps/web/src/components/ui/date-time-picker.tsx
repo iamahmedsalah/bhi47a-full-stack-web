@@ -109,7 +109,7 @@ export function DateTimePicker({
                 mode="single"
                 selected={date}
                 onSelect={(selectedDate) => handleUpdate(selectedDate, hour, minute, ampm)}
-                initialFocus
+                autoFocus
               />
             </div>
 

@@ -159,10 +159,10 @@ export function updateStudent(id: string, payload: StudentWritePayload) {
   return apiPatch<Student, StudentWritePayload>(`/admin/students/${id}`, payload);
 }
 
-export function resetStudentPassword(id: string, newPassword: string, mustChangePassword = false) {
-  return apiPost<{ message?: string }, { newPassword: string; mustChangePassword: boolean }>(
+export function resetStudentPassword(id: string, newPassword?: string, mustChangePassword = true) {
+  return apiPost<{ message?: string; mustChangePassword?: boolean }, { newPassword?: string; mustChangePassword?: boolean }>(
     `/admin/students/${id}/reset-password`,
-    { newPassword, mustChangePassword },
+    { ...(newPassword ? { newPassword } : {}), mustChangePassword },
   );
 }
 
@@ -172,6 +172,20 @@ export function deactivateStudent(id: string) {
 
 export function activateStudent(id: string) {
   return apiPost<Student>(`/admin/students/${id}/activate`);
+}
+
+export async function exportStudentsStreamingExcel(
+  params: Omit<StudentListParams, 'page' | 'limit'>,
+) {
+  const queryParams = new URLSearchParams();
+  if (params.search) queryParams.set('search', params.search);
+  if (params.level && params.level !== 'all') queryParams.set('level', params.level);
+  if (params.enrollmentStatus && params.enrollmentStatus !== 'all') {
+    queryParams.set('enrollmentStatus', params.enrollmentStatus);
+  }
+  const queryString = queryParams.toString();
+  const url = `/api/admin/students/export/excel${queryString ? `?${queryString}` : ''}`;
+  window.open(url, '_blank');
 }
 
 export async function listAllStudentsForExport(

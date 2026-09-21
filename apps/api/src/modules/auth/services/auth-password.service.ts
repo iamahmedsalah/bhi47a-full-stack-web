@@ -52,7 +52,7 @@ export class AuthPasswordService {
   ) {}
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
-    const user = await this.usersService.findById(userId);
+    const user = await this.usersService.findByIdWithNationalId(userId);
 
     const isValid = await this.usersService.validatePassword(
       user,
@@ -60,6 +60,33 @@ export class AuthPasswordService {
     );
     if (!isValid) {
       throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    if (dto.newPassword === dto.currentPassword) {
+      throw new BadRequestException(
+        'New password cannot be the same as current password / لا يمكن إعادة استخدام كلمة المرور الحالية',
+      );
+    }
+
+    // Do not allow National ID as permanent password
+    const trimmedNewPassword = dto.newPassword.trim();
+    if (user.nationalId && trimmedNewPassword === user.nationalId.trim()) {
+      throw new BadRequestException(
+        'New password cannot be your National ID / لا يمكن استخدام الرقم القومي ككلمة مرور دائمة',
+      );
+    }
+
+    const studentProfile = await this.studentProfileModel
+      .findOne({ userId })
+      .select('+nationalId')
+      .lean();
+    if (
+      studentProfile?.nationalId &&
+      trimmedNewPassword === studentProfile.nationalId.trim()
+    ) {
+      throw new BadRequestException(
+        'New password cannot be your National ID / لا يمكن استخدام الرقم القومي ككلمة مرور دائمة',
+      );
     }
 
     const updatedUser = await this.usersService.updatePassword(
@@ -73,6 +100,12 @@ export class AuthPasswordService {
         updatedUser.role,
         updatedUser.tokenVersion ?? 0,
       ),
+      user: {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        mustChangePassword: false,
+      },
     };
   }
 
@@ -170,9 +203,7 @@ export class AuthPasswordService {
     );
     if (!otpMatches) {
       throw new BadRequestException(
-        isEn
-          ? 'Invalid verification code (OTP)'
-          : 'رمز التحقق (OTP) غير صحيح',
+        isEn ? 'Invalid verification code (OTP)' : 'رمز التحقق (OTP) غير صحيح',
       );
     }
 
@@ -218,7 +249,8 @@ export class AuthPasswordService {
   ): Promise<string | undefined> {
     const user = await this.usersService.findById(userId);
     if (user?.email && user.email.trim()) return user.email.trim();
-    if (user?.googleEmail && user.googleEmail.trim()) return user.googleEmail.trim();
+    if (user?.googleEmail && user.googleEmail.trim())
+      return user.googleEmail.trim();
 
     const profile = await this.studentProfileModel
       .findOne({ userId })

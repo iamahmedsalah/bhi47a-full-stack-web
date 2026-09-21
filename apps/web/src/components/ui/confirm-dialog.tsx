@@ -56,27 +56,27 @@ export function ConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
-      <AlertDialogContent className="w-[95vw] max-w-md border-border bg-card">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="text-start text-foreground">
+      <AlertDialogContent className="w-[95vw] max-w-md border-border bg-card p-5 sm:p-6 shadow-2xl rounded-2xl">
+        <AlertDialogHeader className="space-y-2 text-start">
+          <AlertDialogTitle className="text-lg font-bold text-foreground">
             {title}
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-start text-muted-foreground">
+          <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
             {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row">
-          <AlertDialogCancel className="w-full border-border sm:w-auto">
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-5">
+          <AlertDialogCancel className="w-full sm:w-auto rounded-squircle text-xs border-border hover:bg-secondary cursor-pointer">
             {cancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             disabled={disabled}
             className={cn(
-              'w-full font-semibold sm:w-auto',
+              'w-full sm:w-auto rounded-squircle text-xs font-semibold cursor-pointer shadow-sm',
               destructive
                 ? 'bg-danger text-white hover:bg-danger/90'
-                : 'bg-primary text-white hover:bg-primary/90',
+                : 'bg-primary text-primary-foreground hover:bg-primary/90',
             )}
           >
             {confirmLabel}

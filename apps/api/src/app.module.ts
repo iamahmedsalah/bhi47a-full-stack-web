@@ -8,6 +8,7 @@ import { StudentsModule } from './modules/students/students.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { DatabaseModule } from './database/database.module';
 import { AppLoggerModule } from './core/logger/logger.module';
+import { RateLimiterModule } from './common/rate-limit/rate-limit.module';
 import { GradesModule } from './modules/grades/grades.module';
 import { AcademicEmailsModule } from './modules/academic-emails/academic-emails.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
@@ -33,6 +34,7 @@ import { HealthController } from './health.controller';
     QueueModule,
     AppLoggerModule,
     DatabaseModule,
+    RateLimiterModule,
     AuthModule,
     UsersModule,
     StudentsModule,

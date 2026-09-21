@@ -23,6 +23,7 @@ describe('validateEnv', () => {
         NODE_ENV: 'production',
         JWT_SECRET: 'a'.repeat(32),
         API_PORT: '4000',
+        RESEND_API_KEY: 're_test_key_123',
       }),
     ).toThrow('MONGODB_URI is required');
   });
@@ -35,6 +36,7 @@ describe('validateEnv', () => {
         MONGODB_URI: 'mongodb://localhost:27017/student-portal',
         CLIENT_URL: 'https://portal.example.edu',
         API_PORT: '4000',
+        RESEND_API_KEY: 're_test_key_123',
       }),
     ).toMatchObject({
       NODE_ENV: 'production',

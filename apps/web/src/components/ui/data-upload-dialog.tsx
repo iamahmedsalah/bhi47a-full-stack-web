@@ -15,7 +15,7 @@ import {
   UploadCloud,
   XCircle,
 } from 'lucide-react';
-import readXlsxFile from 'read-excel-file';
+import { readSheet as readXlsxFile } from 'read-excel-file/browser';
 import { toast } from 'sonner';
 
 import api, { getApiErrorMessage } from '@/lib/api';

@@ -1,7 +1,8 @@
-export const PERMISSIONS = {
+ export const PERMISSIONS = {
   STUDENTS_READ: 'students.read',
   STUDENTS_WRITE: 'students.write',
   STUDENTS_RESET_PASSWORD: 'students.reset_password',
+  STUDENTS_VIEW_NATIONAL_ID: 'students.view_national_id',
   COURSES_READ: 'courses.read',
   COURSES_WRITE: 'courses.write',
   GRADES_READ: 'grades.read',
@@ -31,6 +32,12 @@ export const PERMISSIONS = {
   ADVISING_OVERRIDE_PREREQUISITES: 'advising.override_prerequisites',
   ADVISING_OVERRIDE_MAX_HOURS: 'advising.override_max_hours',
   STUDY_PLAN_MANAGE: 'study_plan.manage',
+  ATTENDANCE_READ: 'attendance.read',
+  ATTENDANCE_WRITE: 'attendance.write',
+  ATTENDANCE_SESSION_CREATE: 'attendance.session_create',
+  ATTENDANCE_SESSION_CLOSE: 'attendance.session_close',
+  ATTENDANCE_MANUAL_MARK: 'attendance.manual_mark',
+  ATTENDANCE_REPORTS: 'attendance.reports',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -46,6 +53,7 @@ export const STAFF_ASSIGNABLE_PERMISSIONS = [
   PERMISSIONS.STUDENTS_READ,
   PERMISSIONS.STUDENTS_WRITE,
   PERMISSIONS.STUDENTS_RESET_PASSWORD,
+  PERMISSIONS.STUDENTS_VIEW_NATIONAL_ID,
   PERMISSIONS.COURSES_READ,
   PERMISSIONS.COURSES_WRITE,
   PERMISSIONS.GRADES_READ,
@@ -74,6 +82,12 @@ export const STAFF_ASSIGNABLE_PERMISSIONS = [
   PERMISSIONS.ADVISING_OVERRIDE_PREREQUISITES,
   PERMISSIONS.ADVISING_OVERRIDE_MAX_HOURS,
   PERMISSIONS.STUDY_PLAN_MANAGE,
+  PERMISSIONS.ATTENDANCE_READ,
+  PERMISSIONS.ATTENDANCE_WRITE,
+  PERMISSIONS.ATTENDANCE_SESSION_CREATE,
+  PERMISSIONS.ATTENDANCE_SESSION_CLOSE,
+  PERMISSIONS.ATTENDANCE_MANUAL_MARK,
+  PERMISSIONS.ATTENDANCE_REPORTS,
 ] as const satisfies readonly Permission[];
 
 export type StaffAssignablePermission =

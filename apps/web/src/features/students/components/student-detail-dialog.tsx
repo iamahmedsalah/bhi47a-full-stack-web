@@ -149,14 +149,12 @@ function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) 
 
 function SensitiveNationalId({
   value,
-  realValue,
   canView,
 }: {
   value?: string;
-  realValue?: string;
   canView: boolean;
 }) {
-  if (!canView) {
+  if (!canView || !value) {
     return (
       <span className="rounded-squircle border border-border/70 bg-surface/50 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
         Restricted
@@ -164,17 +162,11 @@ function SensitiveNationalId({
     );
   }
 
-  const displayValue = realValue || value;
-
-  if (!displayValue) {
-    return <span className="text-sm text-muted-foreground">N/A</span>;
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-sm text-muted-foreground">{displayValue}</span>
+      <span className="font-mono text-sm font-medium text-foreground">{value}</span>
       <CopyButton
-        value={realValue || displayValue}
+        value={value}
         label="Copy"
         successMessage="National ID copied"
         className="rounded-squircle px-2 py-1"
@@ -724,8 +716,7 @@ export function StudentDetailDialog({
                       label={isAr ? 'الرقم القومي' : 'National ID'}
                       value={
                         <SensitiveNationalId
-                          value={student.nationalIdMasked || userRef?.nationalIdMasked}
-                          realValue={userRef?.nationalId}
+                          value={student.nationalId || userRef?.nationalId}
                           canView={canViewSensitiveStudentData}
                         />
                       }
