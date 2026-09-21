@@ -11,7 +11,11 @@ export class CourseRecommendation {
   @Prop({ type: Types.ObjectId, ref: 'Course', required: true })
   courseId!: Types.ObjectId;
   @Prop({ min: 0, max: 100, required: true }) score!: number;
-  @Prop({ enum: ['HIGH', 'MEDIUM', 'LOW', 'BLOCKED'], required: true })
+  @Prop({
+    type: String,
+    enum: ['HIGH', 'MEDIUM', 'LOW', 'BLOCKED'],
+    required: true,
+  })
   priority!: string;
   @Prop({ required: true }) eligible!: boolean;
   @Prop({ default: false, index: true }) isRecommendedForSemester!: boolean;

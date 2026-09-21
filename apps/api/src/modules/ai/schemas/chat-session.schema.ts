@@ -5,7 +5,7 @@ export type ChatSessionDocument = ChatSession & Document;
 
 @Schema({ timestamps: true })
 export class ChatMessage {
-  @Prop({ required: true, enum: ['user', 'model', 'system'] })
+  @Prop({ type: String, required: true, enum: ['user', 'model', 'system'] })
   role!: 'user' | 'model' | 'system';
 
   @Prop({ required: true })
@@ -20,7 +20,11 @@ export class ChatSession {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   userId!: Types.ObjectId;
 
-  @Prop({ required: true, enum: ['student-faq', 'student-academic', 'admin-advising'] })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['student-faq', 'student-academic', 'admin-advising'],
+  })
   sessionType!: string;
 
   @Prop({ type: [ChatMessage], default: [] })

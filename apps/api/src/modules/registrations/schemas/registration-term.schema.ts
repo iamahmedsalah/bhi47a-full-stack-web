@@ -9,7 +9,7 @@ export class RegistrationTerm {
   @Prop({ required: true, trim: true })
   academicYear!: string;
 
-  @Prop({ required: true, enum: SEMESTER_VALUES })
+  @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
   @Prop({ default: false })

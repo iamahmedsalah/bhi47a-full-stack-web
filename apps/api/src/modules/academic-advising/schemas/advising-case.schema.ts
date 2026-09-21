@@ -13,7 +13,7 @@ export class AdvisingCase {
   assignedAdvisorId?: Types.ObjectId;
   @Prop({ required: true, trim: true }) academicYear!: string;
   @Prop({ required: true, trim: true }) semester!: string;
-  @Prop({ enum: ADVISING_STATUSES, default: 'NOT_STARTED' })
+  @Prop({ type: String, enum: ADVISING_STATUSES, default: 'NOT_STARTED' })
   status!: AdvisingStatus;
   @Prop({ type: Types.ObjectId, ref: 'AdvisingPlan' })
   currentDraftId?: Types.ObjectId;

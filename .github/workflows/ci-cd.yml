@@ -63,6 +63,7 @@ jobs:
         run: pnpm --filter @student-portal/api run test --runInBand
         continue-on-error: true
         env:
+          NODE_OPTIONS: --experimental-vm-modules
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/student-portal-test
           REDIS_URL: redis://localhost:6379
@@ -74,6 +75,7 @@ jobs:
         run: pnpm --filter @student-portal/api run test:e2e --runInBand
         continue-on-error: true
         env:
+          NODE_OPTIONS: --experimental-vm-modules
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/student-portal-e2e
           REDIS_URL: redis://localhost:6379

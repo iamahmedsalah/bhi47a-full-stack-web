@@ -26,7 +26,8 @@ export class AdvisingPlan {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   studentId!: Types.ObjectId;
   @Prop({ type: Types.ObjectId, ref: 'User' }) advisorId?: Types.ObjectId;
-  @Prop({ enum: PLAN_TYPES, required: true }) type!: AdvisingPlanType;
+  @Prop({ type: String, enum: PLAN_TYPES, required: true })
+  type!: AdvisingPlanType;
   @Prop({ required: true, min: 1, default: 1 }) version!: number;
   @Prop({ required: true, trim: true, maxlength: 160 }) title!: string;
   @Prop({ required: true }) academicYear!: string;
@@ -38,7 +39,8 @@ export class AdvisingPlan {
   @Prop({ trim: true, maxlength: 4000 }) advisorNotes?: string;
   @Prop({ trim: true, maxlength: 4000 }) studentVisibleNotes?: string;
   @Prop({ type: [String], default: [] }) overrideReasons!: string[];
-  @Prop({ enum: PLAN_STATUSES, default: 'DRAFT' }) status!: AdvisingPlanStatus;
+  @Prop({ type: String, enum: PLAN_STATUSES, default: 'DRAFT' })
+  status!: AdvisingPlanStatus;
   @Prop() studentAcknowledgedAt?: Date;
   @Prop() submittedAt?: Date;
   @Prop() registeredAt?: Date;

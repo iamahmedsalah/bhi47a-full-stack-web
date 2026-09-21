@@ -11,7 +11,7 @@ export class AdvisingNote {
   advisingCaseId!: Types.ObjectId;
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   authorId!: Types.ObjectId;
-  @Prop({ enum: NOTE_VISIBILITIES, required: true })
+  @Prop({ type: String, enum: NOTE_VISIBILITIES, required: true })
   visibility!: AdvisingNoteVisibility;
   @Prop({ required: true, trim: true, maxlength: 4000 }) content!: string;
   @Prop({ type: Types.ObjectId, ref: 'Course' })
