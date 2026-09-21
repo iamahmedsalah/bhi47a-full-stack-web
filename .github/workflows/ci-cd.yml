@@ -131,26 +131,18 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@59.23.2
 
-      - name: Reset API Vercel project link
+      - name: Link API Vercel project
         shell: bash
         run: |
           set -euo pipefail
           : "${VERCEL_TOKEN:?VERCEL_TOKEN is not configured}"
           : "${VERCEL_ORG_ID:?VERCEL_ORG_ID is not configured}"
           : "${VERCEL_PROJECT_ID:?VERCEL_API_PROJECT_ID is not configured}"
-
           rm -rf -- .vercel
-          mkdir -p -- .vercel
-          node <<'NODE'
-          const fs = require('node:fs');
-          fs.writeFileSync(
-            '.vercel/project.json',
-            `${JSON.stringify({
-              orgId: process.env.VERCEL_ORG_ID,
-              projectId: process.env.VERCEL_PROJECT_ID,
-            }, null, 2)}\n`,
-          );
-          NODE
+          vercel link --yes \
+            --team "$VERCEL_ORG_ID" \
+            --project "$VERCEL_PROJECT_ID" \
+            --token="$VERCEL_TOKEN"
 
       - name: Pull API production configuration
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
