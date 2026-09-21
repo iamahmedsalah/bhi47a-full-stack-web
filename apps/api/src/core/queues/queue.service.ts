@@ -7,6 +7,7 @@ import {
   QueueOptions,
   Worker,
 } from 'bullmq';
+import { shouldRunQueueWorkers } from '../../common/utils/runtime.util';
 
 type QueueConnection = NonNullable<QueueOptions['connection']>;
 
@@ -99,6 +100,14 @@ export class QueueService implements OnModuleDestroy {
   }
 
   private buildRedisConnection(): QueueConnection | undefined {
+    // A Vercel Function is not an always-on worker process. Without this guard,
+    // every warm function instance can register another BullMQ consumer and jobs
+    // may stop when that instance is suspended. Run the fallback in-request on
+    // serverless; use a separate always-on worker for durable background jobs.
+    if (!shouldRunQueueWorkers()) {
+      return undefined;
+    }
+
     const redisUrl =
       process.env.REDIS_URL ||
       process.env.UPSTASH_REDIS_URL ||

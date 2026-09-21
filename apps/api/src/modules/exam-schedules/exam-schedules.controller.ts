@@ -25,8 +25,9 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { PERMISSIONS } from '@student-portal/shared';
 import type { ExamScheduleUploadFile } from './exam-schedules.service';
+import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
 
-const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_SIZE_BYTES = MAX_HTTP_UPLOAD_SIZE_BYTES;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/jpg',

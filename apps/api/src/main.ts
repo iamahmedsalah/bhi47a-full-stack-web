@@ -103,8 +103,8 @@ async function bootstrap() {
 
   app.use(securityHeadersMiddleware);
   app.use(cookieParser());
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
+  app.use(json({ limit: '4mb' }));
+  app.use(urlencoded({ limit: '4mb', extended: true }));
   app.use(rateLimitMiddleware);
 
   app.useGlobalPipes(

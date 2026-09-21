@@ -2,6 +2,7 @@ import { Injectable, LoggerService } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as winston from 'winston';
+import { isServerlessRuntime } from '../../common/utils/runtime.util';
 
 const { combine, timestamp, printf, colorize, json, errors } = winston.format;
 
@@ -27,10 +28,7 @@ export class AppLoggerService implements LoggerService {
   private readonly logger: winston.Logger;
 
   constructor() {
-    const isServerlessRuntime =
-      process.env.VERCEL === '1' ||
-      process.env.VERCEL === 'true' ||
-      Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const isServerless = isServerlessRuntime();
 
     const baseConsoleTransport = new winston.transports.Console({
       format:
@@ -41,7 +39,7 @@ export class AppLoggerService implements LoggerService {
 
     const fileTransports: winston.transport[] = [];
 
-    if (!isServerlessRuntime) {
+    if (!isServerless) {
       try {
         fs.mkdirSync(path.resolve(process.cwd(), 'logs'), { recursive: true });
         fileTransports.push(
@@ -70,14 +68,14 @@ export class AppLoggerService implements LoggerService {
         errors({ stack: true }),
       ),
       transports: [baseConsoleTransport, ...fileTransports],
-      exceptionHandlers: isServerlessRuntime
+      exceptionHandlers: isServerless
         ? [baseConsoleTransport]
         : [
             new winston.transports.File({
               filename: 'logs/exceptions.log',
             }),
           ],
-      rejectionHandlers: isServerlessRuntime
+      rejectionHandlers: isServerless
         ? [baseConsoleTransport]
         : [
             new winston.transports.File({

@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "scripts": {
+    "postinstall": "pnpm --filter @student-portal/shared build",
     "dev": "pnpm -r --parallel run dev",
     "dev:api": "pnpm --filter @student-portal/api run dev",
     "dev:web": "pnpm --filter @student-portal/web run dev",

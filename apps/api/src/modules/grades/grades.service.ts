@@ -22,6 +22,7 @@ import {
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
 import { calculatePromotedAcademicLevel } from './utils/academic-level-progression.util';
 import type { CourseLevel } from '@student-portal/shared';
+import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 
 @Injectable()
 export class GradesService implements OnModuleInit {
@@ -39,6 +40,10 @@ export class GradesService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    if (!shouldRunStartupTasks()) {
+      return;
+    }
+
     // Earlier versions allowed only one quiz record per student/course, which
     // caused a later semester to overwrite or conflict with the previous one.
     // Replace only that known legacy index and preserve every other DB index.

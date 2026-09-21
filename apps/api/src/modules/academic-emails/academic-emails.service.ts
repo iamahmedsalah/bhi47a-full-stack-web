@@ -25,6 +25,7 @@ import {
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
+import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 
 @Injectable()
 export class AcademicEmailsService implements OnModuleInit {
@@ -39,7 +40,12 @@ export class AcademicEmailsService implements OnModuleInit {
     private userModel: Model<UserDocument>,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    if (!shouldRunStartupTasks()) {
+      this.logger.log('Skipping startup sync in serverless runtime');
+      return;
+    }
+
     // Non-blocking auto-sync on server startup
     void this.syncFromStudentProfiles().catch((err) => {
       this.logger.warn(`Startup sync error: ${err.message}`);

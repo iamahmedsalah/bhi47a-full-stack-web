@@ -40,6 +40,7 @@ import {
   type CustomDropdownOption,
 } from "@/components/ui/custom-dropdown";
 import { toast } from "sonner";
+import { apiBaseUrl } from "@/lib/api";
 
 interface ActiveSessionPresenterProps {
   session: AttendanceSessionDto;
@@ -90,21 +91,44 @@ export function ActiveSessionPresenter({
   const [editReason, setEditReason] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // 1. Initial Attendees Fetch
+  // 1. Poll persisted records so updates remain reliable when the API scales
+  // across multiple Vercel Function instances. SSE below remains the fast path.
   useEffect(() => {
-    attendanceApi
-      .getSessionRecords(session._id, { limit: 100 })
-      .then((res) => {
-        setAttendees(res.items);
-      })
-      .catch((err) => {
-        console.error("Failed to load attendees", err);
-      });
-  }, [session._id]);
+    let isCancelled = false;
+
+    const refreshAttendees = async () => {
+      try {
+        const response = await attendanceApi.getSessionRecords(session._id, {
+          limit: 100,
+        });
+        if (isCancelled) return;
+
+        setAttendees(response.items);
+        setStats({
+          present: response.items.filter((item) => item.status === "present")
+            .length,
+          late: response.items.filter((item) => item.status === "late").length,
+          total: response.total,
+        });
+      } catch (error) {
+        console.error("Failed to refresh attendees", error);
+      }
+    };
+
+    void refreshAttendees();
+    const interval = window.setInterval(() => {
+      if (!isSessionEnded) void refreshAttendees();
+    }, 5_000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [session._id, isSessionEnded]);
 
   // 2. Real-Time Server-Sent Events (SSE) Stream
   useEffect(() => {
-    const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/attendance/sessions/${session._id}/live`;
+    const sseUrl = `${apiBaseUrl}/attendance/sessions/${session._id}/live`;
     let eventSource: EventSource | null = null;
 
     try {
@@ -661,7 +685,7 @@ export function ActiveSessionPresenter({
             </div>
 
             {/* Scrollable list */}
-            <div className="flex-1 overflow-y-auto max-h-[420px] space-y-2 pr-1">
+            <div className="flex-1 overflow-y-auto max-h-105 space-y-2 pr-1">
               <AnimatePresence initial={false}>
                 {attendees.length === 0 ? (
                   <div className="py-16 text-center text-muted-foreground text-sm space-y-2">

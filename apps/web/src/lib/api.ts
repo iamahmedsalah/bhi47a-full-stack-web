@@ -44,7 +44,7 @@ export interface ApiErrorDetails {
 const rawApiBaseUrl =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const trimmedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
-const apiBaseUrl = trimmedApiBaseUrl.endsWith('/api')
+export const apiBaseUrl = trimmedApiBaseUrl.endsWith('/api')
   ? trimmedApiBaseUrl
   : `${trimmedApiBaseUrl}/api`;
 
