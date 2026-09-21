@@ -1,8 +1,15 @@
 # Deploy the Student Portal API to Vercel
 
 The web app and API must be two separate Vercel projects connected to the same
-repository. The existing root `vercel.json` remains the web deployment. Create
-a second Vercel project whose Root Directory is `apps/api`.
+repository. Each app owns its Vercel configuration inside its app directory:
+
+- `apps/web/vercel.json` for the Next.js project;
+- `apps/api/vercel.json` for the NestJS project.
+
+There must not be a repository-root `vercel.json`, because Vercel can apply it
+after changing into a project's Root Directory. A root frontend configuration
+would make the API project build Next.js and resolve `apps/web/.next` relative
+to `apps/api`.
 
 Vercel detects `apps/api/src/main.ts` as a NestJS server entry point and turns
 the whole API into one Node.js Vercel Function. Do not add an `api/` wrapper,
@@ -32,14 +39,18 @@ Do not put production secrets in `.env`, Git, screenshots, or
 4. Set **Root Directory** to `apps/api`.
 5. Keep **Include source files outside of the Root Directory** enabled. The API
    imports `packages/shared` through the pnpm workspace.
-6. Use the detected **NestJS** framework preset.
-7. Leave Build Command and Output Directory at their detected defaults. Current
+6. Use the **NestJS** framework preset. `apps/api/vercel.json` also enforces it.
+7. Leave Build Command and Output Directory empty. The API's app-level config
+   explicitly sets both to `null`, clearing stale frontend overrides. Current
    Vercel NestJS support compiles and bundles `src/main.ts` directly.
 8. Use Node.js `24.x`. It is also pinned in `apps/api/package.json`.
 9. Enable Fluid compute if the project does not already have it enabled.
 
 The root `postinstall` script builds `@student-portal/shared`, ensuring its
 runtime `dist` output exists before Vercel bundles the API.
+
+For the existing frontend Vercel project, set its Root Directory to `apps/web`.
+Its app-level `vercel.json` uses `.next` relative to that directory.
 
 ## 3. Add API environment variables
 
