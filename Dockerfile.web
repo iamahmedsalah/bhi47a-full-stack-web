@@ -1,7 +1,7 @@
 # ===================================================
 # STAGE 1: Build Frontend App
 # ===================================================
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache libc6-compat
@@ -11,17 +11,16 @@ WORKDIR /app
 # Enable Corepack and activate pnpm
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
-# Copy root lockfiles and configurations
+# Copy dependency manifests and the shared package required by the root postinstall
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
-COPY packages/shared/package.json ./packages/shared/
+COPY tsconfig.base.json ./
+COPY packages/shared ./packages/shared
 COPY apps/web/package.json ./apps/web/
 
 # Install dependencies (leveraging Docker cache)
 RUN pnpm install --frozen-lockfile
 
-# Copy project source files
-COPY tsconfig.base.json ./
-COPY packages/shared ./packages/shared
+# Copy target application source files
 COPY apps/web ./apps/web
 
 # Setup build-time environment variables
@@ -45,7 +44,7 @@ RUN pnpm --filter @student-portal/web run build
 # ===================================================
 # STAGE 2: Lightweight Next.js Runtime
 # ===================================================
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

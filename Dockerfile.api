@@ -1,27 +1,26 @@
 # ===================================================
 # STAGE 1: Build & Prune Dependencies
 # ===================================================
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
-# Install build dependencies for native modules (e.g., bcrypt)
-RUN apk add --no-cache libc6-compat python3 make g++
+# Native dependencies used by the API publish Alpine-compatible prebuilt binaries.
+RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
 # Enable Corepack and activate pnpm
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
-# Copy root lockfiles and configurations
+# Copy dependency manifests and the shared package required by the root postinstall
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
-COPY packages/shared/package.json ./packages/shared/
+COPY tsconfig.base.json ./
+COPY packages/shared ./packages/shared
 COPY apps/api/package.json ./apps/api/
 
 # Install dependencies (leveraging Docker cache)
 RUN pnpm install --frozen-lockfile
 
-# Copy project source files
-COPY tsconfig.base.json ./
-COPY packages/shared ./packages/shared
+# Copy target application source files
 COPY apps/api ./apps/api
 
 # Build dependencies and target app
@@ -35,7 +34,7 @@ RUN pnpm --filter @student-portal/api deploy --prod --legacy /app/pruned
 # ===================================================
 # STAGE 2: Lightweight Production Runtime
 # ===================================================
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
