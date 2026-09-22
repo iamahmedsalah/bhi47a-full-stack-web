@@ -197,4 +197,43 @@ describe('RulesBasedRecommendationProvider', () => {
     expect(recommendations[1].courseCode).toBe('CURRENT201');
     expect(recommendations[1].isRecommendedForSemester).toBe(true);
   });
+
+  it('blocks a failed course that is not offered in the active semester', () => {
+    const recommendations = provider.generate({
+      courses: [
+        course('FAILED_FIRST', {
+          semester: 'first',
+          offeredTerms: ['first'],
+        }),
+        course('OPEN_SECOND', {
+          semester: 'second',
+          offeredTerms: ['second'],
+        }),
+      ],
+      completedCourses: [],
+      failedCourses: ['FAILED_FIRST'],
+      academicLevel: '2',
+      semester: 'second',
+      maxCreditHours: 3,
+    });
+
+    expect(
+      recommendations.find(({ courseCode }) => courseCode === 'FAILED_FIRST'),
+    ).toMatchObject({
+      eligible: false,
+      isRecommendedForSemester: false,
+      schedulingEvaluation: { offered: false },
+    });
+    expect(
+      recommendations.find(({ courseCode }) => courseCode === 'FAILED_FIRST')
+        ?.reasonCodes,
+    ).toContain('NOT_OFFERED_THIS_SEMESTER');
+    expect(
+      recommendations.find(({ courseCode }) => courseCode === 'OPEN_SECOND'),
+    ).toMatchObject({
+      eligible: true,
+      isRecommendedForSemester: true,
+    });
+    expect(recommendations[0].courseCode).toBe('OPEN_SECOND');
+  });
 });

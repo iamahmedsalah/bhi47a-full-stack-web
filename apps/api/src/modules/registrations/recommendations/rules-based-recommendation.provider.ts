@@ -234,7 +234,7 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
     }
 
     const eligible =
-      (offered || previouslyFailed) &&
+      offered &&
       !alreadyPassed &&
       !alreadyInProgress &&
       missingOnlyCompleted.length === 0;
@@ -267,9 +267,11 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         : `${courseCode} — ${courseNameEn ?? courseName}`;
 
     const explanation = previouslyFailed
-      ? unlockCount > 0
-        ? `Priority #1 (Critical Blocker): ${nameDisplay} was previously failed and blocks ${unlockCount} upcoming course${unlockCount > 1 ? 's' : ''}! Must be retaken to unblock future registrations.`
-        : `Priority #1: ${nameDisplay} was previously failed and must be retaken first for graduation.`
+      ? !offered
+        ? `${nameDisplay} was previously failed, but it is not offered in the ${context.semester} semester. Defer it until its next offering and select another eligible course for the current plan.`
+        : unlockCount > 0
+          ? `Priority #1 (Critical Blocker): ${nameDisplay} was previously failed and blocks ${unlockCount} upcoming course${unlockCount > 1 ? 's' : ''}! Must be retaken to unblock future registrations.`
+          : `Priority #1: ${nameDisplay} was previously failed and must be retaken first for graduation.`
       : required
         ? `${nameDisplay} is a required course for level ${course.academicLevel ?? course.level}.`
         : `${nameDisplay} is an elective course fitting the student plan.`;

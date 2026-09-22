@@ -93,6 +93,7 @@ type CanvasFilter = "all" | "available" | "planned" | "attention";
 interface CourseNodeData extends Record<string, unknown> {
   course: CourseMapCourse;
   title: string;
+  prerequisiteLabels: string[];
   status: CourseProgressStatus;
   statusLabel: string;
   selectedForPlan: boolean;
@@ -177,6 +178,27 @@ function getCourseTitle(course: CourseMapCourse, isEnglish: boolean) {
     : (course.nameAr ?? course.name);
 }
 
+function getPrerequisiteLabels(
+  course: CourseMapCourse,
+  courseByCode: Map<string, CourseMapCourse>,
+  isEnglish: boolean,
+) {
+  return (course.prerequisites ?? []).map((code) => {
+    const prerequisite = courseByCode.get(normalizeCode(code));
+    return prerequisite ? getCourseTitle(prerequisite, isEnglish) : code;
+  });
+}
+
+function isCourseOfferedInSemester(
+  course: CourseMapCourse,
+  semester?: string,
+) {
+  if (!semester) return true;
+  return course.offeredTerms?.length
+    ? course.offeredTerms.includes(semester)
+    : course.semester === semester;
+}
+
 function getStatusLabel(status: CourseProgressStatus, isEnglish: boolean) {
   const labels: Record<CourseProgressStatus, { en: string; ar: string }> = {
     passed: { en: "Passed", ar: "ناجح" },
@@ -233,6 +255,7 @@ const CourseNode = memo(function CourseNode({
   const {
     course,
     title,
+    prerequisiteLabels,
     status,
     statusLabel,
     selectedForPlan,
@@ -330,10 +353,10 @@ const CourseNode = memo(function CourseNode({
           <span className="font-bold text-foreground/80">{course.creditHours ?? 0} {isEnglish ? "credits" : "ساعات"}</span>
           {course.gradeSummary?.percentage != null ? (
             <strong className={cn("font-mono font-black text-xs", style.text)}>{course.gradeSummary.percentage}%</strong>
-          ) : course.prerequisites?.length ? (
+          ) : prerequisiteLabels.length ? (
             <span className="inline-flex max-w-[165px] items-center gap-1 truncate font-semibold text-foreground/75">
               <GitBranch className="h-3 w-3 shrink-0 text-primary" />
-              {course.prerequisites.join(", ")}
+              {prerequisiteLabels.join(", ")}
             </span>
           ) : (
             <span className="text-foreground/60 font-medium">{isEnglish ? "No prerequisites" : "بلا متطلبات"}</span>
@@ -433,10 +456,18 @@ export function CourseMapFlow({
         .map((course) => ({ ...course, code: normalizeCode(course.code) })),
     [courses],
   );
+  const courseByCode = useMemo(
+    () => new Map(normalizedCourses.map((course) => [course.code, course])),
+    [normalizedCourses],
+  );
 
   const selectable = useMemo(() => {
     const set = new Set(selectableCodes.map(normalizeCode));
     normalizedCourses.forEach((course) => {
+      if (!isCourseOfferedInSemester(course, currentSemester)) {
+        set.delete(course.code);
+        return;
+      }
       const isPassed = completed.has(course.code);
       if (!isPassed || course.progressStatus === 'low_grade') {
         const prereqs = (course.prerequisites ?? []).map(normalizeCode);
@@ -447,7 +478,7 @@ export function CourseMapFlow({
       }
     });
     return set;
-  }, [selectableCodes, normalizedCourses, completed, failed]);
+  }, [selectableCodes, normalizedCourses, completed, currentSemester, failed]);
 
   const statusByCode = useMemo(
     () =>
@@ -599,6 +630,11 @@ export function CourseMapFlow({
             data: {
               course,
               title: getCourseTitle(course, isEnglish),
+              prerequisiteLabels: getPrerequisiteLabels(
+                course,
+                courseByCode,
+                isEnglish,
+              ),
               status,
               statusLabel: getStatusLabel(status, isEnglish),
               selectedForPlan: selected.has(course.code),
@@ -655,6 +691,7 @@ export function CourseMapFlow({
     return { nodes, edges };
   }, [
     completed,
+    courseByCode,
     currentSemester,
     focusedCourseCode,
     isEnglish,
@@ -687,6 +724,9 @@ export function CourseMapFlow({
   const focusedCourse = focusedCourseCode
     ? normalizedCourses.find((course) => course.code === focusedCourseCode)
     : undefined;
+  const focusedPrerequisiteLabels = focusedCourse
+    ? getPrerequisiteLabels(focusedCourse, courseByCode, isEnglish)
+    : [];
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: AdvisingFlowNode) => {
     if (node.type === "course") setFocusedCourseCode(node.data.course.code);
@@ -908,8 +948,8 @@ export function CourseMapFlow({
                 <span className="text-[10px] font-medium text-muted-foreground block">
                   {isEnglish ? "Prerequisites" : "المتطلب السابق"}
                 </span>
-                <span className="font-bold text-foreground truncate block" title={focusedCourse.prerequisites?.join(", ") || (isEnglish ? "None" : "لا يوجد")}>
-                  {focusedCourse.prerequisites?.length ? focusedCourse.prerequisites.join(", ") : (isEnglish ? "None" : "لا يوجد")}
+                <span className="font-bold text-foreground truncate block" title={focusedPrerequisiteLabels.join(", ") || (isEnglish ? "None" : "لا يوجد")}>
+                  {focusedPrerequisiteLabels.length ? focusedPrerequisiteLabels.join(", ") : (isEnglish ? "None" : "لا يوجد")}
                 </span>
               </div>
             </div>

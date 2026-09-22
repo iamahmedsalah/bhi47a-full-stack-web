@@ -47,13 +47,6 @@ interface StudentProfile {
   examBuilding?: string;
 }
 
-interface AttendanceRecord {
-  totalLectures: number;
-  attendedLectures: number;
-  absenceLectures: number;
-  attendancePercentage: number;
-}
-
 interface Eligibility {
   canRegisterDirectly: boolean;
   maxCreditHours: number;
@@ -79,12 +72,9 @@ export default function StudentDashboard() {
 
   // 2. Attendance Query
   const attendanceQuery = useQuery({
-    queryKey: ["student-attendance"],
-    queryFn: async () => {
-      const res = await api.get<any>("/students/me/attendance");
-      const data = res.data?.data ?? res.data;
-      return Array.isArray(data) ? (data as AttendanceRecord[]) : [];
-    },
+    queryKey: ["my-student-attendance-history"],
+    queryFn: () => attendanceApi.getMyAttendanceHistory(),
+    refetchInterval: 15000,
   });
 
   // 3. Eligibility/GPA Query
@@ -105,7 +95,16 @@ export default function StudentDashboard() {
   });
 
   const profile = profileQuery.data ?? null;
-  const attendance = attendanceQuery.data?.[0] ?? null;
+  const attendance = attendanceQuery.data
+    ? {
+        totalLectures: attendanceQuery.data.summary.totalSessions,
+        attendedLectures:
+          attendanceQuery.data.summary.presentCount +
+          attendanceQuery.data.summary.lateCount,
+        absenceLectures: attendanceQuery.data.summary.absentCount,
+        attendancePercentage: attendanceQuery.data.summary.attendanceRate,
+      }
+    : null;
   const eligibility = eligibilityQuery.data ?? null;
   const liveSessions = liveSessionsQuery.data?.sessions || [];
   const activeLiveSession =

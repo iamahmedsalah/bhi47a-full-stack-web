@@ -39,14 +39,21 @@ console.log(`  • Environment : [ ${appEnv} ]`);
 console.log(`  • Version     : v${appVersion}`);
 console.log(`────────────────────────────────────────────────────────\n`);
 
+// output: "standalone" is for Docker deployments only (Dockerfile.web sets BUILD_STANDALONE=true).
+// Do NOT set output: "standalone" for Vercel — Vercel's Next.js adapter owns the output format
+// and a standalone build breaks Vercel's routing, causing a platform-level 404 NOT_FOUND.
+const isStandaloneOutput = process.env.BUILD_STANDALONE === "true";
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
     NEXT_PUBLIC_APP_ENV: process.env.NODE_ENV || "development",
   },
   reactCompiler: true,
-  output: "standalone",
-  outputFileTracingRoot: workspaceRoot,
+  ...(isStandaloneOutput && {
+    output: "standalone",
+    outputFileTracingRoot: workspaceRoot,
+  }),
   transpilePackages: ["@student-portal/shared"],
   turbopack: {
     root: workspaceRoot,

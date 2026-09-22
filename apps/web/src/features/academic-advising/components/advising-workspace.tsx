@@ -1171,6 +1171,15 @@ function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
   return 1;
 }
 
+function isCourseOfferedInSemester(
+  course: AdvisingCourseMap["courses"][0],
+  semester: "first" | "second" | "summer",
+) {
+  return course.offeredTerms?.length
+    ? course.offeredTerms.includes(semester)
+    : course.semester === semester;
+}
+
 function Canvas({
   courseMap,
   recommendations,
@@ -1283,6 +1292,9 @@ function Canvas({
     [courseMap.courses],
   );
   const completedSet = useMemo(() => new Set(completedCodes), [completedCodes]);
+  const courseByCode = new Map(
+    courseMap.courses.map((course) => [course.code.toUpperCase(), course]),
+  );
 
   const selectedSet = useMemo(
     () => new Set(selectedCourseIds),
@@ -1323,10 +1335,14 @@ function Canvas({
           return false;
         }
 
+        if (!isCourseOfferedInSemester(course, advisingSemester)) {
+          return false;
+        }
+
         const prereqs = course.prerequisites ?? [];
         return prereqs.every((code) => completedSet.has(code.toUpperCase()));
       }),
-    [courseMap.courses, completedSet],
+    [advisingSemester, courseMap.courses, completedSet],
   );
 
   // Credit limits computation
@@ -1555,8 +1571,13 @@ function Canvas({
                         visibleSelectedSet.has(codeUpper) ||
                         selectedSet.has(course._id);
                       const rec = recommendationByCode.get(codeUpper);
+                      const isOffered = isCourseOfferedInSemester(
+                        course,
+                        advisingSemester,
+                      );
                       const isRecommended =
                         !isPassed &&
+                        isOffered &&
                         (Boolean(
                           courseMap.suggestedCourses?.includes(course.code),
                         ) ||
@@ -1572,7 +1593,10 @@ function Canvas({
                         completedSet.has(p.toUpperCase()),
                       );
                       const canSelect =
-                        (!isPassed || isLowGrade) && prereqsMet && !disabled;
+                        (!isPassed || isLowGrade) &&
+                        prereqsMet &&
+                        isOffered &&
+                        !disabled;
 
                       return (
                         <div
@@ -1624,6 +1648,14 @@ function Canvas({
                                     const pPassed = completedSet.has(
                                       p.toUpperCase(),
                                     );
+                                    const prerequisite = courseByCode.get(
+                                      p.toUpperCase(),
+                                    );
+                                    const prerequisiteName = prerequisite
+                                      ? isArabic
+                                        ? prerequisite.nameAr || prerequisite.name
+                                        : prerequisite.nameEn || prerequisite.name
+                                      : p;
                                     return (
                                       <span
                                         key={p}
@@ -1639,7 +1671,7 @@ function Canvas({
                                         ) : (
                                           <LockKeyhole className="h-2.5 w-2.5" />
                                         )}
-                                        {p}
+                                        {prerequisiteName}
                                       </span>
                                     );
                                   })}
@@ -1715,7 +1747,14 @@ function Canvas({
                                     </span>
                                   ) : null}
 
-                                  {isRecommended ? (
+                                  {!isOffered ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">
+                                      <CalendarClock className="h-3 w-3" />
+                                      {isArabic
+                                        ? "غير مطروح هذا الفصل"
+                                        : "Not offered this semester"}
+                                    </span>
+                                  ) : isRecommended ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 font-semibold text-purple-300">
                                       <Sparkles className="h-3 w-3 text-purple-400" />
                                       {isArabic ? "موصى به" : "Recommended"}
@@ -1760,6 +1799,15 @@ function Canvas({
                                 <Plus className="me-1 h-3.5 w-3.5" />
                                 {isArabic ? "إضافة إلى الخطة" : "Add to Plan"}
                               </Button>
+                            ) : !isOffered ? (
+                              <div className="flex items-center justify-center gap-1 py-1 text-center text-[10px] font-medium text-amber-300">
+                                <CalendarClock className="h-3 w-3" />
+                                <span>
+                                  {isArabic
+                                    ? "غير مطروح هذا الفصل"
+                                    : "Not offered this semester"}
+                                </span>
+                              </div>
                             ) : isPassed ? (
                               <div className="text-center text-[10px] text-emerald-400 font-medium py-1">
                                 {isArabic ? "مكتمل بنجاح" : "Completed"}

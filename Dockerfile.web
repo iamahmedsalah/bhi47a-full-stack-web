@@ -38,6 +38,9 @@ ENV PORT=3000
 ENV NODE_ENV=production
 
 # Build packages
+# BUILD_STANDALONE=true activates output: "standalone" in next.config.ts for Docker.
+# Vercel builds do NOT set this, so Vercel's adapter owns the output format there.
+ENV BUILD_STANDALONE=true
 RUN pnpm --filter @student-portal/shared run build
 RUN pnpm --filter @student-portal/web run build
 

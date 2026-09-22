@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Role } from '@student-portal/shared';
+import type { Role, Semester } from '@student-portal/shared';
 import { Course } from '../../courses/schemas/course.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { User } from '../../users/schemas/user.schema';
@@ -14,6 +14,7 @@ import { StudentProfile } from '../../students/schemas/student-profile.schema';
 import { StudentAcademicProfile } from '../../registrations/schemas/student-academic-profile.schema';
 import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
 import { mergeAcademicCourseProgress } from '../../registrations/utils/academic-course-progress.util';
+import { isCourseOfferedForTerm } from '../../registrations/utils/term-availability.util';
 import { AdvisingCase } from '../schemas/advising-case.schema';
 import { AdvisingPlan } from '../schemas/advising-plan.schema';
 import { CourseRecommendation } from '../schemas/course-recommendation.schema';
@@ -79,6 +80,7 @@ export interface AdvisingCourseMapResponse {
     academicLevel?: string;
     level?: string;
     semester?: string;
+    offeredTerms?: string[];
     department?: string;
     creditHours?: number;
     prerequisites: string[];
@@ -512,12 +514,20 @@ export class AdvisingQueryService {
     const planCourseIds = new Set(
       (approvedPlan?.selectedCourses ?? []).map((id) => id.toString()),
     );
+    const offeredCourseIds = new Set(
+      courses
+        .filter((course) =>
+          isCourseOfferedForTerm(course, caseItem.semester as Semester),
+        )
+        .map((course) => course._id.toString()),
+    );
     const suggestedCourseIds = new Set(
       recs
         .filter(
           (rec) =>
-            rec.isRecommendedForSemester ||
-            (rec.isRecommendedForSemester == null && rec.eligible),
+            offeredCourseIds.has(rec.courseId.toString()) &&
+            (rec.isRecommendedForSemester ||
+              (rec.isRecommendedForSemester == null && rec.eligible)),
         )
         .map((rec) => rec.courseId.toString()),
     );
@@ -589,6 +599,7 @@ export class AdvisingQueryService {
           academicLevel: course.academicLevel,
           level: course.level,
           semester: course.semester,
+          offeredTerms: course.offeredTerms ?? [],
           department: course.department,
           creditHours: course.creditHours,
           prerequisites: course.prerequisites ?? [],
