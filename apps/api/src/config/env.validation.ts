@@ -88,6 +88,36 @@ function validateEmailProvider(
   }
 }
 
+function validateCookieConfig(
+  config: Record<string, unknown>,
+  nodeEnv: string,
+) {
+  const sameSite = (readString(config, 'COOKIE_SAME_SITE') ?? 'lax').toLowerCase();
+  const clientUrl = readString(config, 'CLIENT_URL') ?? '';
+
+  if (nodeEnv !== 'production') return;
+
+  // Detect cross-origin deployment: web and API on different hosts.
+  // *.vercel.app subdomains are always cross-origin to each other.
+  // In that case the browser will refuse to send SameSite=Lax cookies on
+  // XHR/fetch requests, which causes 401s on every authenticated API call
+  // immediately after login.
+  const hasVercelWebOrigin = clientUrl
+    .split(',')
+    .map((u) => u.trim())
+    .some((u) => u.includes('vercel.app') || u.startsWith('https://'));
+
+  if (hasVercelWebOrigin && sameSite !== 'none') {
+    throw new Error(
+      'COOKIE_SAME_SITE must be "none" when the web and API are on different ' +
+      'origins (e.g. separate *.vercel.app domains or any cross-origin setup). ' +
+      'With SameSite=Lax the browser will not send cookies on XHR/fetch ' +
+      'requests, causing 401s on every authenticated API call after login. ' +
+      'Set COOKIE_SAME_SITE=none in the API Vercel environment variables.',
+    );
+  }
+}
+
 export function validateEnv(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -97,6 +127,7 @@ export function validateEnv(
   validateOptionalPort(config);
   validateGoogleClientIds(config);
   validateEmailProvider(config, nodeEnv);
+  validateCookieConfig(config, nodeEnv);
 
   if (nodeEnv === 'production') {
     requireValue(config, 'MONGODB_URI');
