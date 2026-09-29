@@ -92,7 +92,9 @@ function validateCookieConfig(
   config: Record<string, unknown>,
   nodeEnv: string,
 ) {
-  const sameSite = (readString(config, 'COOKIE_SAME_SITE') ?? 'lax').toLowerCase();
+  const sameSite = (
+    readString(config, 'COOKIE_SAME_SITE') ?? 'lax'
+  ).toLowerCase();
   const clientUrl = readString(config, 'CLIENT_URL') ?? '';
 
   if (nodeEnv !== 'production') return;
@@ -110,11 +112,35 @@ function validateCookieConfig(
   if (hasVercelWebOrigin && sameSite !== 'none') {
     throw new Error(
       'COOKIE_SAME_SITE must be "none" when the web and API are on different ' +
-      'origins (e.g. separate *.vercel.app domains or any cross-origin setup). ' +
-      'With SameSite=Lax the browser will not send cookies on XHR/fetch ' +
-      'requests, causing 401s on every authenticated API call after login. ' +
-      'Set COOKIE_SAME_SITE=none in the API Vercel environment variables.',
+        'origins (e.g. separate *.vercel.app domains or any cross-origin setup). ' +
+        'With SameSite=Lax the browser will not send cookies on XHR/fetch ' +
+        'requests, causing 401s on every authenticated API call after login. ' +
+        'Set COOKIE_SAME_SITE=none in the API Vercel environment variables.',
     );
+  }
+}
+
+function validateWebBaseUrl(config: Record<string, unknown>, nodeEnv: string) {
+  const webBaseUrl = readString(config, 'WEB_BASE_URL');
+
+  if (!webBaseUrl) {
+    if (nodeEnv === 'production') {
+      throw new Error(
+        'WEB_BASE_URL is required in production so attendance QR links point to the web app',
+      );
+    }
+    return;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(webBaseUrl);
+  } catch {
+    throw new Error('WEB_BASE_URL must be a valid absolute URL');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('WEB_BASE_URL must use http or https');
   }
 }
 
@@ -128,6 +154,7 @@ export function validateEnv(
   validateGoogleClientIds(config);
   validateEmailProvider(config, nodeEnv);
   validateCookieConfig(config, nodeEnv);
+  validateWebBaseUrl(config, nodeEnv);
 
   if (nodeEnv === 'production') {
     requireValue(config, 'MONGODB_URI');

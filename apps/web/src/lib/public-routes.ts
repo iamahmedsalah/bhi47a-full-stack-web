@@ -24,5 +24,12 @@ export function isPublicRoute(pathname: string) {
   const segments = routeSegments(pathname);
   if (segments.length === 0) return true;
   if (segments.length === 1 && segments[0] === 'complaints') return true;
+  if (
+    segments.length === 2 &&
+    segments[0] === 'attendance' &&
+    segments[1] === 'check-in'
+  ) {
+    return true;
+  }
   return isAuthEntryRoute(pathname);
 }

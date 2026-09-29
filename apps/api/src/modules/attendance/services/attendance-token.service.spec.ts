@@ -1,4 +1,5 @@
 import { AttendanceTokenService } from './attendance-token.service';
+import * as crypto from 'crypto';
 
 describe('AttendanceTokenService', () => {
   let service: AttendanceTokenService;
@@ -100,7 +101,6 @@ describe('AttendanceTokenService', () => {
       const prevBucket = currentBucket - 1;
 
       // Construct token from previous bucket
-      const crypto = require('crypto');
       const dataToSign = `${mockSessionId}:${prevBucket}`;
       const sig = crypto
         .createHmac('sha256', mockSecret)
@@ -116,9 +116,8 @@ describe('AttendanceTokenService', () => {
     it('should reject a token that is older than the allowed tolerance window (screenshot sharing)', () => {
       const intervalMs = 25 * 1000;
       const currentBucket = Math.floor(Date.now() / intervalMs);
-      const expiredBucket = currentBucket - 3; // ~75 seconds old
+      const expiredBucket = currentBucket - 2;
 
-      const crypto = require('crypto');
       const dataToSign = `${mockSessionId}:${expiredBucket}`;
       const sig = crypto
         .createHmac('sha256', mockSecret)

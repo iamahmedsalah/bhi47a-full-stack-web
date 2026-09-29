@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 import { getApiErrorMessage } from "@/lib/api";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
@@ -45,7 +45,9 @@ function StudentLoginContent() {
   const { login } = useAuth();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const locale = params.locale as string;
+  const returnUrl = searchParams.get("returnUrl");
 
   const {
     loading,
@@ -89,7 +91,7 @@ function StudentLoginContent() {
       onSuccess: async (credential) => {
         setLoading(true);
         try {
-          await login("google", { credential });
+          await login("google", { credential }, { returnUrl });
         } catch (err: unknown) {
           toast.error(getApiErrorMessage(err, t("loginError")));
         } finally {
@@ -204,10 +206,14 @@ function StudentLoginContent() {
 
     setLoading(true);
     try {
-      await login("student", {
-        studentCode: data.studentCode,
-        password: data.password,
-      });
+      await login(
+        "student",
+        {
+          studentCode: data.studentCode,
+          password: data.password,
+        },
+        { returnUrl },
+      );
       // Reset attempts on successful login
       try {
         sessionStorage.removeItem("remainingAttempts");

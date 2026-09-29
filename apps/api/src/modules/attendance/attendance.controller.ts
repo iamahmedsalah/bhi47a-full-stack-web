@@ -11,6 +11,7 @@ import {
   Req,
   MessageEvent,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import type { Request } from 'express';
@@ -46,7 +47,21 @@ export class AttendanceController {
     private readonly checkInService: AttendanceCheckInService,
     private readonly reportService: AttendanceReportService,
     private readonly realtimeService: AttendanceRealtimeService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * Resolves the web app base URL for QR check-in links.
+   * WEB_BASE_URL is authoritative in production. Request values are retained as
+   * development fallbacks so local setups continue to work without extra config.
+   */
+  private resolveWebBaseUrl(req: Request): string {
+    const envUrl = this.configService.get<string>('WEB_BASE_URL');
+    if (envUrl?.trim()) return envUrl.trim().replace(/\/+$/, '');
+    const origin = req.headers?.origin;
+    if (origin) return Array.isArray(origin) ? origin[0] : origin;
+    return `${req.protocol}://${req.get('host')}`;
+  }
 
   // ==========================================
   // STAFF / ADMIN: SESSION MANAGEMENT & QR
@@ -61,14 +76,19 @@ export class AttendanceController {
 
   @Post('attendance/sessions')
   @Roles('staff', 'admin')
-  @ApiOperation({ summary: 'Start a new class attendance session with rotating QR' })
+  @ApiOperation({
+    summary: 'Start a new class attendance session with rotating QR',
+  })
   async createSession(
     @CurrentUser() user: { _id: string; name: string; role: string },
     @Body() dto: CreateAttendanceSessionDto,
     @Req() req: Request,
   ) {
-    const origin = req.headers?.origin || `${req.protocol}://${req.get('host')}`;
-    return this.sessionService.createSession(user, dto, Array.isArray(origin) ? origin[0] : origin);
+    return this.sessionService.createSession(
+      user,
+      dto,
+      this.resolveWebBaseUrl(req),
+    );
   }
 
   @Get('attendance/sessions/:id')
@@ -84,13 +104,14 @@ export class AttendanceController {
   @Roles('staff', 'admin')
   @ApiOperation({ summary: 'Get current rotating QR token for active session' })
   async getCurrentQr(@Param('id') id: string, @Req() req: Request) {
-    const origin = req.headers?.origin || `${req.protocol}://${req.get('host')}`;
-    return this.sessionService.getCurrentQr(id, Array.isArray(origin) ? origin[0] : origin);
+    return this.sessionService.getCurrentQr(id, this.resolveWebBaseUrl(req));
   }
 
   @Post('attendance/sessions/:id/close')
   @Roles('staff', 'admin')
-  @ApiOperation({ summary: 'Close attendance session and block further check-ins' })
+  @ApiOperation({
+    summary: 'Close attendance session and block further check-ins',
+  })
   async closeSession(
     @Param('id') id: string,
     @CurrentUser() user: { _id: string; role: string },
@@ -100,7 +121,9 @@ export class AttendanceController {
 
   @Sse('attendance/sessions/:id/live')
   @Roles('staff', 'admin')
-  @ApiOperation({ summary: 'Server-Sent Events (SSE) live stream for attendees' })
+  @ApiOperation({
+    summary: 'Server-Sent Events (SSE) live stream for attendees',
+  })
   liveSessionFeed(@Param('id') id: string): Observable<MessageEvent> {
     return this.realtimeService.getEventStream(id);
   }
@@ -139,14 +162,18 @@ export class AttendanceController {
 
   @Get('attendance/admin/overview')
   @Roles('admin')
-  @ApiOperation({ summary: 'Get system-wide attendance overview and recent sessions (Admin)' })
+  @ApiOperation({
+    summary: 'Get system-wide attendance overview and recent sessions (Admin)',
+  })
   async getAdminOverview(): Promise<AdminOverviewResponse> {
     return this.sessionService.getAdminOverview();
   }
 
   @Post('attendance/assignments')
   @Roles('admin')
-  @ApiOperation({ summary: 'Assign a Doctor or Instructor to a course (Admin)' })
+  @ApiOperation({
+    summary: 'Assign a Doctor or Instructor to a course (Admin)',
+  })
   async assignStaffToCourse(
     @CurrentUser('_id') adminId: string,
     @Body() dto: CreateCourseStaffAssignmentDto,
@@ -156,7 +183,9 @@ export class AttendanceController {
 
   @Get('attendance/reports/course/:courseCode')
   @Roles('staff', 'admin')
-  @ApiOperation({ summary: 'Get course-level attendance overview across sessions' })
+  @ApiOperation({
+    summary: 'Get course-level attendance overview across sessions',
+  })
   async getCourseReport(@Param('courseCode') courseCode: string) {
     return this.reportService.getCourseReport(courseCode);
   }
@@ -177,7 +206,9 @@ export class AttendanceController {
 
   @Get('attendance/student/live-sessions')
   @Roles('student')
-  @ApiOperation({ summary: 'Get currently active live attendance sessions for student' })
+  @ApiOperation({
+    summary: 'Get currently active live attendance sessions for student',
+  })
   async getStudentLiveSessions(
     @CurrentUser() user: { _id: string; name: string; studentCode?: string },
   ) {
@@ -186,7 +217,9 @@ export class AttendanceController {
 
   @Get('students/me/attendance-history')
   @Roles('student')
-  @ApiOperation({ summary: 'Get individual attendance session records and rate' })
+  @ApiOperation({
+    summary: 'Get individual attendance session records and rate',
+  })
   async getMyAttendanceHistory(@CurrentUser('_id') studentId: string) {
     return this.reportService.getStudentAttendanceHistory(studentId);
   }
@@ -197,7 +230,9 @@ export class AttendanceController {
 
   @Get('students/me/attendance')
   @Roles('student')
-  @ApiOperation({ summary: 'Get current student semester aggregate attendance rates' })
+  @ApiOperation({
+    summary: 'Get current student semester aggregate attendance rates',
+  })
   async getMyAttendance(@CurrentUser('_id') studentId: string) {
     return this.attendanceService.findByStudentId(studentId);
   }

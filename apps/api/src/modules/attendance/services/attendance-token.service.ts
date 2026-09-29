@@ -214,7 +214,8 @@ export class AttendanceTokenService {
       };
     }
 
-    // Allow current bucket (0) or previous bucket (-1) for network latency
+    // Allow the current and immediately previous bucket for camera/network latency.
+    // A wider window would make captured QR codes replayable for substantially longer.
     const bucketDiff = currentBucket - tokenBucket;
     if (bucketDiff > 1) {
       return {

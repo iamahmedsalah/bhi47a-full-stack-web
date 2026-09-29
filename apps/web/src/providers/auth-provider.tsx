@@ -44,7 +44,11 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isLoggingOut: boolean;
-  login: (type: 'student' | 'admin' | 'google', data: LoginPayload) => Promise<void>;
+  login: (
+    type: 'student' | 'admin' | 'google',
+    data: LoginPayload,
+    options?: { returnUrl?: string | null },
+  ) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -57,6 +61,28 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function getSafeStudentReturnPath(
+  returnUrl: string | null | undefined,
+  locale: string,
+): string | null {
+  if (!returnUrl || typeof window === 'undefined') return null;
+
+  try {
+    const url = new URL(returnUrl, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+
+    const allowedPaths = new Set([
+      `/${locale}/attendance/check-in`,
+      '/attendance/check-in',
+    ]);
+    if (!allowedPaths.has(url.pathname)) return null;
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -80,7 +106,11 @@ export function AuthProvider({
     retry: false,
   });
 
-  const login = useCallback(async (type: 'student' | 'admin' | 'google', data: LoginPayload) => {
+  const login = useCallback(async (
+    type: 'student' | 'admin' | 'google',
+    data: LoginPayload,
+    options?: { returnUrl?: string | null },
+  ) => {
     const endpoint =
       type === 'student'
         ? '/auth/student/login'
@@ -100,7 +130,8 @@ export function AuthProvider({
       );
 
       if (res.data.user.role === 'student') {
-        router.push(`/${locale}/dashboard`);
+        const returnPath = getSafeStudentReturnPath(options?.returnUrl, locale);
+        router.push(returnPath ?? `/${locale}/dashboard`);
       } else {
         router.push(`/${locale}/admin`);
       }
@@ -189,7 +220,13 @@ export function AuthProvider({
 
     if (isAuthEntryPath && pathname !== `/${locale}/login/change-password` && pathname !== '/login/change-password') {
       if (user.role === 'student') {
-        router.push(`/${locale}/dashboard`);
+        const returnUrl =
+          typeof window === 'undefined'
+            ? null
+            : new URLSearchParams(window.location.search).get('returnUrl');
+        router.push(
+          getSafeStudentReturnPath(returnUrl, locale) ?? `/${locale}/dashboard`,
+        );
       } else {
         router.push(`/${locale}/admin`);
       }

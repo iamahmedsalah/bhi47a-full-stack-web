@@ -41,6 +41,23 @@ interface StudentQrScannerDialogProps {
   initialToken?: string;
 }
 
+interface DetectedBarcode {
+  rawValue?: string;
+}
+
+interface BarcodeDetectorInstance {
+  detect(source: HTMLVideoElement): Promise<DetectedBarcode[]>;
+}
+
+interface BarcodeDetectorConstructor {
+  new (options: { formats: string[] }): BarcodeDetectorInstance;
+}
+
+type WindowWithBarcodeDetector = Window &
+  typeof globalThis & {
+    BarcodeDetector?: BarcodeDetectorConstructor;
+  };
+
 export function StudentQrScannerDialog({
   open,
   onOpenChange,
@@ -64,10 +81,13 @@ export function StudentQrScannerDialog({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cameraRunRef = useRef(0);
+  const checkInInFlightRef = useRef(false);
 
   // Stop camera helper
   const stopCamera = useCallback(() => {
+    cameraRunRef.current += 1;
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
@@ -94,6 +114,9 @@ export function StudentQrScannerDialog({
         return;
       }
 
+      if (checkInInFlightRef.current) return;
+      checkInInFlightRef.current = true;
+
       setValidationError(null);
       setIsSubmitting(true);
 
@@ -113,15 +136,76 @@ export function StudentQrScannerDialog({
         toast.error(msg);
         setValidationError(msg);
       } finally {
+        checkInInFlightRef.current = false;
         setIsSubmitting(false);
       }
     },
     [isAr, locale, onSuccess, stopCamera],
   );
 
+  const startCanvasScanner = useCallback(
+    async (cameraRun: number) => {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+        scanIntervalRef.current = null;
+      }
+
+      let decodeQr: typeof import("jsqr").default;
+      try {
+        decodeQr = (await import("jsqr")).default;
+      } catch (error) {
+        console.warn("Could not load the QR scanner fallback", error);
+        return;
+      }
+
+      if (cameraRun !== cameraRunRef.current) return;
+
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+
+      setCameraError(null);
+      let scanInFlight = false;
+      scanIntervalRef.current = setInterval(async () => {
+        const video = videoRef.current;
+        if (
+          scanInFlight ||
+          cameraRun !== cameraRunRef.current ||
+          !video ||
+          video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+          video.videoWidth === 0 ||
+          video.videoHeight === 0
+        ) {
+          return;
+        }
+
+        scanInFlight = true;
+        try {
+          const scale = Math.min(1, 960 / video.videoWidth);
+          canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+          const result = decodeQr(frame.data, frame.width, frame.height);
+
+          if (result?.data && cameraRun === cameraRunRef.current) {
+            stopCamera();
+            await executeCheckIn(result.data);
+          }
+        } catch {
+          // A partially rendered frame can fail; the next frame will retry.
+        } finally {
+          scanInFlight = false;
+        }
+      }, 300);
+    },
+    [executeCheckIn, stopCamera],
+  );
+
   // Start camera stream
   const startCamera = useCallback(async () => {
     stopCamera();
+    const cameraRun = cameraRunRef.current;
     setCameraError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -144,6 +228,11 @@ export function StudentQrScannerDialog({
         audio: false,
       });
 
+      if (cameraRun !== cameraRunRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -153,7 +242,9 @@ export function StudentQrScannerDialog({
       // BarcodeDetector API for instant camera scanning
       if (typeof window !== "undefined" && "BarcodeDetector" in window) {
         try {
-          const barcodeDetector = new (window as any).BarcodeDetector({
+          const BarcodeDetector = (window as WindowWithBarcodeDetector)
+            .BarcodeDetector!;
+          const barcodeDetector = new BarcodeDetector({
             formats: ["qr_code"],
           });
 
@@ -169,10 +260,11 @@ export function StudentQrScannerDialog({
                 }
               }
             } catch {
-              // Frame scan skipped
+              void startCanvasScanner(cameraRun);
             }
           }, 300);
         } catch {
+          void startCanvasScanner(cameraRun);
           setCameraError(
             isAr
               ? "تعذر تشغيل قارئ QR في هذا المتصفح. استخدم رمز الحضور القصير المعروض أسفل رمز QR."
@@ -180,13 +272,14 @@ export function StudentQrScannerDialog({
           );
         }
       } else {
+        void startCanvasScanner(cameraRun);
         setCameraError(
           isAr
             ? "هذا المتصفح لا يدعم مسح QR مباشرة. استخدم رمز الحضور القصير المعروض أسفل رمز QR."
             : "This browser does not support direct QR scanning. Use the short attendance code shown below the QR.",
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("Camera access denied or unavailable", err);
       setCameraError(
         isAr
@@ -194,7 +287,7 @@ export function StudentQrScannerDialog({
           : "Could not access camera. Please allow camera permissions or enter the code manually.",
       );
     }
-  }, [cameraFacing, executeCheckIn, isAr, stopCamera]);
+  }, [cameraFacing, executeCheckIn, isAr, startCanvasScanner, stopCamera]);
 
   // Lifecycle when dialog opens/closes
   useEffect(() => {
@@ -416,7 +509,6 @@ export function StudentQrScannerDialog({
                       setCameraFacing((prev) =>
                         prev === "environment" ? "user" : "environment",
                       );
-                      startCamera();
                     }}
                     className="absolute bottom-2.5 end-2.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-foreground text-[11px] font-medium border border-border/60 backdrop-blur-md cursor-pointer transition-all"
                   >
