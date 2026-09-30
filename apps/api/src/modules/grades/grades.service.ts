@@ -20,7 +20,10 @@ import {
   StudentAcademicProfileDocument,
 } from '../registrations/schemas/student-academic-profile.schema';
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
-import { calculatePromotedAcademicLevel } from './utils/academic-level-progression.util';
+import {
+  calculatePromotedAcademicLevel,
+  evaluateAcademicProgression,
+} from './utils/academic-level-progression.util';
 import type { CourseLevel } from '@student-portal/shared';
 import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 
@@ -87,6 +90,10 @@ export class GradesService implements OnModuleInit {
 
   async syncPublishedAcademicProgress(
     studentIds: Array<string | Types.ObjectId>,
+    options?: {
+      dryRun?: boolean;
+      maxAllowedCarriedCourses?: number;
+    },
   ) {
     const uniqueIds = [
       ...new Set(studentIds.map((id) => id.toString()).filter(Boolean)),
@@ -104,12 +111,13 @@ export class GradesService implements OnModuleInit {
     const results = await Promise.all(
       uniqueIds.map(async (studentId) => {
         const objectId = new Types.ObjectId(studentId);
-        const [academic, studentProfile, grades] = await Promise.all([
+        const [academic, studentProfile, grades, user] = await Promise.all([
           this.studentAcademicProfileModel.findOne({ studentId: objectId }),
           this.studentProfileModel.findOne({ userId: objectId }),
           this.gradeModel
             .find({ studentId: objectId, isPublished: true })
             .lean(),
+          this.userModel.findById(objectId).select('name studentCode').lean(),
         ]);
         if (!academic && !studentProfile) return null;
 
@@ -126,57 +134,73 @@ export class GradesService implements OnModuleInit {
         const finalizedCourses = progress.courseResults.map(
           (result) => result.courseCode,
         );
-        const promotedLevel = calculatePromotedAcademicLevel({
+
+        const evaluation = evaluateAcademicProgression({
           currentLevel,
           courses,
           finalizedCourses,
+          failedCourses: progress.failedCourses,
+          maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
         });
-        const wasPromoted = Number(promotedLevel) > Number(currentLevel);
+
+        const promotedLevel = evaluation.promotedLevel;
+        const wasPromoted = evaluation.willPromote;
+
         const currentRequirements = courses.filter(
           (course) =>
             (course.academicLevel ?? course.level) === currentLevel &&
             (course.semester === 'first' || course.semester === 'second') &&
             course.type !== 'elective',
         );
-        const finalized = new Set(finalizedCourses);
-        const missingCourseCodes = currentRequirements
-          .filter((course) => !finalized.has(course.code.toUpperCase()))
-          .map((course) => course.code)
-          .sort();
-        const requiredCodes = new Set(
-          currentRequirements.map((course) => course.code.toUpperCase()),
-        );
-        const carriedFailedCourseCodes = progress.failedCourses.filter((code) =>
-          requiredCodes.has(code),
-        );
 
-        if (academic) {
-          academic.completedCourses = progress.completedCourses;
-          academic.failedCourses = progress.failedCourses;
-          academic.lowGradeCourses = progress.lowGradeCourses;
-          if (progress.calculatedGpa !== null)
-            academic.gpa = progress.calculatedGpa;
-          academic.academicLevel = promotedLevel;
-          if (wasPromoted) academic.semester = 'first';
-          await academic.save();
+        const isDryRun = Boolean(options?.dryRun);
+
+        if (!isDryRun) {
+          if (academic) {
+            academic.completedCourses = progress.completedCourses;
+            academic.failedCourses = progress.failedCourses;
+            academic.lowGradeCourses = progress.lowGradeCourses;
+            if (progress.calculatedGpa !== null)
+              academic.gpa = progress.calculatedGpa;
+            academic.academicLevel = promotedLevel;
+            if (wasPromoted) academic.semester = 'first';
+            await academic.save();
+          }
+          if (
+            studentProfile &&
+            (studentProfile.level !== promotedLevel ||
+              (wasPromoted && studentProfile.semester !== 'first'))
+          ) {
+            studentProfile.level = promotedLevel;
+            if (wasPromoted) studentProfile.semester = 'first';
+            await studentProfile.save();
+          }
         }
-        if (
-          studentProfile &&
-          (studentProfile.level !== promotedLevel ||
-            (wasPromoted && studentProfile.semester !== 'first'))
-        ) {
-          studentProfile.level = promotedLevel;
-          if (wasPromoted) studentProfile.semester = 'first';
-          await studentProfile.save();
-        }
+
+        const completedCredits = progress.courseResults
+          .filter((r) => r.passed)
+          .reduce((acc, curr) => acc + curr.creditHours, 0);
 
         return {
-          studentCode: studentProfile?.studentCode ?? null,
+          studentId: studentId.toString(),
+          studentCode: studentProfile?.studentCode ?? user?.studentCode ?? null,
+          studentName: user?.name ?? studentProfile?.studentCode ?? '—',
           previousLevel: currentLevel,
+          currentLevel,
+          targetLevel: promotedLevel,
           academicLevel: promotedLevel,
           promoted: wasPromoted,
-          missingCourseCodes,
-          carriedFailedCourseCodes,
+          willPromote: wasPromoted,
+          gpa: progress.calculatedGpa ?? academic?.gpa ?? 0,
+          completedCredits,
+          totalFailedCount: progress.failedCourses.length,
+          carriedFailedCourseCodes: evaluation.carriedFailedCourses,
+          carriedFailedCourses: evaluation.carriedFailedCourses,
+          missingCourseCodes: evaluation.missingMandatoryCourses,
+          missingMandatoryCourses: evaluation.missingMandatoryCourses,
+          reasonCode: evaluation.reasonCode,
+          reasonAr: evaluation.reasonAr,
+          reasonEn: evaluation.reasonEn,
           hasFirstSemesterCurriculum: currentRequirements.some(
             (course) => course.semester === 'first',
           ),
@@ -189,11 +213,15 @@ export class GradesService implements OnModuleInit {
     return results.filter((result) => result !== null);
   }
 
-  async recalculateAcademicProgress(studentCode?: string) {
+  async recalculateAcademicProgress(options?: {
+    studentCode?: string;
+    dryRun?: boolean;
+    maxAllowedCarriedCourses?: number;
+  }) {
     let studentIds: Types.ObjectId[] = [];
-    if (studentCode) {
+    if (options?.studentCode) {
       const student = await this.userModel
-        .findOne({ studentCode: studentCode.trim(), role: 'student' })
+        .findOne({ studentCode: options.studentCode.trim(), role: 'student' })
         .select('_id')
         .lean();
       if (!student) throw new NotFoundException('Student not found');
@@ -204,10 +232,21 @@ export class GradesService implements OnModuleInit {
       });
     }
 
-    const students = await this.syncPublishedAcademicProgress(studentIds);
+    const students = await this.syncPublishedAcademicProgress(studentIds, {
+      dryRun: options?.dryRun ?? false,
+      maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
+    });
+
+    const promoted = students.filter((student) => student.promoted).length;
+    const retained = students.length - promoted;
+
     return {
+      dryRun: options?.dryRun ?? false,
+      maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
       processed: students.length,
-      promoted: students.filter((student) => student.promoted).length,
+      promotedCount: promoted,
+      promoted,
+      retainedCount: retained,
       students,
     };
   }

@@ -30,9 +30,7 @@ export class CreateStudentDto {
 
   @ApiProperty({ example: 'أحمد محمد علي' })
   @Transform(({ value }) =>
-    typeof value === 'string'
-      ? value.trim().replace(/<[^>]*>/g, '')
-      : value,
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsString()
   @IsNotEmpty()
@@ -63,9 +61,7 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional()
   @Transform(({ value }) =>
-    typeof value === 'string'
-      ? value.trim().replace(/<[^>]*>/g, '')
-      : value,
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
   @IsString()
@@ -151,9 +147,7 @@ export class CreateStudentDto {
 export class UpdateStudentDto {
   @ApiPropertyOptional()
   @Transform(({ value }) =>
-    typeof value === 'string'
-      ? value.trim().replace(/<[^>]*>/g, '')
-      : value,
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
   @IsString()
@@ -184,9 +178,7 @@ export class UpdateStudentDto {
 
   @ApiPropertyOptional()
   @Transform(({ value }) =>
-    typeof value === 'string'
-      ? value.trim().replace(/<[^>]*>/g, '')
-      : value,
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
   @IsString()

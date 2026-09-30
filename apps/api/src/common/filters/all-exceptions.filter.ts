@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AppLoggerService } from '../../core/logger/logger.service';
+import { isCorsBlockedError } from '../../config/cors-origins';
 
 type ErrorLike = Error & {
   status?: number;
@@ -75,7 +76,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       });
     }
 
-    if (String(error?.message || '').startsWith('CORS blocked')) {
+    if (isCorsBlockedError(error)) {
       logRequestError(HttpStatus.FORBIDDEN);
       return response.status(HttpStatus.FORBIDDEN).json({
         success: false,

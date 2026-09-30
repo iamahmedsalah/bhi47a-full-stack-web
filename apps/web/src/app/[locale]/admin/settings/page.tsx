@@ -12,32 +12,82 @@ import { GpaRulesPanel } from '@/features/settings/components/gpa-rules-panel';
 import { RegistrationTermsPanel } from '@/features/settings/components/registration-terms-panel';
 import { AiSettingsPanel } from '@/features/settings/components/ai-settings-panel';
 import { useAuth } from '@/providers/auth-provider';
+import { cn } from '@/lib/cn';
 
 function AdminSettingsContent() {
   const params = useParams();
   const locale = params.locale as string;
+  const isAr = locale === 'ar';
   const t = useTranslations('settings');
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'gpa' | 'terms' | 'ai'>('gpa');
 
+  const tabs = [
+    {
+      id: 'gpa' as const,
+      label: isAr ? 'قواعد الساعات والمعدل' : 'GPA & Course Rules',
+      icon: ShieldCheck,
+      description: isAr ? 'الحد الأدنى والأقصى للساعات والمعدل التراكمي' : 'Credit hours & GPA limits',
+    },
+    {
+      id: 'terms' as const,
+      label: isAr ? 'فصول وسنوات التسجيل' : 'Registration Terms',
+      icon: Calendar,
+      description: isAr ? 'مواعيد فتح وغلق فصول التسجيل والسنة المعتمدة' : 'Semesters & authoritative year',
+    },
+    ...(user?.role === 'admin'
+      ? [
+          {
+            id: 'ai' as const,
+            label: isAr ? 'المرشد الذكي' : 'AI Advisor',
+            icon: Bot,
+            description: isAr ? 'إعدادات واستخدام المرشد الآلي للطلاب' : 'Chatbot & token usage settings',
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="animate-fade-in space-y-6 p-2 md:p-6">
-      <PageTitleBanner title={t('pageTitle')} icon={<Settings className="h-5 w-5" />} subtitle={t('pageDescription')} />
-      <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
-        <Button variant={activeTab === 'gpa' ? 'default' : 'ghost'} onClick={() => setActiveTab('gpa')} className="cursor-pointer gap-2">
-          <ShieldCheck className="h-4 w-4" />{t('tabs.gpa')}
-        </Button>
-        {user?.role === 'admin' && (
-          <Button variant={activeTab === 'ai' ? 'default' : 'ghost'} onClick={() => setActiveTab('ai')} className="cursor-pointer gap-2">
-            <Bot className="h-4 w-4" />{t('ai.tab')}
-          </Button>
-        )}
-        <Button variant={activeTab === 'terms' ? 'default' : 'ghost'} onClick={() => setActiveTab('terms')} className="cursor-pointer gap-2">
-          <Calendar className="h-4 w-4" />{t('tabs.terms')}
-        </Button>
+    <div className="animate-fade-in space-y-6 p-2 md:p-6" dir={isAr ? 'rtl' : 'ltr'}>
+      <PageTitleBanner
+        title={t('pageTitle')}
+        icon={<Settings className="h-5 w-5" />}
+        subtitle={t('pageDescription')}
+      />
+
+      {/* Modern Tabs Navigation Bar */}
+      <div className="flex flex-wrap gap-2.5 rounded-2xl border border-white/10 bg-card/60 p-1.5 backdrop-blur-sm shadow-sm">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-md ring-1 ring-primary/30'
+                  : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+              )}
+            >
+              <Icon className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : 'text-primary')} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
-      <div className="rounded-xl border border-border/70 bg-card/90 p-6 text-start shadow-(--shadow-glow)">
-        {activeTab === 'gpa' ? <GpaRulesPanel locale={locale} /> : activeTab === 'terms' ? <RegistrationTermsPanel locale={locale} /> : <AiSettingsPanel locale={locale} />}
+
+      {/* Tab Panels */}
+      <div className="rounded-2xl border border-white/10 bg-card/80 p-5 md:p-6 text-start shadow-(--shadow-glow) backdrop-blur-sm">
+        {activeTab === 'gpa' ? (
+          <GpaRulesPanel locale={locale} />
+        ) : activeTab === 'terms' ? (
+          <RegistrationTermsPanel locale={locale} />
+        ) : (
+          <AiSettingsPanel locale={locale} />
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,8 @@ import {
   Info,
   Layers,
   BookOpen,
+  Loader2,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TableCell } from '@/components/ui/table';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog,
   DialogContent,
@@ -36,11 +39,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
+import { getApiErrorMessage } from '@/lib/api';
 
 import {
   listAcademicYears,
   setCurrentAcademicYear,
   createAcademicYear,
+  deleteAcademicYear,
   toggleRegistrationTerm,
   type AcademicYearGroup,
   type RegistrationTermItem,
@@ -54,6 +59,8 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newAcademicYear, setNewAcademicYear] = useState('');
   const [makeNewCurrent, setMakeNewCurrent] = useState(false);
+  const [pendingTermId, setPendingTermId] = useState<string | null>(null);
+  const [yearToDelete, setYearToDelete] = useState<string | null>(null);
 
   // Queries
   const academicYearsQuery = useQuery({
@@ -87,6 +94,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
   // Mutations
   const toggleTermMutation = useMutation({
     mutationFn: async ({ id, isOpen }: { id: string; isOpen: boolean }) => {
+      setPendingTermId(id);
       return toggleRegistrationTerm(id, isOpen);
     },
     onSuccess: () => {
@@ -94,8 +102,12 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
     },
-    onError: () => {
-      toast.error(isAr ? 'فشل تعديل حالة الفصل' : 'Failed to update term status');
+    onError: (err: unknown) => {
+      const msg = getApiErrorMessage(err, isAr ? 'فشل تعديل حالة الفصل' : 'Failed to update term status');
+      toast.error(msg);
+    },
+    onSettled: () => {
+      setPendingTermId(null);
     },
   });
 
@@ -110,8 +122,25 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
     },
-    onError: () => {
-      toast.error(isAr ? 'فشل تغيير السنة الأكاديمية الحالية' : 'Failed to set current academic year');
+    onError: (err: unknown) => {
+      const msg = getApiErrorMessage(err, isAr ? 'فشل تغيير السنة الأكاديمية الحالية' : 'Failed to set current academic year');
+      toast.error(msg);
+    },
+  });
+
+  const deleteYearMutation = useMutation({
+    mutationFn: async (academicYear: string) => {
+      return deleteAcademicYear(academicYear);
+    },
+    onSuccess: (_, year) => {
+      toast.success(isAr ? `تم حذف السنة الأكاديمية ${year}` : `Deleted academic year ${year}`);
+      setYearToDelete(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+    },
+    onError: (err: unknown) => {
+      const msg = getApiErrorMessage(err, isAr ? 'فشل حذف السنة الأكاديمية' : 'Failed to delete academic year');
+      toast.error(msg);
     },
   });
 
@@ -128,7 +157,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : isAr ? 'فشل إنشاء السنة الأكاديمية' : 'Failed to create academic year';
+      const msg = getApiErrorMessage(err, isAr ? 'فشل إنشاء السنة الأكاديمية' : 'Failed to create academic year');
       toast.error(msg);
     },
   });
@@ -193,20 +222,29 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     {
       key: 'actions',
       header: isAr ? 'الإجراءات' : 'Actions',
-      render: (item) => (
-        <TableCell className="text-center">
-          <Button
-            size="sm"
-            variant={item.isOpen ? 'destructive' : 'default'}
-            disabled={toggleTermMutation.isPending}
-            onClick={() => toggleTermMutation.mutate({ id: item._id, isOpen: !item.isOpen })}
-            className="gap-1.5 text-xs"
-          >
-            {item.isOpen ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-            {item.isOpen ? (isAr ? 'إغلاق التسجيل' : 'Close Term') : (isAr ? 'فتح التسجيل' : 'Open Term')}
-          </Button>
-        </TableCell>
-      ),
+      render: (item) => {
+        const isThisPending = pendingTermId === item._id;
+        return (
+          <TableCell className="text-center">
+            <Button
+              size="sm"
+              variant={item.isOpen ? 'destructive' : 'default'}
+              disabled={toggleTermMutation.isPending}
+              onClick={() => toggleTermMutation.mutate({ id: item._id, isOpen: !item.isOpen })}
+              className="gap-1.5 text-xs"
+            >
+              {isThisPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : item.isOpen ? (
+                <Lock className="h-3.5 w-3.5" />
+              ) : (
+                <Unlock className="h-3.5 w-3.5" />
+              )}
+              {item.isOpen ? (isAr ? 'إغلاق التسجيل' : 'Close Term') : (isAr ? 'فتح التسجيل' : 'Open Term')}
+            </Button>
+          </TableCell>
+        );
+      },
     },
   ];
 
@@ -383,87 +421,110 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                   </div>
                 </div>
 
-                {!group.isCurrent && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={setCurrentYearMutation.isPending}
-                    onClick={() => setCurrentYearMutation.mutate(group.academicYear)}
-                    className="gap-1.5 border-border hover:border-amber-500/40 hover:text-amber-300 text-xs self-start sm:self-auto"
-                  >
-                    <Star className="h-3.5 w-3.5" />
-                    {isAr ? 'تعيين كسنة أكاديمية حالية' : 'Set as Current Year'}
-                  </Button>
-                )}
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {!group.isCurrent && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={setCurrentYearMutation.isPending}
+                      onClick={() => setCurrentYearMutation.mutate(group.academicYear)}
+                      className="gap-1.5 border-border hover:border-amber-500/40 hover:text-amber-300 text-xs"
+                    >
+                      {setCurrentYearMutation.isPending && setCurrentYearMutation.variables === group.academicYear ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Star className="h-3.5 w-3.5" />
+                      )}
+                      {isAr ? 'تعيين كسنة أكاديمية حالية' : 'Set as Current Year'}
+                    </Button>
+                  )}
+                  {!group.isCurrent && group.registrationCount === 0 && group.advisingCaseCount === 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={deleteYearMutation.isPending}
+                      onClick={() => setYearToDelete(group.academicYear)}
+                      className="h-8 w-8 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      title={isAr ? 'حذف السنة الأكاديمية' : 'Delete academic year'}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* 3 Semesters Mini Cards */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {group.terms.map((term) => (
-                  <div
-                    key={term._id}
-                    className={cn(
-                      'rounded-xl border p-3.5 transition-colors flex flex-col justify-between gap-3',
-                      term.isOpen
-                        ? 'border-emerald-500/30 bg-emerald-950/10'
-                        : 'border-border/60 bg-surface/30',
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h5 className="font-semibold text-foreground text-xs">
-                          {getSemesterLabel(term.semester)}
-                        </h5>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {term.isOpen
-                            ? isAr
-                              ? 'متاح لتسجيل الطلاب'
-                              : 'Open for registration'
-                            : isAr
-                              ? 'التسجيل مغلق'
-                              : 'Registration closed'}
-                        </p>
+                {group.terms.map((term) => {
+                  const isThisPending = pendingTermId === term._id;
+                  return (
+                    <div
+                      key={term._id}
+                      className={cn(
+                        'rounded-xl border p-3.5 transition-colors flex flex-col justify-between gap-3',
+                        term.isOpen
+                          ? 'border-emerald-500/30 bg-emerald-950/10'
+                          : 'border-border/60 bg-surface/30',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h5 className="font-semibold text-foreground text-xs">
+                            {getSemesterLabel(term.semester)}
+                          </h5>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {term.isOpen
+                              ? isAr
+                                ? 'متاح لتسجيل الطلاب'
+                                : 'Open for registration'
+                              : isAr
+                                ? 'التسجيل مغلق'
+                                : 'Registration closed'}
+                          </p>
+                        </div>
+                        <StatusBadge
+                          label={term.isOpen ? (isAr ? 'مفتوح' : 'Open') : (isAr ? 'مغلق' : 'Closed')}
+                          variant={term.isOpen ? 'success' : 'danger'}
+                        />
                       </div>
-                      <StatusBadge
-                        label={term.isOpen ? (isAr ? 'مفتوح' : 'Open') : (isAr ? 'مغلق' : 'Closed')}
-                        variant={term.isOpen ? 'success' : 'danger'}
-                      />
-                    </div>
 
-                    <div className="flex items-center justify-between border-t border-border/40 pt-2.5">
-                      <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {term.semester.toUpperCase()}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant={term.isOpen ? 'destructive' : 'default'}
-                        disabled={toggleTermMutation.isPending}
-                        onClick={() =>
-                          toggleTermMutation.mutate({ id: term._id, isOpen: !term.isOpen })
-                        }
-                        className={cn(
-                          'h-7 px-2.5 text-xs font-medium gap-1',
-                          term.isOpen
-                            ? 'bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive hover:text-white'
-                            : 'bg-primary text-primary-foreground hover:bg-primary/90',
-                        )}
-                      >
-                        {term.isOpen ? (
-                          <>
-                            <Lock className="h-3 w-3" />
-                            {isAr ? 'إغلاق' : 'Close'}
-                          </>
-                        ) : (
-                          <>
-                            <Unlock className="h-3 w-3" />
-                            {isAr ? 'فتح' : 'Open'}
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center justify-between border-t border-border/40 pt-2.5">
+                        <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {term.semester.toUpperCase()}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant={term.isOpen ? 'destructive' : 'default'}
+                          disabled={toggleTermMutation.isPending}
+                          onClick={() =>
+                            toggleTermMutation.mutate({ id: term._id, isOpen: !term.isOpen })
+                          }
+                          className={cn(
+                            'h-7 px-2.5 text-xs font-medium gap-1',
+                            term.isOpen
+                              ? 'bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive hover:text-white'
+                              : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                          )}
+                        >
+                          {isThisPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : term.isOpen ? (
+                            <>
+                              <Lock className="h-3 w-3" />
+                              {isAr ? 'إغلاق' : 'Close'}
+                            </>
+                          ) : (
+                            <>
+                              <Unlock className="h-3 w-3" />
+                              {isAr ? 'فتح' : 'Open'}
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -569,6 +630,27 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Academic Year Confirmation */}
+      <ConfirmDialog
+        open={Boolean(yearToDelete)}
+        onOpenChange={(open) => !open && setYearToDelete(null)}
+        title={isAr ? 'حذف السنة الأكاديمية' : 'Delete Academic Year'}
+        description={
+          isAr
+            ? `هل أنت متأكد من حذف السنة الأكاديمية ${yearToDelete}؟ سيتم حذف جميع فصولها المسجلة.`
+            : `Are you sure you want to delete academic year ${yearToDelete}? All associated terms will be removed.`
+        }
+        confirmLabel={isAr ? 'تأكيد الحذف' : 'Delete'}
+        cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+        destructive={true}
+        disabled={deleteYearMutation.isPending}
+        onConfirm={() => {
+          if (yearToDelete) {
+            deleteYearMutation.mutate(yearToDelete);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -85,6 +85,7 @@ Every feature table across the Student Portal must follow these unified standard
 3. **Headless Radix Primitives**: Use Radix UI primitives (`Select`, `DropdownMenu`, `Dialog`, `Popover`) for all dropdowns, modal windows, and filter controls. Never render raw browser `<select>` or `<input type="checkbox">` elements.
 4. **Lean Composition (`DataTable<T>` & `DataTableShell`)**: Avoid imperative `<table>` boilerplate; compose views using `<DataTable<T>>` with memoized column definitions, debounced search, responsive layouts, and automatic skeleton/empty states.
 5. **URL-Synchronized Filter State (`useTableState`)**: Keep pagination, active search, and filters in URL query parameters, never in global Zustand stores.
+6. **Design System Curvature (`rounded-squircle`)**: Standardize curvature by applying `rounded-squircle` strictly to small-to-medium interactive components: buttons, icon buttons, dialog triggers, badges (`<Badge>`, `<StatusBadge>`), meta chips, form controls (`<Input>`, `<SelectTrigger>`), and custom dropdowns. **Never** use `rounded-squircle` on parent divs, modal containers (`DialogContent`), drawer sheets, page header banners, or large outer wrappers (use `rounded-2xl` or `rounded-xl` instead to prevent oval/egg distortion). Reserve `rounded-full` exclusively for circular avatars and small indicator dots.
 
 ## RTL, Modal & Bilingual Architecture Standards
 

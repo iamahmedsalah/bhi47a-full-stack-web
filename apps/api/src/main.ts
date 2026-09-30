@@ -9,14 +9,15 @@ import { json, urlencoded, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import {
-  rateLimitMiddleware,
-  setGlobalRateLimiterService,
-} from './common/middleware/rate-limit.middleware';
+import { createRateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { RateLimiterService } from './common/rate-limit/rate-limit.service';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { AppLoggerService } from './core/logger/logger.service';
-import { isOriginAllowed, parseAllowedOrigins } from './config/cors-origins';
+import {
+  CORS_BLOCKED_ERROR_PREFIX,
+  isOriginAllowed,
+  parseAllowedOrigins,
+} from './config/cors-origins';
 
 function resolveAppVersion(): string {
   if (process.env.APP_VERSION) {
@@ -75,7 +76,6 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = app.get(AppLoggerService);
   const rateLimiterService = app.get(RateLimiterService);
-  setGlobalRateLimiterService(rateLimiterService);
   const port = Number(
     configService.get<string>('PORT') ??
       configService.get<string>('API_PORT') ??
@@ -99,7 +99,7 @@ async function bootstrap() {
         return;
       }
 
-      callback(new Error(`CORS origin not allowed: ${origin}`));
+      callback(new Error(`${CORS_BLOCKED_ERROR_PREFIX}: ${origin}`));
     },
     credentials: true,
   });
@@ -108,7 +108,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.use(json({ limit: '4mb' }));
   app.use(urlencoded({ limit: '4mb', extended: true }));
-  app.use(rateLimitMiddleware);
+  app.use(createRateLimitMiddleware(rateLimiterService));
 
   app.useGlobalPipes(
     new ValidationPipe({

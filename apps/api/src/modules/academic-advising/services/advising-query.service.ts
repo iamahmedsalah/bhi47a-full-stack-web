@@ -638,7 +638,7 @@ export class AdvisingQueryService {
         .lean()
         .then((items) => items.filter((item) => item.courseId != null)),
       this.notes
-        .find({ caseId: caseItem._id, visibility: 'STUDENT' })
+        .find({ advisingCaseId: caseItem._id, visibility: 'STUDENT_VISIBLE' })
         .populate('authorId', 'name role')
         .sort({ createdAt: -1 })
         .lean(),
@@ -662,7 +662,7 @@ export class AdvisingQueryService {
     );
 
     return this.notes
-      .find({ caseId: new Types.ObjectId(caseId) })
+      .find({ advisingCaseId: new Types.ObjectId(caseId) })
       .populate('authorId', 'name email role')
       .sort({ createdAt: -1 })
       .lean();
@@ -683,7 +683,7 @@ export class AdvisingQueryService {
     );
 
     const note = await this.notes.create({
-      caseId: caseItem._id,
+      advisingCaseId: caseItem._id,
       authorId: new Types.ObjectId(actorId),
       visibility: dto.visibility,
       content: dto.content,

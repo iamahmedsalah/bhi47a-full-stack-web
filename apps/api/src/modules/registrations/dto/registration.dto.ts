@@ -407,6 +407,12 @@ export class UpsertRegistrationTermDto {
   closesAt?: string;
 }
 
+export class ToggleRegistrationTermDto {
+  @ApiProperty()
+  @IsBoolean()
+  isOpen!: boolean;
+}
+
 export class CreateAcademicYearDto {
   @ApiProperty({ example: '2026-2027' })
   @IsString()

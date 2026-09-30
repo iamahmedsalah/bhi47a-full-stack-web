@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import type { Connection } from 'mongoose';
 import * as ExcelJS from 'exceljs';
 import * as JSZipLib from 'jszip';
 const JSZip = (JSZipLib as any).default || JSZipLib;
@@ -220,14 +220,14 @@ export class UploadsService {
           .deleteMany({ planId: { $in: planIds } }),
         db
           .collection('advising_notes')
-          .deleteMany({ caseId: { $in: caseIds } }),
+          .deleteMany({ advisingCaseId: { $in: caseIds } }),
         db
           .collection('advising_audit_logs')
-          .deleteMany({ caseId: { $in: caseIds } }),
+          .deleteMany({ advisingCaseId: { $in: caseIds } }),
         db.collection('course_recommendations').deleteMany({
           $or: [
             { studentId: { $in: studentIds } },
-            { caseId: { $in: caseIds } },
+            { advisingCaseId: { $in: caseIds } },
           ],
         }),
         db

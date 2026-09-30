@@ -26,6 +26,7 @@ import {
   UpdateGpaRegistrationRuleDto,
   UpsertStudentAcademicProfileDto,
   UpsertRegistrationTermDto,
+  ToggleRegistrationTermDto,
 } from './dto/registration.dto';
 import { RegistrationsService } from './registrations.service';
 import type { AdvisingCourseMapResponse } from './registrations.service';
@@ -317,5 +318,20 @@ export class RegistrationsController {
     @Body() dto: UpsertRegistrationTermDto,
   ) {
     return this.registrationsService.upsertRegistrationTerm(dto, user._id);
+  }
+
+  @Patch('admin/registration-terms/:id')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Toggle registration semester open/close' })
+  toggleRegistrationTerm(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: ToggleRegistrationTermDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.registrationsService.toggleRegistrationTerm(
+      id,
+      dto.isOpen,
+      user._id,
+    );
   }
 }

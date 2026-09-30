@@ -48,6 +48,7 @@ import {
   type GradeItem,
 } from "@/features/grades/api";
 import { GradeFormDialog } from "@/features/grades/components/grade-form-dialog";
+import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
 import type { GradeFormValues } from "@/features/grades/schema";
 
 interface CourseOption {
@@ -88,6 +89,7 @@ function GradesPageContent() {
   const [selectedGrade, setSelectedGrade] = useState<GradeItem | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const limit = 10;
 
@@ -399,7 +401,7 @@ function GradesPageContent() {
             : "Manage exam grades, results, and student academic progress."
         }
       >
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
+        <Button variant="outline" onClick={() => setIsUploadOpen(true)} className="rounded-squircle">
           <UploadCloud className="h-4 w-4" />
           {isAr ? "رفع الدرجات" : "Upload Grades"}
         </Button>
@@ -407,6 +409,7 @@ function GradesPageContent() {
           variant="outline"
           onClick={() => void handleExport()}
           disabled={isExporting}
+          className="rounded-squircle"
         >
           {isExporting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -417,17 +420,13 @@ function GradesPageContent() {
         </Button>
         <Button
           variant="outline"
-          onClick={() => void handleRecalculate()}
-          disabled={isRecalculating}
+          onClick={() => setIsRecalculateOpen(true)}
+          className="rounded-squircle border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
         >
-          {isRecalculating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
+          <RefreshCw className="h-4 w-4 text-sky-400" />
           {isAr ? "إعادة حساب المستويات" : "Recalculate levels"}
         </Button>
-        <Button onClick={() => setIsAddOpen(true)}>
+        <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
           <Plus className="h-4 w-4" />
           {isAr ? "إضافة درجة" : "Add Grade"}
         </Button>
@@ -585,6 +584,17 @@ function GradesPageContent() {
         uploadType="grades"
         expectedColumns={gradeImportColumns}
         onSuccess={() => void refreshGrades()}
+      />
+      <RecalculateLevelsModal
+        open={isRecalculateOpen}
+        onOpenChange={setIsRecalculateOpen}
+        isAr={isAr}
+        onSuccess={() => {
+          void refreshGrades();
+          void queryClient.invalidateQueries({ queryKey: ["admin-grades"] });
+          void queryClient.invalidateQueries({ queryKey: ["advising"] });
+          void queryClient.invalidateQueries({ queryKey: ["students"] });
+        }}
       />
     </div>
   );

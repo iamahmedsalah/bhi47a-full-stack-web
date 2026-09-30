@@ -83,7 +83,10 @@ export function normalizeRowKeys(
   const normalized: Record<string, unknown> = {};
 
   for (const key of Object.keys(row)) {
-    const cleanKey = key.trim().toLowerCase().replace(/[\s_\-]/g, '');
+    const cleanKey = key
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\-]/g, '');
     const val = row[key];
 
     // Student Code

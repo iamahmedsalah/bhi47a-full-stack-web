@@ -105,6 +105,10 @@ export class GradesController {
   async recalculateAcademicProgress(
     @Body() dto: RecalculateAcademicProgressDto,
   ) {
-    return this.gradesService.recalculateAcademicProgress(dto.studentCode);
+    return this.gradesService.recalculateAcademicProgress({
+      studentCode: dto.studentCode,
+      dryRun: dto.dryRun,
+      maxAllowedCarriedCourses: dto.maxAllowedCarriedCourses,
+    });
   }
 }

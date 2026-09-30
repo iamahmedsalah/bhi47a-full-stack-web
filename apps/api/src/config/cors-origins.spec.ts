@@ -1,4 +1,9 @@
-import { isOriginAllowed, parseAllowedOrigins } from './cors-origins';
+import {
+  CORS_BLOCKED_ERROR_PREFIX,
+  isCorsBlockedError,
+  isOriginAllowed,
+  parseAllowedOrigins,
+} from './cors-origins';
 
 describe('CORS origin matching', () => {
   const origins = parseAllowedOrigins(
@@ -26,5 +31,15 @@ describe('CORS origin matching', () => {
         origins,
       ),
     ).toBe(false);
+  });
+
+  it('classifies only the shared CORS rejection error', () => {
+    expect(
+      isCorsBlockedError(
+        new Error(`${CORS_BLOCKED_ERROR_PREFIX}: https://attacker.test`),
+      ),
+    ).toBe(true);
+    expect(isCorsBlockedError(new Error('Database unavailable'))).toBe(false);
+    expect(isCorsBlockedError('CORS blocked')).toBe(false);
   });
 });

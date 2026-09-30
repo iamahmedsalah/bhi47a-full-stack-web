@@ -1903,6 +1903,21 @@ export class RegistrationsService {
     );
   }
 
+  async toggleRegistrationTerm(id: string, isOpen: boolean, adminId?: string) {
+    const term = await this.registrationTermModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isOpen: Boolean(isOpen),
+          ...(adminId ? { updatedBy: new Types.ObjectId(adminId) } : {}),
+        },
+      },
+      { new: true },
+    );
+    if (!term) throw new NotFoundException('Registration term not found');
+    return term;
+  }
+
   async getRegistrationTermStatus(academicYear: string, semester: string) {
     const normSem = normalizeSemester(semester);
     const term = await this.registrationTermModel

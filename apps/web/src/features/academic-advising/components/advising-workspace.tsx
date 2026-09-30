@@ -22,6 +22,8 @@ import {
   LockKeyhole,
   MessageSquarePlus,
   Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Printer,
   Search,
@@ -104,10 +106,16 @@ export function AdvisingWorkspace() {
   const [newAcademicYear, setNewAcademicYear] = useState("");
   const [selectedAdvisorId, setSelectedAdvisorId] = useState("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isAssignAdvisorModalOpen, setIsAssignAdvisorModalOpen] = useState(false);
+  const [assignTargetStudent, setAssignTargetStudent] = useState<AdvisingStudent | undefined>();
+  const [advisorSearchTerm, setAdvisorSearchTerm] = useState("");
+  const [modalStudentSearch, setModalStudentSearch] = useState("");
+  const [modalStudentLevelFilter, setModalStudentLevelFilter] = useState("all");
   const [manualSelections, setManualSelections] = useState<
     Record<string, string[]>
   >({});
   const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
+  const [isStudentSidebarOpen, setIsStudentSidebarOpen] = useState(true);
   useEffect(() => {
     const requestedStudent = new URLSearchParams(window.location.search).get(
       "student",
@@ -193,15 +201,40 @@ export function AdvisingWorkspace() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
   const assignStudents = useMutation({
-    mutationFn: () =>
-      advisingApi.assignStudents({
+    mutationFn: () => {
+      const ids =
+        selectedStudentIds.length > 0
+          ? selectedStudentIds
+          : assignTargetStudent
+            ? [assignTargetStudent.id]
+            : active
+              ? [active.id]
+              : [];
+      if (ids.length === 0) {
+        throw new Error(
+          isArabic
+            ? "يرجى تحديد طالب واحد على الأقل"
+            : "Select at least one student",
+        );
+      }
+      if (!selectedAdvisorId) {
+        throw new Error(
+          isArabic
+            ? "يرجى اختيار المرشد الأكاديمي"
+            : "Select an academic advisor",
+        );
+      }
+      return advisingApi.assignStudents({
         advisorId: selectedAdvisorId,
-        studentIds: selectedStudentIds,
+        studentIds: ids,
         academicYear,
         semester: advisingSemester,
-      }),
+      });
+    },
     onSuccess: (result) => {
       setSelectedStudentIds([]);
+      setAssignTargetStudent(undefined);
+      setIsAssignAdvisorModalOpen(false);
       queryClient.invalidateQueries({ queryKey: advisingKeys.advisors });
       queryClient.invalidateQueries({
         queryKey: advisingKeys.students(
@@ -214,12 +247,35 @@ export function AdvisingWorkspace() {
       });
       toast.success(
         isArabic
-          ? `تم تعيين ${result.assignedCount} طالب`
-          : `${result.assignedCount} students assigned`,
+          ? `تم تعيين ${result.assignedCount} طالب للمرشد بنجاح`
+          : `${result.assignedCount} students assigned to advisor successfully`,
       );
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
+
+  const allModalStudents = useMemo(
+    () => students.data?.items ?? [],
+    [students.data?.items],
+  );
+
+  const modalFilteredStudents = useMemo(() => {
+    return allModalStudents.filter((student) => {
+      if (modalStudentLevelFilter !== "all") {
+        if (modalStudentLevelFilter === "unassigned") {
+          if (student.assignedAdvisorId) return false;
+        } else if (String(student.academicLevel) !== modalStudentLevelFilter) {
+          return false;
+        }
+      }
+      if (!modalStudentSearch.trim()) return true;
+      const q = modalStudentSearch.toLowerCase().trim();
+      return (
+        (student.name?.toLowerCase().includes(q) ?? false) ||
+        (student.studentCode?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [allModalStudents, modalStudentLevelFilter, modalStudentSearch]);
   const saveTerm = useMutation({
     mutationFn: ({
       semester,
@@ -486,26 +542,26 @@ export function AdvisingWorkspace() {
   return (
     <div className="space-y-4">
       {/* Top Academic Context & Action Bar */}
-      <div className="rounded-3xl border border-white/10 bg-card/85 p-4 shadow-sm backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Title & Quick Academic Context */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-5 w-5 text-sky-400" />
-                <h1 className="text-lg font-bold tracking-tight">
-                  {isArabic ? "الإرشاد والتسجيل الأكاديمي" : "Academic Advising"}
-                </h1>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isArabic
-                  ? "إدارة الخطط الدراسية، التوصيات الآلية، واعتماد تسجيل المقررات"
-                  : "Manage student advising cases, automated recommendations, and registrations"}
-              </p>
-            </div>
+      <div className="rounded-squircle border border-white/10 bg-card/85 p-4 shadow-sm backdrop-blur space-y-3">
+        {/* Title & Description */}
+        <div>
+          <div className="flex items-center gap-2">
+            <GraduationCap className="h-5 w-5 text-sky-400" />
+            <h1 className="text-lg font-bold tracking-tight">
+              {isArabic ? "الإرشاد والتسجيل الأكاديمي" : "Academic Advising"}
+            </h1>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isArabic
+              ? "إدارة الخطط الدراسية، التوصيات الآلية، واعتماد تسجيل المقررات"
+              : "Manage student advising cases, automated recommendations, and registrations"}
+          </p>
+        </div>
 
-            {/* Academic Period Quick Switcher Bar */}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-secondary/30 p-1.5">
+        {/* Row 2: Current Period in LEFT and 3 Action Buttons in RIGHT */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-0.5">
+          {/* Academic Period Quick Switcher Bar (LEFT) */}
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-secondary/30 p-1.5">
               <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-300">
                 <CalendarClock className="h-3.5 w-3.5" />
                 <span>{academicYear}</span>
@@ -631,19 +687,83 @@ export function AdvisingWorkspace() {
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Settings Trigger for Academic Period Management */}
-          {user?.role === "admin" && (
-            <Dialog
-              open={isPeriodSettingsOpen}
-              onOpenChange={setIsPeriodSettingsOpen}
+            {/* Header 3 Action Buttons: Toggle Full Canvas, Assign Advisor & Settings */}
+            <div className="flex items-center gap-2">
+            {/* Toggle Student Sidebar Button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsStudentSidebarOpen((prev) => !prev)}
+              className={cn(
+                "gap-2 rounded-squircle text-xs font-semibold transition-all cursor-pointer",
+                isStudentSidebarOpen
+                  ? "border-white/10 bg-secondary/20 hover:bg-secondary/40 text-muted-foreground hover:text-foreground"
+                  : "border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 shadow-sm"
+              )}
+              title={
+                isStudentSidebarOpen
+                  ? isArabic
+                    ? "إخفاء قائمة الطلاب لتوسيع لوحة التسجيل (شاشة كاملة)"
+                    : "Collapse student sidebar for full canvas"
+                  : isArabic
+                    ? "إظهار قائمة الطلاب"
+                    : "Show student list"
+              }
             >
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="gap-2 rounded-2xl border-white/10 bg-secondary/20 hover:bg-secondary/40 text-xs"
-                >
+              {isStudentSidebarOpen ? (
+                <>
+                  <PanelLeftClose className="h-4 w-4 rtl:rotate-180" />
+                  <span className="hidden sm:inline">
+                    {isArabic ? "لوحة كاملة" : "Full Canvas"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <PanelLeftOpen className="h-4 w-4 rtl:rotate-180" />
+                  <span>{isArabic ? "عرض الطلاب" : "Show Students"}</span>
+                  <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-200">
+                    {students.data?.items.length ?? 0}
+                  </span>
+                </>
+              )}
+            </Button>
+
+            {user?.role === "admin" && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (active) {
+                    setAssignTargetStudent(active);
+                    setSelectedStudentIds([active.id]);
+                  } else {
+                    setAssignTargetStudent(undefined);
+                    setSelectedStudentIds([]);
+                  }
+                  setIsAssignAdvisorModalOpen(true);
+                }}
+                className="gap-2 rounded-squircle border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                title={isArabic ? "تعيين المرشد الأكاديمي للطلاب" : "Assign Academic Advisor"}
+              >
+                <UserPlus className="h-4 w-4 text-sky-400" />
+                <span>
+                  {isArabic ? "تعيين المرشد الأكاديمي" : "Assign Academic Advisor"}
+                </span>
+              </Button>
+            )}
+
+            {/* Settings Trigger for Academic Period Management */}
+            {user?.role === "admin" && (
+              <Dialog
+                open={isPeriodSettingsOpen}
+                onOpenChange={setIsPeriodSettingsOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="gap-2 rounded-squircle border-white/10 bg-secondary/20 hover:bg-secondary/40 text-xs"
+                  >
                   <Settings2 className="h-4 w-4 text-sky-400" />
                   <span>
                     {isArabic
@@ -844,50 +964,33 @@ export function AdvisingWorkspace() {
               </DialogContent>
             </Dialog>
           )}
+          </div>
         </div>
       </div>
 
       {/* Main Workspace Layout */}
-      <div className="grid min-h-[76vh] gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
-        <aside className="flex flex-col rounded-3xl border border-white/10 bg-card/80 p-4">
-          {/* Sidebar Header with Student Count & Select All */}
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold">
-                {isArabic ? "دليل الطلاب" : "Students"}
-              </h2>
-              <p className="text-[11px] text-muted-foreground">
-                {students.data?.items.length ?? 0} {isArabic ? "طالب" : "students"}
-              </p>
+      <div
+        className={cn(
+          "grid min-h-[76vh] gap-4 transition-all duration-300",
+          isStudentSidebarOpen
+            ? "xl:grid-cols-[330px_minmax(0,1fr)]"
+            : "grid-cols-1",
+        )}
+      >
+        {isStudentSidebarOpen && (
+          <aside className="flex flex-col rounded-2xl border border-white/10 bg-card/80 p-4 transition-all">
+            {/* Sidebar Header with Student Count */}
+            <div className="mb-3 flex items-center justify-between border-b border-white/5 pb-3">
+              <div>
+                <h2 className="text-base font-bold">
+                  {isArabic ? "دليل الطلاب" : "Students"}
+                </h2>
+                <p className="text-[11px] text-muted-foreground">
+                  {students.data?.items.length ?? 0}{" "}
+                  {isArabic ? "طالب" : "students"}
+                </p>
+              </div>
             </div>
-            {user?.role === "admin" && (students.data?.items.length ?? 0) > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    selectedStudentIds.length ===
-                    (students.data?.items.length ?? 0)
-                  ) {
-                    setSelectedStudentIds([]);
-                  } else {
-                    setSelectedStudentIds(
-                      students.data?.items.map((s) => s.id) ?? [],
-                    );
-                  }
-                }}
-                className="text-xs text-sky-400 hover:text-sky-300 font-medium"
-              >
-                {selectedStudentIds.length ===
-                (students.data?.items.length ?? 0)
-                  ? isArabic
-                    ? "إلغاء التحديد"
-                    : "Deselect all"
-                  : isArabic
-                    ? "تحديد الكل"
-                    : "Select all"}
-              </button>
-            ) : null}
-          </div>
 
           {/* Search Box */}
           <div className="relative mb-2.5">
@@ -957,57 +1060,6 @@ export function AdvisingWorkspace() {
             />
           </div>
 
-          {/* Dynamic Bulk Advisor Assignment Bar */}
-          {user?.role === "admin" && selectedStudentIds.length > 0 ? (
-            <div className="mb-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 shadow-md animate-in fade-in slide-in-from-top-2">
-              <div className="mb-2 flex items-center justify-between text-xs font-bold text-sky-300">
-                <span className="flex items-center gap-1.5">
-                  <Users className="h-4 w-4" />
-                  {isArabic
-                    ? `تم اختيار ${selectedStudentIds.length} طالب`
-                    : `${selectedStudentIds.length} selected`}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedStudentIds([])}
-                  className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                >
-                  {isArabic ? "إلغاء" : "Clear"}
-                </button>
-              </div>
-              <CustomDropdown
-                ariaLabel={isArabic ? "اختيار المرشد" : "Select advisor"}
-                value={selectedAdvisorId}
-                onValueChange={setSelectedAdvisorId}
-                className="mb-2 h-8 text-xs"
-                options={(advisors.data ?? []).map((advisor) => ({
-                  value: advisor._id,
-                  label: `${advisor.name} (${advisor.assignedStudentCount})`,
-                }))}
-                placeholder={isArabic ? "اختر المرشد" : "Select advisor"}
-              />
-              <Button
-                size="sm"
-                className="w-full h-8 text-xs font-medium"
-                disabled={
-                  assignStudents.isPending ||
-                  !selectedAdvisorId ||
-                  selectedStudentIds.length === 0
-                }
-                onClick={() => assignStudents.mutate()}
-              >
-                {assignStudents.isPending ? (
-                  <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <UserPlus className="me-2 h-3.5 w-3.5" />
-                )}
-                {isArabic
-                  ? `تعيين للمرشد (${selectedStudentIds.length})`
-                  : `Assign selected (${selectedStudentIds.length})`}
-              </Button>
-            </div>
-          ) : null}
-
           {/* Student Cards List */}
           <div className="custom-scroll flex-1 max-h-[calc(100vh-270px)] space-y-2 overflow-auto pe-1">
           {students.isLoading ? (
@@ -1031,7 +1083,7 @@ export function AdvisingWorkspace() {
                 )}
               >
                 <div className="flex justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div
                       role="img"
                       aria-label={student.name}
@@ -1040,33 +1092,15 @@ export function AdvisingWorkspace() {
                           ? { backgroundImage: `url(${student.avatarUrl})` }
                           : undefined
                       }
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500/15 bg-cover bg-center text-xs font-bold text-sky-200"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-sky-500/15 bg-cover bg-center text-xs font-bold text-sky-200"
                     >
                       {!student.avatarUrl
                         ? student.name.trim().charAt(0)
                         : null}
                     </div>
-                    {user?.role === "admin" ? (
-                      <input
-                        type="checkbox"
-                        aria-label={
-                          isArabic
-                            ? `اختيار ${student.name}`
-                            : `Select ${student.name}`
-                        }
-                        checked={selectedStudentIds.includes(student.id)}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={(event) =>
-                          setSelectedStudentIds((current) =>
-                            event.target.checked
-                              ? [...current, student.id]
-                              : current.filter((id) => id !== student.id),
-                          )
-                        }
-                        className="h-4 w-4 accent-sky-500"
-                      />
-                    ) : null}
-                    <strong className="text-sm">{student.name}</strong>
+                    <strong className="text-sm truncate">
+                      <bdi>{student.name}</bdi>
+                    </strong>
                   </div>
                   <span className="font-mono text-xs text-sky-300">
                     {student.gpa.toFixed(2)}
@@ -1098,14 +1132,36 @@ export function AdvisingWorkspace() {
           )}
         </div>
       </aside>
+    )}
       <main className="min-w-0 space-y-4">
         {!active ? (
-          <Empty
-            text={isArabic ? "لا يوجد طلاب مطابقون" : "No matching students"}
-          />
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-card/60 p-12 text-center">
+            {!isStudentSidebarOpen && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsStudentSidebarOpen(true)}
+                className="mb-4 gap-2 rounded-squircle border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 cursor-pointer"
+              >
+                <PanelLeftOpen className="h-4 w-4 rtl:rotate-180" />
+                <span>
+                  {isArabic
+                    ? "عرض قائمة الطلاب لاختيار طالب"
+                    : "Open student list to select a student"}
+                </span>
+              </Button>
+            )}
+            <Empty
+              text={
+                isArabic
+                  ? "اختر طالباً من القائمة لفتح لوحة الإرشاد والتسجيل"
+                  : "Select a student to open the advising and registration canvas"
+              }
+            />
+          </div>
         ) : (
           <>
-            <header className="sticky top-2 z-20 rounded-3xl border border-white/10 bg-card/95 p-4 backdrop-blur">
+            <header className="sticky top-2 z-20 rounded-2xl border border-white/10 bg-card/95 p-4 backdrop-blur">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
@@ -1373,6 +1429,446 @@ export function AdvisingWorkspace() {
         )}
       </main>
     </div>
+
+    {/* Assign Advisor Modal Dialog - Wide 2-Column UX with Student & Advisor Selectors */}
+    {user?.role === "admin" && (
+      <Dialog
+        open={isAssignAdvisorModalOpen}
+        onOpenChange={(open) => {
+          setIsAssignAdvisorModalOpen(open);
+          if (!open) {
+            setAssignTargetStudent(undefined);
+            setAdvisorSearchTerm("");
+            setModalStudentSearch("");
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl bg-card/95 border border-white/15 backdrop-blur-2xl shadow-2xl"
+          dir={isArabic ? "rtl" : "ltr"}
+        >
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-secondary/20 p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-sky-500/30 bg-gradient-to-br from-teal-500/20 to-sky-500/20 text-sky-400 shadow-sm">
+                <UserPlus className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-foreground">
+                  {isArabic ? "تعيين المرشد الأكاديمي" : "Assign Academic Advisor"}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  {isArabic
+                    ? "حدد الطلاب المطلوب إسنادهم ثم اختر المرشد الأكاديمي المناسب"
+                    : "Select target students and choose the academic advisor to assign them to"}
+                </DialogDescription>
+              </div>
+            </div>
+
+            {/* Target Period Context Badge */}
+            <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-background/50 px-3 py-1.5 text-xs font-semibold text-sky-300">
+              <CalendarClock className="h-3.5 w-3.5" />
+              <span>{academicYear}</span>
+              <span>·</span>
+              <span>{semesterLabel(advisingSemester, locale)}</span>
+            </div>
+          </div>
+
+          {/* Body: Split View 2 Columns */}
+          <div className="grid flex-1 grid-cols-1 md:grid-cols-12 overflow-hidden min-h-0">
+            {/* Column 1: Target Students (col-span-12 md:col-span-6 lg:col-span-5) */}
+            <div className="col-span-12 md:col-span-6 lg:col-span-5 border-b md:border-b-0 md:border-e border-white/10 p-5 flex flex-col bg-secondary/5 min-h-[340px] md:min-h-0 overflow-hidden">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    {isArabic ? "الطلاب المطلوب إسنادهم" : "Target Students"}
+                  </h3>
+                  <span className="rounded-full bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-sky-300">
+                    {selectedStudentIds.length} / {modalFilteredStudents.length}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const filteredIds = modalFilteredStudents.map((s) => s.id);
+                    const allSelected =
+                      filteredIds.length > 0 &&
+                      filteredIds.every((id) => selectedStudentIds.includes(id));
+                    if (allSelected) {
+                      setSelectedStudentIds((prev) =>
+                        prev.filter((id) => !filteredIds.includes(id)),
+                      );
+                    } else {
+                      setSelectedStudentIds((prev) => [
+                        ...new Set([...prev, ...filteredIds]),
+                      ]);
+                    }
+                  }}
+                  className="text-[11px] text-sky-400 hover:text-sky-300 font-medium cursor-pointer"
+                >
+                  {modalFilteredStudents.length > 0 &&
+                  modalFilteredStudents.every((s) =>
+                    selectedStudentIds.includes(s.id),
+                  )
+                    ? isArabic
+                      ? "إلغاء تحديد المعروض"
+                      : "Deselect visible"
+                    : isArabic
+                      ? "تحديد كل المعروض"
+                      : "Select visible"}
+                </button>
+              </div>
+
+              {/* Student Search & Filters within modal */}
+              <div className="space-y-2 mb-3">
+                <div className="relative">
+                  <Search className="absolute inset-s-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    value={modalStudentSearch}
+                    onChange={(e) => setModalStudentSearch(e.target.value)}
+                    className="ps-8 h-8 text-xs rounded-squircle bg-background/50 border-white/10"
+                    placeholder={
+                      isArabic ? "بحث بالاسم أو الكود..." : "Search student..."
+                    }
+                  />
+                  {modalStudentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setModalStudentSearch("")}
+                      className="absolute inset-e-2 top-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Level / Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { id: "all", label: isArabic ? "الكل" : "All" },
+                    { id: "unassigned", label: isArabic ? "بدون مرشد" : "No Advisor" },
+                    { id: "1", label: isArabic ? "م 1" : "L1" },
+                    { id: "2", label: isArabic ? "م 2" : "L2" },
+                    { id: "3", label: isArabic ? "م 3" : "L3" },
+                    { id: "4", label: isArabic ? "م 4" : "L4" },
+                  ].map((filter) => {
+                    const active = modalStudentLevelFilter === filter.id;
+                    return (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        onClick={() => setModalStudentLevelFilter(filter.id)}
+                        className={cn(
+                          "rounded-squircle px-2 py-0.5 text-[10px] font-medium border transition cursor-pointer",
+                          active
+                            ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                            : "border-white/10 bg-secondary/20 text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {filter.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Students Scrollable List */}
+              <div className="custom-scroll flex-1 overflow-y-auto space-y-1.5 pe-1 max-h-[300px] md:max-h-[360px]">
+                {modalFilteredStudents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-44 text-center p-4 rounded-xl border border-dashed border-white/10 bg-secondary/10">
+                    <Users className="h-7 w-7 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {isArabic ? "لا يوجد طلاب مطابقون" : "No matching students"}
+                    </p>
+                  </div>
+                ) : (
+                  modalFilteredStudents.map((s) => {
+                    const isSelected = selectedStudentIds.includes(s.id);
+                    const currentAdvisor = advisors.data?.find(
+                      (a) => a._id === String(s.assignedAdvisorId),
+                    );
+
+                    return (
+                      <div
+                        key={s.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setSelectedStudentIds((prev) =>
+                            isSelected
+                              ? prev.filter((id) => id !== s.id)
+                              : [...prev, s.id],
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            setSelectedStudentIds((prev) =>
+                              isSelected
+                                ? prev.filter((id) => id !== s.id)
+                                : [...prev, s.id],
+                            );
+                          }
+                        }}
+                        className={cn(
+                          "group flex items-center justify-between rounded-xl border p-2 transition cursor-pointer text-start",
+                          isSelected
+                            ? "border-sky-400/80 bg-sky-500/15 shadow-sm ring-1 ring-sky-400/30"
+                            : "border-white/5 bg-card/60 hover:border-white/15 hover:bg-card/80",
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {/* Checkbox */}
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                              isSelected
+                                ? "border-sky-400 bg-sky-500 text-white"
+                                : "border-white/20 bg-background/50",
+                            )}
+                          >
+                            {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-500/20 bg-sky-500/10 text-xs font-bold text-sky-300">
+                            {s.name.trim().charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold text-foreground">
+                              <bdi>{s.name}</bdi>
+                            </p>
+                            <p className="text-[10px] text-muted-foreground font-mono">
+                              {s.studentCode} · {isArabic ? "م" : "L"}{s.academicLevel} · GPA {s.gpa.toFixed(2)}
+                            </p>
+                            {currentAdvisor ? (
+                              <p className="text-[10px] text-sky-300/80 truncate mt-0.5">
+                                {isArabic ? "المرشد: " : "Advisor: "}
+                                {currentAdvisor.name}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-amber-400/80 truncate mt-0.5">
+                                {isArabic ? "بدون مرشد" : "No advisor"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Column 2: Choose Advisor (col-span-12 md:col-span-6 lg:col-span-7) */}
+            <div className="col-span-12 md:col-span-6 lg:col-span-7 p-5 flex flex-col min-h-[350px] md:min-h-0 overflow-hidden">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    {isArabic ? "اختيار المرشد الأكاديمي" : "Select Academic Advisor"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isArabic
+                      ? "اختر المرشد لمتابعة الخطة الأكاديمية"
+                      : "Choose the advisor according to capacity & workload"}
+                  </p>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground">
+                  {advisors.data?.length ?? 0} {isArabic ? "مرشد متاح" : "advisors"}
+                </span>
+              </div>
+
+              {/* Advisor Search Box */}
+              <div className="relative mb-3">
+                <Search className="absolute inset-s-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={advisorSearchTerm}
+                  onChange={(e) => setAdvisorSearchTerm(e.target.value)}
+                  className="ps-9 h-9 text-xs rounded-squircle"
+                  placeholder={
+                    isArabic
+                      ? "بحث عن مرشد بالاسم أو البريد..."
+                      : "Search advisor by name or email..."
+                  }
+                />
+                {advisorSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvisorSearchTerm("")}
+                    className="absolute inset-e-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Advisors List */}
+              <div className="custom-scroll flex-1 overflow-y-auto space-y-2 pe-1 max-h-[300px] md:max-h-[360px]">
+                {(advisors.data ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-center p-4">
+                    <UserPlus className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {isArabic ? "لا يوجد مرشدون مسجلون" : "No advisors found"}
+                    </p>
+                  </div>
+                ) : (
+                  (advisors.data ?? [])
+                    .filter((advisor) => {
+                      if (!advisorSearchTerm.trim()) return true;
+                      const q = advisorSearchTerm.toLowerCase();
+                      return (
+                        advisor.name.toLowerCase().includes(q) ||
+                        (advisor.email && advisor.email.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((advisor) => {
+                      const isSelected = selectedAdvisorId === advisor._id;
+                      const count = advisor.assignedStudentCount ?? 0;
+                      const loadLevel =
+                        count < 20 ? "low" : count < 35 ? "medium" : "high";
+
+                      return (
+                        <div
+                          key={advisor._id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedAdvisorId(advisor._id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ")
+                              setSelectedAdvisorId(advisor._id);
+                          }}
+                          className={cn(
+                            "flex items-center justify-between rounded-xl border p-3 text-start transition-all cursor-pointer",
+                            isSelected
+                              ? "border-sky-400 bg-sky-500/15 shadow-md ring-2 ring-sky-400/40"
+                              : "border-white/10 bg-secondary/20 hover:bg-secondary/40 hover:border-white/20",
+                          )}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={cn(
+                                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold",
+                                isSelected
+                                  ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                                  : "border-white/10 bg-secondary/30 text-muted-foreground",
+                              )}
+                            >
+                              {advisor.name.trim().charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-foreground truncate">
+                                {advisor.name}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground truncate font-mono">
+                                {advisor.email || "—"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            {/* Workload Indicator Pill */}
+                            <span
+                              className={cn(
+                                "rounded-squircle px-2.5 py-0.5 text-[10px] font-semibold font-mono border",
+                                loadLevel === "low"
+                                  ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                                  : loadLevel === "medium"
+                                    ? "border-sky-500/30 bg-sky-500/15 text-sky-300"
+                                    : "border-amber-500/30 bg-amber-500/15 text-amber-300",
+                              )}
+                            >
+                              {count} {isArabic ? "طالب" : "students"}
+                            </span>
+
+                            {/* Radio Checkmark */}
+                            <div
+                              className={cn(
+                                "flex h-5 w-5 items-center justify-center rounded-full border transition-all",
+                                isSelected
+                                  ? "border-sky-400 bg-sky-500 text-white"
+                                  : "border-white/20 bg-background/50",
+                              )}
+                            >
+                              {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-white/10 bg-secondary/20 p-4 px-6">
+            <div className="text-xs text-muted-foreground">
+              {selectedAdvisorId && selectedStudentIds.length > 0 ? (
+                <span>
+                  {isArabic ? "المرشد المختار: " : "Selected Advisor: "}
+                  <strong className="text-sky-300">
+                    {
+                      advisors.data?.find((a) => a._id === selectedAdvisorId)
+                        ?.name
+                    }
+                  </strong>
+                  {" · "}
+                  <span>
+                    {isArabic
+                      ? `سيتم إسناد ${selectedStudentIds.length} طالب`
+                      : `Will assign ${selectedStudentIds.length} student(s)`}
+                  </span>
+                </span>
+              ) : selectedStudentIds.length === 0 ? (
+                <span className="text-amber-300/80">
+                  {isArabic
+                    ? "يرجى تحديد طالب واحد على الأقل من القائمة"
+                    : "Please select at least one student"}
+                </span>
+              ) : (
+                <span className="text-amber-300/80">
+                  {isArabic
+                    ? "اختر مرشداً أكاديمياً لتأكيد الإسناد"
+                    : "Please select an academic advisor to continue"}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsAssignAdvisorModalOpen(false)}
+                className="h-9 text-xs rounded-squircle"
+              >
+                {isArabic ? "إلغاء" : "Cancel"}
+              </Button>
+              <Button
+                type="button"
+                disabled={
+                  assignStudents.isPending ||
+                  !selectedAdvisorId ||
+                  selectedStudentIds.length === 0
+                }
+                onClick={() => assignStudents.mutate()}
+                className="h-9 gap-1.5 bg-gradient-to-r from-teal-500 to-sky-500 text-white hover:from-teal-400 hover:to-sky-400 text-xs font-semibold shadow-md rounded-squircle cursor-pointer"
+              >
+                {assignStudents.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UserPlus className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {isArabic
+                    ? `تأكيد التعيين (${selectedStudentIds.length})`
+                    : `Confirm Assignment (${selectedStudentIds.length})`}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
   </div>
 );
 }

@@ -25,7 +25,7 @@ export function PageTitleBanner({
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-xl border border-border/70 bg-card/90 p-5 shadow-[var(--shadow-glow)] backdrop-blur md:p-6',
+        'overflow-hidden rounded-2xl border border-border/70 bg-card/90 p-5 shadow-[var(--shadow-glow)] backdrop-blur md:p-6',
         className,
       )}
     >

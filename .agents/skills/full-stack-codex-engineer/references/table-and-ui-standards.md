@@ -59,3 +59,33 @@ Every data-driven view must implement all five fundamental UI states:
 3. **No Results State:** Distinct state when active search/filters yield zero matches, with a "مسح عوامل التصفية" (Clear Filters) button.
 4. **Error State:** Clear error alert with a retry button (`refetch`) and user-friendly error description.
 5. **Success / Mutating State:** Inline spinners or disabled states on buttons during mutations, accompanied by Sonner toasts.
+
+---
+
+## 4. Design System Curvature (`rounded-squircle`) Standards
+
+The Student Portal design system enforces an Apple/iOS-inspired organic squircle curvature token (`rounded-squircle`, mapped via `--radius-squircle: var(--sq-radius)` where `--sq-radius: 12px;` in CSS). Consistent application of this class creates a unified, modern, and tactile look across all interfaces.
+
+### A. Mandatory `rounded-squircle` Element Placements
+Strictly reserve `rounded-squircle` for small-to-medium interactive components and micro-elements:
+1. **Buttons & Triggers:**
+   - Primary, secondary, outline, ghost, and destructive buttons (`<Button>`).
+   - Icon buttons (`h-9 w-9`, `h-10 w-10`, theme toggle, language switch, notification trigger).
+   - Modal action triggers, tab triggers, and dropdown triggers (`<TableActionButton>`).
+2. **Badges, Chips & Tags:**
+   - System status badges (`<StatusBadge>`, `<Badge>`).
+   - Meta chips (e.g., student level tag, course code pill, GPA indicator, carried courses chip).
+   - Filter count badges and search pill filters.
+3. **Form Controls & Dropdown Selects:**
+   - Text inputs, search bars, and password fields (`<Input>`, `<PasswordInput>`).
+   - Text areas (`<Textarea>`).
+   - Select dropdown triggers (`<SelectTrigger>`), custom dropdowns (`<CustomDropdown>`), date pickers (`<DatePicker>`, `<DateTimePicker>`).
+
+### B. Usage Rules & Anti-Patterns
+- **STRICT PROHIBITION ON PARENT DIVS & MODALS:** **Never** use `rounded-squircle` on parent divs, modal dialog containers (`<DialogContent>`), drawer sheets, page header banners (`<PageTitleBanner>`), or large outer card wrappers. Applying squircle curvature formulas to large rectangular boxes with wide aspect ratios causes severe visual distortion (egg/oval warping, clipped corners, and distorted borders).
+- **Large Container Standards:**
+  - For modals, dialogs, drawers, and large outer hero sections/banners: Use standard geometric curvature `rounded-2xl`.
+  - For cards, table containers, and intermediate content blocks: Use `rounded-xl`.
+- **When to use `rounded-full`:** Strictly reserve `rounded-full` for circular user avatars (`<Avatar>`), circular icon indicators, or small circular status dots. Do not use `rounded-full` for text pills or buttons where `rounded-squircle` provides superior typographic rhythm and proportions.
+
+

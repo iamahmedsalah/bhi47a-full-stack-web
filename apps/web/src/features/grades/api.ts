@@ -55,7 +55,43 @@ export async function publishGradesBulk(dto: Record<string, unknown>): Promise<{
   return response.data;
 }
 
-export async function recalculateAcademicProgress(studentCode?: string): Promise<{ message: string }> {
-  const response = await api.post<{ message: string }>('/admin/grades/recalculate-progress', { studentCode });
+export interface StudentPromotionEvaluation {
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  currentLevel: string;
+  targetLevel: string;
+  promoted: boolean;
+  willPromote: boolean;
+  gpa: number;
+  completedCredits: number;
+  totalFailedCount: number;
+  carriedFailedCourseCodes: string[];
+  carriedFailedCourses: string[];
+  missingCourseCodes: string[];
+  missingMandatoryCourses: string[];
+  reasonCode: string;
+  reasonAr: string;
+  reasonEn: string;
+}
+
+export interface AcademicProgressRecalculateResult {
+  dryRun: boolean;
+  maxAllowedCarriedCourses: number;
+  processed: number;
+  promotedCount: number;
+  retainedCount: number;
+  students: StudentPromotionEvaluation[];
+}
+
+export async function recalculateAcademicProgress(options?: {
+  studentCode?: string;
+  dryRun?: boolean;
+  maxAllowedCarriedCourses?: number;
+}): Promise<AcademicProgressRecalculateResult> {
+  const response = await api.post<AcademicProgressRecalculateResult>(
+    '/admin/grades/recalculate-progress',
+    options ?? {},
+  );
   return response.data;
 }

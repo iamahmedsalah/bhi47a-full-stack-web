@@ -145,6 +145,22 @@ export class RecalculateAcademicProgressDto {
   @IsString()
   @IsNotEmpty()
   studentCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'When true, returns the progression simulation preview without updating records',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Maximum allowed carried failed courses to advance to next level (default: 2)',
+    default: 2,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxAllowedCarriedCourses?: number;
 }
 
 export class UpdateGradeDto {
