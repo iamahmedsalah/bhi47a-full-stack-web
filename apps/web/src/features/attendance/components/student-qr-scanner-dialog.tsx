@@ -20,7 +20,6 @@ import {
   Clock,
   RefreshCw,
   Copy,
-  Sparkles,
   SwitchCamera,
   XCircle,
   Lightbulb,
@@ -155,6 +154,11 @@ export function StudentQrScannerDialog({
         decodeQr = (await import("jsqr")).default;
       } catch (error) {
         console.warn("Could not load the QR scanner fallback", error);
+        setCameraError(
+          isAr
+            ? "تعذر تحميل قارئ QR في المتصفح. يرجى إدخال الرمز يدوياً."
+            : "Could not load the QR scanner. Please enter the code manually.",
+        );
         return;
       }
 
@@ -186,7 +190,9 @@ export function StudentQrScannerDialog({
           canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
           context.drawImage(video, 0, 0, canvas.width, canvas.height);
           const frame = context.getImageData(0, 0, canvas.width, canvas.height);
-          const result = decodeQr(frame.data, frame.width, frame.height);
+          const result = decodeQr(frame.data, frame.width, frame.height, {
+            inversionAttempts: "attemptBoth",
+          });
 
           if (result?.data && cameraRun === cameraRunRef.current) {
             stopCamera();
@@ -197,16 +203,15 @@ export function StudentQrScannerDialog({
         } finally {
           scanInFlight = false;
         }
-      }, 300);
+      }, 250);
     },
-    [executeCheckIn, stopCamera],
+    [executeCheckIn, isAr, stopCamera],
   );
 
   // Start camera stream
   const startCamera = useCallback(async () => {
     stopCamera();
     const cameraRun = cameraRunRef.current;
-    setCameraError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraError(
@@ -239,7 +244,7 @@ export function StudentQrScannerDialog({
         videoRef.current.play().catch(() => {});
       }
 
-      // BarcodeDetector API for instant camera scanning
+      // BarcodeDetector API for instant camera scanning if supported
       if (typeof window !== "undefined" && "BarcodeDetector" in window) {
         try {
           const BarcodeDetector = (window as WindowWithBarcodeDetector)
@@ -254,30 +259,21 @@ export function StudentQrScannerDialog({
               const barcodes = await barcodeDetector.detect(videoRef.current);
               if (barcodes && barcodes.length > 0) {
                 const rawValue = barcodes[0].rawValue;
-                if (rawValue) {
+                if (rawValue && cameraRun === cameraRunRef.current) {
                   stopCamera();
-                  executeCheckIn(rawValue);
+                  void executeCheckIn(rawValue);
                 }
               }
             } catch {
               void startCanvasScanner(cameraRun);
             }
-          }, 300);
+          }, 250);
         } catch {
           void startCanvasScanner(cameraRun);
-          setCameraError(
-            isAr
-              ? "تعذر تشغيل قارئ QR في هذا المتصفح. استخدم رمز الحضور القصير المعروض أسفل رمز QR."
-              : "The QR reader could not start in this browser. Use the short attendance code shown below the QR.",
-          );
         }
       } else {
+        // Universal fallback to jsQR canvas scanner (works everywhere including iOS Safari)
         void startCanvasScanner(cameraRun);
-        setCameraError(
-          isAr
-            ? "هذا المتصفح لا يدعم مسح QR مباشرة. استخدم رمز الحضور القصير المعروض أسفل رمز QR."
-            : "This browser does not support direct QR scanning. Use the short attendance code shown below the QR.",
-        );
       }
     } catch (err: unknown) {
       console.warn("Camera access denied or unavailable", err);
@@ -289,23 +285,38 @@ export function StudentQrScannerDialog({
     }
   }, [cameraFacing, executeCheckIn, isAr, startCanvasScanner, stopCamera]);
 
-  // Lifecycle when dialog opens/closes
-  useEffect(() => {
-    if (open) {
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen) {
       setCheckInResult(null);
       setValidationError(null);
       if (initialToken) {
         setManualInput(initialToken);
         setActiveTab("manual");
-      } else if (activeTab === "camera") {
-        startCamera();
       }
     } else {
       stopCamera();
     }
+    onOpenChange(isOpen);
+  };
 
-    return () => stopCamera();
-  }, [open, activeTab, initialToken, startCamera, stopCamera]);
+  // Camera stream lifecycle
+  useEffect(() => {
+    let active = true;
+    if (open && activeTab === "camera") {
+      void Promise.resolve().then(() => {
+        if (active) {
+          void startCamera();
+        }
+      });
+    } else {
+      stopCamera();
+    }
+
+    return () => {
+      active = false;
+      stopCamera();
+    };
+  }, [open, activeTab, startCamera, stopCamera]);
 
   // Handle manual submit
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -332,7 +343,7 @@ export function StudentQrScannerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="w-[95vw] max-w-md border-border bg-card text-card-foreground p-5 sm:p-6 rounded-2xl"
         dir={isAr ? "rtl" : "ltr"}

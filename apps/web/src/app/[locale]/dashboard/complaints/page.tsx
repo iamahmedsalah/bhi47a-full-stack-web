@@ -272,17 +272,16 @@ export default function StudentComplaintsPage() {
 
                 <div className="flex flex-wrap items-center justify-between md:justify-end gap-3.5 pt-3 md:pt-0 border-t border-border/60 md:border-none">
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border capitalize ${
-                      tkt.status === 'open'
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border capitalize ${tkt.status === 'open'
                         ? 'bg-red-500/10 text-red-500 border-red-500/20'
                         : tkt.status === 'in_review'
-                        ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                        : tkt.status === 'in_progress'
-                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                        : tkt.status === 'resolved'
-                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                        : 'bg-secondary text-muted-foreground border-border/80'
-                    }`}
+                          ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                          : tkt.status === 'in_progress'
+                            ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                            : tkt.status === 'resolved'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                              : 'bg-secondary text-muted-foreground border-border/80'
+                      }`}
                   >
                     {t(`status_${tkt.status}`)}
                   </span>
@@ -548,16 +547,14 @@ export default function StudentComplaintsPage() {
                       return (
                         <div
                           key={idx}
-                          className={`flex flex-col max-w-[85%] space-y-1 ${
-                            isMyReply ? 'ms-auto items-end' : 'me-auto items-start'
-                          }`}
+                          className={`flex flex-col max-w-[85%] space-y-1 ${isMyReply ? 'ms-auto items-end' : 'me-auto items-start'
+                            }`}
                         >
                           <div
-                            className={`p-3.5 rounded-squircle text-sm leading-relaxed ${
-                              isMyReply
+                            className={`p-3.5 rounded-squircle text-sm leading-relaxed ${isMyReply
                                 ? 'bg-primary text-primary-foreground rounded-te-none'
                                 : 'bg-card border border-border text-foreground rounded-ts-none shadow-sm'
-                            }`}
+                              }`}
                           >
                             <p className="whitespace-pre-wrap">{reply.message}</p>
                           </div>

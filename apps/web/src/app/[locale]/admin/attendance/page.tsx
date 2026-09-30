@@ -69,7 +69,7 @@ export default function StaffAttendancePage() {
   const [section, setSection] = useState("1");
   const [durationMinutes, setDurationMinutes] = useState(15);
   const [lateThresholdMinutes, setLateThresholdMinutes] = useState(10);
-  const [qrRotationSeconds, setQrRotationSeconds] = useState(25);
+  const [qrRotationSeconds, setQrRotationSeconds] = useState(60);
   const [isStarting, setIsStarting] = useState(false);
 
   // Fetch staff assigned courses
@@ -186,7 +186,7 @@ export default function StaffAttendancePage() {
         }
         subtitle={
           isArabic
-            ? "اختر المقرر والقاعة، وابدأ جلسة الحضور لعرض رمز الاستجابة السريعة (QR) المتجدد تلقائيًا كل 25 ثانية على شاشة العرض. يتم التحقق من قيد الطالب وحساب الحضور والغياب والتأخير فورياً."
+            ? "اختر المقرر والقاعة، وابدأ جلسة الحضور لعرض رمز الاستجابة السريعة (QR) المتجدد تلقائيًا كل دقيقة (60 ثانية) على شاشة العرض. يتم التحقق من قيد الطالب وحساب الحضور والغياب والتأخير فورياً."
             : "Launch real-time attendance sessions with rotating anti-screenshot QR codes. Student enrollment and server timestamps are verified instantly."
         }
         icon={<QrCode className="h-5 w-5" />}
@@ -618,7 +618,7 @@ export default function StaffAttendancePage() {
                 <Input
                   type="number"
                   min={15}
-                  max={60}
+                  max={120}
                   value={qrRotationSeconds}
                   onChange={(e) => setQrRotationSeconds(Number(e.target.value))}
                   required

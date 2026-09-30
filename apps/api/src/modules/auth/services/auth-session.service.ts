@@ -13,11 +13,7 @@ export class AuthSessionService {
     private readonly configService: ConfigService,
   ) {}
 
-  generateToken(
-    userId: string,
-    role: string,
-    tokenVersion: number,
-  ): string {
+  generateToken(userId: string, role: string, tokenVersion: number): string {
     return this.jwtService.sign({
       sub: userId,
       role,

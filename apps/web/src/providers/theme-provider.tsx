@@ -68,7 +68,7 @@ function getSystemTheme(): ResolvedTheme {
 }
 
 function subscribeTheme(callback: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
+  if (typeof window === 'undefined') return () => { };
 
   window.addEventListener('storage', callback);
   window.addEventListener('theme-change', callback);
@@ -80,7 +80,7 @@ function subscribeTheme(callback: () => void): () => void {
 }
 
 function subscribeSystemTheme(callback: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
+  if (typeof window === 'undefined') return () => { };
 
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -119,7 +119,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   );
 
   const mounted = useSyncExternalStore<boolean>(
-    () => () => {},
+    () => () => { },
     getMountedSnapshot,
     getServerMountedSnapshot
   );
@@ -140,9 +140,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     // Try to update theme preference on server DB in the background
     import('@/lib/api')
       .then(({ default: api }) => {
-        api.patch('/auth/theme', { theme: nextTheme }).catch(() => {});
+        api.patch('/auth/theme', { theme: nextTheme }).catch(() => { });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const value = useMemo<ThemeContextValue>(

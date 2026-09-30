@@ -37,12 +37,17 @@ export function calculatePromotedAcademicLevel(input: {
         (course.semester === 'first' || course.semester === 'second') &&
         course.type !== 'elective',
     );
-    const firstCourses = mandatory.filter((course) => course.semester === 'first');
-    const secondCourses = mandatory.filter((course) => course.semester === 'second');
+    const firstCourses = mandatory.filter(
+      (course) => course.semester === 'first',
+    );
+    const secondCourses = mandatory.filter(
+      (course) => course.semester === 'second',
+    );
 
     // Missing curriculum data must never promote a student accidentally.
     if (firstCourses.length === 0 || secondCourses.length === 0) break;
-    if (!mandatory.every((course) => finalized.has(course.code.toUpperCase()))) break;
+    if (!mandatory.every((course) => finalized.has(course.code.toUpperCase())))
+      break;
     levelIndex += 1;
   }
 

@@ -52,18 +52,26 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Lint workspace
         run: pnpm run lint
-        continue-on-error: true
+
+      - name: Typecheck workspace
+        run: pnpm run typecheck
 
       - name: Test API
-        run: pnpm --filter @student-portal/api run test --runInBand
-        continue-on-error: true
+        run: pnpm run test -- --runInBand
         env:
-          NODE_OPTIONS: --experimental-vm-modules
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/student-portal-test
           REDIS_URL: redis://localhost:6379
@@ -71,23 +79,8 @@ jobs:
           QUEUE_WORKERS_ENABLED: "false"
           RUN_STARTUP_TASKS: "false"
 
-      - name: Test API end to end
-        run: pnpm --filter @student-portal/api run test:e2e --runInBand
-        continue-on-error: true
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
-          NODE_ENV: test
-          MONGODB_URI: mongodb://localhost:27017/student-portal-e2e
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: testing-secret-must-be-rotated-32-chars
-          QUEUE_WORKERS_ENABLED: "false"
-          RUN_STARTUP_TASKS: "false"
-
-      - name: Build shared package
-        run: pnpm --filter @student-portal/shared run build
-
-      - name: Build API
-        run: pnpm --filter @student-portal/api run build
+      - name: Build workspace
+        run: pnpm run build
 
       - name: Validate API Vercel runtime compatibility
         shell: bash
@@ -96,15 +89,22 @@ jobs:
           test "$configured_node_options" = "--experimental-require-module"
           NODE_OPTIONS="$configured_node_options" node -e "require('@nestjs/core')"
 
-      - name: Build web
-        run: pnpm --filter @student-portal/web run build
-
       - name: Validate web route manifest
         run: >-
           node -e "const routes=require('./apps/web/.next/routes-manifest.json');
           const appRoutes=require('./apps/web/.next/app-path-routes-manifest.json');
           if (!routes.staticRoutes.some(({page}) => page === '/') || appRoutes['/page'] !== '/')
           throw new Error('The web build does not contain the root route');"
+
+      - name: Test API end to end
+        run: pnpm run test:e2e -- --runInBand
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/student-portal-e2e
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: testing-secret-must-be-rotated-32-chars
+          QUEUE_WORKERS_ENABLED: "false"
+          RUN_STARTUP_TASKS: "false"
 
   deploy-api:
     name: Deploy API to Vercel

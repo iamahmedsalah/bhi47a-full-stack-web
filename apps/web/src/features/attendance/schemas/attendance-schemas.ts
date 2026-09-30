@@ -28,7 +28,7 @@ export const createQrTokenSchema = (locale: string = "ar") => {
     })
     .refine(
       (val) => {
-        // Accepts raw rotating token format OR URL containing ?t=<token>
+        // Accepts raw rotating token format OR manual code format OR URL containing ?t=<token> / ?token=<token>
         if (
           QR_TOKEN_REGEX.test(val) ||
           MANUAL_ATTENDANCE_CODE_REGEX.test(val)
@@ -36,9 +36,9 @@ export const createQrTokenSchema = (locale: string = "ar") => {
           return true;
         }
         try {
-          const url = new URL(val);
-          const t = url.searchParams.get("t");
-          return !!t && QR_TOKEN_REGEX.test(t);
+          const url = new URL(val, "https://portal.local");
+          const t = url.searchParams.get("t") || url.searchParams.get("token");
+          return !!t && (QR_TOKEN_REGEX.test(t) || MANUAL_ATTENDANCE_CODE_REGEX.test(t));
         } catch {
           return false;
         }
@@ -63,10 +63,15 @@ export function extractRawToken(input: string): string {
     return trimmed.toUpperCase();
   }
   try {
-    const url = new URL(trimmed);
-    const tokenParam = url.searchParams.get("t");
-    if (tokenParam && QR_TOKEN_REGEX.test(tokenParam)) {
-      return tokenParam;
+    const url = new URL(trimmed, "https://portal.local");
+    const tokenParam = url.searchParams.get("t") || url.searchParams.get("token");
+    if (tokenParam) {
+      if (QR_TOKEN_REGEX.test(tokenParam)) {
+        return tokenParam;
+      }
+      if (MANUAL_ATTENDANCE_CODE_REGEX.test(tokenParam)) {
+        return tokenParam.toUpperCase();
+      }
     }
   } catch {
     // Not a valid URL, return trimmed as fallback

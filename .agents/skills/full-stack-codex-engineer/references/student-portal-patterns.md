@@ -1,76 +1,65 @@
 # Student Portal Implementation Patterns
 
-## Backend feature pattern
+## 1. Backend Feature Pattern
 
-For a new domain feature, prefer:
+For a new domain feature, structure modules under `apps/api/src/modules/<feature>`:
 
-- `*.module.ts` to declare module dependencies
-- `*.controller.ts` for routes only
-- `*.service.ts` for business logic
-- `dto/` for create/update/query DTOs
-- `schemas/` for Mongoose schemas
-- optional `entities/` or `interfaces/` only if the repo already uses them
-- tests near the service/controller if existing style supports it
+- `*.module.ts`: Declares module dependencies, controllers, and providers.
+- `*.controller.ts`: Thin routing layer; delegates to services immediately.
+- `services/`:
+  - `<feature>-query.service.ts`: Read models, paginated filters, aggregations (`.lean()`).
+  - `<feature>-command.service.ts`: Write models, transactions, mutations, side-effects.
+- `dto/`: Input DTOs with `class-validator` rules, strict typing, and transformation.
+- `schemas/`: Mongoose schemas with compound indexes, projections (`select: false` on sensitive fields), and virtuals.
+- `tests/`: Unit and e2e integration tests.
 
-Controller rules:
+### Controller & Service Rules:
+- **Thin Controllers:** Validate all inputs through DTOs and explicit pipes (`ParseObjectIdPipe`). Never access Mongoose models directly in controllers.
+- **Authorization & Guards:** Always enforce `@UseGuards(JwtAuthGuard, RolesGuard)` and explicit `@Roles(...)` or `@RequirePermissions(...)`.
+- **Transactions:** Wrap multi-document writes (e.g. course registration + student credit update + audit log) in MongoDB replica set sessions (`startSession`).
+- **No Leaking Errors:** Catch database conflicts (e.g. `11000` duplicate key) and throw semantic NestJS `ConflictException` or `BadRequestException`.
 
-- validate all inputs through DTOs, pipes, and explicit params parsing
-- use guards for auth and roles
-- avoid direct Mongoose access
-- return consistent response shapes used by the project
+---
 
-Service rules:
+## 2. Frontend Feature Pattern
 
-- centralize business rules
-- use transactions only when the repo/database setup supports them
-- handle duplicate and not-found cases explicitly
-- avoid leaking raw database errors to users
+For a new UI feature, structure under `apps/web/src/features/<feature>`:
 
-## Frontend feature pattern
+- `api.ts`: Typed API client functions using the centralized Axios client.
+- `queries.ts`: TanStack Query key factories and custom hooks (`useQuery`, `useMutation`).
+- `schema.ts`: Zod validation schemas aligned with backend DTOs.
+- `types/`: Domain TypeScript interfaces and API response envelopes.
+- `components/`:
+  - `<Feature>Table.tsx`: Composed `<DataTable<T>>` with memoized columns and bulk selection.
+  - `<Feature>Toolbar.tsx`: Debounced search, category filters, and action triggers.
+  - `<Feature>FormDialog.tsx`: Create/Edit modal dialog with RHF + Zod.
+  - `<Feature>KpiCards.tsx`: Stat cards for summary metrics.
 
-For a new UI feature, prefer:
+---
 
-- route/page files under the existing App Router convention
-- focused components under the existing component organization
-- API client functions or service layer matching the repo
-- TanStack Query hooks for fetch/mutate
-- local component state for local UI only
-- Zustand store only for cross-route/cross-component UI state
-- RHF/Zod for forms with real validation
-- next-intl keys for visible copy
+## 3. RTL, LTR & Bilingual UI Patterns
 
-Query rules:
+- **RTL Dialog Footers:** Ensure action buttons in `DialogFooter` support RTL reading direction (`rtl:sm:justify-start`).
+- **Radix Portal Direction:** Explicitly pass `dir={isRtl ? 'rtl' : 'ltr'}` to portaled dropdowns, selects, and dialog contents.
+- **LTR Field Enforcement:** Inputs containing technical codes (`studentCode`, `nationalId`, phone numbers, emails, passwords) must explicitly specify `dir="ltr"` and `text-left`.
+- **Bilingual Entity Names:** Support `fullNameAr || fullName` or `nameAr || name` when rendering in Arabic mode.
+- **Status Badges & Dates:** Enums and dates must be localized via `next-intl` and `Intl.DateTimeFormat(locale, { timeZone: 'Africa/Cairo' })`. Never show raw English status strings like `ACTIVE` in Arabic.
 
-- query keys must include resource and filters
-- mutations should invalidate or update affected queries
-- handle unauthorized and forbidden states intentionally
+---
 
-Form rules:
+## 4. Table & Interface Patterns
 
-- align frontend Zod validation with backend DTO rules
-- show field errors from client validation and server validation
-- disable submit while pending
-- show success/error toast only when useful
+- **Bulk Selection:** Support checkbox selection column with "Select All" and floating bulk action bar.
+- **3-Dots Actions Column:** Restrict table row actions strictly to a single `MoreVertical` dropdown menu. Never put raw `Pencil` / `Trash` buttons inside table cells.
+- **URL-Synchronized Filter State:** Synchronize pagination and filters with URL search parameters using `useTableState`.
 
-## Student Portal domain reminders
+---
 
-Common roles may include student, staff, advisor, admin, or super admin. Do not assume exact role names; inspect existing enums/constants first.
+## 5. Academic Workflows & Domain Patterns
 
-Academic workflows often need:
-
-- GPA rules
-- course prerequisites
-- credit-hour limits
-- registration windows
-- academic advising assignment
-- staff override/audit trail
-- printable registration document
-- student-facing approval status
-
-For these workflows, always check:
-
-- who can create, edit, approve, reject, or override
-- what the student can see before and after approval
-- whether changes require audit logs
-- whether generated/printed documents need stable snapshots
-- whether recommendations are advisory or binding
+Core academic rules to enforce across features:
+- **Credit-Hour Limits:** Check minimum (e.g. 12 hours) and maximum (e.g. 18-21 hours based on GPA) during registration.
+- **Prerequisites Engine:** Validate that prerequisite courses have been completed and passed before allowing course registration.
+- **Exam Place & Schedules:** Provide read-only views for students showing hall name, seat number, and localized date/time.
+- **Grade Management:** Protect grade finalization behind admin approval; student view must reflect finalized status.
+- **Complaints & Tickets:** Track complaints through status transitions (`PENDING` -> `IN_REVIEW` -> `RESOLVED` / `DISMISSED`) with full audit reply threads.

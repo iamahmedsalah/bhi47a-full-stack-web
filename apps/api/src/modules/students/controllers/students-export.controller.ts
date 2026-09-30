@@ -17,10 +17,7 @@ export class StudentsExportController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)
   @ApiOperation({ summary: 'Stream students list as Excel file' })
-  async exportExcel(
-    @Query() query: SearchStudentQuery,
-    @Res() res: Response,
-  ) {
+  async exportExcel(@Query() query: SearchStudentQuery, @Res() res: Response) {
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

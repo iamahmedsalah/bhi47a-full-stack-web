@@ -49,7 +49,11 @@ export class AdvisingPlanService {
   ) {
     const caseItem = await this.cases.findById(caseId);
     if (!caseItem) throw new NotFoundException('Advising case not found');
-    this.assertCaseAccess(caseItem.assignedAdvisorId?.toString(), actorId, role);
+    this.assertCaseAccess(
+      caseItem.assignedAdvisorId?.toString(),
+      actorId,
+      role,
+    );
 
     const latest = await this.plans
       .findOne({ advisingCaseId: caseItem._id })
@@ -106,7 +110,10 @@ export class AdvisingPlanService {
     );
     return this.plans
       .find({ advisingCaseId: new Types.ObjectId(caseId) })
-      .populate('selectedCourses', 'code name nameAr nameEn creditHours semester')
+      .populate(
+        'selectedCourses',
+        'code name nameAr nameEn creditHours semester',
+      )
       .populate('advisorId', 'name email')
       .sort({ version: -1 })
       .lean();
@@ -115,7 +122,10 @@ export class AdvisingPlanService {
   async getPlan(id: string, actorId: string, role: Role) {
     const plan = await this.plans
       .findById(id)
-      .populate('selectedCourses', 'code name nameAr nameEn creditHours semester')
+      .populate(
+        'selectedCourses',
+        'code name nameAr nameEn creditHours semester',
+      )
       .populate('advisorId', 'name email')
       .lean();
     if (!plan) throw new NotFoundException('Advising plan not found');
@@ -150,12 +160,16 @@ export class AdvisingPlanService {
     }
 
     if (dto.selectedCourses) {
-      const courseIds = dto.selectedCourses.map((cId) => new Types.ObjectId(cId));
+      const courseIds = dto.selectedCourses.map(
+        (cId) => new Types.ObjectId(cId),
+      );
       const selected = await this.courses
         .find({ _id: { $in: courseIds }, isActive: true })
         .lean();
       if (selected.length !== courseIds.length) {
-        throw new BadRequestException('One or more selected courses are invalid');
+        throw new BadRequestException(
+          'One or more selected courses are invalid',
+        );
       }
       plan.selectedCourses = courseIds;
       plan.totalCredits = selected.reduce(
@@ -201,7 +215,7 @@ export class AdvisingPlanService {
       .lean();
 
     const result = this.validation.validate({
-      courses: selectedCourseObjs as Course[],
+      courses: selectedCourseObjs,
       completedCodes: studentProfile?.completedCourses ?? [],
       failedCodes: studentProfile?.failedCourses ?? [],
       maxCredits: 18,
@@ -246,7 +260,7 @@ export class AdvisingPlanService {
       .lean();
 
     const validationResult = this.validation.validate({
-      courses: selectedCourseObjs as Course[],
+      courses: selectedCourseObjs,
       completedCodes: studentProfile?.completedCourses ?? [],
       failedCodes: studentProfile?.failedCourses ?? [],
       maxCredits: 18,
@@ -399,7 +413,9 @@ export class AdvisingPlanService {
 
     const selectedCodes = new Set(selected.map((c) => c.code.toUpperCase()));
     const prereqCodes = new Set(
-      selected.flatMap((c) => (c.prerequisites ?? []).map((p) => p.toUpperCase())),
+      selected.flatMap((c) =>
+        (c.prerequisites ?? []).map((p) => p.toUpperCase()),
+      ),
     );
 
     const allCodes = Array.from(new Set([...selectedCodes, ...prereqCodes]));
@@ -413,10 +429,14 @@ export class AdvisingPlanService {
       position: { x: (idx % 4) * 200, y: Math.floor(idx / 4) * 100 },
       courseId: c._id.toString(),
       label: `${c.code} - ${c.name}`,
-      status: selectedCodes.has(c.code.toUpperCase()) ? 'planned' : 'prerequisite',
+      status: selectedCodes.has(c.code.toUpperCase())
+        ? 'planned'
+        : 'prerequisite',
     }));
 
-    const nodeMap = new Map(allCourses.map((c) => [c.code.toUpperCase(), c._id.toString()]));
+    const nodeMap = new Map(
+      allCourses.map((c) => [c.code.toUpperCase(), c._id.toString()]),
+    );
     const edges: AdvisingGraphEdge[] = [];
 
     for (const c of allCourses) {

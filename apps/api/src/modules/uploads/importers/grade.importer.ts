@@ -14,7 +14,8 @@ export class GradeImporter implements Importer {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Course.name) private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
     @InjectModel(Grade.name) private readonly gradeModel: Model<GradeDocument>,
     private readonly gradesService: GradesService,
   ) {}
@@ -113,7 +114,7 @@ export class GradeImporter implements Importer {
           filter: {
             studentCode,
             courseCode: course.code,
-            examType: row.examType as string,
+            examType: row.examType,
           },
           update: { $set: gradeData },
           upsert: true,

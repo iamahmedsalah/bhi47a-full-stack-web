@@ -9,7 +9,10 @@ import { json, urlencoded, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { rateLimitMiddleware, setGlobalRateLimiterService } from './common/middleware/rate-limit.middleware';
+import {
+  rateLimitMiddleware,
+  setGlobalRateLimiterService,
+} from './common/middleware/rate-limit.middleware';
 import { RateLimiterService } from './common/rate-limit/rate-limit.service';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 import { AppLoggerService } from './core/logger/logger.service';
@@ -75,8 +78,8 @@ async function bootstrap() {
   setGlobalRateLimiterService(rateLimiterService);
   const port = Number(
     configService.get<string>('PORT') ??
-    configService.get<string>('API_PORT') ??
-    4000,
+      configService.get<string>('API_PORT') ??
+      4000,
   );
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
   const allowedOrigins = parseAllowedOrigins(
@@ -139,15 +142,10 @@ async function bootstrap() {
     );
   } else {
     // In production or when Swagger is disabled, explicitly deny access with 403 Forbidden
-    app.use(
-      ['/api/docs', '/docs'],
-      (req: Request, res: Response) => {
-        const acceptsHtml = req.headers.accept?.includes('text/html');
-        if (acceptsHtml) {
-          res
-            .status(403)
-            .setHeader('Content-Type', 'text/html')
-            .send(`
+    app.use(['/api/docs', '/docs'], (req: Request, res: Response) => {
+      const acceptsHtml = req.headers.accept?.includes('text/html');
+      if (acceptsHtml) {
+        res.status(403).setHeader('Content-Type', 'text/html').send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -173,17 +171,16 @@ async function bootstrap() {
 </body>
 </html>
             `);
-        } else {
-          res.status(403).json({
-            statusCode: 403,
-            error: 'Forbidden',
-            message:
-              'Access Denied: Swagger API documentation is disabled in production mode.',
-            environment: 'production',
-          });
-        }
-      },
-    );
+      } else {
+        res.status(403).json({
+          statusCode: 403,
+          error: 'Forbidden',
+          message:
+            'Access Denied: Swagger API documentation is disabled in production mode.',
+          environment: 'production',
+        });
+      }
+    });
     logger.log(
       'Swagger docs disabled (Access Denied / 403) in production mode',
       'Bootstrap',

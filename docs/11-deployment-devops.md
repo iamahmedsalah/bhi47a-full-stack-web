@@ -63,15 +63,15 @@ The validation job runs for pull requests and pushes to `main`, `staging`, and
 
 1. installs Node.js 24 and pnpm 10.28.0;
 2. installs the frozen workspace lockfile;
-3. runs workspace linting;
-4. runs API unit and end-to-end tests with MongoDB and Redis services;
-5. builds `packages/shared`, the NestJS API, and the Next.js web app.
+3. restores the local Turborepo cache;
+4. runs root lint and typecheck gates;
+5. runs API unit tests;
+6. builds the workspace through Turborepo;
+7. validates API runtime compatibility and the Next.js route manifest;
+8. runs API end-to-end tests with MongoDB and Redis services.
 
-Lint and test steps are currently advisory (`continue-on-error`) because the
-repository has known ESLint 10/React-plugin and Jest/NestJS ESM compatibility
-failures. They still run and remain visible in every workflow. The three
-production builds are blocking release gates. Restore strict lint/test gating
-after those toolchain issues are corrected.
+All validation steps are blocking. Jest runs in ESM mode to match NestJS 12;
+CI no longer hides lint or test failures with `continue-on-error`.
 
 After validation succeeds on `main`:
 
@@ -124,6 +124,7 @@ MONGODB_URI=mongodb+srv://...
 JWT_SECRET=replace-with-at-least-32-random-bytes
 JWT_EXPIRES_IN=7d
 CLIENT_URL=https://your-web-project.vercel.app
+WEB_BASE_URL=https://your-web-project.vercel.app
 COOKIE_SAME_SITE=none
 COOKIE_DOMAIN=
 RATE_LIMIT_STORE=mongo
@@ -142,6 +143,10 @@ passes it explicitly as a runtime variable.
 
 Add Cloudinary, Firebase Admin, Gemini, Google sign-in, SMTP, and rate-limit
 variables from `.env.example` only when those integrations are used.
+
+`WEB_BASE_URL` belongs to the **API** environment. The API uses it to generate
+attendance QR links that open the web application; set it to the canonical web
+origin without a trailing slash.
 
 Do not set `PORT` or `API_PORT` in Vercel. Vercel supplies the runtime port.
 

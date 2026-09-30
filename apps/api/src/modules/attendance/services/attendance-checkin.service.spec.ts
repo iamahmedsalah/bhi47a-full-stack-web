@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { AttendanceCheckInService } from './attendance-checkin.service';
 import { Types } from 'mongoose';
 
@@ -18,7 +18,6 @@ describe('AttendanceCheckInService', () => {
   };
 
   const mockSessionId = new Types.ObjectId();
-  const mockNow = new Date('2026-10-10T10:05:00Z');
 
   beforeEach(() => {
     mockSessionModel = {
@@ -61,7 +60,7 @@ describe('AttendanceCheckInService', () => {
   });
 
   it('should successfully check in student and record status as PRESENT within late threshold', async () => {
-    const rawToken = `${mockSessionId}.100.validsignature32characterslong12`;
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 
     const mockSession = {
       _id: mockSessionId,
@@ -112,7 +111,7 @@ describe('AttendanceCheckInService', () => {
   });
 
   it('should mark student as LATE when check-in occurs after lateThresholdMinutes', async () => {
-    const rawToken = `${mockSessionId}.100.validsignature32characterslong12`;
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 
     const mockSession = {
       _id: mockSessionId,
@@ -158,7 +157,7 @@ describe('AttendanceCheckInService', () => {
   });
 
   it('should handle duplicate scans idempotently and return original record', async () => {
-    const rawToken = `${mockSessionId}.100.validsignature32characterslong12`;
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 
     const mockSession = {
       _id: mockSessionId,
@@ -198,7 +197,7 @@ describe('AttendanceCheckInService', () => {
   });
 
   it('should reject check-in when session is CLOSED', async () => {
-    const rawToken = `${mockSessionId}.100.validsignature32characterslong12`;
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({

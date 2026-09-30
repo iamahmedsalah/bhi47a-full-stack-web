@@ -36,7 +36,10 @@ export class SendNotificationDto {
   @IsOptional()
   targetStudentCode?: string;
 
-  @ApiPropertyOptional({ example: false, description: 'Forward notification to students via WhatsApp automation' })
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Forward notification to students via WhatsApp automation',
+  })
   @IsBoolean()
   @IsOptional()
   sendWhatsApp?: boolean;

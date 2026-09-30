@@ -19,10 +19,6 @@ import {
   ResetPasswordDto,
   UpdateMyContactDto,
 } from './dto/student.dto';
-import {
-  buildPaginationOptions,
-  createPaginatedResult,
-} from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
 import {
   CourseRegistration,
@@ -32,7 +28,6 @@ import {
   RegistrationTerm,
   RegistrationTermDocument,
 } from '../registrations/schemas/registration-term.schema';
-import { isRegistrationTermCurrentlyOpen } from '../registrations/utils/registration-term.util';
 import {
   AdvisingCase,
   AdvisingCaseDocument,
@@ -296,7 +291,7 @@ export class StudentsService {
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
 
-  async resetPassword(id: string, dto: ResetPasswordDto, actor?: any) {
+  async resetPassword(id: string, dto: ResetPasswordDto, _actor?: any) {
     const profile = await this.studentProfileModel
       .findById(id)
       .select('+nationalId');

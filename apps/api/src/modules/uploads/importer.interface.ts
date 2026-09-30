@@ -1,5 +1,3 @@
-import type { AppLoggerService } from '../../core/logger/logger.service';
-
 /** Result of a single row validation. */
 export interface ImportRowError {
   row: number;
@@ -26,9 +24,10 @@ export interface Importer {
    * Validate required fields and return only rows that are valid.
    * Invalid rows are reported back as error strings.
    */
-  validate(
-    rows: Record<string, unknown>[],
-  ): { validRows: { row: Record<string, unknown>; rowNum: number }[]; errors: string[] };
+  validate(rows: Record<string, unknown>[]): {
+    validRows: { row: Record<string, unknown>; rowNum: number }[];
+    errors: string[];
+  };
 
   /**
    * Persist the validated rows into the database.

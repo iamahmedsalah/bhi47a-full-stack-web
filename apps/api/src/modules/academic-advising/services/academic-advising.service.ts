@@ -40,7 +40,12 @@ export class AcademicAdvisingService {
     return this.caseService.getCase(id, actorId, role);
   }
 
-  updateStatus(id: string, dto: UpdateCaseStatusDto, actorId: string, role: Role) {
+  updateStatus(
+    id: string,
+    dto: UpdateCaseStatusDto,
+    actorId: string,
+    role: Role,
+  ) {
     return this.caseService.updateStatus(id, dto, actorId, role);
   }
 
@@ -90,16 +95,35 @@ export class AcademicAdvisingService {
   }
 
   // ── Recommendation Engine ────────────────────────────────────
-  generate(caseId: string, dto: GenerateRecommendationsDto, actorId: string, role: Role) {
+  generate(
+    caseId: string,
+    dto: GenerateRecommendationsDto,
+    actorId: string,
+    role: Role,
+  ) {
     return this.recommendationService.generate(caseId, dto, actorId, role);
   }
 
   listRecommendations(caseId: string, actorId: string, role: Role) {
-    return this.recommendationService.listRecommendations(caseId, actorId, role);
+    return this.recommendationService.listRecommendations(
+      caseId,
+      actorId,
+      role,
+    );
   }
 
-  decideRecommendation(id: string, dto: DecideRecommendationDto, actorId: string, role: Role) {
-    return this.recommendationService.decideRecommendation(id, dto, actorId, role);
+  decideRecommendation(
+    id: string,
+    dto: DecideRecommendationDto,
+    actorId: string,
+    role: Role,
+  ) {
+    return this.recommendationService.decideRecommendation(
+      id,
+      dto,
+      actorId,
+      role,
+    );
   }
 
   // ── Student & Advisor Queries ────────────────────────────────

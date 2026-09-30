@@ -2,18 +2,25 @@
 
 import React from 'react';
 import { useParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { GraduationCap, MessageSquare, Shield } from 'lucide-react';
+import { GraduationCap, MessageSquare, Shield, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import LangToggle from '@/components/ui/LangToggle';
 import { Footer } from '@/components/ui/footer';
 
 export default function LoginPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const locale = params.locale as string;
   const isAr = locale === 'ar';
+
+  const isSessionExpired =
+    searchParams.get('reason') === 'session_expired' ||
+    searchParams.get('error') === 'session_expired';
 
   return (
     <div
@@ -42,6 +49,17 @@ export default function LoginPage() {
           <p className="text-sm font-semibold text-muted-foreground md:text-base">
             {isAr ? 'البوابة الإلكترونية' : 'Electronic Portal'}
           </p>
+
+          {isSessionExpired && (
+            <Alert className="max-w-md border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-3 mt-2 text-start">
+              <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <AlertDescription className="text-xs leading-relaxed">
+                {isAr
+                  ? 'انتهت صلاحية جلستك السابقة تلقائياً لدواعي الأمان (الحد الأقصى للجلسة 20 دقيقة). يرجى اختيار بوابتك لتسجيل الدخول مجدداً.'
+                  : 'Your previous session expired for security reasons (20-minute limit). Please choose your portal to log in again.'}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2">

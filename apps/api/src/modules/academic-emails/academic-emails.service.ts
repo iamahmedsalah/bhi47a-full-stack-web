@@ -70,7 +70,9 @@ export class AcademicEmailsService implements OnModuleInit {
       const existingEmails = await this.emailModel
         .find({}, { studentCode: 1, academicEmail: 1 })
         .lean();
-      const existingMap = new Map(existingEmails.map((e) => [e.studentCode, e]));
+      const existingMap = new Map(
+        existingEmails.map((e) => [e.studentCode, e]),
+      );
 
       const bulkOps: any[] = [];
 
@@ -100,7 +102,10 @@ export class AcademicEmailsService implements OnModuleInit {
               upsert: true,
             },
           });
-        } else if (p.academicEmail && existing.academicEmail !== p.academicEmail) {
+        } else if (
+          p.academicEmail &&
+          existing.academicEmail !== p.academicEmail
+        ) {
           bulkOps.push({
             updateOne: {
               filter: { studentCode: sc },
@@ -117,7 +122,9 @@ export class AcademicEmailsService implements OnModuleInit {
 
       if (bulkOps.length > 0) {
         await this.emailModel.bulkWrite(bulkOps, { ordered: false });
-        this.logger.log(`[AcademicEmails] Synced ${bulkOps.length} student academic emails.`);
+        this.logger.log(
+          `[AcademicEmails] Synced ${bulkOps.length} student academic emails.`,
+        );
       }
 
       return bulkOps.length;
@@ -131,7 +138,9 @@ export class AcademicEmailsService implements OnModuleInit {
     // If academic_emails has fewer records than student_profiles, run a fast sync
     const [emailCount, profileCount] = await Promise.all([
       this.emailModel.countDocuments(),
-      this.profileModel.countDocuments({ studentCode: { $exists: true, $ne: '' } }),
+      this.profileModel.countDocuments({
+        studentCode: { $exists: true, $ne: '' },
+      }),
     ]);
 
     if (emailCount < profileCount) {
@@ -229,14 +238,17 @@ export class AcademicEmailsService implements OnModuleInit {
   }
 
   async findByStudentId(studentId: string): Promise<AcademicEmail> {
-    let record = await this.emailModel.findOne({
+    const record = await this.emailModel.findOne({
       studentId: new Types.ObjectId(studentId),
     });
 
     if (!record) {
       // Check if student profile exists and create on-the-fly
       const profile = await this.profileModel.findOne({
-        $or: [{ userId: new Types.ObjectId(studentId) }, { _id: new Types.ObjectId(studentId) }],
+        $or: [
+          { userId: new Types.ObjectId(studentId) },
+          { _id: new Types.ObjectId(studentId) },
+        ],
       });
       if (profile) {
         const emailStr =

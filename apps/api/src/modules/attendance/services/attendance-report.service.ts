@@ -36,10 +36,7 @@ export class AttendanceReportService {
   /**
    * Retrieves paginated attendee records for a specific session.
    */
-  async getSessionRecords(
-    sessionId: string,
-    query: QueryAttendanceRecordsDto,
-  ) {
+  async getSessionRecords(sessionId: string, query: QueryAttendanceRecordsDto) {
     if (!Types.ObjectId.isValid(sessionId)) {
       throw new BadRequestException('معرّف الجلسة غير صالح');
     }

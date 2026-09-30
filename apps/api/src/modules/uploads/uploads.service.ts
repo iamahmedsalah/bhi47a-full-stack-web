@@ -113,13 +113,19 @@ export class UploadsService {
     };
   }
 
-  async wipeData(target: 'students' | 'grades' | 'attendance' | 'all', adminId: string) {
+  async wipeData(
+    target: 'students' | 'grades' | 'attendance' | 'all',
+    adminId: string,
+  ) {
     const db = this.connection.db;
     if (!db) {
       throw new BadRequestException('Database connection is not available');
     }
 
-    this.logger.warn(`Admin ${adminId} initiated data wipe for: ${target}`, 'UploadsService');
+    this.logger.warn(
+      `Admin ${adminId} initiated data wipe for: ${target}`,
+      'UploadsService',
+    );
     const result: Record<string, number> = {};
 
     if (target === 'grades') {
@@ -133,7 +139,9 @@ export class UploadsService {
     }
 
     if (target === 'attendance') {
-      const deletedAttendance = await db.collection('attendance').deleteMany({});
+      const deletedAttendance = await db
+        .collection('attendance')
+        .deleteMany({});
       result.attendance = deletedAttendance.deletedCount;
       return { success: true, target, deletedCounts: result };
     }
@@ -141,7 +149,10 @@ export class UploadsService {
     if (target === 'students' || target === 'all') {
       const students = await db
         .collection('users')
-        .find({ role: 'student' }, { projection: { _id: 1, studentCode: 1, email: 1 } })
+        .find(
+          { role: 'student' },
+          { projection: { _id: 1, studentCode: 1, email: 1 } },
+        )
         .toArray();
       const studentIds = students.map((s) => s._id);
       const studentCodes = students.map((s) => s.studentCode).filter(Boolean);
@@ -168,48 +179,75 @@ export class UploadsService {
         delRegistrations,
         delCases,
         delPlans,
-        delGraphs,
-        delNotes,
-        delAuditLogs,
-        delRecommendations,
-        delRequests,
+        _delGraphs,
+        _delNotes,
+        _delAuditLogs,
+        _delRecommendations,
+        _delRequests,
         delEmails,
       ] = await Promise.all([
         db.collection('users').deleteMany({
           role: 'student',
-          $or: [{ _id: { $in: studentIds } }, { studentCode: { $in: studentCodes } }],
+          $or: [
+            { _id: { $in: studentIds } },
+            { studentCode: { $in: studentCodes } },
+          ],
         }),
-        db.collection('student_profiles').deleteMany({ userId: { $in: studentIds } }),
-        db.collection('student_academic_profiles').deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('student_profiles')
+          .deleteMany({ userId: { $in: studentIds } }),
+        db
+          .collection('student_academic_profiles')
+          .deleteMany({ studentId: { $in: studentIds } }),
         db.collection('grades').deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('course_quizzes').deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('attendance').deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('course_registrations').deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('advising_cases').deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('course_quizzes')
+          .deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('attendance')
+          .deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('course_registrations')
+          .deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('advising_cases')
+          .deleteMany({ studentId: { $in: studentIds } }),
         db.collection('advising_plans').deleteMany({
           $or: [{ studentId: { $in: studentIds } }, { _id: { $in: planIds } }],
         }),
-        db.collection('advising_graphs').deleteMany({ planId: { $in: planIds } }),
-        db.collection('advising_notes').deleteMany({ caseId: { $in: caseIds } }),
-        db.collection('advising_audit_logs').deleteMany({ caseId: { $in: caseIds } }),
+        db
+          .collection('advising_graphs')
+          .deleteMany({ planId: { $in: planIds } }),
+        db
+          .collection('advising_notes')
+          .deleteMany({ caseId: { $in: caseIds } }),
+        db
+          .collection('advising_audit_logs')
+          .deleteMany({ caseId: { $in: caseIds } }),
         db.collection('course_recommendations').deleteMany({
-          $or: [{ studentId: { $in: studentIds } }, { caseId: { $in: caseIds } }],
+          $or: [
+            { studentId: { $in: studentIds } },
+            { caseId: { $in: caseIds } },
+          ],
         }),
-        db.collection('academic_advising_requests').deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('academic_emails').deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('academic_advising_requests')
+          .deleteMany({ studentId: { $in: studentIds } }),
+        db
+          .collection('academic_emails')
+          .deleteMany({ studentId: { $in: studentIds } }),
       ]);
 
       // Cleanup notifications
-      await db.collection('notifications').deleteMany({ targetStudentId: { $in: studentIds } });
-      await db.collection('notifications').updateMany(
-        {},
-        {
-          $pull: {
-            readBy: { userId: { $in: studentIds } },
-            hiddenBy: { userId: { $in: studentIds } },
-          },
-        } as any,
-      );
+      await db
+        .collection('notifications')
+        .deleteMany({ targetStudentId: { $in: studentIds } });
+      await db.collection('notifications').updateMany({}, {
+        $pull: {
+          readBy: { userId: { $in: studentIds } },
+          hiddenBy: { userId: { $in: studentIds } },
+        },
+      } as any);
 
       result.students = delUsers.deletedCount;
       result.studentProfiles = delProfiles.deletedCount;
@@ -253,9 +291,15 @@ export class UploadsService {
         if (!file || file.dir) continue;
 
         const normalizedName = fileName.replace(/\\/g, '/');
-        if (normalizedName.endsWith('.xml') || normalizedName.endsWith('.rels')) {
+        if (
+          normalizedName.endsWith('.xml') ||
+          normalizedName.endsWith('.rels')
+        ) {
           const content = await file.async('string');
-          const stripped = content.replace(/<(\/)?([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)([\s>])/g, '<$1$3$4');
+          const stripped = content.replace(
+            /<(\/)?([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)([\s>])/g,
+            '<$1$3$4',
+          );
           if (stripped !== content || normalizedName !== fileName) {
             if (normalizedName !== fileName) {
               zip.remove(fileName);
@@ -272,7 +316,10 @@ export class UploadsService {
       }
 
       if (modified) {
-        return await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+        return await zip.generateAsync({
+          type: 'nodebuffer',
+          compression: 'DEFLATE',
+        });
       }
     } catch {
       // Fall through to original buffer
@@ -280,19 +327,25 @@ export class UploadsService {
     return fileBuffer;
   }
 
-  private async parseZipWorksheetFallback(fileBuffer: Buffer): Promise<Record<string, unknown>[]> {
+  private async parseZipWorksheetFallback(
+    fileBuffer: Buffer,
+  ): Promise<Record<string, unknown>[]> {
     const zip = await JSZip.loadAsync(fileBuffer);
 
     // 1. Shared strings
     const sharedStrings: string[] = [];
     const sharedStringsFile =
-      zip.file(/xl\/sharedStrings\.xml$/i)[0] || zip.file(/sharedStrings\.xml$/i)[0];
+      zip.file(/xl\/sharedStrings\.xml$/i)[0] ||
+      zip.file(/sharedStrings\.xml$/i)[0];
     if (sharedStringsFile) {
       const ssXml = await sharedStringsFile.async('string');
       const siMatches = ssXml.match(/<si\b[\s\S]*?<\/si>/gi) || [];
       for (const si of siMatches) {
-        const tMatches = (si.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) || []) as string[];
-        const str = tMatches.map((m: string) => m.replace(/<[^>]+>/g, '')).join('');
+        const tMatches = (si.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) ||
+          []) as string[];
+        const str = tMatches
+          .map((m: string) => m.replace(/<[^>]+>/g, ''))
+          .join('');
         sharedStrings.push(this.decodeXml(str));
       }
     }
@@ -302,15 +355,20 @@ export class UploadsService {
       /xl\/worksheets\/sheet\d+\.xml$/i.test(k.replace(/\\/g, '/')),
     );
     const targetSheetKey =
-      sheetFiles[0] || Object.keys(zip.files).find((k) => /sheet\d+\.xml$/i.test(k));
+      sheetFiles[0] ||
+      Object.keys(zip.files).find((k) => /sheet\d+\.xml$/i.test(k));
     if (!targetSheetKey) {
-      throw new BadRequestException('الملف المرفوع لا يحتوي على صفحات عمل صالحة');
+      throw new BadRequestException(
+        'الملف المرفوع لا يحتوي على صفحات عمل صالحة',
+      );
     }
 
     const sheetXml = await zip.files[targetSheetKey].async('string');
     const rowMatches = sheetXml.match(/<row\b[\s\S]*?<\/row>/gi) || [];
     if (rowMatches.length === 0) {
-      throw new BadRequestException('الملف المرفوع فارغ أو لا يحتوي على صفوف بيانات');
+      throw new BadRequestException(
+        'الملف المرفوع فارغ أو لا يحتوي على صفوف بيانات',
+      );
     }
 
     const colIndexFromRef = (ref: string): number => {
@@ -325,9 +383,14 @@ export class UploadsService {
     let headers: string[] = [];
     const rows: Record<string, unknown>[] = [];
 
-    for (let rIdx = 0; rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS; rIdx++) {
+    for (
+      let rIdx = 0;
+      rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS;
+      rIdx++
+    ) {
       const rowXml = rowMatches[rIdx];
-      const cellMatches = rowXml.match(/<c\b[\s\S]*?<\/c>|<c\b[^>]*\/>/gi) || [];
+      const cellMatches =
+        rowXml.match(/<c\b[\s\S]*?<\/c>|<c\b[^>]*\/>/gi) || [];
       const rowValues: string[] = [];
 
       for (const cellXml of cellMatches) {
@@ -346,8 +409,11 @@ export class UploadsService {
             val = sharedStrings[ssIdx] ?? '';
           }
         } else if (cellType === 'inlineStr') {
-          const tMatches = (cellXml.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) || []) as string[];
-          val = this.decodeXml(tMatches.map((m: string) => m.replace(/<[^>]+>/g, '')).join(''));
+          const tMatches = (cellXml.match(/<t\b[^>]*>([\s\S]*?)<\/t>/gi) ||
+            []) as string[];
+          val = this.decodeXml(
+            tMatches.map((m: string) => m.replace(/<[^>]+>/g, '')).join(''),
+          );
         } else {
           const vMatch = cellXml.match(/<v\b[^>]*>([\s\S]*?)<\/v>/i);
           val = vMatch ? this.decodeXml(vMatch[1].trim()) : '';
@@ -378,7 +444,9 @@ export class UploadsService {
     }
 
     if (rows.length === 0) {
-      throw new BadRequestException('الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة');
+      throw new BadRequestException(
+        'الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة',
+      );
     }
 
     return rows;
@@ -393,9 +461,14 @@ export class UploadsService {
     let headers: string[] = [];
     const rows: Record<string, unknown>[] = [];
 
-    for (let rIdx = 0; rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS; rIdx++) {
+    for (
+      let rIdx = 0;
+      rIdx < rowMatches.length && rows.length < MAX_UPLOAD_ROWS;
+      rIdx++
+    ) {
       const rowXml = rowMatches[rIdx];
-      const cellMatches = rowXml.match(/<Cell\b[\s\S]*?<\/Cell>|<Cell\b[^>]*\/>/gi) || [];
+      const cellMatches =
+        rowXml.match(/<Cell\b[\s\S]*?<\/Cell>|<Cell\b[^>]*\/>/gi) || [];
       const rowValues = cellMatches.map((cellXml) => {
         const dataMatch = cellXml.match(/<Data\b[^>]*>([\s\S]*?)<\/Data>/i);
         return dataMatch ? this.decodeXml(dataMatch[1].trim()) : '';
@@ -429,9 +502,13 @@ export class UploadsService {
     return rows;
   }
 
-  private async parseWorkbook(fileBuffer: Buffer): Promise<Record<string, unknown>[]> {
+  private async parseWorkbook(
+    fileBuffer: Buffer,
+  ): Promise<Record<string, unknown>[]> {
     const isZipArchive =
-      fileBuffer.length >= 2 && fileBuffer[0] === 0x50 && fileBuffer[1] === 0x4b; // 'PK'
+      fileBuffer.length >= 2 &&
+      fileBuffer[0] === 0x50 &&
+      fileBuffer[1] === 0x4b; // 'PK'
 
     // 1. Binary Excel (.xlsx)
     if (isZipArchive) {
@@ -447,15 +524,17 @@ export class UploadsService {
           worksheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) {
               const values = row.values as (string | number | undefined)[];
-              headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
-                v !== null && v !== undefined ? String(v).trim() : '',
+              headers = (Array.isArray(values) ? values.slice(1) : []).map(
+                (v) => (v !== null && v !== undefined ? String(v).trim() : ''),
               );
               return;
             }
 
             if (rows.length >= MAX_UPLOAD_ROWS) return;
 
-            const values = row.values as (string | number | boolean | Date | undefined)[];
+            const values = row.values as (
+              string | number | boolean | Date | undefined
+            )[];
             if (!Array.isArray(values)) return;
 
             const rowData: Record<string, unknown> = {};
@@ -464,7 +543,11 @@ export class UploadsService {
             headers.forEach((header, index) => {
               if (!header) return;
               const cellVal = values[index + 1];
-              if (cellVal !== null && cellVal !== undefined && String(cellVal).trim() !== '') {
+              if (
+                cellVal !== null &&
+                cellVal !== undefined &&
+                String(cellVal).trim() !== ''
+              ) {
                 hasData = true;
                 if (cellVal instanceof Date) {
                   rowData[header] = cellVal.toISOString().split('T')[0];
@@ -475,7 +558,8 @@ export class UploadsService {
                 ) {
                   rowData[header] = String((cellVal as any).text).trim();
                 } else {
-                  rowData[header] = typeof cellVal === 'string' ? cellVal.trim() : cellVal;
+                  rowData[header] =
+                    typeof cellVal === 'string' ? cellVal.trim() : cellVal;
                 }
               } else {
                 rowData[header] = '';
@@ -525,7 +609,9 @@ export class UploadsService {
     const rows: Record<string, unknown>[] = [];
     for (let i = 1; i < lines.length && rows.length < MAX_UPLOAD_ROWS; i++) {
       const line = lines[i];
-      const cells = line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, ''));
+      const cells = line
+        .split(/[,;\t]/)
+        .map((c) => c.trim().replace(/^["']|["']$/g, ''));
       if (cells.some((c) => c.length > 0)) {
         const rowData: Record<string, unknown> = {};
         headers.forEach((header, index) => {

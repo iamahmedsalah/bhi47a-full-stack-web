@@ -6,6 +6,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit --incremental false",
     "clean": "rimraf dist"
   },
   "devDependencies": {

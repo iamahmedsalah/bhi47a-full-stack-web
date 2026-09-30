@@ -499,61 +499,61 @@ export default function StudentResultsPage() {
                       </td>
                     </tr>
                     {section.groups.map((course) => {
-                  const midVal = course.midterm?.status === 'present' ? course.midterm.grade : 0;
-                  const finalVal = course.final?.status === 'present' ? course.final.grade : 0;
-                  const total = midVal + finalVal;
+                      const midVal = course.midterm?.status === 'present' ? course.midterm.grade : 0;
+                      const finalVal = course.final?.status === 'present' ? course.final.grade : 0;
+                      const total = midVal + finalVal;
 
-                  const maxMid = course.midterm?.maxGrade ?? 0;
-                  const maxFin = course.final?.maxGrade ?? 0;
-                  const maxTotal = maxMid + maxFin;
+                      const maxMid = course.midterm?.maxGrade ?? 0;
+                      const maxFin = course.final?.maxGrade ?? 0;
+                      const maxTotal = maxMid + maxFin;
 
-                  const isPass = total >= (maxTotal / 2) && course.final?.status === 'present';
-                  const isAbsent = course.final?.status === 'absent' || course.midterm?.status === 'absent';
-                  const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
+                      const isPass = total >= (maxTotal / 2) && course.final?.status === 'present';
+                      const isAbsent = course.final?.status === 'absent' || course.midterm?.status === 'absent';
+                      const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
 
-                  let statusText = '—';
-                  let badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+                      let statusText = '—';
+                      let badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
 
-                  if (isBanned) {
-                    statusText = isEnglish ? 'Banned' : 'محجوب/محروم';
-                    badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
-                  } else if (isAbsent) {
-                    statusText = isEnglish ? 'Absent' : 'غائب';
-                    badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
-                  } else if (isPass) {
-                    statusText = isEnglish ? 'Pass' : 'ناجح';
-                    badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-                  } else {
-                    statusText = isEnglish ? 'Fail' : 'راسب';
-                    badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
-                  }
+                      if (isBanned) {
+                        statusText = isEnglish ? 'Banned' : 'محجوب/محروم';
+                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                      } else if (isAbsent) {
+                        statusText = isEnglish ? 'Absent' : 'غائب';
+                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                      } else if (isPass) {
+                        statusText = isEnglish ? 'Pass' : 'ناجح';
+                        badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+                      } else {
+                        statusText = isEnglish ? 'Fail' : 'راسب';
+                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                      }
 
-                  return (
-                    <tr key={`${course.academicYear}:${course.semester}:${course.courseCode}`} className="hover:bg-secondary/25 transition-colors text-foreground">
-                      <td className="p-4 text-start">
-                        <span className="font-bold block text-sm text-foreground">{course.courseName}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">{course.courseCode}</span>
-                      </td>
-                      <td className="p-4 text-center font-mono font-semibold">
-                        {course.midterm ? (
-                          course.midterm.status === 'present' ? `${course.midterm.grade} / ${course.midterm.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
-                        ) : '—'}
-                      </td>
-                      <td className="p-4 text-center font-mono font-semibold">
-                        {course.final ? (
-                          course.final.status === 'present' ? `${course.final.grade} / ${course.final.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
-                        ) : '—'}
-                      </td>
-                      <td className="p-4 text-center font-mono font-bold text-foreground">
-                        {total} / {maxTotal}
-                      </td>
-                      <td className="p-4 text-end">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
-                          {statusText}
-                        </span>
-                      </td>
-                    </tr>
-                  );
+                      return (
+                        <tr key={`${course.academicYear}:${course.semester}:${course.courseCode}`} className="hover:bg-secondary/25 transition-colors text-foreground">
+                          <td className="p-4 text-start">
+                            <span className="font-bold block text-sm text-foreground">{course.courseName}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">{course.courseCode}</span>
+                          </td>
+                          <td className="p-4 text-center font-mono font-semibold">
+                            {course.midterm ? (
+                              course.midterm.status === 'present' ? `${course.midterm.grade} / ${course.midterm.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
+                            ) : '—'}
+                          </td>
+                          <td className="p-4 text-center font-mono font-semibold">
+                            {course.final ? (
+                              course.final.status === 'present' ? `${course.final.grade} / ${course.final.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
+                            ) : '—'}
+                          </td>
+                          <td className="p-4 text-center font-mono font-bold text-foreground">
+                            {total} / {maxTotal}
+                          </td>
+                          <td className="p-4 text-end">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
+                              {statusText}
+                            </span>
+                          </td>
+                        </tr>
+                      );
                     })}
                   </React.Fragment>
                 ))}

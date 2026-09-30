@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -91,10 +95,13 @@ export class GpaRuleService {
         requireForFailedCourses: matched.requireForFailedCourses ?? true,
         requireForAcademicWarnings: matched.requireForAcademicWarnings ?? true,
         academicWarningThreshold: matched.academicWarningThreshold ?? 1,
-        requireForIncompleteCourses: matched.requireForIncompleteCourses ?? true,
+        requireForIncompleteCourses:
+          matched.requireForIncompleteCourses ?? true,
         requireForGraduationPlans: matched.requireForGraduationPlans ?? false,
-        requireForSummerRegistration: matched.requireForSummerRegistration ?? true,
-        exemptNewStudentsFromGpaRule: matched.exemptNewStudentsFromGpaRule ?? true,
+        requireForSummerRegistration:
+          matched.requireForSummerRegistration ?? true,
+        exemptNewStudentsFromGpaRule:
+          matched.exemptNewStudentsFromGpaRule ?? true,
       };
     }
 
@@ -166,7 +173,11 @@ export class GpaRuleService {
     minCourses: number,
     maxCourses: number,
   ) {
-    if (minCreditHours <= 0 || maxCreditHours <= 0 || minCreditHours > maxCreditHours) {
+    if (
+      minCreditHours <= 0 ||
+      maxCreditHours <= 0 ||
+      minCreditHours > maxCreditHours
+    ) {
       throw new BadRequestException('Invalid credit hour limits');
     }
     if (minCourses <= 0 || maxCourses <= 0 || minCourses > maxCourses) {

@@ -176,7 +176,10 @@ function AdminLoginContent() {
 
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
-      if (searchParams.get('error') === 'session_expired') {
+      if (
+        searchParams.get('error') === 'session_expired' ||
+        searchParams.get('reason') === 'session_expired'
+      ) {
         setShowExpiredToast(true);
       }
     }
@@ -337,13 +340,24 @@ function AdminLoginContent() {
           />
 
           <div className="text-center">
-            <h1 className="text-xl md:text-2xl font-bold text-foreground mb-2">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground mb-1">
               {locale === 'ar' ? 'لوحة الإدارة - البوابة الإلكترونية' : 'Admin & Staff Portal'}
             </h1>
             <p className="text-sm text-muted-foreground">
               {locale === 'ar' ? 'الرجاء إدخال كود المدير للدخول' : 'Please enter manager code to login'}
             </p>
           </div>
+
+          {showExpiredToast && (
+            <Alert className="w-full border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-3">
+              <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <AlertDescription className="text-xs leading-relaxed text-start">
+                {locale === 'ar'
+                  ? 'انتهت صلاحية جلستك الإدارية السابقة تلقائياً (الحد الأقصى للجلسة 20 دقيقة). يرجى تسجيل الدخول مجدداً.'
+                  : 'Your previous administrative session expired (20-minute limit). Please log in again.'}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <AdminLoginForm
             onSubmit={onSubmit}

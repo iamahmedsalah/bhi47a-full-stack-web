@@ -321,27 +321,45 @@ export type GpaRuleInput = z.infer<ReturnType<typeof getGpaRuleSchema>>;
 
 export const getPublicComplaintSchema = (t: (key: string) => string) =>
   z.object({
-    requesterName: z.string().min(3, {
-      message:
-        t("validation.nameMinLength") || "Name must be at least 3 characters",
-    }),
-    studentCode: z.string().min(4, {
-      message:
-        t("validation.studentCodeMinLength") ||
-        "Student code must be at least 4 digits",
-    }),
-    contactPhone: z.string().min(10, {
-      message:
-        t("validation.phoneMinLength") ||
-        "Phone number must be at least 10 digits",
-    }),
-    nationalId: z.string().regex(/^\d{14}$/, {
-      message:
-        t("validation.nationalIdLength") ||
-        "National ID must be exactly 14 digits",
-    }),
+    requesterName: z
+      .string()
+      .trim()
+      .min(3, {
+        message:
+          t("validation.nameMinLength") || "Name must be at least 3 characters",
+      })
+      .max(120),
+    studentCode: z
+      .string()
+      .trim()
+      .min(4, {
+        message:
+          t("validation.studentCodeMinLength") ||
+          "Student code must be at least 4 digits",
+      })
+      .regex(/^\d{4,12}$/, {
+        message:
+          t("validation.studentCodeNumber") || "Student code must be numbers",
+      }),
+    contactPhone: z
+      .string()
+      .trim()
+      .regex(/^(010|011|012|015)\d{8}$|^\+?\d{10,15}$/, {
+        message:
+          t("validation.phoneMinLength") ||
+          "Phone number must be at least 10 digits",
+      }),
+    nationalId: z
+      .string()
+      .trim()
+      .regex(/^(2|3)\d{13}$|^\d{14}$/, {
+        message:
+          t("validation.nationalIdLength") ||
+          "National ID must be exactly 14 digits",
+      }),
     contactEmail: z
       .string()
+      .trim()
       .email({
         message: t("validation.emailInvalid") || "Invalid email address",
       })

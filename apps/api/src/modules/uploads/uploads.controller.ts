@@ -6,10 +6,15 @@ import {
   UploadedFile,
   Body,
   BadRequestException,
+  Param,
+  Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
+import { UploadsTemplateGenerator } from './uploads-template.generator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -31,10 +36,65 @@ const ALLOWED_MIME_TYPES = new Set([
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
+  @Get('templates/bundle')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({
+    summary: 'Download zip bundle containing all Excel templates',
+  })
+  async downloadTemplatesBundle(
+    @Query('lang') lang: 'ar' | 'en' = 'ar',
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } =
+      await UploadsTemplateGenerator.generateZipBundle(lang);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.send(buffer);
+  }
+
+  @Get('templates/:type')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({
+    summary: 'Download official Excel (.xlsx) template for specific type',
+  })
+  async downloadTemplate(
+    @Param('type') type: string,
+    @Query('lang') lang: 'ar' | 'en' = 'ar',
+    @Res() res: Response,
+  ) {
+    try {
+      const { buffer, filename } = await UploadsTemplateGenerator.generate(
+        type,
+        lang,
+      );
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(buffer);
+    } catch (err: any) {
+      throw new BadRequestException(
+        err?.message || 'Failed to generate template',
+      );
+    }
+  }
+
   @Get('wipe-summary')
   @Roles('admin')
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
-  @ApiOperation({ summary: 'Get counts of students and academic records for data reset (Admin)' })
+  @ApiOperation({
+    summary:
+      'Get counts of students and academic records for data reset (Admin)',
+  })
   getWipeSummary() {
     return this.uploadsService.getWipeSummary();
   }
@@ -42,7 +102,10 @@ export class UploadsController {
   @Post('wipe')
   @Roles('admin')
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
-  @ApiOperation({ summary: 'Wipe/Reset student and academic data before uploading fresh datasets (Admin)' })
+  @ApiOperation({
+    summary:
+      'Wipe/Reset student and academic data before uploading fresh datasets (Admin)',
+  })
   wipeData(
     @Body('target') target: 'students' | 'grades' | 'attendance' | 'all',
     @CurrentUser('_id') adminId: string,

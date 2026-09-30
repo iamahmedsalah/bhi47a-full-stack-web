@@ -151,7 +151,9 @@ export class RegistrationTermService {
 
   async deleteAcademicYear(academicYear: string) {
     this.assertAcademicYear(academicYear);
-    const terms = await this.registrationTermModel.find({ academicYear }).lean();
+    const terms = await this.registrationTermModel
+      .find({ academicYear })
+      .lean();
     if (!terms.length) throw new NotFoundException('Academic year not found');
     if (terms.some((term) => term.isCurrent)) {
       throw new ConflictException(
@@ -221,10 +223,7 @@ export class RegistrationTermService {
     };
   }
 
-  async assertRegistrationTermOpen(
-    academicYear: string,
-    semester: string,
-  ) {
+  async assertRegistrationTermOpen(academicYear: string, semester: string) {
     const status = await this.getRegistrationTermStatus(academicYear, semester);
     if (!status.isCurrentlyOpen) {
       throw new ForbiddenException(

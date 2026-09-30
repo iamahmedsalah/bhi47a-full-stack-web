@@ -124,7 +124,11 @@ export const rateLimitRules: RateLimitRule[] = [
     max: readLimit('FORGOT_PASSWORD_RATE_LIMIT', 5),
     message: 'Too many password recovery attempts. Please try again later.',
     keyGenerator: (req) =>
-      identityKey(readBodyString(req, 'studentCode'), readBodyString(req, 'email'), getClientIp(req)),
+      identityKey(
+        readBodyString(req, 'studentCode'),
+        readBodyString(req, 'email'),
+        getClientIp(req),
+      ),
   },
   {
     name: 'reset-password-otp',
@@ -134,7 +138,11 @@ export const rateLimitRules: RateLimitRule[] = [
     max: readLimit('RESET_PASSWORD_OTP_RATE_LIMIT', 5),
     message: 'Too many OTP verification attempts. Please wait 15 minutes.',
     keyGenerator: (req) =>
-      identityKey(readBodyString(req, 'studentCode'), readBodyString(req, 'email'), getClientIp(req)),
+      identityKey(
+        readBodyString(req, 'studentCode'),
+        readBodyString(req, 'email'),
+        getClientIp(req),
+      ),
   },
   {
     name: 'google-verify-otp',

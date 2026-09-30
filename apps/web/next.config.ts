@@ -49,7 +49,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: appVersion,
     NEXT_PUBLIC_APP_ENV: process.env.NODE_ENV || "development",
   },
-  reactCompiler: true,
+  // React compiler runs babel-loader subprocesses that crash and timeout on large components in Turbopack/Docker
+  reactCompiler: false,
   ...(isStandaloneOutput && {
     output: "standalone",
     outputFileTracingRoot: workspaceRoot,

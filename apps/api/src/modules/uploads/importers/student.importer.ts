@@ -16,7 +16,10 @@ import {
   AcademicEmailDocument,
 } from '../../academic-emails/schemas/academic-email.schema';
 import type { Importer, ImportResult } from '../importer.interface';
-import { normalizeStudentLevel, normalizeStudentSemester } from '../upload-utils';
+import {
+  normalizeStudentLevel,
+  normalizeStudentSemester,
+} from '../upload-utils';
 
 interface UpdateUserOp {
   updateOne: {
@@ -131,7 +134,7 @@ export class StudentImporter implements Importer {
                 nationalIdHash: passwordHash,
                 nationalIdMasked: maskedId,
                 nationalId,
-                mustChangePassword: (row.mustChangePassword as boolean) ?? false,
+                mustChangePassword: row.mustChangePassword ?? false,
                 isActive: true,
               },
               $setOnInsert: { permissions: [] },
@@ -154,7 +157,7 @@ export class StudentImporter implements Importer {
                 group: row.group,
                 section: row.section,
                 academicEmail: row.academicEmail,
-                academicYear: (row.academicYear as string) || defaultAcademicYear,
+                academicYear: row.academicYear || defaultAcademicYear,
                 semester: normalizeStudentSemester(row.semester),
                 seatNumber: row.seatNumber,
                 examRoom: row.examRoom,
@@ -175,7 +178,7 @@ export class StudentImporter implements Importer {
     }
 
     if (userOps.length > 0) {
-      await this.userModel.bulkWrite(userOps as any, { ordered: false });
+      await this.userModel.bulkWrite(userOps, { ordered: false });
     }
 
     if (profileOps.length > 0) {
@@ -197,7 +200,7 @@ export class StudentImporter implements Importer {
         }
       }
 
-      await this.studentModel.bulkWrite(profileOps as any, { ordered: false });
+      await this.studentModel.bulkWrite(profileOps, { ordered: false });
 
       const academicProfileOps = profileOps.flatMap((op) => {
         const studentCode = op.updateOne.filter.studentCode;
@@ -240,7 +243,8 @@ export class StudentImporter implements Importer {
         const studentCode = op.updateOne.filter.studentCode;
         const studentId = updatedUserMap.get(studentCode);
         const fullName =
-          (op.updateOne.update.$set.fullName as string) || `Student ${studentCode}`;
+          (op.updateOne.update.$set.fullName as string) ||
+          `Student ${studentCode}`;
         const academicEmail =
           (op.updateOne.update.$set.academicEmail as string)?.trim() ||
           `${studentCode}.bhi47@bhiasc.org`;

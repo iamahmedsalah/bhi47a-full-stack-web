@@ -231,8 +231,8 @@ export default function StudentQuizzesPage() {
                                     <td className="py-3 text-center">
                                       <span
                                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${quiz.status === 'present'
-                                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                            : 'bg-red-500/10 text-red-500 border-red-500/20'
+                                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                          : 'bg-red-500/10 text-red-500 border-red-500/20'
                                           }`}
                                       >
                                         {isEnglish

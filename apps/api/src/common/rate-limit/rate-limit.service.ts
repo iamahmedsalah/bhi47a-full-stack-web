@@ -89,13 +89,22 @@ export class RateLimiterService {
     private readonly logger: AppLoggerService,
     @Optional() @InjectConnection() private readonly connection?: Connection,
   ) {
-    const storeType = this.configService.get<string>('RATE_LIMIT_STORE', 'mongo');
+    const storeType = this.configService.get<string>(
+      'RATE_LIMIT_STORE',
+      'mongo',
+    );
     if (storeType === 'memory') {
       this.store = new MemoryRateLimiterStore();
-      this.logger.log('Rate limiter initialized with Memory store', 'RateLimiterService');
+      this.logger.log(
+        'Rate limiter initialized with Memory store',
+        'RateLimiterService',
+      );
     } else {
       this.store = new MongoRateLimiterStore(this.connection);
-      this.logger.log('Rate limiter initialized with Mongo store', 'RateLimiterService');
+      this.logger.log(
+        'Rate limiter initialized with Mongo store',
+        'RateLimiterService',
+      );
     }
   }
 

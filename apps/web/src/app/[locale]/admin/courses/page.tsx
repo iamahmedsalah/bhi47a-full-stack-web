@@ -670,13 +670,13 @@ function CoursesPageContent() {
         bulkActions={[
           ...(selectedKeys.length === 1
             ? [
-                {
-                  label: locale === 'ar' ? 'تعديل' : 'Edit',
-                  onClick: handleBulkEdit,
-                  variant: 'default' as const,
-                  icon: <Edit2 className="w-3.5 h-3.5" />,
-                },
-              ]
+              {
+                label: locale === 'ar' ? 'تعديل' : 'Edit',
+                onClick: handleBulkEdit,
+                variant: 'default' as const,
+                icon: <Edit2 className="w-3.5 h-3.5" />,
+              },
+            ]
             : []),
           {
             label: locale === 'ar' ? 'حذف المادة' : 'Delete',

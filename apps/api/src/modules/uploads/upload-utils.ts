@@ -7,7 +7,12 @@ import type { CourseLevel, Semester } from '@student-portal/shared';
 export function parseSafeNumber(val: unknown): number | undefined {
   if (val === null || val === undefined) return undefined;
   if (typeof val === 'number') return Number.isNaN(val) ? undefined : val;
-  const str = String(val).trim();
+  const str =
+    typeof val === 'string'
+      ? val.trim()
+      : typeof val === 'boolean'
+        ? String(val)
+        : '';
   if (
     !str ||
     str === 'محل' ||
@@ -23,19 +28,43 @@ export function parseSafeNumber(val: unknown): number | undefined {
 }
 
 const LEVEL_ALIASES: Record<string, CourseLevel> = {
-  '1': '1', first: '1', one: '1',
-  '2': '2', second: '2', two: '2',
-  '3': '3', third: '3', three: '3',
-  '4': '4', fourth: '4', four: '4',
+  '1': '1',
+  first: '1',
+  one: '1',
+  '2': '2',
+  second: '2',
+  two: '2',
+  '3': '3',
+  third: '3',
+  three: '3',
+  '4': '4',
+  fourth: '4',
+  four: '4',
 };
 
 export function normalizeStudentLevel(value: unknown): CourseLevel {
-  const level = String(value ?? '1').trim().toLowerCase();
+  const level = (
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number'
+        ? String(value)
+        : '1'
+  )
+    .trim()
+    .toLowerCase();
   return LEVEL_ALIASES[level] ?? '1';
 }
 
 export function normalizeStudentSemester(value: unknown): Semester {
-  const semester = String(value ?? 'first').trim().toLowerCase();
+  const semester = (
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number'
+        ? String(value)
+        : 'first'
+  )
+    .trim()
+    .toLowerCase();
   if (semester === '2' || semester === 'second') return 'second';
   if (semester === '3' || semester === 'summer') return 'summer';
   return 'first';
@@ -54,7 +83,7 @@ export function normalizeRowKeys(
   const normalized: Record<string, unknown> = {};
 
   for (const key of Object.keys(row)) {
-    const cleanKey = key.trim().toLowerCase();
+    const cleanKey = key.trim().toLowerCase().replace(/[\s_\-]/g, '');
     const val = row[key];
 
     // Student Code
@@ -226,9 +255,19 @@ export function normalizeRowKeys(
       cleanKey === 'فصول الطرح'
     ) {
       const termMap: Record<string, string> = {
-        first: 'first', '1': 'first', أول: 'first', الاول: 'first', الأول: 'first',
-        second: 'second', '2': 'second', ثاني: 'second', الثاني: 'second',
-        summer: 'summer', '3': 'summer', صيفي: 'summer', الصيفي: 'summer',
+        first: 'first',
+        '1': 'first',
+        أول: 'first',
+        الاول: 'first',
+        الأول: 'first',
+        second: 'second',
+        '2': 'second',
+        ثاني: 'second',
+        الثاني: 'second',
+        summer: 'summer',
+        '3': 'summer',
+        صيفي: 'summer',
+        الصيفي: 'summer',
       };
       normalized.offeredTerms = String(val)
         .split(/[,;،]/)
@@ -249,10 +288,7 @@ export function normalizeRowKeys(
       cleanKey === 'الفصل الموصى به'
     ) {
       normalized.recommendedSemester = parseSafeNumber(val);
-    } else if (
-      cleanKey === 'minimumgpa' ||
-      cleanKey === 'الحد الأدنى للمعدل'
-    ) {
+    } else if (cleanKey === 'minimumgpa' || cleanKey === 'الحد الأدنى للمعدل') {
       normalized.minimumGpa = parseSafeNumber(val);
     }
     // Credit Hours
@@ -263,16 +299,33 @@ export function normalizeRowKeys(
     ) {
       normalized.creditHours = parseSafeNumber(val);
     }
-    // Grade Value
-    else if (cleanKey === 'grade' || cleanKey === 'الدرجة') {
-      normalized.grade = parseSafeNumber(val);
-    }
-    // Max Grade
-    else if (cleanKey === 'maxgrade' || cleanKey === 'الدرجة العظمى') {
+    // Max Grade (Checked first to avoid prefix collisions)
+    else if (
+      cleanKey === 'maxgrade' ||
+      cleanKey === 'maxscore' ||
+      cleanKey === 'الدرجةالعظمى' ||
+      cleanKey === 'الدرجةالقصوى' ||
+      cleanKey === 'العظمى' ||
+      cleanKey === 'أقصىدرجة'
+    ) {
       normalized.maxGrade = parseSafeNumber(val);
     }
+    // Grade Value
+    else if (
+      cleanKey === 'grade' ||
+      cleanKey === 'score' ||
+      cleanKey === 'الدرجة' ||
+      cleanKey === 'درجة' ||
+      cleanKey === 'الدرجةالمحققة'
+    ) {
+      normalized.grade = parseSafeNumber(val);
+    }
     // Exam Type
-    else if (cleanKey === 'examtype' || cleanKey === 'نوع الامتحان') {
+    else if (
+      cleanKey === 'examtype' ||
+      cleanKey === 'نوعالامتحان' ||
+      cleanKey === 'نوعالاختبار'
+    ) {
       normalized.examType = String(val).trim().toLowerCase();
     }
     // Quiz Number

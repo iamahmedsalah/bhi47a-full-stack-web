@@ -48,6 +48,9 @@ function StudentLoginContent() {
   const searchParams = useSearchParams();
   const locale = params.locale as string;
   const returnUrl = searchParams.get("returnUrl");
+  const isSessionExpired =
+    searchParams.get("reason") === "session_expired" ||
+    searchParams.get("error") === "session_expired";
 
   const {
     loading,
@@ -316,6 +319,17 @@ function StudentLoginContent() {
               {locale === "ar" ? "بوابة الطالب" : "Student Portal"}
             </h1>
           </div>
+
+          {isSessionExpired && (
+            <Alert className="w-full border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-3">
+              <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <AlertDescription className="text-xs leading-relaxed text-start">
+                {locale === "ar"
+                  ? "انتهت جلستك الأكاديمية السابقة تلقائياً لدواعي الأمان (الحد الأقصى للجلسة 20 دقيقة). يرجى تسجيل الدخول مجدداً للمتابعة."
+                  : "Your previous session has expired automatically for security (20-minute limit). Please log in again to continue."}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
             <div className="space-y-4">

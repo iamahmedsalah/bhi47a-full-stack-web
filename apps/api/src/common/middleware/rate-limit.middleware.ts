@@ -8,9 +8,15 @@ import type {
   RateLimiterStore,
 } from '../rate-limit/rate-limit.types';
 
-let activeRateLimiterService: { apply: (req: Request, res: Response, next: NextFunction) => Promise<void> } | undefined;
+let activeRateLimiterService:
+  | {
+      apply: (req: Request, res: Response, next: NextFunction) => Promise<void>;
+    }
+  | undefined;
 
-export function setGlobalRateLimiterService(service: { apply: (req: Request, res: Response, next: NextFunction) => Promise<void> }) {
+export function setGlobalRateLimiterService(service: {
+  apply: (req: Request, res: Response, next: NextFunction) => Promise<void>;
+}) {
   activeRateLimiterService = service;
 }
 

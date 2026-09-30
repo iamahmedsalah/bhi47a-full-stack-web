@@ -125,11 +125,10 @@ export default function StudentExamSchedulePage() {
               key={type}
               type="button"
               onClick={() => setSelectedType(type)}
-              className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-start transition-all cursor-pointer ${
-                isActive
+              className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-start transition-all cursor-pointer ${isActive
                   ? 'border-primary/50 bg-primary/10 shadow-md shadow-primary/5'
                   : 'border-border bg-card/45 hover:border-primary/45 hover:bg-card/75'
-              }`}
+                }`}
             >
               <div className="space-y-1">
                 <p className="text-sm font-bold text-foreground">
@@ -247,8 +246,8 @@ export default function StudentExamSchedulePage() {
                   ? 'لا يوجد جدول نهائي متاح حالياً'
                   : 'لا يوجد جدول ميد ترم متاح حالياً'
                 : selectedType === 'final'
-                ? 'No final schedule available yet'
-                : 'No midterm schedule available yet'}
+                  ? 'No final schedule available yet'
+                  : 'No midterm schedule available yet'}
               description={locale === 'ar'
                 ? 'لم يتم رفع الجدول بعد. يرجى المتابعة لاحقاً.'
                 : 'The administration has not published this schedule yet. Please check again later.'}

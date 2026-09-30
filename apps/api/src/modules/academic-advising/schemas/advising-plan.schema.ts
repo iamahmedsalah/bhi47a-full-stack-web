@@ -8,8 +8,18 @@ import {
 } from '../constants/advising.constants';
 export interface PlanValidationSnapshot {
   valid: boolean;
-  errors: Array<{ code: string; message: string; severity: string; courseIds: string[] }>;
-  warnings: Array<{ code: string; message: string; severity: string; courseIds: string[] }>;
+  errors: Array<{
+    code: string;
+    message: string;
+    severity: string;
+    courseIds: string[];
+  }>;
+  warnings: Array<{
+    code: string;
+    message: string;
+    severity: string;
+    courseIds: string[];
+  }>;
   requiredOverrides: string[];
   totalCredits: number;
   validatedAt: Date;

@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { GeminiProvider } from '../providers/gemini.provider';
-import {
-  AiUsageLog,
-  AiUsageLogDocument,
-} from '../schemas/ai-usage-log.schema';
+import { AiUsageLog, AiUsageLogDocument } from '../schemas/ai-usage-log.schema';
 import { User } from '../../users/schemas/user.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { Course } from '../../courses/schemas/course.schema';
@@ -167,7 +164,9 @@ export class AdminAiAdvisorService {
     };
   }
 
-  private async buildStudentAnalysis(studentId: string): Promise<string | null> {
+  private async buildStudentAnalysis(
+    studentId: string,
+  ): Promise<string | null> {
     const id = new Types.ObjectId(studentId);
     const [user, profile, academic, publishedGrades] = await Promise.all([
       this.users.findById(id).select('name studentCode').lean(),
@@ -175,7 +174,9 @@ export class AdminAiAdvisorService {
       this.academics.findOne({ studentId: id }).lean(),
       this.grades
         .find({ studentId: id, isPublished: true })
-        .select('courseCode examType grade maxGrade status academicYear semester')
+        .select(
+          'courseCode examType grade maxGrade status academicYear semester',
+        )
         .sort({ academicYear: -1, semester: -1 })
         .lean(),
     ]);

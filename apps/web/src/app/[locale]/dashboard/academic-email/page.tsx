@@ -142,17 +142,16 @@ export default function StudentAcademicEmailPage() {
               </div>
             </div>
             <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold self-start sm:self-center border ${
-                record.status === 'active'
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold self-start sm:self-center border ${record.status === 'active'
                   ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                   : 'bg-red-500/10 text-red-500 border-red-500/20'
-              }`}
+                }`}
             >
               {isEnglish
                 ? record.status
                 : record.status === 'active'
-                ? 'نشط ومفعل'
-                : 'معطل مؤقتاً'}
+                  ? 'نشط ومفعل'
+                  : 'معطل مؤقتاً'}
             </span>
           </div>
 

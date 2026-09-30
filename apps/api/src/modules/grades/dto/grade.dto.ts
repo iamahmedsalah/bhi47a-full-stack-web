@@ -100,17 +100,28 @@ export class QueryGradeDto {
 }
 
 export class PublishGradesDto {
-  @ApiPropertyOptional({ example: '2026-2027', description: 'Omit to affect all academic years' })
+  @ApiPropertyOptional({
+    example: '2026-2027',
+    description: 'Omit to affect all academic years',
+  })
   @IsOptional()
   @IsString()
   academicYear?: string;
 
-  @ApiPropertyOptional({ example: 'first', enum: SEMESTER_VALUES, description: 'Omit to affect every semester' })
+  @ApiPropertyOptional({
+    example: 'first',
+    enum: SEMESTER_VALUES,
+    description: 'Omit to affect every semester',
+  })
   @IsOptional()
   @IsEnum(SEMESTER_VALUES)
   semester?: Semester;
 
-  @ApiPropertyOptional({ example: 'midterm', enum: EXAM_TYPE_VALUES, description: 'Omit to affect final, midterm, and quiz results' })
+  @ApiPropertyOptional({
+    example: 'midterm',
+    enum: EXAM_TYPE_VALUES,
+    description: 'Omit to affect final, midterm, and quiz results',
+  })
   @IsOptional()
   @IsEnum(EXAM_TYPE_VALUES)
   examType?: ExamType;

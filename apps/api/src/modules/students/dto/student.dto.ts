@@ -20,80 +20,124 @@ import {
 
 export class CreateStudentDto {
   @ApiProperty({ example: '20231001' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\d{4,12}$/, {
+    message: 'كود الطالب يجب أن يتكون من أرقام فقط بين 4 و 12 رقماً',
+  })
   studentCode!: string;
 
   @ApiProperty({ example: 'أحمد محمد علي' })
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().replace(/<[^>]*>/g, '')
+      : value,
+  )
   @IsString()
   @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(120)
   fullName!: string;
 
   @ApiProperty({
     example: '12345678901234',
     description: 'National ID (used as initial password)',
   })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @Matches(/^(2|3)\d{13}$|^\d{14}$/, {
+    message: 'الرقم القومي يجب أن يتكون من 14 رقماً',
+  })
   nationalId!: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
+  @Matches(/^(010|011|012|015)\d{8}$|^\+?\d{10,15}$/, {
+    message: 'رقم الهاتف يجب أن يكون مصرياً صالحاً أو بتنسيق دولي',
+  })
   phone?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().replace(/<[^>]*>/g, '')
+      : value,
+  )
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   department?: string;
 
   @ApiProperty({ example: '1', enum: ['1', '2', '3', '4'] })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @IsIn(['1', '2', '3', '4'])
   level!: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   group?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   section?: string;
 
   @ApiProperty({ example: '2024-2025' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\d{4}-\d{4}$/, {
+    message: 'العام الأكاديمي يجب أن يكون بالصيغة YYYY-YYYY',
+  })
   academicYear!: string;
 
   @ApiProperty({ example: 'first', enum: ['first', 'second', 'summer'] })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsString()
   @IsNotEmpty()
+  @IsIn(['first', 'second', 'summer'])
   semester!: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   seatNumber?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsOptional()
   @IsString()
   @IsEmail()
   academicEmail?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examRoom?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examFloor?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examBuilding?: string;
@@ -106,8 +150,14 @@ export class CreateStudentDto {
 
 export class UpdateStudentDto {
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().replace(/<[^>]*>/g, '')
+      : value,
+  )
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   fullName?: string;
 
   @ApiPropertyOptional({
@@ -115,43 +165,69 @@ export class UpdateStudentDto {
     description:
       'New national ID. Existing value is stored hashed and cannot be read back.',
   })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
+  @Matches(/^(2|3)\d{13}$|^\d{14}$/, {
+    message: 'الرقم القومي يجب أن يتكون من 14 رقماً',
+  })
   nationalId?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
+  @Matches(/^(010|011|012|015)\d{8}$|^\+?\d{10,15}$/, {
+    message: 'رقم الهاتف يجب أن يكون مصرياً صالحاً أو بتنسيق دولي',
+  })
   phone?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().replace(/<[^>]*>/g, '')
+      : value,
+  )
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   department?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
+  @IsIn(['1', '2', '3', '4'])
   level?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   group?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   section?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
+  @Matches(/^\d{4}-\d{4}$/, {
+    message: 'العام الأكاديمي يجب أن يكون بالصيغة YYYY-YYYY',
+  })
   academicYear?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsOptional()
   @IsString()
+  @IsIn(['first', 'second', 'summer'])
   semester?: string;
 
   @ApiPropertyOptional({
@@ -162,27 +238,34 @@ export class UpdateStudentDto {
   enrollmentStatus?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   seatNumber?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsOptional()
   @IsString()
   @IsEmail()
   academicEmail?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examRoom?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examFloor?: string;
 
   @ApiPropertyOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
   @IsString()
   examBuilding?: string;

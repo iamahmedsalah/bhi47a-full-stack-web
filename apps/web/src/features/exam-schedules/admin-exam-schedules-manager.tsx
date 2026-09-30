@@ -264,11 +264,10 @@ function AdminExamSchedulesManagerContent() {
               key={type}
               type="button"
               onClick={() => setSelectedType(type)}
-              className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-start transition-all duration-200 ${
-                isActive
+              className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-start transition-all duration-200 ${isActive
                   ? 'border-primary/70 bg-primary/10 shadow-md shadow-primary/10'
                   : 'border-border bg-surface/40 hover:border-primary/40 hover:bg-primary/5'
-              }`}
+                }`}
             >
               <div className="space-y-1">
                 <p className="text-sm font-bold text-foreground">
@@ -283,8 +282,8 @@ function AdminExamSchedulesManagerContent() {
                       ? 'يوجد جدول متاح'
                       : 'Schedule available'
                     : locale === 'ar'
-                    ? 'لا يوجد جدول حالياً'
-                    : 'No schedule yet'}
+                      ? 'لا يوجد جدول حالياً'
+                      : 'No schedule yet'}
                 </p>
               </div>
               <div className={`rounded-2xl border p-3 ${isActive ? 'border-primary/50 bg-primary/15' : 'border-border bg-surface/50'}`}>
@@ -391,8 +390,8 @@ function AdminExamSchedulesManagerContent() {
                       ? 'لا يوجد جدول ميد ترم متاح حالياً'
                       : 'لا يوجد جدول ميد ترم متاح حالياً'
                     : selectedType === 'final'
-                    ? 'No final schedule available yet'
-                    : 'No midterm schedule available yet'}
+                      ? 'No final schedule available yet'
+                      : 'No midterm schedule available yet'}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {locale === 'ar'
@@ -427,8 +426,8 @@ function AdminExamSchedulesManagerContent() {
             </label>
             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-2xl border border-border bg-card/70 px-4 py-5 text-center transition hover:border-primary/60 hover:bg-primary/5">
               <input
-                  type="file"
-                  accept="image/*,.pdf"
+                type="file"
+                accept="image/*,.pdf"
                 className="sr-only"
                 onChange={(event) => void handleUploadPick(event.target.files?.[0])}
               />
@@ -455,9 +454,9 @@ function AdminExamSchedulesManagerContent() {
                   <p className="mt-2 text-sm font-semibold text-foreground">
                     {locale === 'ar' ? 'No file chosen' : 'No file chosen'}
                   </p>
-                    <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {locale === 'ar' ? 'PNG / JPG / WEBP / PDF' : 'PNG / JPG / WEBP / PDF'}
-                    </p>
+                  </p>
                 </>
               )}
             </label>

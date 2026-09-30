@@ -41,6 +41,8 @@ ENV NODE_ENV=production
 # BUILD_STANDALONE=true activates output: "standalone" in next.config.ts for Docker.
 # Vercel builds do NOT set this, so Vercel's adapter owns the output format there.
 ENV BUILD_STANDALONE=true
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN pnpm --filter @student-portal/shared run build
 RUN pnpm --filter @student-portal/web run build
 

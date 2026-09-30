@@ -44,7 +44,9 @@ export class AcademicProfileService {
       .lean();
   }
 
-  async getAcademicProfile(studentId: string): Promise<StudentAcademicProfileDocument> {
+  async getAcademicProfile(
+    studentId: string,
+  ): Promise<StudentAcademicProfileDocument> {
     const profile = await this.academicProfileModel.findOne({
       studentId: new Types.ObjectId(studentId),
     });

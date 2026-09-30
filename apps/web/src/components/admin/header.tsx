@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/sheet';
 import { Bell, Clock, Loader2, Inbox, Send, ExternalLink, Calendar } from 'lucide-react';
 
+import { SessionTimerWidget } from '@/components/common/session-timer-widget';
+
 export default function AdminHeader() {
   const { logout } = useAuth();
   const params = useParams();
@@ -36,48 +38,6 @@ export default function AdminHeader() {
 
   const notifications = notificationsQuery.data?.items || [];
   const notificationCount = notifications.length;
-
-  // 20 minutes session window (1200 seconds)
-  const SESSION_MAX_SECONDS = 20 * 60;
-  const [remainingSeconds, setRemainingSeconds] = useState(SESSION_MAX_SECONDS);
-  const [prevPathname, setPrevPathname] = useState(pathname);
-
-  const extendSession = () => {
-    setRemainingSeconds(SESSION_MAX_SECONDS);
-  };
-
-  if (pathname !== prevPathname) {
-    setPrevPathname(pathname);
-    setRemainingSeconds(SESSION_MAX_SECONDS);
-  }
-
-  // Session timer countdown tick
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          // Handle auto logout
-          logout();
-          router.push(`/${locale}/login?error=session_expired`);
-          return 0;
-        }
-
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [logout, router, locale]);
-
-  const formatRemaining = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const pct = Math.max(0, Math.min(100, Math.round((remainingSeconds / SESSION_MAX_SECONDS) * 100)));
-  const barColor = pct > 60 ? 'bg-green-400' : pct > 20 ? 'bg-yellow-400' : 'bg-red-400';
 
   return (
     <header className="relative bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-4 rounded-squircle mx-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -104,21 +64,7 @@ export default function AdminHeader() {
       {/* Left section: Session timer, language switcher, logout */}
       <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
         {/* Session Expiry Timer widget */}
-        <div 
-          onClick={extendSession}
-          className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-squircle border border-white/5 cursor-pointer hover:bg-black/30 transition-all"
-          title={isAr ? 'انقر لتمديد الجلسة' : 'Click to extend session'}
-        >
-          <Clock className="w-4 h-4 text-slate-300" />
-          <div className="flex flex-col">
-            <span className="text-xs font-mono text-white text-center leading-none">
-              {formatRemaining(remainingSeconds)}
-            </span>
-            <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden mt-1">
-              <div className={`${barColor} h-1 rounded-full transition-all duration-1000`} style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        </div>
+        <SessionTimerWidget role="admin" />
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">

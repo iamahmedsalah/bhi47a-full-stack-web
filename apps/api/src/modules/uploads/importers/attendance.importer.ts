@@ -75,8 +75,7 @@ export class AttendanceImporter implements Importer {
         row.absenceLectures !== undefined
           ? (row.absenceLectures as number)
           : Math.max(0, total - attended);
-      const percentage =
-        total > 0 ? Math.round((attended / total) * 100) : 100;
+      const percentage = total > 0 ? Math.round((attended / total) * 100) : 100;
 
       const attendanceData = {
         studentId: student._id,

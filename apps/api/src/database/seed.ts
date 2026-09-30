@@ -73,7 +73,9 @@ function loadSeedData(): SeedData {
     path.resolve(process.cwd(), 'dist/database/seed.data.json'),
     path.resolve(process.cwd(), 'apps/api/src/database/seed.data.json'),
   ];
-  const foundPath = candidatePaths.find((candidate) => fs.existsSync(candidate));
+  const foundPath = candidatePaths.find((candidate) =>
+    fs.existsSync(candidate),
+  );
   if (!foundPath) {
     throw new Error(
       `seed.data.json not found in candidate paths:\n${candidatePaths.join('\n')}`,
@@ -154,11 +156,11 @@ async function upsertUser(
   const filter = data.email
     ? { email: data.email.toLowerCase() }
     : {
-      $or: [
-        { studentCode: data.studentCode },
-        { userCode: `STD-${data.studentCode}` },
-      ],
-    };
+        $or: [
+          { studentCode: data.studentCode },
+          { userCode: `STD-${data.studentCode}` },
+        ],
+      };
 
   const existing = await usersCollection.findOne(filter);
 
@@ -316,15 +318,11 @@ async function seed() {
 
   const seedData = loadSeedData();
 
-  const adminEmail = (
-    process.env.ADMIN_EMAIL || 'admin@institute.edu'
-  ).trim();
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@institute.edu').trim();
   const adminPassword = process.env.ADMIN_PASSWORD?.trim();
   const adminName = (process.env.ADMIN_NAME || 'System Admin').trim();
 
-  const staffEmail = (
-    process.env.STAFF_EMAIL || 'staff@institute.edu'
-  ).trim();
+  const staffEmail = (process.env.STAFF_EMAIL || 'staff@institute.edu').trim();
   const staffPassword = (
     process.env.STAFF_PASSWORD || 'StaffPass12345!'
   ).trim();
@@ -598,9 +596,7 @@ async function seed() {
             academicYear: student.academicYear,
             semester: student.semester,
             status:
-              student.failedCourses.length > 0
-                ? 'UNDER_REVIEW'
-                : 'IN_PROGRESS',
+              student.failedCourses.length > 0 ? 'UNDER_REVIEW' : 'IN_PROGRESS',
             timeline: [
               {
                 status: 'IN_PROGRESS',
@@ -643,7 +639,9 @@ async function seed() {
             reason: student.failedCourses.length ? 'failed_courses' : 'low_gpa',
             autoSuggestedCourses: suggestedCourses.slice(0, 3),
             staffApprovedCourses: suggestedCourses.slice(0, 3),
-            policyWarnings: ['GPA is below 2.00 and requires academic advising.'],
+            policyWarnings: [
+              'GPA is below 2.00 and requires academic advising.',
+            ],
             overridePrerequisites: false,
             overrideMaxCreditHours: false,
             approveIncompleteCompletion: false,
@@ -667,9 +665,15 @@ async function seed() {
 
         const isFailed = student.failedCourses.includes(course.code);
         // Deterministic pseudo-random variation based on course code
-        const codeHash = course.code.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        const midtermGrade = isFailed ? (5 + (codeHash % 3)) : (16 + (codeHash % 4)); // 5-7/20 or 16-19/20
-        const finalGrade = isFailed ? (28 + (codeHash % 8)) : (62 + (codeHash % 15)); // 28-35/80 or 62-76/80
+        const codeHash = course.code
+          .split('')
+          .reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const midtermGrade = isFailed
+          ? 5 + (codeHash % 3)
+          : 16 + (codeHash % 4); // 5-7/20 or 16-19/20
+        const finalGrade = isFailed
+          ? 28 + (codeHash % 8)
+          : 62 + (codeHash % 15); // 28-35/80 or 62-76/80
 
         const priorAcademicYear =
           course.academicLevel === '1'

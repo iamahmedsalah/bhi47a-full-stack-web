@@ -8,8 +8,9 @@ import {
 
 export const studentCodeSchema = z
   .string()
+  .trim()
   .min(1, "Student code is required")
-  .regex(/^\d{6}$/, "Student code must be exactly 6 digits");
+  .regex(/^\d{4,12}$/, "Student code must be between 4 and 12 digits");
 
 export const studentPasswordSchema = z
   .string()

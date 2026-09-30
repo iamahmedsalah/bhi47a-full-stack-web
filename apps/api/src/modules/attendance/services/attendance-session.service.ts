@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -19,10 +18,7 @@ import {
   CourseStaffAssignment,
   CourseStaffAssignmentDocument,
 } from '../schemas/course-staff-assignment.schema';
-import {
-  Course,
-  CourseDocument,
-} from '../../courses/schemas/course.schema';
+import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   CreateAttendanceSessionDto,
@@ -182,8 +178,7 @@ export class AttendanceSessionService {
     const qrRotationSeconds =
       dto.qrRotationSeconds ?? ATTENDANCE_CONFIG_DEFAULTS.QR_ROTATION_SECONDS;
     const lateThresholdMinutes =
-      dto.lateThresholdMinutes ??
-      ATTENDANCE_CONFIG_DEFAULTS.LATE_AFTER_MINUTES;
+      dto.lateThresholdMinutes ?? ATTENDANCE_CONFIG_DEFAULTS.LATE_AFTER_MINUTES;
 
     const startsAt = now;
     const expiresAt = new Date(

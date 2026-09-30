@@ -104,8 +104,10 @@ export class PlanValidationService {
       }
 
       // Equivalent already passed
-      const equiv = (course.equivalentCourses ?? []).find((eq) =>
-        completed.has(eq.toUpperCase()) || equivalentPassed.has(eq.toUpperCase()),
+      const equiv = (course.equivalentCourses ?? []).find(
+        (eq) =>
+          completed.has(eq.toUpperCase()) ||
+          equivalentPassed.has(eq.toUpperCase()),
       );
       if (equiv) {
         errors.push({

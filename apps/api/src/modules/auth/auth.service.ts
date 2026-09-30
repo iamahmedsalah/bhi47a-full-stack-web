@@ -7,7 +7,10 @@ import { UsersService } from '../users/users.service';
 import type { StudentLoginDto } from './dto/student-login.dto';
 import type { AdminLoginDto } from './dto/admin-login.dto';
 import type { ChangePasswordDto } from './dto/change-password.dto';
-import type { ForgotPasswordDto, ResetPasswordOtpDto } from './dto/forgot-password.dto';
+import type {
+  ForgotPasswordDto,
+  ResetPasswordOtpDto,
+} from './dto/forgot-password.dto';
 
 @Injectable()
 export class AuthService {

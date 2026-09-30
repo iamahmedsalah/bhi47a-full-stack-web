@@ -83,9 +83,9 @@ export class CreateAttendanceSessionDto {
   sessionDurationMinutes?: number;
 
   @ApiPropertyOptional({
-    example: 25,
+    example: 60,
     description: 'QR rotation frequency in seconds',
-    default: 25,
+    default: 60,
   })
   @IsOptional()
   @Type(() => Number)

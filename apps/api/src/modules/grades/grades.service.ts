@@ -85,7 +85,9 @@ export class GradesService implements OnModuleInit {
     }
   }
 
-  async syncPublishedAcademicProgress(studentIds: Array<string | Types.ObjectId>) {
+  async syncPublishedAcademicProgress(
+    studentIds: Array<string | Types.ObjectId>,
+  ) {
     const uniqueIds = [
       ...new Set(studentIds.map((id) => id.toString()).filter(Boolean)),
     ];
@@ -93,7 +95,10 @@ export class GradesService implements OnModuleInit {
 
     const courses = await this.courseModel.find({ isActive: true }).lean();
     const courseCredits = Object.fromEntries(
-      courses.map((course) => [course.code.toUpperCase(), course.creditHours ?? 1]),
+      courses.map((course) => [
+        course.code.toUpperCase(),
+        course.creditHours ?? 1,
+      ]),
     );
 
     const results = await Promise.all(
@@ -102,7 +107,9 @@ export class GradesService implements OnModuleInit {
         const [academic, studentProfile, grades] = await Promise.all([
           this.studentAcademicProfileModel.findOne({ studentId: objectId }),
           this.studentProfileModel.findOne({ userId: objectId }),
-          this.gradeModel.find({ studentId: objectId, isPublished: true }).lean(),
+          this.gradeModel
+            .find({ studentId: objectId, isPublished: true })
+            .lean(),
         ]);
         if (!academic && !studentProfile) return null;
 
@@ -147,7 +154,8 @@ export class GradesService implements OnModuleInit {
           academic.completedCourses = progress.completedCourses;
           academic.failedCourses = progress.failedCourses;
           academic.lowGradeCourses = progress.lowGradeCourses;
-          if (progress.calculatedGpa !== null) academic.gpa = progress.calculatedGpa;
+          if (progress.calculatedGpa !== null)
+            academic.gpa = progress.calculatedGpa;
           academic.academicLevel = promotedLevel;
           if (wasPromoted) academic.semester = 'first';
           await academic.save();
@@ -191,9 +199,9 @@ export class GradesService implements OnModuleInit {
       if (!student) throw new NotFoundException('Student not found');
       studentIds = [student._id];
     } else {
-      studentIds = (await this.gradeModel.distinct('studentId', {
+      studentIds = await this.gradeModel.distinct('studentId', {
         isPublished: true,
-      })) as Types.ObjectId[];
+      });
     }
 
     const students = await this.syncPublishedAcademicProgress(studentIds);
@@ -369,7 +377,9 @@ export class GradesService implements OnModuleInit {
       : [];
     const [result, quizResult] = await Promise.all([
       includeGrades
-        ? this.gradeModel.updateMany(filter, { $set: { isPublished: dto.isPublished } })
+        ? this.gradeModel.updateMany(filter, {
+            $set: { isPublished: dto.isPublished },
+          })
         : Promise.resolve({ modifiedCount: 0 }),
       includeQuizzes
         ? this.courseQuizModel.updateMany(quizFilter, {
@@ -427,9 +437,7 @@ export class GradesService implements OnModuleInit {
 
   // ─── Student Self Services ───────────────────────────────────────
 
-  async findStudentResults(
-    studentId: string,
-  ): Promise<
+  async findStudentResults(studentId: string): Promise<
     Array<
       Grade & {
         creditHours: number;
@@ -469,14 +477,7 @@ export class GradesService implements OnModuleInit {
         '1',
       courseNameAr: coursesByCode.get(grade.courseCode.toUpperCase())?.nameAr,
       courseNameEn: coursesByCode.get(grade.courseCode.toUpperCase())?.nameEn,
-    })) as Array<
-      Grade & {
-        creditHours: number;
-        academicLevel: CourseLevel;
-        courseNameAr?: string;
-        courseNameEn?: string;
-      }
-    >;
+    }));
   }
 
   async findStudentQuizzes(studentId: string): Promise<CourseQuiz[]> {

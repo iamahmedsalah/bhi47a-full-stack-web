@@ -1,6 +1,10 @@
 import { calculatePromotedAcademicLevel } from './academic-level-progression.util';
 
-const course = (code: string, level: '1' | '2', semester: 'first' | 'second') => ({
+const course = (
+  code: string,
+  level: '1' | '2',
+  semester: 'first' | 'second',
+) => ({
   code,
   academicLevel: level,
   level,

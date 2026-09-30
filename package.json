@@ -2,15 +2,25 @@
   "name": "student-portal",
   "private": true,
   "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
-    "postinstall": "pnpm --filter @student-portal/shared build",
-    "dev": "pnpm -r --parallel run dev",
-    "dev:api": "pnpm --filter @student-portal/api run dev",
-    "dev:web": "pnpm --filter @student-portal/web run dev",
-    "build": "pnpm --filter @student-portal/shared build && pnpm --filter @student-portal/web build",
-    "build:api": "pnpm --filter @student-portal/api run build",
-    "build:web": "pnpm --filter @student-portal/web run build",
-    "lint": "pnpm -r run lint",
-    "clean": "pnpm -r run clean"
+    "postinstall": "corepack pnpm --filter @student-portal/shared build",
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@student-portal/api",
+    "dev:web": "turbo run dev --filter=@student-portal/web",
+    "build": "turbo run build",
+    "build:api": "turbo run build --filter=@student-portal/api",
+    "build:web": "turbo run build --filter=@student-portal/web",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "clean": "turbo run clean && rimraf .turbo"
+  },
+  "devDependencies": {
+    "rimraf": "6.1.3",
+    "turbo": "2.11.5"
   }
 }

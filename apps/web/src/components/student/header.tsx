@@ -19,6 +19,7 @@ import { cn } from '@/lib/cn';
 import Themes from '@/components/ui/Themes';
 import LangToggle from '@/components/ui/LangToggle';
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 
 export default function StudentHeader() {
   const { user } = useAuth();
@@ -387,6 +388,9 @@ export default function StudentHeader() {
               </div>
             </SheetContent>
           </Sheet>
+
+          {/* Session Expiry Timer Widget */}
+          <SessionTimerWidget role="student" />
 
           <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
           

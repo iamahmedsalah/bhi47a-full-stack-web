@@ -39,16 +39,10 @@ export interface LlmEmbeddingOptions {
 
 export interface LlmProvider {
   /** Send a chat message and receive a response. */
-  chat(
-    userMessage: string,
-    options?: LlmChatOptions,
-  ): Promise<LlmChatResponse>;
+  chat(userMessage: string, options?: LlmChatOptions): Promise<LlmChatResponse>;
 
   /** Generate a vector embedding for the given text. */
-  embed(
-    text: string,
-    options?: LlmEmbeddingOptions,
-  ): Promise<number[]>;
+  embed(text: string, options?: LlmEmbeddingOptions): Promise<number[]>;
 
   /** Embed multiple texts in a single batch. */
   embedBatch(

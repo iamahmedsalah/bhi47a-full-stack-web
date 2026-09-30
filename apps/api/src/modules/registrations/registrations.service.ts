@@ -50,9 +50,7 @@ import {
 } from './utils/course-recommendation.util';
 import { isCourseOfferedForTerm } from './utils/term-availability.util';
 import { isRegistrationTermCurrentlyOpen } from './utils/registration-term.util';
-import {
-  isNewStudentWithoutAcademicHistory,
-} from './utils/academic-standing.util';
+import { isNewStudentWithoutAcademicHistory } from './utils/academic-standing.util';
 import { getRegistrationSelectionLimits } from './utils/registration-selection.util';
 import { isConsecutiveAcademicYear } from './utils/academic-year.util';
 import { mergeAcademicCourseProgress } from './utils/academic-course-progress.util';
@@ -809,33 +807,33 @@ export class RegistrationsService {
       );
     }
 
-    const [profile, courses, grades, student, registration] = await Promise.all([
-      this.getAcademicProfile(request.studentId.toString()),
-      this.courseModel.find({ isActive: true }).sort({ code: 1 }).lean(),
-      this.gradeModel
-        .find({ studentId: request.studentId, isPublished: true })
-        .sort({ courseCode: 1, examType: 1 })
-        .lean(),
-      this.resolveStudentPrintProfile(request.studentId.toString()),
-      this.registrationModel
-        .findOne({ studentId: request.studentId })
-        .sort({ createdAt: -1 })
-        .lean(),
-    ]);
+    const [profile, courses, grades, student, registration] = await Promise.all(
+      [
+        this.getAcademicProfile(request.studentId.toString()),
+        this.courseModel.find({ isActive: true }).sort({ code: 1 }).lean(),
+        this.gradeModel
+          .find({ studentId: request.studentId, isPublished: true })
+          .sort({ courseCode: 1, examType: 1 })
+          .lean(),
+        this.resolveStudentPrintProfile(request.studentId.toString()),
+        this.registrationModel
+          .findOne({ studentId: request.studentId })
+          .sort({ createdAt: -1 })
+          .lean(),
+      ],
+    );
 
     const gradeSummaryByCourse = this.summarizeGradesByCourse(grades);
     const completed = new Set(normalizeCourseCodes(profile.completedCourses));
     const failed = new Set(normalizeCourseCodes(profile.failedCourses));
     const lowGrade = new Set(normalizeCourseCodes(profile.lowGradeCourses));
     const selected = new Set(
-      normalizeCourseCodes(
-        [
-          ...(request.staffApprovedCourses.length
-            ? request.staffApprovedCourses
-            : request.autoSuggestedCourses),
-          ...(registration?.courses ?? []),
-        ],
-      ),
+      normalizeCourseCodes([
+        ...(request.staffApprovedCourses.length
+          ? request.staffApprovedCourses
+          : request.autoSuggestedCourses),
+        ...(registration?.courses ?? []),
+      ]),
     );
     const suggested = new Set(
       normalizeCourseCodes(request.autoSuggestedCourses),
@@ -1043,7 +1041,10 @@ export class RegistrationsService {
         .find({ studentId: { $in: normalizedStudentIds }, isPublished: true })
         .select('studentId courseCode examType grade maxGrade status')
         .lean(),
-      this.courseModel.find({ isActive: true }).select('code creditHours').lean(),
+      this.courseModel
+        .find({ isActive: true })
+        .select('code creditHours')
+        .lean(),
       this.gpaRuleModel.find({ isActive: true }).sort({ minGpa: -1 }).lean(),
     ]);
     const courseCredits = Object.fromEntries(
@@ -1097,10 +1098,10 @@ export class RegistrationsService {
             {
               failedCourses: progress.failedCourses,
               academicWarnings: profile.academicWarnings,
-              approvedICCourseCompletions:
-                profile.approvedICCourseCompletions,
+              approvedICCourseCompletions: profile.approvedICCourseCompletions,
               semester: query.semester ?? profile.semester,
-              isNewStudent: isNewStudentWithoutAcademicHistory(effectiveProfile),
+              isNewStudent:
+                isNewStudentWithoutAcademicHistory(effectiveProfile),
             },
             {
               requiresAdvisor: matchingRule.requiresAdvisor,
@@ -1497,7 +1498,7 @@ export class RegistrationsService {
           { studentId: new Types.ObjectId(studentId) },
           {
             $setOnInsert: {
-              academicLevel: (studentProfile?.level || '1') as any,
+              academicLevel: studentProfile?.level || '1',
               semester: normalizeSemester(studentProfile?.semester) as any,
               gpa: 0,
               completedCourses: [],
@@ -1568,16 +1569,13 @@ export class RegistrationsService {
         maxCourses: rule.maxCourses ?? 6,
         requiresAdvisor: rule.requiresAdvisor,
         requireForFailedCourses: rule.requireForFailedCourses ?? true,
-        requireForAcademicWarnings:
-          rule.requireForAcademicWarnings ?? true,
+        requireForAcademicWarnings: rule.requireForAcademicWarnings ?? true,
         academicWarningThreshold: rule.academicWarningThreshold ?? 1,
-        requireForIncompleteCourses:
-          rule.requireForIncompleteCourses ?? true,
+        requireForIncompleteCourses: rule.requireForIncompleteCourses ?? true,
         requireForGraduationPlans: rule.requireForGraduationPlans ?? true,
         requireForSummerRegistration:
           rule.requireForSummerRegistration ?? false,
-        exemptNewStudentsFromGpaRule:
-          rule.exemptNewStudentsFromGpaRule ?? true,
+        exemptNewStudentsFromGpaRule: rule.exemptNewStudentsFromGpaRule ?? true,
       };
     }
 
@@ -1853,7 +1851,9 @@ export class RegistrationsService {
 
   async deleteAcademicYear(academicYear: string) {
     this.assertAcademicYear(academicYear);
-    const terms = await this.registrationTermModel.find({ academicYear }).lean();
+    const terms = await this.registrationTermModel
+      .find({ academicYear })
+      .lean();
     if (!terms.length) throw new NotFoundException('Academic year not found');
     if (terms.some((term) => term.isCurrent)) {
       throw new ConflictException(

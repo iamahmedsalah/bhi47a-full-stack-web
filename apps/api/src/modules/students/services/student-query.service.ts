@@ -162,14 +162,15 @@ export class StudentQueryService {
 
     if (userIds.length === 0) {
       return profiles.map((p) => {
-        const { nationalIdMasked: _nMask, ...rest } = p as any;
+        const rest = { ...(p as any) };
+        delete rest.nationalIdMasked;
         if (rest.userId && typeof rest.userId === 'object') {
           delete rest.userId.nationalIdMasked;
         }
 
         let nationalIdValue: string | undefined = undefined;
         if (canViewNationalId) {
-          nationalIdValue = p.nationalId || (p.userId as any)?.nationalId;
+          nationalIdValue = p.nationalId || p.userId?.nationalId;
         } else {
           delete rest.nationalId;
           if (rest.userId && typeof rest.userId === 'object') {
@@ -267,15 +268,15 @@ export class StudentQueryService {
         advisingStatus: advisingCase?.status ?? 'none',
       };
 
-      const { nationalIdMasked: _nMask, ...restProfile } = profile as any;
+      const restProfile = { ...(profile as any) };
+      delete restProfile.nationalIdMasked;
       if (restProfile.userId && typeof restProfile.userId === 'object') {
         delete restProfile.userId.nationalIdMasked;
       }
 
       let nationalIdValue: string | undefined = undefined;
       if (canViewNationalId) {
-        nationalIdValue =
-          profile.nationalId || (profile.userId as any)?.nationalId;
+        nationalIdValue = profile.nationalId || profile.userId?.nationalId;
       } else {
         delete restProfile.nationalId;
         if (restProfile.userId && typeof restProfile.userId === 'object') {

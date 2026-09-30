@@ -12,9 +12,13 @@ import { normalizeStudentSemester } from '../upload-utils';
 import type { GradeStatus } from '@student-portal/shared';
 
 function normalizeGradeStatus(status?: string): GradeStatus {
-  const clean = String(status ?? '').trim().toLowerCase();
-  if (clean === 'absent' || clean === 'غائب' || clean === 'غياب') return 'absent';
-  if (clean === 'banned' || clean === 'محروم' || clean === 'حرمان') return 'banned';
+  const clean = String(status ?? '')
+    .trim()
+    .toLowerCase();
+  if (clean === 'absent' || clean === 'غائب' || clean === 'غياب')
+    return 'absent';
+  if (clean === 'banned' || clean === 'محروم' || clean === 'حرمان')
+    return 'banned';
   return 'present';
 }
 
@@ -24,7 +28,8 @@ export class QuizImporter implements Importer {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Course.name) private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
     @InjectModel(CourseQuiz.name)
     private readonly courseQuizModel: Model<CourseQuizDocument>,
   ) {}
@@ -115,7 +120,7 @@ export class QuizImporter implements Importer {
 
         const quizEntry = {
           quizNumber: row.quizNumber as number,
-          title: (row.title as string) || `Quiz ${row.quizNumber}`,
+          title: (row.title as string) || `Quiz ${String(row.quizNumber)}`,
           grade: row.grade as number,
           maxGrade: row.maxGrade as number,
           status: normalizeGradeStatus(row.status as string),
@@ -135,7 +140,7 @@ export class QuizImporter implements Importer {
             totalGrade: quizEntry.grade,
             maxTotalGrade: quizEntry.maxGrade,
             percentage: Math.round(
-              ((quizEntry.grade as number) / (quizEntry.maxGrade as number)) * 100,
+              (quizEntry.grade / quizEntry.maxGrade) * 100,
             ),
             isPublished: true,
           });

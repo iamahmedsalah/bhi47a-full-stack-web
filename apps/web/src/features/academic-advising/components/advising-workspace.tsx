@@ -27,6 +27,7 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Settings2,
   Trash2,
   UnlockKeyhole,
   UserPlus,
@@ -39,6 +40,14 @@ import { toast } from "sonner";
 import { useLocale } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomDropdown } from "@/components/ui/custom-dropdown";
@@ -98,6 +107,7 @@ export function AdvisingWorkspace() {
   const [manualSelections, setManualSelections] = useState<
     Record<string, string[]>
   >({});
+  const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
   useEffect(() => {
     const requestedStudent = new URLSearchParams(window.location.search).get(
       "student",
@@ -474,322 +484,532 @@ export function AdvisingWorkspace() {
   }
 
   return (
-    <div className="grid min-h-[76vh] gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="rounded-3xl border border-white/10 bg-card/80 p-4">
-        <div className="mb-4">
-          <h1 className="text-lg font-bold">
-            {isArabic ? "الإرشاد الأكاديمي" : "Academic Advising"}
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            {isArabic
-              ? "اختر طالباً لبدء جلسة الإرشاد"
-              : "Select a student to begin advising"}
-          </p>
-        </div>
-        {/* Unified Academic Period & Registration Control Card */}
-        <div className="mb-4 rounded-2xl border border-sky-500/20 bg-card/60 p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-sky-400 min-w-0 truncate">
-              <CalendarClock className="h-4 w-4 shrink-0" />
-              <span className="truncate">{isArabic ? "الفترة الأكاديمية والتسجيل" : "Academic Period & Terms"}</span>
-            </span>
-            {selectedYearSummary?.isCurrent ? (
-              <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-                {isArabic ? "العام الحالي" : "Current Year"}
-              </span>
-            ) : null}
-          </div>
-
-          {/* Academic Year Selection */}
-          <div className="mb-2.5">
-            <label className="mb-1 block text-[10px] text-muted-foreground">
-              {isArabic ? "العام الأكاديمي النشط" : "Active Academic Year"}
-            </label>
-            <CustomDropdown
-              ariaLabel={
-                isArabic ? "السنة الأكاديمية للإرشاد" : "Advising academic year"
-              }
-              value={academicYear}
-              onValueChange={(value) => {
-                setManagedYear(value);
-                setSelected(undefined);
-              }}
-              className="h-8 text-xs"
-              options={(academicYears.data ?? []).map((year) => ({
-                value: year.academicYear,
-                label: `${year.academicYear}${year.isCurrent ? (isArabic ? " (الحالي)" : " (Current)") : ""}`,
-              }))}
-            />
-          </div>
-
-          {/* Semester Pills (Instant 1-Click Switcher - prevents overlapping dropdowns) */}
-          <div className="mb-3">
-            <label className="mb-1 block text-[10px] text-muted-foreground">
-              {isArabic ? "الفصل الدراسي للإرشاد" : "Advising Semester"}
-            </label>
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-secondary/40 p-1">
-              {(["first", "second", "summer"] as const).map((sem) => {
-                const isSelected = advisingSemester === sem;
-                const term = terms.data?.find(
-                  (item) =>
-                    item.academicYear === academicYear && item.semester === sem,
-                );
-                const isOpen = term?.isOpen ?? false;
-                return (
-                  <button
-                    key={sem}
-                    type="button"
-                    onClick={() => {
-                      setAdvisingSemester(sem);
-                      setSelected(undefined);
-                    }}
-                    className={cn(
-                      "relative flex flex-col items-center justify-center rounded-lg py-1.5 text-center transition-all",
-                      isSelected
-                        ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                    )}
-                  >
-                    <span className="text-[11px] leading-tight">
-                      {sem === "first"
-                        ? isArabic
-                          ? "الأول"
-                          : "1st"
-                        : sem === "second"
-                          ? isArabic
-                            ? "الثاني"
-                            : "2nd"
-                          : isArabic
-                            ? "صيفي"
-                            : "Summer"}
-                    </span>
-                    <span
-                      className={cn(
-                        "mt-0.5 inline-block h-1.5 w-1.5 rounded-full",
-                        isOpen ? "bg-emerald-400" : "bg-red-400/50",
-                      )}
-                      title={
-                        isOpen
-                          ? isArabic
-                            ? "التسجيل مفتوح"
-                            : "Registration open"
-                          : isArabic
-                            ? "التسجيل مغلق"
-                            : "Registration closed"
-                      }
-                    />
-                  </button>
-                );
-              })}
+    <div className="space-y-4">
+      {/* Top Academic Context & Action Bar */}
+      <div className="rounded-3xl border border-white/10 bg-card/85 p-4 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Title & Quick Academic Context */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-sky-400" />
+                <h1 className="text-lg font-bold tracking-tight">
+                  {isArabic ? "الإرشاد والتسجيل الأكاديمي" : "Academic Advising"}
+                </h1>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isArabic
+                  ? "إدارة الخطط الدراسية، التوصيات الآلية، واعتماد تسجيل المقررات"
+                  : "Manage student advising cases, automated recommendations, and registrations"}
+              </p>
             </div>
-          </div>
 
-          {/* Term Registration Status & Admin Controls */}
-          {user?.role === "admin" ? (
-            <div className="space-y-2 border-t border-white/10 pt-2.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">
-                  {isArabic ? "حالة تسجيل الفصل:" : "Semester Registration:"}
-                </span>
-                {(() => {
-                  const currentTerm = terms.data?.find(
+            {/* Academic Period Quick Switcher Bar */}
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-secondary/30 p-1.5">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-300">
+                <CalendarClock className="h-3.5 w-3.5" />
+                <span>{academicYear}</span>
+                {selectedYearSummary?.isCurrent ? (
+                  <span className="ms-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] text-emerald-300">
+                    {isArabic ? "الحالي" : "Current"}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Semester Switcher Pills */}
+              <div className="flex items-center gap-1 rounded-xl bg-background/50 p-0.5">
+                {(["first", "second", "summer"] as const).map((sem) => {
+                  const isSelected = advisingSemester === sem;
+                  const term = terms.data?.find(
+                    (item) =>
+                      item.academicYear === academicYear &&
+                      item.semester === sem,
+                  );
+                  const isOpen = term?.isOpen ?? false;
+                  return (
+                    <button
+                      key={sem}
+                      type="button"
+                      onClick={() => {
+                        setAdvisingSemester(sem);
+                        setSelected(undefined);
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all",
+                        isSelected
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                      )}
+                    >
+                      <span>
+                        {sem === "first"
+                          ? isArabic
+                            ? "الفصل الأول"
+                            : "1st"
+                          : sem === "second"
+                            ? isArabic
+                              ? "الفصل الثاني"
+                              : "2nd"
+                            : isArabic
+                              ? "صيفي"
+                              : "Summer"}
+                      </span>
+                      <span
+                        className={cn(
+                          "h-2 w-2 rounded-full",
+                          isOpen
+                            ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]"
+                            : "bg-red-400/60",
+                        )}
+                        title={
+                          isOpen
+                            ? isArabic
+                              ? "التسجيل مفتوح"
+                              : "Registration Open"
+                            : isArabic
+                              ? "التسجيل مغلق"
+                              : "Registration Closed"
+                        }
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quick Registration Status Toggle for Admin */}
+              {user?.role === "admin" && (
+                <button
+                  type="button"
+                  disabled={saveTerm.isPending}
+                  onClick={() => {
+                    const currentTerm = terms.data?.find(
+                      (item) =>
+                        item.academicYear === academicYear &&
+                        item.semester === advisingSemester,
+                    );
+                    const open = currentTerm?.isOpen ?? false;
+                    saveTerm.mutate({
+                      semester: advisingSemester,
+                      isOpen: !open,
+                    });
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition",
+                    terms.data?.find(
+                      (item) =>
+                        item.academicYear === academicYear &&
+                        item.semester === advisingSemester,
+                    )?.isOpen
+                      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                      : "border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25",
+                  )}
+                  title={
+                    isArabic
+                      ? "تبديل حالة فتح/إغلاق التسجيل للفصل المحدد"
+                      : "Toggle Registration Status"
+                  }
+                >
+                  {terms.data?.find(
                     (item) =>
                       item.academicYear === academicYear &&
                       item.semester === advisingSemester,
-                  );
-                  const open = currentTerm?.isOpen ?? false;
-                  return (
-                    <button
-                      type="button"
-                      disabled={saveTerm.isPending}
-                      onClick={() =>
-                        saveTerm.mutate({
-                          semester: advisingSemester,
-                          isOpen: !open,
-                        })
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-medium transition",
-                        open
-                          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
-                          : "border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25",
-                      )}
-                      title={
-                        isArabic
-                          ? "اضغط لتبديل حالة التسجيل"
-                          : "Click to toggle registration status"
-                      }
-                    >
-                      {open ? (
-                        <UnlockKeyhole className="h-3 w-3" />
-                      ) : (
-                        <LockKeyhole className="h-3 w-3" />
-                      )}
+                  )?.isOpen ? (
+                    <>
+                      <UnlockKeyhole className="h-3.5 w-3.5" />
                       <span>
-                        {open
-                          ? isArabic
-                            ? "مفتوح (تبديل)"
-                            : "Open"
-                          : isArabic
-                            ? "مغلق (تبديل)"
-                            : "Closed"}
+                        {isArabic ? "التسجيل مفتوح" : "Registration Open"}
                       </span>
-                    </button>
-                  );
-                })()}
-              </div>
+                    </>
+                  ) : (
+                    <>
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                      <span>
+                        {isArabic ? "التسجيل مغلق" : "Registration Closed"}
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
 
-              {/* Year Metadata & Current Year Setter */}
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>
-                  {selectedYearSummary?.registrationCount ?? 0}{" "}
-                  {isArabic ? "تسجيل" : "reg"} ·{" "}
-                  {selectedYearSummary?.advisingCaseCount ?? 0}{" "}
-                  {isArabic ? "حالة" : "cases"}
-                </span>
-                <div className="flex items-center gap-1">
-                  {!selectedYearSummary?.isCurrent ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-1.5 text-[10px] text-sky-300 hover:text-sky-200"
-                      disabled={setCurrentYear.isPending}
-                      onClick={() => setCurrentYear.mutate(academicYear)}
-                    >
-                      {isArabic ? "تعيين كحالية" : "Make current"}
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-1.5 text-[10px] text-red-400 hover:text-red-300"
-                    disabled={
-                      deleteYear.isPending || selectedYearSummary?.isCurrent
-                    }
-                    onClick={() => deleteYear.mutate(academicYear)}
-                    title={
-                      isArabic ? "حذف السنة الأكاديمية" : "Delete academic year"
-                    }
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Compact Year Creation */}
-              <div className="flex gap-1.5 pt-1">
-                <Input
-                  value={newAcademicYear}
-                  onChange={(e) => setNewAcademicYear(e.target.value)}
-                  placeholder="2027-2028"
-                  className="h-7 text-[11px]"
-                />
+          {/* Settings Trigger for Academic Period Management */}
+          {user?.role === "admin" && (
+            <Dialog
+              open={isPeriodSettingsOpen}
+              onOpenChange={setIsPeriodSettingsOpen}
+            >
+              <DialogTrigger asChild>
                 <Button
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  disabled={
-                    createYear.isPending ||
-                    !/^\d{4}-\d{4}$/.test(newAcademicYear)
-                  }
-                  onClick={() => createYear.mutate()}
-                  title={isArabic ? "إضافة سنة أكاديمية" : "Add academic year"}
+                  variant="outline"
+                  className="gap-2 rounded-2xl border-white/10 bg-secondary/20 hover:bg-secondary/40 text-xs"
                 >
-                  +
+                  <Settings2 className="h-4 w-4 text-sky-400" />
+                  <span>
+                    {isArabic
+                      ? "إعدادات الفترات والسنوات"
+                      : "Period & Term Settings"}
+                  </span>
                 </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md rounded-2xl bg-card border border-white/15 p-6">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                    <CalendarClock className="h-5 w-5 text-sky-400" />
+                    <span>
+                      {isArabic
+                        ? "إدارة السنوات الأكاديمية والتسجيل"
+                        : "Academic Periods & Registration"}
+                    </span>
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground">
+                    {isArabic
+                      ? "التحكم في فترات التسجيل، تحديد السنة الحالية، وإضافة سنوات دراسية جديدة."
+                      : "Manage registration terms, select current academic year, and add new periods."}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 pt-2">
+                  {/* Select Active Academic Year */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-foreground">
+                      {isArabic ? "السنة الأكاديمية" : "Academic Year"}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <CustomDropdown
+                          ariaLabel={
+                            isArabic
+                              ? "السنة الأكاديمية للإرشاد"
+                              : "Advising academic year"
+                          }
+                          value={academicYear}
+                          onValueChange={(value) => {
+                            setManagedYear(value);
+                            setSelected(undefined);
+                          }}
+                          className="h-9 text-xs"
+                          options={(academicYears.data ?? []).map((year) => ({
+                            value: year.academicYear,
+                            label: `${year.academicYear}${year.isCurrent ? (isArabic ? " (الحالي)" : " (Current)") : ""}`,
+                          }))}
+                        />
+                      </div>
+                      {!selectedYearSummary?.isCurrent ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-9 px-2.5 text-xs text-sky-300"
+                          disabled={setCurrentYear.isPending}
+                          onClick={() => setCurrentYear.mutate(academicYear)}
+                        >
+                          {isArabic ? "تعيين كحالية" : "Make current"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-9 px-2 text-xs text-red-400 hover:text-red-300"
+                        disabled={
+                          deleteYear.isPending || selectedYearSummary?.isCurrent
+                        }
+                        onClick={() => deleteYear.mutate(academicYear)}
+                        title={
+                          isArabic
+                            ? "حذف السنة الأكاديمية"
+                            : "Delete academic year"
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Summary counts */}
+                  <div className="rounded-xl border border-white/10 bg-secondary/20 px-3 py-2 text-xs text-muted-foreground flex justify-between">
+                    <span>
+                      {selectedYearSummary?.registrationCount ?? 0}{" "}
+                      {isArabic ? "تسجيل معتمد" : "registrations"}
+                    </span>
+                    <span>
+                      {selectedYearSummary?.advisingCaseCount ?? 0}{" "}
+                      {isArabic ? "حالة إرشاد" : "advising cases"}
+                    </span>
+                  </div>
+
+                  {/* Term Registration Controls per Semester */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-foreground">
+                      {isArabic
+                        ? "حالة التسجيل لكل فصل دراسي"
+                        : "Semester Registration Status"}
+                    </label>
+                    <div className="space-y-1.5">
+                      {(["first", "second", "summer"] as const).map((sem) => {
+                        const currentTerm = terms.data?.find(
+                          (item) =>
+                            item.academicYear === academicYear &&
+                            item.semester === sem,
+                        );
+                        const open = currentTerm?.isOpen ?? false;
+                        const label =
+                          sem === "first"
+                            ? isArabic
+                              ? "الفصل الدراسي الأول"
+                              : "1st Semester"
+                            : sem === "second"
+                              ? isArabic
+                                ? "الفصل الدراسي الثاني"
+                                : "2nd Semester"
+                              : isArabic
+                                ? "الفصل الصيفي"
+                                : "Summer Semester";
+                        return (
+                          <div
+                            key={sem}
+                            className="flex items-center justify-between rounded-xl border border-white/5 bg-secondary/15 px-3 py-2 text-xs"
+                          >
+                            <span>{label}</span>
+                            <button
+                              type="button"
+                              disabled={saveTerm.isPending}
+                              onClick={() =>
+                                saveTerm.mutate({
+                                  semester: sem,
+                                  isOpen: !open,
+                                })
+                              }
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition",
+                                open
+                                  ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                                  : "border-red-500/30 bg-red-500/15 text-red-300 hover:bg-red-500/25",
+                              )}
+                            >
+                              {open ? (
+                                <>
+                                  <UnlockKeyhole className="h-3 w-3" />
+                                  <span>
+                                    {isArabic ? "مفتوح (تبديل)" : "Open"}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <LockKeyhole className="h-3 w-3" />
+                                  <span>
+                                    {isArabic ? "مغلق (تبديل)" : "Closed"}
+                                  </span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Add New Academic Year */}
+                  <div className="space-y-1.5 border-t border-white/10 pt-3">
+                    <label className="block text-xs font-semibold text-foreground">
+                      {isArabic
+                        ? "إضافة سنة أكاديمية جديدة"
+                        : "Add New Academic Year"}
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newAcademicYear}
+                        onChange={(e) => setNewAcademicYear(e.target.value)}
+                        placeholder="2027-2028"
+                        className="h-8 text-xs font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 px-3 text-xs"
+                        disabled={
+                          createYear.isPending ||
+                          !/^\d{4}-\d{4}$/.test(newAcademicYear)
+                        }
+                        onClick={() => createYear.mutate()}
+                      >
+                        {createYear.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5 me-1" />
+                        )}
+                        {isArabic ? "إضافة" : "Add"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+      </div>
+
+      {/* Main Workspace Layout */}
+      <div className="grid min-h-[76vh] gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
+        <aside className="flex flex-col rounded-3xl border border-white/10 bg-card/80 p-4">
+          {/* Sidebar Header with Student Count & Select All */}
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold">
+                {isArabic ? "دليل الطلاب" : "Students"}
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                {students.data?.items.length ?? 0} {isArabic ? "طالب" : "students"}
+              </p>
+            </div>
+            {user?.role === "admin" && (students.data?.items.length ?? 0) > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    selectedStudentIds.length ===
+                    (students.data?.items.length ?? 0)
+                  ) {
+                    setSelectedStudentIds([]);
+                  } else {
+                    setSelectedStudentIds(
+                      students.data?.items.map((s) => s.id) ?? [],
+                    );
+                  }
+                }}
+                className="text-xs text-sky-400 hover:text-sky-300 font-medium"
+              >
+                {selectedStudentIds.length ===
+                (students.data?.items.length ?? 0)
+                  ? isArabic
+                    ? "إلغاء التحديد"
+                    : "Deselect all"
+                  : isArabic
+                    ? "تحديد الكل"
+                    : "Select all"}
+              </button>
+            ) : null}
+          </div>
+
+          {/* Search Box */}
+          <div className="relative mb-2.5">
+            <Search className="absolute inset-s-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ps-9 h-9 text-xs"
+              placeholder={
+                isArabic ? "بحث بالاسم أو الكود..." : "Search name or code..."
+              }
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute inset-e-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Filters Row */}
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <CustomDropdown
+              ariaLabel={
+                isArabic ? "تصفية حسب حالة الإرشاد" : "Filter by advising status"
+              }
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+              className="h-8 text-xs"
+              options={[
+                { value: "", label: isArabic ? "كل الحالات" : "All statuses" },
+                {
+                  value: "NOT_STARTED",
+                  label: advisingStatusLabel("NOT_STARTED", locale),
+                },
+                {
+                  value: "AUTO_RECOMMENDED",
+                  label: advisingStatusLabel("AUTO_RECOMMENDED", locale),
+                },
+                { value: "DRAFT", label: advisingStatusLabel("DRAFT", locale) },
+                {
+                  value: "APPROVED",
+                  label: advisingStatusLabel("APPROVED", locale),
+                },
+                { value: "CLOSED", label: advisingStatusLabel("CLOSED", locale) },
+              ]}
+            />
+            <CustomDropdown
+              ariaLabel={
+                isArabic
+                  ? "تصفية حسب المستوى الأكاديمي"
+                  : "Filter by academic level"
+              }
+              value={levelFilter}
+              onValueChange={setLevelFilter}
+              className="h-8 text-xs"
+              options={[
+                { value: "", label: isArabic ? "كل المستويات" : "All levels" },
+                ...["1", "2", "3", "4"].map((level) => ({
+                  value: level,
+                  label: isArabic ? `المستوى ${level}` : `Level ${level}`,
+                })),
+              ]}
+            />
+          </div>
+
+          {/* Dynamic Bulk Advisor Assignment Bar */}
+          {user?.role === "admin" && selectedStudentIds.length > 0 ? (
+            <div className="mb-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3 shadow-md animate-in fade-in slide-in-from-top-2">
+              <div className="mb-2 flex items-center justify-between text-xs font-bold text-sky-300">
+                <span className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4" />
+                  {isArabic
+                    ? `تم اختيار ${selectedStudentIds.length} طالب`
+                    : `${selectedStudentIds.length} selected`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentIds([])}
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                >
+                  {isArabic ? "إلغاء" : "Clear"}
+                </button>
               </div>
+              <CustomDropdown
+                ariaLabel={isArabic ? "اختيار المرشد" : "Select advisor"}
+                value={selectedAdvisorId}
+                onValueChange={setSelectedAdvisorId}
+                className="mb-2 h-8 text-xs"
+                options={(advisors.data ?? []).map((advisor) => ({
+                  value: advisor._id,
+                  label: `${advisor.name} (${advisor.assignedStudentCount})`,
+                }))}
+                placeholder={isArabic ? "اختر المرشد" : "Select advisor"}
+              />
+              <Button
+                size="sm"
+                className="w-full h-8 text-xs font-medium"
+                disabled={
+                  assignStudents.isPending ||
+                  !selectedAdvisorId ||
+                  selectedStudentIds.length === 0
+                }
+                onClick={() => assignStudents.mutate()}
+              >
+                {assignStudents.isPending ? (
+                  <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UserPlus className="me-2 h-3.5 w-3.5" />
+                )}
+                {isArabic
+                  ? `تعيين للمرشد (${selectedStudentIds.length})`
+                  : `Assign selected (${selectedStudentIds.length})`}
+              </Button>
             </div>
           ) : null}
-        </div>
-        <div className="relative mb-3">
-          <Search className="absolute inset-s-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="ps-9"
-            placeholder={
-              isArabic ? "بحث بالاسم أو الكود" : "Search name or code"
-            }
-          />
-        </div>
-        <div className="mb-3 grid grid-cols-2 gap-2">
-          <CustomDropdown
-            ariaLabel={
-              isArabic ? "تصفية حسب حالة الإرشاد" : "Filter by advising status"
-            }
-            value={statusFilter}
-            onValueChange={setStatusFilter}
-            className="h-9 text-xs"
-            options={[
-              { value: "", label: isArabic ? "كل الحالات" : "All statuses" },
-              {
-                value: "NOT_STARTED",
-                label: advisingStatusLabel("NOT_STARTED", locale),
-              },
-              {
-                value: "AUTO_RECOMMENDED",
-                label: advisingStatusLabel("AUTO_RECOMMENDED", locale),
-              },
-              { value: "DRAFT", label: advisingStatusLabel("DRAFT", locale) },
-              {
-                value: "APPROVED",
-                label: advisingStatusLabel("APPROVED", locale),
-              },
-              { value: "CLOSED", label: advisingStatusLabel("CLOSED", locale) },
-            ]}
-          />
-          <CustomDropdown
-            ariaLabel={
-              isArabic
-                ? "تصفية حسب المستوى الأكاديمي"
-                : "Filter by academic level"
-            }
-            value={levelFilter}
-            onValueChange={setLevelFilter}
-            className="h-9 text-xs"
-            options={[
-              { value: "", label: isArabic ? "كل المستويات" : "All levels" },
-              ...["1", "2", "3", "4"].map((level) => ({
-                value: level,
-                label: isArabic ? `المستوى ${level}` : `Level ${level}`,
-              })),
-            ]}
-          />
-        </div>
-        {user?.role === "admin" ? (
-          <div className="mb-3 rounded-2xl border border-white/10 bg-secondary/20 p-3">
-            <div className="mb-2 flex items-center gap-2 text-xs font-bold">
-              <Users className="h-4 w-4 text-sky-300" />
-              {isArabic ? "تعيين المرشد الأكاديمي" : "Advisor assignment"}
-            </div>
-            <CustomDropdown
-              ariaLabel={isArabic ? "اختيار المرشد" : "Select advisor"}
-              value={selectedAdvisorId}
-              onValueChange={setSelectedAdvisorId}
-              className="mb-2 h-9 text-xs"
-              options={(advisors.data ?? []).map((advisor) => ({
-                value: advisor._id,
-                label: `${advisor.name} (${advisor.assignedStudentCount})`,
-              }))}
-              placeholder={isArabic ? "اختر المرشد" : "Select advisor"}
-            />
-            <Button
-              size="sm"
-              className="w-full"
-              disabled={
-                assignStudents.isPending ||
-                !selectedAdvisorId ||
-                selectedStudentIds.length === 0
-              }
-              onClick={() => assignStudents.mutate()}
-            >
-              <UserPlus className="me-2 h-4 w-4" />
-              {isArabic
-                ? `تعيين الطلاب (${selectedStudentIds.length})`
-                : `Assign selected (${selectedStudentIds.length})`}
-            </Button>
-          </div>
-        ) : null}
-        <div className="custom-scroll max-h-[65vh] space-y-2 overflow-auto">
+
+          {/* Student Cards List */}
+          <div className="custom-scroll flex-1 max-h-[calc(100vh-270px)] space-y-2 overflow-auto pe-1">
           {students.isLoading ? (
             <Loader2 className="mx-auto mt-8 animate-spin" />
           ) : (
@@ -1153,7 +1373,8 @@ export function AdvisingWorkspace() {
         )}
       </main>
     </div>
-  );
+  </div>
+);
 }
 function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
   if (course.academicLevel) {
@@ -1180,26 +1401,7 @@ function isCourseOfferedInSemester(
     : course.semester === semester;
 }
 
-function Canvas({
-  courseMap,
-  recommendations,
-  selectedCourseIds,
-  locale,
-  isArabic,
-  disabled,
-  activeStudent,
-  onDecision,
-  onToggleManual,
-  onStartCase,
-  isStartingCase,
-  onSaveDraft,
-  isSavingDraft,
-  onApprove,
-  isApproving,
-  hasDraft,
-  selectedCredits,
-  advisingSemester,
-}: {
+type CanvasProps = {
   courseMap?: AdvisingCourseMap;
   recommendations: CourseRecommendation[];
   selectedCourseIds: string[];
@@ -1221,40 +1423,38 @@ function Canvas({
   hasDraft?: boolean;
   selectedCredits: number;
   advisingSemester: "first" | "second" | "summer";
-}) {
-  const [viewMode, setViewMode] = useState<"grid" | "flow">("grid");
-  const [gridLevelFilter, setGridLevelFilter] = useState<string>("all");
-  const [courseSearch, setCourseSearch] = useState<string>("");
+};
 
-  if (!courseMap) {
-    if (activeStudent) {
+function Canvas(props: CanvasProps) {
+  if (!props.courseMap) {
+    if (props.activeStudent) {
       return (
         <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-sky-500/30 bg-card/40 p-8 text-center">
           <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sky-500/10 text-sky-400">
             <Sparkles className="h-8 w-8" />
           </div>
           <h3 className="text-base font-bold">
-            {isArabic
-              ? `طالب محدد: ${activeStudent.name}`
-              : `Selected Student: ${activeStudent.name}`}
+            {props.isArabic
+              ? `طالب محدد: ${props.activeStudent.name}`
+              : `Selected Student: ${props.activeStudent.name}`}
           </h3>
           <p className="mt-1.5 max-w-md text-xs text-muted-foreground">
-            {isArabic
+            {props.isArabic
               ? "لم يتم فتح ملف إرشاد بعد لهذا الطالب في الفترة المحددة. اضغط على الزر أدناه لبدء جلسة الإرشاد وتوليد خريطة المقررات والتوصيات تلقائياً."
               : "No advising case exists for this student in the selected period. Click below to start advising and generate the course map."}
           </p>
           <div className="mt-5 flex gap-2">
             <Button
-              disabled={isStartingCase}
-              onClick={onStartCase}
+              disabled={props.isStartingCase}
+              onClick={props.onStartCase}
               className="gap-2"
             >
-              {isStartingCase ? (
+              {props.isStartingCase ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <FolderOpen className="h-4 w-4" />
               )}
-              {isArabic
+              {props.isArabic
                 ? "بدء جلسة الإرشاد وعرض الخريطة"
                 : "Open Advising Case & View Map"}
             </Button>
@@ -1266,13 +1466,38 @@ function Canvas({
     return (
       <Empty
         text={
-          isArabic
+          props.isArabic
             ? "اختر طالباً من القائمة الجانبية لبدء جلسة الإرشاد وعرض الخريطة"
             : "Select a student from the sidebar to open the advising canvas"
         }
       />
     );
   }
+
+  return <CanvasContent {...props} courseMap={props.courseMap} />;
+}
+
+function CanvasContent({
+  courseMap,
+  recommendations,
+  selectedCourseIds,
+  locale,
+  isArabic,
+  disabled,
+  activeStudent,
+  onDecision,
+  onToggleManual,
+  onSaveDraft,
+  isSavingDraft,
+  onApprove,
+  isApproving,
+  hasDraft,
+  selectedCredits,
+  advisingSemester,
+}: CanvasProps & { courseMap: AdvisingCourseMap }) {
+  const [viewMode, setViewMode] = useState<"grid" | "flow">("grid");
+  const [gridLevelFilter, setGridLevelFilter] = useState<string>("all");
+  const [courseSearch, setCourseSearch] = useState<string>("");
 
   const recommendationByCode = useMemo(
     () =>

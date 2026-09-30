@@ -52,7 +52,8 @@ export class GeminiProvider implements LlmProvider {
       },
     });
 
-    const result: GenerateContentResult = await chatSession.sendMessage(userMessage);
+    const result: GenerateContentResult =
+      await chatSession.sendMessage(userMessage);
     const response = result.response;
     const text = response.text() ?? '';
     const usage = response.usageMetadata;
@@ -68,10 +69,7 @@ export class GeminiProvider implements LlmProvider {
     };
   }
 
-  async embed(
-    text: string,
-    _options?: LlmEmbeddingOptions,
-  ): Promise<number[]> {
+  async embed(text: string, _options?: LlmEmbeddingOptions): Promise<number[]> {
     const model = this.client.getGenerativeModel({
       model: this.embeddingModel,
     });

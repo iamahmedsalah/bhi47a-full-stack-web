@@ -106,10 +106,7 @@ export const AttendanceRecordSchema =
   SchemaFactory.createForClass(AttendanceRecord);
 
 // CRITICAL DATABASE UNIQUE CONSTRAINT: Prevent duplicate attendance records for the same session and student
-AttendanceRecordSchema.index(
-  { sessionId: 1, studentId: 1 },
-  { unique: true },
-);
+AttendanceRecordSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
 
 // High-performance query indexes
 AttendanceRecordSchema.index({ studentId: 1, courseCode: 1, createdAt: -1 });

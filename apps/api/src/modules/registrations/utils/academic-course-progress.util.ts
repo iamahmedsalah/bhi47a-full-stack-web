@@ -38,7 +38,9 @@ export function mergeAcademicCourseProgress(input: {
   }
 
   for (const [code, records] of gradesByCourse) {
-    const finalRecords = records.filter((record) => record.examType === 'final');
+    const finalRecords = records.filter(
+      (record) => record.examType === 'final',
+    );
     if (finalRecords.length === 0) continue;
 
     const blockedFinal = finalRecords.some(
@@ -50,10 +52,12 @@ export function mergeAcademicCourseProgress(input: {
     );
     const totalEarned = records.reduce(
       (total, record) =>
-        total + (record.status === 'present' ? Math.max(0, record.grade ?? 0) : 0),
+        total +
+        (record.status === 'present' ? Math.max(0, record.grade ?? 0) : 0),
       0,
     );
-    const passed = !blockedFinal && totalMax > 0 && totalEarned / totalMax >= 0.5;
+    const passed =
+      !blockedFinal && totalMax > 0 && totalEarned / totalMax >= 0.5;
     const percentage = totalMax > 0 ? (totalEarned / totalMax) * 100 : 0;
     const gradePoints = Math.min(4, Math.max(0, percentage / 25));
     const creditHours = Math.max(0, input.courseCredits?.[code] ?? 1);

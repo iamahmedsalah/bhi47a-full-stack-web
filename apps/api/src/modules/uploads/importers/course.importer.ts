@@ -10,20 +10,59 @@ export class CourseImporter implements Importer {
   readonly type = 'courses';
 
   constructor(
-    @InjectModel(Course.name) private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
   ) {}
 
   private readonly levelMap: Record<string, string> = {
-    '1': '1', 'أول': '1', 'الاول': '1', 'أولى': '1', 'الاولى': '1', 'الأولى': '1', 'first': '1', 'one': '1',
-    '2': '2', 'ثاني': '2', 'ثانية': '2', 'الثاني': '2', 'الثانية': '2', 'second': '2', 'two': '2',
-    '3': '3', 'ثالث': '3', 'ثالثة': '3', 'الثالث': '3', 'الثالثة': '3', 'third': '3', 'three': '3',
-    '4': '4', 'رابع': '4', 'رابعة': '4', 'الرابع': '4', 'الرابعة': '4', 'fourth': '4', 'four': '4',
+    '1': '1',
+    أول: '1',
+    الاول: '1',
+    أولى: '1',
+    الاولى: '1',
+    الأولى: '1',
+    first: '1',
+    one: '1',
+    '2': '2',
+    ثاني: '2',
+    ثانية: '2',
+    الثاني: '2',
+    الثانية: '2',
+    second: '2',
+    two: '2',
+    '3': '3',
+    ثالث: '3',
+    ثالثة: '3',
+    الثالث: '3',
+    الثالثة: '3',
+    third: '3',
+    three: '3',
+    '4': '4',
+    رابع: '4',
+    رابعة: '4',
+    الرابع: '4',
+    الرابعة: '4',
+    fourth: '4',
+    four: '4',
   };
 
   private readonly semesterMap: Record<string, string> = {
-    'first': 'first', '1': 'first', 'أول': 'first', 'الاول': 'first', 'الأول': 'first', 'الفصل الأول': 'first',
-    'second': 'second', '2': 'second', 'ثاني': 'second', 'الثاني': 'second', 'الفصل الثاني': 'second',
-    'summer': 'summer', '3': 'summer', 'صيفي': 'summer', 'الصيفي': 'summer', 'الفصل الصيفي': 'summer',
+    first: 'first',
+    '1': 'first',
+    أول: 'first',
+    الاول: 'first',
+    الأول: 'first',
+    'الفصل الأول': 'first',
+    second: 'second',
+    '2': 'second',
+    ثاني: 'second',
+    الثاني: 'second',
+    'الفصل الثاني': 'second',
+    summer: 'summer',
+    '3': 'summer',
+    صيفي: 'summer',
+    الصيفي: 'summer',
+    'الفصل الصيفي': 'summer',
   };
 
   validate(rows: Record<string, unknown>[]) {
@@ -34,15 +73,28 @@ export class CourseImporter implements Importer {
       const row = rows[i];
       const rowNum = i + 2;
 
-      const courseCode = String(row.courseCode || row.code || '').trim();
-      const bilingualName = row.courseNameAr || row.courseNameEn || row.courseName;
-      const cleanLevel = row.level
-        ? this.levelMap[String(row.level).trim().toLowerCase()] ||
-          String(row.level).trim()
+      const rawCode =
+        typeof row.courseCode === 'string' || typeof row.courseCode === 'number'
+          ? String(row.courseCode)
+          : typeof row.code === 'string' || typeof row.code === 'number'
+            ? String(row.code)
+            : '';
+      const courseCode = rawCode.trim();
+      const bilingualName =
+        row.courseNameAr || row.courseNameEn || row.courseName;
+      const rawLevelStr =
+        typeof row.level === 'string' || typeof row.level === 'number'
+          ? String(row.level).trim()
+          : '';
+      const cleanLevel = rawLevelStr
+        ? this.levelMap[rawLevelStr.toLowerCase()] || rawLevelStr
         : '';
-      const cleanSemester = row.semester
-        ? this.semesterMap[String(row.semester).trim().toLowerCase()] ||
-          String(row.semester).trim().toLowerCase()
+      const rawSemStr =
+        typeof row.semester === 'string' || typeof row.semester === 'number'
+          ? String(row.semester).trim().toLowerCase()
+          : '';
+      const cleanSemester = rawSemStr
+        ? this.semesterMap[rawSemStr] || rawSemStr
         : '';
 
       const missingFields: string[] = [];
@@ -86,8 +138,12 @@ export class CourseImporter implements Importer {
       const courseData = {
         code: courseCode.toUpperCase(),
         name: bilingualName,
-        nameAr: (row.courseNameAr || row.courseName || row.courseNameEn) as string,
-        nameEn: (row.courseNameEn || row.courseName || row.courseNameAr) as string,
+        nameAr: (row.courseNameAr ||
+          row.courseName ||
+          row.courseNameEn) as string,
+        nameEn: (row.courseNameEn ||
+          row.courseName ||
+          row.courseNameAr) as string,
         level: cleanLevel,
         academicLevel: cleanLevel,
         semester: cleanSemester,

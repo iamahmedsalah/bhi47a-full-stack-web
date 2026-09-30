@@ -56,9 +56,15 @@ export function ActiveSessionPresenter({
   isArabic = true,
 }: ActiveSessionPresenterProps) {
   const [currentQr, setCurrentQr] = useState<QrPayload>(initialQr);
-  const [qrCountdown, setQrCountdown] = useState<number>(
-    initialQr.remainingSeconds || 25,
-  );
+  const [qrCountdown, setQrCountdown] = useState<number>(() => {
+    if (initialQr.expiresAt) {
+      const left = Math.ceil(
+        (new Date(initialQr.expiresAt).getTime() - Date.now()) / 1000,
+      );
+      return Math.max(0, left);
+    }
+    return initialQr.remainingSeconds || session.qrRotationSeconds || 60;
+  });
   const [sessionRemainingSec, setSessionRemainingSec] = useState<number>(0);
   const [attendees, setAttendees] = useState<AttendanceRecordDto[]>([]);
   const [attendeeFilter, setAttendeeFilter] = useState<
@@ -90,6 +96,7 @@ export function ActiveSessionPresenter({
   const [editStatus, setEditStatus] = useState<string>("present");
   const [editReason, setEditReason] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const isFetchingQrRef = useRef(false);
 
   // 1. Poll persisted records so updates remain reliable when the API scales
   // across multiple Vercel Function instances. SSE below remains the fast path.
@@ -209,46 +216,64 @@ export function ActiveSessionPresenter({
         return;
       }
 
-      setQrCountdown((prev) => {
-        if (prev <= 1) {
-          // Time to fetch freshly rotated QR
-          attendanceApi
-            .getCurrentQr(session._id)
-            .then((newQr) => {
-              if (!isCancelled) {
-                setCurrentQr(newQr);
-                setQrCountdown(newQr.remainingSeconds || 25);
-              }
-            })
-            .catch((err) => {
-              const status = err?.response?.status || err?.status;
-              const msg = String(
-                err?.response?.data?.message || err?.message || "",
+      // Compute exact seconds left based on server expiresAt
+      const qrExpiresAtMs = currentQr.expiresAt
+        ? new Date(currentQr.expiresAt).getTime()
+        : null;
+
+      const remainingSec = qrExpiresAtMs
+        ? Math.max(0, Math.ceil((qrExpiresAtMs - now) / 1000))
+        : Math.max(0, qrCountdown - 1);
+
+      setQrCountdown(remainingSec);
+
+      if (remainingSec <= 0 && !isFetchingQrRef.current) {
+        isFetchingQrRef.current = true;
+        attendanceApi
+          .getCurrentQr(session._id)
+          .then((newQr) => {
+            if (!isCancelled) {
+              setCurrentQr(newQr);
+              const freshRemaining = newQr.expiresAt
+                ? Math.max(
+                    0,
+                    Math.ceil(
+                      (new Date(newQr.expiresAt).getTime() - Date.now()) / 1000,
+                    ),
+                  )
+                : (newQr.remainingSeconds || session.qrRotationSeconds || 60);
+              setQrCountdown(freshRemaining);
+            }
+          })
+          .catch((err) => {
+            const status = err?.response?.status || err?.status;
+            const msg = String(
+              err?.response?.data?.message || err?.message || "",
+            );
+            // Stop polling if session is closed or expired on server
+            if (
+              status === 400 ||
+              msg.includes("مغلقة") ||
+              msg.includes("انتهت") ||
+              msg.includes("closed") ||
+              msg.includes("expired")
+            ) {
+              clearInterval(interval);
+              setIsSessionEnded(true);
+              toast.info(
+                isArabic
+                  ? "جلسة الحضور مغلقة أو انتهت مدة صلاحيتها"
+                  : "Attendance session is closed or has expired",
               );
-              // Stop polling if session is closed or expired on server
-              if (
-                status === 400 ||
-                msg.includes("مغلقة") ||
-                msg.includes("انتهت") ||
-                msg.includes("closed") ||
-                msg.includes("expired")
-              ) {
-                clearInterval(interval);
-                setIsSessionEnded(true);
-                toast.info(
-                  isArabic
-                    ? "جلسة الحضور مغلقة أو انتهت مدة صلاحيتها"
-                    : "Attendance session is closed or has expired",
-                );
-                onSessionClosed();
-              } else {
-                setQrCountdown(5);
-              }
-            });
-          return 0;
-        }
-        return prev - 1;
-      });
+              onSessionClosed();
+            } else {
+              setQrCountdown(5);
+            }
+          })
+          .finally(() => {
+            isFetchingQrRef.current = false;
+          });
+      }
     }, 1000);
 
     return () => {
@@ -258,9 +283,12 @@ export function ActiveSessionPresenter({
   }, [
     session.expiresAt,
     session._id,
+    session.qrRotationSeconds,
+    currentQr.expiresAt,
     onSessionClosed,
     isArabic,
     isSessionEnded,
+    qrCountdown,
   ]);
 
   // Handle End Attendance
@@ -354,7 +382,12 @@ export function ActiveSessionPresenter({
 
   const rotationPercent = Math.min(
     100,
-    Math.max(0, (qrCountdown / (currentQr.rotationSeconds || 25)) * 100),
+    Math.max(
+      0,
+      (qrCountdown /
+        (currentQr.rotationSeconds || session.qrRotationSeconds || 60)) *
+        100,
+    ),
   );
   const manualStatusOptions: CustomDropdownOption[] = [
     { value: "present", label: isArabic ? "حاضر (Present)" : "Present" },
@@ -562,8 +595,8 @@ export function ActiveSessionPresenter({
                 />
                 <p className="text-[11px] text-muted-foreground/70">
                   {isArabic
-                    ? "حماية مشددة: تنتهي صلاحية لقطات الشاشة تلقائياً بعد 25 ثانية"
-                    : "Anti-cheat protection: Screenshots expire automatically"}
+                    ? "حماية مشددة: تنتهي صلاحية لقطات الشاشة تلقائياً بعد دقيقة واحدة"
+                    : "Anti-cheat protection: Screenshots expire automatically after 1 minute"}
                 </p>
               </div>
 

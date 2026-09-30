@@ -78,14 +78,16 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         const leftSameYearSem =
           left.eligible &&
           leftCourse &&
-          (leftCourse.academicLevel ?? leftCourse.level) === context.academicLevel &&
+          (leftCourse.academicLevel ?? leftCourse.level) ===
+            context.academicLevel &&
           isCourseOfferedForTerm(leftCourse, context.semester)
             ? 1
             : 0;
         const rightSameYearSem =
           right.eligible &&
           rightCourse &&
-          (rightCourse.academicLevel ?? rightCourse.level) === context.academicLevel &&
+          (rightCourse.academicLevel ?? rightCourse.level) ===
+            context.academicLevel &&
           isCourseOfferedForTerm(rightCourse, context.semester)
             ? 1
             : 0;
@@ -277,7 +279,10 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
         : `${nameDisplay} is an elective course fitting the student plan.`;
 
     return {
-      courseId: course._id == null ? undefined : String(course._id),
+      courseId:
+        course._id != null
+          ? (course._id as { toString(): string }).toString()
+          : undefined,
       courseCode,
       courseName,
       courseNameAr,
