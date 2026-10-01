@@ -201,7 +201,7 @@ export class AttendanceController {
     @CurrentUser() user: { _id: string; name: string; studentCode?: string },
     @Body() dto: CheckInAttendanceDto,
   ) {
-    return this.checkInService.checkIn(user, dto.token);
+    return this.checkInService.checkIn(user, dto);
   }
 
   @Get('attendance/student/live-sessions')

@@ -28,6 +28,24 @@ export class CreateStudentDto {
   })
   studentCode!: string;
 
+  @ApiPropertyOptional({ example: 'أحمد محمد علي' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  fullNameAr?: string;
+
+  @ApiPropertyOptional({ example: 'Ahmed Mohamed Ali' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  fullNameEn?: string;
+
   @ApiProperty({ example: 'أحمد محمد علي' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
@@ -145,6 +163,24 @@ export class CreateStudentDto {
 }
 
 export class UpdateStudentDto {
+  @ApiPropertyOptional({ example: 'أحمد محمد علي' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  fullNameAr?: string;
+
+  @ApiPropertyOptional({ example: 'Ahmed Mohamed Ali' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  fullNameEn?: string;
+
   @ApiPropertyOptional()
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,

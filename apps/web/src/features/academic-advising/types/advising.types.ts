@@ -31,6 +31,7 @@ export interface AdvisingCourseMap {
     name?: string;
     studentCode?: string;
     avatarUrl?: string;
+    department?: string;
     gpa: number;
     academicLevel: string;
     semester: string;
@@ -110,6 +111,7 @@ export interface AdvisingCourse {
   prerequisites?: string[];
   offeredTerms?: string[];
   semester?: string;
+  department?: string;
   type?: string;
 }
 export interface CourseRecommendation {

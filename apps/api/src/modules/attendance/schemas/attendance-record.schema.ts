@@ -98,6 +98,13 @@ export class AttendanceRecord {
   @Prop({ trim: true, maxlength: 500 })
   note?: string;
 
+  /**
+   * Unique client device identifier (UUIDv4) to enforce anti-proxy check:
+   * 1 physical device = 1 student per attendance session.
+   */
+  @Prop({ trim: true, index: true })
+  deviceId?: string;
+
   @Prop({ type: [AttendanceAuditEntrySchema], default: [] })
   auditTrail!: AttendanceAuditEntry[];
 }
@@ -107,6 +114,9 @@ export const AttendanceRecordSchema =
 
 // CRITICAL DATABASE UNIQUE CONSTRAINT: Prevent duplicate attendance records for the same session and student
 AttendanceRecordSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
+
+// Anti-proxy device lock index: Quickly query or enforce device uniqueness per session
+AttendanceRecordSchema.index({ sessionId: 1, deviceId: 1 });
 
 // High-performance query indexes
 AttendanceRecordSchema.index({ studentId: 1, courseCode: 1, createdAt: -1 });

@@ -102,24 +102,46 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       });
 
     let allocatedCredits = 0;
+    let allocatedCourses = 0;
+    const maxCoursesLimit = context.maxCourses ?? 6;
+
     return evaluated.map((recommendation) => {
       if (!recommendation.eligible) return recommendation;
+
+      // Low grade improvement courses are optional suggestions, not auto-forced into semester plan
+      if (recommendation.category === 'LOW_GRADE_IMPROVEMENT') {
+        return {
+          ...recommendation,
+          isRecommendedForSemester: false,
+          warnings: [
+            ...recommendation.warnings,
+            'Optional improvement course: Can be added optionally if the student desires to improve GPA.',
+          ],
+        };
+      }
+
       if (
-        allocatedCredits + recommendation.creditHours <=
-        context.maxCreditHours
+        allocatedCourses < maxCoursesLimit &&
+        allocatedCredits + recommendation.creditHours <= context.maxCreditHours
       ) {
         allocatedCredits += recommendation.creditHours;
+        allocatedCourses += 1;
         return { ...recommendation, isRecommendedForSemester: true };
       }
+
+      const exceededReason =
+        allocatedCourses >= maxCoursesLimit
+          ? ('COURSE_LIMIT_EXCEEDED' as const)
+          : ('CREDIT_LIMIT_EXCEEDED' as const);
+
       return {
         ...recommendation,
-        reasonCodes: [
-          ...recommendation.reasonCodes,
-          'CREDIT_LIMIT_EXCEEDED' as const,
-        ],
+        reasonCodes: [...recommendation.reasonCodes, exceededReason],
         warnings: [
           ...recommendation.warnings,
-          `Not included in the recommended semester plan because it would exceed the ${context.maxCreditHours}-credit limit.`,
+          allocatedCourses >= maxCoursesLimit
+            ? `Not included in recommended semester plan because the student reached the maximum limit of ${maxCoursesLimit} courses.`
+            : `Not included in the recommended semester plan because it would exceed the ${context.maxCreditHours}-credit limit.`,
         ],
       };
     });
@@ -200,11 +222,22 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       );
     }
 
+    const isLowGrade = (context.lowGradeCourses ?? []).some(
+      (code) => code.toUpperCase() === courseCode,
+    );
+
     if (alreadyPassed) {
-      reasonCodes.push('ALREADY_PASSED');
-      blockedReasons.push(
-        `${courseCode} ${courseNameEn ?? courseName} has already been passed.`,
-      );
+      if (isLowGrade) {
+        reasonCodes.push('LOW_GRADE_IMPROVEMENT_AVAILABLE');
+        warnings.push(
+          `${courseCode} ${courseNameEn ?? courseName} was previously passed with a low grade (D/D+); available as an optional improvement course.`,
+        );
+      } else {
+        reasonCodes.push('ALREADY_PASSED');
+        blockedReasons.push(
+          `${courseCode} ${courseNameEn ?? courseName} has already been passed.`,
+        );
+      }
     }
     if (alreadyInProgress) {
       reasonCodes.push('ALREADY_IN_PROGRESS');
@@ -235,10 +268,53 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       );
     }
 
+    // Level check: Do not recommend courses higher than student current level
+    const courseLevelNum = Number(course.academicLevel ?? course.level ?? '1');
+    const studentLevelNum = Number(context.academicLevel ?? '1');
+    const isHigherLevel = courseLevelNum > studentLevelNum;
+
+    if (isHigherLevel && !context.allowHigherLevelCourses) {
+      reasonCodes.push('HIGHER_LEVEL_RESTRICTED');
+      blockedReasons.push(
+        `${courseCode} ${courseNameEn ?? courseName} is a Level ${courseLevelNum} course, which is higher than the student's current level (${studentLevelNum}). It cannot be recommended.`,
+      );
+    }
+
+    // Department compatibility check for Level 3 & Level 4
+    const isSpecializedLevel = courseLevelNum >= 3;
+    let departmentMismatch = false;
+
+    if (isSpecializedLevel && context.department) {
+      const studentDeptNorm = this.normalizeDepartment(context.department);
+      const courseDeptNorm = this.normalizeDepartment(course.department);
+
+      // Common courses shared by both BIS and Accounting in Level 3
+      const isCommonSharedCourse = ['317', '411', '318', '319', '326'].includes(
+        courseCode,
+      );
+
+      if (
+        !isCommonSharedCourse &&
+        courseDeptNorm &&
+        courseDeptNorm !== 'GENERAL' &&
+        studentDeptNorm &&
+        studentDeptNorm !== 'GENERAL' &&
+        courseDeptNorm !== studentDeptNorm
+      ) {
+        departmentMismatch = true;
+        reasonCodes.push('DIFFERENT_DEPARTMENT');
+        blockedReasons.push(
+          `${courseCode} ${courseNameEn ?? courseName} belongs to the ${course.department} track and does not match the student's department (${context.department}).`,
+        );
+      }
+    }
+
     const eligible =
       offered &&
-      !alreadyPassed &&
+      (!alreadyPassed || isLowGrade) &&
       !alreadyInProgress &&
+      !departmentMismatch &&
+      !(isHigherLevel && !context.allowHigherLevelCourses) &&
       missingOnlyCompleted.length === 0;
 
     score =
@@ -255,13 +331,15 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       ? unlockCount > 0
         ? 'FAILED_PREREQUISITE'
         : 'FAILED_COURSE'
-      : required && currentLevel
-        ? 'REQUIRED_CURRENT_SEMESTER'
-        : required && !currentLevel && score > 10
-          ? 'REQUIRED_EARLIER_SEMESTER'
-          : !required
-            ? 'ELECTIVE'
-            : 'REQUIRED_NEXT_SEMESTER';
+      : alreadyPassed && isLowGrade
+        ? 'LOW_GRADE_IMPROVEMENT'
+        : required && currentLevel
+          ? 'REQUIRED_CURRENT_SEMESTER'
+          : required && !currentLevel && score > 10
+            ? 'REQUIRED_EARLIER_SEMESTER'
+            : !required
+              ? 'ELECTIVE'
+              : 'REQUIRED_NEXT_SEMESTER';
 
     const nameDisplay =
       courseNameEn && courseNameAr
@@ -317,5 +395,24 @@ export class RulesBasedRecommendationProvider implements AcademicRecommendationP
       }),
     );
     return counts;
+  }
+
+  private normalizeDepartment(dept?: string): string {
+    if (!dept) return '';
+    const clean = dept.trim().toUpperCase();
+    if (
+      clean.includes('BIS') ||
+      clean.includes('نظم') ||
+      clean.includes('INFORMATION')
+    ) {
+      return 'BIS';
+    }
+    if (clean.includes('ACC') || clean.includes('محاسب')) {
+      return 'ACCOUNTING';
+    }
+    if (clean === 'GENERAL' || clean === 'عام') {
+      return 'GENERAL';
+    }
+    return clean;
   }
 }

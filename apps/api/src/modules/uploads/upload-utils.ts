@@ -86,7 +86,7 @@ export function normalizeRowKeys(
     const cleanKey = key
       .trim()
       .toLowerCase()
-      .replace(/[\s_\-]/g, '');
+      .replace(/[\s_-]/g, '');
     const val = row[key];
 
     // Student Code
@@ -98,9 +98,39 @@ export function normalizeRowKeys(
     ) {
       normalized.studentCode = String(val).trim();
     }
+    // Arabic Name
+    else if (
+      cleanKey === 'fullnamear' ||
+      cleanKey === 'namear' ||
+      cleanKey === 'الاسم بالعربية' ||
+      cleanKey === 'اسم الطالب بالعربية' ||
+      cleanKey === 'الاسم العربي'
+    ) {
+      normalized.fullNameAr = String(val).trim();
+      if (!normalized.fullName) {
+        normalized.fullName = String(val).trim();
+      }
+    }
+    // English Name
+    else if (
+      cleanKey === 'fullnameen' ||
+      cleanKey === 'nameen' ||
+      cleanKey === 'englishname' ||
+      cleanKey === 'studentnameen' ||
+      cleanKey === 'الاسم بالانجليزية' ||
+      cleanKey === 'الاسم بالإنجليزية' ||
+      cleanKey === 'اسم الطالب بالانجليزية' ||
+      cleanKey === 'اسم الطالب بالإنجليزية'
+    ) {
+      normalized.fullNameEn = String(val).trim();
+      if (!normalized.fullName) {
+        normalized.fullName = String(val).trim();
+      }
+    }
     // Full Name
     else if (
       cleanKey === 'fullname' ||
+      cleanKey === 'name' ||
       cleanKey === 'الاسم' ||
       cleanKey === 'الاسم بالكامل' ||
       cleanKey === 'اسم الطالب'

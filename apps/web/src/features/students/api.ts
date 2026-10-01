@@ -14,8 +14,11 @@ export interface Student {
   _id: string;
   studentCode: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
   nationalIdMasked?: string;
   nationalId?: string;
+  phone?: string;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -93,8 +96,11 @@ export interface StudentListParams {
 
 export interface StudentWritePayload {
   studentCode?: string;
-  fullName: string;
+  fullName?: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
   nationalId?: string;
+  phone?: string;
   academicEmail?: string;
   department?: string;
   level: string;

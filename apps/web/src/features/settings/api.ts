@@ -46,11 +46,36 @@ export interface AiSettingsItem {
   };
 }
 
+export interface AdvisingRulesItem {
+  maxCoursesLimit: number;
+  preventHigherLevelCourses: boolean;
+  allowLowGradeImprovementFallback: boolean;
+  enforceDepartmentLevel3And4: boolean;
+  probationMaxCredits: number;
+  regularMaxCredits: number;
+  graduatingMaxCredits: number;
+  summerMaxCredits: number;
+  summerProbationMaxCredits: number;
+}
+
 export const settingsKeys = {
   gpaRules: ["admin-gpa-rules"] as const,
   registrationTerms: ["admin-registration-terms"] as const,
   aiSettings: ["admin-ai-settings"] as const,
+  advisingRules: ["admin-advising-rules"] as const,
 };
+
+export async function getAdvisingRules(): Promise<AdvisingRulesItem> {
+  const response = await api.get<AdvisingRulesItem>("/admin/advising/rules");
+  return response.data;
+}
+
+export async function updateAdvisingRules(
+  dto: Partial<AdvisingRulesItem>,
+): Promise<AdvisingRulesItem> {
+  const response = await api.patch<AdvisingRulesItem>("/admin/advising/rules", dto);
+  return response.data;
+}
 
 export async function listGpaRules(): Promise<GpaRuleItem[]> {
   const response = await api.get<GpaRuleItem[]>("/admin/gpa-rules");

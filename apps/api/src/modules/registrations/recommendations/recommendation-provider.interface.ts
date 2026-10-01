@@ -14,7 +14,11 @@ export type RecommendationReasonCode =
   | 'ALREADY_IN_PROGRESS'
   | 'MISSING_PREREQUISITE'
   | 'NOT_OFFERED_THIS_SEMESTER'
-  | 'CREDIT_LIMIT_EXCEEDED';
+  | 'DIFFERENT_DEPARTMENT'
+  | 'COURSE_LIMIT_EXCEEDED'
+  | 'CREDIT_LIMIT_EXCEEDED'
+  | 'HIGHER_LEVEL_RESTRICTED'
+  | 'LOW_GRADE_IMPROVEMENT_AVAILABLE';
 
 export type RecommendationCourse = Course & { _id?: unknown };
 
@@ -23,10 +27,14 @@ export interface AcademicRecommendationContext {
   completedCourses: readonly string[];
   failedCourses: readonly string[];
   inProgressCourses?: readonly string[];
+  lowGradeCourses?: readonly string[];
   academicLevel: CourseLevel;
   semester: Semester;
   maxCreditHours: number;
+  maxCourses?: number;
+  department?: string;
   academicWarningCount?: number;
+  allowHigherLevelCourses?: boolean;
 }
 
 export interface PrerequisiteEvaluation {
@@ -47,7 +55,8 @@ export type RecommendationCategory =
   | 'REQUIRED_EARLIER_SEMESTER'
   | 'REQUIRED_NEXT_SEMESTER'
   | 'ELECTIVE'
-  | 'MIN_HOURS_FILLER';
+  | 'MIN_HOURS_FILLER'
+  | 'LOW_GRADE_IMPROVEMENT';
 
 export interface AcademicCourseRecommendation {
   courseId?: string;

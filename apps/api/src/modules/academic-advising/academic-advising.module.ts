@@ -45,6 +45,10 @@ import { AdvisingQueryService } from './services/advising-query.service';
 import { AdvisingAuditService } from './services/advising-audit.service';
 import { PlanValidationService } from './services/plan-validation.service';
 import {
+  AdvisingRules,
+  AdvisingRulesSchema,
+} from './schemas/advising-rules.schema';
+import {
   CourseRegistration,
   CourseRegistrationSchema,
 } from '../registrations/schemas/course-registration.schema';
@@ -69,6 +73,7 @@ import { AiModule } from '../ai/ai.module';
       { name: CourseRecommendation.name, schema: CourseRecommendationSchema },
       { name: AdvisingNote.name, schema: AdvisingNoteSchema },
       { name: AdvisingAuditLog.name, schema: AdvisingAuditLogSchema },
+      { name: AdvisingRules.name, schema: AdvisingRulesSchema },
     ]),
   ],
   controllers: [AdminAdvisingController, StudentAdvisingController],

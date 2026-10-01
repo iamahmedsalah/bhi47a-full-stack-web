@@ -36,6 +36,8 @@ export class StudentsExportController {
     worksheet.columns = [
       { header: 'كود الطالب', key: 'studentCode', width: 15 },
       { header: 'الاسم الكامل', key: 'fullName', width: 30 },
+      { header: 'الاسم بالعربية', key: 'fullNameAr', width: 25 },
+      { header: 'الاسم بالإنجليزية', key: 'fullNameEn', width: 25 },
       { header: 'الفرقة', key: 'level', width: 12 },
       { header: 'القسم', key: 'department', width: 20 },
       { header: 'البريد الأكاديمي', key: 'academicEmail', width: 30 },
@@ -63,6 +65,8 @@ export class StudentsExportController {
           .addRow({
             studentCode: student.studentCode,
             fullName: student.fullName,
+            fullNameAr: student.fullNameAr || student.fullName,
+            fullNameEn: student.fullNameEn || '-',
             level: student.level,
             department: student.department || '-',
             academicEmail: student.academicEmail || '-',

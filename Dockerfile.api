@@ -1,5 +1,5 @@
 # ===================================================
-# STAGE 1: Build & Prune Dependencies
+# STAGE 1: Build & Prune Dependencies (Production)
 # ===================================================
 FROM node:24-alpine AS builder
 

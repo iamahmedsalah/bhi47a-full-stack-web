@@ -4,6 +4,7 @@ import { AdvisingCaseService } from './advising-case.service';
 import { AdvisingPlanService } from './advising-plan.service';
 import { AdvisingRecommendationService } from './advising-recommendation.service';
 import { AdvisingQueryService } from './advising-query.service';
+import type { UpdateAdvisingRulesDto } from '../dto/update-advising-rules.dto';
 import type {
   AdvisingStudentsQueryDto,
   AssignCaseDto,
@@ -124,6 +125,14 @@ export class AcademicAdvisingService {
       actorId,
       role,
     );
+  }
+
+  getAdvisingRules() {
+    return this.recommendationService.getRules();
+  }
+
+  updateAdvisingRules(dto: UpdateAdvisingRulesDto, actorId: string) {
+    return this.recommendationService.updateRules(dto, actorId);
   }
 
   // ── Student & Advisor Queries ────────────────────────────────

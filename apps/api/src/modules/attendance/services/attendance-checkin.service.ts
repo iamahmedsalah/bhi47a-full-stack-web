@@ -24,6 +24,7 @@ import {
 } from '../../students/schemas/student-profile.schema';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
+import { CheckInAttendanceDto } from '../dto/attendance-session.dto';
 
 interface MongoDuplicateKeyError {
   code: number;
@@ -66,8 +67,22 @@ export class AttendanceCheckInService {
    */
   async checkIn(
     studentUser: { _id: string; name: string; studentCode?: string },
-    rawToken: string,
+    payload: string | CheckInAttendanceDto,
   ) {
+    const rawToken = typeof payload === 'string' ? payload : payload?.token;
+    const deviceId =
+      typeof payload === 'object' && payload?.deviceId
+        ? payload.deviceId.trim()
+        : undefined;
+    const latitude =
+      typeof payload === 'object' && typeof payload?.latitude === 'number'
+        ? payload.latitude
+        : undefined;
+    const longitude =
+      typeof payload === 'object' && typeof payload?.longitude === 'number'
+        ? payload.longitude
+        : undefined;
+
     if (!rawToken || typeof rawToken !== 'string') {
       throw new BadRequestException('رمز الحضور مفقود أو غير صالح');
     }
@@ -213,6 +228,49 @@ export class AttendanceCheckInService {
       };
     }
 
+    // 7.1 Anti-Proxy Device Lock: Ensure one physical device cannot check in for multiple students in the same session
+    if (deviceId) {
+      const deviceUsedByOther = await this.recordModel
+        .findOne({
+          sessionId: session._id,
+          deviceId,
+          studentId: { $ne: new Types.ObjectId(studentUser._id) },
+        })
+        .lean();
+
+      if (deviceUsedByOther) {
+        throw new ForbiddenException(
+          'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة.',
+        );
+      }
+    }
+
+    // 7.2 Geofencing Proof: If session specifies hall coordinates, verify student proximity
+    if (
+      typeof session.location?.latitude === 'number' &&
+      typeof session.location?.longitude === 'number'
+    ) {
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        throw new BadRequestException(
+          'يجب تفعيل خدمة تحديد الموقع الجغرافي (GPS) للتحقق من تواجدك داخل القاعة.',
+        );
+      }
+
+      const distanceMeters = this.calculateHaversineDistance(
+        latitude,
+        longitude,
+        session.location.latitude,
+        session.location.longitude,
+      );
+
+      const maxAllowedRadius = session.location.radiusMeters || 100;
+      if (distanceMeters > maxAllowedRadius) {
+        throw new ForbiddenException(
+          `أنت خارج النطاق الجغرافي المسموح به للمحاضرة (${Math.round(distanceMeters)} متر عن القاعة).`,
+        );
+      }
+    }
+
     // 8. Determine attendance status using SERVER TIME
     const lateThresholdMs = session.lateThresholdMinutes * 60 * 1000;
     const isLate = now.getTime() > session.startsAt.getTime() + lateThresholdMs;
@@ -229,6 +287,7 @@ export class AttendanceCheckInService {
         sessionType: session.sessionType,
         status: attendanceStatus,
         method: 'qr',
+        deviceId,
         checkedInAt: now,
       });
 
@@ -374,5 +433,31 @@ export class AttendanceCheckInService {
     });
 
     return { sessions: liveSessions };
+  }
+
+  /**
+   * Calculates the great-circle distance between two geographic coordinates using the Haversine formula (in meters).
+   */
+  private calculateHaversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371e3; // Earth radius in meters
+    const phi1 = (lat1 * Math.PI) / 180;
+    const phi2 = (lat2 * Math.PI) / 180;
+    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+      Math.cos(phi1) *
+        Math.cos(phi2) *
+        Math.sin(deltaLambda / 2) *
+        Math.sin(deltaLambda / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
   }
 }

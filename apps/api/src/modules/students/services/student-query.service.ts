@@ -62,6 +62,8 @@ export class StudentQueryService {
       filter.$or = [
         { studentCode: { $regex: search, $options: 'i' } },
         { fullName: { $regex: search, $options: 'i' } },
+        { fullNameAr: { $regex: search, $options: 'i' } },
+        { fullNameEn: { $regex: search, $options: 'i' } },
       ];
     }
 

@@ -16,6 +16,7 @@ import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../../common/pipes/parse-objectid.pipe';
 import { AcademicAdvisingService } from '../services/academic-advising.service';
 import { PERMISSIONS } from '@student-portal/shared';
+import type { UpdateAdvisingRulesDto } from '../dto/update-advising-rules.dto';
 import {
   AdvisingStudentsQueryDto,
   AssignCaseDto,
@@ -247,5 +248,21 @@ export class AdminAdvisingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.listAudit(id, user._id, user.role);
+  }
+
+  @Get('rules')
+  @RequirePermissions(PERMISSIONS.ADVISING_READ)
+  getRules() {
+    return this.service.getAdvisingRules();
+  }
+
+  @Patch('rules')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.ADVISING_WRITE)
+  updateRules(
+    @Body() dto: UpdateAdvisingRulesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateAdvisingRules(dto, user._id);
   }
 }

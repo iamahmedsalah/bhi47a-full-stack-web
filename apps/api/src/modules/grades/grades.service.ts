@@ -20,10 +20,7 @@ import {
   StudentAcademicProfileDocument,
 } from '../registrations/schemas/student-academic-profile.schema';
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
-import {
-  calculatePromotedAcademicLevel,
-  evaluateAcademicProgression,
-} from './utils/academic-level-progression.util';
+import { evaluateAcademicProgression } from './utils/academic-level-progression.util';
 import type { CourseLevel } from '@student-portal/shared';
 import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 

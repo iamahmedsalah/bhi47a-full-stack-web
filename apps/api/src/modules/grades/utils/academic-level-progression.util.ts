@@ -114,9 +114,7 @@ export function evaluateAcademicProgression(input: {
   }
 
   // Check 3: Check failed/carried courses in current level and overall
-  const mandatoryCodes = new Set(
-    mandatory.map((c) => c.code.toUpperCase()),
-  );
+  const mandatoryCodes = new Set(mandatory.map((c) => c.code.toUpperCase()));
   const levelFailedCourses = [...failedSet].filter((code) =>
     mandatoryCodes.has(code),
   );

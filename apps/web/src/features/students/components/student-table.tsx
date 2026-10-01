@@ -8,9 +8,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TableCell } from '@/components/ui/table';
 import { CopyButton } from '@/components/ui/copy-button';
-import { Button } from '@/components/ui/button';
 import { CustomDropdown, type CustomDropdownOption } from '@/components/ui/custom-dropdown';
-import { cn } from '@/lib/cn';
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -25,8 +23,11 @@ export interface Student {
   _id: string;
   studentCode: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
   nationalIdMasked?: string;
   nationalId?: string;
+  phone?: string;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -152,14 +153,27 @@ export function StudentTable({
       key: 'fullName',
       header: t('studentName'),
       className: 'min-w-[180px] text-start',
-      render: (student) => (
-        <TableCell className="min-w-[180px] py-2.5 px-3">
-          <div className="font-semibold text-foreground leading-tight">{student.fullName}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-[220px]">
-            {student.academicEmail || 'No academic email'}
-          </div>
-        </TableCell>
-      ),
+      render: (student) => {
+        const isAr = locale === 'ar';
+        const primaryName = isAr
+          ? (student.fullNameAr || student.fullName)
+          : (student.fullNameEn || student.fullName);
+        const secondaryName = isAr ? student.fullNameEn : student.fullNameAr;
+
+        return (
+          <TableCell className="min-w-[180px] py-2.5 px-3">
+            <div className="font-semibold text-foreground leading-tight">{primaryName}</div>
+            {secondaryName && secondaryName !== primaryName ? (
+              <div className="text-[11px] text-muted-foreground/80 mt-0.5 truncate max-w-[220px]">
+                {secondaryName}
+              </div>
+            ) : null}
+            <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-[220px]">
+              {student.academicEmail || 'No academic email'}
+            </div>
+          </TableCell>
+        );
+      },
     },
     {
       key: 'academic',

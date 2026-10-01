@@ -54,6 +54,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
     headersAr: [
       'كود الطالب',
       'الاسم بالكامل',
+      'الاسم بالعربية',
+      'الاسم بالإنجليزية',
       'الرقم القومي',
       'المستوى',
       'القسم',
@@ -67,6 +69,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
     headersEn: [
       'studentCode',
       'fullName',
+      'fullNameAr',
+      'fullNameEn',
       'nationalId',
       'level',
       'department',
@@ -77,13 +81,15 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       'semester',
       'mustChangePassword',
     ],
-    widths: [16, 32, 22, 12, 24, 16, 14, 14, 18, 16, 28],
-    textColumns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    widths: [16, 30, 28, 28, 22, 12, 24, 16, 14, 14, 18, 16, 28],
+    textColumns: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
     numberColumns: [],
     samplesAr: [
       [
         '202601',
         'أحمد محمد علي حسن',
+        'أحمد محمد علي حسن',
+        'Ahmed Mohamed Ali Hassan',
         '30205151234567',
         '1',
         'نظم معلومات الأعمال',
@@ -97,6 +103,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       [
         '202602',
         'سارة محمود إبراهيم',
+        'سارة محمود إبراهيم',
+        'Sara Mahmoud Ibrahim',
         '30308221234568',
         '1',
         'نظم معلومات الأعمال',
@@ -110,6 +118,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       [
         '202603',
         'عمر خالد عبد الرحمن',
+        'عمر خالد عبد الرحمن',
+        'Omar Khaled Abdelrahman',
         '30111051234569',
         '2',
         'المحاسبة والتمويل',
@@ -124,7 +134,9 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
     samplesEn: [
       [
         '202601',
-        'Ahmed Mohamed Ali',
+        'Ahmed Mohamed Ali Hassan',
+        'أحمد محمد علي حسن',
+        'Ahmed Mohamed Ali Hassan',
         '30205151234567',
         '1',
         'Business Information Systems',
@@ -138,6 +150,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       [
         '202602',
         'Sara Mahmoud Ibrahim',
+        'سارة محمود إبراهيم',
+        'Sara Mahmoud Ibrahim',
         '30308221234568',
         '1',
         'Business Information Systems',
@@ -150,6 +164,8 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       ],
       [
         '202603',
+        'Omar Khaled Abdelrahman',
+        'عمر خالد عبد الرحمن',
         'Omar Khaled Abdelrahman',
         '30111051234569',
         '2',

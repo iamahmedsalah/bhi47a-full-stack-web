@@ -46,6 +46,7 @@ export interface AdvisingCourseMapResponse {
     name?: string;
     studentCode?: string;
     avatarUrl?: string;
+    department?: string;
     gpa: number;
     academicLevel: string;
     semester: string;
@@ -411,6 +412,7 @@ export class AdvisingQueryService {
 
     const [
       profile,
+      studentProfile,
       courses,
       grades,
       approvedPlan,
@@ -419,6 +421,7 @@ export class AdvisingQueryService {
       firstRegistration,
     ] = await Promise.all([
       this.academicProfiles.findOne({ studentId }).lean(),
+      this.studentProfiles.findOne({ studentId }).lean(),
       this.courses.find({ isActive: true }).sort({ code: 1 }).lean(),
       this.grades
         .find({ studentId, isPublished: true })
@@ -537,6 +540,7 @@ export class AdvisingQueryService {
         name: studentObj.name,
         studentCode: studentObj.studentCode,
         avatarUrl: studentObj.avatarUrl,
+        department: studentProfile?.department,
         gpa: progress.calculatedGpa ?? profile.gpa,
         academicLevel: profile.academicLevel,
         semester: caseItem.semester,

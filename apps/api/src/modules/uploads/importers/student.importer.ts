@@ -63,7 +63,8 @@ export class StudentImporter implements Importer {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
-      if (!row.studentCode || !row.fullName || !row.nationalId) {
+      const hasName = Boolean(row.fullName || row.fullNameAr || row.fullNameEn);
+      if (!row.studentCode || !hasName || !row.nationalId) {
         errors.push(
           `السطر ${rowNum}: البيانات الأساسية ناقصة (كود الطالب، الاسم، الرقم القومي)`,
         );
@@ -103,6 +104,18 @@ export class StudentImporter implements Importer {
         const nationalId = String(row.nationalId).trim();
         const existingUser = userMap.get(studentCode);
 
+        const resolvedName =
+          (row.fullName as string)?.trim() ||
+          (row.fullNameAr as string)?.trim() ||
+          (row.fullNameEn as string)?.trim() ||
+          'Student';
+        const fullNameAr =
+          (row.fullNameAr as string)?.trim() ||
+          (/[\u0600-\u06FF]/.test(resolvedName) ? resolvedName : undefined);
+        const fullNameEn =
+          (row.fullNameEn as string)?.trim() ||
+          (!/[\u0600-\u06FF]/.test(resolvedName) ? resolvedName : undefined);
+
         const maskedId =
           nationalId.length === 14
             ? nationalId.substring(0, 3) + '****' + nationalId.substring(11)
@@ -129,7 +142,7 @@ export class StudentImporter implements Importer {
               $set: {
                 role: 'student',
                 studentCode,
-                name: row.fullName,
+                name: resolvedName,
                 passwordHash,
                 nationalIdHash: passwordHash,
                 nationalIdMasked: maskedId,
@@ -148,7 +161,9 @@ export class StudentImporter implements Importer {
             filter: { studentCode },
             update: {
               $set: {
-                fullName: row.fullName,
+                fullName: resolvedName,
+                fullNameAr,
+                fullNameEn,
                 studentCode,
                 nationalIdMasked: maskedId,
                 nationalId,

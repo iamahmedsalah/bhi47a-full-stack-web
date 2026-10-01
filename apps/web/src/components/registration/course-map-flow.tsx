@@ -84,6 +84,7 @@ interface CourseMapFlowProps {
   readonly?: boolean;
   studentName?: string;
   studentCode?: string;
+  studentDepartment?: string;
   gpa?: number;
   currentSemester?: string;
 }
@@ -189,14 +190,87 @@ function getPrerequisiteLabels(
   });
 }
 
+const COURSE_LEVEL_BY_CODE: Record<string, string> = {
+  // Level 1
+  "112": "1", "113": "1", "114": "1", "211": "1", "212": "1",
+  "111": "1", "115": "1", "214": "1", "216": "1", "513": "1", "514": "1",
+  // Level 2
+  "213": "2", "310": "2", "311": "2", "312": "2", "415": "2",
+  "215": "2", "313": "2", "314": "2", "316": "2", "416": "2", "511": "2",
+  // Level 3
+  "317": "3", "411": "3", "S11": "3", "S12": "3", "515": "3", "A11": "3", "B11": "3", "326": "3",
+  "318": "3", "319": "3", "S13": "3", "S14": "3", "422": "3", "A12": "3", "A13": "3", "A26": "3", "425": "3",
+  // Level 4
+  "412": "4", "413": "4", "414": "4", "S15": "4", "S16": "4", "S21": "4",
+  "315": "4", "512": "4", "S17": "4", "S22": "4", "S23": "4",
+};
+
+const COURSE_SEMESTER_BY_CODE: Record<string, string> = {
+  "112": "first", "113": "first", "114": "first", "211": "first", "212": "first",
+  "213": "first", "310": "first", "311": "first", "312": "first", "415": "first",
+  "317": "first", "411": "first", "S11": "first", "S12": "first", "515": "first",
+  "A11": "first", "B11": "first", "326": "first",
+  "412": "first", "413": "first", "414": "first", "S15": "first", "S16": "first", "S21": "first",
+  "111": "second", "115": "second", "214": "second", "216": "second", "513": "second", "514": "second",
+  "215": "second", "313": "second", "314": "second", "316": "second", "416": "second", "511": "second",
+  "318": "second", "319": "second", "S13": "second", "S14": "second", "422": "second",
+  "A12": "second", "A13": "second", "A26": "second", "425": "second",
+  "315": "second", "512": "second", "S17": "second", "S22": "second", "S23": "second",
+};
+
+function getFlowCourseLevel(course: CourseMapCourse): string {
+  if (course.academicLevel) return String(course.academicLevel);
+  if (course.level) return String(course.level);
+  const code = normalizeCode(course.code);
+  if (COURSE_LEVEL_BY_CODE[code]) return COURSE_LEVEL_BY_CODE[code];
+  const match = course.code.match(/([1-4])\d{2}/);
+  if (match) return match[1];
+  return "1";
+}
+
+function getFlowCourseSemester(course: CourseMapCourse): string {
+  if (course.semester) return course.semester;
+  const code = normalizeCode(course.code);
+  return COURSE_SEMESTER_BY_CODE[code] ?? "first";
+}
+
 function isCourseOfferedInSemester(
   course: CourseMapCourse,
   semester?: string,
 ) {
   if (!semester) return true;
-  return course.offeredTerms?.length
-    ? course.offeredTerms.includes(semester)
-    : course.semester === semester;
+  if (course.offeredTerms?.length) {
+    return course.offeredTerms.includes(semester);
+  }
+  return getFlowCourseSemester(course) === semester;
+}
+
+const SHARED_LEVEL3_CODES = new Set(["317", "411", "318", "319", "326"]);
+
+const COURSE_DEPT_BY_CODE: Record<string, "BIS" | "ACCOUNTING"> = {
+  "S11": "BIS", "S12": "BIS", "515": "BIS", "S13": "BIS", "S14": "BIS", "422": "BIS",
+  "A11": "ACCOUNTING", "B11": "ACCOUNTING", "A12": "ACCOUNTING", "A13": "ACCOUNTING", "A26": "ACCOUNTING", "425": "ACCOUNTING",
+  "412": "BIS", "413": "BIS", "414": "BIS", "S15": "BIS", "S16": "BIS", "S21": "BIS",
+  "315": "BIS", "512": "BIS", "S17": "BIS", "S22": "BIS", "S23": "BIS",
+};
+
+function normalizeFlowDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
+  if (!dept) return null;
+  const upper = dept.toUpperCase();
+  if (upper.includes("ACC") || upper.includes("محاسب")) return "ACCOUNTING";
+  if (upper.includes("BIS") || upper.includes("نظم")) return "BIS";
+  return null;
+}
+
+function getFlowCourseDept(
+  course: CourseMapCourse,
+): "BIS" | "ACCOUNTING" | "GENERAL" | undefined {
+  if (course.department) {
+    const norm = normalizeFlowDept(course.department);
+    if (norm) return norm;
+  }
+  const code = normalizeCode(course.code);
+  return COURSE_DEPT_BY_CODE[code] ?? (SHARED_LEVEL3_CODES.has(code) ? "GENERAL" : undefined);
 }
 
 function getStatusLabel(status: CourseProgressStatus, isEnglish: boolean) {
@@ -423,14 +497,17 @@ export function CourseMapFlow({
   readonly = false,
   studentName,
   studentCode,
+  studentDepartment,
   gpa,
   currentSemester,
 }: CourseMapFlowProps) {
   const isEnglish = locale === "en";
+  const studentTrack = normalizeFlowDept(studentDepartment) ?? "BIS";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CanvasFilter>("all");
   const [levelView, setLevelView] = useState("all");
   const [semesterView, setSemesterView] = useState("all");
+  const [deptView, setDeptView] = useState<"auto" | "all" | "BIS" | "ACCOUNTING">("auto");
   const [focusedCourseCode, setFocusedCourseCode] = useState<string>();
 
   const selected = useMemo(
@@ -494,8 +571,8 @@ export function CourseMapFlow({
   const terms = useMemo(() => {
     const keys = new Set(
       normalizedCourses.map((course) => {
-        const level = course.academicLevel ?? course.level ?? "1";
-        return `${level}:${course.semester ?? "first"}`;
+        const level = getFlowCourseLevel(course);
+        return `${level}:${getFlowCourseSemester(course)}`;
       }),
     );
     return [...keys]
@@ -528,15 +605,41 @@ export function CourseMapFlow({
             (filter === "planned" && selected.has(course.code)) ||
             (filter === "attention" &&
               (status === "failed" || status === "low_grade"));
-          const courseLevel = course.academicLevel ?? course.level ?? "1";
+          const courseLevel = getFlowCourseLevel(course);
           const matchesLevel = levelView === "all" || courseLevel === levelView;
           const matchesSemester =
-            semesterView === "all" || (course.semester ?? "first") === semesterView;
-          return matchesQuery && matchesFilter && matchesLevel && matchesSemester;
+            semesterView === "all" || getFlowCourseSemester(course) === semesterView;
+
+          // Department track filter for Level 3 & Level 4
+          const targetDept =
+            deptView === "auto" ? studentTrack : deptView === "all" ? null : deptView;
+          const courseLvlNum = Number(courseLevel);
+          let matchesDept = true;
+          if (targetDept && (courseLvlNum === 3 || courseLvlNum === 4)) {
+            const courseDept = getFlowCourseDept(course);
+            if (courseDept && courseDept !== "GENERAL" && courseDept !== targetDept) {
+              matchesDept = false;
+            }
+          }
+
+          return matchesQuery && matchesFilter && matchesLevel && matchesSemester && matchesDept;
         })
         .map((course) => course.code),
     );
-  }, [filter, isEnglish, levelView, locale, normalizedCourses, query, selectable, selected, semesterView, statusByCode]);
+  }, [
+    deptView,
+    filter,
+    isEnglish,
+    levelView,
+    locale,
+    normalizedCourses,
+    query,
+    selectable,
+    selected,
+    semesterView,
+    statusByCode,
+    studentTrack,
+  ]);
 
   const graph = useMemo(() => {
     const nodes: AdvisingFlowNode[] = [];
@@ -557,8 +660,8 @@ export function CourseMapFlow({
         semester,
         courses: normalizedCourses
           .filter((course) => {
-            const courseLevel = course.academicLevel ?? course.level ?? "1";
-            return courseLevel === level && (course.semester ?? "first") === semester;
+            const courseLevel = getFlowCourseLevel(course);
+            return courseLevel === level && getFlowCourseSemester(course) === semester;
           })
           .filter((course) => visibleCourseCodes.has(course.code))
           .sort((a, b) => a.code.localeCompare(b.code)),
@@ -827,6 +930,25 @@ export function CourseMapFlow({
               options={[
                 { value: "all", label: isEnglish ? "All semesters" : "كل الفصول" },
                 ...SEMESTERS.map((semester) => ({ value: semester, label: getSemesterLabel(semester, isEnglish) })),
+              ]}
+            />
+          </div>
+          <div className="w-36 shrink-0">
+            <CustomDropdown
+              value={deptView}
+              onValueChange={(val) => setDeptView(val as "auto" | "all" | "BIS" | "ACCOUNTING")}
+              ariaLabel={isEnglish ? "Filter by department" : "تصفية حسب الشعبة"}
+              className="h-8 border-white/15 bg-background/70 text-xs font-semibold"
+              options={[
+                {
+                  value: "auto",
+                  label: isEnglish
+                    ? `My track (${studentTrack})`
+                    : `شعبتي (${studentTrack === "BIS" ? "نظم BIS" : "محاسبة"})`,
+                },
+                { value: "all", label: isEnglish ? "All tracks" : "كافة الشعب" },
+                { value: "BIS", label: isEnglish ? "BIS track" : "شعبة نظم BIS" },
+                { value: "ACCOUNTING", label: isEnglish ? "Accounting track" : "شعبة المحاسبة" },
               ]}
             />
           </div>

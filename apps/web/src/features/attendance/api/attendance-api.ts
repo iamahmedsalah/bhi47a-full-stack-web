@@ -217,11 +217,23 @@ export const attendanceApi = {
     return res.data;
   },
 
-  // Student QR Check-in
-  async checkIn(token: string): Promise<CheckInResponse> {
-    const res = await api.post<CheckInResponse>("/attendance/check-in", {
-      token,
-    });
+  // Student QR Check-in with anti-proxy deviceId and optional GPS geofencing
+  async checkIn(
+    payloadOrToken:
+      | string
+      | {
+          token: string;
+          deviceId?: string;
+          latitude?: number;
+          longitude?: number;
+        },
+    meta?: { deviceId?: string; latitude?: number; longitude?: number },
+  ): Promise<CheckInResponse> {
+    const body =
+      typeof payloadOrToken === "string"
+        ? { token: payloadOrToken, ...meta }
+        : payloadOrToken;
+    const res = await api.post<CheckInResponse>("/attendance/check-in", body);
     return res.data;
   },
 

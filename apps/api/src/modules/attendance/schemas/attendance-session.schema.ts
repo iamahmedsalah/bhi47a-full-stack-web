@@ -110,6 +110,25 @@ export class AttendanceSession {
     max: 120,
   })
   qrRotationSeconds!: number;
+
+  /**
+   * Optional geofencing configuration to ensure students check in within physical range of the lecture hall.
+   */
+  @Prop({
+    type: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      radiusMeters: { type: Number, default: 100 },
+      venueName: { type: String, trim: true },
+    },
+    _id: false,
+  })
+  location?: {
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    venueName?: string;
+  };
 }
 
 export const AttendanceSessionSchema =

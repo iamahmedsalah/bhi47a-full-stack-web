@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AttendanceCheckInService } from './attendance-checkin.service';
 import { Types } from 'mongoose';
 
@@ -211,5 +211,90 @@ describe('AttendanceCheckInService', () => {
     await expect(service.checkIn(mockStudent, rawToken)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('should reject check-in when deviceId was already used by another student in this session', async () => {
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
+
+    const mockSession = {
+      _id: mockSessionId,
+      courseCode: 'CS101',
+      status: 'OPEN',
+      startsAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      lateThresholdMinutes: 10,
+      sessionSecret: 'supersecret',
+      qrRotationSeconds: 20,
+    };
+
+    mockSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockSession),
+      }),
+    });
+
+    mockTokenService.validateToken.mockReturnValue({ valid: true });
+    mockRegistrationModel.exists.mockResolvedValue(true);
+
+    // Mock existing record for student is null, but device is used by another student
+    mockRecordModel.findOne
+      .mockReturnValueOnce({
+        lean: jest.fn().mockResolvedValue(null), // student not checked in yet
+      })
+      .mockReturnValueOnce({
+        lean: jest.fn().mockResolvedValue({
+          _id: new Types.ObjectId(),
+          studentId: new Types.ObjectId(), // another student
+          deviceId: 'device-xyz-123',
+        }),
+      });
+
+    await expect(
+      service.checkIn(mockStudent, {
+        token: rawToken,
+        deviceId: 'device-xyz-123',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('should reject check-in when student location is outside the geofence radius', async () => {
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
+
+    const mockSession = {
+      _id: mockSessionId,
+      courseCode: 'CS101',
+      status: 'OPEN',
+      startsAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      lateThresholdMinutes: 10,
+      sessionSecret: 'supersecret',
+      qrRotationSeconds: 20,
+      location: {
+        latitude: 30.0444, // Cairo Center
+        longitude: 31.2357,
+        radiusMeters: 50, // 50m radius
+      },
+    };
+
+    mockSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockSession),
+      }),
+    });
+
+    mockTokenService.validateToken.mockReturnValue({ valid: true });
+    mockRegistrationModel.exists.mockResolvedValue(true);
+    mockRecordModel.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+
+    // Student coordinates far away (Giza pyramids ~ 13km away)
+    await expect(
+      service.checkIn(mockStudent, {
+        token: rawToken,
+        latitude: 29.9792,
+        longitude: 31.1342,
+      }),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

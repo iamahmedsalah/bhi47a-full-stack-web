@@ -22,6 +22,12 @@ export class StudentProfile {
   fullName!: string;
 
   @Prop()
+  fullNameAr?: string;
+
+  @Prop()
+  fullNameEn?: string;
+
+  @Prop()
   nationalIdMasked?: string;
 
   @Prop({ select: false })
@@ -73,6 +79,10 @@ export const StudentProfileSchema =
 
 // Indexes
 StudentProfileSchema.index({ userId: 1 }, { unique: true });
-StudentProfileSchema.index({ fullName: 'text' });
+StudentProfileSchema.index({
+  fullName: 'text',
+  fullNameAr: 'text',
+  fullNameEn: 'text',
+});
 StudentProfileSchema.index({ level: 1 });
 StudentProfileSchema.index({ enrollmentStatus: 1 });

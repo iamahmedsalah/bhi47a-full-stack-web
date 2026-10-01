@@ -63,10 +63,21 @@ export class StudentsService {
       throw new ConflictException('كود الطالب موجود بالفعل'); // Student code already exists
     }
 
+    const resolvedFullName =
+      dto.fullName || dto.fullNameAr || dto.fullNameEn || 'Student';
+    const fullNameAr =
+      dto.fullNameAr ||
+      (/[\u0600-\u06FF]/.test(resolvedFullName) ? resolvedFullName : undefined);
+    const fullNameEn =
+      dto.fullNameEn ||
+      (!/[\u0600-\u06FF]/.test(resolvedFullName)
+        ? resolvedFullName
+        : undefined);
+
     // Create user account (nationalId is the initial password)
     const user = await this.usersService.createUser({
       role: 'student',
-      name: dto.fullName,
+      name: resolvedFullName,
       studentCode: dto.studentCode,
       password: dto.nationalId,
       nationalId: dto.nationalId,
@@ -79,7 +90,9 @@ export class StudentsService {
     const profile = new this.studentProfileModel({
       userId: user._id,
       studentCode: dto.studentCode,
-      fullName: dto.fullName,
+      fullName: resolvedFullName,
+      fullNameAr,
+      fullNameEn,
       nationalIdMasked: user.nationalIdMasked,
       nationalId: dto.nationalId,
       department: dto.department,
@@ -197,6 +210,17 @@ export class StudentsService {
 
   async update(id: string, dto: UpdateStudentDto) {
     const { nationalId, mustChangePassword, ...profileUpdates } = dto;
+    const effectiveFullName = dto.fullName || dto.fullNameAr || dto.fullNameEn;
+    if (effectiveFullName) {
+      profileUpdates.fullName = effectiveFullName;
+    }
+    if (dto.fullNameAr !== undefined) {
+      profileUpdates.fullNameAr = dto.fullNameAr;
+    }
+    if (dto.fullNameEn !== undefined) {
+      profileUpdates.fullNameEn = dto.fullNameEn;
+    }
+
     const profile = await this.studentProfileModel.findByIdAndUpdate(
       id,
       { $set: profileUpdates },
@@ -206,12 +230,12 @@ export class StudentsService {
       throw new NotFoundException('الطالب غير موجود');
     }
 
-    // Also update the user name if fullName changed
-    if (dto.fullName) {
+    // Also update the user name if fullName or bilingual names changed
+    if (effectiveFullName) {
       await this.usersService
         .findById(profile.userId.toString())
         .then((user) => {
-          user.name = dto.fullName!;
+          user.name = effectiveFullName;
           return user.save();
         });
     }

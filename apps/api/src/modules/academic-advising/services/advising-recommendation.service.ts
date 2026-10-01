@@ -11,11 +11,20 @@ import { AdvisingCase } from '../schemas/advising-case.schema';
 import { CourseRecommendation } from '../schemas/course-recommendation.schema';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { StudentAcademicProfile } from '../../registrations/schemas/student-academic-profile.schema';
+import {
+  StudentProfile,
+  StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
 import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { RulesBasedRecommendationProvider } from '../../registrations/recommendations/rules-based-recommendation.provider';
 import { mergeAcademicCourseProgress } from '../../registrations/utils/academic-course-progress.util';
 import { AdvisingAuditService } from './advising-audit.service';
+import {
+  AdvisingRules,
+  AdvisingRulesDocument,
+} from '../schemas/advising-rules.schema';
+import type { UpdateAdvisingRulesDto } from '../dto/update-advising-rules.dto';
 import type {
   DecideRecommendationDto,
   GenerateRecommendationsDto,
@@ -32,11 +41,49 @@ export class AdvisingRecommendationService {
     @InjectModel(Course.name) private readonly courses: Model<CourseDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private readonly academicProfiles: Model<StudentAcademicProfile>,
+    @InjectModel(StudentProfile.name)
+    private readonly studentProfiles: Model<StudentProfileDocument>,
     @InjectModel(CourseRegistration.name)
     private readonly registrations: Model<CourseRegistration>,
     @InjectModel(Grade.name) private readonly grades: Model<Grade>,
+    @InjectModel(AdvisingRules.name)
+    private readonly rulesModel: Model<AdvisingRulesDocument>,
     private readonly audit: AdvisingAuditService,
   ) {}
+
+  async getRules(): Promise<AdvisingRules> {
+    const rules = await this.rulesModel.findOne().lean();
+    if (rules) return rules as AdvisingRules;
+    return {
+      maxCoursesLimit: 6,
+      preventHigherLevelCourses: true,
+      allowLowGradeImprovementFallback: true,
+      enforceDepartmentLevel3And4: true,
+      probationMaxCredits: 12,
+      regularMaxCredits: 18,
+      graduatingMaxCredits: 21,
+      summerMaxCredits: 9,
+      summerProbationMaxCredits: 6,
+    };
+  }
+
+  async updateRules(
+    dto: UpdateAdvisingRulesDto,
+    actorId: string,
+  ): Promise<AdvisingRules> {
+    const existing = await this.rulesModel.findOne();
+    if (existing) {
+      Object.assign(existing, dto);
+      existing.updatedBy = new Types.ObjectId(actorId);
+      await existing.save();
+      return existing.toObject() as AdvisingRules;
+    }
+    const created = await this.rulesModel.create({
+      ...dto,
+      updatedBy: new Types.ObjectId(actorId),
+    });
+    return created.toObject() as AdvisingRules;
+  }
 
   async generate(
     caseId: string,
@@ -52,9 +99,10 @@ export class AdvisingRecommendationService {
       role,
     );
 
-    const student = await this.academicProfiles
-      .findOne({ studentId: caseItem.studentId })
-      .lean();
+    const [student, studentProfile] = await Promise.all([
+      this.academicProfiles.findOne({ studentId: caseItem.studentId }).lean(),
+      this.studentProfiles.findOne({ userId: caseItem.studentId }).lean(),
+    ]);
     if (!student)
       throw new NotFoundException('Student academic profile not found');
 
@@ -88,15 +136,17 @@ export class AdvisingRecommendationService {
       student.academicLevel === '4' ||
       (progress.completedCourses?.length ?? 0) >= 30;
 
+    const rules = await this.getRules();
+
     const defaultMaxCredits = isSummer
       ? isProbation
-        ? 6
-        : 9
+        ? (rules.summerProbationMaxCredits ?? 6)
+        : (rules.summerMaxCredits ?? 9)
       : isProbation
-        ? 12
+        ? (rules.probationMaxCredits ?? 12)
         : isGraduating
-          ? 21
-          : 18;
+          ? (rules.graduatingMaxCredits ?? 21)
+          : (rules.regularMaxCredits ?? 18);
 
     const maxCredits = dto.maxCredits ?? defaultMaxCredits;
 
@@ -105,8 +155,14 @@ export class AdvisingRecommendationService {
       semester,
       completedCourses: progress.completedCourses,
       failedCourses: progress.failedCourses,
+      lowGradeCourses: progress.lowGradeCourses,
       inProgressCourses: [],
       maxCreditHours: maxCredits,
+      maxCourses: rules.maxCoursesLimit ?? 6,
+      department: rules.enforceDepartmentLevel3And4
+        ? studentProfile?.department
+        : undefined,
+      allowHigherLevelCourses: !rules.preventHigherLevelCourses,
       academicWarningCount: warningCount,
       courses: activeCourses,
     });

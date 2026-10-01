@@ -28,10 +28,11 @@ export const createQrTokenSchema = (locale: string = "ar") => {
     })
     .refine(
       (val) => {
+        const normalized = val.trim().replace(/^att:/i, "");
         // Accepts raw rotating token format OR manual code format OR URL containing ?t=<token> / ?token=<token>
         if (
-          QR_TOKEN_REGEX.test(val) ||
-          MANUAL_ATTENDANCE_CODE_REGEX.test(val)
+          QR_TOKEN_REGEX.test(normalized) ||
+          MANUAL_ATTENDANCE_CODE_REGEX.test(normalized)
         ) {
           return true;
         }
@@ -52,10 +53,13 @@ export const createQrTokenSchema = (locale: string = "ar") => {
 };
 
 /**
- * Helper to extract raw token from either raw string or pasted check-in URL
+ * Helper to extract raw token from either raw string, in-app att: prefix, or pasted check-in URL
  */
 export function extractRawToken(input: string): string {
-  const trimmed = input.trim();
+  let trimmed = input.trim();
+  if (trimmed.toLowerCase().startsWith("att:")) {
+    trimmed = trimmed.slice(4).trim();
+  }
   if (QR_TOKEN_REGEX.test(trimmed)) {
     return trimmed;
   }
@@ -63,14 +67,17 @@ export function extractRawToken(input: string): string {
     return trimmed.toUpperCase();
   }
   try {
-    const url = new URL(trimmed, "https://portal.local");
+    const url = new URL(input.trim(), "https://portal.local");
     const tokenParam = url.searchParams.get("t") || url.searchParams.get("token");
     if (tokenParam) {
-      if (QR_TOKEN_REGEX.test(tokenParam)) {
-        return tokenParam;
+      const cleanParam = tokenParam.toLowerCase().startsWith("att:")
+        ? tokenParam.slice(4).trim()
+        : tokenParam.trim();
+      if (QR_TOKEN_REGEX.test(cleanParam)) {
+        return cleanParam;
       }
-      if (MANUAL_ATTENDANCE_CODE_REGEX.test(tokenParam)) {
-        return tokenParam.toUpperCase();
+      if (MANUAL_ATTENDANCE_CODE_REGEX.test(cleanParam)) {
+        return cleanParam.toUpperCase();
       }
     }
   } catch {

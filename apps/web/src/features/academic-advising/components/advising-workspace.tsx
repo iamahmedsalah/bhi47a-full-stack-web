@@ -1872,6 +1872,78 @@ export function AdvisingWorkspace() {
   </div>
 );
 }
+const SHARED_LEVEL3_CODES = new Set(["317", "411", "318", "319", "326"]);
+
+const COURSE_LEVEL_BY_CODE: Record<string, number> = {
+  // Level 1
+  "112": 1, "113": 1, "114": 1, "211": 1, "212": 1,
+  "111": 1, "115": 1, "214": 1, "216": 1, "513": 1, "514": 1,
+  // Level 2
+  "213": 2, "310": 2, "311": 2, "312": 2, "415": 2,
+  "215": 2, "313": 2, "314": 2, "316": 2, "416": 2, "511": 2,
+  // Level 3
+  "317": 3, "411": 3, "S11": 3, "S12": 3, "515": 3, "A11": 3, "B11": 3, "326": 3,
+  "318": 3, "319": 3, "S13": 3, "S14": 3, "422": 3, "A12": 3, "A13": 3, "A26": 3, "425": 3,
+  // Level 4
+  "412": 4, "413": 4, "414": 4, "S15": 4, "S16": 4, "S21": 4,
+  "315": 4, "512": 4, "S17": 4, "S22": 4, "S23": 4,
+};
+
+const COURSE_SEMESTER_BY_CODE: Record<string, "first" | "second"> = {
+  // First semester
+  "112": "first", "113": "first", "114": "first", "211": "first", "212": "first",
+  "213": "first", "310": "first", "311": "first", "312": "first", "415": "first",
+  "317": "first", "411": "first", "S11": "first", "S12": "first", "515": "first",
+  "A11": "first", "B11": "first", "326": "first",
+  "412": "first", "413": "first", "414": "first", "S15": "first", "S16": "first", "S21": "first",
+  // Second semester
+  "111": "second", "115": "second", "214": "second", "216": "second", "513": "second", "514": "second",
+  "215": "second", "313": "second", "314": "second", "316": "second", "416": "second", "511": "second",
+  "318": "second", "319": "second", "S13": "second", "S14": "second", "422": "second",
+  "A12": "second", "A13": "second", "A26": "second", "425": "second",
+  "315": "second", "512": "second", "S17": "second", "S22": "second", "S23": "second",
+};
+
+const COURSE_DEPT_BY_CODE: Record<string, "BIS" | "ACCOUNTING"> = {
+  "S11": "BIS", "S12": "BIS", "515": "BIS", "S13": "BIS", "S14": "BIS", "422": "BIS",
+  "A11": "ACCOUNTING", "B11": "ACCOUNTING", "A12": "ACCOUNTING", "A13": "ACCOUNTING", "A26": "ACCOUNTING", "425": "ACCOUNTING",
+  "412": "BIS", "413": "BIS", "414": "BIS", "S15": "BIS", "S16": "BIS", "S21": "BIS",
+  "315": "BIS", "512": "BIS", "S17": "BIS", "S22": "BIS", "S23": "BIS",
+};
+
+function normalizeDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
+  if (!dept) return null;
+  const upper = dept.toUpperCase();
+  if (upper.includes("ACC") || upper.includes("محاسب")) return "ACCOUNTING";
+  if (upper.includes("BIS") || upper.includes("نظم")) return "BIS";
+  return null;
+}
+
+function getCourseSemester(
+  course: AdvisingCourseMap["courses"][0],
+): "first" | "second" | "summer" | undefined {
+  if (
+    course.semester === "first" ||
+    course.semester === "second" ||
+    course.semester === "summer"
+  ) {
+    return course.semester;
+  }
+  const code = course.code.toUpperCase();
+  return COURSE_SEMESTER_BY_CODE[code];
+}
+
+function getCourseDepartment(
+  course: AdvisingCourseMap["courses"][0],
+): "BIS" | "ACCOUNTING" | "GENERAL" | undefined {
+  if (course.department) {
+    const norm = normalizeDept(course.department);
+    if (norm) return norm;
+  }
+  const code = course.code.toUpperCase();
+  return COURSE_DEPT_BY_CODE[code] ?? (SHARED_LEVEL3_CODES.has(code) ? "GENERAL" : undefined);
+}
+
 function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
   if (course.academicLevel) {
     const num = parseInt(course.academicLevel.replace(/\D/g, ""), 10);
@@ -1880,6 +1952,10 @@ function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
   if (course.level) {
     const num = parseInt(course.level.replace(/\D/g, ""), 10);
     if (!isNaN(num) && num >= 1 && num <= 4) return num;
+  }
+  const code = course.code.toUpperCase();
+  if (COURSE_LEVEL_BY_CODE[code]) {
+    return COURSE_LEVEL_BY_CODE[code];
   }
   const match = course.code.match(/([1-4])\d{2}/);
   if (match) {
@@ -1892,9 +1968,11 @@ function isCourseOfferedInSemester(
   course: AdvisingCourseMap["courses"][0],
   semester: "first" | "second" | "summer",
 ) {
-  return course.offeredTerms?.length
-    ? course.offeredTerms.includes(semester)
-    : course.semester === semester;
+  if (course.offeredTerms?.length) {
+    return course.offeredTerms.includes(semester);
+  }
+  const courseSem = getCourseSemester(course);
+  return courseSem === semester;
 }
 
 type CanvasProps = {
@@ -1993,6 +2071,9 @@ function CanvasContent({
 }: CanvasProps & { courseMap: AdvisingCourseMap }) {
   const [viewMode, setViewMode] = useState<"grid" | "flow">("grid");
   const [gridLevelFilter, setGridLevelFilter] = useState<string>("all");
+  const [gridSemesterFilter, setGridSemesterFilter] = useState<"all" | "first" | "second">("all");
+  const studentTrack = normalizeDept(activeStudent?.department || courseMap.student?.department) ?? "BIS";
+  const [gridDeptFilter, setGridDeptFilter] = useState<"auto" | "all" | "BIS" | "ACCOUNTING">("auto");
   const [courseSearch, setCourseSearch] = useState<string>("");
 
   const recommendationByCode = useMemo(
@@ -2091,11 +2172,39 @@ function CanvasContent({
 
   // Course Grid filtering and grouping
   const filteredCourses = useMemo(() => {
+    const targetDept =
+      gridDeptFilter === "auto"
+        ? studentTrack
+        : gridDeptFilter === "all"
+          ? null
+          : gridDeptFilter;
+
     return courseMap.courses.filter((course) => {
       const level = getCourseLevel(course);
       if (gridLevelFilter !== "all" && String(level) !== gridLevelFilter) {
         return false;
       }
+
+      // Semester filter
+      if (gridSemesterFilter !== "all") {
+        const sem = getCourseSemester(course);
+        if (sem && sem !== gridSemesterFilter) {
+          return false;
+        }
+      }
+
+      // Department filter for Level 3 & Level 4
+      if (targetDept && (level === 3 || level === 4)) {
+        const courseDept = getCourseDepartment(course);
+        if (
+          courseDept &&
+          courseDept !== "GENERAL" &&
+          courseDept !== targetDept
+        ) {
+          return false;
+        }
+      }
+
       if (!courseSearch.trim()) return true;
       const q = courseSearch.toLowerCase();
       return (
@@ -2105,7 +2214,14 @@ function CanvasContent({
         (course.name && course.name.toLowerCase().includes(q))
       );
     });
-  }, [courseMap.courses, gridLevelFilter, courseSearch]);
+  }, [
+    courseMap.courses,
+    gridLevelFilter,
+    gridSemesterFilter,
+    gridDeptFilter,
+    studentTrack,
+    courseSearch,
+  ]);
 
   const coursesByLevel = useMemo(() => {
     const map = new Map<number, AdvisingCourseMap["courses"]>();
@@ -2137,6 +2253,17 @@ function CanvasContent({
     const recommendation = recommendationByCode.get(course.code.toUpperCase());
     if (recommendation?.accepted) {
       onDecision(recommendation._id, "PENDING");
+      return;
+    }
+    const isCurrentlySelected =
+      visibleSelectedSet.has(course.code.toUpperCase()) ||
+      selectedSet.has(course._id);
+    if (!isCurrentlySelected && visibleSelectedCodes.length >= 6) {
+      toast.warning(
+        isArabic
+          ? "الحد الأقصى للتسجيل هو 6 مقررات دراسية للفصل الدراسي الحالي."
+          : "Maximum limit reached: Only 6 courses can be registered per semester.",
+      );
       return;
     }
     onToggleManual(course._id);
@@ -2204,6 +2331,73 @@ function CanvasContent({
               ))}
             </div>
 
+            {/* Semester Quick Filter */}
+            <div className="flex items-center gap-1 rounded-lg bg-secondary/30 p-0.5 text-[11px]">
+              {[
+                { id: "all", label: isArabic ? "كل الفصول" : "All" },
+                { id: "first", label: isArabic ? "فصل 1" : "Sem 1" },
+                { id: "second", label: isArabic ? "فصل 2" : "Sem 2" },
+              ].map((term) => (
+                <button
+                  key={term.id}
+                  type="button"
+                  onClick={() =>
+                    setGridSemesterFilter(
+                      term.id as "all" | "first" | "second",
+                    )
+                  }
+                  className={cn(
+                    "rounded-md px-2 py-1 transition",
+                    gridSemesterFilter === term.id
+                      ? "bg-sky-500/20 text-sky-300 font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {term.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Department Quick Filter for Level 3 & Level 4 */}
+            {gridLevelFilter === "all" ||
+            gridLevelFilter === "3" ||
+            gridLevelFilter === "4" ? (
+              <div className="flex items-center gap-1 rounded-lg bg-secondary/30 p-0.5 text-[11px]">
+                {[
+                  {
+                    id: "auto",
+                    label: isArabic
+                      ? `طالب (${studentTrack === "ACCOUNTING" ? "محاسبة" : "نظم"})`
+                      : `Auto (${studentTrack === "ACCOUNTING" ? "Acc" : "BIS"})`,
+                  },
+                  { id: "all", label: isArabic ? "الكل" : "All" },
+                  { id: "BIS", label: isArabic ? "نظم BIS" : "BIS" },
+                  {
+                    id: "ACCOUNTING",
+                    label: isArabic ? "محاسبة" : "Accounting",
+                  },
+                ].map((dept) => (
+                  <button
+                    key={dept.id}
+                    type="button"
+                    onClick={() =>
+                      setGridDeptFilter(
+                        dept.id as "auto" | "all" | "BIS" | "ACCOUNTING",
+                      )
+                    }
+                    className={cn(
+                      "rounded-md px-2 py-1 transition",
+                      gridDeptFilter === dept.id
+                        ? "bg-emerald-500/20 text-emerald-300 font-semibold"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {dept.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
             {/* In-Canvas Search */}
             <div className="relative">
               <Search className="absolute inset-s-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
@@ -2213,7 +2407,7 @@ function CanvasContent({
                 placeholder={
                   isArabic ? "بحث في المقررات..." : "Search courses..."
                 }
-                className="h-8 w-36 ps-8 text-xs sm:w-48"
+                className="h-8 w-32 ps-8 text-xs sm:w-44"
               />
             </div>
           </div>
@@ -2340,15 +2534,68 @@ function CanvasContent({
                           )}
                         >
                           <div>
-                            {/* Card Top: Code & Credit Hours */}
+                            {/* Card Top: Code, Semester & Dept Badges, Credit Hours */}
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono text-xs font-bold text-foreground">
-                                {course.code}
-                              </span>
-                              <span className="rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                {course.creditHours ?? 3}{" "}
-                                {isArabic ? "ساعات" : "cr"}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-mono text-xs font-bold text-foreground">
+                                  {course.code}
+                                </span>
+                                {(() => {
+                                  const sem = getCourseSemester(course);
+                                  if (!sem) return null;
+                                  return (
+                                    <span
+                                      className={cn(
+                                        "rounded px-1.5 py-0.2 text-[9px] font-semibold border",
+                                        sem === "first"
+                                          ? "bg-sky-500/15 text-sky-300 border-sky-500/25"
+                                          : "bg-indigo-500/15 text-indigo-300 border-indigo-500/25",
+                                      )}
+                                    >
+                                      {isArabic
+                                        ? sem === "first"
+                                          ? "فصل 1"
+                                          : "فصل 2"
+                                        : sem === "first"
+                                          ? "Sem 1"
+                                          : "Sem 2"}
+                                    </span>
+                                  );
+                                })()}
+                                {(() => {
+                                  const lvl = getCourseLevel(course);
+                                  const dept = getCourseDepartment(course);
+                                  if (lvl < 3 || !dept || dept === "GENERAL")
+                                    return null;
+                                  return (
+                                    <span
+                                      className={cn(
+                                        "rounded px-1.5 py-0.2 text-[9px] font-bold border",
+                                        dept === "ACCOUNTING"
+                                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                          : "bg-purple-500/15 text-purple-300 border-purple-500/30",
+                                      )}
+                                    >
+                                      {dept === "ACCOUNTING"
+                                        ? isArabic
+                                          ? "محاسبة"
+                                          : "ACC"
+                                        : "BIS"}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1">
+                                {course.type === "elective" ? (
+                                  <span className="rounded bg-amber-500/10 border border-amber-500/20 px-1 py-0.2 text-[9px] font-medium text-amber-300">
+                                    {isArabic ? "اختياري" : "Elective"}
+                                  </span>
+                                ) : null}
+                                <span className="rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  {course.creditHours ?? 3}{" "}
+                                  {isArabic ? "ساعات" : "cr"}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Card Title */}
@@ -2565,6 +2812,7 @@ function CanvasContent({
           readonly={disabled}
           studentName={courseMap.student.name}
           studentCode={courseMap.student.studentCode}
+          studentDepartment={activeStudent?.department || courseMap.student?.department || (activeStudent as any)?.major}
           gpa={courseMap.student.gpa}
           currentSemester={courseMap.student.semester}
           onToggleCourse={(code) => {
@@ -2572,6 +2820,15 @@ function CanvasContent({
             if (disabled) return;
             if (recommendation?.accepted) {
               onDecision(recommendation._id, "PENDING");
+              return;
+            }
+            const isCurrentlySelected = visibleSelectedSet.has(code.toUpperCase());
+            if (!isCurrentlySelected && visibleSelectedCodes.length >= 6) {
+              toast.warning(
+                isArabic
+                  ? "الحد الأقصى للتسجيل هو 6 مقررات دراسية للفصل الدراسي الحالي."
+                  : "Maximum limit reached: Only 6 courses can be registered per semester.",
+              );
               return;
             }
             const course = courseMap.courses.find(
@@ -2605,6 +2862,21 @@ function CanvasContent({
                   {selectedCredits} / {maxAllowedCredits}{" "}
                   {isArabic ? "ساعة معتمدة" : "credits"}
                 </span>
+
+                <span
+                  className={cn(
+                    "rounded-md px-2 py-0.5 font-mono text-xs font-bold",
+                    visibleSelectedCodes.length > 6
+                      ? "bg-red-500/20 text-red-300"
+                      : visibleSelectedCodes.length === 6
+                        ? "bg-emerald-500/20 text-emerald-300 font-bold"
+                        : "bg-secondary/70 text-foreground",
+                  )}
+                >
+                  {visibleSelectedCodes.length} / 6{" "}
+                  {isArabic ? "مقررات (الحد 6)" : "courses (max 6)"}
+                </span>
+
                 {isProbation ? (
                   <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                     {isArabic
@@ -2620,7 +2892,7 @@ function CanvasContent({
                 ) : null}
               </div>
               <span className="text-[11px] text-muted-foreground">
-                {selectedCodes.length}{" "}
+                {visibleSelectedCodes.length}{" "}
                 {isArabic ? "مقررات محددة" : "courses selected"}
               </span>
             </div>
@@ -2630,7 +2902,7 @@ function CanvasContent({
               <div
                 className={cn(
                   "h-full transition-all duration-300 rounded-full",
-                  isOverCreditLimit
+                  isOverCreditLimit || visibleSelectedCodes.length > 6
                     ? "bg-red-500"
                     : creditUsagePercent > 85
                       ? "bg-amber-400"
@@ -2648,6 +2920,15 @@ function CanvasContent({
                 {isArabic
                   ? `تنبيه: تجاوزت الحد الأقصى (${maxAllowedCredits} ساعة). يرجى إزالة مقرر ليتوافق مع اللائحة الأكاديمية.`
                   : `Warning: Selected credits exceed the maximum limit (${maxAllowedCredits} cr). Please remove a course.`}
+              </p>
+            ) : null}
+
+            {visibleSelectedCodes.length > 6 ? (
+              <p className="flex items-center gap-1 text-[11px] font-medium text-red-400">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {isArabic
+                  ? "تنبيه: تجاوزت الحد الأقصى للمقررات المسموح بها في الفصل الدراسي (6 مقررات). يُرجى إزالة مقرر."
+                  : "Warning: Maximum course limit exceeded (6 courses). Please remove a course to conform with regulations."}
               </p>
             ) : null}
           </div>

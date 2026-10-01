@@ -65,6 +65,8 @@ const initialForm = {
 const studentImportColumns = [
   'studentCode',
   'fullName',
+  'fullNameAr',
+  'fullNameEn',
   'nationalId',
   'level',
   'department',
@@ -320,8 +322,50 @@ function StudentsPageContent() {
         </div>
       </div>
 
-      <StudentFormDialog open={isAddOpen} onOpenChange={setIsAddOpen} isEditing={false} onSubmit={handleAddSubmit} isSubmitting={formLoading} />
-      <StudentFormDialog open={isEditOpen} onOpenChange={setIsEditOpen} isEditing={true} onSubmit={handleEditSubmit} isSubmitting={formLoading} defaultValues={selectedStudent ? { fullName: selectedStudent.fullName, studentCode: selectedStudent.studentCode, level: selectedStudent.level, department: selectedStudent.department } : undefined} />
+      <StudentFormDialog
+        open={isAddOpen}
+        onOpenChange={setIsAddOpen}
+        isEditing={false}
+        onSubmit={handleAddSubmit}
+        isSubmitting={formLoading}
+        locale={locale}
+      />
+      <StudentFormDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        isEditing={true}
+        onSubmit={handleEditSubmit}
+        isSubmitting={formLoading}
+        locale={locale}
+        defaultValues={
+          selectedStudent
+            ? {
+                fullName: selectedStudent.fullName,
+                fullNameAr: selectedStudent.fullNameAr,
+                fullNameEn: selectedStudent.fullNameEn,
+                studentCode: selectedStudent.studentCode,
+                nationalId: selectedStudent.nationalId,
+                phone:
+                  selectedStudent.phone ||
+                  (typeof selectedStudent.userId === 'object'
+                    ? selectedStudent.userId?.phone
+                    : undefined),
+                academicEmail: selectedStudent.academicEmail,
+                department: selectedStudent.department,
+                level: selectedStudent.level,
+                group: selectedStudent.group,
+                section: selectedStudent.section,
+                academicYear: selectedStudent.academicYear,
+                semester: selectedStudent.semester,
+                seatNumber: selectedStudent.seatNumber,
+                examRoom: selectedStudent.examRoom,
+                examFloor: selectedStudent.examFloor,
+                examBuilding: selectedStudent.examBuilding,
+                enrollmentStatus: selectedStudent.enrollmentStatus,
+              }
+            : undefined
+        }
+      />
 
       <DataUploadDialog open={isUploadOpen} onOpenChange={setIsUploadOpen} title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'} description="Upload XLSX, XLS or CSV to import students." uploadType="students" expectedColumns={studentImportColumns} onSuccess={() => invalidateStudents()} />
       <StudentDetailDialog open={Boolean(profileStudent)} onOpenChange={(open) => !open && setProfileStudent(null)} student={profileQuery.data ?? profileStudent} grades={profileGradesQuery.data ?? []} complaints={profileComplaintsQuery.data ?? []} academicEmail={profileEmailQuery.data} isLoading={profileQuery.isLoading} gradesLoading={profileGradesQuery.isLoading} complaintsLoading={profileComplaintsQuery.isLoading} locale={locale} canViewSensitiveStudentData={canViewSensitiveStudentData} />

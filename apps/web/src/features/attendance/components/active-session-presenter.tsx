@@ -539,10 +539,10 @@ export function ActiveSessionPresenter({
                 </p>
               </div>
 
-              {/* SVG QR Code */}
+              {/* SVG QR Code: Enforce in-app scanning with att: prefix (prevents copy-pasting open browser links) */}
               <div className="relative p-2 bg-white rounded-3xl border border-border">
                 <QRCodeSVG
-                  value={currentQr.checkInUrl}
+                  value={`att:${currentQr.token}`}
                   size={290}
                   fgColor="#042f2e"
                 />
@@ -595,8 +595,8 @@ export function ActiveSessionPresenter({
                 />
                 <p className="text-[11px] text-muted-foreground/70">
                   {isArabic
-                    ? "حماية مشددة: تنتهي صلاحية لقطات الشاشة تلقائياً بعد دقيقة واحدة"
-                    : "Anti-cheat protection: Screenshots expire automatically after 1 minute"}
+                    ? "حماية مشددة: كود حضور مشفر داخل التطبيق يتجدد كل 20 ثانية لمنع تصوير ومشاركة الشاشة"
+                    : "Anti-cheat protection: In-app encrypted token rotates every 20s to prevent screenshot sharing"}
                 </p>
               </div>
 

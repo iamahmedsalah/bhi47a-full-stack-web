@@ -103,6 +103,30 @@ export class CheckInAttendanceDto {
   @IsString()
   @IsNotEmpty()
   token!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Unique client device identifier (UUIDv4) to enforce 1 device per student per session',
+  })
+  @IsOptional()
+  @IsString()
+  deviceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Client GPS latitude coordinate for geofence validation',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Client GPS longitude coordinate for geofence validation',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
 }
 
 export class ManualMarkAttendanceDto {

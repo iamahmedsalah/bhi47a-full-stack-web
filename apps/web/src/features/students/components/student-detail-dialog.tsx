@@ -44,8 +44,11 @@ export interface Student {
   _id: string;
   studentCode: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
   nationalIdMasked?: string;
   nationalId?: string;
+  phone?: string;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -349,10 +352,23 @@ export function StudentDetailDialog({
           <DialogHeader className="text-start">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <DialogTitle className="flex flex-wrap items-center gap-2.5 text-2xl font-bold">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
                   <GraduationCap className="h-6 w-6" />
                 </div>
-                <span>{student?.fullName || (isAr ? 'الملف الشخصي للطالب' : 'Student Profile')}</span>
+                <div>
+                  <div>
+                    {isAr
+                      ? student?.fullNameAr || student?.fullName || 'الملف الشخصي للطالب'
+                      : student?.fullNameEn || student?.fullName || 'Student Profile'}
+                  </div>
+                  {((isAr ? student?.fullNameEn : student?.fullNameAr) &&
+                    (isAr ? student?.fullNameEn : student?.fullNameAr) !==
+                      (isAr ? student?.fullNameAr || student?.fullName : student?.fullNameEn || student?.fullName)) ? (
+                    <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                      {isAr ? student?.fullNameEn : student?.fullNameAr}
+                    </div>
+                  ) : null}
+                </div>
               </DialogTitle>
               {student && (
                 <div className="flex flex-wrap items-center gap-2">
