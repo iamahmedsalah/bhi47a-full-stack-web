@@ -25,7 +25,7 @@ import {
   extractRawToken,
   getAttendanceErrorMessage,
 } from "@/features/attendance/schemas/attendance-schemas";
-import { getOrCreateDeviceId } from "@/lib/device-id";
+import { getDeviceIdentity } from "@/lib/device-id";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +72,7 @@ export default function StudentCheckInPage() {
     setErrorMessage("");
 
     try {
-      const deviceId = getOrCreateDeviceId();
+      const deviceIdentity = await getDeviceIdentity();
       let coords: { latitude?: number; longitude?: number } = {};
 
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -97,7 +97,9 @@ export default function StudentCheckInPage() {
 
       const data = await attendanceApi.checkIn({
         token: cleanToken,
-        deviceId,
+        deviceId: deviceIdentity.deviceId,
+        deviceFingerprint: deviceIdentity.deviceFingerprint,
+        deviceInfo: deviceIdentity.deviceInfo,
         ...coords,
       });
       setResult(data);

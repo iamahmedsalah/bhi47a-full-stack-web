@@ -105,6 +105,42 @@ export class AttendanceRecord {
   @Prop({ trim: true, index: true })
   deviceId?: string;
 
+  /**
+   * Cross-browser hardware/GPU/screen fingerprint to enforce 1 physical device
+   * even if student switches browsers or uses incognito.
+   */
+  @Prop({ trim: true, index: true })
+  deviceFingerprint?: string;
+
+  /**
+   * Human readable device details (e.g. "Windows 11 • Chrome", "Apple iPhone • Mobile Safari")
+   */
+  @Prop({ trim: true })
+  deviceInfo?: string;
+
+  /**
+   * Client network IP address from request headers.
+   */
+  @Prop({ trim: true })
+  ipAddress?: string;
+
+  /**
+   * Client GPS coordinates captured at scan time.
+   */
+  @Prop({
+    type: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      accuracy: { type: Number },
+    },
+    _id: false,
+  })
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  };
+
   @Prop({ type: [AttendanceAuditEntrySchema], default: [] })
   auditTrail!: AttendanceAuditEntry[];
 }
@@ -117,6 +153,7 @@ AttendanceRecordSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
 
 // Anti-proxy device lock index: Quickly query or enforce device uniqueness per session
 AttendanceRecordSchema.index({ sessionId: 1, deviceId: 1 });
+AttendanceRecordSchema.index({ sessionId: 1, deviceFingerprint: 1 });
 
 // High-performance query indexes
 AttendanceRecordSchema.index({ studentId: 1, courseCode: 1, createdAt: -1 });

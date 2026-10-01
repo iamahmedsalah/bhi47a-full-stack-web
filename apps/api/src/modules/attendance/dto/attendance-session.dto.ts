@@ -7,6 +7,8 @@ import {
   Min,
   Max,
   IsArray,
+  ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -18,6 +20,73 @@ import {
   type AttendanceRecordStatus,
   type StaffAcademicPosition,
 } from '@student-portal/shared';
+
+export class SessionLocationDto {
+  @ApiPropertyOptional({
+    example: 'مدرج 315',
+    description: 'Name of the hall or lecture room',
+  })
+  @IsOptional()
+  @IsString()
+  venueName?: string;
+
+  @ApiProperty({ example: 30.0444, description: 'Hall latitude' })
+  @Type(() => Number)
+  @IsNumber()
+  latitude!: number;
+
+  @ApiProperty({ example: 31.2357, description: 'Hall longitude' })
+  @Type(() => Number)
+  @IsNumber()
+  longitude!: number;
+
+  @ApiPropertyOptional({
+    example: 100,
+    default: 100,
+    description: 'Allowed radius in meters',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(5000)
+  radiusMeters?: number = 100;
+}
+
+export class UpdateSessionLocationDto {
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Enable or disable geofencing for this session',
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'مدرج 315' })
+  @IsOptional()
+  @IsString()
+  venueName?: string;
+
+  @ApiPropertyOptional({ example: 30.0444 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @ApiPropertyOptional({ example: 31.2357 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
+
+  @ApiPropertyOptional({ example: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(10)
+  @Max(5000)
+  radiusMeters?: number;
+}
 
 export class CreateAttendanceSessionDto {
   @ApiProperty({ example: 'CS101', description: 'Course Code' })
@@ -93,6 +162,15 @@ export class CreateAttendanceSessionDto {
   @Min(10)
   @Max(120)
   qrRotationSeconds?: number;
+
+  @ApiPropertyOptional({
+    type: SessionLocationDto,
+    description: 'Optional geofencing location for the lecture hall',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SessionLocationDto)
+  location?: SessionLocationDto;
 }
 
 export class CheckInAttendanceDto {
@@ -111,6 +189,22 @@ export class CheckInAttendanceDto {
   @IsOptional()
   @IsString()
   deviceId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Hardware-based cross-browser fingerprint to enforce 1 physical device even across browsers',
+  })
+  @IsOptional()
+  @IsString()
+  deviceFingerprint?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Human-readable device model and browser (e.g. Windows PC • Chrome)',
+  })
+  @IsOptional()
+  @IsString()
+  deviceInfo?: string;
 
   @ApiPropertyOptional({
     description: 'Client GPS latitude coordinate for geofence validation',

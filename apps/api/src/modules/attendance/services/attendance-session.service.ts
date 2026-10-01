@@ -23,6 +23,7 @@ import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   CreateAttendanceSessionDto,
   CreateCourseStaffAssignmentDto,
+  UpdateSessionLocationDto,
 } from '../dto/attendance-session.dto';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
@@ -48,6 +49,12 @@ export interface SessionDetailsResponse {
   lateThresholdMinutes: number;
   sessionDurationMinutes: number;
   qrRotationSeconds: number;
+  location?: {
+    venueName?: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+  };
   stats: {
     totalCheckedIn: number;
     presentCount: number;
@@ -206,6 +213,18 @@ export class AttendanceSessionService {
       lateThresholdMinutes,
       sessionDurationMinutes,
       qrRotationSeconds,
+      ...(dto.location &&
+      typeof dto.location.latitude === 'number' &&
+      typeof dto.location.longitude === 'number'
+        ? {
+            location: {
+              venueName: dto.location.venueName?.trim() || undefined,
+              latitude: dto.location.latitude,
+              longitude: dto.location.longitude,
+              radiusMeters: dto.location.radiusMeters || 100,
+            },
+          }
+        : {}),
     });
 
     const qrPayload = this.tokenService.generateRotatingToken(
@@ -220,6 +239,53 @@ export class AttendanceSessionService {
       qr: qrPayload,
       isExisting: false,
     };
+  }
+
+  /**
+   * Updates or toggles the geofencing location of an active attendance session.
+   */
+  async updateSessionLocation(
+    sessionId: string,
+    currentUser: { _id: string; role: string },
+    dto: UpdateSessionLocationDto,
+  ) {
+    if (!Types.ObjectId.isValid(sessionId)) {
+      throw new BadRequestException('معرّف الجلسة غير صالح');
+    }
+
+    const session = await this.sessionModel.findById(sessionId).exec();
+    if (!session) {
+      throw new NotFoundException('جلسة الحضور غير موجودة');
+    }
+
+    if (
+      currentUser.role !== 'admin' &&
+      session.createdBy.toString() !== currentUser._id
+    ) {
+      throw new ForbiddenException('غير مصرح لك بتعديل موقع هذه الجلسة');
+    }
+
+    if (session.status !== 'OPEN') {
+      throw new BadRequestException('لا يمكن تعديل موقع جلسة مغلقة أو منتهية');
+    }
+
+    if (dto.enabled === false) {
+      session.location = undefined;
+    } else if (
+      typeof dto.latitude === 'number' &&
+      typeof dto.longitude === 'number'
+    ) {
+      session.location = {
+        venueName: dto.venueName?.trim() || session.location?.venueName,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        radiusMeters: dto.radiusMeters || session.location?.radiusMeters || 100,
+      };
+    }
+
+    await session.save();
+
+    return session;
   }
 
   /**

@@ -32,6 +32,7 @@ import {
   ManualStudentCheckInDto,
   QueryAttendanceRecordsDto,
   CreateCourseStaffAssignmentDto,
+  UpdateSessionLocationDto,
 } from './dto/attendance-session.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -190,6 +191,19 @@ export class AttendanceController {
     return this.reportService.getCourseReport(courseCode);
   }
 
+  @Patch('attendance/sessions/:id/location')
+  @Roles('staff', 'admin')
+  @ApiOperation({
+    summary: 'Update or toggle geofencing location for active session',
+  })
+  async updateSessionLocation(
+    @Param('id') id: string,
+    @CurrentUser() user: { _id: string; role: string },
+    @Body() dto: UpdateSessionLocationDto,
+  ) {
+    return this.sessionService.updateSessionLocation(id, user, dto);
+  }
+
   // ==========================================
   // STUDENT: CHECK-IN & ATTENDANCE HISTORY
   // ==========================================
@@ -200,8 +214,14 @@ export class AttendanceController {
   async checkIn(
     @CurrentUser() user: { _id: string; name: string; studentCode?: string },
     @Body() dto: CheckInAttendanceDto,
+    @Req() req: Request,
   ) {
-    return this.checkInService.checkIn(user, dto);
+    const rawIp =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.ip ||
+      req.socket.remoteAddress ||
+      '127.0.0.1';
+    return this.checkInService.checkIn(user, dto, rawIp);
   }
 
   @Get('attendance/student/live-sessions')

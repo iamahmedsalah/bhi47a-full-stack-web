@@ -16,6 +16,8 @@ import {
   Layers,
   Clock,
   Filter,
+  MapPin,
+  Crosshair,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,10 @@ import {
   AttendanceSessionDto,
   QrPayload,
 } from "@/features/attendance/api/attendance-api";
-import { ActiveSessionPresenter } from "@/features/attendance/components/active-session-presenter";
+import {
+  ActiveSessionPresenter,
+  HALL_PRESETS,
+} from "@/features/attendance/components/active-session-presenter";
 import { AdminAttendanceOverview } from "@/features/attendance/components/admin-attendance-overview";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -71,6 +76,14 @@ export default function StaffAttendancePage() {
   const [lateThresholdMinutes, setLateThresholdMinutes] = useState(10);
   const [qrRotationSeconds, setQrRotationSeconds] = useState(60);
   const [isStarting, setIsStarting] = useState(false);
+
+  // Location & Geofencing State
+  const [enableGeofence, setEnableGeofence] = useState(false);
+  const [venueName, setVenueName] = useState("مدرج 315");
+  const [geoLat, setGeoLat] = useState("30.0448");
+  const [geoLng, setGeoLng] = useState("31.2360");
+  const [geoRadius, setGeoRadius] = useState(100);
+  const [isLocating, setIsLocating] = useState(false);
 
   // Fetch staff assigned courses
   const classesQuery = useQuery({
@@ -123,6 +136,42 @@ export default function StaffAttendancePage() {
     setShowStartDialog(true);
   };
 
+  const handleUseCurrentLocation = async () => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      toast.error(
+        isArabic
+          ? "تحديد الموقع غير مدعوم في هذا المتصفح"
+          : "Geolocation not supported in this browser",
+      );
+      return;
+    }
+    setIsLocating(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 7000,
+          enableHighAccuracy: true,
+        });
+      });
+      setGeoLat(pos.coords.latitude.toFixed(6));
+      setGeoLng(pos.coords.longitude.toFixed(6));
+      setEnableGeofence(true);
+      toast.success(
+        isArabic
+          ? "تم التقاط إحداثيات موقعك الحالي بنجاح!"
+          : "Current GPS coordinates captured!",
+      );
+    } catch {
+      toast.error(
+        isArabic
+          ? "تعذر الحصول على الموقع الجغرافي. تأكد من تفعيل صلاحيات GPS."
+          : "Could not retrieve GPS coordinates.",
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClass) return;
@@ -138,6 +187,16 @@ export default function StaffAttendancePage() {
         sessionDurationMinutes: durationMinutes,
         lateThresholdMinutes: lateThresholdMinutes,
         qrRotationSeconds: qrRotationSeconds,
+        ...(enableGeofence && geoLat && geoLng
+          ? {
+              location: {
+                venueName: venueName.trim(),
+                latitude: Number(geoLat),
+                longitude: Number(geoLng),
+                radiusMeters: Number(geoRadius) || 100,
+              },
+            }
+          : {}),
       });
 
       setActiveSession(res.session);
@@ -623,6 +682,153 @@ export default function StaffAttendancePage() {
                   onChange={(e) => setQrRotationSeconds(Number(e.target.value))}
                   required
                 />
+              </div>
+
+              {/* Geofencing Location Controls */}
+              <div className="space-y-3 pt-2 border-t border-border/60">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/40 border border-border/70">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-bold text-foreground cursor-pointer">
+                      {isArabic
+                        ? "تحديد موقع القاعة (Geofencing GPS)"
+                        : "Enable Hall Geofencing"}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isArabic
+                        ? "التحقق من تواجد الطالب داخل نطاق القاعة عند مسح الرمز"
+                        : "Enforce student physical presence within lecture hall radius"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enableGeofence}
+                    onClick={() => setEnableGeofence(!enableGeofence)}
+                    className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                      enableGeofence
+                        ? "bg-primary justify-end"
+                        : "bg-muted justify-start"
+                    }`}
+                  >
+                    <div className="bg-white w-4 h-4 rounded-full shadow-md" />
+                  </button>
+                </div>
+
+                {enableGeofence && (
+                  <div className="space-y-3 p-3 rounded-xl bg-background/50 border border-border/60">
+                    {/* Hall Presets */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        {isArabic
+                          ? "اختيار سريع لمدرجات الكلية:"
+                          : "Quick Hall Selection:"}
+                      </Label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {HALL_PRESETS.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => {
+                              setVenueName(preset.name);
+                              setGeoLat(String(preset.lat));
+                              setGeoLng(String(preset.lng));
+                              setGeoRadius(preset.radius);
+                            }}
+                            className={`p-2 rounded-xl border text-xs text-start transition-all cursor-pointer ${
+                              venueName === preset.name
+                                ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
+                                : "bg-secondary/40 border-border text-foreground hover:bg-secondary/70"
+                            }`}
+                          >
+                            <div className="font-semibold truncate">
+                              {preset.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              {preset.radius}م
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* GPS Button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseCurrentLocation}
+                      disabled={isLocating}
+                      className="w-full flex items-center justify-center gap-2 border-primary/30 text-primary bg-primary/5 hover:bg-primary/15 text-xs font-bold cursor-pointer"
+                    >
+                      <Crosshair className="h-4 w-4" />
+                      <span>
+                        {isLocating
+                          ? isArabic
+                            ? "جاري تحديد موقعك..."
+                            : "Detecting GPS..."
+                          : isArabic
+                            ? "تحديد موقعي الحالي كقاعة للمحاضرة"
+                            : "Use My Current Hall Location"}
+                      </span>
+                    </Button>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          {isArabic ? "اسم القاعة" : "Hall Name"}
+                        </Label>
+                        <Input
+                          value={venueName}
+                          onChange={(e) => setVenueName(e.target.value)}
+                          placeholder="مدرج 315"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          {isArabic ? "نطاق السماح (متر)" : "Radius (Meters)"}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={10}
+                          max={1000}
+                          value={geoRadius}
+                          onChange={(e) => setGeoRadius(Number(e.target.value))}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          {isArabic ? "خط العرض (Lat)" : "Latitude"}
+                        </Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={geoLat}
+                          onChange={(e) => setGeoLat(e.target.value)}
+                          dir="ltr"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          {isArabic ? "خط الطول (Lng)" : "Longitude"}
+                        </Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={geoLng}
+                          onChange={(e) => setGeoLng(e.target.value)}
+                          dir="ltr"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0 mt-6">

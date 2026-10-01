@@ -14,6 +14,11 @@ import {
   Edit2,
   BookOpen,
   Copy,
+  MapPin,
+  Globe,
+  Navigation,
+  Crosshair,
+  Check,
 } from "lucide-react";
 import {
   AttendanceSessionDto,
@@ -42,6 +47,35 @@ import {
 import { toast } from "sonner";
 import { apiBaseUrl } from "@/lib/api";
 
+export const HALL_PRESETS = [
+  { name: "مدرج 315 (Hall 315)", lat: 30.0448, lng: 31.2360, radius: 100 },
+  { name: "المدرج المركزي (Main Auditorium)", lat: 30.0444, lng: 31.2357, radius: 120 },
+  { name: "معمل الحاسب 1 (Lab 1)", lat: 30.0442, lng: 31.2352, radius: 50 },
+  { name: "معمل الحاسب 2 (Lab 2)", lat: 30.0443, lng: 31.2353, radius: 50 },
+  { name: "مبنى نظم المعلومات (BIS Building)", lat: 30.0446, lng: 31.2355, radius: 150 },
+];
+
+export function calculateDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371e3;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) *
+      Math.cos(phi2) *
+      Math.sin(deltaLambda / 2) *
+      Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
+
 interface ActiveSessionPresenterProps {
   session: AttendanceSessionDto;
   initialQr: QrPayload;
@@ -55,6 +89,8 @@ export function ActiveSessionPresenter({
   onSessionClosed,
   isArabic = true,
 }: ActiveSessionPresenterProps) {
+  const [currentSession, setCurrentSession] =
+    useState<AttendanceSessionDto>(session);
   const [currentQr, setCurrentQr] = useState<QrPayload>(initialQr);
   const [qrCountdown, setQrCountdown] = useState<number>(() => {
     if (initialQr.expiresAt) {
@@ -97,6 +133,100 @@ export function ActiveSessionPresenter({
   const [editReason, setEditReason] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const isFetchingQrRef = useRef(false);
+
+  // Geofencing Location State
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [locEnabled, setLocEnabled] = useState(
+    Boolean(
+      currentSession.location?.latitude && currentSession.location?.longitude,
+    ),
+  );
+  const [locVenueName, setLocVenueName] = useState(
+    currentSession.location?.venueName || "مدرج 315",
+  );
+  const [locLatitude, setLocLatitude] = useState<string>(
+    currentSession.location?.latitude !== undefined
+      ? String(currentSession.location.latitude)
+      : "30.0448",
+  );
+  const [locLongitude, setLocLongitude] = useState<string>(
+    currentSession.location?.longitude !== undefined
+      ? String(currentSession.location.longitude)
+      : "31.2360",
+  );
+  const [locRadius, setLocRadius] = useState<number>(
+    currentSession.location?.radiusMeters || 100,
+  );
+  const [isSavingLoc, setIsSavingLoc] = useState(false);
+  const [isLocatingInstructor, setIsLocatingInstructor] = useState(false);
+
+  const handleUseCurrentLocation = async () => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      toast.error(
+        isArabic
+          ? "تحديد الموقع غير مدعوم في هذا المتصفح"
+          : "Geolocation not supported in this browser",
+      );
+      return;
+    }
+    setIsLocatingInstructor(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: 7000,
+          enableHighAccuracy: true,
+        });
+      });
+      setLocLatitude(pos.coords.latitude.toFixed(6));
+      setLocLongitude(pos.coords.longitude.toFixed(6));
+      setLocEnabled(true);
+      toast.success(
+        isArabic
+          ? "تم التقاط إحداثيات موقعك الحالي بنجاح!"
+          : "Current GPS coordinates captured!",
+      );
+    } catch {
+      toast.error(
+        isArabic
+          ? "تعذر الحصول على الموقع الجغرافي. تأكد من تفعيل صلاحيات GPS."
+          : "Could not retrieve GPS coordinates. Check device permissions.",
+      );
+    } finally {
+      setIsLocatingInstructor(false);
+    }
+  };
+
+  const handleSaveLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingLoc(true);
+    try {
+      const updated = await attendanceApi.updateSessionLocation(
+        currentSession._id,
+        {
+          enabled: locEnabled,
+          venueName: locVenueName.trim(),
+          latitude: locEnabled ? Number(locLatitude) : undefined,
+          longitude: locEnabled ? Number(locLongitude) : undefined,
+          radiusMeters: locEnabled ? Number(locRadius) : undefined,
+        },
+      );
+      setCurrentSession(updated);
+      setShowLocationDialog(false);
+      toast.success(
+        isArabic
+          ? locEnabled
+            ? "تم تحديث نطاق الحضور الجغرافي للقاعة بنجاح!"
+            : "تم إلغاء قيد الموقع الجغرافي للجلسة"
+          : "Session location updated successfully!",
+      );
+    } catch {
+      toast.error(
+        isArabic ? "فشل حفظ إعدادات الموقع" : "Failed to update location",
+      );
+    } finally {
+      setIsSavingLoc(false);
+    }
+  };
 
   // 1. Poll persisted records so updates remain reliable when the API scales
   // across multiple Vercel Function instances. SSE below remains the fast path.
@@ -452,7 +582,36 @@ export function ActiveSessionPresenter({
         </div>
 
         {/* Timer & Close Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Geofencing Location Button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowLocationDialog(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/50 border border-border text-foreground hover:bg-secondary/80 text-xs font-semibold cursor-pointer"
+          >
+            <MapPin
+              className={`h-4 w-4 ${
+                currentSession.location?.latitude
+                  ? "text-emerald-400"
+                  : "text-muted-foreground"
+              }`}
+            />
+            <div className="text-start">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground">
+                {isArabic ? "موقع القاعة (Geofence)" : "Hall Location"}
+              </div>
+              <div className="text-xs font-bold text-foreground">
+                {currentSession.location?.latitude
+                  ? `${currentSession.location.venueName || (isArabic ? "موقع محدد" : "Preset")} (${currentSession.location.radiusMeters || 100}م)`
+                  : isArabic
+                    ? "غير محدد (اضغط للضبط)"
+                    : "Not set (Click to set)"}
+              </div>
+            </div>
+          </Button>
+
           <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-secondary/50 border border-border text-foreground">
             <Clock className="h-5 w-5 text-primary" />
             <div className="text-left">
@@ -468,7 +627,7 @@ export function ActiveSessionPresenter({
           <Button
             variant="destructive"
             onClick={() => setShowCloseDialog(true)}
-            className="flex items-center gap-2 bg-rose-600/90 hover:bg-rose-600 text-white font-semibold"
+            className="flex items-center gap-2 bg-rose-600/90 hover:bg-rose-600 text-white font-semibold cursor-pointer"
           >
             <StopCircle className="h-5 w-5" />
             <span>{isArabic ? "إنهاء الحضور" : "End Attendance"}</span>
@@ -769,17 +928,81 @@ export function ActiveSessionPresenter({
                               <Clock className="h-4 w-4" />
                             )}
                           </div>
-                          <div>
+                          <div className="space-y-1">
                             <div className="font-semibold text-sm text-foreground">
                               {record.studentName}
                             </div>
-                            <div className="text-xs text-muted-foreground font-mono">
-                              {record.studentCode} •{" "}
-                              {record.method === "manual"
-                                ? isArabic
-                                  ? "تسجيل يدوي"
-                                  : "Manual"
-                                : "QR Scan"}
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                              <span>
+                                {record.studentCode} •{" "}
+                                {record.method === "manual"
+                                  ? isArabic
+                                    ? "تسجيل يدوي"
+                                    : "Manual"
+                                  : "QR Scan"}
+                              </span>
+
+                              {/* Device Info */}
+                              {record.deviceInfo && (
+                                <span
+                                  title={
+                                    record.deviceFingerprint
+                                      ? `بصمة العتاد (Fingerprint): ${record.deviceFingerprint}`
+                                      : undefined
+                                  }
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-secondary/80 text-foreground/90 border border-border/60 font-sans"
+                                >
+                                  {record.deviceInfo}
+                                </span>
+                              )}
+
+                              {/* Client IP */}
+                              {record.ipAddress && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-secondary/50 text-muted-foreground border border-border/40 font-mono">
+                                  <Globe className="h-3 w-3 text-primary/70" />
+                                  {record.ipAddress}
+                                </span>
+                              )}
+
+                              {/* Scanned Location */}
+                              {record.location?.latitude &&
+                              record.location?.longitude ? (
+                                <a
+                                  href={`https://maps.google.com/?q=${record.location.latitude},${record.location.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={
+                                    isArabic
+                                      ? "فتح في خرائط Google"
+                                      : "Open in Google Maps"
+                                  }
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 font-sans cursor-pointer transition-colors"
+                                >
+                                  <MapPin className="h-3 w-3" />
+                                  <span>
+                                    {record.location.latitude.toFixed(4)},{" "}
+                                    {record.location.longitude.toFixed(4)}
+                                  </span>
+                                  {currentSession.location?.latitude &&
+                                    currentSession.location?.longitude && (
+                                      <span className="text-[10px] opacity-80">
+                                        (
+                                        {calculateDistanceMeters(
+                                          record.location.latitude,
+                                          record.location.longitude,
+                                          currentSession.location.latitude,
+                                          currentSession.location.longitude,
+                                        )}
+                                        م)
+                                      </span>
+                                    )}
+                                </a>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground/60 font-sans">
+                                  <MapPin className="h-2.5 w-2.5" />
+                                  {isArabic ? "بدون GPS" : "No GPS"}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1019,6 +1242,202 @@ export function ActiveSessionPresenter({
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Manage & Change Session Geofence Location */}
+      <Dialog open={showLocationDialog} onOpenChange={setShowLocationDialog}>
+        <DialogContent
+          className="sm:max-w-lg border-border bg-card rounded-2xl"
+          dir={isArabic ? "rtl" : "ltr"}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+              <MapPin className="h-6 w-6 text-emerald-400" />
+              <span>
+                {isArabic
+                  ? "إعدادات موقع القاعة ونطاق الحضور الجغرافي"
+                  : "Lecture Hall Geofence Settings"}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveLocation} className="space-y-4 py-2">
+            {/* Enable / Disable toggle */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-secondary/40 border border-border/70">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-bold text-foreground cursor-pointer">
+                  {isArabic
+                    ? "تفعيل قيد الموقع الجغرافي (Geofencing)"
+                    : "Enable Geofencing Verification"}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {isArabic
+                    ? "يمنع تسجيل حضور الطلاب المتواجدين خارج نطاق القاعة"
+                    : "Rejects check-ins from students outside the lecture hall"}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={locEnabled}
+                onClick={() => setLocEnabled(!locEnabled)}
+                className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                  locEnabled ? "bg-primary justify-end" : "bg-muted justify-start"
+                }`}
+              >
+                <motion.div
+                  layout
+                  className="bg-white w-4 h-4 rounded-full shadow-md"
+                />
+              </button>
+            </div>
+
+            {locEnabled && (
+              <div className="space-y-4">
+                {/* Presets */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {isArabic
+                      ? "اختر قاعة / مدرج من القائمة السريعة:"
+                      : "Quick Hall Presets:"}
+                  </Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {HALL_PRESETS.map((preset) => (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        onClick={() => {
+                          setLocVenueName(preset.name);
+                          setLocLatitude(String(preset.lat));
+                          setLocLongitude(String(preset.lng));
+                          setLocRadius(preset.radius);
+                        }}
+                        className={`p-2 rounded-xl border text-xs text-start transition-all cursor-pointer ${
+                          locVenueName === preset.name
+                            ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
+                            : "bg-background/60 border-border text-foreground hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className="font-semibold truncate">{preset.name}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {preset.radius}م
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* GPS Capture Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleUseCurrentLocation}
+                  disabled={isLocatingInstructor}
+                  className="w-full flex items-center justify-center gap-2 border-primary/30 text-primary bg-primary/5 hover:bg-primary/15 text-xs font-bold cursor-pointer"
+                >
+                  <Crosshair className="h-4 w-4" />
+                  <span>
+                    {isLocatingInstructor
+                      ? isArabic
+                        ? "جاري تحديد إحداثيات موقعك..."
+                        : "Detecting GPS coordinates..."
+                      : isArabic
+                        ? "استخدام موقعي الحالي في القاعة (تحديد GPS تلقائي)"
+                        : "Use My Current Location in the Hall"}
+                  </span>
+                </Button>
+
+                {/* Venue Name */}
+                <div className="space-y-1.5">
+                  <Label>{isArabic ? "اسم القاعة / المدرج" : "Venue Name"}</Label>
+                  <Input
+                    value={locVenueName}
+                    onChange={(e) => setLocVenueName(e.target.value)}
+                    placeholder="مدرج 315"
+                    required={locEnabled}
+                  />
+                </div>
+
+                {/* Coordinates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>{isArabic ? "خط العرض (Latitude)" : "Latitude"}</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={locLatitude}
+                      onChange={(e) => setLocLatitude(e.target.value)}
+                      required={locEnabled}
+                      dir="ltr"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{isArabic ? "خط الطول (Longitude)" : "Longitude"}</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={locLongitude}
+                      onChange={(e) => setLocLongitude(e.target.value)}
+                      required={locEnabled}
+                      dir="ltr"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Radius */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label>
+                      {isArabic
+                        ? "نطاق السماح (بالمتر)"
+                        : "Allowed Radius (Meters)"}
+                    </Label>
+                    <span className="font-mono font-bold text-primary">
+                      {locRadius} {isArabic ? "متر" : "meters"}
+                    </span>
+                  </div>
+                  <Input
+                    type="number"
+                    min={10}
+                    max={1000}
+                    value={locRadius}
+                    onChange={(e) => setLocRadius(Number(e.target.value))}
+                    required={locEnabled}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {isArabic
+                      ? "المدى الموصى به: 50-100م للمدرجات، و 30-50م للمعامل."
+                      : "Recommended: 50-100m for halls, 30-50m for labs."}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0 mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowLocationDialog(false)}
+                disabled={isSavingLoc}
+              >
+                {isArabic ? "إلغاء" : "Cancel"}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSavingLoc}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+              >
+                {isSavingLoc
+                  ? "..."
+                  : isArabic
+                    ? "حفظ وتطبيق إعدادات الموقع"
+                    : "Save & Apply Location"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

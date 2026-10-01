@@ -13,6 +13,15 @@ export interface AttendanceLiveEvent {
     method: string;
     checkedInAt: Date;
     note?: string;
+    deviceId?: string;
+    deviceFingerprint?: string;
+    deviceInfo?: string;
+    ipAddress?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+      accuracy?: number;
+    };
   };
   stats?: {
     totalCheckedIn: number;

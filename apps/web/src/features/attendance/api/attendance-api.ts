@@ -21,6 +21,12 @@ export interface CreateSessionPayload {
   lateThresholdMinutes?: number;
   sessionDurationMinutes?: number;
   qrRotationSeconds?: number;
+  location?: {
+    venueName?: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters?: number;
+  };
 }
 
 export interface QrPayload {
@@ -52,6 +58,12 @@ export interface AttendanceSessionDto {
   lateThresholdMinutes: number;
   sessionDurationMinutes: number;
   qrRotationSeconds: number;
+  location?: {
+    venueName?: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+  };
   stats?: {
     totalCheckedIn: number;
     presentCount: number;
@@ -89,6 +101,15 @@ export interface AttendanceRecordDto {
   status: "present" | "late" | "excused" | "absent";
   method: "qr" | "manual";
   checkedInAt: string;
+  deviceId?: string;
+  deviceFingerprint?: string;
+  deviceInfo?: string;
+  ipAddress?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  };
   markedByName?: string;
   note?: string;
 }
@@ -217,17 +238,43 @@ export const attendanceApi = {
     return res.data;
   },
 
-  // Student QR Check-in with anti-proxy deviceId and optional GPS geofencing
+  // Update session location & geofencing
+  async updateSessionLocation(
+    sessionId: string,
+    payload: {
+      enabled?: boolean;
+      venueName?: string;
+      latitude?: number;
+      longitude?: number;
+      radiusMeters?: number;
+    },
+  ): Promise<AttendanceSessionDto> {
+    const res = await api.patch<AttendanceSessionDto>(
+      `/attendance/sessions/${sessionId}/location`,
+      payload,
+    );
+    return res.data;
+  },
+
+  // Student QR Check-in with anti-proxy deviceId, hardware fingerprint, and optional GPS geofencing
   async checkIn(
     payloadOrToken:
       | string
       | {
           token: string;
           deviceId?: string;
+          deviceFingerprint?: string;
+          deviceInfo?: string;
           latitude?: number;
           longitude?: number;
         },
-    meta?: { deviceId?: string; latitude?: number; longitude?: number },
+    meta?: {
+      deviceId?: string;
+      deviceFingerprint?: string;
+      deviceInfo?: string;
+      latitude?: number;
+      longitude?: number;
+    },
   ): Promise<CheckInResponse> {
     const body =
       typeof payloadOrToken === "string"

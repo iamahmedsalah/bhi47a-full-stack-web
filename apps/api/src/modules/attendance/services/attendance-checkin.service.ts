@@ -68,11 +68,20 @@ export class AttendanceCheckInService {
   async checkIn(
     studentUser: { _id: string; name: string; studentCode?: string },
     payload: string | CheckInAttendanceDto,
+    clientIp?: string,
   ) {
     const rawToken = typeof payload === 'string' ? payload : payload?.token;
     const deviceId =
       typeof payload === 'object' && payload?.deviceId
         ? payload.deviceId.trim()
+        : undefined;
+    const deviceFingerprint =
+      typeof payload === 'object' && payload?.deviceFingerprint
+        ? payload.deviceFingerprint.trim()
+        : undefined;
+    const deviceInfo =
+      typeof payload === 'object' && payload?.deviceInfo
+        ? payload.deviceInfo.trim()
         : undefined;
     const latitude =
       typeof payload === 'object' && typeof payload?.latitude === 'number'
@@ -229,18 +238,36 @@ export class AttendanceCheckInService {
     }
 
     // 7.1 Anti-Proxy Device Lock: Ensure one physical device cannot check in for multiple students in the same session
+    // Checks both deviceId (storage UUID) and deviceFingerprint (cross-browser hardware signature)
+    const deviceOrFingerprintConditions: Record<string, any>[] = [];
     if (deviceId) {
+      deviceOrFingerprintConditions.push({ deviceId });
+    }
+    if (deviceFingerprint) {
+      deviceOrFingerprintConditions.push({ deviceFingerprint });
+    }
+
+    if (deviceOrFingerprintConditions.length > 0) {
+      const deviceQuery =
+        deviceOrFingerprintConditions.length === 1
+          ? {
+              sessionId: session._id,
+              studentId: { $ne: new Types.ObjectId(studentUser._id) },
+              ...deviceOrFingerprintConditions[0],
+            }
+          : {
+              sessionId: session._id,
+              studentId: { $ne: new Types.ObjectId(studentUser._id) },
+              $or: deviceOrFingerprintConditions,
+            };
+
       const deviceUsedByOther = await this.recordModel
-        .findOne({
-          sessionId: session._id,
-          deviceId,
-          studentId: { $ne: new Types.ObjectId(studentUser._id) },
-        })
+        .findOne(deviceQuery)
         .lean();
 
       if (deviceUsedByOther) {
         throw new ForbiddenException(
-          'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة.',
+          'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة (حتى مع تغيير المتصفح أو التصفح الخفي).',
         );
       }
     }
@@ -288,6 +315,13 @@ export class AttendanceCheckInService {
         status: attendanceStatus,
         method: 'qr',
         deviceId,
+        deviceFingerprint,
+        deviceInfo: deviceInfo || 'غير محدد',
+        ipAddress: clientIp || '127.0.0.1',
+        location:
+          typeof latitude === 'number' && typeof longitude === 'number'
+            ? { latitude, longitude }
+            : undefined,
         checkedInAt: now,
       });
 
@@ -301,6 +335,11 @@ export class AttendanceCheckInService {
           studentName,
           status: record.status,
           method: record.method,
+          deviceId: record.deviceId,
+          deviceFingerprint: record.deviceFingerprint,
+          deviceInfo: record.deviceInfo,
+          ipAddress: record.ipAddress,
+          location: record.location,
           checkedInAt: record.checkedInAt,
         },
         timestamp: now,

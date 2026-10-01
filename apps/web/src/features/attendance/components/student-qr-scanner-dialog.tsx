@@ -31,7 +31,7 @@ import {
   extractRawToken,
   getAttendanceErrorMessage,
 } from "../schemas/attendance-schemas";
-import { getOrCreateDeviceId } from "@/lib/device-id";
+import { getDeviceIdentity } from "@/lib/device-id";
 
 interface StudentQrScannerDialogProps {
   open: boolean;
@@ -121,7 +121,7 @@ export function StudentQrScannerDialog({
       setIsSubmitting(true);
 
       try {
-        const deviceId = getOrCreateDeviceId();
+        const deviceIdentity = await getDeviceIdentity();
         let coords: { latitude?: number; longitude?: number } = {};
 
         if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -146,7 +146,9 @@ export function StudentQrScannerDialog({
 
         const res = await attendanceApi.checkIn({
           token: cleanToken,
-          deviceId,
+          deviceId: deviceIdentity.deviceId,
+          deviceFingerprint: deviceIdentity.deviceFingerprint,
+          deviceInfo: deviceIdentity.deviceInfo,
           ...coords,
         });
         setCheckInResult(res);
