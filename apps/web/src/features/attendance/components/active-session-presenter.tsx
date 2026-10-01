@@ -19,7 +19,13 @@ import {
   Navigation,
   Crosshair,
   Check,
+  ExternalLink,
 } from "lucide-react";
+import {
+  INSTITUTE_VENUE_PRESETS,
+  INSTITUTE_GEO_LOCATION,
+  type InstituteVenuePreset,
+} from "@student-portal/shared";
 import {
   AttendanceSessionDto,
   AttendanceRecordDto,
@@ -47,14 +53,7 @@ import {
 import { toast } from "sonner";
 import { apiBaseUrl } from "@/lib/api";
 
-export const HALL_PRESETS = [
-  { name: "حرم المعهد بالكامل (Campus Wide)", lat: 30.901143, lng: 29.874724, radius: 350 },
-  { name: "مبنى نظم المعلومات (BIS Building)", lat: 30.901143, lng: 29.874724, radius: 150 },
-  { name: "مدرج 315 (Hall 315)", lat: 30.901143, lng: 29.874724, radius: 100 },
-  { name: "المدرج المركزي (Main Auditorium)", lat: 30.901143, lng: 29.874724, radius: 120 },
-  { name: "معمل الحاسب 1 (Lab 1)", lat: 30.901143, lng: 29.874724, radius: 60 },
-  { name: "معمل الحاسب 2 (Lab 2)", lat: 30.901143, lng: 29.874724, radius: 60 },
-];
+export const HALL_PRESETS = INSTITUTE_VENUE_PRESETS;
 
 export function calculateDistanceMeters(
   lat1: number,
@@ -161,6 +160,69 @@ export function ActiveSessionPresenter({
   const [isSavingLoc, setIsSavingLoc] = useState(false);
   const [isLocatingInstructor, setIsLocatingInstructor] = useState(false);
 
+  const [selectedVenuePresetId, setSelectedVenuePresetId] = useState<string>(() => {
+    const found = INSTITUTE_VENUE_PRESETS.find(
+      (p) => p.name === (currentSession.location?.venueName || ""),
+    );
+    return found ? found.id : "bis_building";
+  });
+
+  const venueDropdownOptions = React.useMemo<CustomDropdownOption[]>(() => {
+    return [
+      // Campus
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "campus").map((p) => ({
+        value: p.id,
+        label: (
+          <div className="flex items-center justify-between w-full py-0.5 text-xs">
+            <span className="font-semibold text-foreground">🏛️ {p.name}</span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+          </div>
+        ),
+      })),
+      // Halls
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "hall").map((p) => ({
+        value: p.id,
+        label: (
+          <div className="flex items-center justify-between w-full py-0.5 text-xs">
+            <span className="font-medium text-foreground">🎓 {p.name}</span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+          </div>
+        ),
+      })),
+      // Labs
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "lab").map((p) => ({
+        value: p.id,
+        label: (
+          <div className="flex items-center justify-between w-full py-0.5 text-xs">
+            <span className="font-medium text-foreground">💻 {p.name}</span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+          </div>
+        ),
+      })),
+      // Custom
+      {
+        value: "custom",
+        label: (
+          <div className="flex items-center justify-between w-full py-0.5 text-xs text-primary font-bold">
+            <span>📍 إدخال يدوي مخصص (Custom Location)</span>
+          </div>
+        ),
+      },
+    ];
+  }, []);
+
+  const handleVenuePresetChange = (presetId: string) => {
+    setSelectedVenuePresetId(presetId);
+    if (presetId === "custom") return;
+    const found = INSTITUTE_VENUE_PRESETS.find((p) => p.id === presetId);
+    if (found) {
+      setLocVenueName(found.name);
+      setLocLatitude(String(found.lat));
+      setLocLongitude(String(found.lng));
+      setLocRadius(found.radius);
+    }
+  };
+
   const handleUseCurrentLocation = async () => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       toast.error(
@@ -180,6 +242,8 @@ export function ActiveSessionPresenter({
       });
       setLocLatitude(pos.coords.latitude.toFixed(6));
       setLocLongitude(pos.coords.longitude.toFixed(6));
+      setLocVenueName(isArabic ? "موقعي الحالي في القاعة" : "My Current Hall Location");
+      setSelectedVenuePresetId("custom");
       setLocEnabled(true);
       toast.success(
         isArabic
@@ -1264,19 +1328,47 @@ export function ActiveSessionPresenter({
           </DialogHeader>
 
           <form onSubmit={handleSaveLocation} className="space-y-4 py-2">
-            {/* Enable / Disable toggle */}
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-secondary/40 border border-border/70">
-              <div className="space-y-0.5">
-                <Label className="text-sm font-bold text-foreground cursor-pointer">
-                  {isArabic
-                    ? "تفعيل قيد الموقع الجغرافي (Geofencing)"
-                    : "Enable Geofencing Verification"}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {isArabic
-                    ? "يمنع تسجيل حضور الطلاب المتواجدين خارج نطاق القاعة"
-                    : "Rejects check-ins from students outside the lecture hall"}
-                </p>
+            {/* STEP 1: Enable / Disable Geofencing */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-secondary/35 border border-border/80">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2.5 rounded-xl border ${
+                    locEnabled
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : "bg-muted/30 text-muted-foreground border-border"
+                  }`}
+                >
+                  <MapPin className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-bold text-foreground cursor-pointer">
+                      {isArabic
+                        ? "الخطوة 1: تفعيل التحقق الجغرافي"
+                        : "Step 1: Geofencing Verification"}
+                    </Label>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        locEnabled
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {locEnabled
+                        ? isArabic
+                          ? "مفعل ومحمي"
+                          : "Active"
+                        : isArabic
+                          ? "معطل"
+                          : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isArabic
+                      ? "رفض أي تسجيل حضور من خارج حدود القاعة أو المعمل المحدد"
+                      : "Rejects check-ins from students outside the hall"}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -1295,145 +1387,190 @@ export function ActiveSessionPresenter({
             </div>
 
             {locEnabled && (
-              <div className="space-y-4">
-                {/* Presets */}
+              <div className="space-y-4 pt-1">
+                {/* STEP 2: Venue Selection via Dropdown & GPS Auto-Detect */}
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    {isArabic
-                      ? "اختر قاعة / مدرج من القائمة السريعة:"
-                      : "Quick Hall Presets:"}
-                  </Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {HALL_PRESETS.map((preset) => (
-                      <button
-                        key={preset.name}
-                        type="button"
-                        onClick={() => {
-                          setLocVenueName(preset.name);
-                          setLocLatitude(String(preset.lat));
-                          setLocLongitude(String(preset.lng));
-                          setLocRadius(preset.radius);
-                        }}
-                        className={`p-2 rounded-xl border text-xs text-start transition-all cursor-pointer ${
-                          locVenueName === preset.name
-                            ? "bg-primary/10 border-primary text-primary font-bold shadow-xs"
-                            : "bg-background/60 border-border text-foreground hover:bg-muted/40"
-                        }`}
-                      >
-                        <div className="font-semibold truncate">{preset.name}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {preset.radius}م
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* GPS Capture Button */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleUseCurrentLocation}
-                  disabled={isLocatingInstructor}
-                  className="w-full flex items-center justify-center gap-2 border-primary/30 text-primary bg-primary/5 hover:bg-primary/15 text-xs font-bold cursor-pointer"
-                >
-                  <Crosshair className="h-4 w-4" />
-                  <span>
-                    {isLocatingInstructor
-                      ? isArabic
-                        ? "جاري تحديد إحداثيات موقعك..."
-                        : "Detecting GPS coordinates..."
-                      : isArabic
-                        ? "استخدام موقعي الحالي في القاعة (تحديد GPS تلقائي)"
-                        : "Use My Current Location in the Hall"}
-                  </span>
-                </Button>
-
-                {/* Venue Name */}
-                <div className="space-y-1.5">
-                  <Label>{isArabic ? "اسم القاعة / المدرج" : "Venue Name"}</Label>
-                  <Input
-                    value={locVenueName}
-                    onChange={(e) => setLocVenueName(e.target.value)}
-                    placeholder="مدرج 315"
-                    required={locEnabled}
-                  />
-                </div>
-
-                {/* Coordinates */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>{isArabic ? "خط العرض (Latitude)" : "Latitude"}</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={locLatitude}
-                      onChange={(e) => setLocLatitude(e.target.value)}
-                      required={locEnabled}
-                      dir="ltr"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>{isArabic ? "خط الطول (Longitude)" : "Longitude"}</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={locLongitude}
-                      onChange={(e) => setLocLongitude(e.target.value)}
-                      required={locEnabled}
-                      dir="ltr"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-                </div>
-
-                {/* Radius */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-mono flex items-center justify-center font-bold">
+                        2
+                      </span>
                       {isArabic
-                        ? "نطاق السماح (بالمتر)"
-                        : "Allowed Radius (Meters)"}
+                        ? "الخطوة 2: اختيار القاعة أو المعمل أو الحرم"
+                        : "Step 2: Select Lecture Hall, Lab, or Campus"}
                     </Label>
-                    <span className="font-mono font-bold text-primary">
+                    <a
+                      href={INSTITUTE_GEO_LOCATION.GOOGLE_MAPS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span>
+                        {isArabic ? "خريطة المعهد (Maps)" : "Institute Map"}
+                      </span>
+                    </a>
+                  </div>
+
+                  {/* Dropdown for selecting venue */}
+                  <CustomDropdown
+                    value={selectedVenuePresetId}
+                    options={venueDropdownOptions}
+                    onValueChange={handleVenuePresetChange}
+                    className="w-full bg-background border-border text-xs font-medium"
+                    placeholder={
+                      isArabic
+                        ? "اختر القاعة أو المعمل..."
+                        : "Choose Hall or Lab..."
+                    }
+                  />
+
+                  {/* GPS Capture Button */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUseCurrentLocation}
+                    disabled={isLocatingInstructor}
+                    className="w-full flex items-center justify-center gap-2 border-primary/30 text-primary bg-primary/5 hover:bg-primary/15 text-xs font-semibold cursor-pointer py-2 rounded-xl"
+                  >
+                    <Crosshair
+                      className={`h-4 w-4 ${isLocatingInstructor ? "animate-spin text-primary" : ""}`}
+                    />
+                    <span>
+                      {isLocatingInstructor
+                        ? isArabic
+                          ? "جاري تحديد إحداثيات موقعك بالـ GPS..."
+                          : "Detecting GPS coordinates..."
+                        : isArabic
+                          ? "استخدام موقعي الحالي بالـ GPS (تحديد تلقائي فوري)"
+                          : "Use My Current Location in the Hall"}
+                    </span>
+                  </Button>
+                </div>
+
+                {/* STEP 3: Allowed Radius & Quick Pills */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-mono flex items-center justify-center font-bold">
+                        3
+                      </span>
+                      {isArabic
+                        ? "الخطوة 3: تحديد نطاق السماح (Radius)"
+                        : "Step 3: Allowed Radius (Meters)"}
+                    </Label>
+                    <span className="font-mono font-bold text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
                       {locRadius} {isArabic ? "متر" : "meters"}
                     </span>
                   </div>
-                  <Input
-                    type="number"
-                    min={10}
-                    max={1000}
-                    value={locRadius}
-                    onChange={(e) => setLocRadius(Number(e.target.value))}
-                    required={locEnabled}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    {isArabic
-                      ? "المدى الموصى به: 50-100م للمدرجات، و 30-50م للمعامل، و 350م لكامل الحرم."
-                      : "Recommended: 50-100m for halls, 30-50m for labs, 350m for campus."}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
+
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[
-                      { r: 50, label: isArabic ? "50م معمل" : "50m Lab" },
+                      { r: 50, label: isArabic ? "50م دقيق" : "50m Strict" },
+                      { r: 60, label: isArabic ? "60م معمل" : "60m Lab" },
                       { r: 100, label: isArabic ? "100م مدرج" : "100m Hall" },
-                      { r: 150, label: isArabic ? "150م مبنى" : "150m Building" },
-                      { r: 350, label: isArabic ? "350م الحرم كاملاً" : "350m Campus" },
-                      { r: 500, label: isArabic ? "500م نطاق واسع" : "500m Wide" },
+                      { r: 150, label: isArabic ? "150م مبنى" : "150m Bldg" },
+                      { r: 350, label: isArabic ? "350م حرم" : "350m Campus" },
+                      { r: 500, label: isArabic ? "500م واسع" : "500m Wide" },
                     ].map((pill) => (
                       <button
                         key={pill.r}
                         type="button"
                         onClick={() => setLocRadius(pill.r)}
-                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        className={`text-xs py-1.5 rounded-lg border font-semibold transition-all cursor-pointer text-center ${
                           locRadius === pill.r
-                            ? "bg-primary text-primary-foreground font-bold border-primary"
-                            : "bg-secondary/40 text-muted-foreground border-border hover:bg-secondary"
+                            ? "bg-primary text-primary-foreground font-bold border-primary shadow-xs"
+                            : "bg-secondary/40 text-muted-foreground border-border hover:bg-secondary hover:text-foreground"
                         }`}
                       >
                         {pill.label}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={10}
+                      max={1000}
+                      value={locRadius}
+                      onChange={(e) => setLocRadius(Number(e.target.value))}
+                      required={locEnabled}
+                      className="text-xs h-8"
+                    />
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                      {isArabic ? "متر مسموح للابتعاد" : "meters allowed distance"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* STEP 4: Venue Details & Coordinates Preview */}
+                <div className="p-3 rounded-2xl bg-secondary/25 border border-border/70 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-semibold flex items-center gap-1.5 text-foreground">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-mono flex items-center justify-center font-bold">
+                        4
+                      </span>
+                      {isArabic ? "معاينة الإحداثيات واسم القاعة" : "Coordinates Preview"}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      King Maryut (30.9011, 29.8747)
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">
+                      {isArabic
+                        ? "اسم القاعة أو المعمل المعروض للطلاب:"
+                        : "Venue Name:"}
+                    </Label>
+                    <Input
+                      value={locVenueName}
+                      onChange={(e) => {
+                        setLocVenueName(e.target.value);
+                        setSelectedVenuePresetId("custom");
+                      }}
+                      placeholder="مدرج 1 أو معمل 3"
+                      required={locEnabled}
+                      className="text-xs h-8"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        {isArabic ? "خط العرض (Latitude)" : "Latitude"}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={locLatitude}
+                        onChange={(e) => {
+                          setLocLatitude(e.target.value);
+                          setSelectedVenuePresetId("custom");
+                        }}
+                        required={locEnabled}
+                        dir="ltr"
+                        className="font-mono text-xs h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        {isArabic ? "خط الطول (Longitude)" : "Longitude"}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={locLongitude}
+                        onChange={(e) => {
+                          setLocLongitude(e.target.value);
+                          setSelectedVenuePresetId("custom");
+                        }}
+                        required={locEnabled}
+                        dir="ltr"
+                        className="font-mono text-xs h-8"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
