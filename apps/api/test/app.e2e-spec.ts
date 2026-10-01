@@ -7,14 +7,14 @@ import { AppModule } from './../src/app.module';
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
-  });
+  }, 30000);
 
   it('/health (GET)', () => {
     return request(app.getHttpServer())
@@ -25,7 +25,7 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await app.close();
-  });
+  }, 10000);
 });

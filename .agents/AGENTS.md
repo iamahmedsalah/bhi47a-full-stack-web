@@ -168,12 +168,13 @@ Before edits or a Codex prompt, produce a short implementation plan with:
 
 ### 5. Verify
 
-Always include commands or checks, choosing from actual repo scripts. Common defaults:
-- backend: `npm run lint`, `npm run test`, `npm run test:e2e`, `npm run build`
-- frontend: `npm run lint`, `npm run build`
-- workspace: use the actual package manager and workspace command if present
-
-If a command cannot be run, state what should be run locally.
+Always run post-coding CI/CD verification before committing or pushing changes (see `.agents/skills/ci-cd-verifier/SKILL.md`):
+- `pnpm run lint`: ensure 0 errors across `@student-portal/shared`, `@student-portal/api`, and `@student-portal/web`.
+- `pnpm run typecheck`: ensure all 4 tsconfig targets pass.
+- `pnpm run test -- --runInBand` (or `pnpm --filter @student-portal/api test`): ensure all 20 test suites pass.
+- `pnpm run build`: ensure production build compiles cleanly.
+- `pnpm run test:e2e`: ensure e2e suite passes without ESM/CJS loader crashes.
+- Validate Vercel manifest and runtime compatibility matching `.github/workflows/ci-cd.yml`.
 
 ## Quality rules
 

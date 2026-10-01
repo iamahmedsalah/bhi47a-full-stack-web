@@ -1,7 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import type { Connection } from 'mongoose';
 import type { NextFunction, Request, Response } from 'express';
 import { AppLoggerService } from '../../core/logger/logger.service';
 import { MemoryRateLimiterStore } from './memory-rate-limiter.store';
