@@ -73,7 +73,7 @@ export default function StudentCheckInPage() {
 
     try {
       const deviceIdentity = await getDeviceIdentity();
-      let coords: { latitude?: number; longitude?: number } = {};
+      let coords: { latitude?: number; longitude?: number; accuracy?: number } = {};
 
       if (typeof window !== "undefined" && "geolocation" in navigator) {
         try {
@@ -81,13 +81,14 @@ export default function StudentCheckInPage() {
             navigator.geolocation.getCurrentPosition(
               (p) => resolve(p),
               () => resolve(null),
-              { timeout: 3500, enableHighAccuracy: true, maximumAge: 10000 },
+              { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 },
             );
           });
           if (pos) {
             coords = {
               latitude: pos.coords.latitude,
               longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
             };
           }
         } catch {

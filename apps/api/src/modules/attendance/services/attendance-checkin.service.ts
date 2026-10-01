@@ -91,6 +91,10 @@ export class AttendanceCheckInService {
       typeof payload === 'object' && typeof payload?.longitude === 'number'
         ? payload.longitude
         : undefined;
+    const accuracy =
+      typeof payload === 'object' && typeof payload?.accuracy === 'number'
+        ? payload.accuracy
+        : undefined;
 
     if (!rawToken || typeof rawToken !== 'string') {
       throw new BadRequestException('رمز الحضور مفقود أو غير صالح');
@@ -290,10 +294,22 @@ export class AttendanceCheckInService {
         session.location.longitude,
       );
 
-      const maxAllowedRadius = session.location.radiusMeters || 100;
+      // Account for realistic mobile GPS accuracy jitter (up to 50m tolerance)
+      const accuracyTolerance = Math.min(
+        accuracy && accuracy > 0 ? accuracy : 0,
+        50,
+      );
+      const maxAllowedRadius =
+        (session.location.radiusMeters || 100) + accuracyTolerance;
+
       if (distanceMeters > maxAllowedRadius) {
+        const roundedDist = Math.round(distanceMeters);
+        const accuracyNote =
+          accuracy && accuracy > 100
+            ? ` (تنبيه: دقة موقع جهازك حالياً ±${Math.round(accuracy)} متر - يرجى التأكد من تفعيل "الموقع الدقيق" Precise Location في إعدادات المتصفح).`
+            : '';
         throw new ForbiddenException(
-          `أنت خارج النطاق الجغرافي المسموح به للمحاضرة (${Math.round(distanceMeters)} متر عن القاعة).`,
+          `أنت خارج النطاق الجغرافي المسموح به للمحاضرة (${roundedDist} متر عن القاعة).${accuracyNote}`,
         );
       }
     }
@@ -320,7 +336,7 @@ export class AttendanceCheckInService {
         ipAddress: clientIp || '127.0.0.1',
         location:
           typeof latitude === 'number' && typeof longitude === 'number'
-            ? { latitude, longitude }
+            ? { latitude, longitude, accuracy }
             : undefined,
         checkedInAt: now,
       });

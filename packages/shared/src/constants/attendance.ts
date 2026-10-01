@@ -63,3 +63,13 @@ export const ATTENDANCE_CONFIG_DEFAULTS = {
   LATE_AFTER_MINUTES: 10,
   QR_TOLERANCE_SECONDS: 5,
 } as const;
+
+export const INSTITUTE_GEO_LOCATION = {
+  VENUE_NAME: 'المعهد العالى للعلوم الادارية والحاسبات',
+  VENUE_NAME_EN: 'BHI Advanced administrative sciences and computers K47',
+  LATITUDE: 30.901143,
+  LONGITUDE: 29.874724,
+  DEFAULT_RADIUS_METERS: 150,
+  CAMPUS_RADIUS_METERS: 350,
+  GOOGLE_MAPS_URL: 'https://maps.app.goo.gl/zH8dqgbJG51u54re6',
+} as const;

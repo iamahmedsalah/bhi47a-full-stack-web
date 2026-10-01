@@ -74,15 +74,15 @@ export default function StaffAttendancePage() {
   const [section, setSection] = useState("1");
   const [durationMinutes, setDurationMinutes] = useState(15);
   const [lateThresholdMinutes, setLateThresholdMinutes] = useState(10);
-  const [qrRotationSeconds, setQrRotationSeconds] = useState(60);
+  const [qrRotationSeconds, setQrRotationSeconds] = useState(20);
   const [isStarting, setIsStarting] = useState(false);
 
   // Location & Geofencing State
   const [enableGeofence, setEnableGeofence] = useState(false);
-  const [venueName, setVenueName] = useState("مدرج 315");
-  const [geoLat, setGeoLat] = useState("30.0448");
-  const [geoLng, setGeoLng] = useState("31.2360");
-  const [geoRadius, setGeoRadius] = useState(100);
+  const [venueName, setVenueName] = useState("المعهد العالى للعلوم الادارية والحاسبات");
+  const [geoLat, setGeoLat] = useState("30.901143");
+  const [geoLng, setGeoLng] = useState("29.874724");
+  const [geoRadius, setGeoRadius] = useState(150);
   const [isLocating, setIsLocating] = useState(false);
 
   // Fetch staff assigned courses
@@ -797,6 +797,30 @@ export default function StaffAttendancePage() {
                           className="h-8 text-xs"
                         />
                       </div>
+                    </div>
+
+                    {/* Quick Radius Selection */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { r: 50, label: isArabic ? "50م معمل" : "50m Lab" },
+                        { r: 100, label: isArabic ? "100م مدرج" : "100m Hall" },
+                        { r: 150, label: isArabic ? "150م مبنى" : "150m Building" },
+                        { r: 350, label: isArabic ? "350م الحرم كاملاً" : "350m Campus" },
+                        { r: 500, label: isArabic ? "500م تجريبي واسع" : "500m Wide" },
+                      ].map((pill) => (
+                        <button
+                          key={pill.r}
+                          type="button"
+                          onClick={() => setGeoRadius(pill.r)}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                            geoRadius === pill.r
+                              ? "bg-primary text-primary-foreground font-bold border-primary"
+                              : "bg-secondary/40 text-muted-foreground border-border hover:bg-secondary"
+                          }`}
+                        >
+                          {pill.label}
+                        </button>
+                      ))}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

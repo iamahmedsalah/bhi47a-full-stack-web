@@ -267,6 +267,7 @@ export const attendanceApi = {
           deviceInfo?: string;
           latitude?: number;
           longitude?: number;
+          accuracy?: number;
         },
     meta?: {
       deviceId?: string;
@@ -274,6 +275,7 @@ export const attendanceApi = {
       deviceInfo?: string;
       latitude?: number;
       longitude?: number;
+      accuracy?: number;
     },
   ): Promise<CheckInResponse> {
     const body =

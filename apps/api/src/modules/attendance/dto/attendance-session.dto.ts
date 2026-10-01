@@ -221,6 +221,14 @@ export class CheckInAttendanceDto {
   @Type(() => Number)
   @IsNumber()
   longitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'GPS accuracy radius in meters reported by device',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  accuracy?: number;
 }
 
 export class ManualMarkAttendanceDto {

@@ -48,11 +48,12 @@ import { toast } from "sonner";
 import { apiBaseUrl } from "@/lib/api";
 
 export const HALL_PRESETS = [
-  { name: "مدرج 315 (Hall 315)", lat: 30.0448, lng: 31.2360, radius: 100 },
-  { name: "المدرج المركزي (Main Auditorium)", lat: 30.0444, lng: 31.2357, radius: 120 },
-  { name: "معمل الحاسب 1 (Lab 1)", lat: 30.0442, lng: 31.2352, radius: 50 },
-  { name: "معمل الحاسب 2 (Lab 2)", lat: 30.0443, lng: 31.2353, radius: 50 },
-  { name: "مبنى نظم المعلومات (BIS Building)", lat: 30.0446, lng: 31.2355, radius: 150 },
+  { name: "حرم المعهد بالكامل (Campus Wide)", lat: 30.901143, lng: 29.874724, radius: 350 },
+  { name: "مبنى نظم المعلومات (BIS Building)", lat: 30.901143, lng: 29.874724, radius: 150 },
+  { name: "مدرج 315 (Hall 315)", lat: 30.901143, lng: 29.874724, radius: 100 },
+  { name: "المدرج المركزي (Main Auditorium)", lat: 30.901143, lng: 29.874724, radius: 120 },
+  { name: "معمل الحاسب 1 (Lab 1)", lat: 30.901143, lng: 29.874724, radius: 60 },
+  { name: "معمل الحاسب 2 (Lab 2)", lat: 30.901143, lng: 29.874724, radius: 60 },
 ];
 
 export function calculateDistanceMeters(
@@ -99,7 +100,7 @@ export function ActiveSessionPresenter({
       );
       return Math.max(0, left);
     }
-    return initialQr.remainingSeconds || session.qrRotationSeconds || 60;
+    return initialQr.remainingSeconds || session.qrRotationSeconds || 20;
   });
   const [sessionRemainingSec, setSessionRemainingSec] = useState<number>(0);
   const [attendees, setAttendees] = useState<AttendanceRecordDto[]>([]);
@@ -142,20 +143,20 @@ export function ActiveSessionPresenter({
     ),
   );
   const [locVenueName, setLocVenueName] = useState(
-    currentSession.location?.venueName || "مدرج 315",
+    currentSession.location?.venueName || "معهد كينج مريوط - مبنى نظم المعلومات",
   );
   const [locLatitude, setLocLatitude] = useState<string>(
     currentSession.location?.latitude !== undefined
       ? String(currentSession.location.latitude)
-      : "30.0448",
+      : "30.901143",
   );
   const [locLongitude, setLocLongitude] = useState<string>(
     currentSession.location?.longitude !== undefined
       ? String(currentSession.location.longitude)
-      : "31.2360",
+      : "29.874724",
   );
   const [locRadius, setLocRadius] = useState<number>(
-    currentSession.location?.radiusMeters || 100,
+    currentSession.location?.radiusMeters || 150,
   );
   const [isSavingLoc, setIsSavingLoc] = useState(false);
   const [isLocatingInstructor, setIsLocatingInstructor] = useState(false);
@@ -371,7 +372,7 @@ export function ActiveSessionPresenter({
                       (new Date(newQr.expiresAt).getTime() - Date.now()) / 1000,
                     ),
                   )
-                : (newQr.remainingSeconds || session.qrRotationSeconds || 60);
+                : (newQr.remainingSeconds || session.qrRotationSeconds || 20);
               setQrCountdown(freshRemaining);
             }
           })
@@ -515,7 +516,7 @@ export function ActiveSessionPresenter({
     Math.max(
       0,
       (qrCountdown /
-        (currentQr.rotationSeconds || session.qrRotationSeconds || 60)) *
+        (currentQr.rotationSeconds || session.qrRotationSeconds || 20)) *
         100,
     ),
   );
@@ -745,7 +746,7 @@ export function ActiveSessionPresenter({
                       : `Rotates in ${qrCountdown}s`}
                   </span>
                   <span className="text-foreground font-mono">
-                    {currentQr.rotationSeconds}s
+                    {currentQr.rotationSeconds || session.qrRotationSeconds || 20}s
                   </span>
                 </div>
                 <Progress
@@ -754,8 +755,8 @@ export function ActiveSessionPresenter({
                 />
                 <p className="text-[11px] text-muted-foreground/70">
                   {isArabic
-                    ? "حماية مشددة: كود حضور مشفر داخل التطبيق يتجدد كل 20 ثانية لمنع تصوير ومشاركة الشاشة"
-                    : "Anti-cheat protection: In-app encrypted token rotates every 20s to prevent screenshot sharing"}
+                    ? `حماية مشددة: كود حضور مشفر داخل التطبيق يتجدد كل ${currentQr.rotationSeconds || session.qrRotationSeconds || 20} ثانية لمنع تصوير ومشاركة الشاشة`
+                    : `Anti-cheat protection: In-app encrypted token rotates every ${currentQr.rotationSeconds || session.qrRotationSeconds || 20}s to prevent screenshot sharing`}
                 </p>
               </div>
 
@@ -1409,9 +1410,31 @@ export function ActiveSessionPresenter({
                   />
                   <p className="text-[11px] text-muted-foreground">
                     {isArabic
-                      ? "المدى الموصى به: 50-100م للمدرجات، و 30-50م للمعامل."
-                      : "Recommended: 50-100m for halls, 30-50m for labs."}
+                      ? "المدى الموصى به: 50-100م للمدرجات، و 30-50م للمعامل، و 350م لكامل الحرم."
+                      : "Recommended: 50-100m for halls, 30-50m for labs, 350m for campus."}
                   </p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { r: 50, label: isArabic ? "50م معمل" : "50m Lab" },
+                      { r: 100, label: isArabic ? "100م مدرج" : "100m Hall" },
+                      { r: 150, label: isArabic ? "150م مبنى" : "150m Building" },
+                      { r: 350, label: isArabic ? "350م الحرم كاملاً" : "350m Campus" },
+                      { r: 500, label: isArabic ? "500م نطاق واسع" : "500m Wide" },
+                    ].map((pill) => (
+                      <button
+                        key={pill.r}
+                        type="button"
+                        onClick={() => setLocRadius(pill.r)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          locRadius === pill.r
+                            ? "bg-primary text-primary-foreground font-bold border-primary"
+                            : "bg-secondary/40 text-muted-foreground border-border hover:bg-secondary"
+                        }`}
+                      >
+                        {pill.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
