@@ -153,10 +153,6 @@ export default function ChangePasswordPage() {
           : "Password secured and changed successfully!",
       );
 
-      if (user) {
-        user.mustChangePassword = false;
-      }
-
       setTimeout(() => {
         window.location.reload();
       }, 1600);

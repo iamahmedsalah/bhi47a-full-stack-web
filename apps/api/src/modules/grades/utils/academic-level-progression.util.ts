@@ -171,6 +171,16 @@ export function calculatePromotedAcademicLevel(input: {
   failedCourses?: string[];
   maxAllowedCarriedCourses?: number;
 }): CourseLevel {
-  const result = evaluateAcademicProgression(input);
-  return result.promotedLevel;
+  let level = input.currentLevel;
+  while (true) {
+    const result = evaluateAcademicProgression({
+      ...input,
+      currentLevel: level,
+    });
+    if (!result.willPromote || result.promotedLevel === level) {
+      break;
+    }
+    level = result.promotedLevel;
+  }
+  return level;
 }

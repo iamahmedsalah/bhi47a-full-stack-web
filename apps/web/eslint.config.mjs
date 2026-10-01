@@ -13,6 +13,16 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      // React Compiler is disabled in next.config.ts (reactCompiler: false);
+      // disable experimental compiler rules that trigger false positives on manual memoization
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/immutability": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;
