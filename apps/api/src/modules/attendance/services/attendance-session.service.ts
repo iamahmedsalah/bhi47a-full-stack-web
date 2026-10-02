@@ -24,10 +24,16 @@ import {
   CreateAttendanceSessionDto,
   CreateCourseStaffAssignmentDto,
   UpdateSessionLocationDto,
+  QueryAttendanceSessionsDto,
 } from '../dto/attendance-session.dto';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { ATTENDANCE_CONFIG_DEFAULTS } from '@student-portal/shared';
+import {
+  attendanceSessionFilter,
+  attendanceSessionScope,
+  type AttendanceViewer,
+} from './attendance-query';
 
 export interface SessionDetailsResponse {
   _id: Types.ObjectId | string;
@@ -71,7 +77,15 @@ export interface AdminOverviewResponse {
     presentCount: number;
     lateCount: number;
   };
-  sessions: any[];
+  sessions: SessionDetailsResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  filters: {
+    levels: string[];
+    courses: { code: string; name?: string; level: string }[];
+  };
 }
 
 @Injectable()
@@ -510,69 +524,141 @@ export class AttendanceSessionService {
   /**
    * Retrieves system-wide attendance KPI statistics and recent sessions for administrators.
    */
-  async getAdminOverview(): Promise<AdminOverviewResponse> {
+  async getAdminOverview(
+    query = new QueryAttendanceSessionsDto(),
+  ): Promise<AdminOverviewResponse> {
+    return this.getSessionOverview({ _id: '', role: 'admin' }, query);
+  }
+
+  async getSessionOverview(
+    user: AttendanceViewer,
+    query: QueryAttendanceSessionsDto,
+  ): Promise<AdminOverviewResponse> {
+    const now = new Date();
+    const scope = attendanceSessionScope(user);
+    const filter = attendanceSessionFilter(user, query, now);
+    const limit = Math.min(100, Math.max(1, Math.trunc(query.limit || 20)));
+    const total = await this.sessionModel.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
+    const page = Math.min(
+      Math.max(1, Math.trunc(query.page || 1)),
+      Math.max(1, totalPages),
+    );
+    const recordScope: import('mongoose').PipelineStage[] =
+      user.role === 'admin'
+        ? []
+        : [
+            {
+              $lookup: {
+                from: 'attendance_sessions',
+                localField: 'sessionId',
+                foreignField: '_id',
+                pipeline: [{ $match: scope }, { $project: { _id: 1 } }],
+                as: 'ownedSession',
+              },
+            },
+            { $match: { 'ownedSession.0': { $exists: true } } },
+          ];
+    type Counts = {
+      _id: Types.ObjectId;
+      total: number;
+      present: number;
+      late: number;
+      excused: number;
+    };
+    const countFields = {
+      total: { $sum: 1 },
+      present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } },
+      late: { $sum: { $cond: [{ $eq: ['$status', 'late'] }, 1, 0] } },
+      excused: { $sum: { $cond: [{ $eq: ['$status', 'excused'] }, 1, 0] } },
+    };
     const [
       totalSessions,
       activeSessions,
       recentSessions,
-      totalRecords,
-      presentRecords,
-      lateRecords,
+      recordCounts,
+      levels,
+      courses,
     ] = await Promise.all([
-      this.sessionModel.countDocuments(),
-      this.sessionModel.countDocuments({ status: 'OPEN' }),
-      this.sessionModel.find().sort({ startsAt: -1 }).limit(30).lean(),
-      this.recordModel.countDocuments(),
-      this.recordModel.countDocuments({ status: 'present' }),
-      this.recordModel.countDocuments({ status: 'late' }),
-    ]);
-
-    const sessionIds = recentSessions.map((s) => s._id);
-    const sessionRecords = await this.recordModel
-      .find({ sessionId: { $in: sessionIds } })
-      .select('sessionId status')
-      .lean();
-
-    const sessionStatsMap = new Map<
-      string,
-      { present: number; late: number; total: number }
-    >();
-    for (const r of sessionRecords) {
-      const sId = r.sessionId.toString();
-      if (!sessionStatsMap.has(sId)) {
-        sessionStatsMap.set(sId, { present: 0, late: 0, total: 0 });
-      }
-      const entry = sessionStatsMap.get(sId)!;
-      entry.total += 1;
-      if (r.status === 'present') entry.present += 1;
-      if (r.status === 'late') entry.late += 1;
-    }
-
-    const sessionsWithStats = recentSessions.map((s) => {
-      const stats = sessionStatsMap.get(s._id.toString()) || {
-        present: 0,
-        late: 0,
-        total: 0,
-      };
-      return {
-        ...s,
-        stats: {
-          presentCount: stats.present,
-          lateCount: stats.late,
-          totalCheckedIn: stats.total,
+      this.sessionModel.countDocuments(scope),
+      this.sessionModel.countDocuments({
+        ...scope,
+        status: 'OPEN',
+        expiresAt: { $gt: now },
+      }),
+      this.sessionModel
+        .find(filter)
+        .sort({ startsAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.recordModel.aggregate<Counts>([
+        ...recordScope,
+        { $group: { _id: null, ...countFields } },
+      ]),
+      this.sessionModel.distinct('level', scope),
+      this.sessionModel.aggregate<{
+        _id: { code: string; level: string };
+        name?: string;
+      }>([
+        { $match: scope },
+        {
+          $group: {
+            _id: { code: '$courseCode', level: '$level' },
+            name: { $first: '$courseName' },
+          },
         },
-      };
-    });
-
+        { $sort: { '_id.code': 1, '_id.level': 1 } },
+      ]),
+    ]);
+    const counts = await this.recordModel.aggregate<Counts>([
+      {
+        $match: {
+          sessionId: { $in: recentSessions.map((session) => session._id) },
+        },
+      },
+      { $group: { _id: '$sessionId', ...countFields } },
+    ]);
+    const statsMap = new Map(
+      counts.map((entry) => [entry._id.toString(), entry]),
+    );
+    const globalCounts = recordCounts[0];
     return {
       kpi: {
         totalSessions,
         activeSessions,
-        totalCheckedIn: totalRecords,
-        presentCount: presentRecords,
-        lateCount: lateRecords,
+        totalCheckedIn: globalCounts?.total || 0,
+        presentCount: globalCounts?.present || 0,
+        lateCount: globalCounts?.late || 0,
       },
-      sessions: sessionsWithStats,
+      sessions: recentSessions.map((session) => {
+        const stats = statsMap.get(session._id.toString());
+        return {
+          ...session,
+          status:
+            session.status === 'OPEN' && session.expiresAt <= now
+              ? 'EXPIRED'
+              : session.status,
+          stats: {
+            presentCount: stats?.present || 0,
+            lateCount: stats?.late || 0,
+            excusedCount: stats?.excused || 0,
+            totalCheckedIn: stats?.total || 0,
+          },
+        };
+      }),
+      total,
+      page,
+      limit,
+      totalPages,
+      filters: {
+        levels: levels.map(String).sort(),
+        courses: courses.map((course) => ({
+          code: course._id.code,
+          level: String(course._id.level),
+          name: course.name,
+        })),
+      },
     };
   }
 }

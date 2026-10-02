@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -18,8 +19,17 @@ import {
   ManualMarkAttendanceDto,
   ManualStudentCheckInDto,
   QueryAttendanceRecordsDto,
+  QueryAttendanceSessionsDto,
 } from '../dto/attendance-session.dto';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
+import {
+  attendanceSessionFilter,
+  type AttendanceViewer,
+} from './attendance-query';
+import {
+  createAttendanceWorkbook,
+  type AttendanceExportEntry,
+} from './attendance-workbook';
 
 @Injectable()
 export class AttendanceReportService {
@@ -32,6 +42,51 @@ export class AttendanceReportService {
     private userModel: Model<UserDocument>,
     private realtimeService: AttendanceRealtimeService,
   ) {}
+
+  async exportAttendance(
+    user: AttendanceViewer,
+    query: QueryAttendanceSessionsDto,
+    sessionId?: string,
+  ) {
+    let filter = attendanceSessionFilter(user, query);
+    if (sessionId) {
+      if (!Types.ObjectId.isValid(sessionId))
+        throw new BadRequestException('Invalid session ID');
+      const session = await this.sessionModel.findById(sessionId).lean();
+      if (!session) throw new NotFoundException('Attendance session not found');
+      if (user.role !== 'admin' && session.createdBy.toString() !== user._id)
+        throw new ForbiddenException(
+          'You can export only your own attendance sessions',
+        );
+      filter = { _id: new Types.ObjectId(sessionId) };
+    }
+    const sessionModel = this.sessionModel;
+    const recordModel = this.recordModel;
+    async function* entries(): AsyncGenerator<AttendanceExportEntry> {
+      const sessions = sessionModel
+        .find(filter)
+        .sort({ startsAt: -1, _id: -1 })
+        .lean()
+        .cursor();
+      try {
+        for await (const session of sessions) {
+          const records = recordModel
+            .find({ sessionId: session._id })
+            .sort({ checkedInAt: 1, _id: 1 })
+            .lean()
+            .cursor();
+          try {
+            yield { session, records };
+          } finally {
+            await records.close();
+          }
+        }
+      } finally {
+        await sessions.close();
+      }
+    }
+    return createAttendanceWorkbook(entries(), query.lang || 'en');
+  }
 
   /**
    * Retrieves paginated attendee records for a specific session.

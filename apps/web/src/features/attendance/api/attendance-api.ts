@@ -156,7 +156,54 @@ export interface StudentAttendanceHistoryResponse {
   records: AttendanceRecordDto[];
 }
 
+export interface AttendanceSessionQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  level?: string;
+  courseCode?: string;
+  lang?: "ar" | "en";
+}
+
+export interface AttendanceOverviewResponse {
+  kpi: {
+    totalSessions: number;
+    activeSessions: number;
+    totalCheckedIn: number;
+    presentCount: number;
+    lateCount: number;
+  };
+  sessions: AttendanceSessionDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  filters: {
+    levels: string[];
+    courses: { code: string; name?: string; level: string }[];
+  };
+}
+
 export const attendanceApi = {
+  async getSessions(
+    params: AttendanceSessionQuery,
+  ): Promise<AttendanceOverviewResponse> {
+    const res = await api.get("/attendance/sessions", { params });
+    return res.data;
+  },
+
+  async exportAttendance(
+    params: AttendanceSessionQuery,
+    sessionId?: string,
+  ): Promise<Blob> {
+    return api.get<Blob, Blob>(
+      sessionId
+        ? `/attendance/sessions/${sessionId}/export`
+        : "/attendance/export",
+      { params, responseType: "blob" },
+    );
+  },
   // Staff classes
   async getStaffClasses(): Promise<AssignedClassItem[]> {
     const res = await api.get<AssignedClassItem[]>("/attendance/my-classes");

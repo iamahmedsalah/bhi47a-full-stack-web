@@ -9,6 +9,9 @@ import {
   IsArray,
   ValidateNested,
   IsBoolean,
+  IsInt,
+  IsIn,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -274,6 +277,44 @@ export class ManualStudentCheckInDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class QueryAttendanceSessionsDto {
+  @IsOptional()
+  @IsIn(['all', 'OPEN', 'CLOSED', 'EXPIRED', 'ENDED'])
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  level?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  courseCode?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 20;
+
+  @IsOptional()
+  @IsIn(['ar', 'en'])
+  lang?: 'ar' | 'en';
 }
 
 export class QueryAttendanceRecordsDto {

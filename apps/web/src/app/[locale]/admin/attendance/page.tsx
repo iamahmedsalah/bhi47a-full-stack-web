@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import {
   QrCode,
@@ -10,14 +9,9 @@ import {
   Play,
   Users,
   GraduationCap,
-  Sparkles,
   Search,
   X,
-  Layers,
-  Clock,
-  Filter,
   MapPin,
-  Crosshair,
   ExternalLink,
   Building2,
   Monitor,
@@ -47,10 +41,7 @@ import {
   AttendanceSessionDto,
   QrPayload,
 } from "@/features/attendance/api/attendance-api";
-import {
-  ActiveSessionPresenter,
-  HALL_PRESETS,
-} from "@/features/attendance/components/active-session-presenter";
+import { ActiveSessionPresenter } from "@/features/attendance/components/active-session-presenter";
 import {
   INSTITUTE_VENUE_PRESETS,
   INSTITUTE_GEO_LOCATION,
@@ -58,7 +49,7 @@ import {
 } from "@student-portal/shared";
 import { AdminAttendanceOverview } from "@/features/attendance/components/admin-attendance-overview";
 import { useAuth } from "@/providers/auth-provider";
-import { getHallPosition } from "@/features/attendance/lib/location";
+import { LocationCapture } from "@/features/attendance/components/location-capture";
 import { toast } from "sonner";
 
 export default function StaffAttendancePage() {
@@ -101,53 +92,72 @@ export default function StaffAttendancePage() {
   const [geoRadius, setGeoRadius] = useState(150);
   const [isLocating, setIsLocating] = useState(false);
 
-  const [selectedVenuePresetId, setSelectedVenuePresetId] = useState<string>("bis_building");
+  const [selectedVenuePresetId, setSelectedVenuePresetId] =
+    useState<string>("bis_building");
 
   const venueDropdownOptions = React.useMemo<CustomDropdownOption[]>(() => {
     const categoryIcon = (cat: string) => {
-      if (cat === "campus") return <Building2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
-      if (cat === "hall") return <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-400" />;
+      if (cat === "campus")
+        return <Building2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
+      if (cat === "hall")
+        return <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-400" />;
       return <Monitor className="h-3.5 w-3.5 shrink-0 text-violet-400" />;
     };
-    const getVenueName = (p: InstituteVenuePreset) => isArabic ? p.name : p.nameEn;
+    const getVenueName = (p: InstituteVenuePreset) =>
+      isArabic ? p.name : p.nameEn;
 
     return [
       // Campus & Main Buildings
-      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "campus").map((p) => ({
-        value: p.id,
-        label: (
-          <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="flex items-center gap-1.5 font-semibold text-foreground">
-              {categoryIcon(p.category)} {getVenueName(p)}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
-          </div>
-        ),
-      })),
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "campus").map(
+        (p) => ({
+          value: p.id,
+          label: (
+            <div className="flex items-center justify-between w-full py-0.5 text-xs">
+              <span className="flex items-center gap-1.5 font-semibold text-foreground">
+                {categoryIcon(p.category)} {getVenueName(p)}
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground mr-2">
+                {p.radius}
+                {isArabic ? "م" : "m"}
+              </span>
+            </div>
+          ),
+        }),
+      ),
       // Halls (Main, 315, 1-7)
-      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "hall").map((p) => ({
-        value: p.id,
-        label: (
-          <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="flex items-center gap-1.5 font-medium text-foreground">
-              {categoryIcon(p.category)} {getVenueName(p)}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
-          </div>
-        ),
-      })),
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "hall").map(
+        (p) => ({
+          value: p.id,
+          label: (
+            <div className="flex items-center justify-between w-full py-0.5 text-xs">
+              <span className="flex items-center gap-1.5 font-medium text-foreground">
+                {categoryIcon(p.category)} {getVenueName(p)}
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground mr-2">
+                {p.radius}
+                {isArabic ? "م" : "m"}
+              </span>
+            </div>
+          ),
+        }),
+      ),
       // Labs (1-7)
-      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "lab").map((p) => ({
-        value: p.id,
-        label: (
-          <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="flex items-center gap-1.5 font-medium text-foreground">
-              {categoryIcon(p.category)} {getVenueName(p)}
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
-          </div>
-        ),
-      })),
+      ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "lab").map(
+        (p) => ({
+          value: p.id,
+          label: (
+            <div className="flex items-center justify-between w-full py-0.5 text-xs">
+              <span className="flex items-center gap-1.5 font-medium text-foreground">
+                {categoryIcon(p.category)} {getVenueName(p)}
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground mr-2">
+                {p.radius}
+                {isArabic ? "م" : "m"}
+              </span>
+            </div>
+          ),
+        }),
+      ),
       // Custom Location
       {
         value: "custom",
@@ -226,37 +236,12 @@ export default function StaffAttendancePage() {
     setShowStartDialog(true);
   };
 
-  const handleUseCurrentLocation = async () => {
-    if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      toast.error(
-        isArabic
-          ? "تحديد الموقع غير مدعوم في هذا المتصفح"
-          : "Geolocation not supported in this browser",
-      );
-      return;
-    }
-    setIsLocating(true);
-    try {
-      const pos = await getHallPosition(navigator.geolocation, isArabic);
-      setGeoLat(pos.coords.latitude.toFixed(6));
-      setGeoLng(pos.coords.longitude.toFixed(6));
-      setVenueName(isArabic ? "موقعي الحالي في القاعة" : "My Current Hall Location");
-      setSelectedVenuePresetId("custom");
-      setEnableGeofence(true);
-      toast.success(
-        isArabic
-          ? `تم التقاط الموقع بدقة ±${Math.round(pos.coords.accuracy)} متر. ابدأ الجلسة لتطبيق الموقع.`
-          : `Location captured (±${Math.round(pos.coords.accuracy)} m). Start the session to apply it.`,
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : isArabic
-          ? "تعذر الحصول على الموقع الجغرافي. تأكد من تفعيل صلاحيات GPS."
-          : "Could not retrieve GPS coordinates.",
-      );
-    } finally {
-      setIsLocating(false);
-    }
+  const handleCapturedLocation = (position: GeolocationPosition) => {
+    setGeoLat(position.coords.latitude.toFixed(6));
+    setGeoLng(position.coords.longitude.toFixed(6));
+    setVenueName(isArabic ? "موقعي الحالي" : "Current location");
+    setSelectedVenuePresetId("custom");
+    setEnableGeofence(true);
   };
 
   const handleStartSession = async (e: React.FormEvent) => {
@@ -339,7 +324,7 @@ export default function StaffAttendancePage() {
       />
 
       {/* Admin Tab Switcher */}
-      {isAdmin && (
+      {
         <div className="flex items-center gap-2 border-b border-border/70 pb-3">
           <button
             type="button"
@@ -367,14 +352,18 @@ export default function StaffAttendancePage() {
             <Users className="h-4 w-4" />
             <span>
               {isArabic
-                ? "الرقابة وإدارة الحضور العامة"
-                : "System Overview & Sessions"}
+                ? isAdmin
+                  ? "الرقابة وإدارة الحضور العامة"
+                  : "جلساتي وسجل الحضور"
+                : isAdmin
+                  ? "System Overview & Sessions"
+                  : "My Sessions & Attendance"}
             </span>
           </button>
         </div>
-      )}
+      }
 
-      {isAdmin && activeTab === "admin-overview" ? (
+      {activeTab === "admin-overview" ? (
         <AdminAttendanceOverview
           isArabic={isArabic}
           onOpenSessionPresenter={async (session) => {
@@ -870,27 +859,17 @@ export default function StaffAttendancePage() {
                       />
 
                       {/* GPS Button */}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUseCurrentLocation}
-                        disabled={isLocating}
-                        className="w-full flex items-center justify-center gap-2 border-primary/30 text-primary bg-primary/5 hover:bg-primary/15 text-xs font-semibold cursor-pointer py-2 rounded-xl"
-                      >
-                        <Crosshair
-                          className={`h-4 w-4 ${isLocating ? "animate-spin text-primary" : ""}`}
-                        />
-                        <span>
-                          {isLocating
-                            ? isArabic
-                              ? "جاري تحديد موقعك بالـ GPS..."
-                              : "Detecting GPS..."
-                            : isArabic
-                              ? "تحديد موقعي الحالي كقاعة للمحاضرة (تلقائي)"
-                              : "Use My Current Hall Location"}
-                        </span>
-                      </Button>
+                      <LocationCapture
+                        isArabic={isArabic}
+                        disabled={isStarting}
+                        onCapture={handleCapturedLocation}
+                        onLocatingChange={setIsLocating}
+                        applyHint={
+                          isArabic
+                            ? "ابدأ الجلسة لتطبيق هذا الموقع."
+                            : "Start the session to apply this location."
+                        }
+                      />
                     </div>
 
                     {/* STEP 3: Allowed Radius & Quick Pills */}
@@ -912,12 +891,27 @@ export default function StaffAttendancePage() {
                       {/* Quick Radius Selection */}
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                         {[
-                          { r: 50, label: isArabic ? "50م دقيق" : "50m Strict" },
+                          {
+                            r: 50,
+                            label: isArabic ? "50م دقيق" : "50m Strict",
+                          },
                           { r: 60, label: isArabic ? "60م معمل" : "60m Lab" },
-                          { r: 100, label: isArabic ? "100م مدرج" : "100m Hall" },
-                          { r: 150, label: isArabic ? "150م مبنى" : "150m Bldg" },
-                          { r: 350, label: isArabic ? "350م حرم" : "350m Campus" },
-                          { r: 500, label: isArabic ? "500م واسع" : "500m Wide" },
+                          {
+                            r: 100,
+                            label: isArabic ? "100م مدرج" : "100m Hall",
+                          },
+                          {
+                            r: 150,
+                            label: isArabic ? "150م مبنى" : "150m Bldg",
+                          },
+                          {
+                            r: 350,
+                            label: isArabic ? "350م حرم" : "350m Campus",
+                          },
+                          {
+                            r: 500,
+                            label: isArabic ? "500م واسع" : "500m Wide",
+                          },
                         ].map((pill) => (
                           <button
                             key={pill.r}
@@ -944,7 +938,9 @@ export default function StaffAttendancePage() {
                           className="h-8 text-xs"
                         />
                         <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                          {isArabic ? "متر مسموح للابتعاد" : "meters allowed distance"}
+                          {isArabic
+                            ? "متر مسموح للابتعاد"
+                            : "meters allowed distance"}
                         </span>
                       </div>
                     </div>
@@ -956,7 +952,9 @@ export default function StaffAttendancePage() {
                           <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-mono flex items-center justify-center font-bold">
                             4
                           </span>
-                          {isArabic ? "معاينة الإحداثيات واسم القاعة" : "Coordinates Preview"}
+                          {isArabic
+                            ? "معاينة الإحداثيات واسم القاعة"
+                            : "Coordinates Preview"}
                         </span>
                         <span className="text-[10px] font-mono text-muted-foreground">
                           King Maryut (30.9011, 29.8747)
@@ -965,7 +963,9 @@ export default function StaffAttendancePage() {
 
                       <div className="space-y-1">
                         <Label className="text-[11px] text-muted-foreground">
-                          {isArabic ? "اسم القاعة أو المعمل:" : "Hall / Lab Name:"}
+                          {isArabic
+                            ? "اسم القاعة أو المعمل:"
+                            : "Hall / Lab Name:"}
                         </Label>
                         <Input
                           value={venueName}

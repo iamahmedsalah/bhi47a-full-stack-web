@@ -1,26 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
-  Calendar,
   CheckCircle2,
   Clock,
-  ExternalLink,
-  Filter,
   Layers,
-  Play,
-  QrCode,
-  Search,
-  ShieldAlert,
   Users,
-  XCircle,
+  Search,
+  MoreVertical,
+  QrCode,
+  UserRound,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { TableCell } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -28,649 +26,646 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/feedback";
+import { CustomDropdown } from "@/components/ui/custom-dropdown";
+import {
+  DataTableShell,
+  type ColumnDef,
+} from "@/components/ui/data-table-shell";
+import { LoadingState, ErrorState } from "@/components/ui/feedback";
+import { useTableState } from "@/hooks/use-table-state";
 import {
   attendanceApi,
   type AttendanceSessionDto,
   type AttendanceRecordDto,
 } from "../api/attendance-api";
+import { getAttendanceErrorMessage } from "../schemas/attendance-schemas";
+import { AttendanceExportButton } from "./attendance-export-button";
+import { AttendancePagination } from "./attendance-pagination";
+import { LiveAttendeeStream } from "./live-attendee-stream";
 import { toast } from "sonner";
 
-interface AdminAttendanceOverviewProps {
-  isArabic?: boolean;
-  onOpenSessionPresenter?: (session: AttendanceSessionDto) => void;
+function SessionSearch({
+  value,
+  onSearch,
+  isArabic,
+}: {
+  value: string;
+  onSearch: (value: string) => void;
+  isArabic: boolean;
+}) {
+  const [input, setInput] = useState({ urlValue: value, draft: value });
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callback = useRef(onSearch);
+  useEffect(() => {
+    callback.current = onSearch;
+  }, [onSearch]);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+  }, [value]);
+  if (input.urlValue !== value) setInput({ urlValue: value, draft: value });
+  return (
+    <div className="relative min-w-0 flex-1">
+      <Search
+        className="pointer-events-none absolute start-3 top-3 h-4 w-4 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <Input
+        value={input.draft}
+        maxLength={100}
+        aria-label={
+          isArabic
+            ? "بحث بالمقرر أو القائم بالتدريس"
+            : "Search course or instructor"
+        }
+        onChange={(event) => {
+          const draft = event.target.value;
+          setInput({ urlValue: value, draft });
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => callback.current(draft), 300);
+        }}
+        placeholder={
+          isArabic
+            ? "بحث بالمقرر، الكود أو القائم بالتدريس…"
+            : "Search course, code or instructor…"
+        }
+        className="h-10 ps-9"
+      />
+    </div>
+  );
 }
 
 export function AdminAttendanceOverview({
   isArabic = true,
   onOpenSessionPresenter,
-}: AdminAttendanceOverviewProps) {
-  const [statusFilter, setStatusFilter] = useState<"all" | "OPEN" | "CLOSED">(
-    "all",
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSessionForDetails, setSelectedSessionForDetails] =
+}: {
+  isArabic?: boolean;
+  onOpenSessionPresenter?: (session: AttendanceSessionDto) => void;
+}) {
+  const table = useTableState({
+    defaultFilters: { status: "all", level: "all", courseCode: "all" },
+    defaultLimit: 20,
+  });
+  const [selectedSession, setSelectedSession] =
     useState<AttendanceSessionDto | null>(null);
-
-  // Correction state
-  const [selectedRecordForEdit, setSelectedRecordForEdit] =
-    useState<AttendanceRecordDto | null>(null);
-  const [editStatus, setEditStatus] = useState<string>("present");
-  const [editReason, setEditReason] = useState<string>("");
-  const [isUpdatingRecord, setIsUpdatingRecord] = useState(false);
-
-  // Fetch admin overview
-  const overviewQuery = useQuery({
-    queryKey: ["admin-attendance-overview"],
-    queryFn: () => attendanceApi.getAdminOverview(),
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [editRecord, setEditRecord] = useState<AttendanceRecordDto | null>(
+    null,
+  );
+  const [editStatus, setEditStatus] = useState("present");
+  const [editReason, setEditReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const locale = isArabic ? "ar-EG" : "en-GB";
+  const params = {
+    page: Math.max(1, Math.trunc(table.page)),
+    limit: [10, 20, 50, 100].includes(table.limit) ? table.limit : 20,
+    search: table.search.slice(0, 100),
+    status: ["OPEN", "CLOSED", "EXPIRED", "ENDED"].includes(
+      table.filters.status,
+    )
+      ? table.filters.status
+      : "all",
+    level: table.filters.level.slice(0, 20),
+    courseCode: table.filters.courseCode.slice(0, 50),
+  };
+  const overview = useQuery({
+    queryKey: ["attendance-sessions", params],
+    queryFn: () => attendanceApi.getSessions(params),
+    placeholderData: keepPreviousData,
     refetchInterval: 10000,
   });
-
-  // Fetch session records when details dialog is open
-  const sessionRecordsQuery = useQuery({
-    queryKey: ["admin-session-records", selectedSessionForDetails?._id],
-    enabled: Boolean(selectedSessionForDetails?._id),
+  const records = useQuery({
+    queryKey: ["attendance-session-records", selectedSession?._id, recordsPage],
+    enabled: Boolean(selectedSession),
     queryFn: () =>
-      attendanceApi.getSessionRecords(selectedSessionForDetails!._id, {
-        limit: 200,
+      attendanceApi.getSessionRecords(selectedSession!._id, {
+        page: recordsPage,
+        limit: 50,
       }),
+    refetchInterval: selectedSession?.status === "OPEN" ? 10000 : false,
   });
-
-  const kpi = overviewQuery.data?.kpi || {
+  const currentSession =
+    overview.data?.sessions.find(
+      (session) => session._id === selectedSession?._id,
+    ) || selectedSession;
+  const kpi = overview.data?.kpi || {
     totalSessions: 0,
     activeSessions: 0,
     totalCheckedIn: 0,
     presentCount: 0,
     lateCount: 0,
   };
-
-  const sessions = overviewQuery.data?.sessions || [];
-
-  const filteredSessions = sessions.filter((s) => {
-    if (statusFilter !== "all" && s.status !== statusFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const code = s.courseCode.toLowerCase();
-      const name = (s.courseName || "").toLowerCase();
-      const staff = (s.createdByName || "").toLowerCase();
-      if (!code.includes(q) && !name.includes(q) && !staff.includes(q)) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  const handleUpdateRecordStatus = async () => {
-    if (!selectedRecordForEdit) return;
-    setIsUpdatingRecord(true);
+  const openRecords = (session: AttendanceSessionDto) => {
+    setSelectedSession(session);
+    setRecordsPage(1);
+  };
+  const columns = useMemo<ColumnDef<AttendanceSessionDto>[]>(
+    () => [
+      {
+        key: "course",
+        header: isArabic ? "المقرر" : "Course",
+        render: (session) => (
+          <div className="min-w-40">
+            <bdi
+              dir="ltr"
+              className="font-mono text-xs font-semibold text-primary"
+            >
+              {session.courseCode}
+            </bdi>
+            <p className="mt-1 text-xs">
+              <bdi>{session.courseName || "—"}</bdi>
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: "level",
+        header: isArabic ? "المستوى" : "Level",
+        render: (session) => <Badge variant="outline">{session.level}</Badge>,
+      },
+      {
+        key: "type",
+        header: isArabic ? "النوع" : "Type",
+        render: (session) => (
+          <span className="whitespace-nowrap text-xs">
+            {session.sessionType === "lecture"
+              ? isArabic
+                ? "محاضرة"
+                : "Lecture"
+              : session.sessionType === "section"
+                ? isArabic
+                  ? "سكشن"
+                  : "Section"
+                : isArabic
+                  ? "معمل"
+                  : "Lab"}
+          </span>
+        ),
+      },
+      {
+        key: "instructor",
+        header: isArabic ? "القائم بالتدريس" : "Instructor",
+        render: (session) => (
+          <div className="min-w-32 text-xs">
+            <bdi>{session.createdByName}</bdi>
+            <p className="mt-1 text-muted-foreground">
+              {session.academicPosition === "doctor"
+                ? isArabic
+                  ? "دكتور المادة"
+                  : "Doctor"
+                : isArabic
+                  ? "معيد"
+                  : "Teaching assistant"}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: "date",
+        header: isArabic ? "الموعد (القاهرة)" : "Date & time (Cairo)",
+        render: (session) => (
+          <time
+            dateTime={session.startsAt}
+            className="whitespace-nowrap text-xs text-muted-foreground"
+          >
+            {new Date(session.startsAt).toLocaleString(locale, {
+              timeZone: "Africa/Cairo",
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </time>
+        ),
+      },
+      {
+        key: "attendance",
+        header: isArabic ? "الحضور" : "Attendance",
+        render: (session) => (
+          <div className="space-y-1 whitespace-nowrap text-xs">
+            <p>
+              <span className="font-semibold text-primary">
+                {session.stats?.totalCheckedIn || 0}
+              </span>{" "}
+              {isArabic ? "مسجل" : "recorded"}
+            </p>
+            <p className="text-muted-foreground">
+              {session.stats?.presentCount || 0} {isArabic ? "حاضر" : "present"}{" "}
+              · {session.stats?.lateCount || 0} {isArabic ? "متأخر" : "late"}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: "status",
+        header: isArabic ? "الحالة" : "Status",
+        render: (session) => (
+          <Badge
+            variant="outline"
+            className={
+              session.status === "OPEN"
+                ? "border-primary/20 bg-primary/10 text-primary"
+                : "text-muted-foreground"
+            }
+          >
+            {session.status === "OPEN"
+              ? isArabic
+                ? "نشطة"
+                : "Live"
+              : session.status === "EXPIRED"
+                ? isArabic
+                  ? "منتهية"
+                  : "Expired"
+                : isArabic
+                  ? "مغلقة"
+                  : "Closed"}
+          </Badge>
+        ),
+      },
+      {
+        key: "actions",
+        header: isArabic ? "الإجراءات" : "Actions",
+        className: "w-16",
+        render: (session) => (
+          <DropdownMenu.Root dir={isArabic ? "rtl" : "ltr"}>
+            <DropdownMenu.Trigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={
+                  isArabic
+                    ? `إجراءات جلسة ${session.courseCode}`
+                    : `Actions for session ${session.courseCode}`
+                }
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content asChild align="end" sideOffset={4}>
+                <div
+                  dir={isArabic ? "rtl" : "ltr"}
+                  className="z-50 min-w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+                >
+                  <DropdownMenu.Item
+                    onSelect={() => openRecords(session)}
+                    className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
+                  >
+                    <UserRound className="h-4 w-4" />
+                    {isArabic ? "سجل الطلاب" : "View attendees"}
+                  </DropdownMenu.Item>
+                  {session.status === "OPEN" && onOpenSessionPresenter && (
+                    <DropdownMenu.Item
+                      onSelect={() => onOpenSessionPresenter(session)}
+                      className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
+                    >
+                      <QrCode className="h-4 w-4" />
+                      {isArabic ? "عرض QR" : "Open presenter"}
+                    </DropdownMenu.Item>
+                  )}
+                </div>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        ),
+      },
+    ],
+    [isArabic, locale, onOpenSessionPresenter],
+  );
+  const updateRecord = async () => {
+    if (!editRecord || saving) return;
+    setSaving(true);
     try {
-      await attendanceApi.manualUpdateRecord(selectedRecordForEdit._id, {
+      await attendanceApi.manualUpdateRecord(editRecord._id, {
         status: editStatus,
-        reason: editReason || "Manual correction by Administrator",
+        reason:
+          editReason.trim() ||
+          (isArabic ? "تصحيح يدوي للحضور" : "Manual attendance correction"),
       });
-      toast.success(
-        isArabic
-          ? "تم تصحيح وتحديث حالة الحضور بنجاح"
-          : "Attendance status corrected successfully",
-      );
-      setSelectedRecordForEdit(null);
-      setEditReason("");
-      sessionRecordsQuery.refetch();
-      overviewQuery.refetch();
-    } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message ||
-          (isArabic ? "فشل تحديث السجل" : "Failed to update record"),
-      );
+      setEditRecord(null);
+      await Promise.all([records.refetch(), overview.refetch()]);
+      toast.success(isArabic ? "تم تحديث حالة الحضور." : "Attendance updated.");
+    } catch (error) {
+      toast.error(getAttendanceErrorMessage(error, isArabic ? "ar" : "en"));
     } finally {
-      setIsUpdatingRecord(false);
+      setSaving(false);
     }
   };
-
-  if (overviewQuery.isLoading) {
+  const courseOptions = Array.from(
+    new Map(
+      (overview.data?.filters.courses || []).map((course) => [
+        course.code,
+        course,
+      ]),
+    ).values(),
+  );
+  const activeFilters =
+    params.search ||
+    params.level !== "all" ||
+    params.courseCode !== "all" ||
+    params.status !== "all";
+  if (overview.isLoading)
     return (
       <LoadingState
-        title={
-          isArabic
-            ? "جاري تحميل لوحة إدارة الحضور العامة..."
-            : "Loading system attendance dashboard..."
-        }
+        title={isArabic ? "جاري تحميل الحضور…" : "Loading attendance…"}
       />
     );
-  }
-
-  if (overviewQuery.isError) {
+  if (overview.isError)
     return (
       <ErrorState
         description={
           isArabic
-            ? "تعذر تحميل بيانات لوحة الإدارة."
-            : "Failed to load admin attendance metrics."
+            ? "تعذر تحميل جلسات الحضور."
+            : "Could not load attendance sessions."
         }
-        onRetry={() => overviewQuery.refetch()}
+        onRetry={() => overview.refetch()}
       />
     );
-  }
-
   return (
-    <div className="space-y-6" dir={isArabic ? "rtl" : "ltr"}>
-      {/* System KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Card className="p-4 bg-card/45 border-border/70 backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{isArabic ? "إجمالي الجلسات" : "Total Sessions"}</span>
-            <Layers className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2 font-mono text-2xl font-black text-foreground">
-            {kpi.totalSessions}
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-card/45 border-border/70 backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{isArabic ? "جلسات نشطة الآن" : "Active Sessions"}</span>
-            <Activity className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2 font-mono text-2xl font-black text-primary">
-            {kpi.activeSessions}
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-card/45 border-border/70 backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{isArabic ? "إجمالي المسجلين" : "Total Attendees"}</span>
-            <Users className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2 font-mono text-2xl font-black text-foreground">
-            {kpi.totalCheckedIn}
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-card/45 border-border/70 backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{isArabic ? "حضور في الموعد" : "Present (On-Time)"}</span>
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2 font-mono text-2xl font-black text-primary">
-            {kpi.presentCount}
-          </div>
-        </Card>
-
-        <Card className="p-4 bg-card/45 border-border/70 backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{isArabic ? "تأخير" : "Late Arrivals"}</span>
-            <Clock className="h-4 w-4 text-amber-400" />
-          </div>
-          <div className="mt-2 font-mono text-2xl font-black text-amber-400">
-            {kpi.lateCount}
-          </div>
-        </Card>
+    <div className="space-y-5" dir={isArabic ? "rtl" : "ltr"}>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[
+          {
+            label: isArabic ? "إجمالي الجلسات" : "Total sessions",
+            value: kpi.totalSessions,
+            Icon: Layers,
+          },
+          {
+            label: isArabic ? "نشطة الآن" : "Active sessions",
+            value: kpi.activeSessions,
+            Icon: Activity,
+          },
+          {
+            label: isArabic ? "إجمالي التسجيلات" : "Total check-ins",
+            value: kpi.totalCheckedIn,
+            Icon: Users,
+          },
+          {
+            label: isArabic ? "حضور في الموعد" : "On time",
+            value: kpi.presentCount,
+            Icon: CheckCircle2,
+          },
+          {
+            label: isArabic ? "متأخر" : "Late",
+            value: kpi.lateCount,
+            Icon: Clock,
+          },
+        ].map(({ label, value, Icon }) => (
+          <Card key={label} className="p-4">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{label}</span>
+              <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums">
+              {value.toLocaleString(locale)}
+            </p>
+          </Card>
+        ))}
       </div>
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-              statusFilter === "all"
-                ? "bg-primary/10 text-primary border border-primary/20 font-bold"
-                : "bg-secondary/40 text-muted-foreground border border-border/60 hover:text-foreground"
-            }`}
-          >
-            {isArabic ? "جميع الجلسات" : "All Sessions"} ({sessions.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("OPEN")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-              statusFilter === "OPEN"
-                ? "bg-primary/10 text-primary border border-primary/20 font-bold"
-                : "bg-secondary/40 text-muted-foreground border border-border/60 hover:text-foreground"
-            }`}
-          >
-            {isArabic ? "الجلسات النشطة" : "Active (Live)"} (
-            {kpi.activeSessions})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("CLOSED")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-              statusFilter === "CLOSED"
-                ? "bg-secondary text-foreground border border-border font-bold"
-                : "bg-secondary/40 text-muted-foreground border border-border/60 hover:text-foreground"
-            }`}
-          >
-            {isArabic ? "المغلقة والمنتهية" : "Closed"}
-          </button>
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              isArabic
-                ? "بحث بالمقرر، الكود أو القائم بالتدريس..."
-                : "Search course, code or instructor..."
-            }
-            className="ps-8 h-9 text-xs bg-background/50 border-border/70"
+      <Card className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {(["all", "OPEN", "ENDED"] as const).map((value) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={params.status === value ? "default" : "outline"}
+                aria-pressed={params.status === value}
+                onClick={() => table.setFilter("status", value)}
+              >
+                {value === "all"
+                  ? isArabic
+                    ? "كل الجلسات"
+                    : "All sessions"
+                  : value === "OPEN"
+                    ? isArabic
+                      ? "نشطة الآن"
+                      : "Live"
+                    : isArabic
+                      ? "مغلقة ومنتهية"
+                      : "Closed & expired"}
+              </Button>
+            ))}
+          </div>
+          <AttendanceExportButton
+            isArabic={isArabic}
+            filters={params}
+            disabled={overview.isPlaceholderData || !overview.data?.total}
           />
         </div>
-      </div>
-
-      {/* Sessions Table */}
-      {filteredSessions.length === 0 ? (
-        <Card className="p-8 text-center bg-card/40 border-border/70">
-          <EmptyState
-            title={
-              isArabic ? "لا توجد جلسات مطابقة" : "No attendance sessions found"
-            }
-            description={
-              isArabic
-                ? "لم يتم العثور على جلسات حضور مطابقة لمعايير البحث."
-                : "No sessions match your search or status filter."
-            }
+        <div className="grid gap-3 md:grid-cols-[minmax(200px,1fr)_170px_minmax(200px,1fr)]">
+          <SessionSearch
+            value={table.search}
+            onSearch={table.setSearch}
+            isArabic={isArabic}
           />
-        </Card>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-card/40 backdrop-blur-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-start">
-              <thead className="bg-secondary/40 border-b border-border/60 text-muted-foreground font-semibold">
-                <tr>
-                  <th className="p-3 text-start">
-                    {isArabic ? "المقرر" : "Course"}
-                  </th>
-                  <th className="p-3 text-center">
-                    {isArabic ? "النوع" : "Type"}
-                  </th>
-                  <th className="p-3 text-start">
-                    {isArabic ? "القائم بالتدريس" : "Instructor"}
-                  </th>
-                  <th className="p-3 text-center">
-                    {isArabic ? "الموعد" : "Date & Time"}
-                  </th>
-                  <th className="p-3 text-center">
-                    {isArabic ? "الحضور" : "Attendance"}
-                  </th>
-                  <th className="p-3 text-center">
-                    {isArabic ? "الحالة" : "Status"}
-                  </th>
-                  <th className="p-3 text-end">
-                    {isArabic ? "الإجراءات" : "Actions"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40 font-mono">
-                {filteredSessions.map((session) => (
-                  <tr
-                    key={session._id}
-                    className="hover:bg-secondary/20 transition-colors"
-                  >
-                    <td className="p-3 text-start font-sans">
-                      <div className="font-bold text-foreground font-mono">
-                        {session.courseCode}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground font-sans truncate max-w-[160px]">
-                        {session.courseName || "—"}
-                      </div>
-                    </td>
-
-                    <td className="p-3 text-center font-sans">
-                      <span className="px-2 py-0.5 rounded bg-secondary/60 text-muted-foreground text-[11px]">
-                        {session.sessionType === "lecture"
-                          ? isArabic
-                            ? "محاضرة"
-                            : "Lecture"
-                          : session.sessionType === "section"
-                            ? isArabic
-                              ? "سكشن"
-                              : "Section"
-                            : isArabic
-                              ? "معمل"
-                              : "Lab"}
-                      </span>
-                    </td>
-
-                    <td className="p-3 text-start font-sans">
-                      <span className="font-medium text-foreground">
-                        {session.createdByName}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground block">
-                        {session.academicPosition === "doctor"
-                          ? isArabic
-                            ? "دكتور المادة"
-                            : "Doctor"
-                          : isArabic
-                            ? "معيد"
-                            : "Teaching Assistant"}
-                      </span>
-                    </td>
-
-                    <td className="p-3 text-center text-muted-foreground text-[11px]">
-                      {new Date(session.startsAt).toLocaleString(
-                        isArabic ? "ar-EG" : "en-US",
-                        {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        },
-                      )}
-                    </td>
-
-                    <td className="p-3 text-center">
-                      <div className="inline-flex items-center gap-2">
-                        <span className="text-primary font-bold">
-                          {session.stats?.presentCount ?? 0}
-                        </span>
-                        <span className="text-muted-foreground">/</span>
-                        <span className="text-amber-400 font-bold">
-                          {session.stats?.lateCount ?? 0}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="p-3 text-center font-sans">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-                          session.status === "OPEN"
-                            ? "bg-primary/10 text-primary border-primary/20"
-                            : "bg-secondary text-muted-foreground border-border"
-                        }`}
-                      >
-                        {session.status === "OPEN"
-                          ? isArabic
-                            ? "نشطة الآن"
-                            : "LIVE"
-                          : isArabic
-                            ? "مغلقة"
-                            : "CLOSED"}
-                      </span>
-                    </td>
-
-                    <td className="p-3 text-end font-sans">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedSessionForDetails(session)}
-                          className="h-7 px-2.5 text-xs cursor-pointer"
-                        >
-                          {isArabic ? "سجل الطلاب" : "Attendees"}
-                        </Button>
-
-                        {session.status === "OPEN" &&
-                          onOpenSessionPresenter && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => onOpenSessionPresenter(session)}
-                              className="h-7 px-2.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
-                            >
-                              {isArabic ? "عرض QR" : "Presenter"}
-                            </Button>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CustomDropdown
+            value={params.level}
+            onValueChange={(value) => table.setFilter("level", value)}
+            ariaLabel={isArabic ? "تصفية حسب المستوى" : "Filter by level"}
+            options={[
+              { value: "all", label: isArabic ? "كل المستويات" : "All levels" },
+              ...(overview.data?.filters.levels || []).map((level) => ({
+                value: level,
+                label: `${isArabic ? "المستوى" : "Level"} ${level}`,
+              })),
+            ]}
+            className="w-full"
+          />
+          <CustomDropdown
+            value={params.courseCode}
+            onValueChange={(value) => table.setFilter("courseCode", value)}
+            ariaLabel={isArabic ? "تصفية حسب المقرر" : "Filter by course"}
+            options={[
+              { value: "all", label: isArabic ? "كل المقررات" : "All courses" },
+              ...courseOptions.map((course) => ({
+                value: course.code,
+                label: (
+                  <span>
+                    <bdi>{course.code}</bdi> ·{" "}
+                    <bdi>{course.name || course.code}</bdi>
+                  </span>
+                ),
+              })),
+            ]}
+            className="w-full"
+          />
         </div>
-      )}
-
-      {/* Session Details & Attendees Dialog */}
+        {activeFilters && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={table.resetAll}
+          >
+            {isArabic ? "مسح التصفية" : "Clear filters"}
+          </Button>
+        )}
+      </Card>
+      <div aria-busy={overview.isFetching || table.isPending}>
+      <DataTableShell<AttendanceSessionDto>
+          columns={columns.map((column) => ({
+            ...column,
+            render: (session, index) => (
+              <TableCell className={column.className}>
+                {column.render(session, index)}
+              </TableCell>
+            ),
+          }))}
+          data={overview.data?.sessions || []}
+          keyExtractor={(session) => session._id}
+          emptyMessage={
+            isArabic
+              ? "لا توجد جلسات مطابقة. جرّب تغيير المستوى أو المقرر أو البحث."
+              : "No matching sessions. Try another level, course, or search."
+          }
+        />
+        <AttendancePagination
+          page={overview.data?.page || 1}
+          limit={params.limit}
+          total={overview.data?.total || 0}
+          totalPages={overview.data?.totalPages || 0}
+          onPage={table.setPage}
+          onLimit={table.setLimit}
+          isArabic={isArabic}
+          disabled={overview.isPlaceholderData || table.isPending}
+        />
+      </div>
       <Dialog
-        open={Boolean(selectedSessionForDetails)}
-        onOpenChange={(open) => !open && setSelectedSessionForDetails(null)}
+        open={Boolean(selectedSession)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSession(null);
+        }}
       >
         <DialogContent
-          className="max-w-3xl max-h-[85vh] flex flex-col border-border/80 bg-card/95 backdrop-blur-md"
+          className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-3xl"
           dir={isArabic ? "rtl" : "ltr"}
         >
-          <DialogHeader className="border-b border-border/60 pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <QrCode className="h-5 w-5 text-primary" />
-                  <span>
-                    {isArabic
-                      ? "سجل حضور الجلسة"
-                      : "Session Attendance Register"}
-                  </span>
-                </DialogTitle>
-                <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                  {selectedSessionForDetails?.courseCode} •{" "}
-                  {selectedSessionForDetails?.createdByName} •{" "}
-                  {selectedSessionForDetails &&
-                    new Date(selectedSessionForDetails.startsAt).toLocaleString(
-                      isArabic ? "ar-EG" : "en-US",
-                      { dateStyle: "medium", timeStyle: "short" },
-                    )}
-                </p>
-              </div>
-
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
-                  selectedSessionForDetails?.status === "OPEN"
-                    ? "bg-primary/10 text-primary border-primary/20"
-                    : "bg-secondary text-muted-foreground border-border"
-                }`}
-              >
-                {selectedSessionForDetails?.status}
-              </span>
-            </div>
+          <DialogHeader>
+            <DialogTitle>
+              {isArabic ? "سجل حضور الجلسة" : "Session attendance register"}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              <bdi>{selectedSession?.courseCode}</bdi> ·{" "}
+              <bdi>{selectedSession?.courseName}</bdi>
+            </p>
           </DialogHeader>
-
-          {/* Attendees List in Modal */}
-          <div className="flex-1 overflow-y-auto py-3 space-y-2">
-            {sessionRecordsQuery.isLoading ? (
-              <LoadingState
-                title={isArabic ? "جاري تحميل الحضور..." : "Loading records..."}
+          {selectedSession && (
+            <div className="flex justify-end">
+              <AttendanceExportButton
+                isArabic={isArabic}
+                sessionId={selectedSession._id}
               />
-            ) : (sessionRecordsQuery.data?.items || []).length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground text-xs">
-                {isArabic
-                  ? "لم يسجل أي طالب حضوره في هذه الجلسة حتى الآن."
-                  : "No student attendance records found for this session."}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border/60 overflow-hidden">
-                <table className="w-full text-xs text-start">
-                  <thead className="bg-secondary/40 border-b border-border/60 text-muted-foreground">
-                    <tr>
-                      <th className="p-2.5 text-start">
-                        {isArabic ? "الطالب" : "Student"}
-                      </th>
-                      <th className="p-2.5 text-center">
-                        {isArabic ? "الكود" : "Code"}
-                      </th>
-                      <th className="p-2.5 text-center">
-                        {isArabic ? "الوقت" : "Time"}
-                      </th>
-                      <th className="p-2.5 text-center">
-                        {isArabic ? "الوسيلة" : "Method"}
-                      </th>
-                      <th className="p-2.5 text-center">
-                        {isArabic ? "الحالة" : "Status"}
-                      </th>
-                      <th className="p-2.5 text-end">
-                        {isArabic ? "تعديل" : "Edit"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
-                    {sessionRecordsQuery.data?.items.map((rec) => (
-                      <tr key={rec._id} className="hover:bg-secondary/20">
-                        <td className="p-2.5 text-start font-sans font-medium text-foreground">
-                          {rec.studentName}
-                        </td>
-                        <td className="p-2.5 text-center text-muted-foreground">
-                          {rec.studentCode}
-                        </td>
-                        <td className="p-2.5 text-center text-muted-foreground text-[11px]">
-                          {new Date(rec.checkedInAt).toLocaleTimeString(
-                            isArabic ? "ar-EG" : "en-US",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )}
-                        </td>
-                        <td className="p-2.5 text-center text-[11px] font-sans">
-                          {rec.method === "qr"
-                            ? "QR"
-                            : isArabic
-                              ? "يدوي"
-                              : "Manual"}
-                        </td>
-                        <td className="p-2.5 text-center font-sans">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              rec.status === "present"
-                                ? "bg-primary/10 text-primary"
-                                : rec.status === "late"
-                                  ? "bg-amber-500/15 text-amber-400"
-                                  : rec.status === "excused"
-                                    ? "bg-blue-500/15 text-blue-400"
-                                    : "bg-rose-500/15 text-rose-400"
-                            }`}
-                          >
-                            {rec.status}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-end font-sans">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedRecordForEdit(rec);
-                              setEditStatus(rec.status);
-                            }}
-                            className="h-6 text-xs text-primary hover:text-primary/80 p-1 cursor-pointer"
-                          >
-                            {isArabic ? "تصحيح" : "Correct"}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedSessionForDetails(null)}
-              className="cursor-pointer"
-            >
+            </div>
+          )}
+          {records.isLoading ? (
+            <LoadingState
+              title={isArabic ? "جاري تحميل التسجيلات…" : "Loading records…"}
+            />
+          ) : records.isError ? (
+            <ErrorState
+              description={
+                isArabic
+                  ? "تعذر تحميل الطلاب المسجلين."
+                  : "Could not load attendees."
+              }
+              onRetry={() => records.refetch()}
+            />
+          ) : (
+            selectedSession && (
+              <>
+                <LiveAttendeeStream
+                  records={records.data?.items || []}
+                  stats={{
+                    total: records.data?.total || 0,
+                    present: currentSession?.stats?.presentCount || 0,
+                    late: currentSession?.stats?.lateCount || 0,
+                  }}
+                  hall={selectedSession.location}
+                  isArabic={isArabic}
+                  isLive={currentSession?.status === "OPEN"}
+                  onEdit={(record) => {
+                    setEditRecord(record);
+                    setEditStatus(record.status);
+                    setEditReason("");
+                  }}
+                />
+                <AttendancePagination
+                  page={records.data?.page || 1}
+                  limit={50}
+                  total={records.data?.total || 0}
+                  totalPages={records.data?.totalPages || 0}
+                  onPage={setRecordsPage}
+                  isArabic={isArabic}
+                  disabled={records.isFetching}
+                />
+              </>
+            )
+          )}
+          <DialogFooter className="rtl:sm:justify-start">
+            <Button variant="outline" onClick={() => setSelectedSession(null)}>
               {isArabic ? "إغلاق" : "Close"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Manual Attendance Correction Dialog */}
       <Dialog
-        open={Boolean(selectedRecordForEdit)}
-        onOpenChange={(open) => !open && setSelectedRecordForEdit(null)}
+        open={Boolean(editRecord)}
+        onOpenChange={(open) => {
+          if (!open && !saving) setEditRecord(null);
+        }}
       >
-        <DialogContent
-          className="max-w-md border-border/80 bg-card/95 backdrop-blur-md"
-          dir={isArabic ? "rtl" : "ltr"}
-        >
+        <DialogContent dir={isArabic ? "rtl" : "ltr"} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold text-foreground">
-              {isArabic
-                ? "تصحيح حالة حضور الطالب"
-                : "Correct Student Attendance"}
+            <DialogTitle>
+              {isArabic ? "تصحيح حالة الحضور" : "Correct attendance status"}
             </DialogTitle>
           </DialogHeader>
-
-          {selectedRecordForEdit && (
-            <div className="space-y-4 py-2">
-              <div className="p-3 rounded-xl bg-secondary/40 border border-border/60">
-                <p className="font-bold text-sm text-foreground">
-                  {selectedRecordForEdit.studentName}
-                </p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {selectedRecordForEdit.studentCode}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isArabic ? "الحالة الجديدة:" : "New Status:"}
-                </label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="w-full h-9 rounded-lg border border-border/70 bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="present">
-                    {isArabic ? "حاضر | Present" : "Present"}
-                  </option>
-                  <option value="late">
-                    {isArabic ? "متأخر | Late" : "Late"}
-                  </option>
-                  <option value="excused">
-                    {isArabic ? "معذور | Excused" : "Excused"}
-                  </option>
-                  <option value="absent">
-                    {isArabic ? "غائب | Absent" : "Absent"}
-                  </option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isArabic
-                    ? "سبب التصحيح (يسجل في سجل التدقيق):"
-                    : "Reason for correction (Audited):"}
-                </label>
-                <Input
-                  value={editReason}
-                  onChange={(e) => setEditReason(e.target.value)}
-                  placeholder={
-                    isArabic
-                      ? "مثال: تقديم عذر طبي معتمد / خطأ في مسح الرمز"
-                      : "e.g. Medical excuse provided / Scanner error"
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-0">
+          <p className="text-sm">
+            <bdi>{editRecord?.studentName}</bdi> ·{" "}
+            <bdi>{editRecord?.studentCode}</bdi>
+          </p>
+          <CustomDropdown
+            value={editStatus}
+            onValueChange={setEditStatus}
+            ariaLabel={isArabic ? "حالة الحضور" : "Attendance status"}
+            options={[
+              { value: "present", label: isArabic ? "حاضر" : "Present" },
+              { value: "late", label: isArabic ? "متأخر" : "Late" },
+              { value: "excused", label: isArabic ? "بعذر" : "Excused" },
+              { value: "absent", label: isArabic ? "غائب" : "Absent" },
+            ]}
+          />
+          <Input
+            value={editReason}
+            onChange={(event) => setEditReason(event.target.value)}
+            aria-label={isArabic ? "سبب التصحيح" : "Correction reason"}
+            placeholder={
+              isArabic
+                ? "سبب التصحيح (يسجل في سجل التدقيق)"
+                : "Correction reason (recorded in audit history)"
+            }
+          />
+          <DialogFooter className="gap-2 rtl:sm:justify-start">
             <Button
               variant="outline"
-              size="sm"
-              onClick={() => setSelectedRecordForEdit(null)}
-              disabled={isUpdatingRecord}
-              className="cursor-pointer"
+              disabled={saving}
+              onClick={() => setEditRecord(null)}
             >
               {isArabic ? "إلغاء" : "Cancel"}
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleUpdateRecordStatus}
-              disabled={isUpdatingRecord}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer"
-            >
-              {isUpdatingRecord
+            <Button disabled={saving} onClick={updateRecord}>
+              {saving
                 ? isArabic
-                  ? "جاري الحفظ..."
-                  : "Saving..."
+                  ? "جاري الحفظ…"
+                  : "Saving…"
                 : isArabic
-                  ? "تأكيد وحفظ التصحيح"
-                  : "Save Correction"}
+                  ? "حفظ التصحيح"
+                  : "Save correction"}
             </Button>
           </DialogFooter>
         </DialogContent>

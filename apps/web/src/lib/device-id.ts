@@ -25,7 +25,8 @@ export function getOrCreateDeviceId(): string {
       if (typeof window.crypto?.randomUUID === "function") {
         deviceId = window.crypto.randomUUID();
       } else {
-        deviceId = "dev-" + Math.random().toString(36).slice(2, 11) + "-" + Date.now();
+        deviceId =
+          "dev-" + Math.random().toString(36).slice(2, 11) + "-" + Date.now();
       }
       window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
     }
@@ -55,8 +56,10 @@ function getWebGlHardwareSignature(): { vendor: string; renderer: string } {
     const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
     if (!debugInfo) return { vendor: "", renderer: "" };
 
-    const vendor = (gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string) || "";
-    const renderer = (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string) || "";
+    const vendor =
+      (gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) as string) || "";
+    const renderer =
+      (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string) || "";
     return { vendor: vendor.trim(), renderer: renderer.trim() };
   } catch {
     return { vendor: "", renderer: "" };
@@ -74,8 +77,12 @@ function fastHash(str: string): string {
     h1 = Math.imul(h1 ^ ch, 2654435761);
     h2 = Math.imul(h2 ^ ch, 1597334677);
   }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  h1 =
+    Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^
+    Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 =
+    Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^
+    Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
@@ -95,7 +102,8 @@ export async function getDeviceFingerprint(): Promise<string> {
     const touchPoints = navigator.maxTouchPoints || 0;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
 
-    const { vendor: gpuVendor, renderer: gpuRenderer } = getWebGlHardwareSignature();
+    const { vendor: gpuVendor, renderer: gpuRenderer } =
+      getWebGlHardwareSignature();
 
     // Determine OS family from platform/userAgent
     const ua = navigator.userAgent || "";
@@ -123,7 +131,9 @@ export async function getDeviceFingerprint(): Promise<string> {
       const msgUint8 = new TextEncoder().encode(rawSignature);
       const hashBuffer = await window.crypto.subtle.digest("SHA-256", msgUint8);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+      const hashHex = hashArray
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
       return `hw_${hashHex.slice(0, 24)}`;
     }
 
@@ -147,17 +157,13 @@ export function getDeviceInfo(): string {
 
   // OS detection
   let os = "Unknown OS";
-  let isMobile = false;
 
   if (/iPhone/i.test(ua)) {
     os = "iPhone";
-    isMobile = true;
   } else if (/iPad/i.test(ua)) {
     os = "iPad";
-    isMobile = true;
   } else if (/Android/i.test(ua)) {
     os = "Android";
-    isMobile = true;
     const match = ua.match(/Android\s+([0-9\.]+)/i);
     if (match) os = `Android ${match[1]}`;
   } else if (/Windows NT 10.0/i.test(ua)) {
@@ -172,7 +178,9 @@ export function getDeviceInfo(): string {
 
   // Browser detection
   let browser = "Browser";
-  if (/Edg\//i.test(ua)) {
+  if (/OPR\//i.test(ua) || /Opera\//i.test(ua)) {
+    browser = "Opera";
+  } else if (/Edg\//i.test(ua)) {
     browser = "Edge";
   } else if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) {
     browser = "Chrome";
@@ -180,12 +188,9 @@ export function getDeviceInfo(): string {
     browser = "Safari";
   } else if (/Firefox\//i.test(ua)) {
     browser = "Firefox";
-  } else if (/OPR\//i.test(ua) || /Opera\//i.test(ua)) {
-    browser = "Opera";
   }
 
-  const deviceType = isMobile ? "📱" : "💻";
-  return `${deviceType} ${os} • ${browser}`;
+  return `${os} • ${browser}`;
 }
 
 export interface DeviceIdentity {

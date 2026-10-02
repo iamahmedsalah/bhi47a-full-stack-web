@@ -10,11 +10,12 @@ import {
   Headers,
   Req,
   MessageEvent,
+  Res,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AttendanceService } from './attendance.service';
 import {
   AttendanceSessionService,
@@ -33,6 +34,7 @@ import {
   QueryAttendanceRecordsDto,
   CreateCourseStaffAssignmentDto,
   UpdateSessionLocationDto,
+  QueryAttendanceSessionsDto,
 } from './dto/attendance-session.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -90,6 +92,66 @@ export class AttendanceController {
       dto,
       this.resolveWebBaseUrl(req),
     );
+  }
+
+  @Get('attendance/sessions')
+  @Roles('staff', 'admin')
+  @ApiOperation({
+    summary:
+      'Paginated attendance sessions with level, course, and status filters',
+  })
+  async getSessions(
+    @CurrentUser() user: { _id: string; role: string },
+    @Query() query: QueryAttendanceSessionsDto,
+  ) {
+    return this.sessionService.getSessionOverview(user, query);
+  }
+
+  @Get('attendance/export')
+  @Roles('staff', 'admin')
+  @ApiOperation({
+    summary: 'Export all matching attendance sessions and records as Excel',
+  })
+  async exportAttendance(
+    @CurrentUser() user: { _id: string; role: string },
+    @Query() query: QueryAttendanceSessionsDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.reportService.exportAttendance(user, query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="attendance-${Date.now()}.xlsx"`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  }
+
+  @Get('attendance/sessions/:id/export')
+  @Roles('staff', 'admin')
+  @ApiOperation({
+    summary: 'Export every attendance record and correction for one session',
+  })
+  async exportSession(
+    @Param('id') id: string,
+    @CurrentUser() user: { _id: string; role: string },
+    @Query() query: QueryAttendanceSessionsDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.reportService.exportAttendance(user, query, id);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="attendance-session-${id}.xlsx"`,
+    );
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
   }
 
   @Get('attendance/sessions/:id')
@@ -166,8 +228,10 @@ export class AttendanceController {
   @ApiOperation({
     summary: 'Get system-wide attendance overview and recent sessions (Admin)',
   })
-  async getAdminOverview(): Promise<AdminOverviewResponse> {
-    return this.sessionService.getAdminOverview();
+  async getAdminOverview(
+    @Query() query: QueryAttendanceSessionsDto,
+  ): Promise<AdminOverviewResponse> {
+    return this.sessionService.getAdminOverview(query);
   }
 
   @Post('attendance/assignments')
