@@ -287,6 +287,14 @@ export class AttendanceCheckInService {
         );
       }
 
+      // Early reject if GPS accuracy is extremely poor (IP-based / WiFi-only)
+      // This prevents misleading distance errors when the device doesn't really know where it is
+      if (accuracy && accuracy > 500) {
+        throw new BadRequestException(
+          `دقة موقع جهازك ضعيفة جداً (±${Math.round(accuracy)} متر). يرجى تفعيل "الموقع الدقيق" (Precise Location / High Accuracy) في إعدادات الجهاز والمتصفح ثم أعد المحاولة.`,
+        );
+      }
+
       const distanceMeters = this.calculateHaversineDistance(
         latitude,
         longitude,
@@ -294,22 +302,24 @@ export class AttendanceCheckInService {
         session.location.longitude,
       );
 
-      // Account for realistic mobile GPS accuracy jitter (up to 50m tolerance)
+      // Proportional accuracy tolerance: allow up to the device's reported accuracy,
+      // capped at 150m to prevent abuse from low-accuracy devices sneaking through.
+      // Real mobile GPS typically reports 5-30m accuracy; WiFi is 30-100m.
       const accuracyTolerance = Math.min(
         accuracy && accuracy > 0 ? accuracy : 0,
-        50,
+        150,
       );
-      const maxAllowedRadius =
-        (session.location.radiusMeters || 100) + accuracyTolerance;
+      const configuredRadius = session.location.radiusMeters || 100;
+      const maxAllowedRadius = configuredRadius + accuracyTolerance;
 
       if (distanceMeters > maxAllowedRadius) {
         const roundedDist = Math.round(distanceMeters);
         const accuracyNote =
-          accuracy && accuracy > 100
-            ? ` (تنبيه: دقة موقع جهازك حالياً ±${Math.round(accuracy)} متر - يرجى التأكد من تفعيل "الموقع الدقيق" Precise Location في إعدادات المتصفح).`
+          accuracy && accuracy > 50
+            ? ` (تنبيه: دقة موقع جهازك حالياً ±${Math.round(accuracy)} متر — يرجى التأكد من تفعيل "الموقع الدقيق" Precise Location في إعدادات المتصفح).`
             : '';
         throw new ForbiddenException(
-          `أنت خارج النطاق الجغرافي المسموح به للمحاضرة (${roundedDist} متر عن القاعة).${accuracyNote}`,
+          `أنت خارج النطاق الجغرافي المسموح به للمحاضرة (${roundedDist} متر عن القاعة، النطاق المسموح ${configuredRadius} متر).${accuracyNote}`,
         );
       }
     }
