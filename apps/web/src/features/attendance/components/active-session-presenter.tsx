@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/custom-dropdown";
 import { toast } from "sonner";
 import { apiBaseUrl } from "@/lib/api";
+import { getHallPosition } from "../lib/location";
 
 export const HALL_PRESETS = INSTITUTE_VENUE_PRESETS;
 
@@ -142,7 +143,8 @@ export function ActiveSessionPresenter({
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [locEnabled, setLocEnabled] = useState(
     Boolean(
-      currentSession.location?.latitude && currentSession.location?.longitude,
+      typeof currentSession.location?.latitude === "number" &&
+      typeof currentSession.location?.longitude === "number",
     ),
   );
   const [locVenueName, setLocVenueName] = useState(
@@ -166,9 +168,10 @@ export function ActiveSessionPresenter({
 
   const [selectedVenuePresetId, setSelectedVenuePresetId] = useState<string>(() => {
     const found = INSTITUTE_VENUE_PRESETS.find(
-      (p) => p.name === (currentSession.location?.venueName || ""),
+      (p) => p.name === currentSession.location?.venueName ||
+        p.nameEn === currentSession.location?.venueName,
     );
-    return found ? found.id : "bis_building";
+    return found ? found.id : currentSession.location ? "custom" : "bis_building";
   });
 
   const venueDropdownOptions = React.useMemo<CustomDropdownOption[]>(() => {
@@ -254,12 +257,7 @@ export function ActiveSessionPresenter({
     }
     setIsLocatingInstructor(true);
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 7000,
-          enableHighAccuracy: true,
-        });
-      });
+      const pos = await getHallPosition(navigator.geolocation, isArabic);
       setLocLatitude(pos.coords.latitude.toFixed(6));
       setLocLongitude(pos.coords.longitude.toFixed(6));
       setLocVenueName(isArabic ? "موقعي الحالي في القاعة" : "My Current Hall Location");
@@ -267,12 +265,12 @@ export function ActiveSessionPresenter({
       setLocEnabled(true);
       toast.success(
         isArabic
-          ? "تم التقاط إحداثيات موقعك الحالي بنجاح!"
-          : "Current GPS coordinates captured!",
+          ? `تم التقاط الموقع بدقة ±${Math.round(pos.coords.accuracy)} متر. اضغط حفظ وتطبيق لتحديث موقع الجلسة.`
+          : `Location captured (±${Math.round(pos.coords.accuracy)} m). Press Save & Apply to update the session.`,
       );
-    } catch {
+    } catch (error) {
       toast.error(
-        isArabic
+        error instanceof Error ? error.message : isArabic
           ? "تعذر الحصول على الموقع الجغرافي. تأكد من تفعيل صلاحيات GPS."
           : "Could not retrieve GPS coordinates. Check device permissions.",
       );
@@ -283,6 +281,7 @@ export function ActiveSessionPresenter({
 
   const handleSaveLocation = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocatingInstructor) return;
     setIsSavingLoc(true);
     try {
       const updated = await attendanceApi.updateSessionLocation(
@@ -1462,7 +1461,7 @@ export function ActiveSessionPresenter({
                           ? "جاري تحديد إحداثيات موقعك بالـ GPS..."
                           : "Detecting GPS coordinates..."
                         : isArabic
-                          ? "استخدام موقعي الحالي بالـ GPS (تحديد تلقائي فوري)"
+                          ? "استخدام موقعي الحالي بالـ GPS"
                           : "Use My Current Location in the Hall"}
                     </span>
                   </Button>
@@ -1607,7 +1606,7 @@ export function ActiveSessionPresenter({
               </Button>
               <Button
                 type="submit"
-                disabled={isSavingLoc}
+                disabled={isSavingLoc || isLocatingInstructor}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
               >
                 {isSavingLoc

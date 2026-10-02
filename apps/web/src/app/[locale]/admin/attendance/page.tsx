@@ -58,6 +58,7 @@ import {
 } from "@student-portal/shared";
 import { AdminAttendanceOverview } from "@/features/attendance/components/admin-attendance-overview";
 import { useAuth } from "@/providers/auth-provider";
+import { getHallPosition } from "@/features/attendance/lib/location";
 import { toast } from "sonner";
 
 export default function StaffAttendancePage() {
@@ -236,12 +237,7 @@ export default function StaffAttendancePage() {
     }
     setIsLocating(true);
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 7000,
-          enableHighAccuracy: true,
-        });
-      });
+      const pos = await getHallPosition(navigator.geolocation, isArabic);
       setGeoLat(pos.coords.latitude.toFixed(6));
       setGeoLng(pos.coords.longitude.toFixed(6));
       setVenueName(isArabic ? "موقعي الحالي في القاعة" : "My Current Hall Location");
@@ -249,12 +245,12 @@ export default function StaffAttendancePage() {
       setEnableGeofence(true);
       toast.success(
         isArabic
-          ? "تم التقاط إحداثيات موقعك الحالي بنجاح!"
-          : "Current GPS coordinates captured!",
+          ? `تم التقاط الموقع بدقة ±${Math.round(pos.coords.accuracy)} متر. ابدأ الجلسة لتطبيق الموقع.`
+          : `Location captured (±${Math.round(pos.coords.accuracy)} m). Start the session to apply it.`,
       );
-    } catch {
+    } catch (error) {
       toast.error(
-        isArabic
+        error instanceof Error ? error.message : isArabic
           ? "تعذر الحصول على الموقع الجغرافي. تأكد من تفعيل صلاحيات GPS."
           : "Could not retrieve GPS coordinates.",
       );
@@ -265,7 +261,7 @@ export default function StaffAttendancePage() {
 
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClass) return;
+    if (!selectedClass || isLocating) return;
 
     setIsStarting(true);
     try {
@@ -1026,13 +1022,13 @@ export default function StaffAttendancePage() {
                   type="button"
                   variant="outline"
                   onClick={() => setShowStartDialog(false)}
-                  disabled={isStarting}
+                  disabled={isStarting || isLocating}
                 >
                   {isArabic ? "إلغاء" : "Cancel"}
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isStarting}
+                  disabled={isStarting || isLocating}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold gap-2 shadow-sm"
                 >
                   {isStarting ? (

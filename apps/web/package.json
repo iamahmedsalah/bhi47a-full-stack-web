@@ -9,6 +9,7 @@
     "preview": "next build && next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
+    "test:location": "node --test tests/attendance-location.test.mjs",
     "clean": "rimraf .next"
   },
   "dependencies": {

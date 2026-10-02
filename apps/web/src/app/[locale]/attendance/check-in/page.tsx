@@ -26,6 +26,7 @@ import {
   getAttendanceErrorMessage,
 } from "@/features/attendance/schemas/attendance-schemas";
 import { getDeviceIdentity } from "@/lib/device-id";
+import { getAttendancePosition } from "@/features/attendance/lib/location";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,13 +78,7 @@ export default function StudentCheckInPage() {
 
       if (typeof window !== "undefined" && "geolocation" in navigator) {
         try {
-          const pos = await new Promise<GeolocationPosition | null>((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              (p) => resolve(p),
-              () => resolve(null),
-              { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 },
-            );
-          });
+          const pos = await getAttendancePosition(navigator.geolocation);
           if (pos) {
             coords = {
               latitude: pos.coords.latitude,

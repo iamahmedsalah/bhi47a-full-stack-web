@@ -79,6 +79,9 @@ jobs:
           QUEUE_WORKERS_ENABLED: "false"
           RUN_STARTUP_TASKS: "false"
 
+      - name: Test attendance location acquisition
+        run: pnpm --filter @student-portal/web test:location
+
       - name: Build workspace
         run: pnpm run build
 
