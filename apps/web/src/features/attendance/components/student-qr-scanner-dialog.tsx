@@ -126,12 +126,34 @@ export function StudentQrScannerDialog({
 
         if (typeof window !== "undefined" && "geolocation" in navigator) {
           try {
+            // Use watchPosition to progressively get a better GPS fix.
+            // First reading is often WiFi/IP-based (±2000m); real GPS kicks in after 2-8s.
             const pos = await new Promise<GeolocationPosition | null>((resolve) => {
-              navigator.geolocation.getCurrentPosition(
-                (p) => resolve(p),
-                () => resolve(null),
-                { timeout: 8000, enableHighAccuracy: true, maximumAge: 0 },
+              let bestPosition: GeolocationPosition | null = null;
+              const watchId = navigator.geolocation.watchPosition(
+                (p) => {
+                  // Keep the most accurate reading
+                  if (!bestPosition || p.coords.accuracy < bestPosition.coords.accuracy) {
+                    bestPosition = p;
+                  }
+                  // Accept if accuracy is good enough (real GPS)
+                  if (p.coords.accuracy < 200) {
+                    navigator.geolocation.clearWatch(watchId);
+                    resolve(bestPosition);
+                  }
+                },
+                () => {
+                  // Error callback — resolve with whatever we have
+                  navigator.geolocation.clearWatch(watchId);
+                  resolve(bestPosition);
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
               );
+              // Fallback timeout: use best reading after 12s even if accuracy > 200m
+              setTimeout(() => {
+                navigator.geolocation.clearWatch(watchId);
+                resolve(bestPosition);
+              }, 12000);
             });
             if (pos) {
               coords = {
@@ -141,7 +163,7 @@ export function StudentQrScannerDialog({
               };
             }
           } catch {
-            // Geolocation fallback
+            // Geolocation fallback — proceed without coordinates
           }
         }
 

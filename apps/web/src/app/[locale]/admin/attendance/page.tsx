@@ -19,6 +19,9 @@ import {
   MapPin,
   Crosshair,
   ExternalLink,
+  Building2,
+  Monitor,
+  MapPinned,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,55 +103,71 @@ export default function StaffAttendancePage() {
   const [selectedVenuePresetId, setSelectedVenuePresetId] = useState<string>("bis_building");
 
   const venueDropdownOptions = React.useMemo<CustomDropdownOption[]>(() => {
+    const categoryIcon = (cat: string) => {
+      if (cat === "campus") return <Building2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
+      if (cat === "hall") return <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-400" />;
+      return <Monitor className="h-3.5 w-3.5 shrink-0 text-violet-400" />;
+    };
+    const getVenueName = (p: InstituteVenuePreset) => isArabic ? p.name : p.nameEn;
+
     return [
       // Campus & Main Buildings
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "campus").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-semibold text-foreground">🏛️ {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-semibold text-foreground">
+              {categoryIcon(p.category)} {getVenueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Halls (1 to 7 + Main + 315)
+      // Halls (Main, 315, 1-7)
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "hall").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-medium text-foreground">🎓 {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              {categoryIcon(p.category)} {getVenueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Labs (1 to 7)
+      // Labs (1-7)
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "lab").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-medium text-foreground">💻 {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              {categoryIcon(p.category)} {getVenueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Custom
+      // Custom Location
       {
         value: "custom",
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs text-primary font-bold">
-            <span>📍 إدخال يدوي مخصص (Custom Location)</span>
+            <span className="flex items-center gap-1.5">
+              <MapPinned className="h-3.5 w-3.5 shrink-0" />
+              {isArabic ? "إدخال يدوي مخصص" : "Custom Location"}
+            </span>
           </div>
         ),
       },
     ];
-  }, []);
+  }, [isArabic]);
 
   const handleVenuePresetChange = (presetId: string) => {
     setSelectedVenuePresetId(presetId);
     if (presetId === "custom") return;
     const found = INSTITUTE_VENUE_PRESETS.find((p) => p.id === presetId);
     if (found) {
-      setVenueName(found.name);
+      setVenueName(isArabic ? found.name : found.nameEn);
       setGeoLat(String(found.lat));
       setGeoLng(String(found.lng));
       setGeoRadius(found.radius);

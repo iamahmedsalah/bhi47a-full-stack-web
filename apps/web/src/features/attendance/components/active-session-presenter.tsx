@@ -20,6 +20,10 @@ import {
   Crosshair,
   Check,
   ExternalLink,
+  Building2,
+  GraduationCap,
+  Monitor,
+  MapPinned,
 } from "lucide-react";
 import {
   INSTITUTE_VENUE_PRESETS,
@@ -168,55 +172,71 @@ export function ActiveSessionPresenter({
   });
 
   const venueDropdownOptions = React.useMemo<CustomDropdownOption[]>(() => {
+    const categoryIcon = (cat: string) => {
+      if (cat === "campus") return <Building2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
+      if (cat === "hall") return <GraduationCap className="h-3.5 w-3.5 shrink-0 text-sky-400" />;
+      return <Monitor className="h-3.5 w-3.5 shrink-0 text-violet-400" />;
+    };
+    const venueName = (p: InstituteVenuePreset) => isArabic ? p.name : p.nameEn;
+
     return [
-      // Campus
+      // Campus & Main Buildings
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "campus").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-semibold text-foreground">🏛️ {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-semibold text-foreground">
+              {categoryIcon(p.category)} {venueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Halls
+      // Halls (Main, 315, 1-7)
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "hall").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-medium text-foreground">🎓 {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              {categoryIcon(p.category)} {venueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Labs
+      // Labs (1-7)
       ...INSTITUTE_VENUE_PRESETS.filter((p) => p.category === "lab").map((p) => ({
         value: p.id,
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs">
-            <span className="font-medium text-foreground">💻 {p.name}</span>
-            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}م</span>
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              {categoryIcon(p.category)} {venueName(p)}
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground mr-2">{p.radius}{isArabic ? "م" : "m"}</span>
           </div>
         ),
       })),
-      // Custom
+      // Custom Location
       {
         value: "custom",
         label: (
           <div className="flex items-center justify-between w-full py-0.5 text-xs text-primary font-bold">
-            <span>📍 إدخال يدوي مخصص (Custom Location)</span>
+            <span className="flex items-center gap-1.5">
+              <MapPinned className="h-3.5 w-3.5 shrink-0" />
+              {isArabic ? "إدخال يدوي مخصص" : "Custom Location"}
+            </span>
           </div>
         ),
       },
     ];
-  }, []);
+  }, [isArabic]);
 
   const handleVenuePresetChange = (presetId: string) => {
     setSelectedVenuePresetId(presetId);
     if (presetId === "custom") return;
     const found = INSTITUTE_VENUE_PRESETS.find((p) => p.id === presetId);
     if (found) {
-      setLocVenueName(found.name);
+      setLocVenueName(isArabic ? found.name : found.nameEn);
       setLocLatitude(String(found.lat));
       setLocLongitude(String(found.lng));
       setLocRadius(found.radius);
