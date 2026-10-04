@@ -184,7 +184,6 @@ export class StudentImporter implements Importer {
             upsert: true,
           },
         });
-
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'خطأ غير معروف';
         errors.push(`السطر ${rowNum}: ${message}`);
@@ -206,7 +205,9 @@ export class StudentImporter implements Importer {
           }
         } else {
           const msg =
-            err instanceof Error ? err.message : 'خطأ في عملية إنشاء المستخدمين';
+            err instanceof Error
+              ? err.message
+              : 'خطأ في عملية إنشاء المستخدمين';
           errors.push(`فشل كتابة المستخدمين: ${msg}`);
         }
       }
@@ -251,7 +252,11 @@ export class StudentImporter implements Importer {
         } catch (err: unknown) {
           const bulkError = err as {
             writeErrors?: Array<{ errmsg?: string; message?: string }>;
-            result?: { nUpserted?: number; nModified?: number; nMatched?: number };
+            result?: {
+              nUpserted?: number;
+              nModified?: number;
+              nMatched?: number;
+            };
           };
           if (bulkError?.writeErrors?.length) {
             for (const we of bulkError.writeErrors) {
