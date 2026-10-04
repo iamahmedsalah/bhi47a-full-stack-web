@@ -185,7 +185,6 @@ export class StudentImporter implements Importer {
           },
         });
 
-        successCount++;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'خطأ غير معروف';
         errors.push(`السطر ${rowNum}: ${message}`);
@@ -193,7 +192,24 @@ export class StudentImporter implements Importer {
     }
 
     if (userOps.length > 0) {
-      await this.userModel.bulkWrite(userOps, { ordered: false });
+      try {
+        await this.userModel.bulkWrite(userOps, { ordered: false });
+      } catch (err: unknown) {
+        const bulkError = err as {
+          writeErrors?: Array<{ errmsg?: string; message?: string }>;
+        };
+        if (bulkError?.writeErrors?.length) {
+          for (const we of bulkError.writeErrors) {
+            errors.push(
+              `خطأ أثناء إنشاء حساب المستخدم: ${we.errmsg || we.message || 'فشل التكرار'}`,
+            );
+          }
+        } else {
+          const msg =
+            err instanceof Error ? err.message : 'خطأ في عملية إنشاء المستخدمين';
+          errors.push(`فشل كتابة المستخدمين: ${msg}`);
+        }
+      }
     }
 
     if (profileOps.length > 0) {
@@ -207,17 +223,53 @@ export class StudentImporter implements Importer {
         updatedUsers.map((u) => [u.studentCode, u._id]),
       );
 
+      // Only upsert profile if a corresponding user document exists with a valid userId.
+      // This prevents orphan records and duplicate key crashes on null userId.
+      const safeProfileOps: UpdateProfileOp[] = [];
       for (const op of profileOps) {
         const sc = op.updateOne.filter.studentCode;
         const uId = updatedUserMap.get(sc);
         if (uId) {
           op.updateOne.update.$set.userId = uId;
+          safeProfileOps.push(op);
+        } else {
+          errors.push(
+            `تعذر حفظ الملف الأكاديمي للطالب ${sc}: حساب المستخدم غير متوفر`,
+          );
         }
       }
 
-      await this.studentModel.bulkWrite(profileOps, { ordered: false });
+      if (safeProfileOps.length > 0) {
+        try {
+          const writeRes = await this.studentModel.bulkWrite(safeProfileOps, {
+            ordered: false,
+          });
+          successCount =
+            (writeRes.upsertedCount || 0) +
+            (writeRes.modifiedCount || 0) +
+            (writeRes.matchedCount || 0);
+        } catch (err: unknown) {
+          const bulkError = err as {
+            writeErrors?: Array<{ errmsg?: string; message?: string }>;
+            result?: { nUpserted?: number; nModified?: number; nMatched?: number };
+          };
+          if (bulkError?.writeErrors?.length) {
+            for (const we of bulkError.writeErrors) {
+              errors.push(
+                `خطأ في حفظ الملف الأكاديمي: ${we.errmsg || we.message || 'خطأ غير معروف'}`,
+              );
+            }
+          }
+          if (bulkError?.result) {
+            successCount =
+              (bulkError.result.nUpserted || 0) +
+              (bulkError.result.nModified || 0) +
+              (bulkError.result.nMatched || 0);
+          }
+        }
+      }
 
-      const academicProfileOps = profileOps.flatMap((op) => {
+      const academicProfileOps = safeProfileOps.flatMap((op) => {
         const studentCode = op.updateOne.filter.studentCode;
         const studentId = updatedUserMap.get(studentCode);
         if (!studentId) return [];
@@ -248,13 +300,17 @@ export class StudentImporter implements Importer {
       });
 
       if (academicProfileOps.length > 0) {
-        await this.academicProfileModel.bulkWrite(academicProfileOps as any, {
-          ordered: false,
-        });
+        try {
+          await this.academicProfileModel.bulkWrite(academicProfileOps as any, {
+            ordered: false,
+          });
+        } catch {
+          // Non-fatal secondary sync
+        }
       }
 
       // Sync to AcademicEmail collection so all imported students appear on Academic Emails page
-      const emailOps = profileOps.map((op) => {
+      const emailOps = safeProfileOps.map((op) => {
         const studentCode = op.updateOne.filter.studentCode;
         const studentId = updatedUserMap.get(studentCode);
         const fullName =
@@ -282,9 +338,13 @@ export class StudentImporter implements Importer {
       });
 
       if (emailOps.length > 0) {
-        await this.academicEmailModel.bulkWrite(emailOps as any, {
-          ordered: false,
-        });
+        try {
+          await this.academicEmailModel.bulkWrite(emailOps as any, {
+            ordered: false,
+          });
+        } catch {
+          // Non-fatal secondary sync
+        }
       }
     }
 

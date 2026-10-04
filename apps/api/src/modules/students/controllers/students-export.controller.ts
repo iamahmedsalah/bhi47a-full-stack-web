@@ -36,7 +36,9 @@ export class StudentsExportController {
       useStyles: false,
       useSharedStrings: false,
     });
-    const worksheet = workbook.addWorksheet('Students');
+    const worksheet = workbook.addWorksheet('Students', {
+      views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }],
+    });
 
     worksheet.columns = [
       { header: 'كود الطالب', key: 'studentCode', width: 15 },

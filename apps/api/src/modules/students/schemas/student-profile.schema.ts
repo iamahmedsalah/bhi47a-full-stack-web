@@ -15,43 +15,43 @@ export class StudentProfile {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, trim: true })
   studentCode!: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   fullName!: string;
 
-  @Prop()
+  @Prop({ trim: true })
   fullNameAr?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   fullNameEn?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   nationalIdMasked?: string;
 
-  @Prop({ select: false })
+  @Prop({ select: false, trim: true })
   nationalId?: string;
 
-  @Prop()
+  @Prop({ trim: true, lowercase: true })
   academicEmail?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   department?: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   level!: string;
 
-  @Prop()
+  @Prop({ trim: true })
   group?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   section?: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   academicYear!: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   semester!: string;
 
   @Prop({
@@ -61,24 +61,24 @@ export class StudentProfile {
   })
   enrollmentStatus!: EnrollmentStatus;
 
-  @Prop()
+  @Prop({ trim: true })
   seatNumber?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   examRoom?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   examFloor?: string;
 
-  @Prop()
+  @Prop({ trim: true })
   examBuilding?: string;
 }
 
 export const StudentProfileSchema =
   SchemaFactory.createForClass(StudentProfile);
 
-// Indexes
-StudentProfileSchema.index({ userId: 1 }, { unique: true });
+// Primary & Foreign Key Identity Indexes
+StudentProfileSchema.index({ userId: 1 }, { unique: true, sparse: true });
 StudentProfileSchema.index({ studentCode: 1 }, { unique: true });
 
 // Compound ESR Indexes (Equality -> Sort -> Range)
@@ -87,6 +87,7 @@ StudentProfileSchema.index({ enrollmentStatus: 1, createdAt: -1 });
 StudentProfileSchema.index({ createdAt: -1 });
 StudentProfileSchema.index({ department: 1, level: 1, createdAt: -1 });
 StudentProfileSchema.index({ level: 1, studentCode: 1 });
+StudentProfileSchema.index({ fullName: 1, studentCode: 1 });
 
 // Weighted Text Search Index
 StudentProfileSchema.index(
