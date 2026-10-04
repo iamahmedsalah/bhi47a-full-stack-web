@@ -47,23 +47,17 @@ export class StudentQueryService {
     private readonly academicProfileModel: Model<StudentAcademicProfileDocument>,
   ) {}
 
-  async findAll(query: SearchStudentQuery, caller?: AuthenticatedUser) {
-    const { page, limit, skip } = buildPaginationOptions(query);
-
-    const canViewNationalId = Boolean(
-      caller?.role === 'admin' ||
-      caller?.permissions?.includes(PERMISSIONS.STUDENTS_VIEW_NATIONAL_ID),
-    );
-
+  buildFilter(query: SearchStudentQuery): FilterQuery<StudentProfileDocument> {
     const filter: FilterQuery<StudentProfileDocument> = {};
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
-        { studentCode: { $regex: search, $options: 'i' } },
-        { fullName: { $regex: search, $options: 'i' } },
-        { fullNameAr: { $regex: search, $options: 'i' } },
-        { fullNameEn: { $regex: search, $options: 'i' } },
+        { studentCode: { $regex: `^${safeSearch}`, $options: 'i' } },
+        { fullName: { $regex: safeSearch, $options: 'i' } },
+        { fullNameAr: { $regex: safeSearch, $options: 'i' } },
+        { fullNameEn: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -74,6 +68,36 @@ export class StudentQueryService {
     if (query.enrollmentStatus && query.enrollmentStatus !== 'all') {
       filter.enrollmentStatus = query.enrollmentStatus;
     }
+
+    return filter;
+  }
+
+  getExportCursor(query: SearchStudentQuery) {
+    const filter = this.buildFilter(query);
+    const sortField =
+      query.sortBy === 'createdAt' ? 'createdAt' : 'studentCode';
+    const sortDir: 1 | -1 = query.sortOrder === 'desc' ? -1 : 1;
+
+    return this.studentProfileModel
+      .find(filter)
+      .read('secondaryPreferred')
+      .select(
+        'studentCode fullName fullNameAr fullNameEn level department academicEmail enrollmentStatus group section seatNumber examRoom',
+      )
+      .sort({ [sortField]: sortDir })
+      .lean()
+      .cursor({ batchSize: 1000 });
+  }
+
+  async findAll(query: SearchStudentQuery, caller?: AuthenticatedUser) {
+    const { page, limit, skip } = buildPaginationOptions(query);
+
+    const canViewNationalId = Boolean(
+      caller?.role === 'admin' ||
+      caller?.permissions?.includes(PERMISSIONS.STUDENTS_VIEW_NATIONAL_ID),
+    );
+
+    const filter = this.buildFilter(query);
 
     const sortField =
       query.sortBy === 'studentCode' ? 'studentCode' : 'createdAt';
@@ -96,6 +120,7 @@ export class StudentQueryService {
     const [items, total] = await Promise.all([
       this.studentProfileModel
         .find(filter)
+        .read('secondaryPreferred')
         .select(projection)
         .populate('userId', userPopulateSelect)
         .sort({ [sortField]: sortDir })

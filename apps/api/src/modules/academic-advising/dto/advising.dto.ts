@@ -38,6 +38,12 @@ export class AdvisingStudentsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
 }
+
+export class AdvisingCasesQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 50;
+  @IsOptional() @IsEnum(ADVISING_STATUSES) status?: string;
+}
 export class CreateAdvisingCaseDto {
   @IsMongoId() studentId!: string;
   @IsString() @Matches(/^\d{4}-\d{4}$/) academicYear!: string;

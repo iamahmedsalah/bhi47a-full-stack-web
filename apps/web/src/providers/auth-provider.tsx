@@ -60,8 +60,6 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => { },
 });
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function getSafeStudentReturnPath(
   returnUrl: string | null | undefined,
   locale: string,
@@ -256,16 +254,19 @@ export function AuthProvider({
     }
   }, [meQuery.data?.theme, currentTheme, setTheme]);
 
+  const contextValue = React.useMemo<AuthContextType>(
+    () => ({
+      user: meQuery.data || null,
+      loading: meQuery.isLoading,
+      isLoggingOut,
+      login,
+      logout,
+    }),
+    [meQuery.data, meQuery.isLoading, isLoggingOut, login, logout],
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user: meQuery.data || null,
-        loading: meQuery.isLoading,
-        isLoggingOut,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

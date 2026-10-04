@@ -17,6 +17,13 @@ export interface StudentPage {
   limit: number;
   totalPages: number;
 }
+export interface CasePage {
+  items: AdvisingCase[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 export interface RegistrationTerm {
   _id?: string;
   academicYear: string;
@@ -77,7 +84,8 @@ export const advisingApi = {
         limit: 50,
       },
     }),
-  cases: () => apiGet<AdvisingCase[]>("/admin/advising/cases"),
+  cases: (params?: { page?: number; limit?: number; status?: string }) =>
+    apiGet<CasePage>("/admin/advising/cases", { params }),
   case: (caseId: string) =>
     apiGet<AdvisingCase>(`/admin/advising/cases/${caseId}`),
   courseMap: (caseId: string) =>

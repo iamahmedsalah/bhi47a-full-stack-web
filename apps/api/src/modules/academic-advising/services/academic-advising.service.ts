@@ -33,8 +33,14 @@ export class AcademicAdvisingService {
     return this.caseService.createCase(dto, actorId);
   }
 
-  listCases(actorId: string, role: Role) {
-    return this.caseService.listCases(actorId, role);
+  listCases(
+    actorId: string,
+    role: Role,
+    page: number = 1,
+    limit: number = 50,
+    status?: string,
+  ) {
+    return this.caseService.listCases(actorId, role, page, limit, status);
   }
 
   getCase(id: string, actorId: string, role: Role) {

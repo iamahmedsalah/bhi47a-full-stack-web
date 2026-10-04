@@ -18,6 +18,7 @@ import { AcademicAdvisingService } from '../services/academic-advising.service';
 import { PERMISSIONS } from '@student-portal/shared';
 import type { UpdateAdvisingRulesDto } from '../dto/update-advising-rules.dto';
 import {
+  AdvisingCasesQueryDto,
   AdvisingStudentsQueryDto,
   AssignCaseDto,
   BulkAssignAdvisorDto,
@@ -74,8 +75,17 @@ export class AdminAdvisingController {
 
   @Get('cases')
   @RequirePermissions(PERMISSIONS.ADVISING_READ)
-  cases(@CurrentUser() user: AuthenticatedUser) {
-    return this.service.listCases(user._id, user.role);
+  cases(
+    @Query() query: AdvisingCasesQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.listCases(
+      user._id,
+      user.role,
+      query.page,
+      query.limit,
+      query.status,
+    );
   }
 
   @Get('cases/:caseId')

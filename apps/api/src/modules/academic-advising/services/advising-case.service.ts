@@ -70,17 +70,53 @@ export class AdvisingCaseService {
     return item;
   }
 
-  async listCases(actorId: string, role: Role) {
-    const filter =
+  /**
+   * Enforces pagination limits on case retrieval.
+   * Hard limits prevent memory exhaustion under concurrent staff access.
+   */
+  async listCases(
+    actorId: string,
+    role: Role,
+    page: number = 1,
+    limit: number = 50,
+    status?: string,
+  ) {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const filter: Record<string, any> =
       role === 'staff'
         ? { assignedAdvisorId: new Types.ObjectId(actorId) }
         : {};
-    return this.cases
-      .find(filter)
-      .populate('studentId', 'name studentCode avatarUrl')
-      .populate('assignedAdvisorId', 'name email')
-      .sort({ updatedAt: -1 })
-      .lean();
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const [items, total] = await Promise.all([
+      this.cases
+        .find(filter)
+        .read('secondaryPreferred')
+        .select(
+          'studentId assignedAdvisorId academicYear semester status currentDraftId approvedPlanId generatedAt reviewedAt approvedAt studentAcknowledgedAt updatedAt',
+        )
+        .populate('studentId', 'name studentCode avatarUrl')
+        .populate('assignedAdvisorId', 'name email')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(safeLimit)
+        .lean(),
+      this.cases.countDocuments(filter),
+    ]);
+
+    return {
+      items,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   async getCase(id: string, actorId: string, role: Role) {

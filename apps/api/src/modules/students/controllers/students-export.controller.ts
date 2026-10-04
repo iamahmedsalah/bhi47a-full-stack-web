@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Query, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import * as ExcelJS from 'exceljs';
@@ -16,8 +16,11 @@ export class StudentsExportController {
   @Get('export/excel')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)
-  @ApiOperation({ summary: 'Stream students list as Excel file' })
+  @ApiOperation({
+    summary: 'Stream students list as Excel file with constant O(1) memory',
+  })
   async exportExcel(@Query() query: SearchStudentQuery, @Res() res: Response) {
+    res.status(HttpStatus.OK);
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -26,10 +29,12 @@ export class StudentsExportController {
       'Content-Disposition',
       `attachment; filename="students-${Date.now()}.xlsx"`,
     );
+    res.setHeader('Transfer-Encoding', 'chunked');
 
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
       stream: res,
-      useStyles: true,
+      useStyles: false,
+      useSharedStrings: false,
     });
     const worksheet = workbook.addWorksheet('Students');
 
@@ -48,19 +53,10 @@ export class StudentsExportController {
       { header: 'لجنة الامتحان', key: 'examRoom', width: 15 },
     ];
 
-    const pageSize = 500;
-    let page = 1;
-    let totalPages = 1;
+    try {
+      const cursor = this.studentQueryService.getExportCursor(query);
 
-    do {
-      const result = await this.studentQueryService.findAll({
-        ...query,
-        page,
-        limit: pageSize,
-      });
-      totalPages = result.totalPages;
-
-      for (const student of result.items) {
+      for await (const student of cursor) {
         worksheet
           .addRow({
             studentCode: student.studentCode,
@@ -79,10 +75,13 @@ export class StudentsExportController {
           .commit();
       }
 
-      page++;
-    } while (page <= totalPages);
-
-    worksheet.commit();
-    await workbook.commit();
+      worksheet.commit();
+      await workbook.commit();
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
+      }
+      throw error;
+    }
   }
 }

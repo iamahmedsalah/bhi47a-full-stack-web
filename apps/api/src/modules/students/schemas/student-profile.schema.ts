@@ -79,10 +79,25 @@ export const StudentProfileSchema =
 
 // Indexes
 StudentProfileSchema.index({ userId: 1 }, { unique: true });
-StudentProfileSchema.index({
-  fullName: 'text',
-  fullNameAr: 'text',
-  fullNameEn: 'text',
-});
-StudentProfileSchema.index({ level: 1 });
-StudentProfileSchema.index({ enrollmentStatus: 1 });
+StudentProfileSchema.index({ studentCode: 1 }, { unique: true });
+
+// Compound ESR Indexes (Equality -> Sort -> Range)
+StudentProfileSchema.index({ level: 1, enrollmentStatus: 1, createdAt: -1 });
+StudentProfileSchema.index({ enrollmentStatus: 1, createdAt: -1 });
+StudentProfileSchema.index({ createdAt: -1 });
+StudentProfileSchema.index({ department: 1, level: 1, createdAt: -1 });
+StudentProfileSchema.index({ level: 1, studentCode: 1 });
+
+// Weighted Text Search Index
+StudentProfileSchema.index(
+  {
+    fullName: 'text',
+    fullNameAr: 'text',
+    fullNameEn: 'text',
+    studentCode: 'text',
+  },
+  {
+    weights: { studentCode: 10, fullNameAr: 5, fullName: 3, fullNameEn: 2 },
+    name: 'StudentTextSearchIndex',
+  },
+);

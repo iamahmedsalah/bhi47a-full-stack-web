@@ -41,6 +41,13 @@ ENV NODE_ENV=production
 ENV PORT=4000
 ENV API_PORT=4000
 
+# V8 Memory & Garbage Collection Optimization:
+# Allocates 1536MB old-generation space inside 2GB container; tunes semi-space to minimize minor GC latency
+ENV NODE_OPTIONS="--max-old-space-size=1536 --max-semi-space-size=64"
+
+# Tune libuv thread pool to match MongoDB connection pool concurrency
+ENV UV_THREADPOOL_SIZE=64
+
 # Install runtime utilities (timezone data, certificates)
 RUN apk add --no-cache tzdata ca-certificates
 

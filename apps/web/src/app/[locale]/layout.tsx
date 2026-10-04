@@ -2,7 +2,6 @@ import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { AppQueryProvider } from '@/lib/query-client';
-import { Toaster } from '@/components/ui/toaster';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { LanguageProvider } from '@/providers/language-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
@@ -53,19 +52,21 @@ export default async function LocaleLayout({
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png" />
         <link rel="apple-touch-icon" href="/favicon_io/maskable-icon.png" />
-        <script id="theme-init">{themeInitScript}</script>
+        <script
+          id="theme-init"
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
       </head>
       <body className={`min-h-screen ${fontClass}`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <AppQueryProvider>
-            <ConsoleBanner />
+            {process.env.NODE_ENV !== 'production' && <ConsoleBanner />}
             <LanguageProvider>
               <ThemeProvider>
                 <AuthProvider locale={locale}>
                   {children}
                 </AuthProvider>
                 <NetworkStatusOverlay locale={locale} />
-                <Toaster />
                 <SonnerToaster />
               </ThemeProvider>
             </LanguageProvider>

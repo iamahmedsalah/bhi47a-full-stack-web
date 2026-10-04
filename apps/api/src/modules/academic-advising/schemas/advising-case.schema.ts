@@ -45,3 +45,5 @@ AdvisingCaseSchema.index(
   { unique: true },
 );
 AdvisingCaseSchema.index({ assignedAdvisorId: 1, status: 1 });
+AdvisingCaseSchema.index({ assignedAdvisorId: 1, updatedAt: -1 });
+AdvisingCaseSchema.index({ updatedAt: -1 });
