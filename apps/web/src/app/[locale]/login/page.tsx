@@ -1,54 +1,106 @@
-'use client';
-
 import React from 'react';
-import { useParams } from 'next/navigation';
-import { useSearchParams } from 'next/navigation';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
-import { GraduationCap, MessageSquare, Shield, Clock } from 'lucide-react';
+import { notFound } from 'next/navigation';
+import { hasLocale } from 'next-intl';
+import { routing } from '@/i18n/routing';
+import {
+  GraduationCap,
+  MessageSquare,
+  Shield,
+  Clock,
+  ArrowRight,
+  ArrowLeft,
+  Home,
+} from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import LangToggle from '@/components/ui/LangToggle';
 import { Footer } from '@/components/ui/footer';
+import { INSTITUTE_INFO } from '@/data/institutional-data';
 
-export default function LoginPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const locale = params.locale as string;
+interface LoginPageProps {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ params }: LoginPageProps): Promise<Metadata> {
+  const { locale } = await params;
   const isAr = locale === 'ar';
 
-  const isSessionExpired =
-    searchParams.get('reason') === 'session_expired' ||
-    searchParams.get('error') === 'session_expired';
+  return {
+    title: isAr
+      ? `البوابة الإلكترونية الموحدة | ${INSTITUTE_INFO.nameAr}`
+      : `Unified Electronic Portal | ${INSTITUTE_INFO.nameEn}`,
+    description: isAr
+      ? 'تسجيل الدخول لبوابة الطالب، نتائج الامتحانات، البريد الأكاديمي، ومنظومة الشكاوى والأعطال الفنية بالمعهد.'
+      : 'Unified portal login for student records, exam results, academic mail, and technical support.',
+  };
+}
+
+export default async function LoginPage({ params, searchParams }: LoginPageProps) {
+  const { locale } = await params;
+
+  if (!hasLocale(routing.locales, locale)) {
+    notFound();
+  }
+
+  const sp = await searchParams;
+  const reason = typeof sp.reason === 'string' ? sp.reason : undefined;
+  const error = typeof sp.error === 'string' ? sp.error : undefined;
+  const isSessionExpired = reason === 'session_expired' || error === 'session_expired';
+
+  const isAr = locale === 'ar';
+  const BackArrow = isAr ? ArrowRight : ArrowLeft;
 
   return (
     <div
-      className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8"
+      className="flex min-h-screen flex-col items-center justify-center p-4 md:p-8 relative"
       style={{ background: 'var(--gradient-primary)' }}
       dir={isAr ? 'rtl' : 'ltr'}
     >
-      <div className="fixed end-4 top-4 z-20">
-        <LangToggle />
+      {/* Top Bar with Back to Website and Language Toggle */}
+      <div className="fixed top-4 inset-x-4 max-w-6xl mx-auto flex items-center justify-between z-20 pointer-events-none">
+        <Link
+          href={`/${locale}`}
+          className="pointer-events-auto inline-flex items-center gap-2 px-3.5 py-2 rounded-squircle bg-card/90 hover:bg-card border border-border text-foreground text-xs sm:text-sm font-semibold shadow-md backdrop-blur-md transition-colors"
+        >
+          <BackArrow className="w-4 h-4 text-primary" />
+          <Home className="w-4 h-4 text-primary hidden sm:inline" />
+          <span>{isAr ? 'العودة إلى الموقع الرئيسي للمعهد' : 'Back to Website'}</span>
+        </Link>
+
+        <div className="pointer-events-auto">
+          <LangToggle />
+        </div>
       </div>
-      <div className="flex w-full max-w-4xl flex-col items-center gap-8">
+
+      <div className="flex w-full max-w-4xl flex-col items-center gap-8 mt-14 sm:mt-8">
         <div className="flex flex-col items-center gap-4 text-center">
-          <Image
-            src="/logo.webp"
-            alt="Institute Logo"
-            width={144}
-            height={144}
-            priority
-            className="h-24 w-24 rounded-full object-contain shadow-[var(--shadow-glow)] md:h-36 md:w-36"
-          />
+          <Link
+            href={`/${locale}`}
+            className="group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
+            aria-label={isAr ? 'العودة للموقع الرئيسي' : 'Return to main website'}
+          >
+            <Image
+              src="/logo.webp"
+              alt="Institute Logo"
+              width={144}
+              height={144}
+              priority
+              className="h-24 w-24 rounded-full object-contain shadow-[var(--shadow-glow)] md:h-36 md:w-36 transition-transform group-hover:scale-105"
+            />
+          </Link>
           <h1 className="text-xl font-bold text-foreground md:text-2xl">
-            {isAr
-              ? 'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات'
-              : 'High Institute for Advanced Management Sciences and Computer'}
+            {isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn}
           </h1>
-          <p className="text-sm font-semibold text-muted-foreground md:text-base">
-            {isAr ? 'البوابة الإلكترونية' : 'Electronic Portal'}
-          </p>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-primary/10 border border-primary/20">
+            <p className="text-sm font-bold text-primary md:text-base">
+              {isAr ? 'البوابة الإلكترونية الموحدة' : 'Unified Electronic Portal'}
+            </p>
+          </div>
 
           {isSessionExpired && (
             <Alert className="max-w-md border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-3 mt-2 text-start">
@@ -63,7 +115,8 @@ export default function LoginPage() {
         </div>
 
         <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2">
-          <Card className="border-border bg-card/95 p-8 text-center shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all hover:border-primary/40">
+          {/* Student Portal Card */}
+          <Card className="border-border bg-card/95 p-8 text-center shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all hover:border-primary/40 flex flex-col justify-between">
             <div className="flex flex-col items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-squircle bg-primary/20">
                 <GraduationCap className="h-10 w-10 text-primary" />
@@ -73,18 +126,21 @@ export default function LoginPage() {
               </h2>
               <p className="min-h-10 text-sm font-semibold text-muted-foreground">
                 {isAr
-                  ? 'تسجيل الدخول للدرجات والبريد الأكاديمي ومتابعة التذاكر'
-                  : 'Sign in for grades, academic email, and ticket tracking'}
+                  ? 'تسجيل الدخول للدرجات والبريد الأكاديمي وجداول الامتحانات ومتابعة التذاكر'
+                  : 'Sign in for grades, academic email, exam schedules, and ticket tracking'}
               </p>
-              <Button asChild className="h-12 w-full text-lg">
+            </div>
+            <div className="mt-6">
+              <Button asChild className="h-12 w-full text-base font-bold rounded-squircle">
                 <Link href={`/${locale}/login/student`}>
-                  {isAr ? 'تسجيل الدخول' : 'Sign In'}
+                  {isAr ? 'تسجيل دخول الطالب' : 'Student Sign In'}
                 </Link>
               </Button>
             </div>
           </Card>
 
-          <Card className="border-border bg-card/95 p-8 text-center shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all hover:border-green-500/40">
+          {/* Complaints & Technical Issues Card */}
+          <Card className="border-border bg-card/95 p-8 text-center shadow-[var(--shadow-glow)] backdrop-blur-sm transition-all hover:border-green-500/40 flex flex-col justify-between">
             <div className="flex flex-col items-center gap-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-squircle bg-green-500/20">
                 <MessageSquare className="h-10 w-10 text-green-400" />
@@ -94,25 +150,30 @@ export default function LoginPage() {
               </h2>
               <p className="min-h-10 text-sm font-semibold text-muted-foreground">
                 {isAr
-                  ? 'تقديم بلاغ جديد بدون تسجيل دخول'
-                  : 'Submit a new issue without signing in'}
+                  ? 'تقديم بلاغ جديد بدون تسجيل دخول ومتابعة حالة التذكرة برقم الهاتف'
+                  : 'Submit a new issue without signing in and track status via phone number'}
               </p>
-              <Button asChild className="h-12 w-full bg-green-600 text-lg text-white hover:bg-green-700">
+            </div>
+            <div className="mt-6">
+              <Button asChild className="h-12 w-full bg-green-600 text-base font-bold text-white hover:bg-green-700 rounded-squircle">
                 <Link href={`/${locale}/complaints`}>
-                  {isAr ? 'إرسال بلاغ' : 'Submit Issue'}
+                  {isAr ? 'إرسال بلاغ أو استعلام' : 'Submit Issue or Inquire'}
                 </Link>
               </Button>
             </div>
           </Card>
         </div>
 
-        <Link
-          href={`/${locale}/login/admin`}
-          className="inline-flex items-center gap-2 rounded-squircle border border-border bg-surface/60 px-4 py-2 text-sm text-muted transition-colors hover:border-primary hover:text-foreground"
-        >
-          <Shield className="h-4 w-4" />
-          {isAr ? 'دخول الإدارة والموظفين' : 'Admin and staff login'}
-        </Link>
+        {/* Admin and Staff Login */}
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <Link
+            href={`/${locale}/login/admin`}
+            className="inline-flex items-center gap-2 rounded-squircle border border-border bg-surface/60 px-5 py-2.5 text-sm font-semibold text-muted transition-colors hover:border-primary hover:text-foreground"
+          >
+            <Shield className="h-4 w-4 text-teal-400" />
+            {isAr ? 'دخول الإدارة وأعضاء هيئة التدريس والمعاونين' : 'Admin and Faculty/Staff Login'}
+          </Link>
+        </div>
 
         <Footer role="student" locale={locale} />
       </div>

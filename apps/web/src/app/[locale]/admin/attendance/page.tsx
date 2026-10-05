@@ -957,7 +957,7 @@ export default function StaffAttendancePage() {
                             : "Coordinates Preview"}
                         </span>
                         <span className="text-[10px] font-mono text-muted-foreground">
-                          King Maryut (30.9011, 29.8747)
+                          BHI47 (30.9011, 29.8747)
                         </span>
                       </div>
 

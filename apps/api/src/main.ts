@@ -18,6 +18,8 @@ import {
   isOriginAllowed,
   parseAllowedOrigins,
 } from './config/cors-origins';
+import { NotificationsService } from './modules/notifications/notifications.service';
+import { QueueService } from './core/queues/queue.service';
 
 function resolveAppVersion(): string {
   if (process.env.APP_VERSION) {
@@ -49,23 +51,34 @@ function printStartupBanner(params: {
   port: number;
   isProduction: boolean;
   swaggerUrl?: string;
+  firebaseStatus: { ready: boolean; message: string };
+  redisStatus: { ready: boolean; message: string };
 }) {
-  const line = '═'.repeat(56);
-  const subLine = '─'.repeat(56);
+  const line = '═'.repeat(58);
+  const subLine = '─'.repeat(58);
   const envTag = params.env.toUpperCase();
 
   console.log('\n' + line);
   console.log('         🎓  STUDENT PORTAL BACKEND API');
   console.log(subLine);
-  console.log(`   ⚡ Environment : [ ${envTag} ]`);
-  console.log(`   📦 Version     : v${params.version}`);
-  console.log(`   🚀 API URL     : http://localhost:${params.port}/api`);
+  console.log(`   ⚡ Environment  : [ ${envTag} ]`);
+  console.log(`   📦 Version      : v${params.version}`);
+  console.log(`   🚀 API URL      : http://localhost:${params.port}/api`);
   if (params.swaggerUrl) {
-    console.log(`   📖 Swagger API : ${params.swaggerUrl}`);
+    console.log(`   📖 Swagger API  : ${params.swaggerUrl}`);
   } else {
-    console.log(`   🔒 Swagger API : Disabled (Access Denied in ${envTag})`);
+    console.log(`   🔒 Swagger API  : Disabled (Access Denied in ${envTag})`);
   }
-  console.log(`   🟢 Node.js     : ${process.version}`);
+  console.log(`   🟢 Node.js      : ${process.version}`);
+  console.log(subLine);
+  const fbTag = params.firebaseStatus.ready ? 'ONLINE' : 'FALLBACK';
+  const redisTag = params.redisStatus.ready ? 'CONNECTED' : 'INLINE';
+  console.log(
+    `   🔥 Firebase SDK : [ ${fbTag} ] ${params.firebaseStatus.message}`,
+  );
+  console.log(
+    `   🔴 Redis Queue  : [ ${redisTag} ] ${params.redisStatus.message}`,
+  );
   console.log(line + '\n');
 }
 
@@ -192,6 +205,34 @@ async function bootstrap() {
     ? `http://localhost:${port}/api/docs`
     : undefined;
 
+  let firebaseStatus = {
+    ready: false,
+    message: 'Notifications service not loaded',
+  };
+  try {
+    const notificationsService = app.get(NotificationsService, {
+      strict: false,
+    });
+    if (notificationsService) {
+      firebaseStatus = notificationsService.getFirebaseStatus();
+    }
+  } catch {
+    // Continue with default
+  }
+
+  let redisStatus = {
+    ready: false,
+    message: 'Queue service not loaded',
+  };
+  try {
+    const queueService = app.get(QueueService, { strict: false });
+    if (queueService) {
+      redisStatus = await queueService.checkConnection();
+    }
+  } catch {
+    // Continue with default
+  }
+
   await app.listen(port);
 
   printStartupBanner({
@@ -200,6 +241,8 @@ async function bootstrap() {
     port,
     isProduction,
     swaggerUrl,
+    firebaseStatus,
+    redisStatus,
   });
 
   logger.log(

@@ -40,6 +40,37 @@ interface PushNotificationJob {
 export class NotificationsService implements OnModuleInit {
   private isFirebaseInitialized = false;
 
+  get isInitialized(): boolean {
+    return this.isFirebaseInitialized;
+  }
+
+  getFirebaseStatus(): { ready: boolean; message: string } {
+    if (this.isFirebaseInitialized && getApps().length > 0) {
+      return {
+        ready: true,
+        message: `Active (Project: ${process.env.FIREBASE_PROJECT_ID || 'fcm-bhi'})`,
+      };
+    }
+
+    const hasConfig = Boolean(
+      process.env.FIREBASE_PROJECT_ID &&
+        process.env.FIREBASE_CLIENT_EMAIL &&
+        process.env.FIREBASE_PRIVATE_KEY,
+    );
+
+    if (!hasConfig) {
+      return {
+        ready: false,
+        message: 'Credentials missing in .env (Push fallback to DB)',
+      };
+    }
+
+    return {
+      ready: false,
+      message: 'Failed to initialize (Push fallback to DB)',
+    };
+  }
+
   constructor(
     @InjectModel(Notification.name)
     private notificationModel: Model<NotificationDocument>,
@@ -70,7 +101,9 @@ export class NotificationsService implements OnModuleInit {
             credential: cert({
               projectId,
               clientEmail,
-              privateKey: privateKey.replace(/\\n/g, '\n'),
+              privateKey: privateKey.includes('\\n')
+                ? privateKey.split('\\n').join('\n')
+                : privateKey,
             }),
           });
         }

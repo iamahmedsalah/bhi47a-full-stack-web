@@ -61,6 +61,13 @@ export function ConsoleBanner() {
       'color: #0d9488; font-weight: bold;',
       'color: inherit;',
     );
+
+    const hasFirebase = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+    console.info(
+      `%c[Firebase FCM]%c ${hasFirebase ? '🟢 Client SDK Configured' : '🟡 Offline / Push simulated in DB'}`,
+      'color: #f59e0b; font-weight: bold;',
+      'color: inherit;',
+    );
   }, []);
 
   return null;

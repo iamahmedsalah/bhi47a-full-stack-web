@@ -1,7 +1,21 @@
 const SUPPORTED_LOCALES = new Set(['ar', 'en']);
 
+const PUBLIC_ROOT_SEGMENTS = new Set([
+  '',
+  'about',
+  'academics',
+  'activities',
+  'gallery',
+  'news',
+  'events',
+  'downloads',
+  'contact',
+  'complaints',
+]);
+
 function routeSegments(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean);
+  const cleanPath = pathname.split('?')[0].split('#')[0];
+  const segments = cleanPath.split('/').filter(Boolean);
   if (segments[0] && SUPPORTED_LOCALES.has(segments[0])) {
     segments.shift();
   }
@@ -23,7 +37,7 @@ export function isAuthEntryRoute(pathname: string) {
 export function isPublicRoute(pathname: string) {
   const segments = routeSegments(pathname);
   if (segments.length === 0) return true;
-  if (segments.length === 1 && segments[0] === 'complaints') return true;
+  if (PUBLIC_ROOT_SEGMENTS.has(segments[0])) return true;
   if (
     segments.length === 2 &&
     segments[0] === 'attendance' &&

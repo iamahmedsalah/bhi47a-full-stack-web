@@ -25,6 +25,33 @@ export class QueueService implements OnModuleDestroy {
     return Boolean(this.connection);
   }
 
+  async checkConnection(): Promise<{ ready: boolean; message: string }> {
+    if (!this.connection) {
+      return { ready: false, message: 'Disabled (Jobs run inline fallback)' };
+    }
+
+    try {
+      const { default: IORedis } = await import('ioredis');
+      const client = new (IORedis as any)(this.connection, {
+        connectTimeout: 2000,
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+        retryStrategy: () => null,
+      });
+
+      await client.connect();
+      const pong = await client.ping();
+      await client.quit();
+      return { ready: true, message: `Connected (Response: ${pong})` };
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      return {
+        ready: false,
+        message: `Offline (${err?.code || err?.message || 'Connection refused'}) - Running inline`,
+      };
+    }
+  }
+
   async add<T>(
     queueName: string,
     jobName: string,
