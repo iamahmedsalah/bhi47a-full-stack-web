@@ -10,7 +10,9 @@ import {
   Min,
   Max,
   IsInt,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   COURSE_LEVEL_VALUES,
@@ -18,8 +20,36 @@ import {
   type CourseLevel,
   type Semester,
 } from '@student-portal/shared';
+import type { CourseCurriculum } from '../schemas/course.schema';
+
+export class CourseCurriculumDto implements CourseCurriculum {
+  @IsIn(['GENERAL', 'BIS', 'ACCOUNTING'])
+  department!: CourseCurriculum['department'];
+
+  @IsEnum(COURSE_LEVEL_VALUES)
+  academicLevel!: CourseLevel;
+
+  @IsEnum(SEMESTER_VALUES)
+  semester!: Semester;
+
+  @IsIn([
+    'required',
+    'elective',
+    'university_req',
+    'institute_req',
+    'specialization_req',
+  ])
+  type!: CourseCurriculum['type'];
+}
 
 export class CreateCourseDto {
+  @ApiPropertyOptional({ type: [CourseCurriculumDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CourseCurriculumDto)
+  curricula?: CourseCurriculumDto[];
+
   @ApiProperty({ example: 'برمجة الحاسب الآلي' })
   @IsString()
   @IsNotEmpty()
@@ -136,6 +166,13 @@ export class CreateCourseDto {
 }
 
 export class UpdateCourseDto {
+  @ApiPropertyOptional({ type: [CourseCurriculumDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CourseCurriculumDto)
+  curricula?: CourseCurriculumDto[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

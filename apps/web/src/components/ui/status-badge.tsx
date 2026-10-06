@@ -3,6 +3,8 @@
 import React from 'react';
 import { cn } from '@/lib/cn';
 
+import { useLocale } from 'next-intl';
+
 type BadgeVariant =
   | 'success'
   | 'danger'
@@ -48,18 +50,83 @@ export function StatusBadge({
   className,
 }: StatusBadgeProps) {
   const Component = onClick ? 'button' : 'span';
+  let locale = 'ar';
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    locale = useLocale();
+  } catch {
+    locale = 'ar';
+  }
+
+  const isEn = locale === 'en';
+
+  const displayLabel = React.useMemo(() => {
+    const raw = String(label).trim().toLowerCase();
+    if (isEn) {
+      switch (raw) {
+        case 'present': return 'Present';
+        case 'absent': return 'Absent';
+        case 'banned': return 'Banned';
+        case 'late': return 'Late';
+        case 'active': return 'Active';
+        case 'inactive': return 'Inactive';
+        case 'completed': return 'Completed';
+        case 'pending': return 'Pending';
+        case 'approved': return 'Approved';
+        case 'rejected': return 'Rejected';
+        case 'published': return 'Published';
+        case 'hidden': return 'Hidden';
+        case 'pass': return 'Pass';
+        case 'fail': return 'Fail';
+        default: return label;
+      }
+    }
+
+    switch (raw) {
+      case 'present':
+        return 'حاضر';
+      case 'absent':
+        return 'غائب';
+      case 'banned':
+        return 'محروم';
+      case 'late':
+        return 'متأخر';
+      case 'active':
+        return 'نشط';
+      case 'inactive':
+        return 'غير نشط';
+      case 'completed':
+        return 'مكتمل';
+      case 'pending':
+        return 'قيد الانتظار';
+      case 'approved':
+        return 'معتمد';
+      case 'rejected':
+        return 'مرفوض';
+      case 'published':
+        return 'منشور';
+      case 'hidden':
+        return 'مخفي';
+      case 'pass':
+        return 'ناجح';
+      case 'fail':
+        return 'راسب';
+      default:
+        return label;
+    }
+  }, [label, isEn]);
 
   return (
     <Component
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-7 items-center rounded-squircle border px-2.5 py-1 text-xs font-semibold whitespace-nowrap shrink-0 transition-all',
+        'inline-flex h-6 min-h-[1.5rem] w-fit items-center justify-center rounded-squircle border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all leading-none',
         variantStyles[variant],
         onClick && 'cursor-pointer hover:opacity-80',
         className,
       )}
     >
-      {label}
+      {displayLabel}
     </Component>
   );
 }

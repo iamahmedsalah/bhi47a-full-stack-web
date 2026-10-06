@@ -9,7 +9,7 @@ import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/s
 import { toast } from 'sonner';
 
 import api, { getApiErrorMessage } from '@/lib/api';
-import { downloadExcel } from '@/lib/utils';
+import { cn, downloadExcel } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { useTableState } from '@/hooks/use-table-state';
@@ -143,17 +143,34 @@ function StudentsPageContent() {
   const [formError, setFormError] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [isAutoRegistering, setIsAutoRegistering] = useState(false);
+  const [isAutoRegisterModalOpen, setIsAutoRegisterModalOpen] = useState(false);
+  const [autoRegYear, setAutoRegYear] = useState('2026-2027');
+  const [autoRegSemester, setAutoRegSemester] = useState<'first' | 'second'>('first');
+  const [autoRegOverwrite, setAutoRegOverwrite] = useState(false);
 
   const handleAutoRegisterFirstYear = async () => {
     setIsAutoRegistering(true);
+    setIsAutoRegisterModalOpen(false);
+
+    const toastId = toast.loading(
+      locale === 'ar'
+        ? 'جاري التسجيل التلقائي لطلاب الفرقة الأولى في الخلفية...'
+        : 'Auto-registering Level 1 students in the background...',
+    );
+
     try {
       const selectedStudents = students.filter((s) =>
         selectedKeys.includes(s._id),
       );
-      const payload =
-        selectedStudents.length > 0
-          ? { studentCodes: selectedStudents.map((s) => s.studentCode) }
-          : {};
+      const payload: Record<string, unknown> = {
+        academicYear: autoRegYear.trim() || '2026-2027',
+        semester: autoRegSemester,
+        forceOverwrite: autoRegOverwrite,
+      };
+
+      if (selectedStudents.length > 0) {
+        payload.studentCodes = selectedStudents.map((s) => s.studentCode);
+      }
 
       const res = await api.post(
         '/admin/registrations/auto-register-first-year',
@@ -164,7 +181,9 @@ function StudentsPageContent() {
           (locale === 'ar'
             ? 'تم التسجيل التلقائي لطلاب الفرقة الأولى بنجاح'
             : 'Level 1 students automatically registered'),
+        { id: toastId },
       );
+      invalidateStudents();
     } catch (error) {
       toast.error(
         getApiErrorMessage(
@@ -173,6 +192,7 @@ function StudentsPageContent() {
             ? 'فشل التسجيل التلقائي للفرقة الأولى'
             : 'Failed to auto-register Level 1 students',
         ),
+        { id: toastId },
       );
     } finally {
       setIsAutoRegistering(false);
@@ -287,7 +307,7 @@ function StudentsPageContent() {
         <Button
           variant="outline"
           disabled={isAutoRegistering}
-          onClick={handleAutoRegisterFirstYear}
+          onClick={() => setIsAutoRegisterModalOpen(true)}
           className="border-primary/40 hover:bg-primary/10 text-primary"
         >
           {isAutoRegistering ? (
@@ -473,6 +493,150 @@ function StudentsPageContent() {
           invalidateStudents();
         }}
       />
+
+      {/* Auto-Register First Year Dialog */}
+      <Dialog open={isAutoRegisterModalOpen} onOpenChange={setIsAutoRegisterModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="text-start sm:text-start rtl:sm:text-right">
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              {locale === 'ar' ? 'التسجيل التلقائي لمقررات الفرقة الأولى' : 'Auto-Register Level 1 Courses'}
+            </DialogTitle>
+            <DialogDescription className="text-start">
+              {locale === 'ar'
+                ? 'تسجيل طلاب الفرقة الأولى النشطين في المقررات الإجبارية للفصل الدراسي المحدد بشكل آلي وفق اللائحة.'
+                : 'Batch enroll active Level 1 students into mandatory semester courses automatically.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+              {selectedKeys.length > 0 ? (
+                <span>
+                  {locale === 'ar'
+                    ? `النطاق: سيتم تسجيل ${selectedKeys.length} طالب محدد فقط.`
+                    : `Scope: Only ${selectedKeys.length} selected student(s) will be processed.`}
+                </span>
+              ) : (
+                <span>
+                  {locale === 'ar'
+                    ? `النطاق: سيتم فحص وتسجيل جميع طلاب الفرقة الأولى النشطين المسجلين في النظام (${total} طالب).`
+                    : `Scope: All active Level 1 students in the registry (${total}) will be processed.`}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                {locale === 'ar' ? 'العام الأكاديمي' : 'Academic Year'}
+              </label>
+              <Input
+                value={autoRegYear}
+                onChange={(e) => setAutoRegYear(e.target.value)}
+                placeholder="2026-2027"
+                dir="ltr"
+                className="text-start font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                {locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}
+              </label>
+              <Select
+                value={autoRegSemester}
+                onValueChange={(val) => setAutoRegSemester(val as 'first' | 'second')}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="first">
+                    {locale === 'ar' ? 'الفصل الدراسي الأول (First Semester)' : 'First Semester'}
+                  </SelectItem>
+                  <SelectItem value="second">
+                    {locale === 'ar' ? 'الفصل الدراسي الثاني (Second Semester)' : 'Second Semester'}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="pt-1">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setAutoRegOverwrite(!autoRegOverwrite)}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    setAutoRegOverwrite(!autoRegOverwrite);
+                  }
+                }}
+                className="flex items-center justify-between gap-3 cursor-pointer rounded-xl border border-border/70 bg-card/60 p-3 hover:bg-card transition-colors select-none"
+              >
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-xs text-foreground block">
+                    {locale === 'ar'
+                      ? 'إعادة تسجيل الطلاب المسجلين مسبقاً (تحديث المقررات)'
+                      : 'Overwrite already registered students'}
+                  </span>
+                  <p className="text-[11px] text-muted-foreground">
+                    {locale === 'ar'
+                      ? 'في حال تفعيله، سيتم تحديث مقررات أي طالب مسجل بالفعل بدلاً من تخطيه.'
+                      : 'When enabled, existing registrations will be updated instead of skipped.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoRegOverwrite}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAutoRegOverwrite(!autoRegOverwrite);
+                  }}
+                  className={cn(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50',
+                    autoRegOverwrite ? 'bg-teal-500' : 'bg-muted-foreground/30',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'pointer-events-none block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform',
+                      autoRegOverwrite
+                        ? 'translate-x-4 rtl:-translate-x-4'
+                        : 'translate-x-0.5 rtl:-translate-x-0.5',
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-row-reverse sm:flex-row rtl:sm:justify-start gap-2 pt-2">
+            <Button
+              type="button"
+              disabled={isAutoRegistering}
+              onClick={handleAutoRegisterFirstYear}
+              className="gap-2"
+            >
+              {isAutoRegistering ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {locale === 'ar' ? 'بدء التسجيل التلقائي' : 'Start Auto-Registration'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isAutoRegistering}
+              onClick={() => setIsAutoRegisterModalOpen(false)}
+            >
+              {tCommon('cancel')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -238,6 +238,7 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       'الحد الأدنى للمعدل',
       'أولوية التسجيل',
       'وصف المقرر',
+      'توزيع الخطة حسب القسم',
     ],
     headersEn: [
       'courseCode',
@@ -257,11 +258,12 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       'minimumGpa',
       'registrationPriority',
       'description',
+      'programCurricula',
     ],
     widths: [
-      16, 30, 28, 28, 12, 16, 24, 16, 18, 22, 20, 20, 20, 18, 18, 16, 34,
+      16, 30, 28, 28, 12, 16, 24, 16, 18, 22, 20, 20, 20, 18, 18, 16, 34, 52,
     ],
-    textColumns: [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 17],
+    textColumns: [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 17, 18],
     numberColumns: [8, 14, 15, 16],
     samplesAr: [
       [

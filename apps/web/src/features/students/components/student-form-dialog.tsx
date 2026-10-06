@@ -68,9 +68,9 @@ const SEMESTER_OPTIONS = [
 ];
 
 const DEPARTMENT_PRESETS = [
-  { value: 'نظم معلومات الأعمال', ar: 'نظم معلومات الأعمال (BIS)', en: 'Business Information Systems (BIS)' },
-  { value: 'المحاسبة والتمويل', ar: 'المحاسبة والمراجعة (Accounting)', en: 'Accounting & Finance' },
-  { value: 'عام', ar: 'عام / غير مخصص', en: 'General' },
+  { value: 'BIS', ar: 'نظم معلومات الأعمال (BIS)', en: 'Business Information Systems (BIS)' },
+  { value: 'ACCOUNTING', ar: 'المحاسبة والمراجعة (Accounting)', en: 'Accounting & Auditing' },
+  { value: 'GENERAL', ar: 'الشعبة العامة (General)', en: 'General' },
 ];
 
 export function StudentFormDialog({

@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { Award, FileSpreadsheet, CheckSquare, Printer, Calendar, Sparkles, Download, GraduationCap } from 'lucide-react';
+import { Award, FileSpreadsheet, CheckSquare, Printer, Calendar, Sparkles, Download, GraduationCap, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
@@ -457,12 +457,37 @@ export default function StudentResultsPage() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-start text-xs">
               <thead>
-                <tr className="border-b border-border bg-secondary/10 text-muted-foreground font-bold text-start">
-                  <th className="p-4 text-start">{isEnglish ? 'Course' : 'المادة'}</th>
-                  <th className="p-4 text-center">{isEnglish ? 'Coursework' : 'أعمال السنة'}</th>
-                  <th className="p-4 text-center">{isEnglish ? 'Final Exam' : 'الامتحان النهائي'}</th>
-                  <th className="p-4 text-center">{isEnglish ? 'Total Grade' : 'المجموع الكلي'}</th>
-                  <th className="p-4 text-end">{isEnglish ? 'Status' : 'التقدير / الحالة'}</th>
+                <tr className="border-b border-border/80 bg-secondary/20 text-muted-foreground font-bold text-start">
+                  <th className="p-4 text-start">
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-primary" />
+                      {isEnglish ? 'Course' : 'المادة والمقرر'}
+                    </span>
+                  </th>
+                  <th className="p-4 text-center">
+                    <span className="flex items-center justify-center gap-1.5">
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground" />
+                      {isEnglish ? 'Coursework' : 'أعمال السنة'}
+                    </span>
+                  </th>
+                  <th className="p-4 text-center">
+                    <span className="flex items-center justify-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-muted-foreground" />
+                      {isEnglish ? 'Final Exam' : 'الامتحان النهائي'}
+                    </span>
+                  </th>
+                  <th className="p-4 text-center">
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      {isEnglish ? 'Total Grade' : 'المجموع الكلي'}
+                    </span>
+                  </th>
+                  <th className="p-4 text-end">
+                    <span className="flex items-center justify-end gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-primary" />
+                      {isEnglish ? 'Grade & Status' : 'التقدير والحالة'}
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -482,18 +507,18 @@ export default function StudentResultsPage() {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className="h-5 w-1 rounded-full bg-primary" />
-                            <span className="font-black text-foreground">
+                            <span className="font-black text-foreground text-sm">
                               {semesterName(section.semester)}
                             </span>
-                            <span className="font-mono text-[10px] text-muted-foreground">
+                            <span className="font-mono text-[11px] text-muted-foreground">
                               {section.academicYears.join(', ')}
                             </span>
                           </div>
-                          <div className="flex items-center gap-3 font-mono text-[10px] font-bold">
-                            <span className="rounded-lg border border-border bg-card/70 px-2.5 py-1 text-foreground">
+                          <div className="flex items-center gap-3 font-mono text-xs font-bold">
+                            <span className="rounded-squircle border border-primary/30 bg-primary/10 px-3 py-1 text-primary">
                               {isEnglish ? 'Semester GPA' : 'معدل الفصل'}: {section.stats.gpa.toFixed(2)}
                             </span>
-                            <span className="text-muted-foreground">
+                            <span className="text-muted-foreground text-[11px]">
                               {section.stats.passed}/{section.groups.length} {isEnglish ? 'passed' : 'ناجح'}
                             </span>
                           </div>
@@ -514,20 +539,20 @@ export default function StudentResultsPage() {
                       const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
 
                       let statusText = '—';
-                      let badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+                      let statusBadgeClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
 
                       if (isBanned) {
                         statusText = isEnglish ? 'Banned' : 'محجوب/محروم';
-                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                        statusBadgeClass = 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
                       } else if (isAbsent) {
                         statusText = isEnglish ? 'Absent' : 'غائب';
-                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                        statusBadgeClass = 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
                       } else if (isPass) {
                         statusText = isEnglish ? 'Pass' : 'ناجح';
-                        badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+                        statusBadgeClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
                       } else {
                         statusText = isEnglish ? 'Fail' : 'راسب';
-                        badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
+                        statusBadgeClass = 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30';
                       }
 
                       const percentage =
@@ -537,47 +562,94 @@ export default function StudentResultsPage() {
                         course.final?.status,
                       );
 
+                      let letterColor = 'bg-secondary text-foreground border-border';
+                      if (scale.letter.startsWith('A')) {
+                        letterColor = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-black';
+                      } else if (scale.letter.startsWith('B')) {
+                        letterColor = 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30 font-bold';
+                      } else if (scale.letter.startsWith('C')) {
+                        letterColor = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold';
+                      } else if (scale.letter.startsWith('D')) {
+                        letterColor = 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 font-bold';
+                      } else if (scale.letter === 'F') {
+                        letterColor = 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 font-black';
+                      }
+
                       return (
                         <tr
                           key={`${course.academicYear}:${course.semester}:${course.courseCode}`}
-                          className="hover:bg-secondary/25 transition-colors text-foreground"
+                          className="hover:bg-muted/40 transition-colors text-foreground"
                         >
                           <td className="p-4 text-start">
                             <span className="font-bold block text-sm text-foreground">
                               {course.courseName}
                             </span>
-                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">
-                              {course.courseCode}
-                            </span>
+                            <div className="flex items-center gap-2 mt-1">
+                              <bdi className="text-[11px] font-mono text-muted-foreground font-semibold px-1.5 py-0.5 rounded bg-muted/60 border border-border/50">
+                                {course.courseCode}
+                              </bdi>
+                              {course.creditHours ? (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {course.creditHours} {isEnglish ? 'hrs' : 'ساعات'}
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
-                          <td className="p-4 text-center font-mono font-semibold">
-                            {course.midterm
-                              ? course.midterm.status === 'present'
-                                ? `${course.midterm.grade} / ${course.midterm.maxGrade}`
-                                : isEnglish
-                                  ? 'Absent'
-                                  : 'غائب'
-                              : '—'}
+                          <td className="p-4 text-center">
+                            {course.midterm ? (
+                              course.midterm.status === 'present' ? (
+                                <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
+                                  <bdi>{course.midterm.grade} / {course.midterm.maxGrade}</bdi>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                                  {isEnglish ? 'Absent' : 'غائب'}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground font-mono">—</span>
+                            )}
                           </td>
-                          <td className="p-4 text-center font-mono font-semibold">
-                            {course.final
-                              ? course.final.status === 'present'
-                                ? `${course.final.grade} / ${course.final.maxGrade}`
-                                : isEnglish
-                                  ? 'Absent'
-                                  : 'غائب'
-                              : '—'}
+                          <td className="p-4 text-center">
+                            {course.final ? (
+                              course.final.status === 'present' ? (
+                                <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
+                                  <bdi>{course.final.grade} / {course.final.maxGrade}</bdi>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                                  {isEnglish ? 'Absent' : 'غائب'}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-muted-foreground font-mono">—</span>
+                            )}
                           </td>
-                          <td className="p-4 text-center font-mono font-bold text-foreground">
-                            {total} / {maxTotal}
+                          <td className="p-4 text-center">
+                            <div className="inline-flex flex-col items-center gap-1">
+                              <span className="font-mono font-black text-sm text-foreground">
+                                <bdi>{total} / {maxTotal}</bdi>
+                              </span>
+                              <div className="w-16 bg-muted rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    isPass ? 'bg-emerald-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                {percentage.toFixed(1)}%
+                              </span>
+                            </div>
                           </td>
                           <td className="p-4 text-end">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-md bg-secondary/80 text-foreground border border-border">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className={`font-mono text-xs px-2.5 py-1 rounded-squircle border shadow-xs ${letterColor}`}>
                                 {scale.letter}
                               </span>
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}
+                                className={`inline-flex items-center px-2.5 py-1 rounded-squircle text-xs font-bold border shadow-xs ${statusBadgeClass}`}
                               >
                                 {statusText}
                               </span>

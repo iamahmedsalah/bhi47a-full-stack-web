@@ -34,3 +34,5 @@ coverage/
 # Misc
 *.tsbuildinfo
 .turbo/
+outputs/
+build_import_files.mjs

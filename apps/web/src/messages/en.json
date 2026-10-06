@@ -169,6 +169,9 @@
     "examType_quiz": "Quiz",
     "examType_midterm": "Midterm Exam",
     "examType_final": "Final Exam",
+    "examType_practical": "Practical Exam",
+    "examType_coursework": "Coursework",
+    "examType_oral": "Oral Exam",
     "status_present": "Present",
     "status_absent": "Absent",
     "status_banned": "Banned/Hidden",
@@ -196,7 +199,10 @@
       "examTypeValues": {
         "quiz": "Quiz",
         "midterm": "Midterm",
-        "final": "Final"
+        "final": "Final",
+        "practical": "Practical",
+        "coursework": "Coursework",
+        "oral": "Oral"
       },
       "statusValues": {
         "present": "Present",

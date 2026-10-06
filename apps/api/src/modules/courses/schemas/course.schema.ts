@@ -9,6 +9,15 @@ import {
 
 export type CourseDocument = Course & Document;
 
+export type CourseCurriculumDepartment = 'GENERAL' | 'BIS' | 'ACCOUNTING';
+
+export interface CourseCurriculum {
+  department: CourseCurriculumDepartment;
+  academicLevel: CourseLevel;
+  semester: Semester;
+  type: Course['type'];
+}
+
 @Schema({
   collection: 'courses',
   timestamps: true,
@@ -34,6 +43,27 @@ export class Course {
 
   @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
+
+  @Prop({
+    type: [
+      {
+        department: {
+          type: String,
+          required: true,
+          enum: ['GENERAL', 'BIS', 'ACCOUNTING'],
+        },
+        academicLevel: {
+          type: String,
+          required: true,
+          enum: COURSE_LEVEL_VALUES,
+        },
+        semester: { type: String, required: true, enum: SEMESTER_VALUES },
+        type: { type: String, required: true },
+      },
+    ],
+    default: undefined,
+  })
+  curricula?: CourseCurriculum[];
 
   @Prop({ trim: true, maxlength: 2000 })
   description?: string;

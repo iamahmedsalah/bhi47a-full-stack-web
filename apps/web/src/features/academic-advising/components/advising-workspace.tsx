@@ -1921,7 +1921,16 @@ function normalizeDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
 
 function getCourseSemester(
   course: AdvisingCourseMap["courses"][0],
+  studentDept?: string | null,
 ): "first" | "second" | "summer" | undefined {
+  const code = course.code.toUpperCase();
+  if (code === "326") {
+    if (course.semester === "first" || course.semester === "second") {
+      return course.semester;
+    }
+    const norm = normalizeDept(studentDept ?? course.department);
+    return norm === "ACCOUNTING" ? "first" : "second";
+  }
   if (
     course.semester === "first" ||
     course.semester === "second" ||
@@ -1929,7 +1938,6 @@ function getCourseSemester(
   ) {
     return course.semester;
   }
-  const code = course.code.toUpperCase();
   return COURSE_SEMESTER_BY_CODE[code];
 }
 
@@ -1967,11 +1975,17 @@ function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
 function isCourseOfferedInSemester(
   course: AdvisingCourseMap["courses"][0],
   semester: "first" | "second" | "summer",
+  studentDept?: string | null,
 ) {
+  const code = course.code.toUpperCase();
+  if (code === "326") {
+    const targetSem = getCourseSemester(course, studentDept);
+    return targetSem === semester;
+  }
   if (course.offeredTerms?.length) {
     return course.offeredTerms.includes(semester);
   }
-  const courseSem = getCourseSemester(course);
+  const courseSem = getCourseSemester(course, studentDept);
   return courseSem === semester;
 }
 
@@ -2137,7 +2151,7 @@ function CanvasContent({
           return false;
         }
 
-        if (!isCourseOfferedInSemester(course, advisingSemester)) {
+        if (!isCourseOfferedInSemester(course, advisingSemester, studentTrack)) {
           return false;
         }
 
@@ -2187,7 +2201,7 @@ function CanvasContent({
 
       // Semester filter
       if (gridSemesterFilter !== "all") {
-        const sem = getCourseSemester(course);
+        const sem = getCourseSemester(course, studentTrack);
         if (sem && sem !== gridSemesterFilter) {
           return false;
         }
@@ -3471,7 +3485,7 @@ function RegistrationSummary({
       const form = await apiGet<PrintableRegistrationForm>(
         `/registrations/${registrationId}/print`,
       );
-      if (!openRegistrationPrintView(form)) {
+      if (!openRegistrationPrintView(form, "print", isArabic ? "ar" : "en")) {
         toast.error(
           isArabic
             ? "يرجى السماح بالنوافذ المنبثقة لفتح الاستمارة"

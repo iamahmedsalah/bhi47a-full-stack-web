@@ -59,6 +59,7 @@ interface Course {
   minimumGpa?: number;
   registrationPriority?: number;
   description?: string;
+  curricula?: { department: string; academicLevel: string; semester: string; type: CourseType }[];
   isActive: boolean;
 }
 
@@ -80,6 +81,7 @@ const courseImportColumns = [
   'minimumGpa',
   'registrationPriority',
   'description',
+  'programCurricula',
 ];
 
 /* ─── Course Form Dialog (Reusable for Add/Edit) ─────── */
@@ -110,6 +112,7 @@ function CourseFormDialog({
   const [semester, setSemester] = useState(initialValues.semester || 'first');
   const [creditHours, setCreditHours] = useState(initialValues.creditHours || 3);
   const [department, setDepartment] = useState(initialValues.department || '');
+  const [programCurricula, setProgramCurricula] = useState('');
   const [prerequisites, setPrerequisites] = useState((initialValues.prerequisites || []).join(', '));
   const [courseType, setCourseType] = useState<CourseType>(initialValues.type || 'required');
   const [isActive, setIsActive] = useState(initialValues.isActive ?? true);
@@ -123,6 +126,7 @@ function CourseFormDialog({
   const [prevSemester, setPrevSemester] = useState(initialValues.semester);
   const [prevCreditHours, setPrevCreditHours] = useState(initialValues.creditHours);
   const [prevDepartment, setPrevDepartment] = useState(initialValues.department);
+  const [prevCurricula, setPrevCurricula] = useState(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|'));
   const [prevPrerequisites, setPrevPrerequisites] = useState(initialValues.prerequisites?.join(', '));
   const [prevCourseType, setPrevCourseType] = useState(initialValues.type);
   const [prevIsActive, setPrevIsActive] = useState(initialValues.isActive);
@@ -135,6 +139,7 @@ function CourseFormDialog({
     initialValues.semester !== prevSemester ||
     initialValues.creditHours !== prevCreditHours ||
     initialValues.department !== prevDepartment ||
+    initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|') !== prevCurricula ||
     initialValues.prerequisites?.join(', ') !== prevPrerequisites ||
     initialValues.type !== prevCourseType ||
     initialValues.isActive !== prevIsActive
@@ -146,6 +151,7 @@ function CourseFormDialog({
     setPrevSemester(initialValues.semester);
     setPrevCreditHours(initialValues.creditHours);
     setPrevDepartment(initialValues.department);
+    setPrevCurricula(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|'));
     setPrevPrerequisites(initialValues.prerequisites?.join(', '));
     setPrevCourseType(initialValues.type);
     setPrevIsActive(initialValues.isActive);
@@ -159,6 +165,7 @@ function CourseFormDialog({
       setSemester(initialValues.semester || 'first');
       setCreditHours(initialValues.creditHours || 3);
       setDepartment(initialValues.department || '');
+      setProgramCurricula(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|') || '');
       setPrerequisites((initialValues.prerequisites || []).join(', '));
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
@@ -181,6 +188,12 @@ function CourseFormDialog({
         semester,
         creditHours,
         department,
+        curricula: programCurricula.trim()
+          ? programCurricula.split('|').map((entry) => {
+              const [curriculumDepartment, academicLevel, curriculumSemester, type] = entry.split(':').map((part) => part.trim());
+              return { department: curriculumDepartment, academicLevel, semester: curriculumSemester, type: type as CourseType };
+            })
+          : undefined,
         prerequisites: prerequisites
           .split(',')
           .map((item) => item.trim().toUpperCase())
@@ -262,6 +275,12 @@ function CourseFormDialog({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted">{t('department')}</label>
             <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted">Program placements</label>
+            <Input type="text" dir="ltr" value={programCurricula} onChange={(e) => setProgramCurricula(e.target.value)} placeholder="ACCOUNTING:3:first:elective|BIS:3:second:elective" />
+            <p className="text-xs text-muted">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. This supports different placements for course 326.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Course, CourseDocument } from '../../courses/schemas/course.schema';
+import {
+  Course,
+  CourseDocument,
+  type CourseCurriculum,
+} from '../../courses/schemas/course.schema';
 import type { Importer, ImportResult } from '../importer.interface';
 import { parseSafeNumber } from '../upload-utils';
 
@@ -68,6 +72,7 @@ export class CourseImporter implements Importer {
   validate(rows: Record<string, unknown>[]) {
     const errors: string[] = [];
     const validRows: { row: Record<string, unknown>; rowNum: number }[] = [];
+    const seenCodes = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -80,6 +85,7 @@ export class CourseImporter implements Importer {
             ? String(row.code)
             : '';
       const courseCode = rawCode.trim();
+      const normalizedCode = courseCode.toUpperCase();
       const bilingualName =
         row.courseNameAr || row.courseNameEn || row.courseName;
       const rawLevelStr =
@@ -96,6 +102,77 @@ export class CourseImporter implements Importer {
       const cleanSemester = rawSemStr
         ? this.semesterMap[rawSemStr] || rawSemStr
         : '';
+      if (seenCodes.has(normalizedCode)) {
+        errors.push(
+          `Row ${rowNum}: duplicate course code ${normalizedCode} in this import`,
+        );
+        continue;
+      }
+      seenCodes.add(normalizedCode);
+
+      const curriculaRaw =
+        typeof row.programCurricula === 'string' ||
+        typeof row.programCurricula === 'number'
+          ? String(row.programCurricula).trim()
+          : '';
+      if (curriculaRaw) {
+        const curricula: CourseCurriculum[] = [];
+        const assignmentKeys = new Set<string>();
+        const typeValues = [
+          'required',
+          'elective',
+          'university_req',
+          'institute_req',
+          'specialization_req',
+        ];
+        const assignments = curriculaRaw.split('|');
+        let invalidCurricula = false;
+        for (const assignmentText of assignments) {
+          const [
+            rawDepartment,
+            rawCurriculumLevel,
+            rawCurriculumSemester,
+            rawType,
+          ] = assignmentText.split(':').map((part) => part.trim());
+          const curriculumDepartment = rawDepartment?.toUpperCase();
+          const curriculumLevel = rawCurriculumLevel
+            ? this.levelMap[rawCurriculumLevel.toLowerCase()] ||
+              rawCurriculumLevel
+            : '';
+          const curriculumSemester = rawCurriculumSemester
+            ? this.semesterMap[rawCurriculumSemester.toLowerCase()] ||
+              rawCurriculumSemester.toLowerCase()
+            : '';
+          const curriculumType = rawType?.toLowerCase();
+          const key = `${curriculumDepartment}:${curriculumLevel}:${curriculumSemester}`;
+          if (
+            !['GENERAL', 'BIS', 'ACCOUNTING'].includes(
+              curriculumDepartment ?? '',
+            ) ||
+            !['1', '2', '3', '4'].includes(curriculumLevel) ||
+            !['first', 'second', 'summer'].includes(curriculumSemester) ||
+            !typeValues.includes(curriculumType ?? '') ||
+            assignmentKeys.has(key)
+          ) {
+            invalidCurricula = true;
+            break;
+          }
+          assignmentKeys.add(key);
+          curricula.push({
+            department: curriculumDepartment as CourseCurriculum['department'],
+            academicLevel: curriculumLevel as CourseCurriculum['academicLevel'],
+            semester: curriculumSemester as CourseCurriculum['semester'],
+            type: curriculumType as CourseCurriculum['type'],
+          });
+        }
+        if (invalidCurricula || curricula.length === 0) {
+          errors.push(
+            `Row ${rowNum}: programCurricula must use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |`,
+          );
+          continue;
+        }
+        row._cleanCurricula = curricula;
+      }
 
       const missingFields: string[] = [];
       if (!courseCode) missingFields.push('الكود');
@@ -134,6 +211,7 @@ export class CourseImporter implements Importer {
       const cleanSemester = row._cleanSemester as string;
       const bilingualName = row._bilingualName as string;
       const offeredTerms = row.offeredTerms as string[] | undefined;
+      const curricula = row._cleanCurricula as CourseCurriculum[] | undefined;
 
       const courseData = {
         code: courseCode.toUpperCase(),
@@ -147,6 +225,7 @@ export class CourseImporter implements Importer {
         level: cleanLevel,
         academicLevel: cleanLevel,
         semester: cleanSemester,
+        ...(curricula ? { curricula } : {}),
         department: row.department === 'محل' ? undefined : row.department,
         creditHours: parseSafeNumber(row.creditHours) ?? 3,
         prerequisites: (row.prerequisites as string[]) || [],

@@ -54,6 +54,7 @@ import {
   recommendCourses,
 } from './utils/course-recommendation.util';
 import { isCourseOfferedForTerm } from './utils/term-availability.util';
+import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
 import { isRegistrationTermCurrentlyOpen } from './utils/registration-term.util';
 import { isNewStudentWithoutAcademicHistory } from './utils/academic-standing.util';
 import { getRegistrationSelectionLimits } from './utils/registration-selection.util';
@@ -100,6 +101,10 @@ function normalizeSemester(val?: string): string {
   return clean;
 }
 
+type RegistrationAcademicProfile = StudentAcademicProfileDocument & {
+  department?: string;
+};
+
 interface EffectiveRule {
   minGpa: number;
   maxGpa: number;
@@ -145,6 +150,7 @@ export interface AdvisingCourseMapResponse {
     gpa: number;
     academicLevel: string;
     semester: string;
+    department?: string;
   };
   selectedCourses: string[];
   suggestedCourses: string[];
@@ -278,7 +284,7 @@ export class RegistrationsService {
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
-    } as StudentAcademicProfileDocument;
+    } as RegistrationAcademicProfile;
     const rule = await this.getRuleForGpa(profile.gpa);
     const policy = await this.getSummerPolicy(profile, rule);
     const academicYear = registrationPeriod.academicYear;
@@ -335,7 +341,7 @@ export class RegistrationsService {
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
-    } as StudentAcademicProfileDocument;
+    } as RegistrationAcademicProfile;
     const rule = await this.getRuleForGpa(profile.gpa);
     const policy = await this.getSummerPolicy(profile, rule);
     const academicYear = registrationPeriod.academicYear;
@@ -360,11 +366,12 @@ export class RegistrationsService {
       .find({ isActive: true })
       .lean()) as unknown as CourseDocument[];
     const eligibleCourses = buildEligibleCourseList({
-      courses,
+      courses: coursesForDepartment(courses, profile.department),
       completedCourses: profile.completedCourses,
       failedCourses: profile.failedCourses,
       academicLevel: profile.academicLevel,
       semester: profile.semester,
+      department: profile.department,
     });
 
     return {
@@ -385,7 +392,7 @@ export class RegistrationsService {
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
-    } as StudentAcademicProfileDocument;
+    } as RegistrationAcademicProfile;
     const rule = await this.getRuleForGpa(profile.gpa);
     const policy = await this.getSummerPolicy(profile, rule);
     const academicYear = registrationPeriod.academicYear;
@@ -447,7 +454,7 @@ export class RegistrationsService {
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
-    } as StudentAcademicProfileDocument;
+    } as RegistrationAcademicProfile;
     const existingRegistration = await this.registrationModel.exists({
       studentId: profile.studentId,
       academicYear,
@@ -579,7 +586,7 @@ export class RegistrationsService {
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
-    } as StudentAcademicProfileDocument;
+    } as RegistrationAcademicProfile;
     const sid = new Types.ObjectId(studentId);
 
     // 1. Check visual AdvisingCase workflow
@@ -845,6 +852,10 @@ export class RegistrationsService {
     const suggested = new Set(
       normalizeCourseCodes(request.autoSuggestedCourses),
     );
+    const curriculumCourses = coursesForDepartment(
+      courses as unknown as CourseDocument[],
+      student.department,
+    );
 
     return {
       student: {
@@ -853,10 +864,11 @@ export class RegistrationsService {
         gpa: profile.gpa,
         academicLevel: profile.academicLevel,
         semester: profile.semester,
+        department: student.department,
       },
       selectedCourses: [...selected],
       suggestedCourses: [...suggested],
-      courses: courses.map((course) => {
+      courses: curriculumCourses.map((course) => {
         const code = course.code.toUpperCase();
         const gradeSummary = gradeSummaryByCourse.get(code);
         const gradePassed = gradeSummary
@@ -996,9 +1008,22 @@ export class RegistrationsService {
     dto?: AutoRegisterFirstYearDto,
     actorId?: string,
   ) {
-    const defaultAcademicYear = '2026-2027';
+    // 1. Resolve active registration term / defaults
+    const activeTerm =
+      (await this.registrationTermModel.findOne({ isCurrent: true }).lean()) ||
+      (await this.registrationTermModel
+        .findOne({ isOpen: true })
+        .sort({ updatedAt: -1, academicYear: -1 })
+        .lean());
 
-    // 1. Build student filter for Level 1 active students
+    const targetYear =
+      dto?.academicYear?.trim() || activeTerm?.academicYear || '2026-2027';
+
+    const targetSemester = (dto?.semester ||
+      (activeTerm ? normalizeSemester(activeTerm.semester) : 'first') ||
+      'first') as 'first' | 'second' | 'summer';
+
+    // 2. Build student filter for Level 1 active students
     const filter: FilterQuery<StudentProfileDocument> = {
       enrollmentStatus: 'active',
       $or: [
@@ -1022,16 +1047,22 @@ export class RegistrationsService {
         totalEligible: 0,
         registeredCount: 0,
         skippedCount: 0,
+        academicYear: targetYear,
+        semester: targetSemester,
         message: 'لا يوجد طلاب مؤهلين للتسجيل التلقائي في الفرقة الأولى',
         results: [],
       };
     }
 
-    // 2. Fetch all active level 1 courses
+    // 3. Fetch all active level 1 courses
     const allCourses = await this.courseModel
       .find({
         isActive: { $ne: false },
-        $or: [{ level: '1' }, { academicLevel: '1' }],
+        $or: [
+          { level: '1' },
+          { academicLevel: '1' },
+          { 'curricula.academicLevel': '1' },
+        ],
       })
       .lean();
 
@@ -1046,16 +1077,49 @@ export class RegistrationsService {
       notes?: string;
     }> = [];
 
-    for (const student of students) {
-      const studentCode = student.studentCode;
-      const studentName = student.fullName || student.fullNameAr || 'طالب';
-      const targetYear =
-        dto?.academicYear || student.academicYear || defaultAcademicYear;
-      const targetSemester = (dto?.semester ||
-        normalizeSemester(student.semester) ||
-        'first') as 'first' | 'second' | 'summer';
+    // Pre-fetch all existing registrations in a single query
+    const studentUserIds = students
+      .map((s) => s.userId)
+      .filter((id) => Boolean(id));
 
-      // Match courses suitable for this student
+    const existingRegistrations = await this.registrationModel
+      .find({
+        studentId: { $in: studentUserIds },
+        academicYear: targetYear,
+        semester: targetSemester,
+      })
+      .lean();
+
+    const existingMap = new Map<
+      string,
+      (typeof existingRegistrations)[number]
+    >();
+    for (const reg of existingRegistrations) {
+      if (reg.studentId) {
+        existingMap.set(reg.studentId.toString(), reg);
+      }
+    }
+
+    const actorObjectId =
+      actorId && Types.ObjectId.isValid(actorId)
+        ? new Types.ObjectId(actorId)
+        : undefined;
+
+    // Cache eligible courses by student department
+    const deptCourseCache = new Map<
+      string,
+      {
+        eligibleCourses: typeof allCourses;
+        courseCodes: string[];
+        totalCreditHours: number;
+      }
+    >();
+
+    const getCoursesForStudent = (sDeptRaw?: string) => {
+      const sDeptKey = (sDeptRaw || '').trim().toLowerCase();
+      const cached = deptCourseCache.get(sDeptKey);
+      if (cached) return cached;
+
       const eligibleCourses = allCourses.filter((c) => {
         const cSemester = normalizeSemester(c.semester);
         const offeredTerms = (c.offeredTerms || []).map((t) =>
@@ -1069,26 +1133,60 @@ export class RegistrationsService {
         if (c.type === 'elective') return false;
 
         // Department matching
+        const cDept = (c.department || '').trim().toLowerCase();
+        const sDept = sDeptKey;
+        const isCourseGeneral =
+          !cDept ||
+          cDept === 'عام' ||
+          cDept === 'general' ||
+          cDept === 'all' ||
+          cDept === 'الكل' ||
+          cDept === 'شعبة عامة';
+        const isStudentGeneral =
+          !sDept ||
+          sDept === 'عام' ||
+          sDept === 'general' ||
+          sDept === 'all' ||
+          sDept === 'الكل' ||
+          sDept === 'شعبة عامة';
+
         if (
-          c.department &&
-          c.department.trim() &&
-          student.department &&
-          student.department.trim()
+          !isCourseGeneral &&
+          !isStudentGeneral &&
+          !cDept.includes(sDept) &&
+          !sDept.includes(cDept)
         ) {
-          const cDept = c.department.trim().toLowerCase();
-          const sDept = student.department.trim().toLowerCase();
-          const isGeneral =
-            cDept === 'عام' ||
-            cDept === 'general' ||
-            cDept === 'all' ||
-            cDept === 'الكل';
-          if (!isGeneral && !cDept.includes(sDept) && !sDept.includes(cDept)) {
-            return false;
-          }
+          return false;
         }
 
         return true;
       });
+
+      const courseCodes = eligibleCourses.map((c) => c.code);
+      const totalCreditHours = eligibleCourses.reduce(
+        (sum, c) => sum + (c.creditHours || 3),
+        0,
+      );
+
+      const entry = { eligibleCourses, courseCodes, totalCreditHours };
+      deptCourseCache.set(sDeptKey, entry);
+      return entry;
+    };
+
+    const registrationOps: Parameters<
+      Model<CourseRegistrationDocument>['bulkWrite']
+    >[0] = [];
+    const academicProfileOps: Parameters<
+      Model<StudentAcademicProfileDocument>['bulkWrite']
+    >[0] = [];
+    const now = new Date();
+
+    for (const student of students) {
+      const studentCode = student.studentCode;
+      const studentName = student.fullName || student.fullNameAr || 'طالب';
+
+      const { eligibleCourses, courseCodes, totalCreditHours } =
+        getCoursesForStudent(student.department);
 
       if (eligibleCourses.length === 0) {
         skippedCount++;
@@ -1103,48 +1201,42 @@ export class RegistrationsService {
         continue;
       }
 
-      const courseCodes = eligibleCourses.map((c) => c.code);
-      const totalCreditHours = eligibleCourses.reduce(
-        (sum, c) => sum + (c.creditHours || 3),
-        0,
-      );
-
-      // Check existing registration
-      const existing = await this.registrationModel.findOne({
-        studentId: student.userId,
-        academicYear: targetYear,
-        semester: targetSemester,
-      });
+      const existing = student.userId
+        ? existingMap.get(student.userId.toString())
+        : undefined;
 
       if (existing && existing.status === 'approved' && !dto?.forceOverwrite) {
         skippedCount++;
         results.push({
           studentCode,
           studentName,
-          coursesCount: existing.courses.length,
-          courseCodes: existing.courses,
+          coursesCount: existing.courses?.length || 0,
+          courseCodes: existing.courses || [],
           status: 'skipped',
           notes: 'مسجل بالفعل ومؤكد',
         });
         continue;
       }
 
-      const actorObjectId =
-        actorId && Types.ObjectId.isValid(actorId)
-          ? new Types.ObjectId(actorId)
-          : undefined;
-
       if (existing) {
-        existing.courses = courseCodes;
-        existing.totalCreditHours = totalCreditHours;
-        existing.source = 'system';
-        existing.status = 'approved';
-        existing.approvedAt = new Date();
-        existing.approvedBy = actorObjectId;
-        existing.advisorNotes =
-          'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)';
-        existing.printableFormUrl = `/api/registrations/${existing._id.toString()}/print`;
-        await existing.save();
+        registrationOps.push({
+          updateOne: {
+            filter: { _id: existing._id },
+            update: {
+              $set: {
+                courses: courseCodes,
+                totalCreditHours,
+                source: 'system',
+                status: 'approved',
+                approvedAt: now,
+                approvedBy: actorObjectId,
+                advisorNotes:
+                  'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+                printableFormUrl: `/api/registrations/${existing._id.toString()}/print`,
+              },
+            },
+          },
+        });
 
         registeredCount++;
         results.push({
@@ -1155,22 +1247,27 @@ export class RegistrationsService {
           status: 'updated',
         });
       } else {
-        const newReg = new this.registrationModel({
-          studentId: student.userId,
-          courses: courseCodes,
-          totalCreditHours,
-          source: 'system',
-          status: 'approved',
-          academicYear: targetYear,
-          semester: targetSemester,
-          approvedAt: new Date(),
-          approvedBy: actorObjectId,
-          advisorNotes:
-            'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
-          editCount: 0,
+        const newId = new Types.ObjectId();
+        registrationOps.push({
+          insertOne: {
+            document: {
+              _id: newId,
+              studentId: student.userId,
+              courses: courseCodes,
+              totalCreditHours,
+              source: 'system',
+              status: 'approved',
+              academicYear: targetYear,
+              semester: targetSemester,
+              approvedAt: now,
+              approvedBy: actorObjectId,
+              advisorNotes:
+                'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+              editCount: 0,
+              printableFormUrl: `/api/registrations/${newId.toString()}/print`,
+            },
+          },
         });
-        newReg.printableFormUrl = `/api/registrations/${newReg._id.toString()}/print`;
-        await newReg.save();
 
         registeredCount++;
         results.push({
@@ -1182,33 +1279,69 @@ export class RegistrationsService {
         });
       }
 
-      // Ensure StudentAcademicProfile is initialized
-      await this.academicProfileModel.updateOne(
-        { studentId: student.userId },
-        {
-          $set: {
-            academicLevel: '1',
-            semester: targetSemester,
+      if (student.userId) {
+        academicProfileOps.push({
+          updateOne: {
+            filter: { studentId: student.userId },
+            update: {
+              $set: {
+                academicLevel: '1',
+                semester: targetSemester,
+              },
+              $setOnInsert: {
+                gpa: 0,
+                completedCourses: [],
+                failedCourses: [],
+                lowGradeCourses: [],
+                academicWarnings: 0,
+                isGraduatingThisYear: false,
+                approvedICCourseCompletions: [],
+              },
+            },
+            upsert: true,
           },
-          $setOnInsert: {
-            gpa: 0,
-            completedCourses: [],
-            failedCourses: [],
-            lowGradeCourses: [],
-            academicWarnings: 0,
-            isGraduatingThisYear: false,
-            approvedICCourseCompletions: [],
-          },
-        },
-        { upsert: true },
-      );
+        });
+      }
+    }
+
+    // Execute bulk writes in chunks of 500 to optimize throughput and keep DB connection healthy
+    const BATCH_SIZE = 500;
+    const maxOps = Math.max(registrationOps.length, academicProfileOps.length);
+    for (let i = 0; i < maxOps; i += BATCH_SIZE) {
+      const regBatch = registrationOps.slice(i, i + BATCH_SIZE);
+      const profileBatch = academicProfileOps.slice(i, i + BATCH_SIZE);
+      await Promise.all([
+        regBatch.length > 0
+          ? this.registrationModel.bulkWrite(regBatch, {
+              ordered: false,
+            })
+          : Promise.resolve(),
+        profileBatch.length > 0
+          ? this.academicProfileModel.bulkWrite(profileBatch, {
+              ordered: false,
+            })
+          : Promise.resolve(),
+      ]);
+    }
+
+    let message = '';
+    if (registeredCount > 0) {
+      message = `تم التسجيل التلقائي بنجاح لـ ${registeredCount} طالب من أصل ${students.length}${
+        skippedCount > 0 ? ` (تم تخطي ${skippedCount} مسجلين مسبقاً)` : ''
+      }`;
+    } else if (skippedCount > 0) {
+      message = `جميع الطلاب (${skippedCount}) مسجلون بالفعل في ${targetYear} (${targetSemester}). يرجى تفعيل خيار إعادة التسجيل لتحديث مقرراتهم.`;
+    } else {
+      message = `لم يتم العثور على مقررات مطابقة للفرقة الأولى في الفصل ${targetSemester}`;
     }
 
     return {
       totalEligible: students.length,
       registeredCount,
       skippedCount,
-      message: `تم التسجيل التلقائي بنجاح لـ ${registeredCount} طالب من أصل ${students.length}`,
+      academicYear: targetYear,
+      semester: targetSemester,
+      message,
       results,
     };
   }
@@ -1444,15 +1577,34 @@ export class RegistrationsService {
       ? await this.resolveAdvisorName(advisorId)
       : undefined;
 
+    const studentProfileAny = studentProfile;
+    const studentNameAr =
+      studentProfileAny.fullNameAr || studentProfile.fullName;
+    const studentNameEn =
+      studentProfileAny.fullNameEn || studentProfile.fullName;
+    const department = studentProfileAny.department;
+
     return {
-      instituteName: 'BIS Institute',
-      title: 'Academic Course Registration Form',
+      instituteName:
+        'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47A)',
+      instituteNameAr:
+        'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47A)',
+      instituteNameEn:
+        'Higher Institute for Advanced Administrative Sciences & Computer (BHI47A)',
+      title: 'استمارة تسجيل المقررات الدراسية',
+      titleAr: 'استمارة تسجيل المقررات الدراسية',
+      titleEn: 'Academic Course Registration Form',
+      academicYear: registration.academicYear,
       studentInformation: {
-        studentName: studentProfile.fullName,
+        studentName: studentNameAr,
+        studentNameAr,
+        studentNameEn,
         studentCode: studentProfile.studentCode,
         nationalId:
           studentProfile.nationalId ?? studentProfile.nationalIdMasked,
-        academicLevel: academicProfile.academicLevel,
+        academicLevel: academicProfile.academicLevel ?? studentProfileAny.level,
+        academicYear: registration.academicYear,
+        department,
         semester: registration.semester,
         gpa: academicProfile.gpa,
         advisorName: advisor,
@@ -1463,9 +1615,9 @@ export class RegistrationsService {
         const course = courses.find((item) => item.code === code);
         return {
           code,
-          courseName: course?.nameEn ?? course?.name ?? code,
+          courseName: course?.nameAr ?? course?.name ?? code,
           courseNameEn: course?.nameEn ?? course?.name ?? code,
-          courseNameAr: course?.nameAr,
+          courseNameAr: course?.nameAr ?? course?.name ?? code,
           creditHours: course?.creditHours ?? 0,
           type: course?.type ?? 'required',
           status:
@@ -1529,13 +1681,18 @@ export class RegistrationsService {
       .find({ isActive: true })
       .lean()) as unknown as CourseDocument[];
     const assignedStaffId = await this.assignStaffAdvisor(profile);
+    const studentProfile = await this.studentProfileModel
+      .findOne({ userId: profile.studentId })
+      .select('department')
+      .lean();
     const autoSuggestedCourses = recommendCourses({
-      courses,
+      courses: coursesForDepartment(courses, studentProfile?.department),
       completedCourses: profile.completedCourses,
       failedCourses: profile.failedCourses,
       academicLevel: profile.academicLevel,
       semester: profile.semester,
       maxCreditHours: rule.maxCreditHours,
+      department: studentProfile?.department,
     });
 
     return new this.advisingRequestModel({
@@ -1611,7 +1768,28 @@ export class RegistrationsService {
     const completedCourses = new Set(
       normalizeCourseCodes(profile.completedCourses),
     );
-    const blockedCourse = courses.find(
+    const studentProfile = await this.studentProfileModel
+      .findOne({ userId: profile.studentId })
+      .select('department')
+      .lean();
+    const department = studentProfile?.department;
+    const scopedCourses = coursesForDepartment(
+      courses as unknown as CourseDocument[],
+      department,
+    );
+    const scopedSelected = courseCodes.map((code) =>
+      scopedCourses.find((course) => course.code.toUpperCase() === code),
+    );
+    if (scopedSelected.some((course) => !course)) {
+      const blocked = courseCodes.find(
+        (code) =>
+          !scopedCourses.some((course) => course.code.toUpperCase() === code),
+      );
+      throw new BadRequestException(
+        `${blocked} is not part of your department curriculum`,
+      );
+    }
+    const blockedCourse = (scopedSelected as CourseDocument[]).find(
       (course) =>
         completedCourses.has(course.code.toUpperCase()) ||
         (!overrides.overridePrerequisites &&
@@ -1623,7 +1801,7 @@ export class RegistrationsService {
       );
     }
 
-    const unavailableCourse = courses.find(
+    const unavailableCourse = (scopedSelected as CourseDocument[]).find(
       (course) => !isCourseOfferedForTerm(course, profile.semester),
     );
     if (unavailableCourse) {
@@ -1634,13 +1812,17 @@ export class RegistrationsService {
 
     if (requireEligiblePlan) {
       const eligible = buildEligibleCourseList({
-        courses: (await this.courseModel
-          .find({ isActive: true })
-          .lean()) as unknown as CourseDocument[],
+        courses: coursesForDepartment(
+          (await this.courseModel
+            .find({ isActive: true })
+            .lean()) as unknown as CourseDocument[],
+          department,
+        ),
         completedCourses: profile.completedCourses,
         failedCourses: profile.failedCourses,
         academicLevel: profile.academicLevel,
         semester: profile.semester,
+        department,
       });
       const eligibleCodes = new Set(eligible.map((course) => course.code));
       const invalidCourse = courseCodes.find(
@@ -1774,11 +1956,16 @@ export class RegistrationsService {
       ),
     });
 
+    const studentProfile = await this.studentProfileModel
+      .findOne({ userId: new Types.ObjectId(studentId) })
+      .select('department')
+      .lean();
     return {
       ...profile,
       ...progress,
+      department: studentProfile?.department,
       gpa: progress.calculatedGpa ?? profile.gpa,
-    } as unknown as StudentAcademicProfileDocument;
+    } as unknown as RegistrationAcademicProfile;
   }
 
   private async getRuleForGpa(gpa: number): Promise<EffectiveRule> {

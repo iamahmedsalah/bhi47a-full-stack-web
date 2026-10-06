@@ -317,6 +317,11 @@ export function normalizeRowKeys(
     ) {
       normalized.courseType = String(val).trim().toLowerCase();
     } else if (
+      cleanKey === 'programcurricula' ||
+      cleanKey === 'departmentcurricula'
+    ) {
+      normalized.programCurricula = String(val).trim();
+    } else if (
       cleanKey === 'recommendedsemester' ||
       cleanKey === 'الفصل الموصى به'
     ) {

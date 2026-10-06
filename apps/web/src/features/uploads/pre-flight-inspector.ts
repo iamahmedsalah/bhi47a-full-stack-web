@@ -105,6 +105,10 @@ async function extractRawSheetRows(
   throw new Error('الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة');
 }
 
+export interface PreFlightInspectOptions {
+  allowDuplicateStudentCode?: boolean;
+}
+
 /**
  * Runs pre-flight client-side inspection and validation on uploaded spreadsheet
  */
@@ -112,6 +116,7 @@ export async function inspectAndValidateFile(
   file: File,
   type: UploadCatalogType,
   isAr: boolean = true,
+  options?: PreFlightInspectOptions,
 ): Promise<PreFlightResult> {
   const catalog = UPLOAD_CATALOGS[type];
   if (!catalog) {
@@ -235,21 +240,52 @@ export async function inspectAndValidateFile(
     // Check for duplicate studentCode or unique identifiers within the file
     if (rowData.studentCode) {
       const codeStr = String(rowData.studentCode).trim();
-      if (seenUniqueKeys.has(codeStr)) {
-        const firstSeenRow = seenUniqueKeys.get(codeStr)!;
-        rowIssues.push({
-          rowNumber,
-          field: 'studentCode',
-          fieldLabel: isAr ? 'كود الطالب' : 'Student Code',
-          code: 'DUPLICATE_CODE',
-          message: isAr
-            ? `كود الطالب (${codeStr}) مكرر في الملف (ظهر لأول مرة في صف ${firstSeenRow})`
-            : `Student code (${codeStr}) is duplicated (first seen at row ${firstSeenRow})`,
-          severity: 'error',
-          rawValue: codeStr,
-        });
+      const courseStr = rowData.courseCode
+        ? String(rowData.courseCode).trim().toUpperCase()
+        : '';
+      const allowDuplicate =
+        options?.allowDuplicateStudentCode ??
+        (type === 'grades' || type === 'quizzes' || type === 'attendance');
+
+      if (allowDuplicate) {
+        // When duplicate student code is allowed (e.g. multi-course upload),
+        // protect against exact duplicate entries for the SAME student and SAME course.
+        if (courseStr) {
+          const pairKey = `${codeStr}:::${courseStr}`;
+          if (seenUniqueKeys.has(pairKey)) {
+            const firstSeenRow = seenUniqueKeys.get(pairKey)!;
+            rowIssues.push({
+              rowNumber,
+              field: 'studentCode',
+              fieldLabel: isAr ? 'كود الطالب' : 'Student Code',
+              code: 'DUPLICATE_STUDENT_COURSE',
+              message: isAr
+                ? `كود الطالب (${codeStr}) مكرر لنفس المقرر (${courseStr}) (ظهر لأول مرة في صف ${firstSeenRow})`
+                : `Student code (${codeStr}) is duplicated for course (${courseStr}) (first seen at row ${firstSeenRow})`,
+              severity: 'error',
+              rawValue: codeStr,
+            });
+          } else {
+            seenUniqueKeys.set(pairKey, rowNumber);
+          }
+        }
       } else {
-        seenUniqueKeys.set(codeStr, rowNumber);
+        if (seenUniqueKeys.has(codeStr)) {
+          const firstSeenRow = seenUniqueKeys.get(codeStr)!;
+          rowIssues.push({
+            rowNumber,
+            field: 'studentCode',
+            fieldLabel: isAr ? 'كود الطالب' : 'Student Code',
+            code: 'DUPLICATE_CODE',
+            message: isAr
+              ? `كود الطالب (${codeStr}) مكرر في الملف (ظهر لأول مرة في صف ${firstSeenRow})`
+              : `Student code (${codeStr}) is duplicated (first seen at row ${firstSeenRow})`,
+            severity: 'error',
+            rawValue: codeStr,
+          });
+        } else {
+          seenUniqueKeys.set(codeStr, rowNumber);
+        }
       }
     }
 

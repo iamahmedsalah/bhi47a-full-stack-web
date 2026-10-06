@@ -183,34 +183,34 @@ export default function StudentCheckInPage() {
 
         {/* State 2: Success (Present or Late) */}
         {status === "success" && result && (
-          <Card className="p-8 text-center bg-card border-primary/20 space-y-6">
+          <Card className="p-8 text-center bg-card border-2 border-emerald-500/30 ring-1 ring-emerald-500/20 shadow-[0_0_35px_rgba(16,185,129,0.15)] space-y-6">
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               className={`h-20 w-20 mx-auto rounded-full flex items-center justify-center ${
                 result.status === "present"
-                  ? "bg-primary/10 text-primary border-2 border-primary/20"
+                  ? "bg-emerald-500/15 text-emerald-500 border-2 border-emerald-500/40 ring-4 ring-emerald-500/15 shadow-[0_0_30px_rgba(16,185,129,0.25)]"
                   : "bg-amber-500/20 text-amber-400 border-2 border-amber-500/40 shadow-amber-950/50"
               }`}
             >
               {result.status === "present" ? (
-                <CheckCircle2 className="h-10 w-10" />
+                <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-pulse" />
               ) : (
-                <Clock className="h-10 w-10" />
+                <Clock className="h-10 w-10 text-amber-400" />
               )}
             </motion.div>
 
             <div className="space-y-2">
               <Badge
-                className={`text-sm px-4 py-1 font-bold ${
+                className={`text-sm px-4 py-1 font-bold shadow-xs ${
                   result.status === "present"
-                    ? "bg-primary/10 text-primary border-primary/20"
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                     : "bg-amber-500/20 text-amber-300 border-amber-500/40"
                 }`}
               >
                 {result.status === "present"
                   ? isArabic
-                    ? "✓ حاضر (في الموعد)"
+                    ? "✓ حاضر (تم توثيق الحضور بنجاح)"
                     : "PRESENT"
                   : isArabic
                     ? "⏰ حاضر (متأخر)"
@@ -231,7 +231,7 @@ export default function StudentCheckInPage() {
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-muted/40 border border-border/60 text-xs space-y-2 text-muted-foreground">
+            <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-2 text-muted-foreground">
               <div className="flex justify-between">
                 <span>{isArabic ? "الطالب:" : "Student:"}</span>
                 <span className="font-semibold text-foreground">
@@ -240,7 +240,7 @@ export default function StudentCheckInPage() {
               </div>
               <div className="flex justify-between">
                 <span>{isArabic ? "وقت التسجيل:" : "Check-in Time:"}</span>
-                <span className="font-mono text-foreground">
+                <span className="font-mono text-emerald-500 font-bold">
                   {new Date(result.checkedInAt).toLocaleTimeString(
                     isArabic ? "ar-EG" : "en-US",
                     { hour: "2-digit", minute: "2-digit", second: "2-digit" },
@@ -249,14 +249,14 @@ export default function StudentCheckInPage() {
               </div>
               <div className="flex justify-between">
                 <span>{isArabic ? "المقرر:" : "Course:"}</span>
-                <span className="font-mono text-primary">
+                <span className="font-mono text-primary font-bold">
                   {result.courseCode}
                 </span>
               </div>
             </div>
 
             <Button
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-md"
               onClick={() => router.push(`/${locale}/dashboard/attendance`)}
             >
               {isArabic ? "عرض سجل حضوري الكامل" : "View My Attendance History"}

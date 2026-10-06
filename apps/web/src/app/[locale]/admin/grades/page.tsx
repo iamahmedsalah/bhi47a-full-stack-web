@@ -284,8 +284,10 @@ function GradesPageContent() {
       key: "studentCode",
       header: isAr ? "كود الطالب" : "Student Code",
       render: (item) => (
-        <TableCell className="p-4 font-mono font-semibold">
-          {item.studentCode}
+        <TableCell className="p-4 font-mono">
+          <bdi className="font-semibold text-foreground px-2 py-0.5 rounded-squircle bg-muted/60 border border-border/50 text-xs inline-block">
+            {item.studentCode}
+          </bdi>
         </TableCell>
       ),
     },
@@ -293,7 +295,7 @@ function GradesPageContent() {
       key: "studentName",
       header: isAr ? "اسم الطالب" : "Student Name",
       render: (item) => (
-        <TableCell className="p-4 font-medium">
+        <TableCell className="p-4 font-medium text-foreground">
           {item.studentName || "—"}
         </TableCell>
       ),
@@ -302,9 +304,13 @@ function GradesPageContent() {
       key: "course",
       header: isAr ? "المقرر" : "Course",
       render: (item) => (
-        <TableCell className="p-4 text-muted-foreground">
-          {localizedCourseName(item.courseCode, item.courseName)} (
-          {item.courseCode})
+        <TableCell className="p-4">
+          <span className="font-semibold text-foreground block text-xs">
+            {localizedCourseName(item.courseCode, item.courseName)}
+          </span>
+          <bdi className="font-mono text-[11px] text-muted-foreground mt-0.5 inline-block">
+            {item.courseCode}
+          </bdi>
         </TableCell>
       ),
     },
@@ -336,14 +342,31 @@ function GradesPageContent() {
                         : pct >= 50
                           ? "D"
                           : "F");
+
+        let letterBadgeClass = "border-border bg-muted/50 text-foreground";
+        if (letter.startsWith("A")) {
+          letterBadgeClass = "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold";
+        } else if (letter.startsWith("B")) {
+          letterBadgeClass = "border-teal-500/30 bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold";
+        } else if (letter.startsWith("C")) {
+          letterBadgeClass = "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold";
+        } else if (letter.startsWith("D")) {
+          letterBadgeClass = "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold";
+        } else if (letter === "F") {
+          letterBadgeClass = "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400 font-bold";
+        }
+
         return (
           <TableCell className="p-4 font-mono">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-primary">
-                {item.grade} / {item.maxGrade}
+              <span className="font-bold text-foreground">
+                <bdi>{item.grade} / {item.maxGrade}</bdi>
               </span>
-              <span className="rounded border border-border bg-secondary/80 px-1.5 py-0.5 text-[11px] font-bold text-foreground">
-                {letter} ({pct}%)
+              <span className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}>
+                {letter}
+              </span>
+              <span className="text-[11px] text-muted-foreground font-mono">
+                ({pct}%)
               </span>
             </div>
           </TableCell>
@@ -470,17 +493,31 @@ function GradesPageContent() {
         </Button>
       </PageTitleBanner>
 
-      <div className="flex gap-2 border-b border-border/70 pb-3">
-        {["midterm", "final", "quiz"].map((tab) => (
+      <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
+        {[
+          {
+            key: "final",
+            label: isAr ? "الامتحان النهائي (Final)" : "Final Exam",
+          },
+          {
+            key: "midterm",
+            label: isAr ? "أعمال السنة والميدتيرم" : "Midterm & Coursework",
+          },
+          {
+            key: "quiz",
+            label: isAr ? "الكويزات" : "Quizzes",
+          },
+        ].map((tab) => (
           <Button
-            key={tab}
-            variant={activeTab === tab ? "default" : "ghost"}
+            key={tab.key}
+            variant={activeTab === tab.key ? "default" : "outline"}
+            className="rounded-squircle font-semibold transition-all px-4"
             onClick={() => {
-              setActiveTab(tab);
+              setActiveTab(tab.key);
               setPage(1);
             }}
           >
-            {tab.toUpperCase()}
+            {tab.label}
           </Button>
         ))}
       </div>

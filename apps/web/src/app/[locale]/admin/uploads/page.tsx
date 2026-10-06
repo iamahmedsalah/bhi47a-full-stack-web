@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense, useMemo } from 'react';
+import React, { useState, Suspense, useMemo, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import {
@@ -59,6 +59,10 @@ import {
 } from '@/features/uploads/upload-catalog';
 import { inspectAndValidateFile } from '@/features/uploads/pre-flight-inspector';
 import { ExcelPreviewGrid } from '@/features/uploads/components/excel-preview-grid';
+import { useBatchUpload } from '@/features/uploads/use-batch-upload';
+import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import { saveUploadHistoryEntry } from '@/features/uploads/upload-history';
+import { UploadHistoryCard } from '@/features/uploads/components/upload-history-card';
 
 const CATALOG_ICONS: Record<UploadCatalogType, React.ReactNode> = {
   students: <Users className="h-5 w-5" />,
@@ -79,7 +83,6 @@ function UploadsPageContent() {
   // Form State
   const [uploadType, setUploadType] = useState<UploadCatalogType>('students');
   const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
 
@@ -92,8 +95,73 @@ function UploadsPageContent() {
   const [errorMsg, setErrorMsg] = useState('');
   const [errorSearch, setErrorSearch] = useState('');
 
+  const uploader = useBatchUpload({
+    onSuccess: (uploadRes) => {
+      setResult(uploadRes);
+      if (file) {
+        saveUploadHistoryEntry({
+          fileName: file.name,
+          catalogType: uploadType,
+          fileSizeBytes: file.size,
+          successCount: uploadRes.successCount,
+          failedCount: uploadRes.failedCount,
+          totalRows: preview?.totalRows ?? (uploadRes.successCount + uploadRes.failedCount),
+          status: uploadRes.failedCount === 0 ? 'success' : uploadRes.successCount > 0 ? 'partial' : 'failed',
+          allowDuplicateStudentCode,
+        });
+      }
+      if (uploadRes.successCount > 0) {
+        toast.success(
+          isAr
+            ? `تم استيراد ${uploadRes.successCount} سجل بنجاح إلى قاعدة البيانات`
+            : `Successfully imported ${uploadRes.successCount} record(s)`,
+        );
+      }
+      if (uploadRes.failedCount > 0) {
+        toast.error(
+          isAr
+            ? `تعذر استيراد ${uploadRes.failedCount} سجل`
+            : `Failed to import ${uploadRes.failedCount} record(s)`,
+        );
+      }
+      void wipeSummaryQuery.refetch();
+    },
+    onError: (err) => {
+      setErrorMsg(err);
+    },
+  });
+
+  const loading = uploader.isUploading;
+
   // UI Accordions
   const [showFieldsGuide, setShowFieldsGuide] = useState(true);
+
+  // Multi-Course / Duplicate Student Code Toggle
+  const [allowDuplicateStudentCode, setAllowDuplicateStudentCode] = useState(
+    uploadType === 'grades' || uploadType === 'quizzes' || uploadType === 'attendance',
+  );
+
+  useEffect(() => {
+    setAllowDuplicateStudentCode(
+      uploadType === 'grades' || uploadType === 'quizzes' || uploadType === 'attendance',
+    );
+  }, [uploadType]);
+
+  const reInspectWithOption = async (newAllowDuplicate: boolean) => {
+    setAllowDuplicateStudentCode(newAllowDuplicate);
+    if (!file) return;
+    setIsInspecting(true);
+    try {
+      const inspectRes = await inspectAndValidateFile(file, uploadType, isAr, {
+        allowDuplicateStudentCode: newAllowDuplicate,
+      });
+      setPreview(inspectRes);
+    } catch (err: any) {
+      setErrorMsg(err?.message || (isAr ? 'فشل فحص الملف' : 'Inspection failed'));
+    } finally {
+      setIsInspecting(false);
+    }
+  };
 
   // Data Wipe / Reset State
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
@@ -164,7 +232,9 @@ function UploadsPageContent() {
     setIsInspecting(true);
 
     try {
-      const inspectRes = await inspectAndValidateFile(selectedFile, uploadType, isAr);
+      const inspectRes = await inspectAndValidateFile(selectedFile, uploadType, isAr, {
+        allowDuplicateStudentCode,
+      });
       setPreview(inspectRes);
       toast.success(
         isAr
@@ -217,40 +287,15 @@ function UploadsPageContent() {
       return;
     }
 
-    setLoading(true);
     setErrorMsg('');
     setResult(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', uploadType);
-
-    try {
-      const response = await api.post<UploadResult>('/admin/uploads', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      setResult(response.data);
-      if (response.data.successCount > 0) {
-        toast.success(
-          isAr
-            ? `تم استيراد ${response.data.successCount} سجل بنجاح إلى قاعدة البيانات`
-            : `Successfully imported ${response.data.successCount} record(s)`,
-        );
-      }
-      if (response.data.failedCount > 0) {
-        toast.error(
-          isAr
-            ? `تعذر استيراد ${response.data.failedCount} سجل`
-            : `Failed to import ${response.data.failedCount} record(s)`,
-        );
-      }
-      void wipeSummaryQuery.refetch();
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, isAr ? 'فشل رفع الملف' : 'Upload failed'));
-    } finally {
-      setLoading(false);
-    }
+    await uploader.startUpload({
+      file,
+      type: uploadType,
+      parsedRows: preview?.parsedRows,
+      isAr,
+    });
   };
 
   const copyErrorsToClipboard = () => {
@@ -415,6 +460,48 @@ function UploadsPageContent() {
             </div>
           </div>
 
+          {/* Multi-Course / Duplicate Student Code Toggle */}
+          {(uploadType === 'grades' || uploadType === 'quizzes' || uploadType === 'attendance') && (
+            <div className="flex items-center justify-between rounded-squircle border border-teal-500/20 bg-teal-500/5 p-3.5 text-xs transition-all">
+              <div className="space-y-0.5 pe-3">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                  {isAr
+                    ? 'السماح بتكرار كود الطالب (لرفع أكثر من مقرر في الملف)'
+                    : 'Allow duplicate student code (multi-course file)'}
+                </span>
+                <p className="text-[11px] text-muted-foreground">
+                  {isAr
+                    ? 'عند تفعيل هذا الخيار، يمكن للطالب أن يتكرر في عدة صفوف لمقررات مختلفة دون اعتباره خطأ تكرار.'
+                    : 'Allows the same student code across multiple rows when each row belongs to a different course.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allowDuplicateStudentCode}
+                onClick={() => void reInspectWithOption(!allowDuplicateStudentCode)}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-teal-500 focus:ring-offset-2',
+                  allowDuplicateStudentCode ? 'bg-teal-500' : 'bg-muted-foreground/30',
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out',
+                    allowDuplicateStudentCode
+                      ? 'translate-x-5 rtl:-translate-x-5'
+                      : 'translate-x-0',
+                  )}
+                />
+              </button>
+            </div>
+          )}
+
+          {/* Upload History Widget */}
+          <UploadHistoryCard currentCatalog={uploadType} isAr={isAr} />
+
           {/* Drag & Drop File Zone */}
           <div
             onDragEnter={(e) => {
@@ -445,7 +532,7 @@ function UploadsPageContent() {
           >
             {file ? (
               <div className="flex items-center gap-3">
-                <div className="p-3.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <div className="p-3.5 rounded-squircle bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
                   <FileSpreadsheet className="w-7 h-7" />
                 </div>
                 <div className="text-start">
@@ -506,6 +593,16 @@ function UploadsPageContent() {
               <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
               <span>{isAr ? 'جاري فحص وتدقيق بيانات الملف...' : 'Inspecting workbook data...'}</span>
             </div>
+          )}
+
+          {/* Live Progress Bar (0% - 100%) */}
+          {uploader.isUploading && (
+            <DataUploadProgress
+              state={uploader.progressState}
+              locale={locale}
+              onAbort={uploader.abortUpload}
+              onRetryNow={uploader.retryNow}
+            />
           )}
 
           {/* Pre-flight Live Preview Grid */}
