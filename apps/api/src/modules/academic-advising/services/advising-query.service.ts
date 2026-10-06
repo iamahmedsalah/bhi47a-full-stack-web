@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Role, Semester } from '@student-portal/shared';
+import {
+  calculateGradeScale,
+  type Role,
+  type Semester,
+} from '@student-portal/shared';
+
 import { Course } from '../../courses/schemas/course.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { User } from '../../users/schemas/user.schema';
@@ -33,6 +38,8 @@ interface CourseGradeSummary {
   percentage: number;
   hasFinal: boolean;
   statuses: string[];
+  letterGrade?: string;
+  gradePoints?: number;
   exams: Array<{
     examType: string;
     grade: number;
@@ -750,6 +757,15 @@ export class AdvisingQueryService {
         current.totalMaxGrade > 0
           ? Math.round((current.totalGrade / current.totalMaxGrade) * 100)
           : 0;
+      const isAbsentOrBanned = current.statuses.some(
+        (s) => s === 'absent' || s === 'banned',
+      );
+      const scale = calculateGradeScale(
+        current.percentage,
+        isAbsentOrBanned ? 'absent' : 'present',
+      );
+      current.letterGrade = scale.letter;
+      current.gradePoints = scale.points;
       grouped.set(code, current);
     });
     return grouped;

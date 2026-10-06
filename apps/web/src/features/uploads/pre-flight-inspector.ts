@@ -201,6 +201,7 @@ export async function inspectAndValidateFile(
   // Parse and validate rows
   const allIssues: PreFlightIssue[] = [];
   const previewRows: PreFlightRow[] = [];
+  const allParsedRows: Record<string, unknown>[] = [];
   let validRowCount = 0;
   let invalidRowCount = 0;
 
@@ -226,6 +227,8 @@ export async function inspectAndValidateFile(
           cellVal !== null && cellVal !== undefined ? String(cellVal).trim() : '';
       }
     }
+
+    allParsedRows.push(rowData);
 
     const rowIssues = validateCatalogRow(type, rowNumber, rowData, isAr);
 
@@ -283,5 +286,6 @@ export async function inspectAndValidateFile(
     canCommit,
     issues: allIssues,
     previewRows,
+    parsedRows: allParsedRows,
   };
 }

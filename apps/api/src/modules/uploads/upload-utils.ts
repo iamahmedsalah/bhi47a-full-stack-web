@@ -353,6 +353,61 @@ export function normalizeRowKeys(
     ) {
       normalized.grade = parseSafeNumber(val);
     }
+    // Midterm breakdown
+    else if (
+      cleanKey === 'midterm' ||
+      cleanKey === 'ميدترم' ||
+      cleanKey === 'امتحانالميدترم' ||
+      cleanKey === 'نصفي'
+    ) {
+      normalized.midterm = parseSafeNumber(val);
+    }
+    // Final breakdown
+    else if (
+      cleanKey === 'final' ||
+      cleanKey === 'نهائي' ||
+      cleanKey === 'الامتحانالنهائي' ||
+      cleanKey === 'فاينل'
+    ) {
+      normalized.final = parseSafeNumber(val);
+    }
+    // Coursework breakdown
+    else if (
+      cleanKey === 'coursework' ||
+      cleanKey === 'أعمالالسنة' ||
+      cleanKey === 'اعمالالسنة' ||
+      cleanKey === 'أعمالسنة' ||
+      cleanKey === 'سنة'
+    ) {
+      normalized.coursework = parseSafeNumber(val);
+    }
+    // Practical breakdown
+    else if (
+      cleanKey === 'practical' ||
+      cleanKey === 'عملي' ||
+      cleanKey === 'شفوي' ||
+      cleanKey === 'الامتحانالعملي'
+    ) {
+      normalized.practical = parseSafeNumber(val);
+    }
+    // Total Score
+    else if (
+      cleanKey === 'total' ||
+      cleanKey === 'totalscore' ||
+      cleanKey === 'المجموع' ||
+      cleanKey === 'المجموعالكلي' ||
+      cleanKey === 'الدرجةالكلية'
+    ) {
+      normalized.total = parseSafeNumber(val);
+    } else if (cleanKey === 'maxmidterm') {
+      normalized.maxMidterm = parseSafeNumber(val);
+    } else if (cleanKey === 'maxfinal') {
+      normalized.maxFinal = parseSafeNumber(val);
+    } else if (cleanKey === 'maxcoursework') {
+      normalized.maxCoursework = parseSafeNumber(val);
+    } else if (cleanKey === 'maxpractical') {
+      normalized.maxPractical = parseSafeNumber(val);
+    }
     // Exam Type
     else if (
       cleanKey === 'examtype' ||
@@ -361,6 +416,7 @@ export function normalizeRowKeys(
     ) {
       normalized.examType = String(val).trim().toLowerCase();
     }
+
     // Quiz Number
     else if (cleanKey === 'quiznumber' || cleanKey === 'رقم الكويز') {
       normalized.quizNumber = parseSafeNumber(val);

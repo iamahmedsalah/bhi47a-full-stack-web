@@ -65,6 +65,11 @@ const gradeImportColumns = [
   "examType",
   "grade",
   "maxGrade",
+  "coursework",
+  "midterm",
+  "practical",
+  "final",
+  "total",
   "status",
   "academicYear",
   "semester",
@@ -306,11 +311,44 @@ function GradesPageContent() {
     {
       key: "grade",
       header: t("gradeValue"),
-      render: (item) => (
-        <TableCell className="p-4 font-mono font-bold text-primary">
-          {item.grade} / {item.maxGrade}
-        </TableCell>
-      ),
+      render: (item) => {
+        const pct =
+          item.percentage ??
+          (item.maxGrade > 0
+            ? Math.round((item.grade / item.maxGrade) * 100)
+            : 0);
+        const letter =
+          item.letterGrade ||
+          (pct >= 90
+            ? "A+"
+            : pct >= 85
+              ? "A"
+              : pct >= 80
+                ? "B+"
+                : pct >= 75
+                  ? "B"
+                  : pct >= 70
+                    ? "C+"
+                    : pct >= 65
+                      ? "C"
+                      : pct >= 60
+                        ? "D+"
+                        : pct >= 50
+                          ? "D"
+                          : "F");
+        return (
+          <TableCell className="p-4 font-mono">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-primary">
+                {item.grade} / {item.maxGrade}
+              </span>
+              <span className="rounded border border-border bg-secondary/80 px-1.5 py-0.5 text-[11px] font-bold text-foreground">
+                {letter} ({pct}%)
+              </span>
+            </div>
+          </TableCell>
+        );
+      },
     },
     {
       key: "status",

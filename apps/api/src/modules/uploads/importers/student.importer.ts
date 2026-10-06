@@ -12,6 +12,11 @@ import {
   StudentAcademicProfileDocument,
 } from '../../registrations/schemas/student-academic-profile.schema';
 import {
+  CourseRegistration,
+  CourseRegistrationDocument,
+} from '../../registrations/schemas/course-registration.schema';
+import { Course, CourseDocument } from '../../courses/schemas/course.schema';
+import {
   AcademicEmail,
   AcademicEmailDocument,
 } from '../../academic-emails/schemas/academic-email.schema';
@@ -54,6 +59,10 @@ export class StudentImporter implements Importer {
     private readonly academicProfileModel: Model<StudentAcademicProfileDocument>,
     @InjectModel(AcademicEmail.name)
     private readonly academicEmailModel: Model<AcademicEmailDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(CourseRegistration.name)
+    private readonly registrationModel: Model<CourseRegistrationDocument>,
   ) {}
 
   validate(rows: Record<string, unknown>[]) {
@@ -347,6 +356,120 @@ export class StudentImporter implements Importer {
           await this.academicEmailModel.bulkWrite(emailOps as any, {
             ordered: false,
           });
+        } catch {
+          // Non-fatal secondary sync
+        }
+      }
+
+      // Automated First-Year Registration for Level 1 imported students
+      const firstYearOps = safeProfileOps.filter((op) => {
+        const lvl = ((op.updateOne.update.$set.level as string) || '').trim();
+        return (
+          lvl === '1' ||
+          lvl.startsWith('1') ||
+          lvl.includes('أول') ||
+          lvl.includes('اول') ||
+          lvl.includes('first')
+        );
+      });
+
+      if (firstYearOps.length > 0) {
+        try {
+          const l1Courses = await this.courseModel
+            .find({
+              isActive: { $ne: false },
+              $or: [{ level: '1' }, { academicLevel: '1' }],
+              type: { $ne: 'elective' },
+            })
+            .lean();
+
+          if (l1Courses.length > 0) {
+            const regOps = firstYearOps.flatMap((op) => {
+              const sc = op.updateOne.filter.studentCode;
+              const uId = updatedUserMap.get(sc);
+              if (!uId) return [];
+
+              const studentSemester = (
+                (op.updateOne.update.$set.semester as string) || 'first'
+              ).toLowerCase();
+              const studentYear =
+                (op.updateOne.update.$set.academicYear as string) ||
+                defaultAcademicYear;
+              const studentDept = (
+                (op.updateOne.update.$set.department as string) || ''
+              )
+                .trim()
+                .toLowerCase();
+
+              const matchingCourses = l1Courses.filter((c) => {
+                const cSem = String(c.semester || 'first').toLowerCase();
+                const offered = (c.offeredTerms || []).map((t) =>
+                  String(t).toLowerCase(),
+                );
+                const semMatch =
+                  cSem === studentSemester || offered.includes(studentSemester);
+                if (!semMatch) return false;
+
+                if (c.department && c.department.trim() && studentDept) {
+                  const cDept = c.department.trim().toLowerCase();
+                  const isGeneral =
+                    cDept === 'عام' ||
+                    cDept === 'general' ||
+                    cDept === 'all' ||
+                    cDept === 'الكل';
+                  if (
+                    !isGeneral &&
+                    !cDept.includes(studentDept) &&
+                    !studentDept.includes(cDept)
+                  ) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+
+              if (matchingCourses.length === 0) return [];
+
+              const courseCodes = matchingCourses.map((c) => c.code);
+              const totalCreditHours = matchingCourses.reduce(
+                (sum, c) => sum + (c.creditHours || 3),
+                0,
+              );
+
+              return [
+                {
+                  updateOne: {
+                    filter: {
+                      studentId: uId,
+                      academicYear: studentYear,
+                      semester: studentSemester,
+                    },
+                    update: {
+                      $set: {
+                        courses: courseCodes,
+                        totalCreditHours,
+                        source: 'system',
+                        status: 'approved',
+                        approvedAt: new Date(),
+                        advisorNotes:
+                          'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+                      },
+                      $setOnInsert: {
+                        editCount: 0,
+                      },
+                    },
+                    upsert: true,
+                  },
+                },
+              ];
+            });
+
+            if (regOps.length > 0) {
+              await this.registrationModel.bulkWrite(regOps as any, {
+                ordered: false,
+              });
+            }
+          }
         } catch {
           // Non-fatal secondary sync
         }

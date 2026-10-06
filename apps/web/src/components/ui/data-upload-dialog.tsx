@@ -10,8 +10,10 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
+  RefreshCw,
   Search,
   UploadCloud,
+  WifiOff,
   X,
   XCircle,
 } from 'lucide-react';
@@ -38,6 +40,26 @@ import {
 } from '@/features/uploads/upload-catalog';
 import { inspectAndValidateFile } from '@/features/uploads/pre-flight-inspector';
 import { ExcelPreviewGrid } from '@/features/uploads/components/excel-preview-grid';
+
+function isNetworkError(err: any): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  if (!err) return false;
+  if (
+    err.code === 'ERR_NETWORK' ||
+    err.code === 'ECONNABORTED' ||
+    err.code === 'ETIMEDOUT'
+  ) {
+    return true;
+  }
+  if (
+    err.message &&
+    /network|offline|internet|timeout|failed to fetch/i.test(err.message)
+  ) {
+    return true;
+  }
+  if (!err.response && Boolean(err.request)) return true;
+  return false;
+}
 
 export interface DataUploadDialogProps {
   open: boolean;
@@ -82,6 +104,18 @@ export function DataUploadDialog({
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState('');
 
+  // Resilient batching & network recovery state
+  const [batchInfo, setBatchInfo] = useState<{
+    currentBatch: number;
+    totalBatches: number;
+    processedRows: number;
+    totalRows: number;
+  } | null>(null);
+  const [isNetworkInterrupted, setIsNetworkInterrupted] = useState(false);
+  const [retrySecondsLeft, setRetrySecondsLeft] = useState(0);
+  const isAbortedRef = React.useRef(false);
+  const retryTriggerRef = React.useRef<(() => void) | null>(null);
+
   // Error search filter
   const [errorSearch, setErrorSearch] = useState('');
 
@@ -97,6 +131,10 @@ export function DataUploadDialog({
     setResult(null);
     setError('');
     setErrorSearch('');
+    setBatchInfo(null);
+    setIsNetworkInterrupted(false);
+    setRetrySecondsLeft(0);
+    isAbortedRef.current = false;
   };
 
   useEffect(() => {
@@ -189,7 +227,7 @@ export function DataUploadDialog({
     }
   };
 
-  // Upload file to backend
+  // Resilient Upload file to backend (Batching + Auto-Retry on network drop)
   const handleUploadFile = async () => {
     if (!file) return;
     setIsUploading(true);
@@ -197,67 +235,249 @@ export function DataUploadDialog({
     setUploadStartTime(Date.now());
     setError('');
     setResult(null);
+    setIsNetworkInterrupted(false);
+    setRetrySecondsLeft(0);
+    isAbortedRef.current = false;
 
+    const rows = preview?.parsedRows || [];
+    const totalRowsCount =
+      rows.length > 0 ? rows.length : (preview?.totalRows || 0);
+
+    // MODE A: Resilient Incremental Batches (when parsed rows are available)
+    if (rows.length > 0) {
+      const BATCH_SIZE = 150;
+      const batches: Record<string, unknown>[][] = [];
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        batches.push(rows.slice(i, i + BATCH_SIZE));
+      }
+      const totalBatches = batches.length;
+      const sessionId = `up_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+      let cumulativeSuccess = 0;
+      const cumulativeErrors: string[] = [];
+
+      for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
+        if (isAbortedRef.current) break;
+
+        const batchRows = batches[bIdx];
+        const processedSoFar = bIdx * BATCH_SIZE;
+
+        setBatchInfo({
+          currentBatch: bIdx + 1,
+          totalBatches,
+          processedRows: Math.min(
+            processedSoFar + batchRows.length,
+            totalRowsCount,
+          ),
+          totalRows: totalRowsCount,
+        });
+
+        // Set live progress percentage
+        const currentPercentage = Math.round((bIdx / totalBatches) * 100);
+        setUploadProgress(currentPercentage);
+
+        let batchCommitted = false;
+        let attempt = 0;
+
+        while (!batchCommitted && !isAbortedRef.current) {
+          attempt++;
+          try {
+            const res = await api.post<{
+              success: boolean;
+              batchIndex: number;
+              totalBatches: number;
+              successCount: number;
+              failedCount: number;
+              errors: string[];
+            }>('/admin/uploads/batch', {
+              type: catalogType,
+              rows: batchRows,
+              batchIndex: bIdx,
+              totalBatches,
+              uploadSessionId: sessionId,
+            });
+
+            cumulativeSuccess += res.data.successCount;
+            if (res.data.errors?.length) {
+              cumulativeErrors.push(...res.data.errors);
+            }
+
+            setIsNetworkInterrupted(false);
+            setRetrySecondsLeft(0);
+            batchCommitted = true;
+            // Update progress on batch completion
+            setUploadProgress(Math.round(((bIdx + 1) / totalBatches) * 100));
+          } catch (err: any) {
+            if (isNetworkError(err) && !isAbortedRef.current) {
+              setIsNetworkInterrupted(true);
+              const waitSec = Math.min(10, 3 + attempt * 2);
+              setRetrySecondsLeft(waitSec);
+
+              await new Promise<void>((resolve) => {
+                let timer: NodeJS.Timeout | null = null;
+                let onlineHandler: (() => void) | null = null;
+
+                const cleanup = () => {
+                  if (timer) clearInterval(timer);
+                  if (onlineHandler)
+                    window.removeEventListener('online', onlineHandler);
+                  retryTriggerRef.current = null;
+                };
+
+                retryTriggerRef.current = () => {
+                  cleanup();
+                  resolve();
+                };
+
+                let remaining = waitSec;
+                timer = setInterval(() => {
+                  remaining--;
+                  setRetrySecondsLeft(remaining);
+                  if (remaining <= 0 || isAbortedRef.current) {
+                    cleanup();
+                    resolve();
+                  }
+                }, 1000);
+
+                onlineHandler = () => {
+                  cleanup();
+                  resolve();
+                };
+                window.addEventListener('online', onlineHandler);
+              });
+            } else {
+              cumulativeErrors.push(
+                isAr
+                  ? `الدفعة ${bIdx + 1}: ${getApiErrorMessage(err)}`
+                  : `Batch ${bIdx + 1}: ${getApiErrorMessage(err)}`,
+              );
+              batchCommitted = true;
+            }
+          }
+        }
+      }
+
+      setUploadProgress(100);
+      setBatchInfo(null);
+      setIsUploading(false);
+
+      const finalResult: UploadResult = {
+        success: true,
+        successCount: cumulativeSuccess,
+        failedCount: cumulativeErrors.length,
+        errors: cumulativeErrors,
+      };
+
+      setResult(finalResult);
+      onSuccess?.(finalResult);
+
+      if (cumulativeSuccess > 0) {
+        toast.success(
+          isAr
+            ? `تم استيراد ${cumulativeSuccess} سجل بنجاح إلى قاعدة البيانات`
+            : `Successfully imported ${cumulativeSuccess} record(s)`,
+        );
+      }
+      if (cumulativeErrors.length > 0) {
+        toast.error(
+          isAr
+            ? `تعذر استيراد ${cumulativeErrors.length} سجل`
+            : `Failed to import ${cumulativeErrors.length} record(s)`,
+        );
+      }
+      return;
+    }
+
+    // MODE B: Single File Fallback (with live upload percentage and network retry)
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', catalogType);
 
-    const totalRowsCount = preview?.totalRows || 100;
-    let simulatedProgress = 0;
-    let timer: NodeJS.Timeout | null = null;
+    let uploadCommitted = false;
+    let attempt = 0;
 
-    try {
-      const estimatedDurationMs = Math.max(2000, Math.min(10000, totalRowsCount * 2.5));
-      const intervalMs = 60;
-      const stepIncrement = (95 * intervalMs) / estimatedDurationMs;
-
-      timer = setInterval(() => {
-        simulatedProgress = Math.min(95, simulatedProgress + stepIncrement);
-        setUploadProgress(Math.round(simulatedProgress));
-      }, intervalMs);
-
-      const res = await api.post<UploadResult>('/admin/uploads', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const bytePercent = Math.min(
-              25,
-              Math.round((progressEvent.loaded * 25) / progressEvent.total),
-            );
-            if (simulatedProgress < bytePercent) {
-              simulatedProgress = bytePercent;
+    while (!uploadCommitted && !isAbortedRef.current) {
+      attempt++;
+      try {
+        const res = await api.post<UploadResult>('/admin/uploads', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const bytePercent = Math.round(
+                (progressEvent.loaded * 95) / progressEvent.total,
+              );
               setUploadProgress(bytePercent);
             }
-          }
-        },
-      });
+          },
+        });
 
-      if (timer) clearInterval(timer);
-      setUploadProgress(100);
-      setResult(res.data);
-      onSuccess?.(res.data);
+        setUploadProgress(100);
+        setResult(res.data);
+        onSuccess?.(res.data);
+        uploadCommitted = true;
 
-      if (res.data.successCount > 0) {
-        toast.success(
-          isAr
-            ? `تم استيراد ${res.data.successCount} سجل بنجاح إلى قاعدة البيانات`
-            : `Successfully imported ${res.data.successCount} record(s)`,
-        );
+        if (res.data.successCount > 0) {
+          toast.success(
+            isAr
+              ? `تم استيراد ${res.data.successCount} سجل بنجاح`
+              : `Successfully imported ${res.data.successCount} record(s)`,
+          );
+        }
+        if (res.data.failedCount > 0) {
+          toast.error(
+            isAr
+              ? `تعذر استيراد ${res.data.failedCount} سجل`
+              : `Failed to import ${res.data.failedCount} record(s)`,
+          );
+        }
+      } catch (err: any) {
+        if (isNetworkError(err) && !isAbortedRef.current && attempt <= 5) {
+          setIsNetworkInterrupted(true);
+          const waitSec = Math.min(10, 3 + attempt * 2);
+          setRetrySecondsLeft(waitSec);
+
+          await new Promise<void>((resolve) => {
+            let timer: NodeJS.Timeout | null = null;
+            let onlineHandler: (() => void) | null = null;
+
+            const cleanup = () => {
+              if (timer) clearInterval(timer);
+              if (onlineHandler)
+                window.removeEventListener('online', onlineHandler);
+              retryTriggerRef.current = null;
+            };
+
+            retryTriggerRef.current = () => {
+              cleanup();
+              resolve();
+            };
+
+            let remaining = waitSec;
+            timer = setInterval(() => {
+              remaining--;
+              setRetrySecondsLeft(remaining);
+              if (remaining <= 0 || isAbortedRef.current) {
+                cleanup();
+                resolve();
+              }
+            }, 1000);
+
+            onlineHandler = () => {
+              cleanup();
+              resolve();
+            };
+            window.addEventListener('online', onlineHandler);
+          });
+        } else {
+          setError(
+            getApiErrorMessage(err, isAr ? 'فشل التحميل' : 'Upload failed'),
+          );
+          uploadCommitted = true;
+        }
       }
-      if (res.data.failedCount > 0) {
-        toast.error(
-          isAr
-            ? `تعذر استيراد ${res.data.failedCount} سجل`
-            : `Failed to import ${res.data.failedCount} record(s)`,
-        );
-      }
-    } catch (uploadError) {
-      if (timer) clearInterval(timer);
-      setError(getApiErrorMessage(uploadError, isAr ? 'فشل التحميل' : 'Upload failed'));
-    } finally {
-      if (timer) clearInterval(timer);
-      setIsUploading(false);
     }
+
+    setIsUploading(false);
   };
 
   const copyErrorsToClipboard = () => {
@@ -463,22 +683,77 @@ export function DataUploadDialog({
             </div>
           )}
 
-          {/* Upload Progress Bar */}
+          {/* Upload Progress Bar & Resilient Network Status */}
           {isUploading && (
-            <div className="p-4 rounded-xl border border-teal-500/30 bg-teal-500/5 space-y-2">
+            <div className="p-4 rounded-xl border border-teal-500/30 bg-teal-500/5 space-y-3">
               <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                  {isAr ? 'جاري استيراد ومعالجة البيانات...' : 'Importing & processing records...'}
+                  {batchInfo
+                    ? isAr
+                      ? `معالجة الدفعة ${batchInfo.currentBatch} من ${batchInfo.totalBatches} (${batchInfo.processedRows} من ${batchInfo.totalRows} سجل)...`
+                      : `Processing batch ${batchInfo.currentBatch} of ${batchInfo.totalBatches} (${batchInfo.processedRows} of ${batchInfo.totalRows} records)...`
+                    : isAr
+                      ? 'جاري نقل وتدقيق بيانات الملف...'
+                      : 'Transferring & validating records...'}
                 </span>
-                <span className="font-mono">{uploadProgress}%</span>
+                <span className="font-mono text-sm font-bold text-teal-600 dark:text-teal-400">
+                  {uploadProgress}%
+                </span>
               </div>
-              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+
+              {/* Glowing progress bar */}
+              <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden p-0.5 border border-border/50">
                 <div
-                  className="bg-linear-to-r from-teal-500 to-emerald-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-linear-to-r from-teal-500 via-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 shadow-[0_0_12px_rgba(20,184,166,0.5)]"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
+
+              {/* Network Interruption Alert with Auto-Retry */}
+              {isNetworkInterrupted && (
+                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs flex flex-col gap-2.5 animate-pulse">
+                  <div className="flex items-start gap-2">
+                    <WifiOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-bold">
+                        {isAr
+                          ? 'انقطع اتصال الإنترنت. تم حفظ ما تم استيراده بأمان.'
+                          : 'Internet connection interrupted. Processed records are safely saved.'}
+                      </p>
+                      <p className="text-[11px] mt-0.5 opacity-90">
+                        {isAr
+                          ? `جاري إعادة المحاولة تلقائياً خلال ${retrySecondsLeft} ثانية أو فور عودة الإنترنت...`
+                          : `Auto-retrying in ${retrySecondsLeft}s or as soon as connection is restored...`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        isAbortedRef.current = true;
+                        retryTriggerRef.current?.();
+                      }}
+                      className="h-7 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200"
+                    >
+                      {isAr ? 'إيقاف المتبقي' : 'Stop Remaining'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => retryTriggerRef.current?.()}
+                      className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      {isAr ? 'إعادة المحاولة الآن' : 'Retry Now'}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

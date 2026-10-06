@@ -17,6 +17,7 @@ import {
   openResultCertificate,
   type ResultCertificateData,
 } from '@/lib/result-certificate';
+import { calculateGradeScale } from '@student-portal/shared';
 
 interface Grade {
   _id: string;
@@ -66,9 +67,10 @@ function calculateGroupStats(groups: CourseGradesGroup[]) {
     const percentage = maxTotal > 0 ? ((midterm + final) / maxTotal) * 100 : 0;
     acquired += midterm + final;
     maximum += maxTotal;
+    const scale = calculateGradeScale(percentage, group.final?.status);
     if (percentage >= 50 && group.final?.status === 'present') passed += 1;
     if (group.final) {
-      weightedPoints += Math.min(4, Math.max(0, percentage / 25)) * group.creditHours;
+      weightedPoints += scale.points * group.creditHours;
       credits += group.creditHours;
     }
   }
@@ -528,29 +530,58 @@ export default function StudentResultsPage() {
                         badgeClass = 'bg-red-500/10 text-red-500 border-red-500/20';
                       }
 
+                      const percentage =
+                        maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+                      const scale = calculateGradeScale(
+                        percentage,
+                        course.final?.status,
+                      );
+
                       return (
-                        <tr key={`${course.academicYear}:${course.semester}:${course.courseCode}`} className="hover:bg-secondary/25 transition-colors text-foreground">
+                        <tr
+                          key={`${course.academicYear}:${course.semester}:${course.courseCode}`}
+                          className="hover:bg-secondary/25 transition-colors text-foreground"
+                        >
                           <td className="p-4 text-start">
-                            <span className="font-bold block text-sm text-foreground">{course.courseName}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">{course.courseCode}</span>
+                            <span className="font-bold block text-sm text-foreground">
+                              {course.courseName}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">
+                              {course.courseCode}
+                            </span>
                           </td>
                           <td className="p-4 text-center font-mono font-semibold">
-                            {course.midterm ? (
-                              course.midterm.status === 'present' ? `${course.midterm.grade} / ${course.midterm.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
-                            ) : '—'}
+                            {course.midterm
+                              ? course.midterm.status === 'present'
+                                ? `${course.midterm.grade} / ${course.midterm.maxGrade}`
+                                : isEnglish
+                                  ? 'Absent'
+                                  : 'غائب'
+                              : '—'}
                           </td>
                           <td className="p-4 text-center font-mono font-semibold">
-                            {course.final ? (
-                              course.final.status === 'present' ? `${course.final.grade} / ${course.final.maxGrade}` : (isEnglish ? 'Absent' : 'غائب')
-                            ) : '—'}
+                            {course.final
+                              ? course.final.status === 'present'
+                                ? `${course.final.grade} / ${course.final.maxGrade}`
+                                : isEnglish
+                                  ? 'Absent'
+                                  : 'غائب'
+                              : '—'}
                           </td>
                           <td className="p-4 text-center font-mono font-bold text-foreground">
                             {total} / {maxTotal}
                           </td>
                           <td className="p-4 text-end">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}>
-                              {statusText}
-                            </span>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-md bg-secondary/80 text-foreground border border-border">
+                                {scale.letter}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}`}
+                              >
+                                {statusText}
+                              </span>
+                            </div>
                           </td>
                         </tr>
                       );

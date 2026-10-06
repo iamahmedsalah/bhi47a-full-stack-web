@@ -21,7 +21,8 @@ import {
 } from '../registrations/schemas/student-academic-profile.schema';
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
 import { evaluateAcademicProgression } from './utils/academic-level-progression.util';
-import type { CourseLevel } from '@student-portal/shared';
+import { calculateGradeScale, type CourseLevel } from '@student-portal/shared';
+
 import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 
 @Injectable()
@@ -272,6 +273,12 @@ export class GradesService implements OnModuleInit {
       examType: dto.examType,
     };
 
+    const percentage =
+      dto.maxGrade > 0
+        ? Math.round((dto.grade / dto.maxGrade) * 10000) / 100
+        : 0;
+    const scale = calculateGradeScale(percentage, dto.status || 'present');
+
     const updateData = {
       studentId: student._id,
       courseId: course._id,
@@ -279,6 +286,9 @@ export class GradesService implements OnModuleInit {
       courseCode: course.code,
       grade: dto.grade,
       maxGrade: dto.maxGrade,
+      percentage,
+      letterGrade: scale.letter,
+      gradePoints: scale.points,
       status: dto.status || 'present',
       academicYear: dto.academicYear,
       semester: dto.semester,
@@ -371,9 +381,32 @@ export class GradesService implements OnModuleInit {
   }
 
   async update(id: string, updateData: Partial<Grade>): Promise<GradeDocument> {
+    const existing = await this.gradeModel.findById(id);
+    if (!existing) {
+      throw new NotFoundException('الدرجة غير موجودة');
+    }
+    const finalGrade =
+      updateData.grade !== undefined ? updateData.grade : existing.grade;
+    const finalMax =
+      updateData.maxGrade !== undefined
+        ? updateData.maxGrade
+        : existing.maxGrade;
+    const finalStatus =
+      updateData.status !== undefined ? updateData.status : existing.status;
+    const percentage =
+      finalMax > 0 ? Math.round((finalGrade / finalMax) * 10000) / 100 : 0;
+    const scale = calculateGradeScale(percentage, finalStatus);
+
+    const mergedData = {
+      ...updateData,
+      percentage,
+      letterGrade: scale.letter,
+      gradePoints: scale.points,
+    };
+
     const updated = await this.gradeModel.findByIdAndUpdate(
       id,
-      { $set: updateData },
+      { $set: mergedData },
       { new: true },
     );
     if (!updated) {

@@ -31,6 +31,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileSchema,
 } from '../registrations/schemas/student-academic-profile.schema';
+import {
+  CourseRegistration,
+  CourseRegistrationSchema,
+} from '../registrations/schemas/course-registration.schema';
 import { GradesModule } from '../grades/grades.module';
 
 @Module({
@@ -48,6 +52,7 @@ import { GradesModule } from '../grades/grades.module';
         name: StudentAcademicProfile.name,
         schema: StudentAcademicProfileSchema,
       },
+      { name: CourseRegistration.name, schema: CourseRegistrationSchema },
     ]),
   ],
   controllers: [UploadsController],

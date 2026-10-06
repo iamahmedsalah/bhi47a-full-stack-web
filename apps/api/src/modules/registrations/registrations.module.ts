@@ -20,6 +20,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileSchema,
 } from './schemas/student-academic-profile.schema';
+import {
+  StudentProfile,
+  StudentProfileSchema,
+} from '../students/schemas/student-profile.schema';
 import { RegistrationsController } from './registrations.controller';
 import { RegistrationsService } from './registrations.service';
 import {
@@ -56,6 +60,7 @@ import { RegistrationTermService } from './services/registration-term.service';
       { name: AdvisingPlan.name, schema: AdvisingPlanSchema },
       { name: AdvisingCase.name, schema: AdvisingCaseSchema },
       { name: RegistrationTerm.name, schema: RegistrationTermSchema },
+      { name: StudentProfile.name, schema: StudentProfileSchema },
     ]),
     StudentsModule,
     UsersModule,

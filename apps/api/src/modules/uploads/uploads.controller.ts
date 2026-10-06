@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
 import { UploadsTemplateGenerator } from './uploads-template.generator';
+import { BatchUploadDto } from './dto/upload.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -179,5 +180,19 @@ export class UploadsController {
       throw new BadRequestException('Please specify file type');
     }
     return this.uploadsService.processUpload(file.buffer, type, adminId);
+  }
+
+  @Post('batch')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({
+    summary:
+      'Resilient chunk/batch data upload for incremental processing with auto-retry and resume support',
+  })
+  async uploadBatch(
+    @Body() dto: BatchUploadDto,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.uploadsService.processBatchUpload(dto, adminId);
   }
 }

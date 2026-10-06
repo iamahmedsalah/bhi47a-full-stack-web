@@ -54,6 +54,7 @@ export interface PreFlightResult {
   canCommit: boolean;
   issues: PreFlightIssue[];
   previewRows: PreFlightRow[];
+  parsedRows?: Record<string, unknown>[];
 }
 
 export interface UploadResult {

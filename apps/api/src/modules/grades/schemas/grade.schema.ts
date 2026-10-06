@@ -56,6 +56,15 @@ export class Grade {
 
   @Prop({ default: true })
   isPublished!: boolean;
+
+  @Prop({ type: Number })
+  percentage?: number;
+
+  @Prop({ type: String })
+  letterGrade?: string;
+
+  @Prop({ type: Number })
+  gradePoints?: number;
 }
 
 export const GradeSchema = SchemaFactory.createForClass(Grade);

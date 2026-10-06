@@ -8,3 +8,5 @@ export * from "./enrollment-statuses";
 export * from "./permissions";
 export * from "./password";
 export * from "./attendance";
+export * from "./grading";
+

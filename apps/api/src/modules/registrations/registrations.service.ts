@@ -31,7 +31,12 @@ import {
   StudentAcademicProfileDocument,
 } from './schemas/student-academic-profile.schema';
 import {
+  StudentProfile,
+  StudentProfileDocument,
+} from '../students/schemas/student-profile.schema';
+import {
   AdminProxyRegistrationDto,
+  AutoRegisterFirstYearDto,
   CreateAcademicYearDto,
   CreateGpaRegistrationRuleDto,
   QueryAdvisingRequestDto,
@@ -188,6 +193,8 @@ export class RegistrationsService {
     private advisingCaseModel: Model<AdvisingCase>,
     @InjectModel(RegistrationTerm.name)
     private registrationTermModel: Model<RegistrationTermDocument>,
+    @InjectModel(StudentProfile.name)
+    private studentProfileModel: Model<StudentProfileDocument>,
     private studentsService: StudentsService,
     private usersService: UsersService,
   ) {}
@@ -979,6 +986,231 @@ export class RegistrationsService {
     registration.printableFormUrl = `/api/registrations/${registration._id.toString()}/print`;
     await registration.save();
     return registration;
+  }
+
+  /**
+   * Automated First-Year Course Registration:
+   * Automatically enrolls Level 1 ("الفرقة الأولى") students into all required Level 1 semester courses.
+   */
+  async autoRegisterFirstYearStudents(
+    dto?: AutoRegisterFirstYearDto,
+    actorId?: string,
+  ) {
+    const defaultAcademicYear = '2026-2027';
+
+    // 1. Build student filter for Level 1 active students
+    const filter: FilterQuery<StudentProfileDocument> = {
+      enrollmentStatus: 'active',
+      $or: [
+        { level: '1' },
+        { level: { $regex: /^(1|الفرقة\s*الأولى|first|level\s*1)/i } },
+      ],
+    };
+
+    if (dto?.studentCodes && dto.studentCodes.length > 0) {
+      const cleanCodes = dto.studentCodes.map((c) => String(c).trim());
+      filter.studentCode = { $in: cleanCodes };
+    }
+
+    if (dto?.department) {
+      filter.department = String(dto.department).trim();
+    }
+
+    const students = await this.studentProfileModel.find(filter).lean();
+    if (students.length === 0) {
+      return {
+        totalEligible: 0,
+        registeredCount: 0,
+        skippedCount: 0,
+        message: 'لا يوجد طلاب مؤهلين للتسجيل التلقائي في الفرقة الأولى',
+        results: [],
+      };
+    }
+
+    // 2. Fetch all active level 1 courses
+    const allCourses = await this.courseModel
+      .find({
+        isActive: { $ne: false },
+        $or: [{ level: '1' }, { academicLevel: '1' }],
+      })
+      .lean();
+
+    let registeredCount = 0;
+    let skippedCount = 0;
+    const results: Array<{
+      studentCode: string;
+      studentName: string;
+      coursesCount: number;
+      courseCodes: string[];
+      status: 'registered' | 'updated' | 'skipped' | 'no_courses';
+      notes?: string;
+    }> = [];
+
+    for (const student of students) {
+      const studentCode = student.studentCode;
+      const studentName = student.fullName || student.fullNameAr || 'طالب';
+      const targetYear =
+        dto?.academicYear || student.academicYear || defaultAcademicYear;
+      const targetSemester = (dto?.semester ||
+        normalizeSemester(student.semester) ||
+        'first') as 'first' | 'second' | 'summer';
+
+      // Match courses suitable for this student
+      const eligibleCourses = allCourses.filter((c) => {
+        const cSemester = normalizeSemester(c.semester);
+        const offeredTerms = (c.offeredTerms || []).map((t) =>
+          normalizeSemester(t),
+        );
+        const semesterMatches =
+          cSemester === targetSemester || offeredTerms.includes(targetSemester);
+        if (!semesterMatches) return false;
+
+        // Skip electives for automated first year registration
+        if (c.type === 'elective') return false;
+
+        // Department matching
+        if (
+          c.department &&
+          c.department.trim() &&
+          student.department &&
+          student.department.trim()
+        ) {
+          const cDept = c.department.trim().toLowerCase();
+          const sDept = student.department.trim().toLowerCase();
+          const isGeneral =
+            cDept === 'عام' ||
+            cDept === 'general' ||
+            cDept === 'all' ||
+            cDept === 'الكل';
+          if (!isGeneral && !cDept.includes(sDept) && !sDept.includes(cDept)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (eligibleCourses.length === 0) {
+        skippedCount++;
+        results.push({
+          studentCode,
+          studentName,
+          coursesCount: 0,
+          courseCodes: [],
+          status: 'no_courses',
+          notes: `لا توجد مقررات للفرقة الأولى في الفصل ${targetSemester}`,
+        });
+        continue;
+      }
+
+      const courseCodes = eligibleCourses.map((c) => c.code);
+      const totalCreditHours = eligibleCourses.reduce(
+        (sum, c) => sum + (c.creditHours || 3),
+        0,
+      );
+
+      // Check existing registration
+      const existing = await this.registrationModel.findOne({
+        studentId: student.userId,
+        academicYear: targetYear,
+        semester: targetSemester,
+      });
+
+      if (existing && existing.status === 'approved' && !dto?.forceOverwrite) {
+        skippedCount++;
+        results.push({
+          studentCode,
+          studentName,
+          coursesCount: existing.courses.length,
+          courseCodes: existing.courses,
+          status: 'skipped',
+          notes: 'مسجل بالفعل ومؤكد',
+        });
+        continue;
+      }
+
+      const actorObjectId =
+        actorId && Types.ObjectId.isValid(actorId)
+          ? new Types.ObjectId(actorId)
+          : undefined;
+
+      if (existing) {
+        existing.courses = courseCodes;
+        existing.totalCreditHours = totalCreditHours;
+        existing.source = 'system';
+        existing.status = 'approved';
+        existing.approvedAt = new Date();
+        existing.approvedBy = actorObjectId;
+        existing.advisorNotes =
+          'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)';
+        existing.printableFormUrl = `/api/registrations/${existing._id.toString()}/print`;
+        await existing.save();
+
+        registeredCount++;
+        results.push({
+          studentCode,
+          studentName,
+          coursesCount: courseCodes.length,
+          courseCodes,
+          status: 'updated',
+        });
+      } else {
+        const newReg = new this.registrationModel({
+          studentId: student.userId,
+          courses: courseCodes,
+          totalCreditHours,
+          source: 'system',
+          status: 'approved',
+          academicYear: targetYear,
+          semester: targetSemester,
+          approvedAt: new Date(),
+          approvedBy: actorObjectId,
+          advisorNotes:
+            'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+          editCount: 0,
+        });
+        newReg.printableFormUrl = `/api/registrations/${newReg._id.toString()}/print`;
+        await newReg.save();
+
+        registeredCount++;
+        results.push({
+          studentCode,
+          studentName,
+          coursesCount: courseCodes.length,
+          courseCodes,
+          status: 'registered',
+        });
+      }
+
+      // Ensure StudentAcademicProfile is initialized
+      await this.academicProfileModel.updateOne(
+        { studentId: student.userId },
+        {
+          $set: {
+            academicLevel: '1',
+            semester: targetSemester,
+          },
+          $setOnInsert: {
+            gpa: 0,
+            completedCourses: [],
+            failedCourses: [],
+            lowGradeCourses: [],
+            academicWarnings: 0,
+            isGraduatingThisYear: false,
+            approvedICCourseCompletions: [],
+          },
+        },
+        { upsert: true },
+      );
+    }
+
+    return {
+      totalEligible: students.length,
+      registeredCount,
+      skippedCount,
+      message: `تم التسجيل التلقائي بنجاح لـ ${registeredCount} طالب من أصل ${students.length}`,
+      results,
+    };
   }
 
   /**

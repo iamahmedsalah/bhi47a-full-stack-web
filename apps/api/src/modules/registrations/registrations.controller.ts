@@ -17,6 +17,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import {
   AdminProxyRegistrationDto,
+  AutoRegisterFirstYearDto,
   CreateAcademicYearDto,
   CreateGpaRegistrationRuleDto,
   QueryAdvisingRequestDto,
@@ -257,6 +258,23 @@ export class RegistrationsController {
     @Body() dto: AdminProxyRegistrationDto,
   ) {
     return this.registrationsService.adminProxyRegistration(dto, user._id);
+  }
+
+  @Post('admin/registrations/auto-register-first-year')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_PROXY)
+  @ApiOperation({
+    summary:
+      'Automated First-Year Course Registration: automatically enrolls Level 1 students in semester courses',
+  })
+  autoRegisterFirstYear(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AutoRegisterFirstYearDto,
+  ) {
+    return this.registrationsService.autoRegisterFirstYearStudents(
+      dto,
+      user._id,
+    );
   }
 
   @Get('admin/registrations/roster')

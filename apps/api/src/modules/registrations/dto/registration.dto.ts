@@ -437,3 +437,42 @@ export class AdminProxyRegistrationDto {
   @IsString({ each: true })
   courseCodes!: string[];
 }
+
+export class AutoRegisterFirstYearDto {
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Optional list of student codes to register. If omitted, all eligible Level 1 students will be processed.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  studentCodes?: string[];
+
+  @ApiPropertyOptional({ example: '2026-2027' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{4}$/)
+  academicYear?: string;
+
+  @ApiPropertyOptional({
+    enum: ['first', 'second', 'summer'],
+    example: 'first',
+  })
+  @IsOptional()
+  @IsEnum(['first', 'second', 'summer'])
+  semester?: 'first' | 'second' | 'summer';
+
+  @ApiPropertyOptional({ description: 'Optional department filter' })
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Overwrite existing registrations if any',
+  })
+  @IsOptional()
+  @IsBoolean()
+  forceOverwrite?: boolean;
+}

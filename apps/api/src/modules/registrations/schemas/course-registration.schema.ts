@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
-export type RegistrationSource = 'student' | 'advisor';
+export type RegistrationSource = 'student' | 'advisor' | 'system';
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected';
 
 export type CourseRegistrationDocument = CourseRegistration & Document;
@@ -33,7 +33,11 @@ export class CourseRegistration {
   @Prop({ required: true, min: 0 })
   totalCreditHours!: number;
 
-  @Prop({ type: String, required: true, enum: ['student', 'advisor'] })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['student', 'advisor', 'system'],
+  })
   source!: RegistrationSource;
 
   @Prop({

@@ -1,12 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { calculateGradeScale } from '@student-portal/shared';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { Grade, GradeDocument } from '../../grades/schemas/grade.schema';
 import { GradesService } from '../../grades/grades.service';
 import type { Importer, ImportResult } from '../importer.interface';
-import { normalizeStudentSemester } from '../upload-utils';
+import { normalizeStudentSemester, parseSafeNumber } from '../upload-utils';
+
+interface ExamEntry {
+  examType: string;
+  grade: number;
+  maxGrade: number;
+}
 
 @Injectable()
 export class GradeImporter implements Importer {
@@ -27,20 +34,32 @@ export class GradeImporter implements Importer {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
-      if (
-        !row.studentCode ||
-        !row.courseCode ||
-        !row.examType ||
-        !row.academicYear ||
-        !row.semester ||
-        row.grade === undefined ||
-        row.maxGrade === undefined
-      ) {
+
+      const hasStudent = Boolean(row.studentCode);
+      const hasCourse = Boolean(row.courseCode);
+
+      const hasStandardGrade = row.grade !== undefined && Boolean(row.examType);
+      const hasBreakdown =
+        row.midterm !== undefined ||
+        row.final !== undefined ||
+        row.coursework !== undefined ||
+        row.practical !== undefined ||
+        row.total !== undefined;
+
+      if (!hasStudent || !hasCourse) {
         errors.push(
-          `السطر ${rowNum}: بيانات الدرجات ناقصة (كود الطالب، كود المادة، نوع الامتحان، الدرجة)`,
+          `السطر ${rowNum}: بيانات الطالب أو المادة ناقصة (كود الطالب وكود المقرر إجباريان)`,
         );
         continue;
       }
+
+      if (!hasStandardGrade && !hasBreakdown) {
+        errors.push(
+          `السطر ${rowNum}: لم يتم العثور على درجات صالحة (يرجى إدخال الدرجة ونوع الامتحان، أو تفصيل أعمال السنة والنهائي والمجموع)`,
+        );
+        continue;
+      }
+
       validRows.push({ row, rowNum });
     }
 
@@ -52,6 +71,8 @@ export class GradeImporter implements Importer {
   ): Promise<ImportResult> {
     const errors: string[] = [];
     let successCount = 0;
+    const currentYear = new Date().getFullYear();
+    const defaultAcademicYear = `${currentYear}-${currentYear + 1}`;
 
     if (validRows.length === 0) return { successCount: 0, errors };
 
@@ -75,6 +96,7 @@ export class GradeImporter implements Importer {
     const courseMap = new Map(courses.map((c) => [c.code, c]));
 
     const gradeOps: Parameters<typeof this.gradeModel.bulkWrite>[0] = [];
+    const affectedStudentIds = new Set<string>();
 
     for (const { row, rowNum } of validRows) {
       const studentCode = String(row.studentCode).trim();
@@ -94,40 +116,108 @@ export class GradeImporter implements Importer {
         continue;
       }
 
-      const gradeData = {
-        studentId: student._id,
-        studentCode,
-        courseId: course._id,
-        courseName: course.name,
-        courseCode: course.code,
-        examType: row.examType,
-        grade: row.grade,
-        maxGrade: row.maxGrade,
-        status: (row.status as string) || 'present',
-        academicYear: String(row.academicYear).trim(),
-        semester: normalizeStudentSemester(row.semester),
-        isPublished: true,
-      };
+      const academicYear = (
+        (row.academicYear as string) || defaultAcademicYear
+      ).trim();
+      const semester = normalizeStudentSemester(row.semester);
+      const status = (row.status as string) || 'present';
 
-      gradeOps.push({
-        updateOne: {
-          filter: {
-            studentCode,
-            courseCode: course.code,
-            examType: row.examType,
+      // Build exam entries either from breakdown columns or standard row
+      const entries: ExamEntry[] = [];
+
+      if (row.midterm !== undefined) {
+        entries.push({
+          examType: 'midterm',
+          grade: Number(row.midterm),
+          maxGrade: parseSafeNumber(row.maxMidterm) ?? 20,
+        });
+      }
+      if (row.coursework !== undefined) {
+        entries.push({
+          examType: 'coursework',
+          grade: Number(row.coursework),
+          maxGrade: parseSafeNumber(row.maxCoursework) ?? 20,
+        });
+      }
+      if (row.practical !== undefined) {
+        entries.push({
+          examType: 'practical',
+          grade: Number(row.practical),
+          maxGrade: parseSafeNumber(row.maxPractical) ?? 10,
+        });
+      }
+      if (row.final !== undefined) {
+        entries.push({
+          examType: 'final',
+          grade: Number(row.final),
+          maxGrade: parseSafeNumber(row.maxFinal) ?? 60,
+        });
+      }
+
+      if (entries.length === 0) {
+        if (row.total !== undefined) {
+          entries.push({
+            examType: 'final',
+            grade: Number(row.total),
+            maxGrade: parseSafeNumber(row.maxGrade) ?? 100,
+          });
+        } else if (row.grade !== undefined && row.examType) {
+          entries.push({
+            examType: String((row.examType as string) || '')
+              .trim()
+              .toLowerCase(),
+            grade: Number(row.grade),
+            maxGrade: parseSafeNumber(row.maxGrade) ?? 100,
+          });
+        }
+      }
+
+      for (const entry of entries) {
+        const percentage =
+          entry.maxGrade > 0
+            ? Math.round((entry.grade / entry.maxGrade) * 10000) / 100
+            : 0;
+        const scale = calculateGradeScale(percentage, status);
+
+        const gradeData = {
+          studentId: student._id,
+          studentCode,
+          courseId: course._id,
+          courseName: course.name,
+          courseCode: course.code,
+          examType: entry.examType,
+          grade: entry.grade,
+          maxGrade: entry.maxGrade,
+          percentage,
+          letterGrade: scale.letter,
+          gradePoints: scale.points,
+          status,
+          academicYear,
+          semester,
+          isPublished: true,
+        };
+
+        gradeOps.push({
+          updateOne: {
+            filter: {
+              studentCode,
+              courseCode: course.code,
+              examType: entry.examType,
+            },
+            update: { $set: gradeData },
+            upsert: true,
           },
-          update: { $set: gradeData },
-          upsert: true,
-        },
-      });
+        });
+      }
 
+      affectedStudentIds.add(student._id.toString());
       successCount++;
     }
 
     if (gradeOps.length > 0) {
       await this.gradeModel.bulkWrite(gradeOps, { ordered: false });
       await this.gradesService.syncPublishedAcademicProgress(
-        students.map((student) => student._id),
+        Array.from(affectedStudentIds),
       );
     }
 

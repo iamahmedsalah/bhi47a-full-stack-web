@@ -81,6 +81,57 @@ export class UploadsService {
     };
   }
 
+  async processBatchUpload(
+    dto: {
+      type: string;
+      rows: Record<string, unknown>[];
+      batchIndex?: number;
+      totalBatches?: number;
+      uploadSessionId?: string;
+    },
+    adminId: string,
+  ) {
+    const importer = this.importerMap.get(dto.type);
+    if (!importer) {
+      throw new BadRequestException('Unknown upload type');
+    }
+
+    if (!Array.isArray(dto.rows) || dto.rows.length === 0) {
+      return {
+        success: true,
+        batchIndex: dto.batchIndex ?? 0,
+        totalBatches: dto.totalBatches ?? 1,
+        successCount: 0,
+        failedCount: 0,
+        errors: [],
+      };
+    }
+
+    this.logger.log(
+      `Processing batch ${(dto.batchIndex ?? 0) + 1}/${dto.totalBatches ?? 1} for ${dto.type} (${dto.rows.length} rows)`,
+      'UploadsService',
+    );
+
+    // Normalize keys on incoming rows in case of Arabic/English variations
+    const normalizedRows = dto.rows.map((row) => normalizeRowKeys(row));
+
+    const { validRows, errors: validationErrors } =
+      importer.validate(normalizedRows);
+    const commitResult = await importer.commit(validRows, adminId);
+
+    const errors = [...validationErrors, ...commitResult.errors];
+    const { successCount } = commitResult;
+
+    return {
+      success: true,
+      batchIndex: dto.batchIndex ?? 0,
+      totalBatches: dto.totalBatches ?? 1,
+      successCount,
+      failedCount: errors.length,
+      errors,
+    };
+  }
+
   async getWipeSummary() {
     const db = this.connection.db;
     if (!db) {

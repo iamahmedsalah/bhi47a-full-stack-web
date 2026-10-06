@@ -4,10 +4,11 @@ import React, { Suspense, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import { Download, Plus, UploadCloud, Users, Loader2 } from 'lucide-react';
+import { Download, Plus, UploadCloud, Users, Loader2, Sparkles } from 'lucide-react';
 import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
 
+import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadExcel } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
@@ -141,6 +142,42 @@ function StudentsPageContent() {
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [isAutoRegistering, setIsAutoRegistering] = useState(false);
+
+  const handleAutoRegisterFirstYear = async () => {
+    setIsAutoRegistering(true);
+    try {
+      const selectedStudents = students.filter((s) =>
+        selectedKeys.includes(s._id),
+      );
+      const payload =
+        selectedStudents.length > 0
+          ? { studentCodes: selectedStudents.map((s) => s.studentCode) }
+          : {};
+
+      const res = await api.post(
+        '/admin/registrations/auto-register-first-year',
+        payload,
+      );
+      toast.success(
+        res.data?.message ||
+          (locale === 'ar'
+            ? 'تم التسجيل التلقائي لطلاب الفرقة الأولى بنجاح'
+            : 'Level 1 students automatically registered'),
+      );
+    } catch (error) {
+      toast.error(
+        getApiErrorMessage(
+          error,
+          locale === 'ar'
+            ? 'فشل التسجيل التلقائي للفرقة الأولى'
+            : 'Failed to auto-register Level 1 students',
+        ),
+      );
+    } finally {
+      setIsAutoRegistering(false);
+    }
+  };
 
   const studentsQuery = useQuery({
     queryKey: studentKeys.list({ page, limit, search, level, enrollmentStatus: status, sortBy, sortOrder: sortOrder as 'asc' | 'desc' }),
@@ -213,17 +250,56 @@ function StudentsPageContent() {
       <PageTitleBanner title={t('title')} icon={<Users className="h-5 w-5" />} subtitle="Manage student identities, academic placement, exam seats, imports, and exports.">
         <Button
           variant="outline"
-          onClick={() =>
-            void exportStudentsStreamingExcel({
-              search: search || undefined,
-              level: level !== 'all' ? level : undefined,
-              enrollmentStatus: status !== 'all' ? status : undefined,
-            })
-          }
+          disabled={isExporting}
+          onClick={async () => {
+            setIsExporting(true);
+            try {
+              await exportStudentsStreamingExcel({
+                search: search || undefined,
+                level: level !== 'all' ? level : undefined,
+                enrollmentStatus: status !== 'all' ? status : undefined,
+              });
+              toast.success(
+                locale === 'ar'
+                  ? 'تم تصدير كشف الطلاب بصيغة Excel المعتمدة (.xlsx)'
+                  : 'Students registry exported successfully (.xlsx)',
+              );
+            } catch (err: any) {
+              toast.error(
+                err?.message ||
+                  (locale === 'ar'
+                    ? 'فشل تصدير بيانات الطلاب'
+                    : 'Failed to export students'),
+              );
+            } finally {
+              setIsExporting(false);
+            }
+          }}
         >
-          <Download className="h-4 w-4" />
+          {isExporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
           {locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}
         </Button>
+
+        <Button
+          variant="outline"
+          disabled={isAutoRegistering}
+          onClick={handleAutoRegisterFirstYear}
+          className="border-primary/40 hover:bg-primary/10 text-primary"
+        >
+          {isAutoRegistering ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {locale === 'ar'
+            ? 'تسجيل الفرقة الأولى تلقائياً'
+            : 'Auto-Register Level 1'}
+        </Button>
+
         <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
           <UploadCloud className="h-4 w-4" />
           {locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}

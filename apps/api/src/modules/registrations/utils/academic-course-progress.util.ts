@@ -1,3 +1,4 @@
+import { calculateGradeScale } from '@student-portal/shared';
 import { normalizeCourseCodes } from './course-recommendation.util';
 
 export interface CourseGradeRecord {
@@ -23,9 +24,11 @@ export function mergeAcademicCourseProgress(input: {
     courseCode: string;
     percentage: number;
     gradePoints: number;
+    letterGrade: string;
     creditHours: number;
     passed: boolean;
   }> = [];
+
   let weightedGradePoints = 0;
   let gradedCredits = 0;
 
@@ -59,7 +62,12 @@ export function mergeAcademicCourseProgress(input: {
     const passed =
       !blockedFinal && totalMax > 0 && totalEarned / totalMax >= 0.5;
     const percentage = totalMax > 0 ? (totalEarned / totalMax) * 100 : 0;
-    const gradePoints = Math.min(4, Math.max(0, percentage / 25));
+    const scale = calculateGradeScale(
+      percentage,
+      blockedFinal ? 'absent' : 'present',
+    );
+    const gradePoints = scale.points;
+    const letterGrade = scale.letter;
     const creditHours = Math.max(0, input.courseCredits?.[code] ?? 1);
     weightedGradePoints += gradePoints * creditHours;
     gradedCredits += creditHours;
@@ -67,6 +75,7 @@ export function mergeAcademicCourseProgress(input: {
       courseCode: code,
       percentage: Math.round(percentage * 100) / 100,
       gradePoints: Math.round(gradePoints * 100) / 100,
+      letterGrade,
       creditHours,
       passed,
     });

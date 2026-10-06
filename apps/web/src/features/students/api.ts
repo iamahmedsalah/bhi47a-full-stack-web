@@ -1,5 +1,6 @@
-import type { PaginatedResponse } from '@/lib/api';
+import api, { type PaginatedResponse } from '@/lib/api';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
+
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -180,19 +181,112 @@ export function activateStudent(id: string) {
   return apiPost<Student>(`/admin/students/${id}/activate`);
 }
 
+export function buildStudentExportSlug(params: {
+  level?: string;
+  enrollmentStatus?: string;
+  search?: string;
+  ext?: string;
+}): string {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const parts: string[] = ['students-registry'];
+
+  if (params.level && params.level !== 'all') {
+    parts.push(`level-${params.level}`);
+  }
+
+  if (params.enrollmentStatus && params.enrollmentStatus !== 'all') {
+    parts.push(
+      params.enrollmentStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    );
+  }
+
+  if (params.search && params.search.trim()) {
+    const cleanSearch = params.search
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20);
+    if (cleanSearch) parts.push(cleanSearch);
+  }
+
+  parts.push(dateStr);
+  const ext = params.ext || 'xlsx';
+  return `${parts.join('-')}.${ext}`;
+}
+
 export async function exportStudentsStreamingExcel(
   params: Omit<StudentListParams, 'page' | 'limit'>,
 ) {
-  const queryParams = new URLSearchParams();
-  if (params.search) queryParams.set('search', params.search);
-  if (params.level && params.level !== 'all') queryParams.set('level', params.level);
+  const queryParams: Record<string, string> = {};
+  if (params.search) queryParams.search = params.search;
+  if (params.level && params.level !== 'all') queryParams.level = params.level;
   if (params.enrollmentStatus && params.enrollmentStatus !== 'all') {
-    queryParams.set('enrollmentStatus', params.enrollmentStatus);
+    queryParams.enrollmentStatus = params.enrollmentStatus;
   }
-  const queryString = queryParams.toString();
-  const url = `/api/admin/students/export/excel${queryString ? `?${queryString}` : ''}`;
-  window.open(url, '_blank');
+
+  const raw = (await api.get('/admin/students/export/excel', {
+    params: queryParams,
+    responseType: 'blob',
+  })) as unknown;
+
+  // Handle axios response interceptor unwrapping:
+  // If response interceptor returned response.data, raw is already the Blob.
+  // Otherwise if raw is an AxiosResponse object, extract raw.data.
+  const rawRecord =
+    typeof raw === 'object' && raw !== null
+      ? (raw as Record<string, unknown>)
+      : null;
+
+  let blob: Blob;
+  if (raw instanceof Blob) {
+    blob = raw;
+  } else if (rawRecord && rawRecord.data instanceof Blob) {
+    blob = rawRecord.data;
+  } else if (rawRecord && rawRecord.data !== undefined) {
+    blob = new Blob([rawRecord.data as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  } else {
+    blob = new Blob([raw as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+
+  // Check if server returned an error JSON disguised as blob
+  if (blob.type.includes('application/json')) {
+    const errorText = await blob.text();
+    try {
+      const errObj = JSON.parse(errorText) as Record<string, unknown>;
+      const msg = typeof errObj.message === 'string' ? errObj.message : '';
+      throw new Error(msg || 'فشل تصدير كشف الطلاب');
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message !== 'فشل تصدير كشف الطلاب') throw e;
+      throw new Error(errorText || 'فشل تصدير كشف الطلاب');
+    }
+  }
+
+  if (blob.size === 0) {
+    throw new Error('الملف المستلم فارغ');
+  }
+
+  const filename = buildStudentExportSlug({
+    level: params.level,
+    enrollmentStatus: params.enrollmentStatus,
+    search: params.search,
+    ext: 'xlsx',
+  });
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
+
 
 export async function listAllStudentsForExport(
   params: Omit<StudentListParams, 'page'>,

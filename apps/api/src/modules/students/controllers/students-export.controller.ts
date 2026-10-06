@@ -20,6 +20,28 @@ export class StudentsExportController {
     summary: 'Stream students list as Excel file with constant O(1) memory',
   })
   async exportExcel(@Query() query: SearchStudentQuery, @Res() res: Response) {
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const slugParts = ['students-registry'];
+    if (query.level && query.level !== 'all') {
+      slugParts.push(`level-${query.level}`);
+    }
+    if (query.enrollmentStatus && query.enrollmentStatus !== 'all') {
+      slugParts.push(
+        query.enrollmentStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      );
+    }
+    if (query.search && query.search.trim()) {
+      const cleanSearch = query.search
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\u0600-\u06FF]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 20);
+      if (cleanSearch) slugParts.push(cleanSearch);
+    }
+    slugParts.push(dateStr);
+    const filename = `${slugParts.join('-')}.xlsx`;
+
     res.status(HttpStatus.OK);
     res.setHeader(
       'Content-Type',
@@ -27,9 +49,8 @@ export class StudentsExportController {
     );
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="students-${Date.now()}.xlsx"`,
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
     );
-    res.setHeader('Transfer-Encoding', 'chunked');
 
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
       stream: res,
@@ -79,6 +100,9 @@ export class StudentsExportController {
 
       worksheet.commit();
       await workbook.commit();
+      if (!res.writableEnded) {
+        res.end();
+      }
     } catch (error) {
       if (!res.headersSent) {
         res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
