@@ -4,12 +4,7 @@ import React, { Suspense, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 
-import { motion } from 'framer-motion';
 import {
-  AlertTriangle,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
   Clock3,
   Eye,
   FileSpreadsheet,

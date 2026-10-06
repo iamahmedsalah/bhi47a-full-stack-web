@@ -1,6 +1,5 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { hasLocale } from 'next-intl';
@@ -77,9 +76,7 @@ export default async function AcademicsPage({ params }: PageProps) {
 
         {/* Detailed Program Breakdown */}
         <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
-          {ACADEMIC_PROGRAMS.map((program, idx) => {
-            const isReversed = idx % 2 === 1;
-
+          {ACADEMIC_PROGRAMS.map((program) => {
             return (
               <div
                 key={program.id}

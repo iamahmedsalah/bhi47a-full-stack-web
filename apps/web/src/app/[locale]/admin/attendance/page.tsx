@@ -371,7 +371,7 @@ export default function StaffAttendancePage() {
               const qr = await attendanceApi.getCurrentQr(session._id);
               setActiveSession(session);
               setActiveQr(qr);
-            } catch (err) {
+            } catch {
               toast.error(
                 isArabic
                   ? "تعذر فتح عرض الجلسة"

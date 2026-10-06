@@ -15,7 +15,6 @@ import {
   Users,
   CheckCircle,
   Camera,
-  Layers,
   Sparkles,
 } from 'lucide-react';
 

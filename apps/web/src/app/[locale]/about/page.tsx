@@ -8,7 +8,7 @@ import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { Award, Compass, BookOpen, ShieldCheck, ChevronRight, ChevronLeft, GraduationCap, CheckCircle2 } from 'lucide-react';
+import { Compass, BookOpen, ShieldCheck, ChevronRight, ChevronLeft, GraduationCap, CheckCircle2 } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string }>;
