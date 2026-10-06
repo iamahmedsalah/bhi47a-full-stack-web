@@ -116,6 +116,14 @@ export function AdvisingWorkspace() {
   >({});
   const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
   const [isStudentSidebarOpen, setIsStudentSidebarOpen] = useState(true);
+
+  // Auto-distribute by student code state
+  const [assignModalTab, setAssignModalTab] = useState<"manual" | "auto">("manual");
+  const [autoDistLevel, setAutoDistLevel] = useState<string>("all");
+  const [autoDistOnlyUnassigned, setAutoDistOnlyUnassigned] = useState<boolean>(true);
+  const [autoDistStrategy, setAutoDistStrategy] = useState<"contiguous" | "round-robin">("contiguous");
+  const [autoDistAdvisorIds, setAutoDistAdvisorIds] = useState<string[]>([]);
+  const [autoDistAdvisorSearch, setAutoDistAdvisorSearch] = useState<string>("");
   useEffect(() => {
     const requestedStudent = new URLSearchParams(window.location.search).get(
       "student",
@@ -253,6 +261,56 @@ export function AdvisingWorkspace() {
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
+
+  const autoDistributeMutation = useMutation({
+    mutationFn: () =>
+      advisingApi.autoDistributeStudents({
+        academicYear,
+        semester: advisingSemester,
+        advisorIds: autoDistAdvisorIds.length > 0 ? autoDistAdvisorIds : undefined,
+        level: autoDistLevel !== "all" ? autoDistLevel : undefined,
+        onlyUnassigned: autoDistOnlyUnassigned,
+        strategy: autoDistStrategy,
+      }),
+    onSuccess: (result) => {
+      setIsAssignAdvisorModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: advisingKeys.advisors });
+      queryClient.invalidateQueries({
+        queryKey: advisingKeys.students(
+          search,
+          statusFilter,
+          levelFilter,
+          academicYear,
+          advisingSemester,
+        ),
+      });
+      toast.success(
+        isArabic
+          ? `تم توزيع ${result.totalDistributed} طالب على ${result.totalAdvisors} مرشد أكاديمي بنجاح`
+          : `Successfully auto-distributed ${result.totalDistributed} students across ${result.totalAdvisors} advisors`,
+      );
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
+  // Keep autoDistAdvisorIds populated when advisors list loads
+  useEffect(() => {
+    if (advisors.data && advisors.data.length > 0 && autoDistAdvisorIds.length === 0) {
+      setAutoDistAdvisorIds(advisors.data.map((a) => a._id));
+    }
+  }, [advisors.data, autoDistAdvisorIds.length]);
+
+  const filteredAutoDistAdvisors = useMemo(() => {
+    const list = advisors.data ?? [];
+    if (!autoDistAdvisorSearch.trim()) return list;
+    const q = autoDistAdvisorSearch.toLowerCase().trim();
+    return list.filter(
+      (adv) =>
+        (adv.name?.toLowerCase().includes(q) ?? false) ||
+        (adv.email?.toLowerCase().includes(q) ?? false) ||
+        (adv.userCode?.toLowerCase().includes(q) ?? false),
+    );
+  }, [advisors.data, autoDistAdvisorSearch]);
 
   const allModalStudents = useMemo(
     () => students.data?.items ?? [],
@@ -1440,6 +1498,7 @@ export function AdvisingWorkspace() {
             setAssignTargetStudent(undefined);
             setAdvisorSearchTerm("");
             setModalStudentSearch("");
+            setAutoDistAdvisorSearch("");
           }
         }}
       >
@@ -1465,17 +1524,328 @@ export function AdvisingWorkspace() {
               </div>
             </div>
 
-            {/* Target Period Context Badge */}
-            <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-background/50 px-3 py-1.5 text-xs font-semibold text-sky-300">
-              <CalendarClock className="h-3.5 w-3.5" />
-              <span>{academicYear}</span>
-              <span>·</span>
-              <span>{semesterLabel(advisingSemester, locale)}</span>
+            {/* Target Period Context Badge & Mode Toggle */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-squircle bg-secondary/60 p-1 border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setAssignModalTab("manual")}
+                  className={`px-3 py-1 text-xs font-semibold rounded-squircle transition-all cursor-pointer ${
+                    assignModalTab === "manual"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {isArabic ? "تعيين يدوي" : "Manual"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignModalTab("auto")}
+                  className={`px-3 py-1 text-xs font-semibold rounded-squircle transition-all cursor-pointer flex items-center gap-1.5 ${
+                    assignModalTab === "auto"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>{isArabic ? "توزيع تلقائي بالأكواد" : "Auto-Distribute"}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-background/50 px-3 py-1.5 text-xs font-semibold text-sky-300">
+                <CalendarClock className="h-3.5 w-3.5" />
+                <span>{academicYear}</span>
+                <span>·</span>
+                <span>{semesterLabel(advisingSemester, locale)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Body: Split View 2 Columns */}
-          <div className="grid flex-1 grid-cols-1 md:grid-cols-12 overflow-hidden min-h-0">
+          {/* Body: Mode Switching */}
+          {assignModalTab === "auto" ? (
+            <>
+              {/* Auto-distribute content */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-secondary/5">
+                {/* Configuration Row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-2xl border border-white/10 bg-card/60 backdrop-blur-sm">
+                  {/* Level Selector */}
+                  <div className="space-y-1.5 text-start">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-sky-400" />
+                      <span>{isArabic ? "المستوى الدراسي للطلاب" : "Academic Level"}</span>
+                    </label>
+                    <CustomDropdown
+                      value={autoDistLevel}
+                      onValueChange={(val) => setAutoDistLevel(val)}
+                      options={[
+                        { value: "all", label: isArabic ? "جميع المستويات (1 - 4)" : "All Levels (1 - 4)" },
+                        { value: "1", label: isArabic ? "الفرقة الأولى (Level 1)" : "Level 1" },
+                        { value: "2", label: isArabic ? "الفرقة الثانية (Level 2)" : "Level 2" },
+                        { value: "3", label: isArabic ? "الفرقة الثالثة (Level 3)" : "Level 3" },
+                        { value: "4", label: isArabic ? "الفرقة الرابعة (Level 4)" : "Level 4" },
+                      ]}
+                      className="w-full h-9 rounded-squircle bg-secondary/60 border border-white/10 text-xs text-foreground"
+                    />
+                  </div>
+
+                  {/* Strategy Selector */}
+                  <div className="space-y-1.5 text-start">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Workflow className="h-3.5 w-3.5 text-teal-400" />
+                      <span>{isArabic ? "خوارزمية التوزيع" : "Distribution Strategy"}</span>
+                    </label>
+                    <CustomDropdown
+                      value={autoDistStrategy}
+                      onValueChange={(val) => setAutoDistStrategy(val as "contiguous" | "round-robin")}
+                      options={[
+                        {
+                          value: "contiguous",
+                          label: isArabic
+                            ? "متتالي حسب نطاق كود الطالب (Contiguous Blocks)"
+                            : "Contiguous Code Blocks",
+                        },
+                        {
+                          value: "round-robin",
+                          label: isArabic
+                            ? "دوري بالتناوب (Round-Robin)"
+                            : "Round-Robin",
+                        },
+                      ]}
+                      className="w-full h-9 rounded-squircle bg-secondary/60 border border-white/10 text-xs text-foreground"
+                    />
+                  </div>
+
+                  {/* Scope Selector */}
+                  <div className="space-y-1.5 text-start">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-amber-400" />
+                      <span>{isArabic ? "نطاق شمول الطلاب" : "Scope"}</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAutoDistOnlyUnassigned(!autoDistOnlyUnassigned)}
+                      className={cn(
+                        "flex items-center justify-between w-full h-9 px-3 rounded-squircle border text-xs transition-all cursor-pointer",
+                        autoDistOnlyUnassigned
+                          ? "bg-sky-500/10 border-sky-500/30 text-foreground"
+                          : "bg-secondary/60 border-white/10 text-muted-foreground hover:bg-secondary/80",
+                      )}
+                    >
+                      <span className="truncate font-medium">
+                        {isArabic ? "الطلاب غير المسندين فقط" : "Unassigned Students Only"}
+                      </span>
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-squircle flex items-center justify-center transition-all",
+                          autoDistOnlyUnassigned
+                            ? "bg-sky-500 text-white"
+                            : "border border-white/20 bg-secondary/60",
+                        )}
+                      >
+                        {autoDistOnlyUnassigned && <Check className="h-3 w-3 stroke-[3]" />}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Target Advisors Selection Card - Scalable for 20+ Staff */}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                        {isArabic ? "أعضاء هيئة التدريس / المرشدين المشمولين بالتوزيع" : "Included Staff / Advisors"}
+                      </h4>
+                      <span className="rounded-full bg-sky-500/15 border border-sky-500/30 px-2.5 py-0.5 font-mono text-[11px] font-bold text-sky-300">
+                        {autoDistAdvisorIds.length} / {advisors.data?.length ?? 0}
+                      </span>
+                    </div>
+
+                    {/* Search & Actions Bar */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-48 sm:w-60">
+                        <Search className="absolute inset-s-2.5 top-2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          value={autoDistAdvisorSearch}
+                          onChange={(e) => setAutoDistAdvisorSearch(e.target.value)}
+                          placeholder={isArabic ? "بحث في المرشدين بالاسم أو الكود..." : "Search staff by name or code..."}
+                          className="ps-8 pe-7 h-8 text-xs rounded-squircle bg-secondary/60 border-white/10"
+                        />
+                        {autoDistAdvisorSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setAutoDistAdvisorSearch("")}
+                            className="absolute inset-e-2 top-2 text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = advisors.data?.map((a) => a._id) || [];
+                          if (autoDistAdvisorIds.length === allIds.length) {
+                            setAutoDistAdvisorIds([]);
+                          } else {
+                            setAutoDistAdvisorIds(allIds);
+                          }
+                        }}
+                        className="px-2.5 py-1 text-[11px] rounded-squircle border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 font-medium cursor-pointer transition-colors whitespace-nowrap"
+                      >
+                        {autoDistAdvisorIds.length === (advisors.data?.length || 0)
+                          ? isArabic ? "إلغاء تحديد الكل" : "Deselect All"
+                          : isArabic ? "تحديد جميع الهيئة" : "Select All Staff"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Advisors Grid - max-h-72 overflow-y-auto scalable for 20+ staff */}
+                  {filteredAutoDistAdvisors.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-secondary/20 p-8 text-center text-xs text-muted-foreground">
+                      {isArabic ? "لا توجد نتائج تطابق بحث المرشدين" : "No advisors match your search"}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto p-1 custom-scroll">
+                      {filteredAutoDistAdvisors.map((adv) => {
+                        const isChecked = autoDistAdvisorIds.includes(adv._id);
+                        const initials = adv.name
+                          ? adv.name
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((w: string) => w[0])
+                              .join("")
+                              .toUpperCase()
+                          : "ST";
+
+                        return (
+                          <div
+                            key={adv._id}
+                            onClick={() => {
+                              if (isChecked) {
+                                setAutoDistAdvisorIds((prev) => prev.filter((id) => id !== adv._id));
+                              } else {
+                                setAutoDistAdvisorIds((prev) => [...prev, adv._id]);
+                              }
+                            }}
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-squircle border transition-all cursor-pointer select-none",
+                              isChecked
+                                ? "bg-gradient-to-r from-teal-500/15 to-sky-500/15 border-sky-500/40 text-foreground ring-1 ring-sky-500/30 shadow-sm"
+                                : "bg-secondary/25 border-white/10 text-muted-foreground hover:bg-secondary/45 hover:border-white/20",
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1 me-2 text-start">
+                              {/* Avatar circle */}
+                              <div
+                                className={cn(
+                                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold border transition-colors",
+                                  isChecked
+                                    ? "bg-gradient-to-br from-teal-500/30 to-sky-500/30 border-sky-400/50 text-sky-200"
+                                    : "bg-secondary/60 border-white/10 text-muted-foreground",
+                                )}
+                              >
+                                {initials}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs font-bold block truncate text-foreground">
+                                  {adv.name}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground block truncate font-mono">
+                                  {adv.email || adv.userCode || (isArabic ? "هيئة تدريس" : "Staff")}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono text-[10px] font-semibold rounded-squircle bg-secondary/80 border border-white/10 px-2 py-0.5 text-muted-foreground">
+                                {adv.assignedStudentCount} {isArabic ? "طالب" : "students"}
+                              </span>
+                              <div
+                                className={cn(
+                                  "h-4 w-4 rounded-squircle flex items-center justify-center transition-all",
+                                  isChecked
+                                    ? "bg-sky-500 text-white"
+                                    : "border border-white/20 bg-secondary/60",
+                                )}
+                              >
+                                {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Preview Info Banner */}
+                <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-r from-teal-500/10 to-sky-500/10 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-sky-300">
+                    <Sparkles className="h-4 w-4" />
+                    <span>{isArabic ? "آلية عمل خوارزمية التوزيع بالترتيب الرقمي لكود الطالب" : "Distribution Mechanics by Student Code"}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {isArabic
+                      ? `تقوم الخوارزمية بفرز أكواد الطلاب (Student Codes) تصاعدياً وترتيبهم رقمياً، ثم توزيعهم بالتساوي والعدل على ${autoDistAdvisorIds.length} مرشد أكاديمي محددين. يضمن نظام النطاقات المتتالية حصول كل مرشد على فئة متسلسلة من أرقام الجلوس/الأكواد ليسهل متابعتهم واستخراج الكشوف.`
+                      : `The algorithm sorts student codes in natural ascending numeric order and distributes them evenly across the ${autoDistAdvisorIds.length} selected advisors. Contiguous mode assigns sequential blocks of codes to each advisor for streamlined management.`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Auto-distribute Footer */}
+              <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-white/10 bg-secondary/20 p-4 px-6">
+                <div className="text-xs text-muted-foreground">
+                  {autoDistAdvisorIds.length > 0 ? (
+                    <span className="text-sky-300 font-medium">
+                      {isArabic
+                        ? `سيتم توزيع الطلاب على ${autoDistAdvisorIds.length} مرشد بالتساوي وفق أكواد الطلاب`
+                        : `Students will be partitioned evenly across ${autoDistAdvisorIds.length} advisors`}
+                    </span>
+                  ) : (
+                    <span className="text-rose-400 font-medium">
+                      {isArabic ? "يرجى تحديد مرشد أكاديمي واحد على الأقل" : "Please select at least one advisor"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAssignAdvisorModalOpen(false)}
+                    className="h-9 text-xs rounded-squircle"
+                  >
+                    {isArabic ? "إلغاء" : "Cancel"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={
+                      autoDistributeMutation.isPending ||
+                      autoDistAdvisorIds.length === 0
+                    }
+                    onClick={() => autoDistributeMutation.mutate()}
+                    className="h-9 gap-1.5 bg-gradient-to-r from-teal-500 to-sky-500 text-white hover:from-teal-400 hover:to-sky-400 text-xs font-semibold shadow-md rounded-squircle cursor-pointer"
+                  >
+                    {autoDistributeMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    <span>
+                      {isArabic
+                        ? `بدء التوزيع التلقائي على (${autoDistAdvisorIds.length}) مرشد`
+                        : `Execute Auto-Distribution (${autoDistAdvisorIds.length})`}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Body: Split View 2 Columns */}
+              <div className="grid flex-1 grid-cols-1 md:grid-cols-12 overflow-hidden min-h-0">
             {/* Column 1: Target Students (col-span-12 md:col-span-6 lg:col-span-5) */}
             <div className="col-span-12 md:col-span-6 lg:col-span-5 border-b md:border-b-0 md:border-e border-white/10 p-5 flex flex-col bg-secondary/5 min-h-[340px] md:min-h-0 overflow-hidden">
               <div className="mb-3 flex items-center justify-between">
@@ -1866,7 +2236,9 @@ export function AdvisingWorkspace() {
               </Button>
             </div>
           </div>
-        </DialogContent>
+        </>
+      )}
+    </DialogContent>
       </Dialog>
     )}
   </div>
@@ -1921,7 +2293,16 @@ function normalizeDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
 
 function getCourseSemester(
   course: AdvisingCourseMap["courses"][0],
+  studentDept?: string | null,
 ): "first" | "second" | "summer" | undefined {
+  const code = course.code.toUpperCase();
+  if (code === "326") {
+    if (course.semester === "first" || course.semester === "second") {
+      return course.semester;
+    }
+    const norm = normalizeDept(studentDept ?? course.department);
+    return norm === "ACCOUNTING" ? "first" : "second";
+  }
   if (
     course.semester === "first" ||
     course.semester === "second" ||
@@ -1929,7 +2310,6 @@ function getCourseSemester(
   ) {
     return course.semester;
   }
-  const code = course.code.toUpperCase();
   return COURSE_SEMESTER_BY_CODE[code];
 }
 
@@ -1967,11 +2347,17 @@ function getCourseLevel(course: AdvisingCourseMap["courses"][0]): number {
 function isCourseOfferedInSemester(
   course: AdvisingCourseMap["courses"][0],
   semester: "first" | "second" | "summer",
+  studentDept?: string | null,
 ) {
+  const code = course.code.toUpperCase();
+  if (code === "326") {
+    const targetSem = getCourseSemester(course, studentDept);
+    return targetSem === semester;
+  }
   if (course.offeredTerms?.length) {
     return course.offeredTerms.includes(semester);
   }
-  const courseSem = getCourseSemester(course);
+  const courseSem = getCourseSemester(course, studentDept);
   return courseSem === semester;
 }
 
@@ -2137,7 +2523,7 @@ function CanvasContent({
           return false;
         }
 
-        if (!isCourseOfferedInSemester(course, advisingSemester)) {
+        if (!isCourseOfferedInSemester(course, advisingSemester, studentTrack)) {
           return false;
         }
 
@@ -2187,7 +2573,7 @@ function CanvasContent({
 
       // Semester filter
       if (gridSemesterFilter !== "all") {
-        const sem = getCourseSemester(course);
+        const sem = getCourseSemester(course, studentTrack);
         if (sem && sem !== gridSemesterFilter) {
           return false;
         }
@@ -3471,7 +3857,7 @@ function RegistrationSummary({
       const form = await apiGet<PrintableRegistrationForm>(
         `/registrations/${registrationId}/print`,
       );
-      if (!openRegistrationPrintView(form)) {
+      if (!openRegistrationPrintView(form, "print", isArabic ? "ar" : "en")) {
         toast.error(
           isArabic
             ? "يرجى السماح بالنوافذ المنبثقة لفتح الاستمارة"

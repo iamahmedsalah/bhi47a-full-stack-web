@@ -107,6 +107,37 @@ export class StudentImporter implements Importer {
     const profileOps: UpdateProfileOp[] = [];
     const passwordHashCache = new Map<string, string>();
 
+    // 1. Identify unhashed unique national IDs across this batch
+    const unhashedNationalIds = new Set<string>();
+    for (const { row } of validRows) {
+      const studentCode = String(row.studentCode).trim();
+      const nationalId = String(row.nationalId).trim();
+      const existingUser = userMap.get(studentCode);
+      if (
+        existingUser &&
+        existingUser.nationalId === nationalId &&
+        existingUser.passwordHash
+      ) {
+        continue;
+      }
+      if (nationalId && !passwordHashCache.has(nationalId)) {
+        unhashedNationalIds.add(nationalId);
+      }
+    }
+
+    // 2. Pre-compute hashes in concurrent batches to prevent blocking the event loop
+    const idList = Array.from(unhashedNationalIds);
+    const HASH_CONCURRENCY = 10;
+    for (let i = 0; i < idList.length; i += HASH_CONCURRENCY) {
+      const chunk = idList.slice(i, i + HASH_CONCURRENCY);
+      await Promise.all(
+        chunk.map(async (nid) => {
+          const hash = await bcrypt.hash(nid, 10);
+          passwordHashCache.set(nid, hash);
+        }),
+      );
+    }
+
     for (const { row, rowNum } of validRows) {
       try {
         const studentCode = String(row.studentCode).trim();

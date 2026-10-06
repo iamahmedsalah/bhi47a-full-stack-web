@@ -8,6 +8,7 @@ import { GradeImporter } from './importers/grade.importer';
 import { QuizImporter } from './importers/quiz.importer';
 import { AttendanceImporter } from './importers/attendance.importer';
 import { AcademicEmailImporter } from './importers/academic-email.importer';
+import { AcademicWarningImporter } from './importers/academic-warning.importer';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import {
   StudentProfile,
@@ -64,6 +65,7 @@ import { GradesModule } from '../grades/grades.module';
     QuizImporter,
     AttendanceImporter,
     AcademicEmailImporter,
+    AcademicWarningImporter,
   ],
   exports: [UploadsService],
 })

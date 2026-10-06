@@ -4,8 +4,9 @@ import React, { useState, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import api, { getApiErrorMessage, PaginatedResponse } from '@/lib/api';
-import { Download, Plus, Edit2, Trash2, Loader2, BookOpen, UploadCloud } from 'lucide-react';
+import api, { getApiErrorMessage, PaginatedResponse, apiBaseUrl } from '@/lib/api';
+import { Download, Plus, Edit2, Trash2, Loader2, BookOpen, UploadCloud, FileText, UserCheck, Eye } from 'lucide-react';
+import { listStaff } from '@/features/staff/api';
 import { COURSE_LEVEL_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
@@ -59,6 +60,14 @@ interface Course {
   minimumGpa?: number;
   registrationPriority?: number;
   description?: string;
+  curricula?: { department: string; academicLevel: string; semester: string; type: CourseType }[];
+  syllabusPdfUrl?: string;
+  syllabusPdfName?: string;
+  syllabusUpdatedAt?: string;
+  doctorId?: string | null;
+  doctorName?: string;
+  doctorNameAr?: string;
+  coverImageUrl?: string;
   isActive: boolean;
 }
 
@@ -80,6 +89,7 @@ const courseImportColumns = [
   'minimumGpa',
   'registrationPriority',
   'description',
+  'programCurricula',
 ];
 
 /* ─── Course Form Dialog (Reusable for Add/Edit) ─────── */
@@ -88,7 +98,13 @@ interface CourseFormDialogProps {
   onOpenChange: (open: boolean) => void;
   mode: 'add' | 'edit';
   initialValues?: Partial<Course>;
-  onSubmit: (data: Omit<Course, '_id' | 'isActive'> & { isActive: boolean }) => Promise<void>;
+  onSubmit: (
+    data: Omit<Course, '_id' | 'isActive'> & {
+      isActive: boolean;
+      syllabusFile?: File | null;
+      coverImageFile?: File | null;
+    },
+  ) => Promise<void>;
   t: ReturnType<typeof useTranslations>;
   tCommon: ReturnType<typeof useTranslations>;
 }
@@ -110,11 +126,26 @@ function CourseFormDialog({
   const [semester, setSemester] = useState(initialValues.semester || 'first');
   const [creditHours, setCreditHours] = useState(initialValues.creditHours || 3);
   const [department, setDepartment] = useState(initialValues.department || '');
+  const [programCurricula, setProgramCurricula] = useState('');
   const [prerequisites, setPrerequisites] = useState((initialValues.prerequisites || []).join(', '));
   const [courseType, setCourseType] = useState<CourseType>(initialValues.type || 'required');
   const [isActive, setIsActive] = useState(initialValues.isActive ?? true);
+  const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
+  const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
+  const [doctorId, setDoctorId] = useState(initialValues.doctorId || '');
+  const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ar';
+
+  const staffQuery = useQuery({
+    queryKey: ['staff-options-for-courses'],
+    queryFn: () => listStaff({ page: 1, limit: 100, status: 'active' }),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const [prevOpen, setPrevOpen] = useState(open);
   const [prevName, setPrevName] = useState(initialValues.name);
@@ -123,9 +154,13 @@ function CourseFormDialog({
   const [prevSemester, setPrevSemester] = useState(initialValues.semester);
   const [prevCreditHours, setPrevCreditHours] = useState(initialValues.creditHours);
   const [prevDepartment, setPrevDepartment] = useState(initialValues.department);
+  const [prevCurricula, setPrevCurricula] = useState(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|'));
   const [prevPrerequisites, setPrevPrerequisites] = useState(initialValues.prerequisites?.join(', '));
   const [prevCourseType, setPrevCourseType] = useState(initialValues.type);
   const [prevIsActive, setPrevIsActive] = useState(initialValues.isActive);
+  const [prevSyllabusUrl, setPrevSyllabusUrl] = useState(initialValues.syllabusPdfUrl);
+  const [prevDoctorId, setPrevDoctorId] = useState(initialValues.doctorId);
+  const [prevCoverImageUrl, setPrevCoverImageUrl] = useState(initialValues.coverImageUrl);
 
   if (
     open !== prevOpen ||
@@ -135,9 +170,13 @@ function CourseFormDialog({
     initialValues.semester !== prevSemester ||
     initialValues.creditHours !== prevCreditHours ||
     initialValues.department !== prevDepartment ||
+    initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|') !== prevCurricula ||
     initialValues.prerequisites?.join(', ') !== prevPrerequisites ||
     initialValues.type !== prevCourseType ||
-    initialValues.isActive !== prevIsActive
+    initialValues.isActive !== prevIsActive ||
+    initialValues.syllabusPdfUrl !== prevSyllabusUrl ||
+    initialValues.doctorId !== prevDoctorId ||
+    initialValues.coverImageUrl !== prevCoverImageUrl
   ) {
     setPrevOpen(open);
     setPrevName(initialValues.name);
@@ -146,9 +185,13 @@ function CourseFormDialog({
     setPrevSemester(initialValues.semester);
     setPrevCreditHours(initialValues.creditHours);
     setPrevDepartment(initialValues.department);
+    setPrevCurricula(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|'));
     setPrevPrerequisites(initialValues.prerequisites?.join(', '));
     setPrevCourseType(initialValues.type);
     setPrevIsActive(initialValues.isActive);
+    setPrevSyllabusUrl(initialValues.syllabusPdfUrl);
+    setPrevDoctorId(initialValues.doctorId);
+    setPrevCoverImageUrl(initialValues.coverImageUrl);
 
     if (open) {
       setName(initialValues.name || '');
@@ -159,9 +202,16 @@ function CourseFormDialog({
       setSemester(initialValues.semester || 'first');
       setCreditHours(initialValues.creditHours || 3);
       setDepartment(initialValues.department || '');
+      setProgramCurricula(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|') || '');
       setPrerequisites((initialValues.prerequisites || []).join(', '));
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
+      setDoctorId(initialValues.doctorId || '');
+      setCoverImageUrl(initialValues.coverImageUrl || '');
+      setSyllabusFile(null);
+      setCoverImageFile(null);
+      setCurrentSyllabusUrl(initialValues.syllabusPdfUrl || '');
+      setCurrentSyllabusName(initialValues.syllabusPdfName || '');
       setError('');
     }
   }
@@ -181,12 +231,22 @@ function CourseFormDialog({
         semester,
         creditHours,
         department,
+        curricula: programCurricula.trim()
+          ? programCurricula.split('|').map((entry) => {
+              const [curriculumDepartment, academicLevel, curriculumSemester, type] = entry.split(':').map((part) => part.trim());
+              return { department: curriculumDepartment, academicLevel, semester: curriculumSemester, type: type as CourseType };
+            })
+          : undefined,
         prerequisites: prerequisites
           .split(',')
           .map((item) => item.trim().toUpperCase())
           .filter(Boolean),
         type: courseType,
         isActive,
+        syllabusFile,
+        coverImageFile,
+        doctorId: doctorId ? doctorId : null,
+        coverImageUrl: coverImageUrl.trim() || undefined,
       });
       onOpenChange(false);
     } catch (err: unknown) {
@@ -264,6 +324,12 @@ function CourseFormDialog({
             <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} />
           </div>
 
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted">Program placements</label>
+            <Input type="text" dir="ltr" value={programCurricula} onChange={(e) => setProgramCurricula(e.target.value)} placeholder="ACCOUNTING:3:first:elective|BIS:3:second:elective" />
+            <p className="text-xs text-muted">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. This supports different placements for course 326.</p>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">Prerequisites</label>
@@ -288,6 +354,142 @@ function CourseFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted">
+              {locale === 'ar' ? 'رابط صورة غلاف الكتاب (اختياري للطلاب)' : 'Cover Book Thumbnail URL (Optional)'}
+            </label>
+            <Input
+              type="url"
+              dir="ltr"
+              value={coverImageUrl}
+              onChange={(e) => setCoverImageUrl(e.target.value)}
+              placeholder="https://example.com/cover.jpg"
+              className="text-xs font-mono"
+            />
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border/80 bg-background/50 p-3.5 text-start">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <FileText className="h-4 w-4 text-primary" />
+                <span>{locale === 'ar' ? 'منهج ومحتوى المقرر (PDF)' : 'Course Curriculum & Syllabus (PDF)'}</span>
+              </label>
+              {currentSyllabusUrl && (
+                <a
+                  href={initialValues._id ? `${apiBaseUrl}/courses/${initialValues._id}/syllabus/download` : currentSyllabusUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-primary underline hover:text-primary/80 flex items-center gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  <span>{locale === 'ar' ? 'معاينة الملف الحالي' : 'View Current Syllabus'}</span>
+                </a>
+              )}
+            </div>
+            <Input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setSyllabusFile(file);
+                }
+              }}
+              className="text-xs file:mr-3 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+            />
+            {currentSyllabusName && !syllabusFile && (
+              <p className="font-mono text-[11px] text-muted-foreground">
+                {locale === 'ar' ? `الملف الحالي: ${currentSyllabusName}` : `Current file: ${currentSyllabusName}`}
+              </p>
+            )}
+            {syllabusFile && (
+              <p className="text-[11px] font-medium text-emerald-400">
+                {locale === 'ar' ? `الملف المحدد للرفع: ${syllabusFile.name}` : `Selected file for upload: ${syllabusFile.name}`}
+              </p>
+            )}
+          </div>
+
+          {/* Book Cover Image Upload / Auto-derive Notice */}
+          <div className="space-y-2 rounded-xl border border-border/80 bg-secondary/20 p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-muted">
+                {locale === 'ar' ? 'صورة غلاف الكتاب / المقرر (Course Book Cover)' : 'Course Book Cover Thumbnail'}
+              </label>
+              {coverImageUrl && (
+                <a
+                  href={coverImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-primary underline hover:text-primary/80 flex items-center gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  <span>{locale === 'ar' ? 'معاينة الغلاف' : 'View Cover'}</span>
+                </a>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {coverImageUrl && !coverImageFile && (
+                <div className="h-14 w-10 shrink-0 overflow-hidden rounded border border-border/60 bg-card">
+                  <img
+                    src={coverImageUrl}
+                    alt="Cover preview"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="flex-1 space-y-1">
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setCoverImageFile(file);
+                    }
+                  }}
+                  className="text-xs file:mr-3 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                />
+                {coverImageFile && (
+                  <p className="text-[11px] font-medium text-emerald-400">
+                    {locale === 'ar' ? `الصورة المحددة: ${coverImageFile.name}` : `Selected cover: ${coverImageFile.name}`}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+              {locale === 'ar'
+                ? '💡 ملاحظة: يمكنك رفع صورة مخصصة لغلاف الكتاب هنا، أو تركها فارغة وسيتم توليد الغلاف تلقائياً من الصفحة الأولى لملف المنهج (PDF) عند رفعه.'
+                : '💡 Note: You can upload a custom cover image, or leave it empty to automatically generate a thumbnail from page 1 of the uploaded syllabus PDF.'}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted">
+              {locale === 'ar' ? 'أستاذ / منسق المقرر (Course Doctor)' : 'Course Doctor / Coordinator'}
+            </label>
+            <Select
+              value={doctorId || 'none'}
+              onValueChange={(val) => setDoctorId(val === 'none' ? '' : val)}
+            >
+              <SelectTrigger className="bg-secondary/50 border-border">
+                <SelectValue placeholder={locale === 'ar' ? 'اختر أستاذ المقرر...' : 'Select course doctor...'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">
+                  {locale === 'ar' ? '-- غير محدد --' : '-- Unassigned --'}
+                </SelectItem>
+                {(staffQuery.data?.items || []).map((staff) => (
+                  <SelectItem key={staff._id} value={staff._id}>
+                    {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}{' '}
+                    {staff.userCode ? `(${staff.userCode})` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-center gap-2 pt-2">
@@ -353,16 +555,57 @@ function CoursesPageContent() {
   const fromRow = total === 0 ? 0 : (page - 1) * limit + 1;
   const toRow = Math.min(page * limit, total);
 
-  const handleAdd = async (data: Omit<Course, '_id' | 'isActive'> & { isActive: boolean }) => {
-    await api.post('/admin/courses', data);
-    toast.success(locale === 'ar' ? 'تم إضافة المادة بنجاح' : 'Course added successfully');
+  const handleAdd = async (
+    data: Omit<Course, '_id' | 'isActive'> & {
+      isActive: boolean;
+      syllabusFile?: File | null;
+      coverImageFile?: File | null;
+    },
+  ) => {
+    const { syllabusFile, coverImageFile, ...coursePayload } = data;
+    const res = await api.post<Course>('/admin/courses', coursePayload);
+    const newCourseId = res.data?._id;
+    if (newCourseId) {
+      if (syllabusFile) {
+        const fd = new FormData();
+        fd.append('file', syllabusFile);
+        await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
+      }
+      if (coverImageFile) {
+        const fd = new FormData();
+        fd.append('file', coverImageFile);
+        await api.post(`/admin/courses/${newCourseId}/cover-image`, fd);
+      }
+    }
+    toast.success(
+      locale === 'ar' ? 'تم إضافة المادة بنجاح' : 'Course added successfully',
+    );
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 
-  const handleEdit = async (data: Omit<Course, '_id' | 'isActive'> & { isActive: boolean }) => {
+  const handleEdit = async (
+    data: Omit<Course, '_id' | 'isActive'> & {
+      isActive: boolean;
+      syllabusFile?: File | null;
+      coverImageFile?: File | null;
+    },
+  ) => {
     if (!selectedCourse) return;
-    await api.patch(`/admin/courses/${selectedCourse._id}`, data);
-    toast.success(locale === 'ar' ? 'تم تحديث المادة بنجاح' : 'Course updated successfully');
+    const { syllabusFile, coverImageFile, ...coursePayload } = data;
+    await api.patch(`/admin/courses/${selectedCourse._id}`, coursePayload);
+    if (syllabusFile) {
+      const fd = new FormData();
+      fd.append('file', syllabusFile);
+      await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
+    }
+    if (coverImageFile) {
+      const fd = new FormData();
+      fd.append('file', coverImageFile);
+      await api.post(`/admin/courses/${selectedCourse._id}/cover-image`, fd);
+    }
+    toast.success(
+      locale === 'ar' ? 'تم تحديث المادة بنجاح' : 'Course updated successfully',
+    );
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 
@@ -519,6 +762,51 @@ function CoursesPageContent() {
           </TableCell>
         );
       },
+    },
+    {
+      key: 'syllabus',
+      header: locale === 'ar' ? 'المنهج (PDF)' : 'Syllabus (PDF)',
+      render: (course) => (
+        <TableCell className="p-4">
+          {course.syllabusPdfUrl ? (
+            <a
+              href={`${apiBaseUrl}/courses/${course._id}/syllabus/download`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              <span>{locale === 'ar' ? 'عرض PDF' : 'View PDF'}</span>
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground/60 italic">
+              {locale === 'ar' ? 'غير مرفوع' : 'Not uploaded'}
+            </span>
+          )}
+        </TableCell>
+      ),
+    },
+    {
+      key: 'doctor',
+      header: locale === 'ar' ? 'أستاذ المقرر' : 'Course Doctor',
+      render: (course) => (
+        <TableCell className="p-4">
+          {course.doctorName || course.doctorNameAr ? (
+            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground">
+              <UserCheck className="h-3.5 w-3.5 text-primary" />
+              <span>
+                {locale === 'ar'
+                  ? course.doctorNameAr || course.doctorName
+                  : course.doctorName || course.doctorNameAr}
+              </span>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground/60 italic">
+              {locale === 'ar' ? 'غير محدد' : 'Unassigned'}
+            </span>
+          )}
+        </TableCell>
+      ),
     },
     {
       key: 'status',

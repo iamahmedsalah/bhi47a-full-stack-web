@@ -22,6 +22,7 @@ import { RegistrationsModule } from './modules/registrations/registrations.modul
 import { AcademicAdvisingModule } from './modules/academic-advising/academic-advising.module';
 import { AiModule } from './modules/ai/ai.module';
 import { StaffManagementModule } from './modules/staff-management/staff-management.module';
+import { QuizzesModule } from './modules/quizzes/quizzes.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -52,6 +53,7 @@ import { HealthController } from './health.controller';
     AcademicAdvisingModule,
     AiModule,
     StaffManagementModule,
+    QuizzesModule,
   ],
   controllers: [HealthController],
 })

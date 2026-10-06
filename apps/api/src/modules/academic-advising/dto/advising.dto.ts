@@ -67,6 +67,41 @@ export class BulkAssignAdvisorDto {
   @IsString() @MinLength(4) @MaxLength(20) academicYear!: string;
   @IsIn(['first', 'second', 'summer']) semester!: string;
 }
+export class AutoDistributeAdvisorsDto {
+  @IsString()
+  @MinLength(4)
+  @MaxLength(20)
+  academicYear!: string;
+
+  @IsIn(['first', 'second', 'summer'])
+  semester!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  advisorIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  studentIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  level?: string;
+
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  onlyUnassigned?: boolean;
+
+  @IsOptional()
+  @IsIn(['contiguous', 'round-robin'])
+  strategy?: 'contiguous' | 'round-robin';
+}
 export class GenerateRecommendationsDto {
   @IsOptional() @IsInt() @Min(1) @Max(30) maxCredits = 18;
 }

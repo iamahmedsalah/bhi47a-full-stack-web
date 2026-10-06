@@ -22,6 +22,7 @@ import {
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
 import { evaluateAcademicProgression } from './utils/academic-level-progression.util';
 import { calculateGradeScale, type CourseLevel } from '@student-portal/shared';
+import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
 
 import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 
@@ -106,108 +107,172 @@ export class GradesService implements OnModuleInit {
       ]),
     );
 
-    const results = await Promise.all(
-      uniqueIds.map(async (studentId) => {
-        const objectId = new Types.ObjectId(studentId);
-        const [academic, studentProfile, grades, user] = await Promise.all([
-          this.studentAcademicProfileModel.findOne({ studentId: objectId }),
-          this.studentProfileModel.findOne({ userId: objectId }),
-          this.gradeModel
-            .find({ studentId: objectId, isPublished: true })
-            .lean(),
-          this.userModel.findById(objectId).select('name studentCode').lean(),
-        ]);
-        if (!academic && !studentProfile) return null;
+    const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
+    const [allAcademics, allProfiles, allGrades, allUsers] = await Promise.all([
+      this.studentAcademicProfileModel.find({ studentId: { $in: objectIds } }),
+      this.studentProfileModel.find({ userId: { $in: objectIds } }),
+      this.gradeModel
+        .find({ studentId: { $in: objectIds }, isPublished: true })
+        .lean(),
+      this.userModel
+        .find({ _id: { $in: objectIds } })
+        .select('name studentCode')
+        .lean(),
+    ]);
 
-        const progress = mergeAcademicCourseProgress({
-          completedCourses: academic?.completedCourses,
-          failedCourses: academic?.failedCourses,
-          lowGradeCourses: academic?.lowGradeCourses,
-          grades,
-          courseCredits,
-        });
-        const currentLevel = (academic?.academicLevel ??
-          studentProfile?.level ??
-          '1') as CourseLevel;
-        const finalizedCourses = progress.courseResults.map(
-          (result) => result.courseCode,
-        );
+    const academicMap = new Map(
+      allAcademics.map((a) => [a.studentId.toString(), a]),
+    );
+    const profileMap = new Map(
+      allProfiles.map((p) => [p.userId.toString(), p]),
+    );
+    const userMap = new Map(allUsers.map((u) => [u._id.toString(), u]));
 
-        const evaluation = evaluateAcademicProgression({
-          currentLevel,
-          courses,
-          finalizedCourses,
-          failedCourses: progress.failedCourses,
-          maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
-        });
+    const gradesByStudent = new Map<string, typeof allGrades>();
+    for (const g of allGrades) {
+      const sId = g.studentId.toString();
+      const list = gradesByStudent.get(sId) || [];
+      list.push(g);
+      gradesByStudent.set(sId, list);
+    }
 
-        const promotedLevel = evaluation.promotedLevel;
-        const wasPromoted = evaluation.willPromote;
+    const docsToSave: Array<{ save: () => Promise<unknown> }> = [];
 
-        const currentRequirements = courses.filter(
-          (course) =>
-            (course.academicLevel ?? course.level) === currentLevel &&
-            (course.semester === 'first' || course.semester === 'second') &&
-            course.type !== 'elective',
-        );
+    const results = uniqueIds.map((studentId) => {
+      const academic = academicMap.get(studentId);
+      const studentProfile = profileMap.get(studentId);
+      const grades = gradesByStudent.get(studentId) || [];
+      const user = userMap.get(studentId);
 
-        const isDryRun = Boolean(options?.dryRun);
+      if (!academic && !studentProfile) return null;
+      const curriculumCourses = coursesForDepartment(
+        courses as unknown as CourseDocument[],
+        studentProfile?.department,
+      );
 
-        if (!isDryRun) {
-          if (academic) {
-            academic.completedCourses = progress.completedCourses;
-            academic.failedCourses = progress.failedCourses;
-            academic.lowGradeCourses = progress.lowGradeCourses;
-            if (progress.calculatedGpa !== null)
-              academic.gpa = progress.calculatedGpa;
-            academic.academicLevel = promotedLevel;
-            if (wasPromoted) academic.semester = 'first';
-            await academic.save();
-          }
-          if (
-            studentProfile &&
-            (studentProfile.level !== promotedLevel ||
-              (wasPromoted && studentProfile.semester !== 'first'))
-          ) {
-            studentProfile.level = promotedLevel;
-            if (wasPromoted) studentProfile.semester = 'first';
-            await studentProfile.save();
+      const progress = mergeAcademicCourseProgress({
+        completedCourses: academic?.completedCourses,
+        failedCourses: academic?.failedCourses,
+        lowGradeCourses: academic?.lowGradeCourses,
+        grades,
+        courseCredits,
+      });
+      const currentLevel = (academic?.academicLevel ??
+        studentProfile?.level ??
+        '1') as CourseLevel;
+      const finalizedCourses = progress.courseResults.map(
+        (result) => result.courseCode,
+      );
+
+      const evaluation = evaluateAcademicProgression({
+        currentLevel,
+        courses: curriculumCourses,
+        finalizedCourses,
+        failedCourses: progress.failedCourses,
+        maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
+      });
+
+      const promotedLevel = evaluation.promotedLevel;
+      const wasPromoted = evaluation.willPromote;
+
+      const currentRequirements = curriculumCourses.filter(
+        (course) =>
+          (course.academicLevel ?? course.level) === currentLevel &&
+          (course.semester === 'first' || course.semester === 'second') &&
+          course.type !== 'elective',
+      );
+
+      const isDryRun = Boolean(options?.dryRun);
+
+      if (!isDryRun) {
+        const finalGpa = progress.calculatedGpa ?? academic?.gpa;
+        let warningCount: number | undefined;
+        if (typeof finalGpa === 'number' && finalGpa > 0) {
+          if (finalGpa < 2.0) {
+            warningCount = Math.max(
+              1,
+              (academic?.academicWarnings ??
+                studentProfile?.academicWarnings ??
+                0) + 1,
+            );
+          } else {
+            warningCount = 0;
           }
         }
 
-        const completedCredits = progress.courseResults
-          .filter((r) => r.passed)
-          .reduce((acc, curr) => acc + curr.creditHours, 0);
+        if (academic) {
+          academic.completedCourses = progress.completedCourses;
+          academic.failedCourses = progress.failedCourses;
+          academic.lowGradeCourses = progress.lowGradeCourses;
+          if (progress.calculatedGpa !== null)
+            academic.gpa = progress.calculatedGpa;
+          academic.academicLevel = promotedLevel;
+          if (wasPromoted) academic.semester = 'first';
+          if (warningCount !== undefined) {
+            academic.academicWarnings = warningCount;
+          }
+          docsToSave.push(academic);
+        }
+        if (studentProfile) {
+          let shouldSaveProfile = false;
+          if (
+            studentProfile.level !== promotedLevel ||
+            (wasPromoted && studentProfile.semester !== 'first')
+          ) {
+            studentProfile.level = promotedLevel;
+            if (wasPromoted) studentProfile.semester = 'first';
+            shouldSaveProfile = true;
+          }
+          if (
+            warningCount !== undefined &&
+            studentProfile.academicWarnings !== warningCount
+          ) {
+            studentProfile.academicWarnings = warningCount;
+            shouldSaveProfile = true;
+          }
+          if (shouldSaveProfile) {
+            docsToSave.push(studentProfile);
+          }
+        }
+      }
 
-        return {
-          studentId: studentId.toString(),
-          studentCode: studentProfile?.studentCode ?? user?.studentCode ?? null,
-          studentName: user?.name ?? studentProfile?.studentCode ?? '—',
-          previousLevel: currentLevel,
-          currentLevel,
-          targetLevel: promotedLevel,
-          academicLevel: promotedLevel,
-          promoted: wasPromoted,
-          willPromote: wasPromoted,
-          gpa: progress.calculatedGpa ?? academic?.gpa ?? 0,
-          completedCredits,
-          totalFailedCount: progress.failedCourses.length,
-          carriedFailedCourseCodes: evaluation.carriedFailedCourses,
-          carriedFailedCourses: evaluation.carriedFailedCourses,
-          missingCourseCodes: evaluation.missingMandatoryCourses,
-          missingMandatoryCourses: evaluation.missingMandatoryCourses,
-          reasonCode: evaluation.reasonCode,
-          reasonAr: evaluation.reasonAr,
-          reasonEn: evaluation.reasonEn,
-          hasFirstSemesterCurriculum: currentRequirements.some(
-            (course) => course.semester === 'first',
-          ),
-          hasSecondSemesterCurriculum: currentRequirements.some(
-            (course) => course.semester === 'second',
-          ),
-        };
-      }),
-    );
+      const completedCredits = progress.courseResults
+        .filter((r) => r.passed)
+        .reduce((acc, curr) => acc + curr.creditHours, 0);
+
+      return {
+        studentId: studentId.toString(),
+        studentCode: studentProfile?.studentCode ?? user?.studentCode ?? null,
+        studentName: user?.name ?? studentProfile?.studentCode ?? '—',
+        previousLevel: currentLevel,
+        currentLevel,
+        targetLevel: promotedLevel,
+        academicLevel: promotedLevel,
+        promoted: wasPromoted,
+        willPromote: wasPromoted,
+        gpa: progress.calculatedGpa ?? academic?.gpa ?? 0,
+        completedCredits,
+        totalFailedCount: progress.failedCourses.length,
+        carriedFailedCourseCodes: evaluation.carriedFailedCourses,
+        carriedFailedCourses: evaluation.carriedFailedCourses,
+        missingCourseCodes: evaluation.missingMandatoryCourses,
+        missingMandatoryCourses: evaluation.missingMandatoryCourses,
+        reasonCode: evaluation.reasonCode,
+        reasonAr: evaluation.reasonAr,
+        reasonEn: evaluation.reasonEn,
+        hasFirstSemesterCurriculum: currentRequirements.some(
+          (course) => course.semester === 'first',
+        ),
+        hasSecondSemesterCurriculum: currentRequirements.some(
+          (course) => course.semester === 'second',
+        ),
+      };
+    });
+
+    if (docsToSave.length > 0) {
+      await Promise.all(docsToSave.map((d) => d.save()));
+    }
+
     return results.filter((result) => result !== null);
   }
 
@@ -557,5 +622,137 @@ export class GradesService implements OnModuleInit {
       })
       .sort({ courseCode: 1 })
       .lean();
+  }
+
+  async auditAcademicWarnings(options?: { dryRun?: boolean }) {
+    const academicProfiles = await this.studentAcademicProfileModel
+      .find({})
+      .lean();
+
+    const studentIds = academicProfiles
+      .map((p) => p.studentId)
+      .filter((id): id is Types.ObjectId => Boolean(id));
+
+    const [studentProfiles, users] = await Promise.all([
+      this.studentProfileModel.find({ userId: { $in: studentIds } }).lean(),
+      this.userModel
+        .find({ _id: { $in: studentIds } })
+        .select('name studentCode')
+        .lean(),
+    ]);
+
+    const studentMap = new Map(
+      studentProfiles.map((sp) => [sp.userId.toString(), sp]),
+    );
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const details: Array<{
+      studentId: string;
+      studentCode: string;
+      studentName: string;
+      gpa: number;
+      previousWarnings: number;
+      newWarnings: number;
+      status: 'WARNED' | 'CLEARED' | 'GOOD_STANDING';
+      isActionRequired: boolean;
+    }> = [];
+
+    const academicBulkOps: Parameters<
+      typeof this.studentAcademicProfileModel.bulkWrite
+    >[0] = [];
+    const profileBulkOps: Parameters<
+      typeof this.studentProfileModel.bulkWrite
+    >[0] = [];
+
+    let warnedCount = 0;
+    let clearedCount = 0;
+    let goodStandingCount = 0;
+
+    for (const ap of academicProfiles) {
+      if (!ap.studentId) continue;
+      const sId = ap.studentId.toString();
+      const sp = studentMap.get(sId);
+      const user = userMap.get(sId);
+      const gpa = ap.gpa ?? 0;
+      const prevWarnings = ap.academicWarnings ?? sp?.academicWarnings ?? 0;
+
+      const hasHistory =
+        gpa > 0 ||
+        (ap.completedCourses && ap.completedCourses.length > 0) ||
+        (ap.failedCourses && ap.failedCourses.length > 0);
+
+      if (!hasHistory) {
+        continue;
+      }
+
+      let newWarnings = prevWarnings;
+      let status: 'WARNED' | 'CLEARED' | 'GOOD_STANDING' = 'GOOD_STANDING';
+
+      if (gpa > 0 && gpa < 2.0) {
+        newWarnings = Math.max(1, prevWarnings + 1);
+        status = 'WARNED';
+        warnedCount++;
+      } else if (gpa >= 2.0) {
+        if (prevWarnings > 0) {
+          newWarnings = 0;
+          status = 'CLEARED';
+          clearedCount++;
+        } else {
+          newWarnings = 0;
+          status = 'GOOD_STANDING';
+          goodStandingCount++;
+        }
+      }
+
+      details.push({
+        studentId: sId,
+        studentCode: sp?.studentCode ?? user?.studentCode ?? '',
+        studentName: user?.name ?? sp?.fullName ?? '',
+        gpa,
+        previousWarnings: prevWarnings,
+        newWarnings,
+        status,
+        isActionRequired: status === 'WARNED',
+      });
+
+      if (!options?.dryRun && newWarnings !== prevWarnings) {
+        academicBulkOps.push({
+          updateOne: {
+            filter: { _id: ap._id },
+            update: { $set: { academicWarnings: newWarnings } },
+          },
+        });
+        if (sp) {
+          profileBulkOps.push({
+            updateOne: {
+              filter: { _id: sp._id },
+              update: { $set: { academicWarnings: newWarnings } },
+            },
+          });
+        }
+      }
+    }
+
+    if (!options?.dryRun) {
+      if (academicBulkOps.length > 0) {
+        await this.studentAcademicProfileModel.bulkWrite(academicBulkOps, {
+          ordered: false,
+        });
+      }
+      if (profileBulkOps.length > 0) {
+        await this.studentProfileModel.bulkWrite(profileBulkOps, {
+          ordered: false,
+        });
+      }
+    }
+
+    return {
+      totalAudited: details.length,
+      warnedCount,
+      clearedCount,
+      goodStandingCount,
+      dryRun: Boolean(options?.dryRun),
+      details,
+    };
   }
 }

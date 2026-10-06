@@ -1,4 +1,7 @@
-import { ReactNode, useEffect } from 'react';
+'use client';
+
+import { ReactNode, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button } from './button';
 
@@ -9,13 +12,14 @@ interface ModalProps {
   onClose: () => void;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  className?: string;
 }
 
 const sizeClass = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  xl: 'max-w-5xl',
 };
 
 export function Modal({
@@ -25,7 +29,14 @@ export function Modal({
   onClose,
   footer,
   size = 'md',
+  className = '',
 }: ModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) {
       return;
@@ -37,31 +48,38 @@ export function Modal({
       }
     };
 
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [onClose, open]);
 
-  if (!open) {
+  if (!open || !mounted) {
     return null;
   }
 
-  return (
+  const modalNode = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
     >
       <button
-        className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-sm"
+        type="button"
+        className="fixed inset-0 cursor-default bg-black/70 backdrop-blur-md transition-opacity"
         aria-label="Close modal"
         onClick={onClose}
       />
       <div
-        className={`relative w-full ${sizeClass[size]} animate-fade-in rounded-2xl border border-border bg-card p-6 shadow-2xl`}
+        className={`relative z-10 w-full ${sizeClass[size]} max-h-[92vh] flex flex-col animate-fade-in rounded-2xl border border-white/10 bg-[#071d24]/95 backdrop-blur-xl shadow-2xl ${className}`}
       >
-        <div className="mb-4 flex items-center justify-between border-b border-border pb-4">
-          <h3 id="modal-title" className="text-lg font-bold text-foreground">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 shrink-0">
+          <h3 id="modal-title" className="text-base sm:text-lg font-bold text-foreground">
             {title}
           </h3>
           <Button
@@ -69,13 +87,22 @@ export function Modal({
             size="icon"
             aria-label="Close modal"
             onClick={onClose}
+            className="rounded-squircle text-muted-foreground hover:text-foreground hover:bg-white/10 cursor-pointer"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
-        {children}
-        {footer ? <div className="mt-6 border-t border-border pt-4">{footer}</div> : null}
+        <div className="flex-1 overflow-y-auto custom-scroll p-5 sm:p-6">
+          {children}
+        </div>
+        {footer ? (
+          <div className="border-t border-white/10 px-6 py-4 shrink-0 bg-background/30">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
+
+  return createPortal(modalNode, document.body);
 }

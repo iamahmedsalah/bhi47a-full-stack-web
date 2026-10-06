@@ -163,4 +163,15 @@ export class NotificationsController {
   async listSentHistory(@Query() query: QueryNotificationDto) {
     return this.notificationsService.listSentHistory(query);
   }
+
+  @Delete('admin/notifications/:id')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.NOTIFICATIONS_SEND)
+  @ApiOperation({
+    summary:
+      'Delete a sent notification log and clear it from student feeds (Admin)',
+  })
+  async deleteNotification(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.notificationsService.deleteNotification(id);
+  }
 }

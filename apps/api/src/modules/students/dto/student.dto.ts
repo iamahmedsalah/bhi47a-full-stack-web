@@ -322,6 +322,13 @@ export class SearchStudentQuery {
   @IsString()
   enrollmentStatus?: string;
 
+  @ApiPropertyOptional({
+    enum: ['active', 'inactive', 'graduated', 'suspended'],
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
   @ApiPropertyOptional({ enum: ['studentCode', 'createdAt'] })
   @IsOptional()
   @IsString()

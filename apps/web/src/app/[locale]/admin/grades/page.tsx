@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  AlertTriangle,
   Award,
   Download,
   Edit2,
@@ -49,6 +50,7 @@ import {
 } from "@/features/grades/api";
 import { GradeFormDialog } from "@/features/grades/components/grade-form-dialog";
 import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
+import { AuditWarningsModal } from "@/features/grades/components/audit-warnings-modal";
 import type { GradeFormValues } from "@/features/grades/schema";
 
 interface CourseOption {
@@ -95,6 +97,7 @@ function GradesPageContent() {
   const [formLoading, setFormLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
+  const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const limit = 10;
 
@@ -284,8 +287,10 @@ function GradesPageContent() {
       key: "studentCode",
       header: isAr ? "كود الطالب" : "Student Code",
       render: (item) => (
-        <TableCell className="p-4 font-mono font-semibold">
-          {item.studentCode}
+        <TableCell className="p-4 font-mono">
+          <bdi className="font-semibold text-foreground px-2 py-0.5 rounded-squircle bg-muted/60 border border-border/50 text-xs inline-block">
+            {item.studentCode}
+          </bdi>
         </TableCell>
       ),
     },
@@ -293,7 +298,7 @@ function GradesPageContent() {
       key: "studentName",
       header: isAr ? "اسم الطالب" : "Student Name",
       render: (item) => (
-        <TableCell className="p-4 font-medium">
+        <TableCell className="p-4 font-medium text-foreground">
           {item.studentName || "—"}
         </TableCell>
       ),
@@ -302,9 +307,13 @@ function GradesPageContent() {
       key: "course",
       header: isAr ? "المقرر" : "Course",
       render: (item) => (
-        <TableCell className="p-4 text-muted-foreground">
-          {localizedCourseName(item.courseCode, item.courseName)} (
-          {item.courseCode})
+        <TableCell className="p-4">
+          <span className="font-semibold text-foreground block text-xs">
+            {localizedCourseName(item.courseCode, item.courseName)}
+          </span>
+          <bdi className="font-mono text-[11px] text-muted-foreground mt-0.5 inline-block">
+            {item.courseCode}
+          </bdi>
         </TableCell>
       ),
     },
@@ -336,14 +345,28 @@ function GradesPageContent() {
                         : pct >= 50
                           ? "D"
                           : "F");
+
+        let letterBadgeClass = "border-border bg-muted/50 text-foreground";
+        if (letter.startsWith("A")) {
+          letterBadgeClass = "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold";
+        } else if (letter.startsWith("B")) {
+          letterBadgeClass = "border-teal-500/30 bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold";
+        } else if (letter.startsWith("C")) {
+          letterBadgeClass = "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold";
+        } else if (letter.startsWith("D")) {
+          letterBadgeClass = "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold";
+        } else if (letter === "F") {
+          letterBadgeClass = "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400 font-bold";
+        }
+
         return (
           <TableCell className="p-4 font-mono">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-primary">
-                {item.grade} / {item.maxGrade}
+              <span className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}>
+                {letter}
               </span>
-              <span className="rounded border border-border bg-secondary/80 px-1.5 py-0.5 text-[11px] font-bold text-foreground">
-                {letter} ({pct}%)
+              <span className="text-xs text-muted-foreground font-mono font-medium">
+                ({pct}%)
               </span>
             </div>
           </TableCell>
@@ -464,23 +487,41 @@ function GradesPageContent() {
           <RefreshCw className="h-4 w-4 text-sky-400" />
           {isAr ? "إعادة حساب المستويات" : "Recalculate levels"}
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => setIsAuditWarningsOpen(true)}
+          className="rounded-squircle border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+        >
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
+        </Button>
         <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
           <Plus className="h-4 w-4" />
           {isAr ? "إضافة درجة" : "Add Grade"}
         </Button>
       </PageTitleBanner>
 
-      <div className="flex gap-2 border-b border-border/70 pb-3">
-        {["midterm", "final", "quiz"].map((tab) => (
+      <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
+        {[
+          {
+            key: "final",
+            label: isAr ? "الامتحان النهائي (Final)" : "Final Exam",
+          },
+          {
+            key: "midterm",
+            label: isAr ? "أعمال السنة والميدتيرم" : "Midterm & Coursework",
+          },
+        ].map((tab) => (
           <Button
-            key={tab}
-            variant={activeTab === tab ? "default" : "ghost"}
+            key={tab.key}
+            variant={activeTab === tab.key ? "default" : "outline"}
+            className="rounded-squircle font-semibold transition-all px-4"
             onClick={() => {
-              setActiveTab(tab);
+              setActiveTab(tab.key);
               setPage(1);
             }}
           >
-            {tab.toUpperCase()}
+            {tab.label}
           </Button>
         ))}
       </div>
@@ -632,6 +673,17 @@ function GradesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ["admin-grades"] });
           void queryClient.invalidateQueries({ queryKey: ["advising"] });
           void queryClient.invalidateQueries({ queryKey: ["students"] });
+        }}
+      />
+      <AuditWarningsModal
+        open={isAuditWarningsOpen}
+        onOpenChange={setIsAuditWarningsOpen}
+        isAr={isAr}
+        onSuccess={() => {
+          void refreshGrades();
+          void queryClient.invalidateQueries({ queryKey: ["admin-grades"] });
+          void queryClient.invalidateQueries({ queryKey: ["students"] });
+          void queryClient.invalidateQueries({ queryKey: ["advising"] });
         }}
       />
     </div>

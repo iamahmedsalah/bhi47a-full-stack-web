@@ -40,6 +40,12 @@ function isDuplicateKeyError(err: unknown): err is MongoDuplicateKeyError {
 
 @Injectable()
 export class AttendanceCheckInService {
+  private readonly sessionCache = new Map<
+    string,
+    { session: AttendanceSessionDocument; cachedAt: number }
+  >();
+  private readonly SESSION_CACHE_TTL_MS = 6000; // 6 seconds matching QR rotation intervals
+
   constructor(
     @InjectModel(AttendanceSession.name)
     private sessionModel: Model<AttendanceSessionDocument>,
@@ -133,10 +139,31 @@ export class AttendanceCheckInService {
         throw new BadRequestException('صيغة رمز الحضور غير صالحة');
       }
 
-      session = await this.sessionModel
-        .findById(parts[0])
-        .select('+sessionSecret')
-        .exec();
+      const sessionIdStr = parts[0];
+      const nowMs = Date.now();
+      const cached = this.sessionCache.get(sessionIdStr);
+
+      if (cached && nowMs - cached.cachedAt < this.SESSION_CACHE_TTL_MS) {
+        session = cached.session;
+      } else {
+        session = await this.sessionModel
+          .findById(sessionIdStr)
+          .select('+sessionSecret')
+          .exec();
+        if (session) {
+          this.sessionCache.set(sessionIdStr, { session, cachedAt: nowMs });
+        }
+      }
+
+      // Memory safeguard: evict stale sessions if cache grows
+      if (this.sessionCache.size > 100) {
+        const purgeThreshold = nowMs - 30_000;
+        for (const [key, val] of this.sessionCache.entries()) {
+          if (val.cachedAt < purgeThreshold) {
+            this.sessionCache.delete(key);
+          }
+        }
+      }
     }
 
     if (!session) {
@@ -147,10 +174,12 @@ export class AttendanceCheckInService {
     const now = new Date();
 
     if (session.status === 'CLOSED') {
+      this.sessionCache.delete(session._id.toString());
       throw new BadRequestException('عذراً، جلسة الحضور أغلقت من قبل المحاضر');
     }
 
     if (session.status === 'EXPIRED' || now > session.expiresAt) {
+      this.sessionCache.delete(session._id.toString());
       if (session.status === 'OPEN') {
         session.status = 'EXPIRED';
         await session.save();
@@ -180,10 +209,47 @@ export class AttendanceCheckInService {
       );
     }
 
-    // 5. Verify Student Profile & Code
-    const studentProfile = await this.studentProfileModel
-      .findOne({ userId: new Types.ObjectId(studentUser._id) })
-      .lean();
+    // 5-7. Parallelize independent validation queries:
+    // Profile, Enrollment, Existing Record (Idempotency), and Anti-Proxy Device Lock
+    const studentObjectId = new Types.ObjectId(studentUser._id);
+    const courseCode = session.courseCode;
+
+    const deviceOrFingerprintConditions: Record<string, any>[] = [];
+    if (deviceId) {
+      deviceOrFingerprintConditions.push({ deviceId });
+    }
+    if (deviceFingerprint) {
+      deviceOrFingerprintConditions.push({ deviceFingerprint });
+    }
+
+    const deviceQuery =
+      deviceOrFingerprintConditions.length === 1
+        ? {
+            sessionId: session._id,
+            studentId: { $ne: studentObjectId },
+            ...deviceOrFingerprintConditions[0],
+          }
+        : deviceOrFingerprintConditions.length > 1
+        ? {
+            sessionId: session._id,
+            studentId: { $ne: studentObjectId },
+            $or: deviceOrFingerprintConditions,
+          }
+        : null;
+
+    const [studentProfile, isEnrolled, existingRecord, deviceUsedByOther] =
+      await Promise.all([
+        this.studentProfileModel.findOne({ userId: studentObjectId }).lean(),
+        this.registrationModel.exists({
+          studentId: studentObjectId,
+          courses: courseCode,
+          status: 'approved',
+        }),
+        this.recordModel
+          .findOne({ sessionId: session._id, studentId: studentObjectId })
+          .lean(),
+        deviceQuery ? this.recordModel.findOne(deviceQuery).lean() : null,
+      ]);
 
     const studentCode =
       studentProfile?.studentCode || studentUser.studentCode || '';
@@ -199,18 +265,10 @@ export class AttendanceCheckInService {
       );
     }
 
-    // 6. Verify Course Enrollment
-    const courseCode = session.courseCode;
-    const isEnrolled = await this.registrationModel.exists({
-      studentId: new Types.ObjectId(studentUser._id),
-      courses: courseCode,
-      status: 'approved',
-    });
-
     if (!isEnrolled) {
       // Check if institute has any registrations recorded yet for this student
       const hasAnyRegistration = await this.registrationModel.exists({
-        studentId: new Types.ObjectId(studentUser._id),
+        studentId: studentObjectId,
       });
 
       // If student has registered courses but this course is not one of them, block check-in
@@ -220,14 +278,6 @@ export class AttendanceCheckInService {
         );
       }
     }
-
-    // 7. Check if already checked in (Idempotency)
-    const existingRecord = await this.recordModel
-      .findOne({
-        sessionId: session._id,
-        studentId: new Types.ObjectId(studentUser._id),
-      })
-      .lean();
 
     if (existingRecord) {
       return {
@@ -241,39 +291,10 @@ export class AttendanceCheckInService {
       };
     }
 
-    // 7.1 Anti-Proxy Device Lock: Ensure one physical device cannot check in for multiple students in the same session
-    // Checks both deviceId (storage UUID) and deviceFingerprint (cross-browser hardware signature)
-    const deviceOrFingerprintConditions: Record<string, any>[] = [];
-    if (deviceId) {
-      deviceOrFingerprintConditions.push({ deviceId });
-    }
-    if (deviceFingerprint) {
-      deviceOrFingerprintConditions.push({ deviceFingerprint });
-    }
-
-    if (deviceOrFingerprintConditions.length > 0) {
-      const deviceQuery =
-        deviceOrFingerprintConditions.length === 1
-          ? {
-              sessionId: session._id,
-              studentId: { $ne: new Types.ObjectId(studentUser._id) },
-              ...deviceOrFingerprintConditions[0],
-            }
-          : {
-              sessionId: session._id,
-              studentId: { $ne: new Types.ObjectId(studentUser._id) },
-              $or: deviceOrFingerprintConditions,
-            };
-
-      const deviceUsedByOther = await this.recordModel
-        .findOne(deviceQuery)
-        .lean();
-
-      if (deviceUsedByOther) {
-        throw new ForbiddenException(
-          'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة (حتى مع تغيير المتصفح أو التصفح الخفي).',
-        );
-      }
+    if (deviceUsedByOther) {
+      throw new ForbiddenException(
+        'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة (حتى مع تغيير المتصفح أو التصفح الخفي).',
+      );
     }
 
     // 7.2 Geofencing Proof: If session specifies hall coordinates, verify student proximity

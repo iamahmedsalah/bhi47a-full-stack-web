@@ -165,6 +165,17 @@ export class RecalculateAcademicProgressDto {
   maxAllowedCarriedCourses?: number;
 }
 
+export class AuditAcademicWarningsDto {
+  @ApiPropertyOptional({
+    description:
+      'When true, only returns audit calculation without persisting changes',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+}
+
 export class UpdateGradeDto {
   @ApiPropertyOptional()
   @IsOptional()

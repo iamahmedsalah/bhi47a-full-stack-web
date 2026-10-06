@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { createHash } from 'crypto';
 import {
   ExamSchedule,
@@ -105,11 +105,12 @@ export class ExamSchedulesService {
       apiSecret,
     );
 
+    const safeFilename = `schedule_${Date.now()}${uploadKind === 'raw' ? '.pdf' : '.jpg'}`;
     const formData = new FormData();
     formData.append(
       'file',
       new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }),
-      file.originalname,
+      safeFilename,
     );
     formData.append('api_key', apiKey);
     formData.append('folder', folder);
@@ -226,9 +227,20 @@ export class ExamSchedulesService {
   // ─── Student Seat & Schedules ───────────────────────────────────
 
   async getStudentExamAssignment(userId: string) {
-    const profile = await this.studentModel.findOne({ userId }).lean();
-    if (!profile) {
-      throw new NotFoundException('الملف الشخصي للطالب غير موجود'); // Student profile not found
+    let profile: any = null;
+    if (Types.ObjectId.isValid(userId)) {
+      profile = await this.studentModel.findOne({ userId }).lean();
+      if (!profile) {
+        const user = await this.studentModel.db
+          .model('User')
+          .findById(userId)
+          .lean();
+        if (user && (user as any).studentCode) {
+          profile = await this.studentModel
+            .findOne({ studentCode: (user as any).studentCode })
+            .lean();
+        }
+      }
     }
 
     const publishedSchedules = await this.examScheduleModel
@@ -237,11 +249,11 @@ export class ExamSchedulesService {
       .lean();
 
     return {
-      seatNumber: profile.seatNumber || null,
-      examRoom: profile.examRoom || null,
-      examFloor: profile.examFloor || null,
-      examBuilding: profile.examBuilding || null,
-      schedules: publishedSchedules,
+      seatNumber: profile?.seatNumber || null,
+      examRoom: profile?.examRoom || null,
+      examFloor: profile?.examFloor || null,
+      examBuilding: profile?.examBuilding || null,
+      schedules: publishedSchedules || [],
     };
   }
 }

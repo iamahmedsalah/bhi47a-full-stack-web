@@ -4,6 +4,7 @@
     "dashboard": "Dashboard",
     "students": "Students",
     "courses": "Courses",
+    "quizzes": "Course Quizzes",
     "attendance": "Smart Attendance",
     "grades": "Grades",
     "academicEmails": "Academic Emails",
@@ -107,6 +108,7 @@
     "nationalId": "National ID",
     "level": "Level",
     "department": "Department",
+    "status": "Enrollment Status",
     "enrollmentStatus": "Enrollment Status",
     "resetPassword": "Reset Password",
     "deactivate": "Deactivate",
@@ -157,6 +159,7 @@
   },
   "grades": {
     "title": "Grades Management",
+    "level": "Level",
     "addGrade": "Add Grade Manually",
     "editGrade": "Edit Grade",
     "examType": "Exam Type",
@@ -169,6 +172,9 @@
     "examType_quiz": "Quiz",
     "examType_midterm": "Midterm Exam",
     "examType_final": "Final Exam",
+    "examType_practical": "Practical Exam",
+    "examType_coursework": "Coursework",
+    "examType_oral": "Oral Exam",
     "status_present": "Present",
     "status_absent": "Absent",
     "status_banned": "Banned/Hidden",
@@ -196,7 +202,10 @@
       "examTypeValues": {
         "quiz": "Quiz",
         "midterm": "Midterm",
-        "final": "Final"
+        "final": "Final",
+        "practical": "Practical",
+        "coursework": "Coursework",
+        "oral": "Oral"
       },
       "statusValues": {
         "present": "Present",
@@ -323,6 +332,7 @@
     "target_all": "All Institute Students",
     "target_level": "Specific Study Level",
     "target_student": "Single Student (by Code)",
+    "level": "Level",
     "sentAt": "Published Date",
     "sentBy": "Publisher",
     "success": "Notification broadcasted successfully to targeted devices",
@@ -345,7 +355,22 @@
     "channelWhatsAppDesc": "Will automatically dispatch to phone numbers stored in student database records once WhatsApp API is active.",
     "channelWhatsAppBadge": "WhatsApp Ready",
     "previewTitle": "Live Student Notification Preview",
-    "previewHint": "How this alert appears on the student's mobile lockscreen & portal"
+    "previewHint": "How this alert appears on the student's mobile lockscreen & portal",
+    "status_sent": "Sent",
+    "status_pending": "Pending",
+    "status_queued": "Queued",
+    "status_skipped": "Saved (No Devices)",
+    "status_failed": "Failed",
+    "readCount": "Student Reads",
+    "viewReaders": "View Students",
+    "readersModalTitle": "Students Read Receipt Log",
+    "noReadersYet": "No students have viewed this alert yet",
+    "deleteNotification": "Delete Notification",
+    "deleteConfirmTitle": "Confirm Notification Deletion",
+    "deleteConfirmDesc": "Are you sure you want to delete this notification? It will be removed from all student feeds.",
+    "deleteSuccess": "Notification deleted successfully",
+    "comingSoon": "Coming Soon",
+    "readAt": "Read Time"
   },
   "settings": {
     "title": "System settings",

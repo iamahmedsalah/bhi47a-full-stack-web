@@ -8,6 +8,7 @@ import type { UpdateAdvisingRulesDto } from '../dto/update-advising-rules.dto';
 import type {
   AdvisingStudentsQueryDto,
   AssignCaseDto,
+  AutoDistributeAdvisorsDto,
   BulkAssignAdvisorDto,
   CreateAdvisingCaseDto,
   CreateNoteDto,
@@ -152,6 +153,10 @@ export class AcademicAdvisingService {
 
   bulkAssignStudents(dto: BulkAssignAdvisorDto, actorId: string) {
     return this.queryService.bulkAssignStudents(dto, actorId);
+  }
+
+  autoDistributeStudents(dto: AutoDistributeAdvisorsDto, actorId: string) {
+    return this.queryService.autoDistributeStudents(dto, actorId);
   }
 
   getCourseMap(caseId: string, actorId: string, role: Role) {

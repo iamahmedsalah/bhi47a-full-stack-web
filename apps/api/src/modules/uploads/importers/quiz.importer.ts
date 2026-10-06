@@ -88,6 +88,30 @@ export class QuizImporter implements Importer {
     const studentMap = new Map(students.map((s) => [s.studentCode, s]));
     const courseMap = new Map(courses.map((c) => [c.code, c]));
 
+    // 1. Pre-fetch existing course quiz documents in bulk
+    const queryConditions = validRows
+      .map(({ row }) => {
+        const studentCode = String(row.studentCode).trim();
+        const courseCode = String(row.courseCode).trim().toUpperCase();
+        const academicYear = String(row.academicYear).trim();
+        const semester = normalizeStudentSemester(row.semester);
+        return { studentCode, courseCode, academicYear, semester };
+      })
+      .filter((cond) => cond.studentCode && cond.courseCode);
+
+    const existingQuizzes =
+      queryConditions.length > 0
+        ? await this.courseQuizModel.find({ $or: queryConditions })
+        : [];
+
+    const quizMap = new Map<string, CourseQuizDocument>();
+    for (const q of existingQuizzes) {
+      const key = `${q.studentCode}:${q.courseCode}:${q.academicYear}:${q.semester}`;
+      quizMap.set(key, q);
+    }
+
+    const modifiedDocs = new Set<CourseQuizDocument>();
+
     for (const { row, rowNum } of validRows) {
       try {
         const studentCode = String(row.studentCode).trim();
@@ -111,12 +135,8 @@ export class QuizImporter implements Importer {
 
         const academicYear = String(row.academicYear).trim();
         const semester = normalizeStudentSemester(row.semester);
-        let quizRecord = await this.courseQuizModel.findOne({
-          studentCode,
-          courseCode: course.code,
-          academicYear,
-          semester,
-        });
+        const key = `${studentCode}:${course.code}:${academicYear}:${semester}`;
+        let quizRecord = quizMap.get(key);
 
         const quizEntry = {
           quizNumber: row.quizNumber as number,
@@ -144,7 +164,7 @@ export class QuizImporter implements Importer {
             ),
             isPublished: true,
           });
-          await quizRecord.save();
+          quizMap.set(key, quizRecord);
         } else {
           const existingIdx = quizRecord.quizzes.findIndex(
             (q) => q.quizNumber === row.quizNumber,
@@ -166,13 +186,18 @@ export class QuizImporter implements Importer {
           quizRecord.maxTotalGrade = maxTotalG;
           quizRecord.percentage =
             maxTotalG > 0 ? Math.round((totalG / maxTotalG) * 100) : 0;
-          await quizRecord.save();
         }
+
+        modifiedDocs.add(quizRecord);
         successCount++;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'خطأ غير معروف';
         errors.push(`السطر ${rowNum}: ${message}`);
       }
+    }
+
+    if (modifiedDocs.size > 0) {
+      await Promise.all(Array.from(modifiedDocs).map((doc) => doc.save()));
     }
 
     return { successCount, errors };

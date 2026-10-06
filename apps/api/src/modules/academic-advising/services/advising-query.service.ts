@@ -28,6 +28,7 @@ import { AdvisingAuditLog } from '../schemas/advising-audit-log.schema';
 import { AdvisingAuditService } from './advising-audit.service';
 import type {
   AdvisingStudentsQueryDto,
+  AutoDistributeAdvisorsDto,
   BulkAssignAdvisorDto,
   CreateNoteDto,
 } from '../dto/advising.dto';
@@ -390,6 +391,217 @@ export class AdvisingQueryService {
       assignedCount,
       skippedClosedCount,
       totalRequested: studentIds.length,
+    };
+  }
+
+  async autoDistributeStudents(
+    dto: AutoDistributeAdvisorsDto,
+    actorId: string,
+  ) {
+    // 1. Fetch target advisors
+    const advisorQuery: Record<string, any> = {
+      role: 'staff',
+      isActive: true,
+    };
+    if (dto.advisorIds && dto.advisorIds.length > 0) {
+      advisorQuery._id = {
+        $in: dto.advisorIds.map((id) => new Types.ObjectId(id)),
+      };
+    }
+    const advisors = await this.users
+      .find(advisorQuery)
+      .select('name email userCode permissions')
+      .sort({ name: 1 })
+      .lean();
+
+    if (advisors.length === 0) {
+      throw new BadRequestException(
+        'No active advisors found to distribute students across',
+      );
+    }
+
+    // 2. Fetch target students
+    let studentFilter: Record<string, any> = {
+      enrollmentStatus: 'active',
+    };
+    if (dto.studentIds && dto.studentIds.length > 0) {
+      const ids = dto.studentIds.map((id) => new Types.ObjectId(id));
+      studentFilter = {
+        $or: [{ userId: { $in: ids } }, { _id: { $in: ids } }],
+      };
+    } else {
+      if (dto.level && dto.level !== 'all') {
+        studentFilter.level = dto.level;
+      }
+      if (dto.department && dto.department !== 'all') {
+        studentFilter.department = dto.department;
+      }
+    }
+
+    const profiles = await this.studentProfiles
+      .find(studentFilter)
+      .select('userId studentCode fullName level department')
+      .lean();
+
+    if (profiles.length === 0) {
+      return {
+        totalDistributed: 0,
+        totalAdvisors: advisors.length,
+        strategy: dto.strategy ?? 'contiguous',
+        advisorSummaries: advisors.map((a) => ({
+          advisorId: a._id.toString(),
+          advisorName: a.name,
+          count: 0,
+        })),
+      };
+    }
+
+    // Filter out already assigned students if onlyUnassigned is true
+    let targetProfiles = profiles;
+    if (dto.onlyUnassigned) {
+      const studentUserIds = profiles
+        .map((p) => p.userId)
+        .filter((id): id is Types.ObjectId => Boolean(id));
+
+      const existingAssigned = await this.academicProfiles
+        .find({
+          studentId: { $in: studentUserIds },
+          advisorId: { $exists: true, $ne: null },
+        })
+        .select('studentId')
+        .lean();
+
+      const assignedSet = new Set(
+        existingAssigned.map((e) => e.studentId.toString()),
+      );
+      targetProfiles = profiles.filter(
+        (p) => !assignedSet.has(p.userId?.toString() ?? ''),
+      );
+    }
+
+    // Sort students by studentCode ascending using natural numeric comparison
+    targetProfiles.sort((a, b) =>
+      a.studentCode.localeCompare(b.studentCode, undefined, { numeric: true }),
+    );
+
+    const totalStudents = targetProfiles.length;
+    const totalAdvisors = advisors.length;
+    const strategy = dto.strategy ?? 'contiguous';
+
+    // Map advisors to assigned students array
+    const advisorAssignments = new Map<
+      string,
+      { advisor: (typeof advisors)[0]; students: typeof targetProfiles }
+    >();
+    advisors.forEach((adv) => {
+      advisorAssignments.set(adv._id.toString(), {
+        advisor: adv,
+        students: [],
+      });
+    });
+
+    if (strategy === 'contiguous') {
+      // Chunk distribution: contiguous blocks of student codes
+      const chunkSize = Math.floor(totalStudents / totalAdvisors);
+      const remainder = totalStudents % totalAdvisors;
+      let currentIndex = 0;
+
+      for (let i = 0; i < totalAdvisors; i++) {
+        const count = chunkSize + (i < remainder ? 1 : 0);
+        const slice = targetProfiles.slice(currentIndex, currentIndex + count);
+        currentIndex += count;
+        const advId = advisors[i]._id.toString();
+        advisorAssignments.get(advId)!.students = slice;
+      }
+    } else {
+      // Round-robin distribution
+      targetProfiles.forEach((student, index) => {
+        const advisor = advisors[index % totalAdvisors];
+        advisorAssignments.get(advisor._id.toString())!.students.push(student);
+      });
+    }
+
+    // Execute bulk updates
+    const summaries: Array<{
+      advisorId: string;
+      advisorName: string;
+      count: number;
+      codeStart?: string;
+      codeEnd?: string;
+    }> = [];
+
+    for (const [
+      advisorIdStr,
+      { advisor, students },
+    ] of advisorAssignments.entries()) {
+      const advisorObjId = new Types.ObjectId(advisorIdStr);
+      const studentUserIds = students
+        .map((s) => s.userId)
+        .filter((id): id is Types.ObjectId => Boolean(id));
+
+      if (studentUserIds.length > 0) {
+        // Update or insert StudentAcademicProfile with advisorId
+        await this.academicProfiles.updateMany(
+          { studentId: { $in: studentUserIds } },
+          { $set: { advisorId: advisorObjId } },
+        );
+
+        // Update or insert AdvisingCase for each student
+        for (const student of students) {
+          if (!student.userId) continue;
+          const caseFilter = {
+            studentId: student.userId,
+            academicYear: dto.academicYear,
+            semester: dto.semester,
+          };
+          const existingCase = await this.cases.findOne(caseFilter).lean();
+          if (
+            existingCase &&
+            ['CLOSED', 'REGISTERED'].includes(existingCase.status)
+          ) {
+            continue;
+          }
+          await this.cases.findOneAndUpdate(
+            caseFilter,
+            {
+              $set: {
+                assignedAdvisorId: advisorObjId,
+              },
+              $setOnInsert: {
+                studentId: student.userId,
+                academicYear: dto.academicYear,
+                semester: dto.semester,
+                status: 'NOT_STARTED',
+                riskLevel: 'LOW',
+              },
+              $push: {
+                timeline: {
+                  status: existingCase?.status ?? 'NOT_STARTED',
+                  changedAt: new Date(),
+                  actorId: new Types.ObjectId(actorId),
+                  note: `Auto-distributed to ${advisor.name} by student code`,
+                },
+              },
+            },
+            { upsert: true, new: true },
+          );
+        }
+      }
+
+      summaries.push({
+        advisorId: advisorIdStr,
+        advisorName: advisor.name,
+        count: students.length,
+        codeStart: students[0]?.studentCode,
+        codeEnd: students[students.length - 1]?.studentCode,
+      });
+    }
+
+    return {
+      totalDistributed: totalStudents,
+      totalAdvisors,
+      strategy,
+      advisorSummaries: summaries,
     };
   }
 

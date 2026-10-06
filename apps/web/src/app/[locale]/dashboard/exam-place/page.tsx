@@ -37,11 +37,24 @@ export default function StudentExamPlacePage() {
 
   if (assignmentQuery.isError) {
     return (
-      <ErrorState
-        description={getApiErrorMessage(assignmentQuery.error)}
-        error={assignmentQuery.error}
-        onRetry={() => assignmentQuery.refetch()}
-      />
+      <div className="mx-auto max-w-4xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
+        <div>
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <MapPin className="h-6 w-6 text-primary" />
+            <span>{t('examPlace')}</span>
+          </h2>
+        </div>
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+          <EmptyState
+            title={isEnglish ? 'No exam place or seating assigned yet' : 'أماكن اللجان ورقم الجلوس لم تعلن بعد'}
+            description={
+              isEnglish
+                ? 'Your seating assignment and exam hall details have not been published by the administration yet. Please check back later.'
+                : 'لم يتم نشر أماكن اللجان أو تخصيص رقم جلوس وقاعة امتحانات لك بعد. يرجى الانتظار حتى اعتماد اللجان رسمياً.'
+            }
+          />
+        </Card>
+      </div>
     );
   }
 

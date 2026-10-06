@@ -20,6 +20,7 @@ import Themes from '@/components/ui/Themes';
 import LangToggle from '@/components/ui/LangToggle';
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { SessionTimerWidget } from '@/components/common/session-timer-widget';
+import { NotificationDetailsDialog } from '@/components/notifications/notification-details-dialog';
 
 export default function StudentHeader() {
   const { user } = useAuth();
@@ -31,20 +32,22 @@ export default function StudentHeader() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'unread' | 'read'>('unread');
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications.studentList,
     queryFn: listStudentNotifications,
     enabled: !!user && user.role === 'student',
-    refetchInterval: 30 * 1000, // Poll every 30 seconds
+    staleTime: 60 * 1000,
+    refetchInterval: 120 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const readMutation = useMutation({
     mutationFn: markNotificationRead,
     onSuccess: (updatedItem) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.notifications.studentList,
-      });
       queryClient.setQueryData<any>(
         queryKeys.notifications.studentList,
         (oldData: any) => {
@@ -139,47 +142,44 @@ export default function StudentHeader() {
     if (!item.isRead) {
       readMutation.mutate(item._id);
     }
-    
+    setSelectedNotification(item);
+    setDetailsOpen(true);
     setIsOpen(false);
-    
-    const metaType = item.meta?.type;
-    if (metaType === 'complaint_reply' || metaType === 'complaint_status') {
-      const ticket = item.meta?.ticketNumber;
-      router.push(`/${locale}/dashboard/complaints${ticket ? `?ticket=${ticket}` : ''}`);
-    } else if (metaType === 'grade_publish') {
-      router.push(`/${locale}/dashboard/results`);
-    } else if (metaType === 'attendance_publish') {
-      router.push(`/${locale}/dashboard/attendance`);
-    } else if (metaType === 'exam_schedule_publish') {
-      router.push(`/${locale}/dashboard/exam-schedule`);
-    }
   };
 
   return (
-    <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-4 pe-16 md:pe-4 rounded-squircle mx-4 mt-4 md:mx-6 md:mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-      {/* Right/Start section: Logo & Institute Name */}
-      <div className="flex items-center gap-4">
-        <Image
-          src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_112,h_112,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
-          alt={isAr ? 'شعار المعهد' : 'Institute Logo'}
-          width={48}
-          height={48}
-          className="object-contain rounded"
-          priority
-        />
-        <div className="text-start">
-          <h2 className="text-sm md:text-base font-bold text-foreground/90 leading-tight">
-            {isAr ? 'المعهد العالى للعلوم الادارية المتقدمة والحاسبات' : 'Higher Institute for Advanced Administrative Sciences & Computer'}
-          </h2>
-          <span className="text-xs text-foreground/70">
-            {isAr ? 'بوابة الطالب الإلكترونية' : 'Student Portal'}
-          </span>
+    <>
+      <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 pe-14 md:pe-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+        {/* Right/Start section: Logo & Institute Name */}
+        <div className="flex items-center gap-3 min-w-0">
+          <Image
+            src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_112,h_112,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
+            alt={isAr ? 'شعار المعهد' : 'Institute Logo'}
+            width={42}
+            height={42}
+            className="h-9 w-9 sm:h-11 sm:w-11 object-contain rounded shrink-0"
+            priority
+          />
+          <div className="text-start min-w-0 flex-1">
+            <h2 className="text-xs sm:text-sm md:text-base font-bold text-foreground/90 leading-tight truncate">
+              {isAr ? 'المعهد العالى للعلوم الادارية المتقدمة والحاسبات' : 'Higher Institute for Advanced Administrative Sciences & Computer'}
+            </h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] sm:text-xs text-primary font-medium">
+                {isAr ? 'بوابة الطالب الإلكترونية' : 'Student Portal'}
+              </span>
+              {user?.studentCode && (
+                <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.2 rounded" dir="ltr">
+                  <bdi>{user.studentCode}</bdi>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Left/End section: Release notes, notifications drawer, theme/lang switches */}
-      <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-        <div className="flex items-center gap-4">
+        {/* Left/End section: Controls bar */}
+        <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
+          <div className="flex items-center gap-2 sm:gap-3">
           {/* Notifications Slide-out Drawer */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
@@ -319,7 +319,7 @@ export default function StudentHeader() {
                             <div className="min-w-0 flex-1 space-y-2">
                               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                 <h3 className="text-xs font-bold leading-snug text-foreground flex flex-wrap items-center gap-1.5">
-                                  {item.title}
+                                  <bdi>{item.title}</bdi>
                                   {!item.isRead && (
                                     <span className="inline-flex rounded-full bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[8px] font-bold text-primary uppercase">
                                       {isAr ? 'جديد' : 'New'}
@@ -328,13 +328,13 @@ export default function StudentHeader() {
                                 </h3>
                               </div>
                               <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                                {item.body}
+                                <bdi>{item.body}</bdi>
                               </p>
                               
                               <div className="flex items-center justify-between mt-1 text-[9px] text-muted pr-1">
                                 <time className="font-mono flex items-center gap-1 font-semibold">
                                   <Calendar className="h-3 w-3" />
-                                  {new Date(item.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}
+                                  <bdi>{new Date(item.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}</bdi>
                                 </time>
                                 
                                 {/* Mark As Read Action (Unread Tab) */}
@@ -391,15 +391,24 @@ export default function StudentHeader() {
 
           {/* Session Expiry Timer Widget */}
           <SessionTimerWidget role="student" />
+        </div>
 
+        <div className="flex items-center gap-2">
           <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
-          
-          <div className="flex items-center gap-3">
-            <LangToggle hideLabel />
-            <Themes />
-          </div>
+          <LangToggle hideLabel />
+          <Themes />
         </div>
       </div>
     </header>
+
+      {/* Notification Details Dialog (Big Popup) */}
+      <NotificationDetailsDialog
+        notification={selectedNotification}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        onDelete={(id) => deleteMutation.mutate(id)}
+        isDeleting={deleteMutation.isPending}
+      />
+    </>
   );
 }

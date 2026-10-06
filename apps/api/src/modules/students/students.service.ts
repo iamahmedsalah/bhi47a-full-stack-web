@@ -12,6 +12,7 @@ import {
 } from './schemas/student-profile.schema';
 import { UsersService } from '../users/users.service';
 import { EmailsService } from '../emails/emails.service';
+import { renderPasswordResetEmailTemplate } from '../emails/templates/email-template.builder';
 import {
   CreateStudentDto,
   UpdateStudentDto,
@@ -356,42 +357,17 @@ export class StudentsService {
     const emailTo = profile.academicEmail || user.email;
     if (emailTo) {
       const isNationalIdDefault = !dto.newPassword?.trim();
-      const displayPasswordHint = isNationalIdDefault
-        ? 'الرقم القومي الخاص بك (14 رقم)'
-        : dto.newPassword;
-      const displayPasswordHintEn = isNationalIdDefault
-        ? 'Your 14-digit National ID'
-        : dto.newPassword;
+      const displayPasswordHint =
+        isNationalIdDefault || !dto.newPassword
+          ? 'الرقم القومي الخاص بك (14 رقم)'
+          : dto.newPassword;
 
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-          <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 20px; margin-bottom: 20px;">
-            <h2 style="color: #0f766e; margin: 0;">بوابة الطالب | Student Portal</h2>
-          </div>
-          <div style="direction: rtl; text-align: right; margin-bottom: 25px;">
-            <p style="font-size: 16px; color: #1e293b; line-height: 1.6;">عزيزي الطالب <strong>${profile.fullName}</strong>،</p>
-            <p style="font-size: 14px; color: #475569; line-height: 1.6;">تمت إعادة تعيين كلمة المرور الخاصة بحسابك على البوابة الإلكترونية بنجاح.</p>
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-right: 4px solid #0f766e; margin: 20px 0;">
-              <p style="margin: 5px 0; font-size: 14px;"><strong>الكود الأكاديمي:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${profile.studentCode}</span></p>
-              <p style="margin: 5px 0; font-size: 14px;"><strong>كلمة المرور المؤقتة:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${displayPasswordHint}</span></p>
-            </div>
-            <p style="font-size: 12px; color: #ef4444;">* يرجى تسجيل الدخول وتغيير كلمة المرور فوراً لحماية حسابك.</p>
-          </div>
-          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-          <div style="direction: ltr; text-align: left;">
-            <p style="font-size: 16px; color: #1e293b; line-height: 1.6;">Dear Student <strong>${profile.fullName}</strong>,</p>
-            <p style="font-size: 14px; color: #475569; line-height: 1.6;">Your student portal account password has been successfully reset.</p>
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #0f766e; margin: 20px 0;">
-              <p style="margin: 5px 0; font-size: 14px;"><strong>Student Code:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${profile.studentCode}</span></p>
-              <p style="margin: 5px 0; font-size: 14px;"><strong>Temporary Password:</strong> <span style="font-family: monospace; font-size: 16px; color: #0f766e;">${displayPasswordHintEn}</span></p>
-            </div>
-            <p style="font-size: 12px; color: #ef4444;">* Please log in and change your password immediately to secure your account.</p>
-          </div>
-          <div style="text-align: center; font-size: 11px; color: #94a3b8; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
-            High Institute for Advanced Management Sciences and Computer &copy; 2026
-          </div>
-        </div>
-      `;
+      const emailHtml = renderPasswordResetEmailTemplate({
+        greetingName: profile.fullName,
+        studentCode: profile.studentCode,
+        temporaryPassword: displayPasswordHint,
+        loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/ar/login`,
+      });
 
       try {
         await this.emailsService.send({

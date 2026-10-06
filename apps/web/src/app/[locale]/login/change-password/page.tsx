@@ -1,8 +1,9 @@
-"use client";
+'use client';
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
+import { useQueryClient } from "@tanstack/react-query";
 import { getApiErrorMessage } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import {
 export default function ChangePasswordPage() {
   const t = useTranslations("auth");
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const params = useParams();
   const router = useRouter();
   const locale = (params.locale as string) || "ar";
@@ -42,6 +44,14 @@ export default function ChangePasswordPage() {
   // Multi-step state: 1 = Current Password, 2 = New Password & Confirm, 3 = Success
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
+
+  // If user already changed password, immediately redirect and avoid any Step 1 flash
+  useEffect(() => {
+    if (user && !user.mustChangePassword) {
+      const target = user.role === 'student' ? `/${locale}/dashboard` : `/${locale}/admin`;
+      router.replace(target);
+    }
+  }, [user, locale, router]);
 
   // Form values
   const [currentPassword, setCurrentPassword] = useState("");
@@ -153,9 +163,13 @@ export default function ChangePasswordPage() {
           : "Password secured and changed successfully!",
       );
 
+      // Invalidate current auth status in TanStack Query
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+
       setTimeout(() => {
-        window.location.reload();
-      }, 1600);
+        const target = user?.role === 'student' ? `/${locale}/dashboard` : `/${locale}/admin`;
+        router.replace(target);
+      }, 1200);
     } catch (err) {
       const msg = getApiErrorMessage(
         err,
@@ -167,6 +181,34 @@ export default function ChangePasswordPage() {
       setLoading(false);
     }
   };
+
+  // If the user already changed password or is not required to, prevent flashing Step 1
+  if (user && !user.mustChangePassword && currentStep !== 3) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden bg-background"
+        style={{ background: "var(--gradient-primary)" }}
+        dir={isArabic ? "rtl" : "ltr"}
+      >
+        <Card className="w-full max-w-md bg-card/95 backdrop-blur-md border border-primary/20 shadow-2xl p-8 z-10 rounded-3xl text-center space-y-4">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground">
+            {isArabic ? "تم تأمين الحساب مسبقاً" : "Account Already Secured"}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {isArabic
+              ? "جاري تحويلك إلى لوحة التحكم الخاصة بك..."
+              : "Redirecting you to your portal dashboard..."}
+          </p>
+          <div className="flex justify-center pt-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div

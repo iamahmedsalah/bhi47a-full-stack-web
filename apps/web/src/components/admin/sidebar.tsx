@@ -24,6 +24,7 @@ import {
   Sidebar,
   LayoutDashboard,
   QrCode,
+  HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
@@ -73,6 +74,12 @@ export default function AdminSidebar() {
       href: `/${locale}/admin/courses`,
       icon: <BookOpen className="h-5 w-5" />,
       permission: PERMISSIONS.COURSES_READ,
+    },
+    {
+      key: "quizzes",
+      href: `/${locale}/admin/quizzes`,
+      icon: <HelpCircle className="h-5 w-5" />,
+      permission: PERMISSIONS.QUIZZES_READ,
     },
     {
       key: "registrations",

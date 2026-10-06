@@ -2,6 +2,7 @@ import type { CourseDocument } from '../../courses/schemas/course.schema';
 import type { CourseLevel, Semester } from '@student-portal/shared';
 import { RulesBasedRecommendationProvider } from '../recommendations/rules-based-recommendation.provider';
 import { isCourseOfferedForTerm } from './term-availability.util';
+import { coursesForDepartment } from '../../courses/utils/course-curriculum.util';
 
 export interface RecommendationInput {
   courses: CourseDocument[];
@@ -10,6 +11,7 @@ export interface RecommendationInput {
   academicLevel: CourseLevel;
   semester: Semester;
   maxCreditHours: number;
+  department?: string;
 }
 
 export function normalizeCourseCodes(codes: string[] = []): string[] {
@@ -37,11 +39,12 @@ export function buildEligibleCourseList({
   failedCourses,
   academicLevel,
   semester,
+  department,
 }: Omit<RecommendationInput, 'maxCreditHours'>): CourseDocument[] {
   const completed = new Set(normalizeCourseCodes(completedCourses));
   const failed = new Set(normalizeCourseCodes(failedCourses));
 
-  return courses
+  return (department ? coursesForDepartment(courses, department) : courses)
     .filter((course) => {
       const code = course.code.toUpperCase();
       if (completed.has(code)) return false;

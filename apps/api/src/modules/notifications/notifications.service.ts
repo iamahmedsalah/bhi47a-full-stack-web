@@ -160,12 +160,25 @@ export class NotificationsService implements OnModuleInit {
       });
     }
 
+    const userObjectId = new Types.ObjectId(userId);
+
     const [items, total] = await Promise.all([
       this.notificationModel
         .find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .select({
+          title: 1,
+          body: 1,
+          targetType: 1,
+          targetLevel: 1,
+          deliveryStatus: 1,
+          createdAt: 1,
+          meta: 1,
+          // High scale projection: only fetch current student's read entry, not entire cohort
+          readBy: { $elemMatch: { userId: userObjectId } },
+        })
         .lean(),
       this.notificationModel.countDocuments(filter),
     ]);
@@ -177,27 +190,53 @@ export class NotificationsService implements OnModuleInit {
   async markAsRead(userId: string, notificationId: string) {
     await this.ensureStudentCanAccessNotification(userId, notificationId);
 
-    await this.notificationModel.updateOne(
-      { _id: notificationId },
-      {
-        $pull: { readBy: { userId: new Types.ObjectId(userId) } },
-      },
-    );
+    const userObjectId = new Types.ObjectId(userId);
 
-    const updated = await this.notificationModel.findByIdAndUpdate(
-      notificationId,
-      {
-        $push: {
-          readBy: {
-            userId: new Types.ObjectId(userId),
-            readAt: new Date(),
+    // Atomic update to prevent multi-roundtrip lock contention on concurrent reads
+    const updated = await this.notificationModel
+      .findOneAndUpdate(
+        {
+          _id: notificationId,
+          'readBy.userId': { $ne: userObjectId },
+        },
+        {
+          $push: {
+            readBy: {
+              userId: userObjectId,
+              readAt: new Date(),
+            },
           },
         },
-      },
-      { new: true },
-    );
+        {
+          new: true,
+          select: {
+            title: 1,
+            body: 1,
+            targetType: 1,
+            createdAt: 1,
+            meta: 1,
+            readBy: { $elemMatch: { userId: userObjectId } },
+          },
+        },
+      )
+      .lean();
 
-    return this.withReadState(updated?.toObject(), userId);
+    if (!updated) {
+      const existing = await this.notificationModel
+        .findById(notificationId)
+        .select({
+          title: 1,
+          body: 1,
+          targetType: 1,
+          createdAt: 1,
+          meta: 1,
+          readBy: { $elemMatch: { userId: userObjectId } },
+        })
+        .lean();
+      return this.withReadState(existing, userId);
+    }
+
+    return this.withReadState(updated, userId);
   }
 
   async markAsUnread(userId: string, notificationId: string) {
@@ -328,7 +367,9 @@ export class NotificationsService implements OnModuleInit {
       targetType: dto.targetType,
       targetLevel: dto.targetLevel,
       targetStudentId,
-      sentBy: new Types.ObjectId(String(senderId)),
+      sentBy: Types.ObjectId.isValid(String(senderId))
+        ? new Types.ObjectId(String(senderId))
+        : new Types.ObjectId(),
       meta: {
         ...((dto as any).meta || {}),
         sendWhatsApp: Boolean(dto.sendWhatsApp),
@@ -387,11 +428,27 @@ export class NotificationsService implements OnModuleInit {
         .skip(skip)
         .limit(limit)
         .populate('sentBy', 'name email')
+        .populate('targetStudentId', 'name studentCode')
+        .slice('readBy', -50)
+        .populate('readBy.userId', 'name studentCode')
         .lean(),
       this.notificationModel.countDocuments(),
     ]);
 
-    return createPaginatedResult(items, total, page, limit);
+    const enrichedItems = items.map((item: any) => ({
+      ...item,
+      readCount: Array.isArray(item.readBy) ? item.readBy.length : 0,
+    }));
+
+    return createPaginatedResult(enrichedItems, total, page, limit);
+  }
+
+  async deleteNotification(id: string) {
+    const deleted = await this.notificationModel.findByIdAndDelete(id);
+    if (!deleted) {
+      throw new NotFoundException('الإشعار غير موجود');
+    }
+    return { message: 'تم حذف الإشعار بنجاح', id };
   }
 
   private async deliverPush(data: PushNotificationJob) {
@@ -413,25 +470,61 @@ export class NotificationsService implements OnModuleInit {
         return;
       }
 
-      const response = await getMessaging().sendEachForMulticast({
-        tokens: data.tokens,
-        notification: {
-          title: data.title,
-          body: data.body,
-        },
-      });
+      // Firebase multicast has a hard ceiling of 500 tokens per call.
+      // Batch tokens in chunks of 500 to guarantee zero crashes under high volume.
+      const BATCH_SIZE = 500;
+      let totalSuccess = 0;
+      let totalFailure = 0;
+      const invalidTokens: string[] = [];
+
+      for (let i = 0; i < data.tokens.length; i += BATCH_SIZE) {
+        const batchTokens = data.tokens.slice(i, i + BATCH_SIZE);
+        const batchResponse = await getMessaging().sendEachForMulticast({
+          tokens: batchTokens,
+          notification: {
+            title: data.title,
+            body: data.body,
+          },
+        });
+
+        totalSuccess += batchResponse.successCount;
+        totalFailure += batchResponse.failureCount;
+
+        // Collect expired/unregistered tokens for self-healing pruning
+        batchResponse.responses.forEach((resp, idx) => {
+          if (!resp.success && resp.error) {
+            const errCode = resp.error.code;
+            if (
+              errCode === 'messaging/registration-token-not-registered' ||
+              errCode === 'messaging/invalid-registration-token'
+            ) {
+              invalidTokens.push(batchTokens[idx]);
+            }
+          }
+        });
+      }
+
+      // Prune dead tokens in background to prevent permanent token bloat
+      if (invalidTokens.length > 0) {
+        this.userModel
+          .updateMany(
+            { 'fcmTokens.token': { $in: invalidTokens } },
+            { $pull: { fcmTokens: { token: { $in: invalidTokens } } } },
+          )
+          .catch((err) =>
+            console.warn('Failed to prune stale FCM tokens:', err),
+          );
+      }
 
       await this.notificationModel.findByIdAndUpdate(data.notificationId, {
         $set: {
           deliveryStatus:
-            response.failureCount > 0 && response.successCount === 0
-              ? 'failed'
-              : 'sent',
-          pushSuccessCount: response.successCount,
-          pushFailureCount: response.failureCount,
+            totalFailure > 0 && totalSuccess === 0 ? 'failed' : 'sent',
+          pushSuccessCount: totalSuccess,
+          pushFailureCount: totalFailure,
           pushError:
-            response.failureCount > 0
-              ? `${response.failureCount} FCM deliveries failed`
+            totalFailure > 0
+              ? `${totalFailure} FCM deliveries failed`
               : undefined,
           sentAt: new Date(),
         },
@@ -456,21 +549,29 @@ export class NotificationsService implements OnModuleInit {
     targetStudentId?: Types.ObjectId,
   ): Promise<string[]> {
     const tokens: string[] = [];
-    const collectTokens = (users: UserDocument[]) => {
+    const collectTokens = (
+      users: Array<{ fcmTokens?: Array<{ token: string }> }>,
+    ) => {
       users.forEach((u) => {
-        u.fcmTokens.forEach((t) => tokens.push(t.token));
+        u.fcmTokens?.forEach((t) => tokens.push(t.token));
       });
     };
 
     if (dto.targetType === 'all') {
-      const users = await this.userModel.find({
-        role: 'student',
-        isActive: true,
-        'fcmTokens.0': { $exists: true },
-      });
+      const users = await this.userModel
+        .find({
+          role: 'student',
+          isActive: true,
+          'fcmTokens.0': { $exists: true },
+        })
+        .select('fcmTokens.token')
+        .lean();
       collectTokens(users);
     } else if (dto.targetType === 'student' && targetStudentId) {
-      const student = await this.userModel.findById(targetStudentId);
+      const student = await this.userModel
+        .findById(targetStudentId)
+        .select('fcmTokens.token')
+        .lean();
       if (student) {
         collectTokens([student]);
       }
@@ -481,12 +582,15 @@ export class NotificationsService implements OnModuleInit {
         .lean();
       const userIds = profiles.map((profile) => profile.userId);
 
-      const studentsInLevel = await this.userModel.find({
-        _id: { $in: userIds },
-        role: 'student',
-        isActive: true,
-        'fcmTokens.0': { $exists: true },
-      });
+      const studentsInLevel = await this.userModel
+        .find({
+          _id: { $in: userIds },
+          role: 'student',
+          isActive: true,
+          'fcmTokens.0': { $exists: true },
+        })
+        .select('fcmTokens.token')
+        .lean();
       collectTokens(studentsInLevel);
     }
 

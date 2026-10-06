@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import api from "@/lib/api";
+import api, { apiBaseUrl } from "@/lib/api";
 import {
   ClipboardList,
   BookOpenCheck,
@@ -19,17 +19,40 @@ import {
   CheckCircle2,
   ChevronRight,
   GraduationCap,
-  Sparkles,
   MessageCircle,
   QrCode,
+  ShieldAlert,
+  Download,
+  BookOpen,
+  Loader2,
+  ExternalLink,
+  Eye,
+  Play,
+  Clock,
+  Check,
+  Building2,
+  Globe,
+  CalendarClock,
+  Layers,
+  UserCheck,
+  Compass,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/cn";
 
+import dynamic from "next/dynamic";
 import { useAuth } from "@/providers/auth-provider";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
-import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
+
+const StudentQrScannerDialog = dynamic(
+  () =>
+    import("@/features/attendance/components/student-qr-scanner-dialog").then(
+      (m) => m.StudentQrScannerDialog,
+    ),
+  { ssr: false },
+);
 
 interface StudentProfile {
   _id: string;
@@ -45,6 +68,7 @@ interface StudentProfile {
   examRoom?: string;
   examFloor?: string;
   examBuilding?: string;
+  academicWarnings?: number;
 }
 
 interface Eligibility {
@@ -61,37 +85,113 @@ export default function StudentDashboard() {
   const locale = params.locale as string;
   const { user } = useAuth();
 
-  // 1. Profile Query
+  // 1. Profile Query (immutable within session)
   const profileQuery = useQuery({
     queryKey: ["student-profile"],
     queryFn: async () => {
       const res = await api.get<any>("/students/me/profile");
       return (res.data?.data ?? res.data) as StudentProfile;
     },
+    staleTime: 5 * 60 * 1000,
   });
 
-  // 2. Attendance Query
+  // 2. Attendance History Query (infrequent change)
   const attendanceQuery = useQuery({
     queryKey: ["my-student-attendance-history"],
     queryFn: () => attendanceApi.getMyAttendanceHistory(),
-    refetchInterval: 15000,
+    staleTime: 60 * 1000,
   });
 
-  // 3. Eligibility/GPA Query
+  // 3. Eligibility/GPA Query (static across semester registration)
   const eligibilityQuery = useQuery({
     queryKey: ["registration-eligibility"],
     queryFn: async () => {
       const res = await api.get<any>("/registration/eligibility");
       return (res.data?.data ?? res.data) as Eligibility;
     },
+    staleTime: 10 * 60 * 1000,
   });
 
-  // 4. Live Attendance Sessions Query
+  // 4. Live Attendance Sessions Query (adaptive 45s interval, never in background)
   const [showScanDialog, setShowScanDialog] = React.useState(false);
   const liveSessionsQuery = useQuery({
     queryKey: ["student-live-attendance-sessions"],
     queryFn: () => attendanceApi.getStudentLiveSessions(),
-    refetchInterval: 12000,
+    staleTime: 30 * 1000,
+    refetchInterval: 45 * 1000,
+    refetchIntervalInBackground: false,
+  });
+
+  // 5. Course Syllabi & Curriculum Query (static)
+  const syllabiQuery = useQuery({
+    queryKey: ["student-syllabi"],
+    queryFn: async () => {
+      const res = await api.get<any>("/students/me/syllabi");
+      return res.data;
+    },
+    staleTime: 15 * 60 * 1000,
+  });
+
+  // 6. Academic Email Query (rarely changes)
+  const academicEmailQuery = useQuery({
+    queryKey: ["student-academic-email"],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{
+          _id: string;
+          studentCode: string;
+          studentName: string;
+          academicEmail: string;
+          status: "active" | "inactive";
+        } | null>("/students/me/academic-email");
+        return res.data;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+
+  // 7. Exam Assignment & Schedules Query (cached 10 min)
+  const examAssignmentQuery = useQuery({
+    queryKey: ["student-exam-assignment"],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{
+          seatNumber: string | null;
+          examRoom: string | null;
+          examFloor: string | null;
+          examBuilding: string | null;
+          schedules: Array<{
+            _id: string;
+            title: string;
+            examType: "midterm" | "final";
+            academicYear: string;
+            semester: string;
+            fileUrl: string;
+            isPublished: boolean;
+          }>;
+        }>("/students/me/exam-assignment");
+        return res.data;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // 8. Quizzes Query (detecting open quizzes)
+  const quizzesQuery = useQuery({
+    queryKey: ["student-quizzes-dashboard"],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any[]>("/students/me/quizzes");
+        return res.data || [];
+      } catch {
+        return [];
+      }
+    },
+    refetchInterval: 30000,
   });
 
   const profile = profileQuery.data ?? null;
@@ -110,6 +210,12 @@ export default function StudentDashboard() {
   const activeLiveSession =
     liveSessions.find((s) => !s.alreadyCheckedIn && s.remainingSeconds > 0) ||
     liveSessions[0];
+  const openQuizzes = (quizzesQuery.data || []).filter(
+    (q: any) => q.isOpen && !q.isSubmitted,
+  );
+  const activeQuiz = openQuizzes[0] || null;
+  const publishedSchedules = examAssignmentQuery.data?.schedules || [];
+  const activeSchedule = publishedSchedules[0] || null;
   const displayName = profile?.fullName || user?.name || "";
 
   // Parse seat number to get a mock position in the seating grid for dashboard preview
@@ -132,33 +238,33 @@ export default function StudentDashboard() {
 
   const quickLinks = [
     {
-      key: "quizzes",
-      icon: <FileText className="w-5 h-5" />,
-      color: "#f59e0b",
+      title: locale === "ar" ? "الاختبارات الأسبوعية" : "Course Quizzes",
+      icon: <BookOpenCheck className="w-5 h-5" />,
+      color: "#8b5cf6",
       href: `/${locale}/dashboard/quizzes`,
     },
     {
-      key: "results",
+      title: locale === "ar" ? "نتائج المقررات" : "Academic Results",
       icon: <Award className="w-5 h-5" />,
-      color: "#8b5cf6",
+      color: "#f59e0b",
       href: `/${locale}/dashboard/results`,
     },
     {
-      key: "academicEmail",
-      icon: <Mail className="w-5 h-5" />,
-      color: "#ec4899",
-      href: `/${locale}/dashboard/academic-email`,
-    },
-    {
-      key: "examSchedule",
+      title: locale === "ar" ? "جدول الامتحانات" : "Exam Schedule",
       icon: <Calendar className="w-5 h-5" />,
       color: "#10b981",
       href: `/${locale}/dashboard/exam-schedule`,
     },
     {
-      key: "complaints",
+      title: locale === "ar" ? "مكان ورقم اللجنة" : "Exam Seating",
+      icon: <MapPin className="w-5 h-5" />,
+      color: "#06b6d4",
+      href: `/${locale}/dashboard/exam-place`,
+    },
+    {
+      title: locale === "ar" ? "الشكاوى والدعم" : "Student Support",
       icon: <MessageCircle className="w-5 h-5" />,
-      color: "#6366f1",
+      color: "#ec4899",
       href: `/${locale}/dashboard/complaints`,
     },
   ];
@@ -172,7 +278,7 @@ export default function StudentDashboard() {
       <div className="relative overflow-hidden bg-card/45 backdrop-blur-sm border border-border/70 shadow-[var(--shadow-glow)] rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-primary/30 transition-all duration-300">
         <div className="space-y-2.5 z-10 text-start">
           <div className="inline-flex max-w-full items-center gap-2 rounded-squircle border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <GraduationCap className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">
               {locale === "ar"
                 ? "البوابة الأكاديمية الموحدة"
@@ -200,6 +306,43 @@ export default function StudentDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Academic Warning Alert Banner */}
+      {(profile?.academicWarnings ?? 0) > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-amber-500/10 backdrop-blur-sm p-4 sm:p-5 shadow-[0_0_25px_rgba(245,158,11,0.15)] animate-fade-in flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5 z-10 text-start">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-squircle bg-amber-500/20 border border-amber-500/30 text-amber-400">
+              <ShieldAlert className="h-6 w-6 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-squircle bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/30">
+                  {locale === "ar"
+                    ? `إنذار أكاديمي رقم ${profile?.academicWarnings}`
+                    : `Academic Warning #${profile?.academicWarnings}`}
+                </span>
+                <span className="text-xs text-amber-200/80 font-medium">
+                  {locale === "ar"
+                    ? "المعدل التراكمي أقل من 2.00 (CGPA < 2.00)"
+                    : "Cumulative GPA is below 2.00 threshold"}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-foreground/90">
+                {locale === "ar"
+                  ? "وفقاً للائحة الساعات المعتمدة، تم تحديد الحد الأقصى لساعات تسجيلك بـ 12 ساعة معتمدة. يلزم مراجعة واعتماد المرشد الأكاديمي."
+                  : "Under Credit Hour regulations, your maximum course registration is capped at 12 credit hours. Academic advisor approval is mandatory."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 z-10">
+            <Link href={`/${locale}/dashboard/academic-advising`}>
+              <button className="h-9 px-4 text-xs font-semibold rounded-squircle bg-amber-500 text-slate-950 hover:bg-amber-400 transition-all cursor-pointer">
+                {locale === "ar" ? "الإرشاد الأكاديمي" : "Academic Advising"}
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Live Attendance Session Alert Banner */}
       {activeLiveSession &&
@@ -260,6 +403,125 @@ export default function StudentDashboard() {
             </div>
           </div>
         )}
+
+      {/* Active/Open Quiz Alert Banner */}
+      {activeQuiz && (
+        <div className="relative overflow-hidden rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/10 to-transparent backdrop-blur-sm p-4 sm:p-5 shadow-[0_0_25px_rgba(14,165,233,0.15)] animate-fade-in flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5 z-10 text-start">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-squircle bg-primary/20 border border-primary/30 text-primary">
+              <FileText className="h-6 w-6 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-squircle bg-primary/25 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/35">
+                  {locale === "ar" ? "اختبار متاح للتقديم الآن!" : "Quiz Open Now!"}
+                </span>
+                <span className="text-xs font-mono font-bold text-foreground">
+                  {activeQuiz.courseCode} · {activeQuiz.courseName}
+                </span>
+              </div>
+              <p className="text-sm font-bold text-foreground">
+                {activeQuiz.title}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
+                  {activeQuiz.durationMinutes} {locale === "ar" ? "دقيقة" : "min"}
+                </span>
+                <span>•</span>
+                <span>
+                  {activeQuiz.totalMarks} {locale === "ar" ? "درجة" : "marks"}
+                </span>
+                {activeQuiz.endsAt && (
+                  <>
+                    <span>•</span>
+                    <span className="text-amber-400 font-medium">
+                      {locale === "ar" ? "ينتهي في:" : "Closes:"}{" "}
+                      {new Date(activeQuiz.endsAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 z-10">
+            <Link href={`/${locale}/dashboard/quizzes`}>
+              <button className="h-10 px-5 text-xs sm:text-sm font-bold rounded-squircle bg-primary hover:bg-primary/85 text-primary-foreground shadow-md transition-all cursor-pointer flex items-center gap-2">
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>{locale === "ar" ? "بدء الاختبار الآن" : "Start Quiz Now"}</span>
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Academic Services (Placed immediately after welcome header & alerts) */}
+      <Card className="p-5 bg-card/60 backdrop-blur-sm border-border/80 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-2xl">
+        <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="text-start">
+              <h3 className="font-bold text-base text-foreground">
+                {locale === "ar" ? "الخدمات الأكاديمية السريعة" : "Quick Academic Services"}
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                {locale === "ar"
+                  ? "الوصول المباشر للاختبارات الأسبوعية، النتائج، تسجيل الحضور، والخدمات الطلابية"
+                  : "Instant access to weekly quizzes, grades, attendance check-in, and services"}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {quickLinks.map((link, idx) => (
+            <Link key={idx} href={link.href}>
+              <div className="flex flex-col items-center gap-2.5 p-3.5 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group h-full justify-center shadow-xs">
+                <div
+                  className="w-10 h-10 rounded-squircle flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                  style={{
+                    backgroundColor: `${link.color}15`,
+                    color: link.color,
+                  }}
+                >
+                  {link.icon}
+                </div>
+                <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                  {link.title}
+                </span>
+              </div>
+            </Link>
+          ))}
+          {/* Smart Attendance Check-in Direct Access */}
+          <button
+            type="button"
+            onClick={() => setShowScanDialog(true)}
+            className="flex flex-col items-center gap-2.5 p-3.5 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group justify-center shadow-xs"
+          >
+            <div className="w-10 h-10 rounded-squircle flex items-center justify-center transition-transform duration-300 group-hover:scale-110 bg-cyan-500/15 text-cyan-400">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+              {locale === "ar" ? "تسجيل الحضور" : "Scan Attendance"}
+            </span>
+          </button>
+          {/* Registration Direct Access */}
+          <Link href={`/${locale}/dashboard/registration`}>
+            <div className="flex flex-col items-center gap-2.5 p-3.5 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group justify-center h-full shadow-xs">
+              <div className="w-10 h-10 rounded-squircle bg-emerald-500/15 text-emerald-400 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                {locale === "ar" ? "تسجيل المقررات" : "Course Registration"}
+              </span>
+            </div>
+          </Link>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* GPA & Advising Widget */}
@@ -481,23 +743,241 @@ export default function StudentDashboard() {
           </div>
         </Card>
 
+        {/* Academic Email Card */}
+        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+          <div>
+            <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground leading-tight">
+                    {locale === "ar" ? "البريد الأكاديمي الرسمي" : "Institutional Webmail"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-primary" />
+                    Google Workspace
+                  </p>
+                </div>
+              </div>
+              <span
+                className={cn(
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                  academicEmailQuery.data?.status === "active"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-muted text-muted-foreground border-border",
+                )}
+              >
+                {academicEmailQuery.data?.status === "active"
+                  ? locale === "ar" ? "نشط ومفعل" : "Active"
+                  : locale === "ar" ? "قيد الإعداد" : "Pending"}
+              </span>
+            </div>
+
+            {academicEmailQuery.data?.academicEmail ? (
+              <div className="space-y-3.5">
+                <div className="space-y-1 text-start">
+                  <label className="text-[11px] font-bold text-muted-foreground">
+                    {locale === "ar" ? "عنوان البريد الأكاديمي" : "Your Academic Email"}
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      readOnly
+                      value={academicEmailQuery.data.academicEmail}
+                      dir="ltr"
+                      className="w-full rounded-xl border border-border bg-secondary/50 py-2.5 pe-24 ps-3.5 font-mono text-xs sm:text-sm font-semibold text-foreground outline-none"
+                    />
+                    <div className="absolute end-1.5 top-1/2 -translate-y-1/2">
+                      <CopyButton
+                        value={academicEmailQuery.data.academicEmail}
+                        label={locale === "ar" ? "نسخ" : "Copy"}
+                        successMessage={locale === "ar" ? "تم نسخ البريد الأكاديمي" : "Email copied"}
+                        className="h-7 rounded-lg bg-card hover:bg-secondary border border-border px-2.5 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-squircle bg-secondary/30 border border-border/60 text-xs text-muted-foreground space-y-1 text-start">
+                  <p className="font-semibold text-foreground text-[11px]">
+                    {locale === "ar" ? "🔑 كلمة المرور الافتراضية:" : "🔑 Initial Login Password:"}
+                  </p>
+                  <p className="text-[11px] leading-relaxed">
+                    {locale === "ar"
+                      ? "رقمك القومي كاملاً (14 رقماً) المسجل بملفك الرسمي، مع وصول كامل لخدمات Google Workspace (Gmail, Drive, Meet, Classroom)."
+                      : "Your 14-digit National ID number as registered in your official file. Grants full Google Workspace access (Gmail, Drive, Meet, Classroom)."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-xs text-muted-foreground space-y-1">
+                <Mail className="w-8 h-8 mx-auto text-muted mb-2" />
+                <p className="font-semibold text-foreground">
+                  {locale === "ar" ? "البريد الأكاديمي قيد التجهيز" : "Academic Email Being Provisioned"}
+                </p>
+                <p className="text-muted-foreground text-[11px]">
+                  {locale === "ar"
+                    ? "يرجى مراجعة إدارة شؤون الطلاب أو مركز تكنولوجيا المعلومات لتفعيل بريدك."
+                    : "Please check with student affairs or the IT department to activate your webmail."}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2 border-t border-border/50">
+            <a
+              href="https://mail.google.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 h-10 text-xs font-bold rounded-squircle bg-primary hover:bg-primary/90 text-primary-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>{locale === "ar" ? "دخول بريد Google (Gmail)" : "Sign In to Google Mail"}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <Link href={`/${locale}/dashboard/profile`}>
+              <button className="h-10 px-4 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">
+                <User className="w-3.5 h-3.5" />
+                <span>{locale === "ar" ? "الملف الشخصي" : "Profile"}</span>
+              </button>
+            </Link>
+          </div>
+        </Card>
+
+        {/* Exam Schedule Thumbnail Widget */}
+        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+          <div>
+            <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground leading-tight">
+                    {locale === "ar" ? "جدول الامتحانات المعتمد" : "Exam Timetable"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {locale === "ar" ? "معاينة الجدول الدراسي الرسمي" : "Official schedule preview"}
+                  </p>
+                </div>
+              </div>
+              <Link href={`/${locale}/dashboard/exam-schedule`}>
+                <span className="text-xs font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  {locale === "ar" ? "عرض بالكامل" : "View All"}
+                  <ChevronRight className="w-3 h-3 rtl:rotate-180" />
+                </span>
+              </Link>
+            </div>
+
+            {activeSchedule ? (
+              <div className="space-y-3">
+                <div className="relative overflow-hidden rounded-xl border border-border bg-secondary/30 h-36 flex items-center justify-center group">
+                  {activeSchedule.fileUrl.toLowerCase().endsWith('.pdf') ? (
+                    <div className="flex flex-col items-center justify-center gap-2 text-center p-4">
+                      <FileText className="w-10 h-10 text-primary" />
+                      <span className="text-xs font-bold text-foreground">
+                        {activeSchedule.title} (PDF)
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <img
+                        src={activeSchedule.fileUrl}
+                        alt={activeSchedule.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-3">
+                        <div className="text-white text-xs font-bold drop-shadow">
+                          {activeSchedule.title}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  <Link
+                    href={`/${locale}/dashboard/exam-schedule`}
+                    className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <span className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold flex items-center gap-1.5 shadow-lg">
+                      <Eye className="w-3.5 h-3.5" />
+                      {locale === "ar" ? "تكبير الجدول" : "View Full"}
+                    </span>
+                  </Link>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span className="font-semibold text-foreground">{activeSchedule.title}</span>
+                  <span className="font-mono">{activeSchedule.academicYear}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-xs text-muted-foreground space-y-1">
+                <Calendar className="w-8 h-8 mx-auto text-muted mb-2" />
+                <p className="font-semibold text-foreground">
+                  {locale === "ar" ? "جدول الامتحانات قيد الإعداد" : "Exam Schedule Pending"}
+                </p>
+                <p className="text-muted-foreground text-[11px]">
+                  {locale === "ar"
+                    ? "سيتم رفع واعتماد جداول الامتحانات رسمياً فور إعلانها من إدارة شؤون الطلاب."
+                    : "The official exam schedule will appear here as soon as published by the administration."}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <Link href={`/${locale}/dashboard/exam-schedule`} className="w-full">
+            <button className="w-full h-10 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">
+              {locale === "ar" ? "فتح صفحة جدول الامتحانات" : "Open Exam Schedule Page"}
+              <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+            </button>
+          </Link>
+        </Card>
+
         {/* Exam Seat / Place Widget */}
         <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
-              <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                {locale === "ar"
-                  ? "مكان ورقم لجنة الامتحان"
-                  : "Exam Seating & Placement"}
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground leading-tight">
+                    {locale === "ar"
+                      ? "مكان ورقم لجنة الامتحان"
+                      : "Exam Seating & Placement"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {locale === "ar"
+                      ? "توزيع المقاعد وأرقام الجلوس الرسمية"
+                      : "Official desk assignment"}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={cn(
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                  profile?.seatNumber
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-muted text-muted-foreground border-border",
+                )}
+              >
+                {profile?.seatNumber
+                  ? locale === "ar" ? "معتمد" : "Allocated"
+                  : locale === "ar" ? "قيد التوزيع" : "Pending"}
+              </span>
             </div>
+
             {profile?.seatNumber ? (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-5 my-2">
                 {/* Details Section */}
-                <div className="md:col-span-5 space-y-4 flex flex-col justify-center">
-                  <div className="p-4 rounded-squircle bg-primary/5 border border-primary/10 flex items-center gap-4 text-start">
-                    <div className="w-10 h-10 rounded-squircle bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <div className="md:col-span-5 space-y-3.5 flex flex-col justify-center">
+                  <div className="p-3.5 rounded-squircle bg-primary/5 border border-primary/15 flex items-center gap-3.5 text-start">
+                    <div className="w-10 h-10 rounded-squircle bg-primary/15 flex items-center justify-center text-primary shrink-0">
                       <span className="font-mono font-black text-sm">#</span>
                     </div>
                     <div>
@@ -510,21 +990,19 @@ export default function StudentDashboard() {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-squircle bg-primary/5 border border-primary/10 flex items-center gap-4 text-start">
-                    <div className="w-10 h-10 rounded-squircle bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                      <MapPin className="w-5 h-5" />
+                  <div className="p-3.5 rounded-squircle bg-secondary/35 border border-border/60 flex items-center gap-3.5 text-start">
+                    <div className="w-10 h-10 rounded-squircle bg-secondary flex items-center justify-center text-muted-foreground shrink-0">
+                      <Building2 className="w-5 h-5 text-primary" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] text-muted-foreground font-bold uppercase">
-                        {locale === "ar" ? "اللجنة والمبنى" : "Building / Room"}
+                        {locale === "ar" ? "اللجنة والمبنى" : "Building & Room"}
                       </p>
-                      <p className="text-sm font-bold text-foreground mt-0.5 truncate">
-                        {profile.examBuilding
-                          ? `${profile.examBuilding} · `
-                          : ""}
+                      <p className="text-xs sm:text-sm font-bold text-foreground mt-0.5 truncate">
+                        {profile.examBuilding ? `${profile.examBuilding} · ` : ""}
                         {profile.examRoom
-                          ? `${locale === "ar" ? "مدرج" : "Room"} ${profile.examRoom}`
-                          : ""}
+                          ? `${locale === "ar" ? "مدرج" : "Hall"} ${profile.examRoom}`
+                          : locale === "ar" ? "مدرج رئيسي" : "Main Hall"}
                       </p>
                     </div>
                   </div>
@@ -532,39 +1010,41 @@ export default function StudentDashboard() {
 
                 {/* Seating Mini-Map Section */}
                 <div className="md:col-span-7 flex flex-col justify-center items-center">
-                  <div className="w-full max-w-[280px] bg-secondary/10 border border-border/40 rounded-xl p-3.5 text-center relative shadow-sm">
+                  <div className="w-full max-w-[280px] bg-secondary/20 border border-border/60 rounded-xl p-3 text-center relative shadow-sm">
                     {/* Front representation */}
-                    <div className="w-full bg-secondary/60 border border-border/30 py-1 rounded text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-4">
+                    <div className="w-full bg-secondary/70 border border-border/40 py-1 rounded text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-3">
                       {locale === "ar"
-                        ? "السبورة والمنصة"
-                        : "Whiteboard / Front"}
+                        ? "السبورة والمنصة الرئيسية"
+                        : "Stage & Front Board"}
                     </div>
 
                     {/* Desks Grid */}
-                    <div className="grid grid-cols-5 gap-2 justify-center mb-3">
+                    <div className="grid grid-cols-5 gap-1.5 justify-center mb-2.5">
                       {gridCells.map((cell, index) => (
                         <div
                           key={index}
                           className={cn(
-                            "h-9 rounded-md flex flex-col items-center justify-center text-[9px] font-mono font-black transition-all select-none border",
+                            "h-8 rounded-md flex flex-col items-center justify-center text-[9px] font-mono font-black transition-all select-none border",
                             cell.isTarget
-                              ? "bg-primary border-primary text-white"
-                              : "bg-muted/10 border-white/5 text-muted-foreground/30",
+                              ? "bg-primary border-primary text-white shadow-[0_0_10px_rgba(14,165,233,0.4)]"
+                              : "bg-muted/10 border-border/30 text-muted-foreground/35",
                           )}
                           title={
                             cell.isTarget
                               ? locale === "ar"
-                                ? `مقعدك`
-                                : `Your Seat`
+                                ? `مقعدك (${cell.seatNum})`
+                                : `Your Seat (${cell.seatNum})`
                               : undefined
                           }
                         >
-                          <span className="text-[7px] text-muted-foreground/45 scale-90 mb-0.5 block">
-                            {locale === "ar" ? "مقعد" : "Seat"}
+                          <span className="text-[6.5px] text-muted-foreground/50 scale-90 block">
+                            {cell.isTarget
+                              ? (locale === "ar" ? "أنت" : "YOU")
+                              : (locale === "ar" ? "مقعد" : "Seat")}
                           </span>
                           <span
                             className={cn(
-                              "text-[10px] font-bold",
+                              "text-[9px] font-bold",
                               cell.isTarget
                                 ? "text-white"
                                 : "text-muted-foreground/50",
@@ -577,31 +1057,31 @@ export default function StudentDashboard() {
                     </div>
 
                     {/* Simple Legend */}
-                    <div className="flex items-center justify-between text-[8px] text-muted-foreground/80 border-t border-border/20 pt-2 mt-1">
+                    <div className="flex items-center justify-between text-[8px] text-muted-foreground/80 border-t border-border/30 pt-1.5 mt-0.5">
                       <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 rounded bg-muted/20 border border-white/5" />
-                        <span>{locale === "ar" ? "محجوز" : "Other"}</span>
+                        <div className="w-2 h-2 rounded bg-muted/20 border border-border/40" />
+                        <span>{locale === "ar" ? "باقي الطلاب" : "Other"}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded bg-primary shadow-[0_0_4px_rgba(14,165,233,0.5)]" />
-                        <span>{locale === "ar" ? "مقعدك" : "Your Seat"}</span>
+                        <span className="font-bold text-primary">{locale === "ar" ? "مكان جلوسك" : "Your Seat"}</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
-                <AlertTriangle className="w-8 h-8 text-muted mb-2" />
-                <p className="text-sm font-semibold">
+              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                <CalendarClock className="w-9 h-9 text-muted mb-2.5 opacity-60" />
+                <p className="text-sm font-semibold text-foreground">
                   {locale === "ar"
-                    ? "أماكن اللجان لم تحدد بعد"
+                    ? "أماكن اللجان قيد الإعداد"
                     : "Exam Seating Not Allocated"}
                 </p>
-                <p className="text-xs text-muted/70 mt-1 max-w-sm">
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
                   {locale === "ar"
-                    ? "سيتم نشر تفاصيل اللجان وأرقام الجلوس فور صدور جدول الامتحانات."
-                    : "Committees and seat numbers will be visible once exam timetables are published."}
+                    ? "سيتم نشر تفاصيل اللجان وتوزيع المقاعد وأرقام الجلوس فور صدور جدول الامتحانات رسمياً."
+                    : "Room allocations and seat numbers will be posted as soon as exam timetables are published."}
                 </p>
               </div>
             )}
@@ -609,68 +1089,140 @@ export default function StudentDashboard() {
           <Link href={`/${locale}/dashboard/exam-place`} className="w-full">
             <button className="w-full h-10 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">
               {locale === "ar"
-                ? "تفاصيل مكان اللجنة"
-                : "Detailed Location Details"}
+                ? "عرض تفاصيل وخريطة اللجنة"
+                : "View Full Seating Details"}
               <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
             </button>
           </Link>
         </Card>
 
-        {/* Quick Actions Grid */}
-        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-          <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
-            <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-              <BookOpenCheck className="w-5 h-5 text-primary" />
-              {locale === "ar" ? "الخدمات السريعة" : "Quick Services"}
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {quickLinks.map((link) => (
-              <Link key={link.key} href={link.href}>
-                <div className="flex flex-col items-center gap-3 p-4 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group">
-                  <div
-                    className="w-10 h-10 rounded-squircle flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                    style={{
-                      backgroundColor: `${link.color}15`,
-                      color: link.color,
-                    }}
-                  >
-                    {link.icon}
-                  </div>
-                  <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                    {t(link.key)}
-                  </span>
+        {/* Course Syllabi & Curriculum Card (Side-by-side with Exam Seating in 2 columns) */}
+        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col justify-between gap-4">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-4 border-b border-border pb-3 text-start">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <BookOpen className="w-5 h-5" />
                 </div>
-              </Link>
-            ))}
-            {/* Smart Attendance Check-in Direct Access in Quick Services */}
-            <button
-              type="button"
-              onClick={() => setShowScanDialog(true)}
-              className="flex flex-col items-center gap-3 p-4 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group"
-            >
-              <div
-                className="w-10 h-10 rounded-squircle flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                style={{ backgroundColor: "#0ea5e915", color: "#0ea5e9" }}
-              >
-                <QrCode className="w-5 h-5" />
+                <div>
+                  <h3 className="font-bold text-base text-foreground leading-tight">
+                    {locale === "ar"
+                      ? "المناهج ومحتوى المقررات الدراسية (PDF)"
+                      : "Course Curriculum & Syllabi (PDF)"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {locale === "ar"
+                      ? "تحميل واستعراض المنهج الأكاديمي المعتمد لمقرراتك"
+                      : "Download official syllabi for registered courses"}
+                  </p>
+                </div>
               </div>
-              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                {locale === "ar" ? "تسجيل الحضور" : "Scan Attendance"}
-              </span>
-            </button>
-            {/* Registration Direct Access */}
-            <Link href={`/${locale}/dashboard/registration`}>
-              <div className="flex flex-col items-center gap-3 p-4 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group">
-                <div className="w-10 h-10 rounded-squircle bg-primary/10 text-primary flex items-center justify-center">
-                  <BookOpenCheck className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
-                  {locale === "ar" ? "تسجيل المواد" : "Registration"}
+              {syllabiQuery.data?.registeredCount !== undefined && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-squircle bg-primary/10 text-primary border border-primary/20 shrink-0">
+                  {locale === "ar"
+                    ? `${syllabiQuery.data.registeredCount} مسجل`
+                    : `${syllabiQuery.data.registeredCount} Enrolled`}
                 </span>
+              )}
+            </div>
+
+            {syllabiQuery.isLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            </Link>
+            ) : (
+              <div className="space-y-3 max-h-[380px] overflow-y-auto pe-1 scrollbar-thin">
+                {(
+                  syllabiQuery.data?.registeredCourses?.length
+                    ? syllabiQuery.data.registeredCourses
+                    : (syllabiQuery.data?.availableLevelCourses || []).slice(0, 6)
+                ).map((course: any) => (
+                  <div
+                    key={course.code}
+                    className="rounded-xl border border-border/70 bg-card/80 p-3 flex items-center justify-between gap-3 text-start hover:border-primary/40 hover:bg-card/95 transition-all group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Cover thumbnail or academic textbook spine preview */}
+                      {course.coverImageUrl ? (
+                        <div className="w-12 h-16 rounded-md overflow-hidden shrink-0 border border-border/60 shadow-sm bg-secondary/40 group-hover:scale-105 transition-transform duration-300">
+                          <img
+                            src={course.coverImageUrl}
+                            alt={course.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-16 rounded-md bg-gradient-to-b from-primary/20 via-primary/10 to-primary/5 border border-primary/25 flex flex-col items-center justify-between p-1.5 shrink-0 text-primary group-hover:border-primary/45 transition-colors shadow-xs">
+                          <BookOpen className="w-4 h-4 opacity-80 mt-1" />
+                          <span className="text-[8px] font-mono font-bold leading-none">{course.code}</span>
+                          <span className="w-4 h-0.5 rounded-full bg-primary/40 mb-0.5" />
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <bdi className="font-mono text-xs font-bold text-primary">
+                            {course.code}
+                          </bdi>
+                          {course.isRegistered && (
+                            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.2 text-[9px] font-semibold text-emerald-400">
+                              {locale === "ar" ? "مسجل" : "Enrolled"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm font-bold text-foreground line-clamp-1 leading-snug">
+                          {locale === "ar"
+                            ? course.nameAr || course.name
+                            : course.nameEn || course.name}
+                        </p>
+                        {course.doctorName && (
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+                            <UserCheck className="w-3 h-3 text-primary shrink-0" />
+                            <span className="truncate">
+                              {locale === "ar"
+                                ? course.doctorNameAr || course.doctorName
+                                : course.doctorName}
+                            </span>
+                          </p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          {locale === "ar" ? `المستوى ${course.level}` : `Level ${course.level}`} · {course.creditHours ?? 3} {locale === "ar" ? "ساعات" : "cr"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {course.syllabusPdfUrl ? (
+                        <a
+                          href={course._id ? `${apiBaseUrl}/courses/${course._id}/syllabus/download` : course.syllabusPdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-squircle bg-primary hover:bg-primary/85 text-primary-foreground text-xs font-semibold transition-all shadow-xs"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">{locale === "ar" ? "تحميل PDF" : "PDF"}</span>
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/70 italic px-2 py-1 rounded bg-secondary/30">
+                          {locale === "ar" ? "قيد الإعداد" : "Pending"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
+
+          <Link href={`/${locale}/dashboard/registration`} className="w-full">
+            <button className="w-full h-10 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">
+              <span>{locale === "ar" ? "عرض الخطة الدراسية والمقررات" : "View Curriculum & Study Plan"}</span>
+              <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+            </button>
+          </Link>
         </Card>
       </div>
 

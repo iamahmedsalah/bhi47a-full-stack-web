@@ -179,6 +179,31 @@ export const advisingApi = {
       "/admin/advising/advisors/assign-students",
       payload,
     ),
+  autoDistributeStudents: (payload: {
+    academicYear: string;
+    semester: "first" | "second" | "summer";
+    advisorIds?: string[];
+    studentIds?: string[];
+    level?: string;
+    department?: string;
+    onlyUnassigned?: boolean;
+    strategy?: "contiguous" | "round-robin";
+  }) =>
+    apiPost<{
+      totalDistributed: number;
+      totalAdvisors: number;
+      strategy: string;
+      advisorSummaries: Array<{
+        advisorId: string;
+        advisorName: string;
+        count: number;
+        codeStart?: string;
+        codeEnd?: string;
+      }>;
+    }, typeof payload>(
+      "/admin/advising/advisors/auto-distribute",
+      payload,
+    ),
   registrations: (studentId: string) =>
     apiGet<RegistrationPage>("/admin/registrations", {
       params: { studentId, page: 1, limit: 20 },

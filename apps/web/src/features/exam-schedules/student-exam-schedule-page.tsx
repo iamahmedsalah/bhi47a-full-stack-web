@@ -87,11 +87,27 @@ export default function StudentExamSchedulePage() {
 
   if (assignmentQuery.isError) {
     return (
-      <ErrorState
-        description={getApiErrorMessage(assignmentQuery.error)}
-        error={assignmentQuery.error}
-        onRetry={() => assignmentQuery.refetch()}
-      />
+      <div className="mx-auto max-w-6xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
+        <div className="space-y-1">
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <Calendar className="h-6 w-6 text-primary" />
+            <span>{isEnglish ? 'Exam Timetables' : 'جداول الامتحانات'}</span>
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {isEnglish
+              ? 'Exam schedules and official timetables'
+              : 'جداول الامتحانات المعتمدة للفصل الدراسي'}
+          </p>
+        </div>
+        <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+          <EmptyState
+            title={locale === 'ar' ? 'لا يوجد جدول امتحانات متاح حالياً' : 'No exam schedule available yet'}
+            description={locale === 'ar'
+              ? 'لم تقم إدارة المعهد بنشر جدول الامتحانات لهذا الفصل الدراسي بعد. يرجى المتابعة لاحقاً.'
+              : 'The administration has not published the exam timetable yet. Please check again later.'}
+          />
+        </Card>
+      </div>
     );
   }
 

@@ -231,6 +231,10 @@ function getFlowCourseLevel(course: CourseMapCourse): string {
 function getFlowCourseSemester(course: CourseMapCourse): string {
   if (course.semester) return course.semester;
   const code = normalizeCode(course.code);
+  if (code === "326") {
+    const dept = String(course.department || "").toUpperCase();
+    return dept.includes("ACC") || dept.includes("محاسب") ? "first" : "second";
+  }
   return COURSE_SEMESTER_BY_CODE[code] ?? "first";
 }
 

@@ -4,7 +4,8 @@ export type UploadCatalogType =
   | 'grades'
   | 'quizzes'
   | 'attendance'
-  | 'academic-emails';
+  | 'academic-emails'
+  | 'academic-warnings';
 
 export interface CatalogField {
   key: string;

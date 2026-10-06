@@ -24,6 +24,9 @@ import {
   Building2,
   ExternalLink,
   User,
+  Trash2,
+  Eye,
+  CheckCheck,
 } from 'lucide-react';
 import { COURSE_LEVEL_VALUES } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
@@ -31,12 +34,16 @@ import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 import { AlertMessage, EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
 import { Field, Select, Textarea, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { getApiErrorMessage } from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { toast } from 'sonner';
 import {
   listAdminNotifications,
   NotificationLog,
   NotificationTarget,
   sendNotification,
+  deleteAdminNotification,
 } from '@/lib/features/notifications';
 import { queryKeys } from '@/lib/query-keys';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
@@ -152,6 +159,8 @@ function NotificationsPageContent() {
   const [sendWhatsApp, setSendWhatsApp] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [selectedLogForReaders, setSelectedLogForReaders] = useState<NotificationLog | null>(null);
+  const [notificationToDelete, setNotificationToDelete] = useState<NotificationLog | null>(null);
 
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications.adminList,
@@ -171,7 +180,21 @@ function NotificationsPageContent() {
       }, 1200);
     },
     onError: (error) => {
-      setFormError(getApiErrorMessage(error, 'Error occurred while sending'));
+      setFormError(getApiErrorMessage(error, isArabic ? 'حدث خطأ أثناء إرسال الإشعار' : 'Error occurred while sending'));
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteAdminNotification,
+    onSuccess: () => {
+      toast.success(t('deleteSuccess'));
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.adminList,
+      });
+      setNotificationToDelete(null);
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err, isArabic ? 'فشل حذف الإشعار' : 'Failed to delete notification'));
     },
   });
 
@@ -184,10 +207,12 @@ function NotificationsPageContent() {
         header: t('notificationTitle'),
         className: 'min-w-72',
         cell: (log) => (
-          <div className="max-w-md">
-            <div className="font-semibold leading-snug text-foreground">{log.title}</div>
+          <div className="max-w-md text-start">
+            <div className="font-semibold leading-snug text-foreground">
+              <bdi>{log.title}</bdi>
+            </div>
             <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-              {log.body}
+              <bdi>{log.body}</bdi>
             </div>
           </div>
         ),
@@ -199,12 +224,14 @@ function NotificationsPageContent() {
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="badge badge-success">{t(`target_${log.targetType}`)}</span>
             {log.targetType === 'level' ? (
-              <span className="text-xs text-muted">
-                ({tGrades('level')} {log.targetLevel})
+              <span className="text-xs text-muted font-mono">
+                ({t('level')} {log.targetLevel})
               </span>
             ) : null}
-            {log.targetType === 'student' && log.targetStudentId ? (
-              <span className="text-xs text-muted">({log.targetStudentId.name})</span>
+            {log.targetType === 'student' ? (
+              <span className="text-xs text-muted font-mono" dir="ltr">
+                <bdi>({log.targetStudentId?.name || log.targetStudentId?.studentCode || 'Student'})</bdi>
+              </span>
             ) : null}
           </div>
         ),
@@ -212,25 +239,54 @@ function NotificationsPageContent() {
       {
         key: 'status',
         header: tCommon('status'),
-        cell: (log) => (
-          <div className="flex flex-col items-start gap-1">
-            <span className="badge badge-info">
-              {log.deliveryStatus || 'pending'}
-            </span>
-            {(log as any).meta?.sendWhatsApp && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
-                <MessageSquare className="h-2.5 w-2.5" />
-                WhatsApp
+        cell: (log) => {
+          const statusKey = `status_${log.deliveryStatus || 'pending'}`;
+          const statusLabel = t(statusKey as any) || log.deliveryStatus;
+          const statusBadge =
+            log.deliveryStatus === 'sent'
+              ? 'badge-success'
+              : log.deliveryStatus === 'failed'
+              ? 'badge-danger'
+              : 'badge-info';
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <span className={cn('badge', statusBadge)}>{statusLabel}</span>
+              {(log as any).meta?.sendWhatsApp && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  WhatsApp
+                </span>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        key: 'readCount',
+        header: t('readCount'),
+        cell: (log) => {
+          const count = log.readCount ?? (Array.isArray(log.readBy) ? log.readBy.length : 0);
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedLogForReaders(log)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-squircle bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 hover:bg-cyan-500/20 text-xs font-semibold cursor-pointer transition-all"
+              title={t('viewReaders')}
+            >
+              <Users className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="font-mono font-bold">{count}</span>
+              <span className="text-[10px] text-cyan-400/80 underline ms-0.5">
+                {isArabic ? 'عرض' : 'View'}
               </span>
-            )}
-          </div>
-        ),
+            </button>
+          );
+        },
       },
       {
         key: 'sentBy',
         header: t('sentBy'),
         cell: (log) => (
-          <div className="font-medium">
+          <div className="font-medium text-xs">
             {log.sentBy?.name || 'System admin'}
           </div>
         ),
@@ -239,9 +295,24 @@ function NotificationsPageContent() {
         key: 'sentAt',
         header: t('sentAt'),
         cell: (log) => (
-          <time className="text-xs text-muted" dateTime={log.createdAt}>
-            {new Date(log.createdAt).toLocaleString(isArabic ? 'ar-EG' : 'en-US')}
+          <time className="text-xs text-muted font-mono" dateTime={log.createdAt}>
+            <bdi>{new Date(log.createdAt).toLocaleString(isArabic ? 'ar-EG' : 'en-US')}</bdi>
           </time>
+        ),
+      },
+      {
+        key: 'actions',
+        header: isArabic ? 'إجراءات' : 'Actions',
+        className: 'w-16 text-center',
+        cell: (log) => (
+          <button
+            type="button"
+            onClick={() => setNotificationToDelete(log)}
+            className="p-1.5 rounded-squircle text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+            title={t('deleteNotification')}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         ),
       },
     ],
@@ -278,6 +349,19 @@ function NotificationsPageContent() {
     setFormError('');
     setFormSuccess('');
 
+    if (!form.title.trim()) {
+      setFormError(isArabic ? 'يرجى كتابة عنوان الإشعار' : 'Please provide notification title');
+      return;
+    }
+    if (!form.body.trim()) {
+      setFormError(isArabic ? 'يرجى كتابة نص الإشعار' : 'Please provide notification message body');
+      return;
+    }
+    if (form.targetType === 'student' && !form.targetStudentCode.trim()) {
+      setFormError(isArabic ? 'يرجى إدخال الكود الأكاديمي للطالب' : 'Please provide target student code');
+      return;
+    }
+
     sendMutation.mutate({
       title: form.title.trim(),
       body: form.body.trim(),
@@ -285,7 +369,7 @@ function NotificationsPageContent() {
       targetLevel: form.targetType === 'level' ? form.targetLevel : undefined,
       targetStudentCode:
         form.targetType === 'student' ? form.targetStudentCode.trim() : undefined,
-      sendWhatsApp,
+      sendWhatsApp: false,
     });
   };
 
@@ -347,7 +431,7 @@ function NotificationsPageContent() {
               {t('quickTemplatesDesc')}
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5 pt-1">
               {TEMPLATES.map((tpl) => {
                 const Icon = tpl.icon;
                 const isSelected = selectedTemplateId === tpl.id;
@@ -500,20 +584,20 @@ function NotificationsPageContent() {
                   </span>
                 </div>
 
-                {/* WhatsApp Automation Channel */}
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 space-y-2">
+                {/* WhatsApp Automation Channel (Disabled / Coming Soon) */}
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500/20 text-emerald-400">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-400">
                         <MessageSquare className="h-3.5 w-3.5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-semibold text-foreground">
                             {t('channelWhatsApp')}
                           </span>
-                          <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400 border border-emerald-500/30">
-                            {t('channelWhatsAppBadge')}
+                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-bold text-amber-300 border border-amber-500/35">
+                            {isArabic ? 'قريباً · Future' : 'Coming Soon'}
                           </span>
                         </div>
                         <div className="text-[10px] text-muted-foreground">
@@ -521,27 +605,29 @@ function NotificationsPageContent() {
                         </div>
                       </div>
                     </div>
-                    <label className="relative inline-flex cursor-pointer items-center shrink-0">
+                    <label
+                      className="relative inline-flex cursor-not-allowed items-center shrink-0 opacity-60"
+                      title={isArabic ? 'هذه الميزة قيد التطوير وستتوفر قريباً فور تفعيل حساب WhatsApp API' : 'Coming Soon - Under development'}
+                    >
                       <input
                         type="checkbox"
                         className="peer sr-only"
-                        checked={sendWhatsApp}
-                        onChange={(e) => setSendWhatsApp(e.target.checked)}
+                        checked={false}
+                        disabled={true}
+                        readOnly
                       />
-                      <div className="peer h-5 w-9 rounded-full bg-muted peer-checked:bg-emerald-500 after:absolute after:start-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full"></div>
+                      <div className="peer h-5 w-9 rounded-full bg-muted/60 after:absolute after:start-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white/50 after:transition-all"></div>
                     </label>
                   </div>
 
-                  {sendWhatsApp ? (
-                    <div className="rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-[11px] text-emerald-300 flex items-start gap-1.5">
-                      <Smartphone className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-400" />
-                      <span>
-                        {isArabic
-                          ? 'سيتم استخدام أرقام هواتف الطلاب (Phone) المسجلة في ملفاتهم بقاعدة البيانات لبث الرسالة تلقائياً فور تشغيل أتمتة WhatsApp API.'
-                          : 'Alerts will be dispatched using student phone numbers registered in database profiles once WhatsApp Business API is connected.'}
-                      </span>
-                    </div>
-                  ) : null}
+                  <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2 text-[11px] text-amber-200/90 flex items-start gap-1.5">
+                    <Smartphone className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-300" />
+                    <span>
+                      {isArabic
+                        ? 'ميزة الإرسال التلقائي عبر WhatsApp API للطلاب قيد المراجعة الفنية وستكون متاحة في التحديث القادم.'
+                        : 'Automated student WhatsApp broadcast is under final integration and will be activated in the next release.'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -670,6 +756,87 @@ function NotificationsPageContent() {
           </div>
         </form>
       </Modal>
+
+      {/* Modal for viewing students who read this notification */}
+      <Modal
+        open={Boolean(selectedLogForReaders)}
+        title={t('readersModalTitle')}
+        onClose={() => setSelectedLogForReaders(null)}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl bg-card/60 border border-border p-3.5 text-start">
+            <h4 className="text-sm font-bold text-foreground">
+              <bdi>{selectedLogForReaders?.title}</bdi>
+            </h4>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              <bdi>{selectedLogForReaders?.body}</bdi>
+            </p>
+          </div>
+
+          {!selectedLogForReaders?.readBy || selectedLogForReaders.readBy.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-xs">
+              <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p>{t('noReadersYet')}</p>
+            </div>
+          ) : (
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {selectedLogForReaders.readBy.map((reader, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-border/50 bg-background/50 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
+                      {idx + 1}
+                    </div>
+                    <div className="text-start">
+                      <div className="font-semibold text-foreground">
+                        {reader.userId?.name || 'Student'}
+                      </div>
+                      {reader.userId?.studentCode && (
+                        <div className="text-[10px] font-mono text-muted-foreground" dir="ltr">
+                          <bdi>{reader.userId.studentCode}</bdi>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <time className="text-[11px] font-mono text-muted-foreground">
+                    <bdi>
+                      {reader.readAt
+                        ? new Date(reader.readAt).toLocaleString(isArabic ? 'ar-EG' : 'en-US')
+                        : ''}
+                    </bdi>
+                  </time>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2 border-t border-border">
+            <Button variant="secondary" onClick={() => setSelectedLogForReaders(null)}>
+              {tCommon('close')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirmation Dialog for Deleting Notification */}
+      <ConfirmDialog
+        open={Boolean(notificationToDelete)}
+        onOpenChange={(open) => !open && setNotificationToDelete(null)}
+        title={t('deleteConfirmTitle')}
+        description={t('deleteConfirmDesc')}
+        confirmLabel={t('deleteNotification')}
+        cancelLabel={tCommon('cancel')}
+        destructive
+        disabled={deleteMutation.isPending}
+        onConfirm={() => {
+          if (notificationToDelete) {
+            deleteMutation.mutate(notificationToDelete._id);
+          }
+        }}
+      />
     </div>
   );
 }

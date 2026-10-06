@@ -52,12 +52,23 @@ export class StudentQueryService {
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
-      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Generate Arabic-variant tolerant regex:
+      // Unify alef forms (ا, أ, إ, آ), taa marbuta/haa (ة, ه), and yaa/alef maksura (ي, ى)
+      const arabicTolerant = search
+        .replace(/[اأإآ]/g, '[اأإآ]')
+        .replace(/[ةه]/g, '[ةه]')
+        .replace(/[يى]/g, '[يى]');
+
       filter.$or = [
-        { studentCode: { $regex: `^${safeSearch}`, $options: 'i' } },
-        { fullName: { $regex: safeSearch, $options: 'i' } },
-        { fullNameAr: { $regex: safeSearch, $options: 'i' } },
-        { fullNameEn: { $regex: safeSearch, $options: 'i' } },
+        { studentCode: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: arabicTolerant, $options: 'i' } },
+        { fullNameAr: { $regex: arabicTolerant, $options: 'i' } },
+        { fullNameEn: { $regex: search, $options: 'i' } },
+        { seatNumber: { $regex: search, $options: 'i' } },
+        { academicEmail: { $regex: search, $options: 'i' } },
+        ...(search.replace(/\D/g, '').length >= 3
+          ? [{ nationalId: { $regex: search, $options: 'i' } }]
+          : []),
       ];
     }
 
@@ -65,8 +76,15 @@ export class StudentQueryService {
       filter.level = query.level;
     }
 
-    if (query.enrollmentStatus && query.enrollmentStatus !== 'all') {
-      filter.enrollmentStatus = query.enrollmentStatus;
+    const effectiveStatus =
+      query.enrollmentStatus && query.enrollmentStatus !== 'all'
+        ? query.enrollmentStatus
+        : query.status && query.status !== 'all'
+          ? query.status
+          : undefined;
+
+    if (effectiveStatus) {
+      filter.enrollmentStatus = effectiveStatus;
     }
 
     return filter;

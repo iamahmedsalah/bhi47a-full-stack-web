@@ -4,6 +4,7 @@
     "dashboard": "لوحة التحكم",
     "students": "الطلاب",
     "courses": "المواد",
+    "quizzes": "الاختبارات الإلكترونية",
     "attendance": "الحضور والغياب الذكي",
     "grades": "الدرجات",
     "academicEmails": "البريد الأكاديمي",
@@ -107,6 +108,7 @@
     "nationalId": "الرقم القومي",
     "level": "المستوى",
     "department": "القسم",
+    "status": "حالة القيد",
     "enrollmentStatus": "حالة القيد",
     "resetPassword": "إعادة تعيين كلمة المرور",
     "deactivate": "تعطيل الحساب",
@@ -157,6 +159,7 @@
   },
   "grades": {
     "title": "إدارة الدرجات والنتائج",
+    "level": "المستوى",
     "addGrade": "إضافة درجة يدوياً",
     "editGrade": "تعديل الدرجة",
     "examType": "نوع الامتحان",
@@ -169,6 +172,9 @@
     "examType_quiz": "كويز",
     "examType_midterm": "امتحان منتصف العام (Midterm)",
     "examType_final": "الامتحان النهائي (Final)",
+    "examType_practical": "امتحان عملي",
+    "examType_coursework": "أعمال السنة",
+    "examType_oral": "امتحان شفوي",
     "status_present": "حاضر",
     "status_absent": "غائب",
     "status_banned": "محجوب/محروم",
@@ -196,7 +202,10 @@
       "examTypeValues": {
         "quiz": "اختبار قصير",
         "midterm": "منتصف الفصل",
-        "final": "الاختبار النهائي"
+        "final": "الاختبار النهائي",
+        "practical": "عملي",
+        "coursework": "أعمال السنة",
+        "oral": "شفوي"
       },
       "statusValues": {
         "present": "حاضر",
@@ -323,6 +332,7 @@
     "target_all": "كافة الطلاب بالمعهد",
     "target_level": "مستوى دراسي محدد",
     "target_student": "طالب فردي (كود محدد)",
+    "level": "المستوى",
     "sentAt": "تاريخ النشر",
     "sentBy": "الناشر",
     "success": "تم بث الإشعار بنجاح لجميع الأجهزة المستهدفة",
@@ -345,7 +355,22 @@
     "channelWhatsAppDesc": "سيتم الإرسال تلقائياً إلى أرقام هواتف الطلاب المسجلة في ملفاتهم فور تفعيل بوابة WhatsApp API.",
     "channelWhatsAppBadge": "تكامل WhatsApp جاهز",
     "previewTitle": "معاينة حية لشكل الإشعار لدى الطالب",
-    "previewHint": "هكذا سيظهر الإشعار على شاشة قفل هاتف الطالب والبوابة"
+    "previewHint": "هكذا سيظهر الإشعار على شاشة قفل هاتف الطالب والبوابة",
+    "status_sent": "تم الإرسال",
+    "status_pending": "قيد المعالجة",
+    "status_queued": "في قائمة الانتظار",
+    "status_skipped": "تم الحفظ (بدون أجهزة)",
+    "status_failed": "فشل الإرسال",
+    "readCount": "قراءات الطلاب",
+    "viewReaders": "عرض الطلاب",
+    "readersModalTitle": "سجل قراءة الإشعار للطلاب",
+    "noReadersYet": "لم يقم أي طالب بفتح هذا الإشعار حتى الآن",
+    "deleteNotification": "حذف الإشعار",
+    "deleteConfirmTitle": "تأكيد حذف الإشعار",
+    "deleteConfirmDesc": "هل أنت متأكد من حذف هذا الإشعار؟ سيتم إزالته من سجل الإرسال وصناديق الطلاب.",
+    "deleteSuccess": "تم حذف الإشعار بنجاح",
+    "comingSoon": "قريباً",
+    "readAt": "تاريخ القراءة"
   },
   "settings": {
     "title": "إعدادات النظام البوابة",

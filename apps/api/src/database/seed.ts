@@ -431,6 +431,44 @@ async function seed() {
 
     for (const course of seedData.courses) {
       const now = new Date();
+      const department = String(course.department ?? '').toUpperCase();
+      const curriculumDepartment =
+        department === 'GENERAL'
+          ? 'GENERAL'
+          : department === 'ACCOUNTING'
+            ? 'ACCOUNTING'
+            : 'BIS';
+      const curricula =
+        course.code === '326'
+          ? [
+              {
+                department: 'ACCOUNTING',
+                academicLevel: '3',
+                semester: 'first',
+                type: 'elective',
+              },
+              {
+                department: 'BIS',
+                academicLevel: '3',
+                semester: 'second',
+                type: 'elective',
+              },
+            ]
+          : ['317', '411', '318', '319'].includes(course.code)
+            ? ['ACCOUNTING', 'BIS'].map((dept) => ({
+                department: dept,
+                academicLevel: course.academicLevel,
+                semester: course.semester,
+                type: course.type,
+              }))
+            : [
+                {
+                  department: curriculumDepartment,
+                  academicLevel: course.academicLevel,
+                  semester: course.semester,
+                  type: course.type,
+                },
+              ];
 
       const result = await coursesCollection.findOneAndUpdate(
         { code: course.code },
@@ -446,10 +484,12 @@ async function seed() {
             level: course.level,
             academicLevel: course.academicLevel,
             semester: course.semester,
+            curricula,
             department: course.department,
             creditHours: course.creditHours,
             prerequisites: course.prerequisites,
-            offeredTerms: [course.semester],
+            offeredTerms:
+              course.code === '326' ? ['first', 'second'] : [course.semester],
             type: course.type,
             isActive: course.isActive,
             updatedAt: now,

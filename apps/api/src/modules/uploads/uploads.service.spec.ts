@@ -49,6 +49,7 @@ describe('UploadsService student data wipe', () => {
       importer('quizzes') as never,
       importer('attendance') as never,
       importer('academic-emails') as never,
+      importer('academic-warnings') as never,
     );
 
     await service.wipeData('students', 'admin-id');

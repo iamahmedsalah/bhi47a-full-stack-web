@@ -43,6 +43,13 @@ export class SendNotificationDto {
   @IsBoolean()
   @IsOptional()
   sendWhatsApp?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Arbitrary metadata payload for notification categorization and bilingual translation',
+  })
+  @IsOptional()
+  meta?: Record<string, any>;
 }
 
 export class RegisterFcmTokenDto {

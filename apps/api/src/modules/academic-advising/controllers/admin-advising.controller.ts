@@ -21,6 +21,7 @@ import {
   AdvisingCasesQueryDto,
   AdvisingStudentsQueryDto,
   AssignCaseDto,
+  AutoDistributeAdvisorsDto,
   BulkAssignAdvisorDto,
   CreateAdvisingCaseDto,
   CreateNoteDto,
@@ -62,6 +63,16 @@ export class AdminAdvisingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.bulkAssignStudents(dto, user._id);
+  }
+
+  @Post('advisors/auto-distribute')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.ADVISING_WRITE)
+  autoDistributeStudents(
+    @Body() dto: AutoDistributeAdvisorsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.autoDistributeStudents(dto, user._id);
   }
 
   @Post('cases')

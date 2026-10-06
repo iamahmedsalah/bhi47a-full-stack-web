@@ -7,7 +7,7 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { Mail, Copy, Check, ExternalLink, HelpCircle, Sparkles } from 'lucide-react';
+import { Mail, Copy, Check, ExternalLink, HelpCircle, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface AcademicEmailRecord {
@@ -136,8 +136,8 @@ export default function StudentAcademicEmailPage() {
                   {isEnglish ? 'Institutional Webmail' : 'البريد الأكاديمي الرسمي'}
                 </h3>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-primary" />
-                  {isEnglish ? 'Powered by Microsoft Office 365' : 'مقدم بالتعاون مع مايكروسوفت أوفيس 365'}
+                  <Globe className="w-3.5 h-3.5 text-primary" />
+                  {isEnglish ? 'Powered by Google Workspace' : 'مقدم بالتعاون مع Google Workspace'}
                 </p>
               </div>
             </div>
@@ -187,16 +187,16 @@ export default function StudentAcademicEmailPage() {
             </div>
           </div>
 
-          {/* Action Button to Outlook */}
+          {/* Action Button to Gmail */}
           {record.status === 'active' && (
             <div className="pt-2">
               <a
-                href="https://outlook.office.com"
+                href="https://mail.google.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/80 py-3.5 text-sm font-bold text-primary-foreground shadow-lg transition-all cursor-pointer"
               >
-                <span>{isEnglish ? 'Sign In to Outlook Web' : 'الدخول لعلبة الوارد (Outlook)'}</span>
+                <span>{isEnglish ? 'Sign In to Google Mail (Gmail)' : 'الدخول لبريد Google المؤسسي (Gmail)'}</span>
                 <ExternalLink className="h-4 w-4" />
               </a>
             </div>

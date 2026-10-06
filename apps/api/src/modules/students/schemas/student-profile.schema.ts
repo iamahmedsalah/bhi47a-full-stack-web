@@ -39,6 +39,9 @@ export class StudentProfile {
   @Prop({ trim: true })
   department?: string;
 
+  @Prop({ type: Number, min: 0, default: 0 })
+  academicWarnings?: number;
+
   @Prop({ required: true, trim: true })
   level!: string;
 

@@ -396,38 +396,38 @@ export function StudentQrScannerDialog({
 
         {/* Success View */}
         {checkInResult ? (
-          <div className="py-4 space-y-5 text-center">
+          <div className="py-4 space-y-5 text-center animate-fade-in">
             <div
-              className={`h-16 w-16 mx-auto rounded-full flex items-center justify-center shadow-sm border-2 ${
+              className={`h-20 w-20 mx-auto rounded-full flex items-center justify-center transition-all ${
                 checkInResult.status === "present"
-                  ? "bg-primary/10 text-primary border-primary/20"
-                  : "bg-amber-500/15 text-amber-400 border-amber-500/40"
+                  ? "bg-emerald-500/15 text-emerald-500 border-2 border-emerald-500/40 ring-4 ring-emerald-500/15 shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+                  : "bg-amber-500/15 text-amber-400 border-2 border-amber-500/40 ring-4 ring-amber-500/10 shadow-[0_0_25px_rgba(245,158,11,0.2)]"
               }`}
             >
               {checkInResult.status === "present" ? (
-                <CheckCircle2 className="h-9 w-9" />
+                <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-pulse" />
               ) : (
-                <Clock className="h-9 w-9" />
+                <Clock className="h-10 w-10 text-amber-400" />
               )}
             </div>
 
             <div className="space-y-1.5">
               <Badge
-                className={`text-xs px-3 py-1 font-bold inline-flex items-center gap-1.5 ${
+                className={`text-xs px-3 py-1 font-bold inline-flex items-center gap-1.5 shadow-xs ${
                   checkInResult.status === "present"
-                    ? "bg-primary/10 text-primary border-primary/20"
-                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/20 text-amber-400 border-amber-500/40"
                 }`}
               >
                 {checkInResult.status === "present" ? (
                   <>
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>{isAr ? "حاضر (في الموعد)" : "PRESENT"}</span>
+                    <span>{isAr ? "✓ حاضر (تم توثيق الحضور)" : "PRESENT"}</span>
                   </>
                 ) : (
                   <>
                     <Clock className="h-3.5 w-3.5" />
-                    <span>{isAr ? "حاضر (متأخر)" : "LATE"}</span>
+                    <span>{isAr ? "⏰ حاضر (متأخر)" : "LATE"}</span>
                   </>
                 )}
               </Badge>
@@ -439,7 +439,13 @@ export function StudentQrScannerDialog({
               </p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/60 text-xs space-y-2 text-start font-mono">
+            <div
+              className={`p-4 rounded-xl text-xs space-y-2 text-start font-mono border ${
+                checkInResult.status === "present"
+                  ? "bg-emerald-500/5 border-emerald-500/25"
+                  : "bg-secondary/30 border-border/60"
+              }`}
+            >
               <div className="flex justify-between text-muted-foreground">
                 <span>{isAr ? "نوع الجلسة:" : "Session Type:"}</span>
                 <span className="text-foreground capitalize font-bold">
@@ -448,7 +454,7 @@ export function StudentQrScannerDialog({
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>{isAr ? "وقت التسجيل:" : "Check-in Time:"}</span>
-                <span className="text-primary font-bold">
+                <span className="text-emerald-500 font-bold">
                   {new Date(checkInResult.checkedInAt).toLocaleTimeString(
                     isAr ? "ar-EG" : "en-US",
                     { hour: "2-digit", minute: "2-digit", second: "2-digit" },
@@ -471,9 +477,9 @@ export function StudentQrScannerDialog({
               </Button>
               <Button
                 onClick={() => onOpenChange(false)}
-                className="w-1/2 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs cursor-pointer shadow-sm"
+                className="w-1/2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-sm transition-all"
               >
-                {isAr ? "تم وإغلاق" : "Done & Close"}
+                {isAr ? "تم بنجاح وإغلاق" : "Done & Close"}
               </Button>
             </div>
           </div>
@@ -527,15 +533,41 @@ export function StudentQrScannerDialog({
 
                   {/* Clean Viewport Overlay */}
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <div className="relative h-44 w-44 rounded-2xl border-2 border-primary/80">
+                    <div
+                      className={`relative h-44 w-44 rounded-2xl transition-all duration-300 ${
+                        isSubmitting
+                          ? "border-2 border-emerald-500 shadow-[0_0_35px_rgba(16,185,129,0.7)]"
+                          : "border-2 border-primary/80 shadow-[0_0_15px_rgba(20,184,166,0.3)]"
+                      }`}
+                    >
                       {/* Subtle Laser Scanline */}
-                      <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent animate-[bounce_2s_infinite]" />
+                      <div
+                        className={`absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent ${
+                          isSubmitting ? "via-emerald-400" : "via-primary"
+                        } to-transparent animate-[bounce_2s_infinite]`}
+                      />
 
                       {/* Corner Accents */}
-                      <span className="absolute -top-1 -start-1 h-3.5 w-3.5 border-t-2 border-s-2 border-primary" />
-                      <span className="absolute -top-1 -end-1 h-3.5 w-3.5 border-t-2 border-e-2 border-primary" />
-                      <span className="absolute -bottom-1 -start-1 h-3.5 w-3.5 border-b-2 border-s-2 border-primary" />
-                      <span className="absolute -bottom-1 -end-1 h-3.5 w-3.5 border-b-2 border-e-2 border-primary" />
+                      <span
+                        className={`absolute -top-1 -start-1 h-3.5 w-3.5 border-t-2 border-s-2 ${
+                          isSubmitting ? "border-emerald-400" : "border-primary"
+                        }`}
+                      />
+                      <span
+                        className={`absolute -top-1 -end-1 h-3.5 w-3.5 border-t-2 border-e-2 ${
+                          isSubmitting ? "border-emerald-400" : "border-primary"
+                        }`}
+                      />
+                      <span
+                        className={`absolute -bottom-1 -start-1 h-3.5 w-3.5 border-b-2 border-s-2 ${
+                          isSubmitting ? "border-emerald-400" : "border-primary"
+                        }`}
+                      />
+                      <span
+                        className={`absolute -bottom-1 -end-1 h-3.5 w-3.5 border-b-2 border-e-2 ${
+                          isSubmitting ? "border-emerald-400" : "border-primary"
+                        }`}
+                      />
                     </div>
                   </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { GlassCard } from '@/components/ui/glass-card';
 import { cn } from '@/lib/cn';
@@ -26,6 +26,29 @@ export function FilterBar({
   children,
   className,
 }: FilterBarProps) {
+  const [localSearch, setLocalSearch] = useState(search);
+
+  // Synchronize internal state with incoming prop
+  useEffect(() => {
+    setLocalSearch(search);
+  }, [search]);
+
+  // Debounce notification back to parent
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localSearch !== search) {
+        onSearchChange(localSearch);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [localSearch, onSearchChange, search]);
+
+  const handleClear = () => {
+    setLocalSearch('');
+    onSearchChange('');
+  };
+
   return (
     <GlassCard className={cn('p-4', className)}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -34,11 +57,21 @@ export function FilterBar({
           <label className="sr-only">{searchPlaceholder}</label>
           <Input
             type="text"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
+            value={localSearch}
+            onChange={(event) => setLocalSearch(event.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full min-w-0 border-border bg-surface/50 pe-4 ps-11 text-sm text-foreground placeholder:text-muted-foreground hover:bg-surface/70 focus-visible:ring-1 focus-visible:ring-primary lg:min-w-56"
+            className="h-10 w-full min-w-0 border-border bg-surface/50 pe-10 ps-11 text-sm text-foreground placeholder:text-muted-foreground hover:bg-surface/70 focus-visible:ring-1 focus-visible:ring-primary lg:min-w-56"
           />
+          {localSearch && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="absolute end-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground cursor-pointer rounded-full hover:bg-secondary/80 transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {children && (

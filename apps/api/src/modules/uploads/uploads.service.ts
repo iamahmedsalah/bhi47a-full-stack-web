@@ -13,6 +13,7 @@ import { GradeImporter } from './importers/grade.importer';
 import { QuizImporter } from './importers/quiz.importer';
 import { AttendanceImporter } from './importers/attendance.importer';
 import { AcademicEmailImporter } from './importers/academic-email.importer';
+import { AcademicWarningImporter } from './importers/academic-warning.importer';
 
 const MAX_UPLOAD_ROWS = 5000;
 
@@ -38,6 +39,7 @@ export class UploadsService {
     quizImporter: QuizImporter,
     attendanceImporter: AttendanceImporter,
     academicEmailImporter: AcademicEmailImporter,
+    academicWarningImporter: AcademicWarningImporter,
   ) {
     const importers: Importer[] = [
       studentImporter,
@@ -46,6 +48,7 @@ export class UploadsService {
       quizImporter,
       attendanceImporter,
       academicEmailImporter,
+      academicWarningImporter,
     ];
     this.importerMap = new Map(importers.map((imp) => [imp.type, imp]));
   }

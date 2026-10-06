@@ -59,8 +59,8 @@ export function ExcelPreviewGrid({
       {/* 1. Summary KPI Stat Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {/* Total Rows */}
-        <div className="p-3 rounded-xl border border-border/70 bg-card/60 flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
+        <div className="p-3 rounded-squircle border border-border/70 bg-card/60 flex items-center gap-3">
+          <div className="p-2 rounded-squircle bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
             <FileSpreadsheet className="w-5 h-5" />
           </div>
           <div>
@@ -72,8 +72,8 @@ export function ExcelPreviewGrid({
         </div>
 
         {/* Valid Rows */}
-        <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+        <div className="p-3 rounded-squircle border border-emerald-500/20 bg-emerald-500/5 flex items-center gap-3">
+          <div className="p-2 rounded-squircle bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
@@ -89,7 +89,7 @@ export function ExcelPreviewGrid({
         {/* Issue Rows */}
         <div
           className={cn(
-            'p-3 rounded-xl border flex items-center gap-3',
+            'p-3 rounded-squircle border flex items-center gap-3',
             preview.invalidRows > 0
               ? 'border-rose-500/30 bg-rose-500/5'
               : 'border-border/70 bg-card/60',
@@ -97,7 +97,7 @@ export function ExcelPreviewGrid({
         >
           <div
             className={cn(
-              'p-2 rounded-lg shrink-0',
+              'p-2 rounded-squircle shrink-0',
               preview.invalidRows > 0
                 ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
                 : 'bg-muted text-muted-foreground',
@@ -127,8 +127,8 @@ export function ExcelPreviewGrid({
         </div>
 
         {/* Column Matching */}
-        <div className="p-3 rounded-xl border border-border/70 bg-card/60 flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
+        <div className="p-3 rounded-squircle border border-border/70 bg-card/60 flex items-center gap-3">
+          <div className="p-2 rounded-squircle bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>

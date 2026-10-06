@@ -136,6 +136,11 @@ function isInvalidCsrfError(error: AxiosError<ApiErrorPayload>) {
 api.interceptors.request.use((config) => {
   const headers = AxiosHeaders.from(config.headers);
 
+  // If payload is FormData, remove Content-Type so browser can set multipart boundary
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    headers.delete('content-type');
+  }
+
   if (typeof window !== 'undefined') {
     const locale = window.location.pathname.split('/')[1];
     if (locale === 'ar' || locale === 'en') {

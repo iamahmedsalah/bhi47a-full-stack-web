@@ -784,6 +784,40 @@ export const UPLOAD_CATALOGS: Record<UploadCatalogType, UploadCatalogConfig> = {
       },
     ],
   },
+  'academic-warnings': {
+    id: 'academic-warnings',
+    titleAr: 'الإنذارات الأكاديمية',
+    titleEn: 'Academic Warnings',
+    descAr: 'تحديث عدد الإنذارات الأكاديمية للطلاب الحاليين فقط.',
+    descEn: 'Update warning counts for existing students only. No account or enrollment data is changed.',
+    fields: [
+      {
+        key: 'studentCode',
+        labelAr: 'كود الطالب',
+        labelEn: 'Student Code',
+        required: true,
+        type: 'string',
+        aliases: ['studentcode', 'كود الطالب'],
+      },
+      {
+        key: 'academicWarnings',
+        labelAr: 'عدد الإنذارات الأكاديمية',
+        labelEn: 'Academic Warnings',
+        required: true,
+        type: 'number',
+        note: 'عدد صحيح غير سالب، حسب القائمة الرسمية المعتمدة.',
+        aliases: ['academicwarnings', 'academicwarningcount', 'warningcount', 'عدد الإنذارات الأكاديمية'],
+      },
+    ],
+    sampleDataAr: [
+      { studentCode: 'SAMPLE001', academicWarnings: 0 },
+      { studentCode: 'SAMPLE002', academicWarnings: 1 },
+    ],
+    sampleDataEn: [
+      { studentCode: 'SAMPLE001', academicWarnings: 0 },
+      { studentCode: 'SAMPLE002', academicWarnings: 1 },
+    ],
+  },
 };
 
 export const TEMPLATE_FILENAMES: Record<UploadCatalogType, { ar: string; en: string }> = {
@@ -811,6 +845,10 @@ export const TEMPLATE_FILENAMES: Record<UploadCatalogType, { ar: string; en: str
     ar: 'قالب_البريد_الأكاديمي.xlsx',
     en: 'Academic_Emails_Template.xlsx',
   },
+  'academic-warnings': {
+    ar: 'قالب_الإنذارات_الأكاديمية.xlsx',
+    en: 'Academic_Warnings_Template.xlsx',
+  },
 };
 
 export const CSV_TEMPLATE_FILENAMES: Record<UploadCatalogType, { ar: string; en: string }> = {
@@ -837,6 +875,10 @@ export const CSV_TEMPLATE_FILENAMES: Record<UploadCatalogType, { ar: string; en:
   'academic-emails': {
     ar: 'نموذج_البريد_الأكاديمي.csv',
     en: 'Academic_Emails_Template.csv',
+  },
+  'academic-warnings': {
+    ar: 'قالب_الإنذارات_الأكاديمية.csv',
+    en: 'Academic_Warnings_Template.csv',
   },
 };
 
@@ -1051,6 +1093,21 @@ export function validateCatalogRow(
           message: isAr
             ? `عدد الساعات المعتمدة يجب أن يكون رقماً موجباً منطقياً (القيمة: ${strVal})`
             : `Credit hours must be a valid positive number (given: ${strVal})`,
+          severity: 'error',
+          rawValue: rawVal,
+        });
+      }
+    } else if (field.key === 'academicWarnings') {
+      const count = Number(strVal);
+      if (!Number.isInteger(count) || count < 0) {
+        issues.push({
+          rowNumber,
+          field: field.key,
+          fieldLabel: isAr ? field.labelAr : field.labelEn,
+          code: 'INVALID_ACADEMIC_WARNINGS',
+          message: isAr
+            ? 'يجب أن يكون عدد الإنذارات رقمًا صحيحًا غير سالب.'
+            : 'Academic warnings must be a non-negative whole number.',
           severity: 'error',
           rawValue: rawVal,
         });

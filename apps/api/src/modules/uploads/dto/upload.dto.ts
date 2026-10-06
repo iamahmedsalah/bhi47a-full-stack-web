@@ -18,6 +18,7 @@ export class BatchUploadDto {
       'quizzes',
       'attendance',
       'academic-emails',
+      'academic-warnings',
     ],
   })
   @IsString()

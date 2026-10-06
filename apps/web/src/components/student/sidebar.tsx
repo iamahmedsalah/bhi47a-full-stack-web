@@ -67,7 +67,6 @@ export default function StudentSidebar() {
     { key: 'registration', href: `/${locale}/dashboard/registration`, icon: <BookOpenCheck className="h-5 w-5" /> },
     { key: 'quizzes', href: `/${locale}/dashboard/quizzes`, icon: <FileText className="h-5 w-5" /> },
     { key: 'results', href: `/${locale}/dashboard/results`, icon: <Award className="h-5 w-5" /> },
-    { key: 'academicEmail', href: `/${locale}/dashboard/academic-email`, icon: <Mail className="h-5 w-5" /> },
     { key: 'examSchedule', href: `/${locale}/dashboard/exam-schedule`, icon: <Calendar className="h-5 w-5" /> },
     { key: 'examPlace', href: `/${locale}/dashboard/exam-place`, icon: <MapPin className="h-5 w-5" /> },
     { key: 'complaints', href: `/${locale}/dashboard/complaints`, icon: <MessageCircle className="h-5 w-5" /> },

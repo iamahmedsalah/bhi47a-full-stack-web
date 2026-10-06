@@ -10,7 +10,10 @@ import {
   Min,
   Max,
   IsInt,
+  ValidateNested,
+  ValidateIf,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   COURSE_LEVEL_VALUES,
@@ -18,8 +21,36 @@ import {
   type CourseLevel,
   type Semester,
 } from '@student-portal/shared';
+import type { CourseCurriculum } from '../schemas/course.schema';
+
+export class CourseCurriculumDto implements CourseCurriculum {
+  @IsIn(['GENERAL', 'BIS', 'ACCOUNTING'])
+  department!: CourseCurriculum['department'];
+
+  @IsEnum(COURSE_LEVEL_VALUES)
+  academicLevel!: CourseLevel;
+
+  @IsEnum(SEMESTER_VALUES)
+  semester!: Semester;
+
+  @IsIn([
+    'required',
+    'elective',
+    'university_req',
+    'institute_req',
+    'specialization_req',
+  ])
+  type!: CourseCurriculum['type'];
+}
 
 export class CreateCourseDto {
+  @ApiPropertyOptional({ type: [CourseCurriculumDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CourseCurriculumDto)
+  curricula?: CourseCurriculumDto[];
+
   @ApiProperty({ example: 'برمجة الحاسب الآلي' })
   @IsString()
   @IsNotEmpty()
@@ -133,9 +164,45 @@ export class CreateCourseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'URL of the uploaded course curriculum/syllabus PDF',
+  })
+  @IsOptional()
+  @IsString()
+  syllabusPdfUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Original file name of the syllabus PDF',
+  })
+  @IsOptional()
+  @IsString()
+  syllabusPdfName?: string;
+
+  @ApiPropertyOptional({
+    description: 'User ID of the assigned doctor / course coordinator',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsOptional()
+  @IsString()
+  doctorId?: string;
+
+  @ApiPropertyOptional({
+    description: 'URL of the course cover book thumbnail image',
+  })
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
 }
 
 export class UpdateCourseDto {
+  @ApiPropertyOptional({ type: [CourseCurriculumDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CourseCurriculumDto)
+  curricula?: CourseCurriculumDto[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -248,6 +315,38 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'URL of the uploaded course curriculum/syllabus PDF',
+  })
+  @IsOptional()
+  @IsString()
+  syllabusPdfUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Original file name of the syllabus PDF',
+  })
+  @IsOptional()
+  @IsString()
+  syllabusPdfName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'User ID of the assigned doctor / course coordinator, or null to unassign',
+    example: '507f1f77bcf86cd799439011',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, val) => val !== null && val !== '')
+  @IsString()
+  doctorId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'URL of the course cover book thumbnail image',
+  })
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
 }
 
 export class QueryCourseDto {

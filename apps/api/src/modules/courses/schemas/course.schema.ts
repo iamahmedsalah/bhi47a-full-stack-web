@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import {
   COURSE_LEVEL_VALUES,
   SEMESTER_VALUES,
@@ -8,6 +8,15 @@ import {
 } from '@student-portal/shared';
 
 export type CourseDocument = Course & Document;
+
+export type CourseCurriculumDepartment = 'GENERAL' | 'BIS' | 'ACCOUNTING';
+
+export interface CourseCurriculum {
+  department: CourseCurriculumDepartment;
+  academicLevel: CourseLevel;
+  semester: Semester;
+  type: Course['type'];
+}
 
 @Schema({
   collection: 'courses',
@@ -34,6 +43,27 @@ export class Course {
 
   @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
+
+  @Prop({
+    type: [
+      {
+        department: {
+          type: String,
+          required: true,
+          enum: ['GENERAL', 'BIS', 'ACCOUNTING'],
+        },
+        academicLevel: {
+          type: String,
+          required: true,
+          enum: COURSE_LEVEL_VALUES,
+        },
+        semester: { type: String, required: true, enum: SEMESTER_VALUES },
+        type: { type: String, required: true },
+      },
+    ],
+    default: undefined,
+  })
+  curricula?: CourseCurriculum[];
 
   @Prop({ trim: true, maxlength: 2000 })
   description?: string;
@@ -85,6 +115,30 @@ export class Course {
 
   @Prop({ default: true })
   isActive!: boolean;
+
+  @Prop({ trim: true })
+  syllabusPdfUrl?: string;
+
+  @Prop({ trim: true })
+  syllabusPdfName?: string;
+
+  @Prop({ select: false })
+  syllabusPdfData?: string;
+
+  @Prop({ type: Date })
+  syllabusUpdatedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  doctorId?: Types.ObjectId;
+
+  @Prop({ trim: true })
+  doctorName?: string;
+
+  @Prop({ trim: true })
+  doctorNameAr?: string;
+
+  @Prop({ trim: true })
+  coverImageUrl?: string;
 }
 
 export const CourseSchema = SchemaFactory.createForClass(Course);

@@ -45,7 +45,11 @@ function extractPlaceholder(node: React.ReactNode): React.ReactNode {
   React.Children.forEach(node, (child) => {
     if (!React.isValidElement<{ placeholder?: React.ReactNode; children?: React.ReactNode }>(child)) return;
 
-    if (child.type === SelectValue) {
+    if (
+      child.type === SelectValue ||
+      (child.type as { displayName?: string })?.displayName === 'SelectValue' ||
+      'placeholder' in (child.props || {})
+    ) {
       placeholder = child.props.placeholder;
       return;
     }
@@ -65,7 +69,11 @@ function extractItems(node: React.ReactNode): CustomDropdownOption[] {
   React.Children.forEach(node, (child) => {
     if (!React.isValidElement<SelectItemMarkerProps & { children?: React.ReactNode }>(child)) return;
 
-    if (child.type === SelectItem) {
+    if (
+      child.type === SelectItem ||
+      (child.type as { displayName?: string })?.displayName === 'SelectItem' ||
+      (child.props && typeof (child.props as { value?: unknown }).value === 'string')
+    ) {
       items.push({
         value: child.props.value,
         label: child.props.children,
@@ -88,7 +96,11 @@ function findSelectPart<TProps>(
 
   React.Children.forEach(children, (child) => {
     if (result || !React.isValidElement<TProps>(child)) return;
-    if (child.type === type) {
+    if (
+      child.type === type ||
+      (child.type as { displayName?: string })?.displayName ===
+        (type as { displayName?: string })?.displayName
+    ) {
       result = child;
     }
   });

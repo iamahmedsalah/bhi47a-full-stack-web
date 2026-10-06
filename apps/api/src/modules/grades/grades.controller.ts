@@ -15,6 +15,7 @@ import {
   QueryGradeDto,
   PublishGradesDto,
   RecalculateAcademicProgressDto,
+  AuditAcademicWarningsDto,
   UpdateGradeDto,
 } from './dto/grade.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -109,6 +110,19 @@ export class GradesController {
       studentCode: dto.studentCode,
       dryRun: dto.dryRun,
       maxAllowedCarriedCourses: dto.maxAllowedCarriedCourses,
+    });
+  }
+
+  @Post('admin/grades/audit-warnings')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  @ApiOperation({
+    summary:
+      'Audit student CGPA under 2.00 threshold and update academic warnings',
+  })
+  async auditAcademicWarnings(@Body() dto: AuditAcademicWarningsDto) {
+    return this.gradesService.auditAcademicWarnings({
+      dryRun: dto.dryRun,
     });
   }
 }

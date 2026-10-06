@@ -38,6 +38,9 @@
   ATTENDANCE_SESSION_CLOSE: 'attendance.session_close',
   ATTENDANCE_MANUAL_MARK: 'attendance.manual_mark',
   ATTENDANCE_REPORTS: 'attendance.reports',
+  QUIZZES_READ: 'quizzes.read',
+  QUIZZES_WRITE: 'quizzes.write',
+  QUIZZES_SUBMISSIONS_READ: 'quizzes.submissions_read',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -88,6 +91,9 @@ export const STAFF_ASSIGNABLE_PERMISSIONS = [
   PERMISSIONS.ATTENDANCE_SESSION_CLOSE,
   PERMISSIONS.ATTENDANCE_MANUAL_MARK,
   PERMISSIONS.ATTENDANCE_REPORTS,
+  PERMISSIONS.QUIZZES_READ,
+  PERMISSIONS.QUIZZES_WRITE,
+  PERMISSIONS.QUIZZES_SUBMISSIONS_READ,
 ] as const satisfies readonly Permission[];
 
 export type StaffAssignablePermission =

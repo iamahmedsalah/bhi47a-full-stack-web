@@ -98,3 +98,31 @@ export async function recalculateAcademicProgress(options?: {
   );
   return response.data;
 }
+
+export interface AuditAcademicWarningsResult {
+  totalAudited: number;
+  warnedCount: number;
+  clearedCount: number;
+  goodStandingCount: number;
+  dryRun: boolean;
+  details: Array<{
+    studentId: string;
+    studentCode: string;
+    studentName: string;
+    gpa: number;
+    previousWarnings: number;
+    newWarnings: number;
+    status: 'WARNED' | 'CLEARED' | 'GOOD_STANDING';
+    isActionRequired: boolean;
+  }>;
+}
+
+export async function auditAcademicWarnings(options?: {
+  dryRun?: boolean;
+}): Promise<AuditAcademicWarningsResult> {
+  const response = await api.post<AuditAcademicWarningsResult>(
+    '/admin/grades/audit-warnings',
+    options ?? {},
+  );
+  return response.data;
+}

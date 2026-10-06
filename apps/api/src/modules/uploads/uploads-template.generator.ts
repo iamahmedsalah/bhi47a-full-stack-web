@@ -238,6 +238,7 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       'الحد الأدنى للمعدل',
       'أولوية التسجيل',
       'وصف المقرر',
+      'توزيع الخطة حسب القسم',
     ],
     headersEn: [
       'courseCode',
@@ -257,11 +258,12 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       'minimumGpa',
       'registrationPriority',
       'description',
+      'programCurricula',
     ],
     widths: [
-      16, 30, 28, 28, 12, 16, 24, 16, 18, 22, 20, 20, 20, 18, 18, 16, 34,
+      16, 30, 28, 28, 12, 16, 24, 16, 18, 22, 20, 20, 20, 18, 18, 16, 34, 52,
     ],
-    textColumns: [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 17],
+    textColumns: [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 17, 18],
     numberColumns: [8, 14, 15, 16],
     samplesAr: [
       [
@@ -643,6 +645,28 @@ export const TEMPLATE_DEFINITIONS: Record<string, TemplateDefinition> = {
       ['202601', 'Ahmed Mohamed Ali', 's202601@bhi.edu.eg', 'active'],
       ['202602', 'Sara Mahmoud Ibrahim', 's202602@bhi.edu.eg', 'active'],
       ['202603', 'Omar Khaled Abdelrahman', 's202603@bhi.edu.eg', 'active'],
+    ],
+  },
+  'academic-warnings': {
+    type: 'academic-warnings',
+    filenameAr: 'قالب_الإنذارات_الأكاديمية.xlsx',
+    filenameEn: 'Academic_Warnings_Template.xlsx',
+    sheetNameAr: 'الإنذارات الأكاديمية',
+    sheetNameEn: 'Academic Warnings',
+    headersAr: ['كود الطالب', 'عدد الإنذارات الأكاديمية'],
+    headersEn: ['studentCode', 'academicWarnings'],
+    widths: [20, 30],
+    textColumns: [1],
+    numberColumns: [2],
+    samplesAr: [
+      ['SAMPLE001', 0],
+      ['SAMPLE002', 1],
+      ['SAMPLE003', 2],
+    ],
+    samplesEn: [
+      ['SAMPLE001', 0],
+      ['SAMPLE002', 1],
+      ['SAMPLE003', 2],
     ],
   },
 };

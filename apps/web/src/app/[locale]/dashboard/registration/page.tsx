@@ -151,9 +151,9 @@ export default function CourseRegistrationPage() {
         setActiveSlipForm(data);
         setViewSlipOpen(true);
       } else if (action === 'download') {
-        await downloadRegistrationPdf(data);
+        await downloadRegistrationPdf(data, isEnglish ? 'en' : 'ar');
       } else {
-        if (!openRegistrationPrintView(data, action)) {
+        if (!openRegistrationPrintView(data, action, isEnglish ? 'en' : 'ar')) {
           toast.error(isEnglish ? 'Allow pop-ups to open the registration sheet' : 'يرجى السماح بالنوافذ المنبثقة لفتح استمارة التسجيل');
         }
       }

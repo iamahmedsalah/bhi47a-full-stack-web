@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-squircle border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center justify-center rounded-squircle border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-h-[1.375rem] h-auto w-fit leading-none",
   {
     variants: {
       variant: {
@@ -12,8 +12,8 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
-        success: "bg-green-500/15 border-green-500/20 text-green-400 hover:bg-green-500/25",
-        warning: "bg-yellow-500/15 border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/25",
+        success: "bg-emerald-500/15 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/25",
+        warning: "bg-amber-500/15 border-amber-500/25 text-amber-400 hover:bg-amber-500/25",
       },
     },
     defaultVariants: {

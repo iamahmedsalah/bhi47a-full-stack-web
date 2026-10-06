@@ -51,6 +51,12 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
     nameEn: 'Courses Management',
   },
   {
+    pattern: /^\/[^/]+\/admin\/quizzes/,
+    permission: PERMISSIONS.QUIZZES_READ,
+    nameAr: 'إدارة الاختبارات الإلكترونية (الكويزات)',
+    nameEn: 'Course Quizzes Management',
+  },
+  {
     pattern: /^\/[^/]+\/admin\/grades/,
     permission: PERMISSIONS.GRADES_READ,
     nameAr: 'إدارة الدرجات والنتائج',

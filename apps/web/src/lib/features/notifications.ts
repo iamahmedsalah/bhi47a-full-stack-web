@@ -9,8 +9,9 @@ export interface NotificationLog {
   targetType: NotificationTarget;
   targetLevel?: string;
   targetStudentId?: {
-    name: string;
-    studentCode: string;
+    _id?: string;
+    name?: string;
+    studentCode?: string;
   };
   sentBy?: {
     name: string;
@@ -19,6 +20,15 @@ export interface NotificationLog {
   deliveryStatus?: 'pending' | 'queued' | 'sent' | 'failed' | 'skipped';
   pushSuccessCount?: number;
   pushFailureCount?: number;
+  readCount?: number;
+  readBy?: Array<{
+    userId?: {
+      _id?: string;
+      name?: string;
+      studentCode?: string;
+    };
+    readAt?: string;
+  }>;
   createdAt: string;
 }
 
@@ -36,6 +46,11 @@ export interface StudentNotification {
     courseId?: string;
     examType?: string;
     status?: string;
+    titleAr?: string;
+    titleEn?: string;
+    bodyAr?: string;
+    bodyEn?: string;
+    [key: string]: any;
   };
 }
 
@@ -62,7 +77,7 @@ export async function sendNotification(input: SendNotificationInput) {
 
 export async function listStudentNotifications() {
   const response = await api.get<PaginatedResponse<StudentNotification>>(
-    `/students/me/notifications?_t=${Date.now()}`,
+    '/students/me/notifications',
   );
   return response.data;
 }
@@ -91,6 +106,13 @@ export async function deleteNotification(id: string) {
 export async function clearAllReadNotifications() {
   const response = await api.delete<{ modifiedCount: number }>(
     '/students/me/notifications/clear-read',
+  );
+  return response.data;
+}
+
+export async function deleteAdminNotification(id: string) {
+  const response = await api.delete<{ message: string; id: string }>(
+    `/admin/notifications/${id}`,
   );
   return response.data;
 }
