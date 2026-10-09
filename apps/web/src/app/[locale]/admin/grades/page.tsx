@@ -362,10 +362,13 @@ function GradesPageContent() {
         return (
           <TableCell className="p-4 font-mono">
             <div className="flex items-center gap-2">
+              <span className="font-bold text-foreground">
+                <bdi>{item.grade} / {item.maxGrade}</bdi>
+              </span>
               <span className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}>
                 {letter}
               </span>
-              <span className="text-xs text-muted-foreground font-mono font-medium">
+              <span className="text-[11px] text-muted-foreground font-mono">
                 ({pct}%)
               </span>
             </div>
@@ -510,6 +513,10 @@ function GradesPageContent() {
           {
             key: "midterm",
             label: isAr ? "أعمال السنة والميدتيرم" : "Midterm & Coursework",
+          },
+          {
+            key: "quiz",
+            label: isAr ? "الكويزات" : "Quizzes",
           },
         ].map((tab) => (
           <Button
