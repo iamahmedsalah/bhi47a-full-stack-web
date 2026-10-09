@@ -230,12 +230,12 @@ export class AttendanceCheckInService {
             ...deviceOrFingerprintConditions[0],
           }
         : deviceOrFingerprintConditions.length > 1
-        ? {
-            sessionId: session._id,
-            studentId: { $ne: studentObjectId },
-            $or: deviceOrFingerprintConditions,
-          }
-        : null;
+          ? {
+              sessionId: session._id,
+              studentId: { $ne: studentObjectId },
+              $or: deviceOrFingerprintConditions,
+            }
+          : null;
 
     const [studentProfile, isEnrolled, existingRecord, deviceUsedByOther] =
       await Promise.all([
