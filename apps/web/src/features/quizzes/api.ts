@@ -20,6 +20,8 @@ export interface QuizItem {
   courseId: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   creatorId?: string;
   creatorName?: string;
   academicYear?: string;
@@ -67,6 +69,8 @@ export interface StudentQuizViewItem {
   courseId: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   creatorName?: string;
   durationMinutes: number;
   totalMarks: number;
@@ -95,6 +99,8 @@ export interface TakeQuizResponse {
   courseId: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   durationMinutes: number;
   totalMarks: number;
   passingMarks: number;

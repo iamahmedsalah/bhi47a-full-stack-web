@@ -12,7 +12,8 @@ import {
   markNotificationRead, 
   markAllNotificationsRead, 
   deleteNotification, 
-  clearAllReadNotifications 
+  clearAllReadNotifications,
+  getLocalizedNotification,
 } from '@/lib/features/notifications';
 import { useAuth } from '@/providers/auth-provider';
 import { cn } from '@/lib/cn';
@@ -142,7 +143,12 @@ export default function StudentHeader() {
     if (!item.isRead) {
       readMutation.mutate(item._id);
     }
-    setSelectedNotification(item);
+    const loc = getLocalizedNotification(item, isAr);
+    setSelectedNotification({
+      ...item,
+      title: loc.title,
+      body: loc.body,
+    });
     setDetailsOpen(true);
     setIsOpen(false);
   };
@@ -287,101 +293,104 @@ export default function StudentHeader() {
                 ) : (
                   <div className="space-y-3 relative">
                     <AnimatePresence initial={false} mode="popLayout">
-                      {filteredItems.map((item) => (
-                        <motion.div
-                          key={item._id}
-                          layout
-                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.2 } }}
-                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                        >
-                          <div
-                            onClick={() => handleNotificationClick(item)}
-                            className={cn(
-                              "p-4 bg-card/45 backdrop-blur-sm transition-all flex gap-3 border rounded-xl text-start cursor-pointer hover:bg-card/70 hover:border-primary/30",
-                              !item.isRead
-                                ? "border-primary/45 shadow-[0_0_12px_rgba(15,118,110,0.06)]"
-                                : "border-border shadow-sm"
-                            )}
+                      {filteredItems.map((item) => {
+                        const loc = getLocalizedNotification(item, isAr);
+                        return (
+                          <motion.div
+                            key={item._id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.2 } }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                           >
                             <div
+                              onClick={() => handleNotificationClick(item)}
                               className={cn(
-                                "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                                "p-3.5 transition-all flex gap-3 border rounded-xl text-start cursor-pointer",
                                 !item.isRead
-                                  ? "bg-primary/20 text-primary"
-                                  : "bg-secondary/60 text-muted-foreground"
+                                  ? "bg-card border-primary/50 shadow-xs hover:border-primary hover:bg-card/90"
+                                  : "bg-secondary/40 border-border/80 shadow-2xs hover:bg-secondary/70 hover:border-border"
                               )}
                             >
-                              <Bell className="h-4 w-4" />
-                            </div>
-                            
-                            <div className="min-w-0 flex-1 space-y-2">
-                              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                                <h3 className="text-xs font-bold leading-snug text-foreground flex flex-wrap items-center gap-1.5">
-                                  <bdi>{item.title}</bdi>
-                                  {!item.isRead && (
-                                    <span className="inline-flex rounded-full bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[8px] font-bold text-primary uppercase">
-                                      {isAr ? 'جديد' : 'New'}
-                                    </span>
-                                  )}
-                                </h3>
+                              <div
+                                className={cn(
+                                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors border",
+                                  !item.isRead
+                                    ? "bg-primary/15 text-primary border-primary/25"
+                                    : "bg-muted text-muted-foreground border-border/50"
+                                )}
+                              >
+                                <Bell className="h-4 w-4" />
                               </div>
-                              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-                                <bdi>{item.body}</bdi>
-                              </p>
                               
-                              <div className="flex items-center justify-between mt-1 text-[9px] text-muted pr-1">
-                                <time className="font-mono flex items-center gap-1 font-semibold">
-                                  <Calendar className="h-3 w-3" />
-                                  <bdi>{new Date(item.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}</bdi>
-                                </time>
+                              <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                  <h3 className="text-xs font-bold leading-snug text-foreground flex flex-wrap items-center gap-1.5">
+                                    <bdi>{loc.title}</bdi>
+                                    {!item.isRead && (
+                                      <span className="inline-flex rounded-full bg-primary/15 border border-primary/30 px-1.5 py-0.5 text-[8px] font-bold text-primary uppercase">
+                                        {isAr ? 'جديد' : 'New'}
+                                      </span>
+                                    )}
+                                  </h3>
+                                </div>
+                                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground font-normal">
+                                  <bdi>{loc.body}</bdi>
+                                </p>
                                 
-                                {/* Mark As Read Action (Unread Tab) */}
-                                {!item.isRead && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      readMutation.mutate(item._id);
-                                    }}
-                                    disabled={readMutation.isPending}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold rounded-squircle bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all cursor-pointer"
-                                  >
-                                    {readMutation.isPending && readMutation.variables === item._id ? (
-                                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                    ) : (
-                                      <Check className="h-2.5 w-2.5" />
-                                    )}
-                                    <span>{isAr ? 'تمت القراءة' : 'Mark as read'}</span>
-                                  </button>
-                                )}
+                                <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40 text-[10px] text-muted-foreground pr-1">
+                                  <time className="font-mono flex items-center gap-1 font-medium">
+                                    <Calendar className="h-3 w-3 opacity-80" />
+                                    <bdi>{new Date(item.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}</bdi>
+                                  </time>
+                                  
+                                  {/* Mark As Read Action (Unread Tab) */}
+                                  {!item.isRead && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        readMutation.mutate(item._id);
+                                      }}
+                                      disabled={readMutation.isPending}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold rounded-squircle bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all cursor-pointer"
+                                    >
+                                      {readMutation.isPending && readMutation.variables === item._id ? (
+                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                      ) : (
+                                        <Check className="h-2.5 w-2.5" />
+                                      )}
+                                      <span>{isAr ? 'تمت القراءة' : 'Mark as read'}</span>
+                                    </button>
+                                  )}
 
-                                {/* Delete Action (Read Tab) */}
-                                {item.isRead && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteMutation.mutate(item._id);
-                                    }}
-                                    disabled={deleteMutation.isPending}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold rounded-squircle bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer"
-                                    title={isAr ? 'حذف' : 'Delete'}
-                                  >
-                                    {deleteMutation.isPending && deleteMutation.variables === item._id ? (
-                                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-2.5 w-2.5" />
-                                    )}
-                                    <span>{isAr ? 'حذف' : 'Delete'}</span>
-                                  </button>
-                                )}
+                                  {/* Delete Action (Read Tab) */}
+                                  {item.isRead && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteMutation.mutate(item._id);
+                                      }}
+                                      disabled={deleteMutation.isPending}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold rounded-squircle bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-all cursor-pointer"
+                                      title={isAr ? 'حذف' : 'Delete'}
+                                    >
+                                      {deleteMutation.isPending && deleteMutation.variables === item._id ? (
+                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-2.5 w-2.5" />
+                                      )}
+                                      <span>{isAr ? 'حذف' : 'Delete'}</span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </motion.div>
-                      ))}
+                          </motion.div>
+                        );
+                      })}
                     </AnimatePresence>
                   </div>
                 )}

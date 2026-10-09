@@ -109,6 +109,8 @@ interface CourseFormDialogProps {
   tCommon: ReturnType<typeof useTranslations>;
 }
 
+const MAX_COURSE_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB Vercel serverless payload limit
+
 function CourseFormDialog({
   open,
   onOpenChange,
@@ -219,6 +221,25 @@ function CourseFormDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (syllabusFile && syllabusFile.size > MAX_COURSE_FILE_SIZE_BYTES) {
+      setError(
+        locale === 'ar'
+          ? `حجم ملف المنهج (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (4 ميجابايت). يرجى ضغط ملف الـ PDF قبل الرفع.`
+          : `Syllabus PDF file size (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB serverless limit. Please compress the file before uploading.`,
+      );
+      return;
+    }
+
+    if (coverImageFile && coverImageFile.size > MAX_COURSE_FILE_SIZE_BYTES) {
+      setError(
+        locale === 'ar'
+          ? `حجم صورة الغلاف (${(coverImageFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (4 ميجابايت).`
+          : `Cover image file size (${(coverImageFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       await onSubmit({
@@ -394,11 +415,27 @@ function CourseFormDialog({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
+                  if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
+                    setError(
+                      locale === 'ar'
+                        ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت). يرجى ضغط ملف الـ PDF أولاً.`
+                        : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB serverless limit. Please compress the PDF first.`,
+                    );
+                    e.target.value = '';
+                    setSyllabusFile(null);
+                    return;
+                  }
+                  setError('');
                   setSyllabusFile(file);
                 }
               }}
               className="text-xs file:mr-3 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
             />
+            <p className="text-[11px] text-muted-foreground/80">
+              {locale === 'ar'
+                ? 'الحد الأقصى لحجم الملف: 4 ميجابايت (PDF فقط)'
+                : 'Maximum file size: 4 MB (PDF only)'}
+            </p>
             {currentSyllabusName && !syllabusFile && (
               <p className="font-mono text-[11px] text-muted-foreground">
                 {locale === 'ar' ? `الملف الحالي: ${currentSyllabusName}` : `Current file: ${currentSyllabusName}`}
@@ -447,6 +484,17 @@ function CourseFormDialog({
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
+                        setError(
+                          locale === 'ar'
+                            ? `حجم الصورة (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
+                            : `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+                        );
+                        e.target.value = '';
+                        setCoverImageFile(null);
+                        return;
+                      }
+                      setError('');
                       setCoverImageFile(file);
                     }
                   }}
@@ -567,14 +615,30 @@ function CoursesPageContent() {
     const newCourseId = res.data?._id;
     if (newCourseId) {
       if (syllabusFile) {
-        const fd = new FormData();
-        fd.append('file', syllabusFile);
-        await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
+        try {
+          const fd = new FormData();
+          fd.append('file', syllabusFile);
+          await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
+        } catch (uploadErr) {
+          toast.error(
+            locale === 'ar'
+              ? 'تم إضافة المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
+              : 'Course added, but syllabus upload failed (ensure file is under 4MB and Cloudinary is configured)',
+          );
+        }
       }
       if (coverImageFile) {
-        const fd = new FormData();
-        fd.append('file', coverImageFile);
-        await api.post(`/admin/courses/${newCourseId}/cover-image`, fd);
+        try {
+          const fd = new FormData();
+          fd.append('file', coverImageFile);
+          await api.post(`/admin/courses/${newCourseId}/cover-image`, fd);
+        } catch (uploadErr) {
+          toast.error(
+            locale === 'ar'
+              ? 'تم إضافة المادة ولكن فشل رفع صورة الغلاف'
+              : 'Course added, but cover image upload failed',
+          );
+        }
       }
     }
     toast.success(
@@ -594,14 +658,30 @@ function CoursesPageContent() {
     const { syllabusFile, coverImageFile, ...coursePayload } = data;
     await api.patch(`/admin/courses/${selectedCourse._id}`, coursePayload);
     if (syllabusFile) {
-      const fd = new FormData();
-      fd.append('file', syllabusFile);
-      await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
+      try {
+        const fd = new FormData();
+        fd.append('file', syllabusFile);
+        await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
+      } catch (uploadErr) {
+        toast.error(
+          locale === 'ar'
+            ? 'تم تحديث المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
+            : 'Course updated, but syllabus upload failed (ensure file is under 4MB and Cloudinary is configured)',
+        );
+      }
     }
     if (coverImageFile) {
-      const fd = new FormData();
-      fd.append('file', coverImageFile);
-      await api.post(`/admin/courses/${selectedCourse._id}/cover-image`, fd);
+      try {
+        const fd = new FormData();
+        fd.append('file', coverImageFile);
+        await api.post(`/admin/courses/${selectedCourse._id}/cover-image`, fd);
+      } catch (uploadErr) {
+        toast.error(
+          locale === 'ar'
+            ? 'تم تحديث المادة ولكن فشل رفع صورة الغلاف'
+            : 'Course updated, but cover image upload failed',
+        );
+      }
     }
     toast.success(
       locale === 'ar' ? 'تم تحديث المادة بنجاح' : 'Course updated successfully',

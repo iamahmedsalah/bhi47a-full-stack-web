@@ -261,15 +261,28 @@ export class AuthLoginService {
     };
   }
 
-  async startGoogleLink(userId: string, email: string) {
+  async startGoogleLink(
+    userId: string,
+    email: string,
+    acceptLanguage?: string,
+  ) {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
+    const lang: 'ar' | 'en' = isEn ? 'en' : 'ar';
+
     const user = await this.usersService.findById(userId);
     if (user.role !== 'student') {
-      throw new UnauthorizedException('Only student accounts can link Google');
+      throw new UnauthorizedException(
+        isEn
+          ? 'Only student accounts can link Google'
+          : 'حسابات الطلاب فقط يمكنها ربط Google',
+      );
     }
 
     if (user.googleLinkedAt && !user.googleLinkPending) {
       throw new BadRequestException(
-        'Google account is already linked. Unlink it before linking another account.',
+        isEn
+          ? 'Google account is already linked. Unlink it before linking another account.'
+          : 'حساب Google مربوط بالفعل بهذا الحساب. قم بإلغاء الربط أولاً إن أردت تغييره.',
       );
     }
 
@@ -277,14 +290,19 @@ export class AuthLoginService {
       await this.usersService.prepareGoogleLink(userId, email);
 
     const emailHtml = renderOtpEmailTemplate({
-      title: 'Google Account Verification',
-      preheader: 'Verify your Google account link for Student Portal',
+      title: isEn
+        ? 'Google Account Link Verification'
+        : 'تأكيد ربط حساب Google',
+      preheader: isEn
+        ? 'Verify your Google account link for Student Portal'
+        : 'استخدم رمز التحقق لإكمال ربط حساب Google ببوابة الطالب',
       greetingName: user.name,
       arabicMessage:
-        'لقد طلبت ربط حساب Google الخاص بك ببوابة الطالب. استخدم رمز التحقق التالي لإكمال الربط.',
+        'لقد طلبت ربط حساب Google الخاص بك ببوابة الطالب. استخدم رمز التحقق التالي لإكمال عملية الربط:',
       englishMessage:
-        'You requested to link your Google account to the student portal. Use the verification code below to complete the link.',
+        'You requested to link your Google account to the student portal. Use the verification code below to complete the link:',
       otp,
+      lang,
     });
 
     let emailDeliveryStatus: 'sent' | 'failed' = 'sent';
@@ -293,7 +311,9 @@ export class AuthLoginService {
     try {
       await this.emailsService.send({
         to: [email],
-        subject: 'تأكيد ربط حساب Google | Verify Google Link',
+        subject: isEn
+          ? 'Google Account Verification Code | Student Portal'
+          : 'رمز تأكيد ربط حساب Google | بوابة الطالب',
         html: emailHtml,
         event: 'google_linking_otp',
       });
@@ -311,7 +331,9 @@ export class AuthLoginService {
       emailDeliveryStatus,
       devOtp,
       status: 'ready',
-      message: 'تم إرسال رمز التحقق (OTP) إلى بريد Google الخاص بك بنجاح',
+      message: isEn
+        ? 'A 6-digit verification code (OTP) was sent to your Google account'
+        : 'تم إرسال رمز التحقق (OTP) إلى بريد Google الخاص بك بنجاح',
     };
   }
 

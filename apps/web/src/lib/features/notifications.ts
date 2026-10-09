@@ -116,3 +116,60 @@ export async function deleteAdminNotification(id: string) {
   );
   return response.data;
 }
+
+/**
+ * Cleanly localizes notification title & body to avoid displaying mixed/duplicate
+ * Arabic & English strings in the notification card.
+ */
+export function getLocalizedNotification(
+  item: {
+    title: string;
+    body: string;
+    meta?: {
+      titleAr?: string;
+      titleEn?: string;
+      bodyAr?: string;
+      bodyEn?: string;
+      [key: string]: any;
+    };
+  },
+  isAr: boolean,
+): { title: string; body: string } {
+  // 1. Meta takes highest priority
+  let title = isAr ? item.meta?.titleAr : item.meta?.titleEn;
+  let body = isAr ? item.meta?.bodyAr : item.meta?.bodyEn;
+
+  // 2. If title wasn't found in meta, inspect delimiter ' | '
+  if (!title) {
+    if (item.title && item.title.includes(' | ')) {
+      const parts = item.title.split(' | ');
+      const arPart = parts.find((p) => /[\u0600-\u06FF]/.test(p));
+      const enPart = parts.find((p) => !/[\u0600-\u06FF]/.test(p));
+      title = (isAr ? arPart : enPart) || parts[0];
+    } else {
+      title = item.title;
+    }
+  }
+
+  // 3. If body wasn't found in meta, inspect line breaks with Arabic/English separation
+  if (!body) {
+    if (item.body && item.body.includes('\n')) {
+      const lines = item.body.split('\n').map((l) => l.trim()).filter(Boolean);
+      const arLines = lines.filter((l) => /[\u0600-\u06FF]/.test(l));
+      const enLines = lines.filter((l) => !/[\u0600-\u06FF]/.test(l));
+
+      if (arLines.length > 0 && enLines.length > 0) {
+        body = (isAr ? arLines : enLines).join('\n');
+      } else {
+        body = item.body;
+      }
+    } else {
+      body = item.body;
+    }
+  }
+
+  return {
+    title: title || item.title || '',
+    body: body || item.body || '',
+  };
+}

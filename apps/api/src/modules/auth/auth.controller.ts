@@ -100,8 +100,9 @@ export class AuthController {
   async startGoogleLink(
     @CurrentUser('_id') userId: string,
     @Body() dto: StartGoogleLinkDto,
+    @Headers('accept-language') acceptLanguage?: string,
   ) {
-    return this.authService.startGoogleLink(userId, dto.email);
+    return this.authService.startGoogleLink(userId, dto.email, acceptLanguage);
   }
 
   @Delete('google/link')

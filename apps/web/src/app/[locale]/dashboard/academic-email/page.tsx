@@ -194,10 +194,11 @@ export default function StudentAcademicEmailPage() {
                 href="https://mail.google.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/80 py-3.5 text-sm font-bold text-primary-foreground shadow-lg transition-all cursor-pointer"
+                className="flex w-full items-center justify-center gap-2 rounded-squircle bg-gradient-to-r from-teal-700 via-teal-600 to-teal-700 hover:from-teal-600 hover:to-teal-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-teal-900/20 border border-teal-500/30 transition-all cursor-pointer"
               >
+                <Mail className="h-4.5 w-4.5 text-teal-100" />
                 <span>{isEnglish ? 'Sign In to Google Mail (Gmail)' : 'الدخول لبريد Google المؤسسي (Gmail)'}</span>
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4 opacity-80" />
               </a>
             </div>
           )}
@@ -229,16 +230,16 @@ export default function StudentAcademicEmailPage() {
               <span className="w-5 h-5 rounded-full bg-secondary text-foreground flex items-center justify-center shrink-0 font-bold">2</span>
               <p className="mt-0.5">
                 {isEnglish
-                  ? 'When signing in for the first time on Microsoft Portal, you will be prompted to register your mobile phone number or alternative email for password recovery.'
-                  : 'عند دخولك للمرة الأولى لموقع مايكروسوفت، سيُطلب منك إدخال رقم هاتفك المحمول أو بريدك البديل لتأمين الحساب واستعادة كلمة المرور لاحقاً.'}
+                  ? 'When signing in for the first time on Google Workspace, you may be prompted to accept terms and set an updated secure password.'
+                  : 'عند دخولك للمرة الأولى لموقع Google Workspace، سيُطلب منك الموافقة على البنود وتحديث كلمة المرور لضمان أمان حسابك.'}
               </p>
             </div>
             <div className="flex items-start gap-2">
               <span className="w-5 h-5 rounded-full bg-secondary text-foreground flex items-center justify-center shrink-0 font-bold">3</span>
               <p className="mt-0.5">
                 {isEnglish
-                  ? 'With this academic email, you are entitled to free access to Microsoft Office 365 applications, including Word, Excel, Teams, and PowerPoint.'
-                  : 'هذا البريد يمنحك ترخيصاً مجانياً لاستخدام تطبيقات أوفيس 365 التعليمية بالكامل مثل (Teams, Word, Excel, PowerPoint) مجاناً.'}
+                  ? 'With this academic email, you have full access to Google Workspace for Education (Gmail, Drive, Meet, Classroom, Docs, Sheets).'
+                  : 'هذا البريد يمنحك وصولاً تعليمياً كاملاً لخدمات Google Workspace (Gmail, Drive, Meet, Classroom, Docs, Sheets).'}
               </p>
             </div>
           </div>

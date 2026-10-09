@@ -366,13 +366,14 @@ export class StudentsService {
         greetingName: profile.fullName,
         studentCode: profile.studentCode,
         temporaryPassword: displayPasswordHint,
-        loginUrl: `${process.env.APP_URL || 'http://localhost:3000'}/ar/login`,
+        loginUrl: `${process.env.APP_URL || 'https://bhi47a-support.vercel.app'}/ar/login`,
+        lang: 'ar',
       });
 
       try {
         await this.emailsService.send({
           to: [emailTo],
-          subject: 'إعادة تعيين كلمة المرور | Password Reset',
+          subject: 'بيانات الدخول الأكاديمية وكلمة المرور | بوابة الطالب',
           html: emailHtml,
         });
       } catch (emailErr) {

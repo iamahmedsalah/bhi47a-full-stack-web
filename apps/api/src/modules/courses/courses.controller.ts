@@ -29,6 +29,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { PERMISSIONS } from '@student-portal/shared';
+import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
 
 @ApiTags('Courses')
 @Controller()
@@ -98,7 +99,7 @@ export class CoursesController {
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max for PDF syllabus
+      limits: { fileSize: MAX_HTTP_UPLOAD_SIZE_BYTES }, // 4MB max for PDF syllabus (Vercel serverless limit)
       fileFilter: (_req, file, callback) => {
         if (
           file.mimetype === 'application/pdf' ||
@@ -147,7 +148,7 @@ export class CoursesController {
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max for cover image
+      limits: { fileSize: MAX_HTTP_UPLOAD_SIZE_BYTES }, // 4MB max for cover image (Vercel serverless limit)
       fileFilter: (_req, file, callback) => {
         if (
           file.mimetype.startsWith('image/') ||

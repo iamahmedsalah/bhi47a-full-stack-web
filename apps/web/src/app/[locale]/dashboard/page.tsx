@@ -794,7 +794,7 @@ export default function StudentDashboard() {
                         value={academicEmailQuery.data.academicEmail}
                         label={locale === "ar" ? "نسخ" : "Copy"}
                         successMessage={locale === "ar" ? "تم نسخ البريد الأكاديمي" : "Email copied"}
-                        className="h-7 rounded-lg bg-card hover:bg-secondary border border-border px-2.5 text-xs font-bold"
+                        className="h-7 rounded-md bg-card border border-border/80 px-2.5 text-xs font-semibold text-foreground shadow-xs hover:border-primary/50"
                       />
                     </div>
                   </div>
@@ -831,11 +831,11 @@ export default function StudentDashboard() {
               href="https://mail.google.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 h-10 text-xs font-bold rounded-squircle bg-primary hover:bg-primary/90 text-primary-foreground transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              className="flex-1 h-10 px-3 text-xs font-bold rounded-squircle bg-gradient-to-r from-teal-700 via-teal-600 to-teal-700 hover:from-teal-600 hover:to-teal-500 text-white shadow-md hover:shadow-teal-900/30 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-teal-500/30 whitespace-nowrap"
             >
-              <Mail className="w-3.5 h-3.5" />
-              <span>{locale === "ar" ? "دخول بريد Google (Gmail)" : "Sign In to Google Mail"}</span>
-              <ExternalLink className="w-3 h-3" />
+              <Mail className="w-4 h-4 text-teal-100 shrink-0" />
+              <span className="font-bold">{locale === "ar" ? "دخول بريد Google (Gmail)" : "Sign In to Google Mail"}</span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-80 shrink-0" />
             </a>
             <Link href={`/${locale}/dashboard/profile`}>
               <button className="h-10 px-4 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">

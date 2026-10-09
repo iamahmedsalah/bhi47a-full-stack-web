@@ -148,6 +148,12 @@ export function useGoogleSignIn({
       return;
     }
 
+    if (!clientId.endsWith('.apps.googleusercontent.com')) {
+      console.warn(
+        `[Google Identity] Warning: NEXT_PUBLIC_GOOGLE_CLIENT_ID does not end with ".apps.googleusercontent.com". Google OAuth requires an OAuth 2.0 Web Client ID generated in Google Cloud Console. Current value appears invalid: "${clientId}".`,
+      );
+    }
+
     const state = getGoogleIdentityState();
     if (state.initializedClientId === clientId) {
       queueMicrotask(() => setIsInitialized(true));

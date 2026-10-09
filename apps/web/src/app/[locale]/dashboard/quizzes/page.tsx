@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -199,10 +199,15 @@ function TakeQuizModal({
       });
 
       setSubmissionResult(res);
-      toast.success(res.message || (isAr ? 'تم تسليم الاختبار بنجاح' : 'Quiz submitted successfully'));
+      toast.success(isAr ? 'تم تسليم الاختبار وتصحيحه بنجاح' : 'Quiz submitted and graded successfully');
       onSubmitted();
     } catch (err: any) {
-      toast.error(getApiErrorMessage(err, isAr ? 'فشل تسليم الاختبار' : 'Failed to submit quiz'));
+      const backendMsg = err?.response?.data?.message;
+      let errorMsg = getApiErrorMessage(err, isAr ? 'فشل تسليم الاختبار' : 'Failed to submit quiz');
+      if (backendMsg === 'لقد قمت بتسليم هذا الاختبار مسبقاً' && !isAr) {
+        errorMsg = 'You have already submitted this quiz';
+      }
+      toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -352,7 +357,7 @@ function TakeQuizModal({
                     {quiz?.title}
                   </DialogTitle>
                   <p className="text-xs text-primary font-mono mt-0.5">
-                    {quiz?.courseCode} - {quiz?.courseName}
+                    {quiz?.courseCode} - {isAr ? (quiz?.courseNameAr || quiz?.courseName) : (quiz?.courseNameEn || quiz?.courseName)}
                   </p>
                 </div>
 
@@ -439,8 +444,9 @@ function TakeQuizModal({
 export default function StudentQuizzesPage() {
   const t = useTranslations('studentPortal');
   const tCommon = useTranslations('common');
-  const isEnglish = tCommon('search') === 'Search...';
-  const isAr = !isEnglish;
+  const locale = useLocale();
+  const isAr = locale === 'ar';
+  const isEnglish = !isAr;
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<'online' | 'history'>('online');
@@ -589,7 +595,7 @@ export default function StudentQuizzesPage() {
                             {quiz.title}
                           </h3>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {quiz.courseName}
+                            {isAr ? (quiz.courseNameAr || quiz.courseName) : (quiz.courseNameEn || quiz.courseName)}
                           </p>
                           {quiz.description && (
                             <p className="text-xs text-muted-foreground/80 mt-1 line-clamp-2">

@@ -1,5 +1,5 @@
 const INSTITUTE_LOGO_URL =
-  'https://res.cloudinary.com/dkocrxpu4/image/upload/w_160,h_160,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp';
+  'https://res.cloudinary.com/dkocrxpu4/image/upload/w_160,h_160,c_limit/v1770685642/logo_k8bbtk.png';
 
 function escapeHtml(value: string | undefined | null): string {
   if (!value) return '';
@@ -15,59 +15,77 @@ function escapeHtml(value: string | undefined | null): string {
 function renderBaseEmailLayout({
   preheader,
   headerTitle,
-  headerSubtitle = 'بوابة الطالب الإلكترونية | Student Portal',
+  headerSubtitle,
   contentHtml,
   footerHtml,
+  lang = 'ar',
 }: {
   preheader: string;
   headerTitle: string;
   headerSubtitle?: string;
   contentHtml: string;
   footerHtml?: string;
+  lang?: 'ar' | 'en';
 }) {
+  const isAr = lang === 'ar';
   const safePreheader = escapeHtml(preheader);
   const safeHeaderTitle = escapeHtml(headerTitle);
-  const safeHeaderSubtitle = escapeHtml(headerSubtitle);
 
-  return `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+  const defaultSubtitle = isAr
+    ? 'بوابة الطالب الإلكترونية الرسمية'
+    : 'Official Student Portal';
+  const safeHeaderSubtitle = escapeHtml(headerSubtitle || defaultSubtitle);
+
+  const instituteName = isAr
+    ? 'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات'
+    : 'Higher Institute for Advanced Administrative Sciences & Computer';
+
+  const defaultFooter = isAr
+    ? `
+      <div>المعهد العالي للعلوم الإدارية المتقدمة والحاسبات &copy; ${new Date().getFullYear()}</div>
+      <div style="margin-top:6px;color:#94a3b8;font-size:10px;">هذه الرسالة رسمية وآلية من نظام البوابة الطلابية، يرجى عدم الرد المباشر عليها.</div>
+    `
+    : `
+      <div>Higher Institute for Advanced Administrative Sciences &amp; Computer &copy; ${new Date().getFullYear()}</div>
+      <div style="margin-top:6px;color:#94a3b8;font-size:10px;">This is an automated official email from the Student Portal system. Please do not reply directly.</div>
+    `;
+
+  return `<!DOCTYPE html>
+<html lang="${isAr ? 'ar' : 'en'}" dir="${isAr ? 'rtl' : 'ltr'}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
   <title>${safeHeaderTitle}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#06232b;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background-color:#04262f;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#0f172a;">
   <!-- Preheader text hidden in client inbox list -->
-  <div style="display:none;font-size:1px;color:#06232b;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+  <div style="display:none;font-size:1px;color:#04262f;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
     ${safePreheader}
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#06232b;padding:32px 12px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#04262f;padding:36px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.3);border:1px solid #134e4a;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.35);border:1px solid #0f766e;">
           <!-- Institute Header Banner -->
           <tr>
-            <td style="background:linear-gradient(135deg, #05262e 0%, #0f766e 100%);padding:28px 24px;text-align:center;color:#ffffff;">
+            <td style="background-color:#063b46;background:linear-gradient(135deg, #04262f 0%, #064e5b 55%, #0f766e 100%);padding:32px 24px;text-align:center;color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <img src="${INSTITUTE_LOGO_URL}" alt="شعار المعهد" width="68" height="68" style="display:block;margin:0 auto 12px;border-radius:10px;object-fit:contain;" />
+                    <img src="${INSTITUTE_LOGO_URL}" alt="${isAr ? 'شعار المعهد' : 'Institute Logo'}" width="64" height="64" style="display:block;margin:0 auto 12px;border-radius:12px;object-fit:contain;background-color:rgba(255,255,255,0.08);padding:4px;" />
                   </td>
                 </tr>
                 <tr>
                   <td align="center">
-                    <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#99f6e4;text-transform:uppercase;margin-bottom:4px;">
-                      المعهد العالي للعلوم الإدارية المتقدمة والحاسبات
+                    <div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#99f6e4;margin-bottom:6px;">
+                      ${instituteName}
                     </div>
-                    <div style="font-size:10px;color:#cbd5e1;letter-spacing:0.05em;margin-bottom:12px;">
-                      Higher Institute for Advanced Administrative Sciences &amp; Computer
-                    </div>
-                    <h1 style="margin:0;font-size:20px;font-weight:800;color:#ffffff;line-height:1.4;">
+                    <h1 style="margin:0 0 6px 0;font-size:20px;font-weight:800;color:#ffffff;line-height:1.4;">
                       ${safeHeaderTitle}
                     </h1>
-                    <div style="margin-top:6px;font-size:11px;color:#a7f3d0;font-weight:600;">
+                    <div style="font-size:11px;color:#a7f3d0;font-weight:600;">
                       ${safeHeaderSubtitle}
                     </div>
                   </td>
@@ -78,21 +96,15 @@ function renderBaseEmailLayout({
 
           <!-- Email Content Body -->
           <tr>
-            <td style="padding:28px 30px;background-color:#ffffff;color:#1e293b;">
+            <td style="padding:32px 30px;background-color:#ffffff;color:#0f172a;line-height:1.7;">
               ${contentHtml}
             </td>
           </tr>
 
           <!-- Official Institute Footer -->
           <tr>
-            <td style="background-color:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px;line-height:1.6;">
-              ${
-                footerHtml ||
-                `
-                <div>المعهد العالي للعلوم الإدارية المتقدمة والحاسبات &copy; ${new Date().getFullYear()}</div>
-                <div style="margin-top:4px;color:#94a3b8;">هذه الرسالة آلية من نظام البوابة الطلابية، يرجى عدم الرد المباشر عليها.</div>
-              `
-              }
+            <td style="background-color:#f8fafc;padding:22px 24px;border-top:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px;line-height:1.6;">
+              ${footerHtml || defaultFooter}
             </td>
           </tr>
         </table>
@@ -100,20 +112,21 @@ function renderBaseEmailLayout({
     </tr>
   </table>
 </body>
-</html>
-  `;
+</html>`;
 }
 
 // ─── 1. OTP Verification Email Template ─────────────────────────────────
 
 export interface OtpTemplateInput {
-  title: string;
-  preheader: string;
+  title?: string;
+  preheader?: string;
   greetingName: string;
-  arabicMessage: string;
-  englishMessage: string;
+  arabicMessage?: string;
+  englishMessage?: string;
+  message?: string;
   otp: string;
   footerNote?: string;
+  lang?: 'ar' | 'en';
 }
 
 export function renderOtpEmailTemplate({
@@ -122,74 +135,90 @@ export function renderOtpEmailTemplate({
   greetingName,
   arabicMessage,
   englishMessage,
+  message,
   otp,
-  footerNote = 'هذا الرمز صالح لمدة 15 دقيقة فقط. | This verification code expires in 15 minutes.',
+  footerNote,
+  lang = 'ar',
 }: OtpTemplateInput): string {
+  const isAr = lang === 'ar';
   const safeName = escapeHtml(greetingName);
-  const safeArabicMessage = escapeHtml(arabicMessage);
-  const safeEnglishMessage = escapeHtml(englishMessage);
   const safeOtp = escapeHtml(otp.split('').join(' ')); // e.g. "5 2 2 5 4 0"
-  const safeFooterNote = escapeHtml(footerNote);
+
+  const defaultTitle = isAr
+    ? 'رمز التحقق من الحساب'
+    : 'Account Verification Code';
+  const finalTitle = title || defaultTitle;
+
+  const defaultPreheader = isAr
+    ? 'استخدم رمز التحقق لتأكيد حسابك في بوابة الطالب'
+    : 'Use your verification code to confirm your Student Portal account';
+  const finalPreheader = preheader || defaultPreheader;
+
+  const bodyText = isAr
+    ? arabicMessage ||
+      message ||
+      'لقد تم طلب رمز تحقق لحسابك في بوابة الطالب. استخدم الرمز التالي لإكمال العملية:'
+    : englishMessage ||
+      message ||
+      'You requested a verification code for your Student Portal account. Use the code below to complete your request:';
+
+  const safeBodyText = escapeHtml(bodyText);
+
+  const otpHeader = isAr ? 'رمز التحقق السريع' : 'VERIFICATION CODE';
+  const otpExpiry = isAr
+    ? '⏱️ صالح لمدة 15 دقيقة فقط'
+    : '⏱️ Valid for 15 minutes only';
+
+  const securityNotice = isAr
+    ? '🛡️ <strong>تنبيه أمني هام:</strong> لا تشارك هذا الرمز السري مع أي شخص. موظفو إدارة المعهد لن يطلبوا هذا الرمز نهائياً. إذا لم تقم بطلب هذا الرمز، يرجى تجاهل الرسالة وتأمين حسابك.'
+    : '🛡️ <strong>Important Security Notice:</strong> Never share this verification code with anyone. Institute staff will never request your code. If you did not initiate this request, please disregard this email and secure your account.';
 
   const contentHtml = `
-    <!-- Arabic Section (RTL) -->
-    <div dir="rtl" style="text-align:right;margin-bottom:20px;">
-      <p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#0f172a;">
-        مرحباً ${safeName}،
+    <div style="text-align:${isAr ? 'right' : 'left'};">
+      <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#0f172a;">
+        ${isAr ? `مرحباً ${safeName}،` : `Hello ${safeName},`}
       </p>
       <p style="margin:0;font-size:13px;line-height:1.8;color:#334155;">
-        ${safeArabicMessage}
+        ${safeBodyText}
       </p>
     </div>
 
     <!-- OTP Display Box -->
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;">
       <tr>
         <td align="center">
-          <div style="background-color:#ecfeff;border:2px dashed #0d9488;border-radius:14px;padding:20px 24px;text-align:center;max-width:320px;">
-            <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:6px;">
-              رمز التحقق | VERIFICATION CODE
+          <div style="background-color:#f0fdfa;border:2px dashed #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:320px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:8px;">
+              ${otpHeader}
             </div>
-            <div style="font-family:Consolas, 'Courier New', monospace;font-size:32px;font-weight:900;letter-spacing:10px;color:#0f2e35;margin:8px 0;text-shadow:0 1px 2px rgba(0,0,0,0.1);">
+            <div style="font-family:Consolas, 'Courier New', monospace;font-size:32px;font-weight:900;letter-spacing:8px;color:#042f2e;margin:6px 0;text-shadow:0 1px 1px rgba(0,0,0,0.05);" dir="ltr">
               ${safeOtp}
             </div>
-            <div style="font-size:11px;color:#0f766e;font-weight:600;margin-top:6px;">
-              ⏱️ صالح لمدة 15 دقيقة فقط
+            <div style="font-size:11px;color:#0d9488;font-weight:600;margin-top:8px;">
+              ${otpExpiry}
             </div>
           </div>
         </td>
       </tr>
     </table>
 
-    <!-- English Section (LTR) -->
-    <div dir="ltr" style="text-align:left;margin-top:20px;padding-top:16px;border-top:1px solid #f1f5f9;">
-      <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0f172a;">
-        Hello ${safeName},
-      </p>
-      <p style="margin:0;font-size:13px;line-height:1.8;color:#475569;">
-        ${safeEnglishMessage}
-      </p>
-    </div>
-
     <!-- Security Warning -->
-    <div style="margin-top:24px;padding:12px 16px;background-color:#fef2f2;border-radius:10px;border-left:4px solid #ef4444;text-align:start;">
-      <div style="font-size:11px;color:#991b1b;line-height:1.6;">
-        🛡️ <strong>تنبيه أمني / Security Notice:</strong> لا تشارك هذا الرمز مع أي شخص. موظفو المعهد لن يطلبوا رمزك السري إطلاقاً. إذا لم تطلب هذا الرمز، يرجى تجاهل الرسالة وتأمين حسابك.
+    <div style="margin-top:22px;padding:14px 18px;background-color:#fff7ed;border-radius:10px;border-${isAr ? 'right' : 'left'}:4px solid #f97316;text-align:${isAr ? 'right' : 'left'};">
+      <div style="font-size:11px;color:#9a3412;line-height:1.6;">
+        ${securityNotice}
       </div>
     </div>
   `;
 
   return renderBaseEmailLayout({
-    preheader,
-    headerTitle: title,
-    headerSubtitle: 'رمز التحقق السريع | One-Time Password',
+    preheader: finalPreheader,
+    headerTitle: finalTitle,
+    headerSubtitle: isAr
+      ? 'رمز التحقق السريع (OTP)'
+      : 'One-Time Verification Code (OTP)',
     contentHtml,
-    footerHtml: `
-      <div>${safeFooterNote}</div>
-      <div style="margin-top:6px;font-size:10px;color:#94a3b8;">
-        المعهد العالي للعلوم الإدارية المتقدمة والحاسبات &copy; ${new Date().getFullYear()}
-      </div>
-    `,
+    footerHtml: footerNote ? `<div>${escapeHtml(footerNote)}</div>` : undefined,
+    lang,
   });
 }
 
@@ -200,26 +229,54 @@ export interface PasswordResetTemplateInput {
   studentCode: string;
   temporaryPassword: string;
   loginUrl?: string;
+  lang?: 'ar' | 'en';
 }
 
 export function renderPasswordResetEmailTemplate({
   greetingName,
   studentCode,
   temporaryPassword,
-  loginUrl = 'http://localhost:3000/ar/login',
+  loginUrl = 'https://bhi47a-support.vercel.app/ar/login',
+  lang = 'ar',
 }: PasswordResetTemplateInput): string {
+  const isAr = lang === 'ar';
   const safeName = escapeHtml(greetingName);
   const safeCode = escapeHtml(studentCode);
   const safePassword = escapeHtml(temporaryPassword);
 
+  const preheader = isAr
+    ? `تمت إعادة تعيين كلمة المرور لحسابك في البوابة (${studentCode})`
+    : `Your Student Portal account password has been reset (${studentCode})`;
+
+  const headerTitle = isAr
+    ? 'إعادة تعيين كلمة المرور'
+    : 'Password Reset Confirmation';
+
+  const headerSubtitle = isAr
+    ? 'بيانات الدخول الأكاديمية الرسمية'
+    : 'Official Academic Login Credentials';
+
+  const codeLabel = isAr ? 'الكود الأكاديمي للطلب:' : 'Student Academic Code:';
+  const passLabel = isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:';
+  const buttonLabel = isAr
+    ? 'تسجيل الدخول إلى البوابة'
+    : 'Sign In to Student Portal';
+
+  const introText = isAr
+    ? 'تمت إعادة تعيين كلمة المرور الخاصة بحسابك في بوابة الطالب بنجاح بواسطة إدارة شؤون الطلاب. يمكنك استخدام البيانات التالية لتسجيل الدخول:'
+    : 'Your Student Portal account password has been successfully reset by the Student Affairs administration. Use the credentials below to sign in:';
+
+  const securityWarning = isAr
+    ? '⚠️ <strong>ملاحظة هامة:</strong> يتطلب منك النظام تعيين كلمة مرور جديدة قوية فور تسجيل الدخول لضمان أمان حسابك وسجلاتك الأكاديمية.'
+    : '⚠️ <strong>Important Security Notice:</strong> The system will prompt you to set a new strong password immediately upon your first sign-in.';
+
   const contentHtml = `
-    <!-- Arabic Notice (RTL) -->
-    <div dir="rtl" style="text-align:right;margin-bottom:20px;">
+    <div style="text-align:${isAr ? 'right' : 'left'};">
       <p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#0f172a;">
-        مرحباً ${safeName}،
+        ${isAr ? `مرحباً ${safeName}،` : `Hello ${safeName},`}
       </p>
       <p style="margin:0 0 12px;font-size:13px;line-height:1.8;color:#334155;">
-        تمت إعادة تعيين كلمة المرور الخاصة بحسابك في بوابة الطالب بنجاح بواسطة إدارة شؤون الطلاب. يمكنك استخدام البيانات التالية لتسجيل الدخول:
+        ${introText}
       </p>
     </div>
 
@@ -227,16 +284,16 @@ export function renderPasswordResetEmailTemplate({
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:20px 0;">
       <tr>
         <td align="center">
-          <div style="background-color:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:20px 24px;text-align:start;max-width:380px;">
+          <div style="background-color:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:20px 24px;text-align:${isAr ? 'right' : 'left'};max-width:380px;">
             <div style="margin-bottom:12px;">
-              <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">الكود الأكاديمي / Student Code:</span>
-              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;background:#ffffff;padding:6px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
+              <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">${codeLabel}</span>
+              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
                 ${safeCode}
               </div>
             </div>
             <div>
-              <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">كلمة المرور المؤقتة / Temporary Password:</span>
-              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f766e;margin-top:4px;background:#ffffff;padding:6px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
+              <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">${passLabel}</span>
+              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f766e;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
                 ${safePassword}
               </div>
             </div>
@@ -245,36 +302,27 @@ export function renderPasswordResetEmailTemplate({
       </tr>
     </table>
 
-    <!-- English Notice (LTR) -->
-    <div dir="ltr" style="text-align:left;margin-top:16px;">
-      <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#334155;">
-        Your password has been reset by the administration.
-      </p>
-      <p style="margin:0;font-size:12px;color:#64748b;line-height:1.6;">
-        You will be required to choose a new secure password upon your first sign-in.
-      </p>
-    </div>
-
     <!-- CTA Button -->
-    <div style="text-align:center;margin:28px 0 16px;">
-      <a href="${loginUrl}" target="_blank" style="display:inline-block;background-color:#0f766e;color:#ffffff;font-size:13px;font-weight:700;padding:12px 28px;border-radius:10px;text-decoration:none;box-shadow:0 4px 10px rgba(15,118,110,0.3);">
-        تسجيل الدخول إلى البوابة | Login to Portal
+    <div style="text-align:center;margin:28px 0 18px;">
+      <a href="${loginUrl}" target="_blank" style="display:inline-block;background-color:#0d9488;color:#ffffff;font-size:13px;font-weight:700;padding:12px 30px;border-radius:10px;text-decoration:none;box-shadow:0 4px 12px rgba(13,148,136,0.35);">
+        ${buttonLabel}
       </a>
     </div>
 
     <!-- Security Warning -->
-    <div style="margin-top:20px;padding:12px 16px;background-color:#fffbeb;border-radius:10px;border-left:4px solid #f59e0b;text-align:start;">
+    <div style="margin-top:20px;padding:12px 16px;background-color:#fffbeb;border-radius:10px;border-${isAr ? 'right' : 'left'}:4px solid #f59e0b;text-align:${isAr ? 'right' : 'left'};">
       <div style="font-size:11px;color:#92400e;line-height:1.6;">
-        ⚠️ <strong>ملاحظة هامة:</strong> يتطلب النظام تعيين كلمة مرور جديدة قوية فور تسجيل الدخول لضمان أمان حسابك وسجلاتك الأكاديمية.
+        ${securityWarning}
       </div>
     </div>
   `;
 
   return renderBaseEmailLayout({
-    preheader: `تمت إعادة تعيين كلمة المرور لحسابك في البوابة (${studentCode})`,
-    headerTitle: 'إعادة تعيين كلمة المرور | Password Reset',
-    headerSubtitle: 'بيانات الدخول الأكاديمية | Account Credentials',
+    preheader,
+    headerTitle,
+    headerSubtitle,
     contentHtml,
+    lang,
   });
 }
 
@@ -287,32 +335,45 @@ export interface NotificationAlertTemplateInput {
   greetingName?: string;
   portalActionUrl?: string;
   portalActionLabel?: string;
+  lang?: 'ar' | 'en';
 }
 
 export function renderNotificationAlertEmailTemplate({
   title,
   body,
-  categoryLabel = 'تنبيه أكاديمي رسمي',
-  greetingName = 'عزيزي الطالب / عزيزتي الطالبة',
+  categoryLabel,
+  greetingName,
   portalActionUrl,
-  portalActionLabel = 'عرض التفاصيل بالبوابة',
+  portalActionLabel,
+  lang = 'ar',
 }: NotificationAlertTemplateInput): string {
+  const isAr = lang === 'ar';
   const safeTitle = escapeHtml(title);
   const safeBody = escapeHtml(body);
-  const safeCategory = escapeHtml(categoryLabel);
-  const safeName = escapeHtml(greetingName);
+  const defaultCategory = isAr
+    ? 'تنبيه أكاديمي رسمي'
+    : 'Official Academic Notice';
+  const safeCategory = escapeHtml(categoryLabel || defaultCategory);
+  const defaultGreeting = isAr
+    ? 'عزيزي الطالب / عزيزتي الطالبة'
+    : 'Dear Student';
+  const safeName = escapeHtml(greetingName || defaultGreeting);
+  const defaultAction = isAr
+    ? 'عرض التفاصيل بالبوابة'
+    : 'View Details on Portal';
+  const safeAction = escapeHtml(portalActionLabel || defaultAction);
 
   const contentHtml = `
-    <div dir="rtl" style="text-align:right;">
-      <div style="display:inline-block;background-color:#ecfeff;border:1px solid #99f6e4;color:#0f766e;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px;">
+    <div style="text-align:${isAr ? 'right' : 'left'};">
+      <div style="display:inline-block;background-color:#f0fdfa;border:1px solid #99f6e4;color:#0f766e;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px;">
         📢 ${safeCategory}
       </div>
 
       <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#0f172a;">
-        مرحباً ${safeName}،
+        ${isAr ? `مرحباً ${safeName}،` : `Hello ${safeName},`}
       </p>
 
-      <div style="background-color:#f8fafc;border-right:4px solid #0f766e;border-radius:10px;padding:18px 20px;margin:16px 0;">
+      <div style="background-color:#f8fafc;border-${isAr ? 'right' : 'left'}:4px solid #0d9488;border-radius:10px;padding:18px 20px;margin:16px 0;">
         <h2 style="margin:0 0 10px;font-size:16px;font-weight:800;color:#0f172a;line-height:1.5;">
           ${safeTitle}
         </h2>
@@ -326,8 +387,8 @@ export function renderNotificationAlertEmailTemplate({
       portalActionUrl
         ? `
       <div style="text-align:center;margin:28px 0 10px;">
-        <a href="${portalActionUrl}" target="_blank" style="display:inline-block;background-color:#0f766e;color:#ffffff;font-size:13px;font-weight:700;padding:12px 28px;border-radius:10px;text-decoration:none;box-shadow:0 4px 10px rgba(15,118,110,0.3);">
-          ${escapeHtml(portalActionLabel)}
+        <a href="${portalActionUrl}" target="_blank" style="display:inline-block;background-color:#0d9488;color:#ffffff;font-size:13px;font-weight:700;padding:12px 28px;border-radius:10px;text-decoration:none;box-shadow:0 4px 10px rgba(13,148,136,0.3);">
+          ${safeAction}
         </a>
       </div>
     `
@@ -337,8 +398,11 @@ export function renderNotificationAlertEmailTemplate({
 
   return renderBaseEmailLayout({
     preheader: title,
-    headerTitle: 'إشعار أكاديمي هام | Academic Notice',
-    headerSubtitle: 'إدارة شؤون الطلاب والامتحانات',
+    headerTitle: isAr ? 'إشعار أكاديمي هام' : 'Important Academic Notice',
+    headerSubtitle: isAr
+      ? 'إدارة شؤون الطلاب والامتحانات'
+      : 'Student Affairs & Examination Office',
     contentHtml,
+    lang,
   });
 }

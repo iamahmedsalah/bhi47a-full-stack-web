@@ -34,8 +34,8 @@ export class AuthService {
     return this.loginService.googleLogin(credential);
   }
 
-  startGoogleLink(userId: string, email: string) {
-    return this.loginService.startGoogleLink(userId, email);
+  startGoogleLink(userId: string, email: string, acceptLanguage?: string) {
+    return this.loginService.startGoogleLink(userId, email, acceptLanguage);
   }
 
   unlinkGoogle(userId: string) {

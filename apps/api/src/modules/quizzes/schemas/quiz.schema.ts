@@ -51,6 +51,12 @@ export class Quiz {
   @Prop({ trim: true, required: true })
   courseName!: string;
 
+  @Prop({ trim: true })
+  courseNameAr?: string;
+
+  @Prop({ trim: true })
+  courseNameEn?: string;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   creatorId!: Types.ObjectId;
 

@@ -134,22 +134,29 @@ export class AuthPasswordService {
     user.resetPasswordExpireAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
+    const lang: 'ar' | 'en' = isEn ? 'en' : 'ar';
     const emailHtml = renderOtpEmailTemplate({
-      title: 'Password Recovery',
-      preheader:
-        'Use this verification code to reset your Student Portal password',
+      title: isEn
+        ? 'Password Recovery Verification'
+        : 'رمز استعادة كلمة المرور',
+      preheader: isEn
+        ? 'Use this verification code to reset your Student Portal password'
+        : 'استخدم رمز التحقق التالي لإعادة تعيين كلمة مرور بوابة الطالب الخاصة بك',
       greetingName: user.name,
       arabicMessage:
-        'لقد طلبت استعادة كلمة المرور الخاصة بك. استخدم رمز التحقق التالي لإكمال إعادة التعيين.',
+        'لقد طلبت استعادة كلمة المرور الخاصة بحسابك في بوابة الطالب. استخدم رمز التحقق التالي لإكمال إعادة التعيين:',
       englishMessage:
-        'You requested to recover your password. Use the verification code below to complete the reset.',
+        'You requested to recover your password on the Student Portal. Use the verification code below to complete the reset:',
       otp,
+      lang,
     });
 
     try {
       await this.emailsService.send({
         to: [emailTo],
-        subject: 'رمز استعادة كلمة المرور | Password Recovery OTP',
+        subject: isEn
+          ? 'Password Recovery Verification Code | Student Portal'
+          : 'رمز استعادة كلمة المرور | بوابة الطالب',
         html: emailHtml,
         event: 'password_reset_otp',
       });

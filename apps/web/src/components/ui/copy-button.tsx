@@ -44,10 +44,10 @@ export function CopyButton({
       type="button"
       onClick={handleCopy}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all',
+        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs cursor-pointer',
         copied
-          ? 'border-success/30 bg-success/10 text-success'
-          : 'border-border text-muted hover:border-primary/30 hover:text-primary',
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500'
+          : 'border-border/80 bg-background/80 text-foreground hover:border-primary/50 hover:bg-background hover:text-primary',
         className,
       )}
     >
@@ -56,7 +56,7 @@ export function CopyButton({
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
-      {label && <span>{label}</span>}
+      {label && <span className="font-semibold">{label}</span>}
     </button>
   );
 }

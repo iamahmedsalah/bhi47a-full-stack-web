@@ -112,6 +112,8 @@ export class QuizzesService {
       courseId: new Types.ObjectId(dto.courseId),
       courseCode: course.code,
       courseName: course.nameAr || course.name,
+      courseNameAr: course.nameAr || course.name,
+      courseNameEn: course.name || course.nameAr,
       creatorId: new Types.ObjectId(user._id),
       creatorName: user.name,
       totalMarks,
@@ -368,7 +370,7 @@ export class QuizzesService {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName creatorName durationMinutes totalMarks passingMarks startsAt endsAt questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -404,6 +406,8 @@ export class QuizzesService {
         courseId: quiz.courseId,
         courseCode: quiz.courseCode,
         courseName: quiz.courseName,
+        courseNameAr: quiz.courseNameAr,
+        courseNameEn: quiz.courseNameEn,
         creatorName: quiz.creatorName,
         durationMinutes: quiz.durationMinutes,
         totalMarks: quiz.totalMarks,
@@ -470,6 +474,8 @@ export class QuizzesService {
       courseId: quiz.courseId,
       courseCode: quiz.courseCode,
       courseName: quiz.courseName,
+      courseNameAr: quiz.courseNameAr,
+      courseNameEn: quiz.courseNameEn,
       durationMinutes: quiz.durationMinutes,
       totalMarks: quiz.totalMarks,
       passingMarks: quiz.passingMarks,
