@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
-import { getApiErrorMessage } from "@/lib/api";
+import { getApiErrorDetails, getApiErrorMessage } from "@/lib/api";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -20,7 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { ArrowRight, UserCircle, Loader2, Clock } from "lucide-react";
+import {
+  ArrowRight,
+  UserCircle,
+  Loader2,
+  Clock,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import { STUDENT_PASSWORD_MAX_LENGTH } from "@student-portal/shared";
 import { useAuthStore } from "@/store/auth-store";
 import { Footer } from "@/components/ui/footer";
@@ -87,22 +94,70 @@ function StudentLoginContent() {
     control,
     name: ["studentCode", "password"],
   });
+  const [googleAuthNotice, setGoogleAuthNotice] = useState<{
+    title: string;
+    description: string;
+    type: "not_linked" | "pending" | "error";
+  } | null>(null);
+
   const googlePromptShownRef = useRef(false);
   const { renderButton, scriptLoaded, isInitialized, prompt } = useGoogleSignIn(
     {
       locale,
       onSuccess: async (credential) => {
         setLoading(true);
+        setGoogleAuthNotice(null);
         try {
           await login("google", { credential }, { returnUrl });
         } catch (err: unknown) {
-          toast.error(getApiErrorMessage(err, t("loginError")));
+          const errDetails = getApiErrorDetails(err);
+          const rawMessage = getApiErrorMessage(err, t("loginError"));
+
+          if (
+            errDetails.code === "GOOGLE_ACCOUNT_NOT_LINKED" ||
+            rawMessage.includes("غير مرتبط") ||
+            rawMessage.toLowerCase().includes("not linked")
+          ) {
+            const title =
+              locale === "ar"
+                ? "حساب Google غير مرتبط بالنظام"
+                : "Google Account Not Linked";
+            const description =
+              locale === "ar"
+                ? "هذا البريد غير مرتبط بأي حساب طالب مسجل بعد. يرجى تسجيل الدخول بكود الطالب والرقم القومي في النموذج أعلاه، ثم ربط حساب Google من صفحة الملف الشخصي لتمكين الدخول السريع."
+                : "This Google account is not linked to any registered student. Please log in using your Student Code and Password/National ID above, then link your Google account from your Profile page for fast 1-click access.";
+            setGoogleAuthNotice({ title, description, type: "not_linked" });
+            toast.error(title, { description, duration: 6000 });
+          } else if (
+            errDetails.code === "GOOGLE_LINK_PENDING" ||
+            rawMessage.includes("معلق") ||
+            rawMessage.toLowerCase().includes("pending")
+          ) {
+            const title =
+              locale === "ar"
+                ? "تأكيد ربط حساب Google قيد الانتظار"
+                : "Google Link Pending Verification";
+            const description =
+              locale === "ar"
+                ? "تم طلب ربط هذا الحساب ولكن لم يتم تأكيد رمز التحقق (OTP) بعد. يرجى تسجيل الدخول بكود الطالب وإتمام التحقق في الملف الشخصي."
+                : "Google linking is pending verification. Please sign in with your Student Code and verify the OTP in your Profile.";
+            setGoogleAuthNotice({ title, description, type: "pending" });
+            toast.error(title, { description, duration: 6000 });
+          } else {
+            toast.error(rawMessage);
+          }
         } finally {
           setLoading(false);
         }
       },
     },
   );
+
+  useEffect(() => {
+    if (googleAuthNotice) {
+      setGoogleAuthNotice(null);
+    }
+  }, [studentCodeVal, passwordVal]);
 
   const [buttonWidth, setButtonWidth] = useState<string>("320");
 
@@ -466,6 +521,30 @@ function StudentLoginContent() {
                 {locale === "ar" ? "أو" : "OR"}
               </span>
             </div>
+
+            {/* Google Unlinked Account Friendly Validation Notice */}
+            {googleAuthNotice && (
+              <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100 py-3 animate-in fade-in slide-in-from-top-2 duration-200 text-start">
+                <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-amber-900 dark:text-amber-200">
+                      {googleAuthNotice.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setGoogleAuthNotice(null)}
+                      className="text-muted-foreground hover:text-foreground text-xs cursor-pointer p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <AlertDescription className="text-xs leading-relaxed text-muted-foreground dark:text-amber-200/90">
+                    {googleAuthNotice.description}
+                  </AlertDescription>
+                </div>
+              </Alert>
+            )}
 
             {/* Google Login Button */}
             <div className="flex justify-center w-full min-h-11">

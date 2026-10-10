@@ -213,15 +213,21 @@ export class AuthLoginService {
       googleEmail: googleAccount.email,
     });
     if (!user) {
-      throw new UnauthorizedException(
-        'حساب Google هذا غير مرتبط بأي طالب مسجل. يرجى ربط الحساب أولاً من صفحة الملف الشخصي.',
-      );
+      throw new UnauthorizedException({
+        code: 'GOOGLE_ACCOUNT_NOT_LINKED',
+        message:
+          'حساب Google هذا غير مرتبط بأي حساب طالب. يرجى تسجيل الدخول أولاً بكود الطالب والرقم القومي، ثم ربط حساب Google من صفحة الملف الشخصي.',
+        messageEn:
+          'This Google account is not linked to any registered student. Please sign in using your Student Code and Password first, then link Google from your Profile page.',
+      });
     }
 
     if (user.role !== 'student') {
-      throw new UnauthorizedException(
-        'Only student accounts can use Google login',
-      );
+      throw new UnauthorizedException({
+        code: 'GOOGLE_NOT_STUDENT',
+        message: 'تسجيل الدخول عبر Google مخصص لحسابات الطلاب فقط.',
+        messageEn: 'Only student accounts are authorized to use Google login.',
+      });
     }
 
     if (user.googleLinkPending && user.googleEmail === googleAccount.email) {
@@ -238,13 +244,21 @@ export class AuthLoginService {
     }
 
     if (user.googleLinkPending) {
-      throw new UnauthorizedException(
-        'ربط حساب Google معلق. يرجى تأكيد رمز التحقق أولاً.',
-      );
+      throw new UnauthorizedException({
+        code: 'GOOGLE_LINK_PENDING',
+        message:
+          'ربط حساب Google قيد التأكيد. يرجى تسجيل الدخول أولاً بكود الطالب وتأكيد رمز التحقق في صفحة الملف الشخصي.',
+        messageEn:
+          'Google account linking is pending confirmation. Please sign in with your Student Code and verify the OTP in your Profile.',
+      });
     }
 
     if (!user.isActive) {
-      throw new UnauthorizedException('الحساب معطل');
+      throw new UnauthorizedException({
+        code: 'ACCOUNT_INACTIVE',
+        message: 'الحساب معطل. يرجى مراجعة إدارة شؤون الطلاب.',
+        messageEn: 'Account is deactivated. Please contact student affairs.',
+      });
     }
 
     await this.usersService.resetAttemptsAndUpdateLastLogin(

@@ -104,8 +104,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : message || 'Error',
         timestamp: new Date().toISOString(),
         path: url,
-        ...(typeof body === 'object' && body !== null && 'errors' in body
-          ? { errors: body.errors }
+        ...(typeof body === 'object' && body !== null
+          ? {
+              ...(typeof (body as any).code === 'string'
+                ? { code: (body as any).code }
+                : {}),
+              ...(typeof (body as any).messageEn === 'string'
+                ? { messageEn: (body as any).messageEn }
+                : {}),
+              ...((body as any).errors ? { errors: (body as any).errors } : {}),
+              ...((body as any).attemptsLeft !== undefined
+                ? { attemptsLeft: (body as any).attemptsLeft }
+                : {}),
+              ...((body as any).lockSecs !== undefined
+                ? { lockSecs: (body as any).lockSecs }
+                : {}),
+            }
           : {}),
       });
     }
