@@ -16,6 +16,7 @@ import {
   SearchStudentQuery,
   ResetPasswordDto,
   UpdateMyContactDto,
+  ToggleAllMustChangePasswordDto,
 } from './dto/student.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -106,6 +107,28 @@ export class StudentsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.studentsService.resetPassword(id, dto, user);
+  }
+
+  @Get('admin/students-must-change-password-summary')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @ApiOperation({
+    summary: 'Get summary of mustChangePassword status across all students',
+  })
+  async getMustChangePasswordSummary() {
+    return this.studentsService.getMustChangePasswordSummary();
+  }
+
+  @Post('admin/students-toggle-all-must-change-password')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_RESET_PASSWORD)
+  @ApiOperation({
+    summary: 'Toggle mustChangePassword flag for all students in bulk',
+  })
+  async toggleAllMustChangePassword(
+    @Body() dto: ToggleAllMustChangePasswordDto,
+  ) {
+    return this.studentsService.toggleAllMustChangePassword(dto.enabled);
   }
 
   // ─── Student Routes ──────────────────────────────────────

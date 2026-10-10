@@ -149,9 +149,10 @@ export function useGoogleSignIn({
     }
 
     if (!clientId.endsWith('.apps.googleusercontent.com')) {
-      console.warn(
-        `[Google Identity] Warning: NEXT_PUBLIC_GOOGLE_CLIENT_ID does not end with ".apps.googleusercontent.com". Google OAuth requires an OAuth 2.0 Web Client ID generated in Google Cloud Console. Current value appears invalid: "${clientId}".`,
+      console.error(
+        `[Google Identity] Error: NEXT_PUBLIC_GOOGLE_CLIENT_ID does not end with ".apps.googleusercontent.com". Google OAuth requires an OAuth 2.0 Web Client ID generated in Google Cloud Console. Current value appears invalid: "${clientId}".`,
       );
+      return;
     }
 
     const state = getGoogleIdentityState();
@@ -218,7 +219,9 @@ export function useGoogleSignIn({
 
   return {
     scriptLoaded,
-    isConfigured: Boolean(clientId),
+    isConfigured: Boolean(
+      clientId && clientId.endsWith('.apps.googleusercontent.com'),
+    ),
     isInitialized,
     renderButton,
     prompt,

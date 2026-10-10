@@ -37,6 +37,11 @@ function maskEmail(email: string): string {
   return `${local[0]}***${local[local.length - 1]}@${domain}`;
 }
 
+function normalizeArabicNumerals(value?: string): string {
+  if (!value) return '';
+  return value.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
+
 @Injectable()
 export class AuthPasswordService {
   constructor(
@@ -54,23 +59,34 @@ export class AuthPasswordService {
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.usersService.findByIdWithNationalId(userId);
 
-    const isValid = await this.usersService.validatePassword(
-      user,
-      dto.currentPassword,
-    );
+    const cleanCurrent = normalizeArabicNumerals(dto.currentPassword);
+    const cleanNew = normalizeArabicNumerals(dto.newPassword);
+
+    let isValid = await this.usersService.validatePassword(user, cleanCurrent);
+    if (!isValid && user.mustChangePassword && user.nationalId) {
+      const cleanNid = normalizeArabicNumerals(user.nationalId);
+      if (cleanCurrent === cleanNid) {
+        isValid = true;
+      }
+    }
     if (!isValid) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new UnauthorizedException(
+        'Current password is incorrect / كلمة المرور الحالية غير صحيحة',
+      );
     }
 
-    if (dto.newPassword === dto.currentPassword) {
+    if (cleanNew === cleanCurrent) {
       throw new BadRequestException(
         'New password cannot be the same as current password / لا يمكن إعادة استخدام كلمة المرور الحالية',
       );
     }
 
     // Do not allow National ID as permanent password
-    const trimmedNewPassword = dto.newPassword.trim();
-    if (user.nationalId && trimmedNewPassword === user.nationalId.trim()) {
+    const trimmedNewPassword = cleanNew;
+    if (
+      user.nationalId &&
+      trimmedNewPassword === normalizeArabicNumerals(user.nationalId)
+    ) {
       throw new BadRequestException(
         'New password cannot be your National ID / لا يمكن استخدام الرقم القومي ككلمة مرور دائمة',
       );
@@ -82,7 +98,7 @@ export class AuthPasswordService {
       .lean();
     if (
       studentProfile?.nationalId &&
-      trimmedNewPassword === studentProfile.nationalId.trim()
+      trimmedNewPassword === normalizeArabicNumerals(studentProfile.nationalId)
     ) {
       throw new BadRequestException(
         'New password cannot be your National ID / لا يمكن استخدام الرقم القومي ككلمة مرور دائمة',
@@ -91,7 +107,7 @@ export class AuthPasswordService {
 
     const updatedUser = await this.usersService.updatePassword(
       userId,
-      dto.newPassword,
+      cleanNew,
     );
     return {
       message: 'Password changed successfully',

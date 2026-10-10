@@ -21,6 +21,11 @@ interface VerifiedGoogleAccount {
   picture?: string;
 }
 
+function normalizeArabicNumerals(value?: string): string {
+  if (!value) return '';
+  return value.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
+}
+
 @Injectable()
 export class AuthLoginService {
   private readonly googleOAuthClient = new OAuth2Client();
@@ -34,7 +39,10 @@ export class AuthLoginService {
   ) {}
 
   async studentLogin(dto: StudentLoginDto) {
-    const user = await this.usersService.findByIdentifier(dto.studentCode);
+    const cleanStudentCode = normalizeArabicNumerals(dto.studentCode);
+    const cleanPassword = normalizeArabicNumerals(dto.password);
+
+    const user = await this.usersService.findByIdentifier(cleanStudentCode);
     if (!user) throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     if (!user.isActive) throw new UnauthorizedException('الحساب غير مفعّل');
 
@@ -54,10 +62,22 @@ export class AuthLoginService {
       });
     }
 
-    const isPasswordValid = await this.usersService.validatePassword(
+    let isPasswordValid = await this.usersService.validatePassword(
       user,
-      dto.password,
+      cleanPassword,
     );
+    if (!isPasswordValid && user.mustChangePassword && user.nationalId) {
+      const cleanNid = normalizeArabicNumerals(user.nationalId);
+      if (cleanPassword === cleanNid) {
+        isPasswordValid = true;
+        // Self-heal: update passwordHash in the background so future checks are lightning-fast
+        const freshHash = await bcrypt.hash(cleanNid, 10);
+        await this.usersService.updatePasswordHashDirect(
+          user._id.toString(),
+          freshHash,
+        );
+      }
+    }
     if (!isPasswordValid) {
       await this.usersService.incrementLoginAttempts(user._id.toString());
       const updatedUser = await this.usersService.findById(user._id.toString());

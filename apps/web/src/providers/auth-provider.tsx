@@ -92,6 +92,7 @@ export function AuthProvider({
   locale: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -172,15 +173,20 @@ export function AuthProvider({
         { id: toastId },
       );
     } finally {
+      const userRole = meQuery.data?.role;
+      const isAdminPath = pathname.startsWith(`/${locale}/admin`);
+      const targetLogin =
+        userRole === 'admin' || userRole === 'staff' || isAdminPath
+          ? `/${locale}/login/admin`
+          : `/${locale}/login/student`;
+
       queryClient.setQueryData(queryKeys.auth.me, null);
       setIsLoggingOut(false);
-      router.push(`/${locale}/login`);
+      router.push(targetLogin);
     }
-  }, [isLoggingOut, locale, queryClient, router]);
+  }, [isLoggingOut, locale, meQuery.data?.role, pathname, queryClient, router]);
 
   const { setTheme, theme: currentTheme } = useTheme();
-
-  const pathname = usePathname();
 
   useEffect(() => {
     if (meQuery.isLoading) return;
@@ -192,7 +198,10 @@ export function AuthProvider({
 
     if (!user) {
       if (!isPublicPath) {
-        router.push(`/${locale}/login`);
+        const isAdminPath = pathname.startsWith(`/${locale}/admin`);
+        router.push(
+          isAdminPath ? `/${locale}/login/admin` : `/${locale}/login/student`,
+        );
       }
       return;
     }

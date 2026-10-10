@@ -301,3 +301,25 @@ export async function listAllStudentsForExport(
 
   return pages.flat();
 }
+
+export interface MustChangePasswordSummary {
+  totalStudents: number;
+  mustChangeCount: number;
+  allEnabled: boolean;
+  anyEnabled: boolean;
+}
+
+export async function getMustChangePasswordSummary(): Promise<MustChangePasswordSummary> {
+  return apiGet<MustChangePasswordSummary>(
+    '/admin/students-must-change-password-summary',
+  );
+}
+
+export async function toggleAllMustChangePassword(
+  enabled: boolean,
+): Promise<{ enabled: boolean; modifiedCount: number }> {
+  return apiPost<{ enabled: boolean; modifiedCount: number }>(
+    '/admin/students-toggle-all-must-change-password',
+    { enabled },
+  );
+}

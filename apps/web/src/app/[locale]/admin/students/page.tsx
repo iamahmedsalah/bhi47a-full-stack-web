@@ -4,7 +4,7 @@ import React, { Suspense, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import { Download, Plus, UploadCloud, Users, Loader2, Sparkles } from 'lucide-react';
+import { Download, Plus, UploadCloud, Users, Loader2, Sparkles, KeyRound } from 'lucide-react';
 import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
 
@@ -18,6 +18,7 @@ import {
   createStudent,
   deactivateStudent,
   exportStudentsStreamingExcel,
+  getMustChangePasswordSummary,
   getStudent,
   getStudentAcademicEmail,
   listAllStudentsForExport,
@@ -26,6 +27,7 @@ import {
   listStudents,
   resetStudentPassword,
   studentKeys,
+  toggleAllMustChangePassword,
   updateStudent,
 } from '@/features/students/api';
 
@@ -147,6 +149,8 @@ function StudentsPageContent() {
   const [autoRegYear, setAutoRegYear] = useState('2026-2027');
   const [autoRegSemester, setAutoRegSemester] = useState<'first' | 'second'>('first');
   const [autoRegOverwrite, setAutoRegOverwrite] = useState(false);
+  const [isBulkMustChangeOpen, setIsBulkMustChangeOpen] = useState(false);
+  const [isTogglingMustChange, setIsTogglingMustChange] = useState(false);
 
   const handleAutoRegisterFirstYear = async () => {
     setIsAutoRegistering(true);
@@ -236,6 +240,51 @@ function StudentsPageContent() {
     void queryClient.invalidateQueries({ queryKey: ['students'] });
   };
 
+  const mustChangeSummaryQuery = useQuery({
+    queryKey: ['admin', 'students', 'must-change-summary'],
+    queryFn: getMustChangePasswordSummary,
+  });
+
+  const handleToggleAllMustChange = async () => {
+    setIsTogglingMustChange(true);
+    setIsBulkMustChangeOpen(false);
+    const targetState = !mustChangeSummaryQuery.data?.allEnabled;
+    const toastId = toast.loading(
+      locale === 'ar'
+        ? 'جاري تحديث حالة إعادة تعيين كلمة المرور لجميع الطلاب...'
+        : 'Updating password reset requirement for all students...',
+    );
+    try {
+      const res = await toggleAllMustChangePassword(targetState);
+      toast.success(
+        locale === 'ar'
+          ? targetState
+            ? `تم إلزام جميع الطلاب (${res.modifiedCount}) بتغيير كلمة المرور وفك الحظر بنجاح`
+            : `تم إلغاء إلزام تغيير كلمة المرور لجميع الطلاب (${res.modifiedCount}) بنجاح`
+          : targetState
+            ? `Successfully enforced password change and unlocked accounts for ${res.modifiedCount} students`
+            : `Successfully removed password change requirement for ${res.modifiedCount} students`,
+        { id: toastId },
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'students', 'must-change-summary'],
+      });
+      invalidateStudents();
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          locale === 'ar'
+            ? 'فشل تحديث حالة إعادة تعيين كلمة المرور'
+            : 'Failed to update password reset requirement',
+        ),
+        { id: toastId },
+      );
+    } finally {
+      setIsTogglingMustChange(false);
+    }
+  };
+
   const handleAddSubmit = async (values: any) => {
     setFormLoading(true);
     try {
@@ -302,6 +351,38 @@ function StudentsPageContent() {
             <Download className="h-4 w-4" />
           )}
           {locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+        </Button>
+
+        <Button
+          variant="outline"
+          disabled={isTogglingMustChange || mustChangeSummaryQuery.isLoading}
+          onClick={() => setIsBulkMustChangeOpen(true)}
+          className={cn(
+            'border-amber-500/40 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+            mustChangeSummaryQuery.data?.allEnabled &&
+              'border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+          )}
+        >
+          {isTogglingMustChange ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <KeyRound className="h-4 w-4" />
+          )}
+          <span>
+            {locale === 'ar'
+              ? mustChangeSummaryQuery.data?.allEnabled
+                ? 'إلغاء إلزام كلمة المرور'
+                : 'إلزام تغيير كلمة المرور'
+              : mustChangeSummaryQuery.data?.allEnabled
+                ? 'Disable Forced Reset'
+                : 'Force Password Reset'}
+          </span>
+          {mustChangeSummaryQuery.data && (
+            <span className="ms-1.5 rounded-full bg-secondary/80 px-1.5 py-0.5 text-[11px] font-mono">
+              {mustChangeSummaryQuery.data.mustChangeCount}/
+              {mustChangeSummaryQuery.data.totalStudents}
+            </span>
+          )}
         </Button>
 
         <Button
@@ -651,6 +732,42 @@ function StudentsPageContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={isBulkMustChangeOpen}
+        onOpenChange={setIsBulkMustChangeOpen}
+        title={
+          locale === 'ar'
+            ? mustChangeSummaryQuery.data?.allEnabled
+              ? 'إلغاء إلزام تغيير كلمة المرور لجميع الطلاب'
+              : 'إلزام جميع الطلاب بتغيير كلمة المرور'
+            : mustChangeSummaryQuery.data?.allEnabled
+              ? 'Disable Forced Password Change for All Students'
+              : 'Enforce Password Change for All Students'
+        }
+        description={
+          locale === 'ar'
+            ? mustChangeSummaryQuery.data?.allEnabled
+              ? `سيتم إيقاف فرض تغيير كلمة المرور لجميع الطلاب (${mustChangeSummaryQuery.data?.totalStudents ?? 0} طالب)، ولن يُطلب منهم تغيير كلمة المرور في تسجيل الدخول القادم.`
+              : `سيتم إلزام جميع الطلاب (${mustChangeSummaryQuery.data?.totalStudents ?? 0} طالب) بتعيين كلمة مرور جديدة عند تسجيل الدخول باستخدام رقمهم القومي، وإعادة تعيين عداد المحاولات الفاشلة وفك أي حظر مؤقت على الحسابات.`
+            : mustChangeSummaryQuery.data?.allEnabled
+              ? `This will remove the mandatory password change flag for all ${mustChangeSummaryQuery.data?.totalStudents ?? 0} students.`
+              : `This will require all ${mustChangeSummaryQuery.data?.totalStudents ?? 0} students to change their password on next login using their National ID, while unlocking any locked accounts.`
+        }
+        confirmLabel={
+          locale === 'ar'
+            ? mustChangeSummaryQuery.data?.allEnabled
+              ? 'تأكيد الإلغاء'
+              : 'تأكيد الإلزام للكل'
+            : mustChangeSummaryQuery.data?.allEnabled
+              ? 'Confirm Disable'
+              : 'Confirm Enforce'
+        }
+        cancelLabel={tCommon('cancel')}
+        destructive={!mustChangeSummaryQuery.data?.allEnabled}
+        onConfirm={handleToggleAllMustChange}
+        disabled={isTogglingMustChange}
+      />
     </div>
   );
 }

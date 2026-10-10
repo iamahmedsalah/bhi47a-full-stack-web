@@ -113,7 +113,9 @@ export class StudentImporter implements Importer {
       const studentCode = String(row.studentCode).trim();
       const nationalId = String(row.nationalId).trim();
       const existingUser = userMap.get(studentCode);
+      const isForcedReset = Boolean(row.mustChangePassword);
       if (
+        !isForcedReset &&
         existingUser &&
         existingUser.nationalId === nationalId &&
         existingUser.passwordHash
@@ -143,6 +145,7 @@ export class StudentImporter implements Importer {
         const studentCode = String(row.studentCode).trim();
         const nationalId = String(row.nationalId).trim();
         const existingUser = userMap.get(studentCode);
+        const isForcedReset = Boolean(row.mustChangePassword);
 
         const resolvedName =
           (row.fullName as string)?.trim() ||
@@ -163,6 +166,7 @@ export class StudentImporter implements Importer {
 
         let passwordHash: string;
         if (
+          !isForcedReset &&
           existingUser &&
           existingUser.nationalId === nationalId &&
           existingUser.passwordHash
@@ -175,23 +179,40 @@ export class StudentImporter implements Importer {
           passwordHashCache.set(nationalId, passwordHash);
         }
 
+        const mustChange =
+          row.mustChangePassword !== undefined
+            ? Boolean(row.mustChangePassword)
+            : existingUser
+              ? Boolean(existingUser.mustChangePassword)
+              : true;
+
+        const userSetFields: Record<string, unknown> = {
+          role: 'student',
+          studentCode,
+          name: resolvedName,
+          passwordHash,
+          nationalIdHash: passwordHash,
+          nationalIdMasked: maskedId,
+          nationalId,
+          mustChangePassword: mustChange,
+          isActive: true,
+        };
+
+        const userUpdateDoc: Record<string, unknown> = {
+          $set: userSetFields,
+          $setOnInsert: { permissions: [] },
+        };
+
+        if (isForcedReset) {
+          userSetFields.loginAttempts = 0;
+          userSetFields.failedLoginAttempts = 0;
+          userUpdateDoc.$unset = { lockUntil: 1 };
+        }
+
         userOps.push({
           updateOne: {
             filter: { studentCode },
-            update: {
-              $set: {
-                role: 'student',
-                studentCode,
-                name: resolvedName,
-                passwordHash,
-                nationalIdHash: passwordHash,
-                nationalIdMasked: maskedId,
-                nationalId,
-                mustChangePassword: row.mustChangePassword ?? false,
-                isActive: true,
-              },
-              $setOnInsert: { permissions: [] },
-            },
+            update: userUpdateDoc as any,
             upsert: true,
           },
         });

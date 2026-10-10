@@ -57,7 +57,7 @@ export class UsersService {
   async findByStudentCode(studentCode: string): Promise<UserDocument | null> {
     return (await this.userModel
       .findOne({ studentCode })
-      .select('+passwordHash +nationalIdHash')
+      .select('+passwordHash +nationalIdHash +nationalId')
       .lean()) as unknown as UserDocument | null;
   }
 
@@ -72,7 +72,7 @@ export class UsersService {
           { username: trimmed.toLowerCase() },
         ],
       })
-      .select('+passwordHash +nationalIdHash +resetPasswordToken')
+      .select('+passwordHash +nationalIdHash +nationalId +resetPasswordToken')
       .lean()) as unknown as UserDocument | null;
   }
 
@@ -212,6 +212,67 @@ export class UsersService {
       passwordChangedAt: new Date(Date.now() - 1000),
       $inc: { tokenVersion: 1 },
     });
+  }
+
+  async updatePasswordHashDirect(
+    userId: string,
+    passwordHash: string,
+  ): Promise<void> {
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: {
+        passwordHash,
+        nationalIdHash: passwordHash,
+        failedLoginAttempts: 0,
+        loginAttempts: 0,
+      },
+      $unset: { lockUntil: 1 },
+    });
+  }
+
+  async getStudentsMustChangePasswordSummary() {
+    const [totalStudents, mustChangeCount] = await Promise.all([
+      this.userModel.countDocuments({ role: 'student' }),
+      this.userModel.countDocuments({
+        role: 'student',
+        mustChangePassword: true,
+      }),
+    ]);
+    return {
+      totalStudents,
+      mustChangeCount,
+      allEnabled: totalStudents > 0 && mustChangeCount === totalStudents,
+      anyEnabled: mustChangeCount > 0,
+    };
+  }
+
+  async toggleAllStudentsMustChangePassword(enabled: boolean) {
+    if (!enabled) {
+      const result = await this.userModel.updateMany(
+        { role: 'student' },
+        { $set: { mustChangePassword: false } },
+      );
+      return {
+        enabled: false,
+        modifiedCount: result.modifiedCount,
+      };
+    }
+
+    const result = await this.userModel.updateMany(
+      { role: 'student' },
+      {
+        $set: {
+          mustChangePassword: true,
+          failedLoginAttempts: 0,
+          loginAttempts: 0,
+        },
+        $unset: { lockUntil: 1 },
+      },
+    );
+
+    return {
+      enabled: true,
+      modifiedCount: result.modifiedCount,
+    };
   }
 
   async updateLastLogin(userId: string): Promise<void> {

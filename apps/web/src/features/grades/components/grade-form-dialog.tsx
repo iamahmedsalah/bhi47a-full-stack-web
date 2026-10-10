@@ -188,7 +188,7 @@ export function GradeFormDialog({
                   <SelectValue placeholder={t("examType")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXAM_TYPE_VALUES.map((examType) => (
+                  {(["midterm", "final"] as const).map((examType) => (
                     <SelectItem key={examType} value={examType}>
                       {t(`examTypeValues.${examType}`)}
                     </SelectItem>

@@ -401,3 +401,12 @@ export class UpdateMyContactDto {
   @IsIn(['light', 'dark', 'system'])
   theme?: 'light' | 'dark' | 'system';
 }
+
+export class ToggleAllMustChangePasswordDto {
+  @ApiProperty({
+    example: true,
+    description: 'Whether to require all students to change password on login',
+  })
+  @IsBoolean()
+  enabled!: boolean;
+}

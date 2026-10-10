@@ -170,12 +170,22 @@ export default function ChangePasswordPage() {
         const target = user?.role === 'student' ? `/${locale}/dashboard` : `/${locale}/admin`;
         router.replace(target);
       }, 1200);
-    } catch (err) {
+    } catch (err: unknown) {
       const msg = getApiErrorMessage(
         err,
         isArabic ? "تعذر حفظ كلمة المرور" : "Error updating password",
       );
-      setStep2Error(msg);
+      const isCurrentPasswordIssue =
+        (err as { response?: { status?: number } })?.response?.status === 401 ||
+        msg.includes('الحالية') ||
+        msg.toLowerCase().includes('current password');
+
+      if (isCurrentPasswordIssue) {
+        setCurrentStep(1);
+        setStep1Error(msg);
+      } else {
+        setStep2Error(msg);
+      }
       toast.error(msg);
     } finally {
       setLoading(false);

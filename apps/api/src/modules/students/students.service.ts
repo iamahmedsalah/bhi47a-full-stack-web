@@ -440,4 +440,12 @@ export class StudentsService {
       },
     };
   }
+
+  async getMustChangePasswordSummary() {
+    return this.usersService.getStudentsMustChangePasswordSummary();
+  }
+
+  async toggleAllMustChangePassword(enabled: boolean) {
+    return this.usersService.toggleAllStudentsMustChangePassword(enabled);
+  }
 }

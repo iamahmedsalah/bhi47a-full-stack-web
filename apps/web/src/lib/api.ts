@@ -189,8 +189,12 @@ api.interceptors.response.use(
         typeof window !== 'undefined' &&
         !isPublicRoute(window.location.pathname)
       ) {
-        const locale = window.location.pathname.split('/')[1] || 'ar';
-        window.location.href = `/${locale}/login`;
+        const pathname = window.location.pathname;
+        const locale = pathname.split('/')[1] || 'ar';
+        const targetLogin = pathname.startsWith(`/${locale}/admin`)
+          ? `/${locale}/login/admin`
+          : `/${locale}/login/student`;
+        window.location.href = targetLogin;
       }
     }
     return Promise.reject(error.response?.data || error);
