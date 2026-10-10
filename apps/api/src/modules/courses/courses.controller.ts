@@ -203,6 +203,22 @@ export class CoursesController {
     return this.coursesService.update(id, dto);
   }
 
+  @Delete('admin/courses/:id/syllabus')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @ApiOperation({ summary: 'Remove course syllabus PDF (Admin/Staff)' })
+  async removeSyllabus(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.coursesService.removeSyllabus(id);
+  }
+
+  @Delete('admin/courses/:id/cover-image')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @ApiOperation({ summary: 'Remove course cover image (Admin/Staff)' })
+  async removeCoverImage(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.coursesService.removeCoverImage(id);
+  }
+
   @Delete('admin/courses/:id')
   @Roles('admin')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)

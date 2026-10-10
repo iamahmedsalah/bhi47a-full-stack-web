@@ -24,14 +24,14 @@ export default function StudentLayout({
       {/* FCM push notifications initializer */}
       <FcmInitializer />
       
-      {/* Sidebar — fixed to end (right in RTL, left in LTR) */}
+      {/* Sidebar — fixed to start (left in LTR, right in RTL) */}
       <StudentSidebar />
 
-      {/* Main Content — offset by sidebar width */}
+      {/* Main Content — offset by sidebar width from start */}
       <div
         className={cn(
           'flex min-h-screen flex-col transition-all duration-300',
-          sidebarOpen ? 'md:me-72' : 'md:me-26',
+          sidebarOpen ? 'md:ms-72' : 'md:ms-26',
         )}
       >
         <StudentHeader />

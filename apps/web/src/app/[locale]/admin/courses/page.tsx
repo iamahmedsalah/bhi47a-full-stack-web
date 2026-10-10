@@ -103,6 +103,8 @@ interface CourseFormDialogProps {
       isActive: boolean;
       syllabusFile?: File | null;
       coverImageFile?: File | null;
+      removeSyllabus?: boolean;
+      removeCover?: boolean;
     },
   ) => Promise<void>;
   t: ReturnType<typeof useTranslations>;
@@ -134,6 +136,8 @@ function CourseFormDialog({
   const [isActive, setIsActive] = useState(initialValues.isActive ?? true);
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [removeSyllabus, setRemoveSyllabus] = useState(false);
+  const [removeCover, setRemoveCover] = useState(false);
   const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
   const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
   const [doctorId, setDoctorId] = useState(initialValues.doctorId || '');
@@ -212,6 +216,8 @@ function CourseFormDialog({
       setCoverImageUrl(initialValues.coverImageUrl || '');
       setSyllabusFile(null);
       setCoverImageFile(null);
+      setRemoveSyllabus(false);
+      setRemoveCover(false);
       setCurrentSyllabusUrl(initialValues.syllabusPdfUrl || '');
       setCurrentSyllabusName(initialValues.syllabusPdfName || '');
       setError('');
@@ -264,10 +270,12 @@ function CourseFormDialog({
           .filter(Boolean),
         type: courseType,
         isActive,
-        syllabusFile,
-        coverImageFile,
+        syllabusFile: removeSyllabus ? null : syllabusFile,
+        coverImageFile: removeCover ? null : coverImageFile,
         doctorId: doctorId ? doctorId : null,
-        coverImageUrl: coverImageUrl.trim() || undefined,
+        coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
+        removeSyllabus,
+        removeCover,
       });
       onOpenChange(false);
     } catch (err: unknown) {
@@ -279,9 +287,9 @@ function CourseFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass max-h-[90vh] max-w-md overflow-y-auto rounded-2xl border border-white/10">
+      <DialogContent className="glass max-h-[90vh] max-w-2xl sm:max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-5 sm:p-6">
         <DialogHeader className="border-b border-border pb-4">
-          <DialogTitle className="text-foreground">
+          <DialogTitle className="text-foreground text-lg font-bold">
             {mode === 'add' ? t('addCourse') : t('editCourse')}
           </DialogTitle>
         </DialogHeader>
@@ -293,6 +301,7 @@ function CourseFormDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+          {/* Section 1: Course Names */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">اسم المادة بالعربية *</label>
@@ -304,6 +313,7 @@ function CourseFormDialog({
             </div>
           </div>
 
+          {/* Section 2: Code and Credit Hours */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">{t('courseCode')} *</label>
@@ -315,6 +325,7 @@ function CourseFormDialog({
             </div>
           </div>
 
+          {/* Section 3: Level and Semester */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">{t('level')} *</label>
@@ -340,17 +351,39 @@ function CourseFormDialog({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">{t('department')}</label>
-            <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} />
+          {/* Section 4: Department and Course Doctor */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted">{t('department')}</label>
+              <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'عام أو نظم معلومات أو محاسبة' : 'General, BIS, Accounting'} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted">
+                {locale === 'ar' ? 'أستاذ / منسق المقرر (Course Doctor)' : 'Course Doctor / Coordinator'}
+              </label>
+              <Select
+                value={doctorId || 'none'}
+                onValueChange={(val) => setDoctorId(val === 'none' ? '' : val)}
+              >
+                <SelectTrigger className="bg-secondary/50 border-border">
+                  <SelectValue placeholder={locale === 'ar' ? 'اختر أستاذ المقرر...' : 'Select course doctor...'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    {locale === 'ar' ? '-- غير محدد --' : '-- Unassigned --'}
+                  </SelectItem>
+                  {(staffQuery.data?.items || []).map((staff) => (
+                    <SelectItem key={staff._id} value={staff._id}>
+                      {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}{' '}
+                      {staff.userCode ? `(${staff.userCode})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">Program placements</label>
-            <Input type="text" dir="ltr" value={programCurricula} onChange={(e) => setProgramCurricula(e.target.value)} placeholder="ACCOUNTING:3:first:elective|BIS:3:second:elective" />
-            <p className="text-xs text-muted">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. This supports different placements for course 326.</p>
-          </div>
-
+          {/* Section 5: Prerequisites and Course Type */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">Prerequisites</label>
@@ -378,171 +411,246 @@ function CourseFormDialog({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">
-              {locale === 'ar' ? 'رابط صورة غلاف الكتاب (اختياري للطلاب)' : 'Cover Book Thumbnail URL (Optional)'}
-            </label>
-            <Input
-              type="url"
-              dir="ltr"
-              value={coverImageUrl}
-              onChange={(e) => setCoverImageUrl(e.target.value)}
-              placeholder="https://example.com/cover.jpg"
-              className="text-xs font-mono"
-            />
+            <label className="text-xs font-semibold text-muted">Program placements</label>
+            <Input type="text" dir="ltr" value={programCurricula} onChange={(e) => setProgramCurricula(e.target.value)} placeholder="ACCOUNTING:3:first:elective|BIS:3:second:elective" />
+            <p className="text-[11px] text-muted-foreground/80">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. Supports multi-department placement.</p>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-border/80 bg-background/50 p-3.5 text-start">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <FileText className="h-4 w-4 text-primary" />
-                <span>{locale === 'ar' ? 'منهج ومحتوى المقرر (PDF)' : 'Course Curriculum & Syllabus (PDF)'}</span>
-              </label>
-              {currentSyllabusUrl && (
-                <a
-                  href={initialValues._id ? `${apiBaseUrl}/courses/${initialValues._id}/syllabus/download` : currentSyllabusUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-primary underline hover:text-primary/80 flex items-center gap-1"
-                >
-                  <Eye className="h-3 w-3" />
-                  <span>{locale === 'ar' ? 'معاينة الملف الحالي' : 'View Current Syllabus'}</span>
-                </a>
-              )}
-            </div>
-            <Input
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
-                    setError(
-                      locale === 'ar'
-                        ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت). يرجى ضغط ملف الـ PDF أولاً.`
-                        : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB serverless limit. Please compress the PDF first.`,
-                    );
-                    e.target.value = '';
-                    setSyllabusFile(null);
-                    return;
-                  }
-                  setError('');
-                  setSyllabusFile(file);
-                }
-              }}
-              className="text-xs file:mr-3 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
-            />
-            <p className="text-[11px] text-muted-foreground/80">
-              {locale === 'ar'
-                ? 'الحد الأقصى لحجم الملف: 4 ميجابايت (PDF فقط)'
-                : 'Maximum file size: 4 MB (PDF only)'}
-            </p>
-            {currentSyllabusName && !syllabusFile && (
-              <p className="font-mono text-[11px] text-muted-foreground">
-                {locale === 'ar' ? `الملف الحالي: ${currentSyllabusName}` : `Current file: ${currentSyllabusName}`}
-              </p>
-            )}
-            {syllabusFile && (
-              <p className="text-[11px] font-medium text-emerald-400">
-                {locale === 'ar' ? `الملف المحدد للرفع: ${syllabusFile.name}` : `Selected file for upload: ${syllabusFile.name}`}
-              </p>
-            )}
-          </div>
-
-          {/* Book Cover Image Upload / Auto-derive Notice */}
-          <div className="space-y-2 rounded-xl border border-border/80 bg-secondary/20 p-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-muted">
-                {locale === 'ar' ? 'صورة غلاف الكتاب / المقرر (Course Book Cover)' : 'Course Book Cover Thumbnail'}
-              </label>
-              {coverImageUrl && (
-                <a
-                  href={coverImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-primary underline hover:text-primary/80 flex items-center gap-1"
-                >
-                  <Eye className="h-3 w-3" />
-                  <span>{locale === 'ar' ? 'معاينة الغلاف' : 'View Cover'}</span>
-                </a>
-              )}
+          {/* Course Curriculum & Cover Image Media Section (Modern 2-Column Grid) */}
+          <div className="space-y-3 rounded-xl border border-border/80 bg-secondary/15 p-3.5 text-start">
+            <div className="flex items-center gap-2 border-b border-border/60 pb-2">
+              <BookOpen className="h-4 w-4 text-primary" />
+              <h4 className="text-xs font-bold text-foreground">
+                {locale === 'ar' ? 'ملحقات ومحتوى المادة الدراسية' : 'Course Curriculum & Media Attachments'}
+              </h4>
             </div>
 
-            <div className="flex items-center gap-3">
-              {coverImageUrl && !coverImageFile && (
-                <div className="h-14 w-10 shrink-0 overflow-hidden rounded border border-border/60 bg-card">
-                  <img
-                    src={coverImageUrl}
-                    alt="Cover preview"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              )}
-              <div className="flex-1 space-y-1">
-                <Input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
-                        setError(
-                          locale === 'ar'
-                            ? `حجم الصورة (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
-                            : `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
-                        );
-                        e.target.value = '';
-                        setCoverImageFile(null);
-                        return;
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {/* Card 1: Curriculum / Syllabus (PDF) */}
+              <div className="space-y-2.5 rounded-xl border border-border/80 bg-background/60 p-3 text-start flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 pb-1">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span>{locale === 'ar' ? 'منهج المقرر (PDF)' : 'Syllabus (PDF)'}</span>
+                    </label>
+                    {currentSyllabusUrl && !removeSyllabus && (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={initialValues._id ? `${apiBaseUrl}/courses/${initialValues._id}/syllabus/download` : currentSyllabusUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+                          title={locale === 'ar' ? 'معاينة المنهج' : 'View Syllabus'}
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>{locale === 'ar' ? 'معاينة' : 'View'}</span>
+                        </a>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRemoveSyllabus(true);
+                            setSyllabusFile(null);
+                          }}
+                          className="h-6 px-2 text-[11px] text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300 rounded-squircle flex items-center gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>{locale === 'ar' ? 'حذف' : 'Remove'}</span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {removeSyllabus ? (
+                    <div className="my-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2 text-xs text-amber-400 flex items-center justify-between">
+                      <span>{locale === 'ar' ? '⚠️ سيتم إزالة ملف الـ PDF عند الحفظ' : '⚠️ Syllabus PDF will be removed on save'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoveSyllabus(false);
+                          setCurrentSyllabusUrl(initialValues.syllabusPdfUrl || '');
+                          setCurrentSyllabusName(initialValues.syllabusPdfName || '');
+                        }}
+                        className="text-primary underline text-xs font-semibold cursor-pointer"
+                      >
+                        {locale === 'ar' ? 'تراجع' : 'Undo'}
+                      </button>
+                    </div>
+                  ) : (
+                    currentSyllabusName && !syllabusFile && (
+                      <p className="font-mono text-[11px] text-muted-foreground truncate mb-1">
+                        📄 {currentSyllabusName}
+                      </p>
+                    )
+                  )}
+
+                  <Input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
+                          setError(
+                            locale === 'ar'
+                              ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
+                              : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+                          );
+                          e.target.value = '';
+                          setSyllabusFile(null);
+                          return;
+                        }
+                        setError('');
+                        setSyllabusFile(file);
+                        setRemoveSyllabus(false);
                       }
-                      setError('');
-                      setCoverImageFile(file);
-                    }
-                  }}
-                  className="text-xs file:mr-3 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
-                />
-                {coverImageFile && (
-                  <p className="text-[11px] font-medium text-emerald-400">
-                    {locale === 'ar' ? `الصورة المحددة: ${coverImageFile.name}` : `Selected cover: ${coverImageFile.name}`}
-                  </p>
-                )}
+                    }}
+                    className="text-xs file:mr-2 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                  />
+                  {syllabusFile && (
+                    <p className="text-[11px] font-medium text-emerald-400 mt-1">
+                      ✓ {syllabusFile.name}
+                    </p>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground/80 pt-1">
+                  {locale === 'ar' ? 'الحد الأقصى: 4 ميجابايت (PDF فقط)' : 'Max size: 4 MB (PDF only)'}
+                </p>
+              </div>
+
+              {/* Card 2: Course Book Cover */}
+              <div className="space-y-2.5 rounded-xl border border-border/80 bg-background/60 p-3 text-start flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 pb-1">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                      <BookOpen className="h-4 w-4 text-purple-400" />
+                      <span>{locale === 'ar' ? 'غلاف الكتاب / المقرر' : 'Book Cover'}</span>
+                    </label>
+                    {coverImageUrl && !removeCover && (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={coverImageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-medium text-purple-400 hover:underline flex items-center gap-1"
+                          title={locale === 'ar' ? 'معاينة الغلاف' : 'View Cover'}
+                        >
+                          <Eye className="h-3 w-3" />
+                          <span>{locale === 'ar' ? 'معاينة' : 'View'}</span>
+                        </a>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRemoveCover(true);
+                            setCoverImageFile(null);
+                            setCoverImageUrl('');
+                          }}
+                          className="h-6 px-2 text-[11px] text-rose-400 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300 rounded-squircle flex items-center gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>{locale === 'ar' ? 'حذف' : 'Remove'}</span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {removeCover ? (
+                    <div className="my-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2 text-xs text-amber-400 flex items-center justify-between">
+                      <span>{locale === 'ar' ? '⚠️ سيتم إزالة صورة الغلاف عند الحفظ' : '⚠️ Cover will be removed on save'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoveCover(false);
+                          setCoverImageUrl(initialValues.coverImageUrl || '');
+                        }}
+                        className="text-primary underline text-xs font-semibold cursor-pointer"
+                      >
+                        {locale === 'ar' ? 'تراجع' : 'Undo'}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {coverImageUrl && !coverImageFile && !removeCover && (
+                    <div className="mb-2 flex items-center justify-between gap-2.5 rounded-lg border border-border/60 bg-card/80 px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          <BookOpen className="h-3.5 w-3.5" />
+                        </div>
+                        <span className="text-[11px] font-medium text-foreground">
+                          {locale === 'ar' ? 'تم حفظ غلاف للمقرر' : 'Cover image attached'}
+                        </span>
+                      </div>
+                      <a
+                        href={coverImageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
+                      >
+                        <Eye className="h-3 w-3" />
+                        <span>{locale === 'ar' ? 'معاينة' : 'Preview'}</span>
+                      </a>
+                    </div>
+                  )}
+
+                  <Input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
+                          setError(
+                            locale === 'ar'
+                              ? `حجم الصورة (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
+                              : `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+                          );
+                          e.target.value = '';
+                          setCoverImageFile(null);
+                          return;
+                        }
+                        setError('');
+                        setCoverImageFile(file);
+                        setRemoveCover(false);
+                      }
+                    }}
+                    className="text-xs file:mr-2 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                  />
+                  {coverImageFile && (
+                    <p className="text-[11px] font-medium text-emerald-400 mt-1">
+                      ✓ {coverImageFile.name}
+                    </p>
+                  )}
+
+                  <div className="pt-1.5">
+                    <Input
+                      type="url"
+                      dir="ltr"
+                      value={coverImageUrl}
+                      onChange={(e) => {
+                        setCoverImageUrl(e.target.value);
+                        setRemoveCover(false);
+                      }}
+                      placeholder="https://... (Optional URL)"
+                      className="h-7 text-[11px] font-mono"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground/80 pt-1 leading-snug">
+                  {locale === 'ar'
+                    ? '💡 اتركها فارغة لتوليد الغلاف تلقائياً من الصفحة الأولى للـ PDF'
+                    : '💡 Leave empty to auto-derive cover from page 1 of syllabus PDF'}
+                </p>
               </div>
             </div>
-
-            <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-              {locale === 'ar'
-                ? '💡 ملاحظة: يمكنك رفع صورة مخصصة لغلاف الكتاب هنا، أو تركها فارغة وسيتم توليد الغلاف تلقائياً من الصفحة الأولى لملف المنهج (PDF) عند رفعه.'
-                : '💡 Note: You can upload a custom cover image, or leave it empty to automatically generate a thumbnail from page 1 of the uploaded syllabus PDF.'}
-            </p>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">
-              {locale === 'ar' ? 'أستاذ / منسق المقرر (Course Doctor)' : 'Course Doctor / Coordinator'}
-            </label>
-            <Select
-              value={doctorId || 'none'}
-              onValueChange={(val) => setDoctorId(val === 'none' ? '' : val)}
-            >
-              <SelectTrigger className="bg-secondary/50 border-border">
-                <SelectValue placeholder={locale === 'ar' ? 'اختر أستاذ المقرر...' : 'Select course doctor...'} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">
-                  {locale === 'ar' ? '-- غير محدد --' : '-- Unassigned --'}
-                </SelectItem>
-                {(staffQuery.data?.items || []).map((staff) => (
-                  <SelectItem key={staff._id} value={staff._id}>
-                    {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}{' '}
-                    {staff.userCode ? `(${staff.userCode})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <input type="checkbox" id="isActiveCourse" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded-full border-input-border bg-input text-primary focus:ring-primary cursor-pointer" />
-            <label htmlFor="isActiveCourse" className="text-sm font-semibold text-foreground">{t('isActive')}</label>
+          <div className="flex items-center gap-2 pt-1">
+            <input type="checkbox" id="isActiveCourse" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded border-input-border bg-input text-primary focus:ring-primary cursor-pointer" />
+            <label htmlFor="isActiveCourse" className="text-sm font-semibold text-foreground cursor-pointer">{t('isActive')}</label>
           </div>
 
           <DialogFooter className="mt-6 gap-2 border-t border-border pt-4">
@@ -652,12 +760,30 @@ function CoursesPageContent() {
       isActive: boolean;
       syllabusFile?: File | null;
       coverImageFile?: File | null;
+      removeSyllabus?: boolean;
+      removeCover?: boolean;
     },
   ) => {
     if (!selectedCourse) return;
-    const { syllabusFile, coverImageFile, ...coursePayload } = data;
+    const { syllabusFile, coverImageFile, removeSyllabus, removeCover, ...coursePayload } = data;
+
+    if (removeSyllabus) {
+      (coursePayload as any).syllabusPdfUrl = null;
+      (coursePayload as any).syllabusPdfName = null;
+    }
+    if (removeCover) {
+      (coursePayload as any).coverImageUrl = null;
+    }
+
     await api.patch(`/admin/courses/${selectedCourse._id}`, coursePayload);
-    if (syllabusFile) {
+
+    if (removeSyllabus) {
+      try {
+        await api.delete(`/admin/courses/${selectedCourse._id}/syllabus`);
+      } catch {
+        // null payload already handled deletion
+      }
+    } else if (syllabusFile) {
       try {
         const fd = new FormData();
         fd.append('file', syllabusFile);
@@ -670,7 +796,14 @@ function CoursesPageContent() {
         );
       }
     }
-    if (coverImageFile) {
+
+    if (removeCover) {
+      try {
+        await api.delete(`/admin/courses/${selectedCourse._id}/cover-image`);
+      } catch {
+        // null payload already handled deletion
+      }
+    } else if (coverImageFile) {
       try {
         const fd = new FormData();
         fd.append('file', coverImageFile);
@@ -683,6 +816,7 @@ function CoursesPageContent() {
         );
       }
     }
+
     toast.success(
       locale === 'ar' ? 'تم تحديث المادة بنجاح' : 'Course updated successfully',
     );

@@ -318,17 +318,21 @@ export class UpdateCourseDto {
 
   @ApiPropertyOptional({
     description: 'URL of the uploaded course curriculum/syllabus PDF',
+    nullable: true,
   })
   @IsOptional()
+  @ValidateIf((_, val) => val !== null && val !== '')
   @IsString()
-  syllabusPdfUrl?: string;
+  syllabusPdfUrl?: string | null;
 
   @ApiPropertyOptional({
     description: 'Original file name of the syllabus PDF',
+    nullable: true,
   })
   @IsOptional()
+  @ValidateIf((_, val) => val !== null && val !== '')
   @IsString()
-  syllabusPdfName?: string;
+  syllabusPdfName?: string | null;
 
   @ApiPropertyOptional({
     description:
@@ -343,10 +347,12 @@ export class UpdateCourseDto {
 
   @ApiPropertyOptional({
     description: 'URL of the course cover book thumbnail image',
+    nullable: true,
   })
   @IsOptional()
+  @ValidateIf((_, val) => val !== null && val !== '')
   @IsString()
-  coverImageUrl?: string;
+  coverImageUrl?: string | null;
 }
 
 export class QueryCourseDto {

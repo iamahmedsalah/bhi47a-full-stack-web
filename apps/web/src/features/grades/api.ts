@@ -126,3 +126,36 @@ export async function auditAcademicWarnings(options?: {
   );
   return response.data;
 }
+
+export interface GradesSettingsData {
+  gradesSystemOpen: boolean;
+  gradesOpenAt?: string;
+  gradesCloseAt?: string;
+  gradesPublishedLevels: string[];
+}
+
+export async function getGradesSettings(): Promise<GradesSettingsData> {
+  const response = await api.get<GradesSettingsData>('/admin/grades/settings');
+  return response.data;
+}
+
+export async function updateGradesSettings(
+  dto: Partial<GradesSettingsData>,
+): Promise<GradesSettingsData> {
+  const response = await api.patch<GradesSettingsData>('/admin/grades/settings', dto);
+  return response.data;
+}
+
+export interface StudentResultsStatusData {
+  isOpen: boolean;
+  reason?: 'system_closed' | 'not_started' | 'ended' | 'level_not_published';
+  openAt?: string;
+  closeAt?: string;
+  studentLevel: string;
+  isLevelPublished: boolean;
+}
+
+export async function getStudentResultsStatus(): Promise<StudentResultsStatusData> {
+  const response = await api.get<StudentResultsStatusData>('/students/me/results-window');
+  return response.data;
+}

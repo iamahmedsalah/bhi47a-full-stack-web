@@ -76,6 +76,29 @@ export class StudentQueryService {
       filter.level = query.level;
     }
 
+    if (query.department && query.department !== 'all') {
+      const dept = query.department.trim();
+      if (dept === 'GENERAL' || dept === 'عام' || dept === 'الشعبة العامة') {
+        filter.department = {
+          $in: ['GENERAL', 'عام', 'الشعبة العامة', '', null],
+        };
+      } else if (
+        dept === 'BIS' ||
+        dept.includes('BIS') ||
+        dept.includes('نظم')
+      ) {
+        filter.department = { $regex: /BIS|نظم معلومات/i } as any;
+      } else if (
+        dept === 'ACCOUNTING' ||
+        dept.includes('ACCOUNTING') ||
+        dept.includes('محاسب')
+      ) {
+        filter.department = { $regex: /ACCOUNTING|محاسب/i } as any;
+      } else {
+        filter.department = dept;
+      }
+    }
+
     const effectiveStatus =
       query.enrollmentStatus && query.enrollmentStatus !== 'all'
         ? query.enrollmentStatus

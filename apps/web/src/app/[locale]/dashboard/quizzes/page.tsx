@@ -510,7 +510,7 @@ export default function StudentQuizzesPage() {
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <Sparkles className="h-4 w-4" />
+          <HelpCircle className="h-4 w-4" />
           <span>{isAr ? 'الاختبارات الإلكترونية النشطة' : 'Active Online Quizzes'}</span>
           {onlineQuizzes.filter((q) => q.isOpen && !q.isSubmitted).length > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/20 px-1 text-[11px] font-bold text-primary">

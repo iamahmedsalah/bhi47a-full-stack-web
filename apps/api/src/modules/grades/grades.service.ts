@@ -3,7 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Grade, GradeDocument } from './schemas/grade.schema';
 import { CourseQuiz, CourseQuizDocument } from './schemas/course-quiz.schema';
-import { SaveGradeDto, QueryGradeDto, PublishGradesDto } from './dto/grade.dto';
+import {
+  SaveGradeDto,
+  QueryGradeDto,
+  PublishGradesDto,
+  UpdateGradesSettingsDto,
+} from './dto/grade.dto';
 import {
   buildPaginationOptions,
   createPaginatedResult,
@@ -19,6 +24,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileDocument,
 } from '../registrations/schemas/student-academic-profile.schema';
+import {
+  SystemSettings,
+  SystemSettingsDocument,
+} from '../complaints/schemas/system-settings.schema';
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
 import { evaluateAcademicProgression } from './utils/academic-level-progression.util';
 import { calculateGradeScale, type CourseLevel } from '@student-portal/shared';
@@ -38,6 +47,8 @@ export class GradesService implements OnModuleInit {
     private studentProfileModel: Model<StudentProfileDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private studentAcademicProfileModel: Model<StudentAcademicProfileDocument>,
+    @InjectModel(SystemSettings.name)
+    private systemSettingsModel: Model<SystemSettingsDocument>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -499,10 +510,26 @@ export class GradesService implements OnModuleInit {
       filter.courseCode = dto.courseCode.toUpperCase();
     }
 
+    if (dto.level) {
+      const studentsInLevel = await this.studentProfileModel
+        .find({ level: dto.level })
+        .select('userId')
+        .lean();
+      const userIds = studentsInLevel.map((p) => p.userId);
+      filter.studentId = { $in: userIds };
+    }
+
     const quizFilter: any = {};
     if (dto.academicYear) quizFilter.academicYear = dto.academicYear;
     if (dto.semester) quizFilter.semester = dto.semester;
     if (dto.courseCode) quizFilter.courseCode = dto.courseCode.toUpperCase();
+    if (dto.level) {
+      const studentsInLevel = await this.studentProfileModel
+        .find({ level: dto.level })
+        .select('userId')
+        .lean();
+      quizFilter.studentId = { $in: studentsInLevel.map((p) => p.userId) };
+    }
 
     const includeGrades = !dto.examType || dto.examType !== 'quiz';
     const includeQuizzes = !dto.examType || dto.examType === 'quiz';
@@ -569,6 +596,134 @@ export class GradesService implements OnModuleInit {
     return { count: result.modifiedCount + quizResult.modifiedCount };
   }
 
+  async getGradesSettings() {
+    let settings = await this.systemSettingsModel.findOne();
+    if (!settings) {
+      settings = await this.systemSettingsModel.create({
+        complaintsSystemOpen: true,
+        gradesSystemOpen: true,
+        gradesPublishedLevels: ['1', '2', '3', '4'],
+      });
+    }
+    return {
+      gradesSystemOpen: settings.gradesSystemOpen ?? true,
+      gradesOpenAt: settings.gradesOpenAt?.toISOString(),
+      gradesCloseAt: settings.gradesCloseAt?.toISOString(),
+      gradesPublishedLevels: settings.gradesPublishedLevels ?? [
+        '1',
+        '2',
+        '3',
+        '4',
+      ],
+    };
+  }
+
+  async updateGradesSettings(dto: UpdateGradesSettingsDto, userId?: string) {
+    let settings = await this.systemSettingsModel.findOne();
+    if (!settings) {
+      settings = new this.systemSettingsModel();
+    }
+
+    if (dto.gradesSystemOpen !== undefined) {
+      settings.gradesSystemOpen = dto.gradesSystemOpen;
+    }
+    if (dto.gradesOpenAt !== undefined) {
+      settings.gradesOpenAt = dto.gradesOpenAt
+        ? new Date(dto.gradesOpenAt)
+        : undefined;
+    }
+    if (dto.gradesCloseAt !== undefined) {
+      settings.gradesCloseAt = dto.gradesCloseAt
+        ? new Date(dto.gradesCloseAt)
+        : undefined;
+    }
+    if (dto.gradesPublishedLevels !== undefined) {
+      settings.gradesPublishedLevels = dto.gradesPublishedLevels;
+    }
+    if (userId && Types.ObjectId.isValid(userId)) {
+      settings.updatedBy = new Types.ObjectId(userId);
+    }
+
+    await settings.save();
+    return this.getGradesSettings();
+  }
+
+  async getStudentResultsStatus(studentId: string): Promise<{
+    isOpen: boolean;
+    reason?: 'system_closed' | 'not_started' | 'ended' | 'level_not_published';
+    openAt?: string;
+    closeAt?: string;
+    studentLevel: string;
+    isLevelPublished: boolean;
+  }> {
+    const settings = await this.getGradesSettings();
+    const profile = await this.studentProfileModel
+      .findOne({ userId: new Types.ObjectId(studentId) })
+      .select('level')
+      .lean();
+    const studentLevel = profile?.level || '1';
+    const publishedLevels = settings.gradesPublishedLevels ?? [
+      '1',
+      '2',
+      '3',
+      '4',
+    ];
+    const isLevelPublished = publishedLevels.includes(studentLevel);
+
+    if (settings.gradesSystemOpen === false) {
+      return {
+        isOpen: false,
+        reason: 'system_closed',
+        openAt: settings.gradesOpenAt,
+        closeAt: settings.gradesCloseAt,
+        studentLevel,
+        isLevelPublished,
+      };
+    }
+
+    const now = new Date();
+    if (settings.gradesOpenAt && now < new Date(settings.gradesOpenAt)) {
+      return {
+        isOpen: false,
+        reason: 'not_started',
+        openAt: settings.gradesOpenAt,
+        closeAt: settings.gradesCloseAt,
+        studentLevel,
+        isLevelPublished,
+      };
+    }
+
+    if (settings.gradesCloseAt && now > new Date(settings.gradesCloseAt)) {
+      return {
+        isOpen: false,
+        reason: 'ended',
+        openAt: settings.gradesOpenAt,
+        closeAt: settings.gradesCloseAt,
+        studentLevel,
+        isLevelPublished,
+      };
+    }
+
+    if (!isLevelPublished) {
+      return {
+        isOpen: false,
+        reason: 'level_not_published',
+        openAt: settings.gradesOpenAt,
+        closeAt: settings.gradesCloseAt,
+        studentLevel,
+        isLevelPublished,
+      };
+    }
+
+    return {
+      isOpen: true,
+      openAt: settings.gradesOpenAt,
+      closeAt: settings.gradesCloseAt,
+      studentLevel,
+      isLevelPublished: true,
+    };
+  }
+
   // ─── Student Self Services ───────────────────────────────────────
 
   async findStudentResults(studentId: string): Promise<
@@ -581,6 +736,11 @@ export class GradesService implements OnModuleInit {
       }
     >
   > {
+    const status = await this.getStudentResultsStatus(studentId);
+    if (!status.isOpen) {
+      return [];
+    }
+
     // Self-heal academic profiles created before automatic progression was
     // introduced. New grade saves/publish operations already trigger this.
     await this.syncPublishedAcademicProgress([studentId]);

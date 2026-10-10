@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { Award, FileSpreadsheet, CheckSquare, Printer, Calendar, Sparkles, Download, GraduationCap, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
+import { Award, FileSpreadsheet, CheckSquare, Printer, Download, GraduationCap, Calendar, BookOpen, Percent, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
@@ -18,6 +18,7 @@ import {
   type ResultCertificateData,
 } from '@/lib/result-certificate';
 import { calculateGradeScale } from '@student-portal/shared';
+import { getStudentResultsStatus } from '@/features/grades/api';
 
 interface Grade {
   _id: string;
@@ -110,6 +111,11 @@ export default function StudentResultsPage() {
     },
   });
 
+  const statusQuery = useQuery({
+    queryKey: ['student-results-status'],
+    queryFn: getStudentResultsStatus,
+  });
+
   const resultLevels = React.useMemo(
     () =>
       [...new Set((resultsQuery.data ?? []).map((grade) => grade.academicLevel))].sort(
@@ -133,7 +139,7 @@ export default function StudentResultsPage() {
     );
   }, [availableLevels, profileQuery.data?.level, selectedLevel]);
 
-  if (resultsQuery.isLoading) {
+  if (resultsQuery.isLoading || statusQuery.isLoading) {
     return <LoadingState title={tCommon('loading')} />;
   }
 
@@ -148,8 +154,38 @@ export default function StudentResultsPage() {
   }
 
   const grades = resultsQuery.data || [];
+  const statusData = statusQuery.data;
 
   if (grades.length === 0) {
+    let emptyTitle = isEnglish ? 'No published results' : 'النتائج لم تعلن بعد';
+    let emptyDesc = isEnglish
+      ? 'Your semester results have not been published by the administration yet.'
+      : 'لم يتم نشر نتائج الفصل الدراسي الخاصة بك من قبل الإدارة بعد.';
+
+    if (statusData?.reason === 'not_started' && statusData.openAt) {
+      const openDate = new Date(statusData.openAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG');
+      emptyTitle = isEnglish ? 'Results Schedule: Opening Soon' : 'إعلان النتائج: سيبدأ قريباً';
+      emptyDesc = isEnglish
+        ? `Results portal is scheduled to open on: ${openDate}`
+        : `من المقرر فتح بوابة استعلام النتائج في: ${openDate}`;
+    } else if (statusData?.reason === 'ended' && statusData.closeAt) {
+      const closeDate = new Date(statusData.closeAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG');
+      emptyTitle = isEnglish ? 'Results Inquiry Window Closed' : 'انتهت فترة استعلام النتائج';
+      emptyDesc = isEnglish
+        ? `The official viewing period concluded on: ${closeDate}`
+        : `انتهت الفترة الرسمية المحددة لعرض النتائج في: ${closeDate}`;
+    } else if (statusData?.reason === 'level_not_published') {
+      emptyTitle = isEnglish ? 'Academic Level Results Pending' : 'نتائج هذا المستوى قيد المراجعة';
+      emptyDesc = isEnglish
+        ? `Results for academic level ${statusData.studentLevel} have not been released yet.`
+        : `لم يتم اعتماد ونشر نتائج الفرقة الدراسية (${statusData.studentLevel}) حتى الآن.`;
+    } else if (statusData?.reason === 'system_closed') {
+      emptyTitle = isEnglish ? 'Results Portal Offline' : 'نظام النتائج مغلق حالياً';
+      emptyDesc = isEnglish
+        ? 'The academic administration has temporarily closed results inquiry.'
+        : 'تم إيقاف عرض نتائج الطلاب مؤقتاً بقرار من الشؤون الأكاديمية.';
+    }
+
     return (
       <div className="mx-auto max-w-4xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
         <div>
@@ -160,12 +196,8 @@ export default function StudentResultsPage() {
         </div>
         <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
           <EmptyState
-            title={isEnglish ? 'No published results' : 'النتائج لم تعلن بعد'}
-            description={
-              isEnglish
-                ? 'Your semester results have not been published by the administration yet.'
-                : 'لم يتم نشر نتائج الفصل الدراسي الخاصة بك من قبل الإدارة بعد.'
-            }
+            title={emptyTitle}
+            description={emptyDesc}
           />
         </Card>
       </div>
@@ -202,10 +234,12 @@ export default function StudentResultsPage() {
   const passedCourses = cumulativeStats.passed;
   const cumulativePercentage = cumulativeStats.percentage;
   const calculatedGpa = cumulativeStats.gpa;
+  const cumulativeScale = calculateGradeScale(cumulativePercentage);
   const selectedLevelGroups = groupedList.filter(
     (group) => group.academicLevel === selectedLevel,
   );
   const selectedLevelStats = calculateGroupStats(selectedLevelGroups);
+  const selectedLevelScale = calculateGradeScale(selectedLevelStats.percentage);
   const semesterSections = (['first', 'second', 'summer'] as const)
     .map((semester) => {
       const semesterGroups = selectedLevelGroups
@@ -258,6 +292,8 @@ export default function StudentResultsPage() {
     totalMax,
     percentage: cumulativePercentage,
     gpa: calculatedGpa,
+    overallGradeLetter: cumulativeScale.letter,
+    overallGradeName: isEnglish ? cumulativeScale.nameEn : cumulativeScale.nameAr,
     passedCourses,
     issuedAt: new Intl.DateTimeFormat(locale === 'ar' ? 'ar-EG' : 'en-GB', {
       dateStyle: 'long',
@@ -272,6 +308,8 @@ export default function StudentResultsPage() {
       const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
       const isAbsent = course.final?.status === 'absent' || course.midterm?.status === 'absent';
       const isPassed = total >= maxTotal / 2 && course.final?.status === 'present';
+      const coursePct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+      const courseScale = calculateGradeScale(coursePct, course.final?.status);
       const status = isBanned
         ? isEnglish ? 'Banned' : 'محروم'
         : isAbsent
@@ -292,6 +330,8 @@ export default function StudentResultsPage() {
           : course.final ? absent : '—',
         total: `${total} / ${maxTotal}`,
         status,
+        creditHours: course.creditHours,
+        letterGrade: courseScale.letter,
       };
     }),
   };
@@ -362,9 +402,30 @@ export default function StudentResultsPage() {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
+        {/* Total Cumulative Letter Grade Card */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/40 transition-all duration-300">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">
+                {isEnglish ? 'Cumulative Grade' : 'التقدير العام التراكمي'}
+              </span>
+              <Award className="h-4.5 w-4.5 text-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black font-mono text-primary">
+                {cumulativeScale.letter}
+              </span>
+              <span className="text-xs font-bold text-muted-foreground">
+                ({isEnglish ? cumulativeScale.nameEn : cumulativeScale.nameAr})
+              </span>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Cumulative GPA */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.03 }}>
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Cumulative GPA' : 'المعدل التراكمي'}
@@ -374,9 +435,10 @@ export default function StudentResultsPage() {
             <span className="text-2xl font-black font-mono text-foreground">{calculatedGpa.toFixed(2)} / 4.00</span>
           </Card>
         </motion.div>
-        {/* GPA Estimate */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+
+        {/* Selected Level GPA */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.06 }}>
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? `Level ${selectedLevel} GPA` : `المعدل للمستوى ${selectedLevel}`}
@@ -387,22 +449,25 @@ export default function StudentResultsPage() {
           </Card>
         </motion.div>
 
-        {/* Total marks */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        {/* Total marks / Level percentage */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.09 }}>
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Level Performance' : 'تقدير المستوى'}
               </span>
               <FileSpreadsheet className="h-4.5 w-4.5 text-primary" />
             </div>
-            <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.percentage}%</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.percentage}%</span>
+              <span className="text-xs font-bold text-emerald-400">({selectedLevelScale.letter})</span>
+            </div>
           </Card>
         </motion.div>
 
         {/* Passed courses */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-          <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.12 }}>
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Passed Courses' : 'المواد الناجح بها'}
@@ -414,8 +479,11 @@ export default function StudentResultsPage() {
         </motion.div>
       </div>
 
-      <Tabs value={selectedLevel} onValueChange={setSelectedLevel} className="print:hidden">
-        <TabsList className="h-auto w-full justify-start gap-2 overflow-x-auto rounded-2xl border border-border bg-card/45 p-2">
+      <Tabs value={selectedLevel} onValueChange={setSelectedLevel} dir={isEnglish ? 'ltr' : 'rtl'} className="print:hidden">
+        <TabsList
+          dir={isEnglish ? 'ltr' : 'rtl'}
+          className="h-auto w-full justify-start rtl:justify-start gap-2 overflow-x-auto rounded-2xl border border-border bg-card/45 p-2"
+        >
           {availableLevels.map((level) => {
             const currentLevel = profileQuery.data?.level ?? selectedLevel;
             const isPast = Number(level) < Number(currentLevel);
@@ -445,7 +513,7 @@ export default function StudentResultsPage() {
         <Card className="bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 overflow-hidden p-0 print:border-none print:shadow-none relative">
           <div className="p-5 border-b border-border flex items-center justify-between">
             <h3 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-primary" />
+              <GraduationCap className="w-4 h-4 text-primary" />
               {isEnglish ? `Level ${selectedLevel} Academic Transcript` : `بيان درجات المستوى ${selectedLevel}`}
             </h3>
             <span className="text-xs text-muted-foreground font-mono font-bold flex items-center gap-1">
@@ -478,7 +546,7 @@ export default function StudentResultsPage() {
                   </th>
                   <th className="p-4 text-center">
                     <span className="flex items-center justify-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      <Percent className="w-3.5 h-3.5 text-muted-foreground" />
                       {isEnglish ? 'Total Grade' : 'المجموع الكلي'}
                     </span>
                   </th>

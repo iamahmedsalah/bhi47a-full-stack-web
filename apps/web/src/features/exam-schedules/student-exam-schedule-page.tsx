@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
-import { Calendar, Download, Eye, FileImage, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Calendar, Download, Eye, FileImage, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { motion } from 'framer-motion';
@@ -187,7 +187,7 @@ export default function StudentExamSchedulePage() {
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1 text-xs font-semibold text-primary self-start md:self-center">
-                  <Sparkles className="h-3 w-3" />
+                  <CheckCircle2 className="h-3 w-3" />
                   <span>{currentSchedule.isPublished ? (locale === 'ar' ? 'منشور' : 'Published') : (locale === 'ar' ? 'مسودة' : 'Draft')}</span>
                 </div>
               </div>

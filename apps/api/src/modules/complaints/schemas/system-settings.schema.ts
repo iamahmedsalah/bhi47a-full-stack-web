@@ -20,6 +20,18 @@ export class SystemSettings {
   @Prop()
   complaintCloseAt?: Date;
 
+  @Prop({ default: true })
+  gradesSystemOpen?: boolean;
+
+  @Prop()
+  gradesOpenAt?: Date;
+
+  @Prop()
+  gradesCloseAt?: Date;
+
+  @Prop({ type: [String], default: ['1', '2', '3', '4'] })
+  gradesPublishedLevels?: string[];
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   updatedBy?: Types.ObjectId;
 }

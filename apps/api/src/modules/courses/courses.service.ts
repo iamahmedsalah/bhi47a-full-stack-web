@@ -174,6 +174,14 @@ export class CoursesService {
     }
 
     const updatePayload: Record<string, any> = { ...dto };
+    if (dto.syllabusPdfUrl === null || dto.syllabusPdfUrl === '') {
+      updatePayload.syllabusPdfUrl = null;
+      updatePayload.syllabusPdfName = null;
+    }
+    if (dto.coverImageUrl === null || dto.coverImageUrl === '') {
+      updatePayload.coverImageUrl = null;
+    }
+
     if (dto.doctorId !== undefined) {
       if (dto.doctorId && Types.ObjectId.isValid(dto.doctorId)) {
         const doctorObjectId = new Types.ObjectId(dto.doctorId);
@@ -572,5 +580,20 @@ export class CoursesService {
         isRegistered: registeredCodes.includes(c.code.toUpperCase()),
       })),
     };
+  }
+
+  async removeSyllabus(courseId: string): Promise<{ message: string }> {
+    const course = await this.findOne(courseId);
+    course.syllabusPdfUrl = undefined;
+    course.syllabusPdfName = undefined;
+    await course.save();
+    return { message: 'تم إزالة ملف المنهج بنجاح' };
+  }
+
+  async removeCoverImage(courseId: string): Promise<{ message: string }> {
+    const course = await this.findOne(courseId);
+    course.coverImageUrl = undefined;
+    await course.save();
+    return { message: 'تم إزالة صورة غلاف المقرر بنجاح' };
   }
 }

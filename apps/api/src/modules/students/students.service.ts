@@ -37,6 +37,10 @@ import {
   AcademicEmail,
   AcademicEmailDocument,
 } from '../academic-emails/schemas/academic-email.schema';
+import {
+  StudentAcademicProfile,
+  type StudentAcademicProfileDocument,
+} from '../registrations/schemas/student-academic-profile.schema';
 import { StudentQueryService } from './services/student-query.service';
 
 @Injectable()
@@ -52,6 +56,8 @@ export class StudentsService {
     private advisingCaseModel: Model<AdvisingCaseDocument>,
     @InjectModel(AcademicEmail.name)
     private academicEmailModel: Model<AcademicEmailDocument>,
+    @InjectModel(StudentAcademicProfile.name)
+    private academicProfileModel: Model<StudentAcademicProfileDocument>,
     private usersService: UsersService,
     private emailsService: EmailsService,
     private readonly studentQueryService: StudentQueryService,
@@ -392,35 +398,195 @@ export class StudentsService {
   }
 
   async getStats() {
-    const [total, active, suspended, graduated, withdrawn, byLevel] =
-      await Promise.all([
-        this.studentProfileModel.countDocuments(),
-        this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
-        this.studentProfileModel.countDocuments({
-          enrollmentStatus: 'suspended',
-        }),
-        this.studentProfileModel.countDocuments({
-          enrollmentStatus: 'graduated',
-        }),
-        this.studentProfileModel.countDocuments({
-          enrollmentStatus: 'withdrawn',
-        }),
-        this.studentProfileModel.aggregate([
-          { $group: { _id: '$level', count: { $sum: 1 } } },
-          { $sort: { _id: 1 } },
-        ]),
-      ]);
+    const [
+      total,
+      active,
+      suspended,
+      graduated,
+      byLevel,
+      allProfiles,
+      academicProfiles,
+      liveOnline,
+    ] = await Promise.all([
+      this.studentProfileModel.countDocuments(),
+      this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
+      this.studentProfileModel.countDocuments({
+        enrollmentStatus: 'suspended',
+      }),
+      this.studentProfileModel.countDocuments({
+        enrollmentStatus: 'graduated',
+      }),
+      this.studentProfileModel.aggregate([
+        { $group: { _id: '$level', count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      this.studentProfileModel
+        .find({}, 'userId level department enrollmentStatus academicWarnings')
+        .lean(),
+      this.academicProfileModel
+        .find({}, 'studentId gpa academicWarnings')
+        .lean(),
+      this.usersService.countActiveOnlineStudents(60),
+    ]);
+
+    const gpaMap = new Map<string, number>(
+      academicProfiles.map((ap) => [ap.studentId?.toString() ?? '', ap.gpa]),
+    );
+
+    // 1. Department Breakdown (Institute structure: General for Years 1 & 2, BIS & Accounting for Years 3 & 4)
+    let generalEnrolled = 0;
+    let bisEnrolled = 0;
+    let accEnrolled = 0;
+
+    // 2. Cohort Retention by Level ('1', '2', '3', '4')
+    const cohortMap: Record<
+      string,
+      { total: number; active: number; probation: number; attrition: number }
+    > = {
+      '1': { total: 0, active: 0, probation: 0, attrition: 0 },
+      '2': { total: 0, active: 0, probation: 0, attrition: 0 },
+      '3': { total: 0, active: 0, probation: 0, attrition: 0 },
+      '4': { total: 0, active: 0, probation: 0, attrition: 0 },
+    };
+
+    // 3. GPA Distribution
+    let probationCount = 0; // < 2.0
+    let satisfactoryCount = 0; // 2.0 - 2.49
+    let goodCount = 0; // 2.5 - 2.99
+    let veryGoodCount = 0; // 3.0 - 3.49
+    let excellentCount = 0; // >= 3.5
+    let inactiveCount = 0;
+
+    for (const p of allProfiles) {
+      const lvl = String(p.level || '1');
+      const status = String(p.enrollmentStatus || 'active');
+      const userIdStr = p.userId?.toString() ?? '';
+      const gpa = gpaMap.get(userIdStr) ?? 0;
+      const warnings = p.academicWarnings || 0;
+      const isProbation = gpa > 0 ? gpa < 2.0 : warnings > 0;
+      const isAttrition = status === 'suspended' || status === 'inactive';
+
+      if (status === 'inactive') {
+        inactiveCount += 1;
+      }
+
+      if (!cohortMap[lvl]) {
+        cohortMap[lvl] = { total: 0, active: 0, probation: 0, attrition: 0 };
+      }
+      cohortMap[lvl].total += 1;
+      if (status === 'active') {
+        cohortMap[lvl].active += 1;
+      }
+      if (isProbation) {
+        cohortMap[lvl].probation += 1;
+      }
+      if (isAttrition) {
+        cohortMap[lvl].attrition += 1;
+      }
+
+      // Department Categorization: Years 1 & 2 are General; Years 3 & 4 are BIS or Accounting
+      const rawDept = (p.department || '').toUpperCase();
+      if (lvl === '1' || lvl === '2') {
+        generalEnrolled += 1;
+      } else {
+        if (rawDept.includes('ACC') || rawDept.includes('محاسب')) {
+          accEnrolled += 1;
+        } else {
+          bisEnrolled += 1;
+        }
+      }
+
+      // GPA Distribution
+      if (gpa > 0) {
+        if (gpa < 2.0) probationCount += 1;
+        else if (gpa < 2.5) satisfactoryCount += 1;
+        else if (gpa < 3.0) goodCount += 1;
+        else if (gpa < 3.5) veryGoodCount += 1;
+        else excellentCount += 1;
+      }
+    }
+
+    const departments = [
+      {
+        department: 'General',
+        nameAr: 'الشعبة العامة',
+        nameEn: 'General Track (Years 1 & 2)',
+        levels: ['1', '2'],
+        enrolled: generalEnrolled,
+      },
+      {
+        department: 'BIS',
+        nameAr: 'نظم معلومات الأعمال (BIS)',
+        nameEn: 'Business Information Systems',
+        levels: ['3', '4'],
+        enrolled: bisEnrolled,
+      },
+      {
+        department: 'ACCOUNTING',
+        nameAr: 'المحاسبة والمراجعة',
+        nameEn: 'Accounting & Auditing',
+        levels: ['3', '4'],
+        enrolled: accEnrolled,
+      },
+    ];
+
+    const cohortRetention = Object.entries(cohortMap).map(([lvl, data]) => ({
+      level: lvl,
+      total: data.total,
+      active: data.active,
+      probation: data.probation,
+      attrition: data.attrition,
+      retentionRate:
+        data.total > 0 ? Math.round((data.active / data.total) * 100) : 100,
+    }));
+
+    const gpaDistribution = [
+      {
+        label: 'Probation (< 2.0)',
+        labelAr: 'إنذار أكاديمي (< 2.0)',
+        range: '< 2.0',
+        count: probationCount,
+      },
+      {
+        label: 'Satisfactory (2.0 - 2.49)',
+        labelAr: 'مقبول (2.0 - 2.49)',
+        range: '2.0 - 2.49',
+        count: satisfactoryCount,
+      },
+      {
+        label: 'Good (2.5 - 2.99)',
+        labelAr: 'جيد (2.5 - 2.99)',
+        range: '2.5 - 2.99',
+        count: goodCount,
+      },
+      {
+        label: 'Very Good (3.0 - 3.49)',
+        labelAr: 'جيد جداً (3.0 - 3.49)',
+        range: '3.0 - 3.49',
+        count: veryGoodCount,
+      },
+      {
+        label: 'Excellent (3.5 - 4.0)',
+        labelAr: 'ممتاز (3.5 - 4.0)',
+        range: '3.5 - 4.0',
+        count: excellentCount,
+      },
+    ];
 
     return {
       total,
       active,
       suspended,
       graduated,
-      withdrawn,
+      withdrawn: inactiveCount,
+      liveOnline: Math.max(liveOnline ?? 0, 0),
       byLevel: byLevel.map((item) => ({
         level: item._id || 'unknown',
         count: item.count,
       })),
+      departments,
+      cohortRetention,
+      gpaDistribution,
     };
   }
 
@@ -447,5 +613,73 @@ export class StudentsService {
 
   async toggleAllMustChangePassword(enabled: boolean) {
     return this.usersService.toggleAllStudentsMustChangePassword(enabled);
+  }
+
+  async transferDepartment(
+    studentIds: string[],
+    targetDepartment: string,
+    targetLevel?: string,
+  ): Promise<{ updatedCount: number; message: string }> {
+    if (!studentIds || !studentIds.length) {
+      throw new BadRequestException('يجب تحديد طالب واحد على الأقل للتحويل');
+    }
+
+    const objectIds = studentIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    const stringCodes = studentIds.filter((id) => !Types.ObjectId.isValid(id));
+
+    const orClauses: Record<string, any>[] = [];
+    if (objectIds.length) {
+      orClauses.push({ _id: { $in: objectIds } });
+      orClauses.push({ userId: { $in: objectIds } });
+    }
+    if (stringCodes.length) {
+      orClauses.push({ studentCode: { $in: stringCodes } });
+    }
+
+    if (!orClauses.length) {
+      throw new BadRequestException('معرفات الطلاب المحددة غير صالحة');
+    }
+
+    const filter = { $or: orClauses };
+
+    const updateDoc: Record<string, any> = {
+      department: targetDepartment,
+    };
+    if (targetLevel) {
+      updateDoc.level = targetLevel;
+    }
+
+    const result = await this.studentProfileModel.updateMany(filter, {
+      $set: updateDoc,
+    });
+
+    if (targetLevel) {
+      const updatedProfiles = await this.studentProfileModel
+        .find(filter)
+        .select('userId')
+        .lean();
+      const userIds = updatedProfiles.map((p) => p.userId).filter(Boolean);
+      if (userIds.length) {
+        await this.academicProfileModel.updateMany(
+          { studentId: { $in: userIds } },
+          { $set: { academicLevel: targetLevel } },
+        );
+      }
+    }
+
+    const deptLabel =
+      targetDepartment === 'BIS'
+        ? 'نظم معلومات الأعمال (BIS)'
+        : targetDepartment === 'ACCOUNTING'
+          ? 'المحاسبة والمراجعة'
+          : targetDepartment;
+
+    return {
+      updatedCount: result.modifiedCount,
+      message: `تم تحويل ${result.modifiedCount} طالب إلى ${deptLabel} بنجاح`,
+    };
   }
 }

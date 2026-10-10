@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/ui/feedback';
@@ -215,7 +215,7 @@ export default function CourseRegistrationPage() {
         <div className="z-10 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 font-semibold text-xs text-primary">
-              <Sparkles className="h-3 w-3" />
+              <BookOpenCheck className="h-3 w-3" />
               {isEnglish ? 'Academic Advising & Course Registration' : 'تسجيل المواد والإرشاد الأكاديمي'}
             </div>
             {eligibility && !eligibility.requiresAdvisor && (

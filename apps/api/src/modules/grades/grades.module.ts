@@ -15,6 +15,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileSchema,
 } from '../registrations/schemas/student-academic-profile.schema';
+import {
+  SystemSettings,
+  SystemSettingsSchema,
+} from '../complaints/schemas/system-settings.schema';
 
 @Module({
   imports: [
@@ -28,6 +32,7 @@ import {
         name: StudentAcademicProfile.name,
         schema: StudentAcademicProfileSchema,
       },
+      { name: SystemSettings.name, schema: SystemSettingsSchema },
     ]),
     NotificationsModule,
   ],

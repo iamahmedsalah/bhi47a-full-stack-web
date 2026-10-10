@@ -4,7 +4,7 @@ import React, { Suspense, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import { Download, Plus, UploadCloud, Users, Loader2, Sparkles, KeyRound } from 'lucide-react';
+import { Download, Plus, UploadCloud, Users, Loader2, BookOpenCheck, KeyRound, ArrowLeftRight } from 'lucide-react';
 import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
 
@@ -34,6 +34,7 @@ import {
 import { StudentFormDialog } from '@/features/students/components/student-form-dialog';
 import { StudentDetailDialog } from '@/features/students/components/student-detail-dialog';
 import { ResetStudentPasswordDialog } from '@/features/students/components/reset-student-password-dialog';
+import { DepartmentTransferDialog } from '@/features/students/components/department-transfer-dialog';
 import { StudentTable, type Student } from '@/features/students/components/student-table';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -107,6 +108,7 @@ function StudentsPageContent() {
   } = useTableState({
     defaultFilters: {
       level: 'all',
+      department: 'all',
       status: 'all',
       sortBy: 'createdAt',
       sortOrder: 'desc',
@@ -116,6 +118,7 @@ function StudentsPageContent() {
   });
 
   const level = filters.level;
+  const department = filters.department || 'all';
   const status = filters.status;
   const sortBy = filters.sortBy;
   const sortOrder = filters.sortOrder;
@@ -136,6 +139,8 @@ function StudentsPageContent() {
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isBulkDeactivateOpen, setIsBulkDeactivateOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferStudent, setTransferStudent] = useState<Student | null>(null);
   const [profileStudent, setProfileStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState(initialForm);
@@ -204,8 +209,17 @@ function StudentsPageContent() {
   };
 
   const studentsQuery = useQuery({
-    queryKey: studentKeys.list({ page, limit, search, level, enrollmentStatus: status, sortBy, sortOrder: sortOrder as 'asc' | 'desc' }),
-    queryFn: () => listStudents({ page, limit, search: search.trim() || undefined, level: level !== 'all' ? level : undefined, enrollmentStatus: status !== 'all' ? status : undefined, sortBy, sortOrder: sortOrder as 'asc' | 'desc' }),
+    queryKey: studentKeys.list({ page, limit, search, level, department, enrollmentStatus: status, sortBy, sortOrder: sortOrder as 'asc' | 'desc' }),
+    queryFn: () => listStudents({
+      page,
+      limit,
+      search: search.trim() || undefined,
+      level: level !== 'all' ? level : undefined,
+      department: department !== 'all' ? department : undefined,
+      enrollmentStatus: status !== 'all' ? status : undefined,
+      sortBy,
+      sortOrder: sortOrder as 'asc' | 'desc'
+    }),
   });
 
   const profileQuery = useQuery({
@@ -319,6 +333,7 @@ function StudentsPageContent() {
       <PageTitleBanner title={t('title')} icon={<Users className="h-5 w-5" />} subtitle="Manage student identities, academic placement, exam seats, imports, and exports.">
         <Button
           variant="outline"
+          size="sm"
           disabled={isExporting}
           onClick={async () => {
             setIsExporting(true);
@@ -344,29 +359,31 @@ function StudentsPageContent() {
               setIsExporting(false);
             }
           }}
+          className="h-9 rounded-squircle border-border/80 bg-card/60 px-3 text-xs font-medium text-foreground hover:bg-secondary/70"
         >
           {isExporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Download className="h-4 w-4" />
+            <Download className="h-3.5 w-3.5" />
           )}
-          {locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+          <span>{locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}</span>
         </Button>
 
         <Button
           variant="outline"
+          size="sm"
           disabled={isTogglingMustChange || mustChangeSummaryQuery.isLoading}
           onClick={() => setIsBulkMustChangeOpen(true)}
           className={cn(
-            'border-amber-500/40 hover:bg-amber-500/10 text-amber-600 dark:text-amber-400',
+            'h-9 rounded-squircle border-amber-500/40 bg-card/60 px-3 text-xs font-medium text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
             mustChangeSummaryQuery.data?.allEnabled &&
-              'border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+              'border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400',
           )}
         >
           {isTogglingMustChange ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <KeyRound className="h-4 w-4" />
+            <KeyRound className="h-3.5 w-3.5" />
           )}
           <span>
             {locale === 'ar'
@@ -378,7 +395,7 @@ function StudentsPageContent() {
                 : 'Force Password Reset'}
           </span>
           {mustChangeSummaryQuery.data && (
-            <span className="ms-1.5 rounded-full bg-secondary/80 px-1.5 py-0.5 text-[11px] font-mono">
+            <span className="ms-1.5 rounded-full bg-secondary/80 px-1.5 py-0.5 text-[10px] font-mono">
               {mustChangeSummaryQuery.data.mustChangeCount}/
               {mustChangeSummaryQuery.data.totalStudents}
             </span>
@@ -387,27 +404,61 @@ function StudentsPageContent() {
 
         <Button
           variant="outline"
+          size="sm"
           disabled={isAutoRegistering}
           onClick={() => setIsAutoRegisterModalOpen(true)}
-          className="border-primary/40 hover:bg-primary/10 text-primary"
+          className="h-9 rounded-squircle border-primary/40 bg-card/60 px-3 text-xs font-medium text-primary hover:bg-primary/10"
         >
           {isAutoRegistering ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <BookOpenCheck className="h-3.5 w-3.5" />
           )}
-          {locale === 'ar'
-            ? 'تسجيل الفرقة الأولى تلقائياً'
-            : 'Auto-Register Level 1'}
+          <span>
+            {locale === 'ar'
+              ? 'تسجيل الفرقة الأولى'
+              : 'Auto-Register Level 1'}
+          </span>
         </Button>
 
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
-          <UploadCloud className="h-4 w-4" />
-          {locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setTransferStudent(null);
+            setIsTransferOpen(true);
+          }}
+          className="h-9 rounded-squircle border-cyan-500/40 bg-card/60 px-3 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          <span>
+            {locale === 'ar'
+              ? 'تحويل تخصص الفرقة 3'
+              : 'Transfer Specialization (Level 3)'}
+          </span>
         </Button>
-        <Button onClick={() => { setSelectedStudent(null); setForm(initialForm); setIsAddOpen(true); }}>
-          <Plus className="h-4 w-4" />
-          {t('addStudent')}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsUploadOpen(true)}
+          className="h-9 rounded-squircle border-border/80 bg-card/60 px-3.5 text-xs font-medium hover:bg-secondary/70"
+        >
+          <UploadCloud className="h-3.5 w-3.5" />
+          <span>{locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}</span>
+        </Button>
+
+        <Button
+          size="sm"
+          onClick={() => {
+            setSelectedStudent(null);
+            setForm(initialForm);
+            setIsAddOpen(true);
+          }}
+          className="h-9 rounded-squircle px-4 text-xs font-bold shadow-sm"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>{t('addStudent')}</span>
         </Button>
       </PageTitleBanner>
 
@@ -421,6 +472,18 @@ function StudentsPageContent() {
             {COURSE_LEVEL_VALUES.map((lvl) => (
               <SelectItem key={lvl} value={lvl}>{locale === 'ar' ? `المستوى ${lvl}` : `Level ${lvl}`}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={department} onValueChange={(val) => setFilter('department', val)}>
+          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
+            <SelectValue placeholder={locale === 'ar' ? 'القسم / الشعبة' : 'Department'} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-card">
+            <SelectItem value="all">{locale === 'ar' ? 'القسم: الكل' : 'Department: All'}</SelectItem>
+            <SelectItem value="GENERAL">{locale === 'ar' ? 'الشعبة العامة (سنة 1 و 2)' : 'General Track (Years 1 & 2)'}</SelectItem>
+            <SelectItem value="BIS">{locale === 'ar' ? 'نظم معلومات الأعمال (BIS)' : 'Business Info Systems (BIS)'}</SelectItem>
+            <SelectItem value="ACCOUNTING">{locale === 'ar' ? 'المحاسبة والمراجعة (Accounting)' : 'Accounting & Auditing'}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -451,6 +514,14 @@ function StudentsPageContent() {
         onViewStudent={(st) => setProfileStudent(st)}
         onEditStudent={(st) => { setSelectedStudent(st); setIsEditOpen(true); }}
         onResetPassword={(st) => { setSelectedStudent(st); setIsResetOpen(true); }}
+        onTransferDepartment={(st) => {
+          setTransferStudent(st);
+          setIsTransferOpen(true);
+        }}
+        onBulkTransferDepartment={() => {
+          setTransferStudent(null);
+          setIsTransferOpen(true);
+        }}
         onActivateStudent={async (st) => { await activateStudent(st._id); invalidateStudents(); }}
         onDeactivateStudent={async (ids) => { await Promise.all(ids.map((id) => deactivateStudent(id))); invalidateStudents(); }}
         onBulkEdit={() => { if (selectedKeys.length === 1) { const found = students.find((s) => s._id === selectedKeys[0]); if (found) { setSelectedStudent(found); setIsEditOpen(true); } } }}
@@ -570,6 +641,21 @@ function StudentsPageContent() {
         onSuccess={() => invalidateStudents()}
         locale={locale}
       />
+      <DepartmentTransferDialog
+        key={isTransferOpen ? transferStudent?._id ?? selectedKeys.join(',') : 'closed'}
+        open={isTransferOpen}
+        onOpenChange={(open) => {
+          setIsTransferOpen(open);
+          if (!open) setTransferStudent(null);
+        }}
+        student={transferStudent}
+        selectedStudents={students.filter((s) => selectedKeys.includes(s._id))}
+        onSuccess={() => {
+          setSelectedKeys([]);
+          invalidateStudents();
+        }}
+        locale={locale}
+      />
       <ConfirmDialog
         open={isBulkDeactivateOpen}
         onOpenChange={setIsBulkDeactivateOpen}
@@ -594,7 +680,7 @@ function StudentsPageContent() {
         <DialogContent className="max-w-md">
           <DialogHeader className="text-start sm:text-start rtl:sm:text-right">
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
+              <BookOpenCheck className="h-5 w-5 text-primary" />
               {locale === 'ar' ? 'التسجيل التلقائي لمقررات الفرقة الأولى' : 'Auto-Register Level 1 Courses'}
             </DialogTitle>
             <DialogDescription className="text-start">
@@ -717,7 +803,7 @@ function StudentsPageContent() {
               {isAutoRegistering ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <BookOpenCheck className="h-4 w-4" />
               )}
               {locale === 'ar' ? 'بدء التسجيل التلقائي' : 'Start Auto-Registration'}
             </Button>

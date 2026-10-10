@@ -1,0 +1,293 @@
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { Types } from 'mongoose';
+import { StudentsService } from './students.service';
+
+describe('StudentsService Unit Tests', () => {
+  let service: StudentsService;
+  let mockStudentProfileModel: any;
+  let mockRegistrationModel: any;
+  let mockRegistrationTermModel: any;
+  let mockAdvisingCaseModel: any;
+  let mockAcademicEmailModel: any;
+  let mockAcademicProfileModel: any;
+  let mockUsersService: any;
+  let mockEmailsService: any;
+  let mockStudentQueryService: any;
+
+  beforeEach(() => {
+    const MockProfileConstructor: any = jest
+      .fn()
+      .mockImplementation((data) => ({
+        ...data,
+        save: jest
+          .fn()
+          .mockResolvedValue({ _id: new Types.ObjectId(), ...data }),
+      }));
+    MockProfileConstructor.countDocuments = jest.fn();
+    MockProfileConstructor.aggregate = jest.fn();
+    MockProfileConstructor.find = jest.fn();
+    MockProfileConstructor.findOne = jest.fn();
+    MockProfileConstructor.create = jest.fn();
+    MockProfileConstructor.updateMany = jest.fn();
+    MockProfileConstructor.updateOne = jest.fn();
+
+    mockStudentProfileModel = MockProfileConstructor;
+
+    mockRegistrationModel = {
+      find: jest.fn(),
+    };
+
+    mockRegistrationTermModel = {
+      findOne: jest.fn(),
+    };
+
+    mockAdvisingCaseModel = {
+      create: jest.fn().mockResolvedValue({}),
+    };
+
+    mockAcademicEmailModel = {
+      create: jest.fn().mockResolvedValue({}),
+      updateOne: jest.fn().mockResolvedValue({}),
+    };
+
+    mockAcademicProfileModel = {
+      find: jest.fn(),
+      create: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn(),
+      updateOne: jest.fn().mockResolvedValue({}),
+    };
+
+    mockUsersService = {
+      findByStudentCode: jest.fn(),
+      countActiveOnlineStudents: jest.fn(),
+      createUser: jest.fn(),
+    };
+
+    mockEmailsService = {
+      send: jest.fn(),
+    };
+
+    mockStudentQueryService = {
+      findAll: jest.fn(),
+      findById: jest.fn(),
+    };
+
+    service = new StudentsService(
+      mockStudentProfileModel,
+      mockRegistrationModel,
+      mockRegistrationTermModel,
+      mockAdvisingCaseModel,
+      mockAcademicEmailModel,
+      mockAcademicProfileModel,
+      mockUsersService,
+      mockEmailsService,
+      mockStudentQueryService,
+    );
+  });
+
+  describe('getStats()', () => {
+    it('returns comprehensive student analytics including liveOnline active portal count', async () => {
+      mockStudentProfileModel.countDocuments
+        .mockResolvedValueOnce(100) // total
+        .mockResolvedValueOnce(90) // active
+        .mockResolvedValueOnce(8) // suspended
+        .mockResolvedValueOnce(2); // graduated
+
+      mockStudentProfileModel.aggregate.mockResolvedValueOnce([
+        { _id: '1', count: 40 },
+        { _id: '2', count: 30 },
+        { _id: '3', count: 20 },
+        { _id: '4', count: 10 },
+      ]);
+
+      const fakeUserId1 = new Types.ObjectId();
+      const fakeUserId2 = new Types.ObjectId();
+      const fakeUserId3 = new Types.ObjectId();
+
+      mockStudentProfileModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          {
+            userId: fakeUserId1,
+            level: '1',
+            department: 'GENERAL',
+            enrollmentStatus: 'active',
+          },
+          {
+            userId: fakeUserId2,
+            level: '3',
+            department: 'BIS',
+            enrollmentStatus: 'active',
+          },
+          {
+            userId: fakeUserId3,
+            level: '3',
+            department: 'ACCOUNTING',
+            enrollmentStatus: 'suspended',
+          },
+        ]),
+      });
+
+      mockAcademicProfileModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          { studentId: fakeUserId1, gpa: 3.6, academicWarnings: 0 },
+          { studentId: fakeUserId2, gpa: 2.8, academicWarnings: 0 },
+          { studentId: fakeUserId3, gpa: 1.8, academicWarnings: 1 },
+        ]),
+      });
+
+      mockUsersService.countActiveOnlineStudents.mockResolvedValue(15);
+
+      const stats = await service.getStats();
+
+      expect(stats.total).toBe(100);
+      expect(stats.active).toBe(90);
+      expect(stats.suspended).toBe(8);
+      expect(stats.graduated).toBe(2);
+      expect(stats.liveOnline).toBe(15);
+      expect(mockUsersService.countActiveOnlineStudents).toHaveBeenCalledWith(
+        60,
+      );
+
+      // Verify department breakdown
+      expect(stats.departments).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ department: 'General', enrolled: 1 }),
+          expect.objectContaining({ department: 'BIS', enrolled: 1 }),
+          expect.objectContaining({ department: 'ACCOUNTING', enrolled: 1 }),
+        ]),
+      );
+
+      // Verify cohort retention
+      expect(stats.cohortRetention).toBeDefined();
+      expect(stats.cohortRetention.length).toBeGreaterThan(0);
+
+      // Verify GPA distribution
+      expect(stats.gpaDistribution).toBeDefined();
+      const excellent = stats.gpaDistribution.find(
+        (b: any) => b.range === '3.5 - 4.0',
+      );
+      const probation = stats.gpaDistribution.find(
+        (b: any) => b.range === '< 2.0',
+      );
+      expect(excellent?.count).toBe(1);
+      expect(probation?.count).toBe(1);
+    });
+  });
+
+  describe('transferDepartment()', () => {
+    it('throws BadRequestException if no studentIds are provided', async () => {
+      await expect(service.transferDepartment([], 'BIS')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('successfully transfers students to target department and updates level', async () => {
+      const studentId1 = new Types.ObjectId().toString();
+      const studentId2 = new Types.ObjectId().toString();
+
+      mockStudentProfileModel.updateMany.mockResolvedValue({
+        modifiedCount: 2,
+      });
+
+      mockStudentProfileModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest
+            .fn()
+            .mockResolvedValue([
+              { userId: new Types.ObjectId() },
+              { userId: new Types.ObjectId() },
+            ]),
+        }),
+      });
+
+      mockAcademicProfileModel.updateMany.mockResolvedValue({
+        modifiedCount: 2,
+      });
+
+      const result = await service.transferDepartment(
+        [studentId1, studentId2],
+        'BIS',
+        '3',
+      );
+
+      expect(result.updatedCount).toBe(2);
+      expect(result.message).toContain('نظم معلومات الأعمال (BIS)');
+      expect(mockStudentProfileModel.updateMany).toHaveBeenCalledWith(
+        expect.any(Object),
+        {
+          $set: { department: 'BIS', level: '3' },
+        },
+      );
+      expect(mockAcademicProfileModel.updateMany).toHaveBeenCalled();
+    });
+
+    it('transfers students to Accounting without level change', async () => {
+      const studentId = new Types.ObjectId().toString();
+
+      mockStudentProfileModel.updateMany.mockResolvedValue({
+        modifiedCount: 1,
+      });
+
+      const result = await service.transferDepartment(
+        [studentId],
+        'ACCOUNTING',
+      );
+
+      expect(result.updatedCount).toBe(1);
+      expect(result.message).toContain('المحاسبة والمراجعة');
+      expect(mockStudentProfileModel.updateMany).toHaveBeenCalledWith(
+        expect.any(Object),
+        {
+          $set: { department: 'ACCOUNTING' },
+        },
+      );
+      expect(mockAcademicProfileModel.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create()', () => {
+    it('throws ConflictException if studentCode already exists', async () => {
+      mockUsersService.findByStudentCode.mockResolvedValue({
+        _id: 'existing-id',
+      });
+
+      await expect(
+        service.create({
+          studentCode: '2026001',
+          nationalId: '30101010101010',
+          fullName: 'Test Student',
+        } as any),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('creates student account and profile when valid', async () => {
+      mockUsersService.findByStudentCode.mockResolvedValue(null);
+      const fakeUserId = new Types.ObjectId();
+      mockUsersService.createUser.mockResolvedValue({
+        _id: fakeUserId,
+        studentCode: '2026001',
+      });
+      mockStudentProfileModel.create.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        userId: fakeUserId,
+        studentCode: '2026001',
+      });
+
+      const result = await service.create({
+        studentCode: '2026001',
+        nationalId: '30101010101010',
+        fullName: 'أحمد علي',
+      } as any);
+
+      expect(result).toBeDefined();
+      expect(mockUsersService.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'student',
+          studentCode: '2026001',
+          name: 'أحمد علي',
+        }),
+      );
+      expect(mockStudentProfileModel).toHaveBeenCalled();
+    });
+  });
+});

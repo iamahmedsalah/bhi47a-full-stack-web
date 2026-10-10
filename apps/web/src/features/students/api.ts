@@ -90,6 +90,7 @@ export interface StudentListParams {
   limit?: number;
   search?: string;
   level?: string;
+  department?: string;
   enrollmentStatus?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
@@ -179,6 +180,17 @@ export function deactivateStudent(id: string) {
 
 export function activateStudent(id: string) {
   return apiPost<Student>(`/admin/students/${id}/activate`);
+}
+
+export function transferDepartment(payload: {
+  studentIds: string[];
+  targetDepartment: string;
+  targetLevel?: string;
+}) {
+  return apiPost<{ updatedCount: number; message: string }, typeof payload>(
+    '/admin/students/transfer-department',
+    payload,
+  );
 }
 
 export function buildStudentExportSlug(params: {

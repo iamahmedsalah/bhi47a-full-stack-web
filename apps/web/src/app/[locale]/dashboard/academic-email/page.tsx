@@ -166,11 +166,13 @@ export default function StudentAcademicEmailPage() {
                 readOnly
                 value={record.academicEmail}
                 dir="ltr"
-                className="w-full rounded-xl border border-border bg-secondary/50 py-3.5 pe-24 ps-4 font-mono text-sm font-semibold text-foreground outline-none focus:border-primary/50 transition-colors"
+                style={{ paddingRight: '6.5rem', paddingLeft: '1rem', textAlign: 'left' }}
+                className="w-full rounded-xl border border-border bg-secondary/50 py-3.5 font-mono text-sm font-semibold text-foreground outline-none focus:border-primary/50 transition-colors text-left"
               />
               <button
                 onClick={handleCopy}
-                className="absolute end-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 rounded-lg bg-card hover:bg-secondary border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-all duration-200 cursor-pointer"
+                className="absolute top-1/2 -translate-y-1/2 flex items-center gap-1.5 rounded-lg bg-card hover:bg-secondary border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-all duration-200 cursor-pointer z-10"
+                style={{ right: '0.5rem', left: 'auto' }}
               >
                 {copied ? (
                   <>

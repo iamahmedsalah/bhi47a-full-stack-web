@@ -17,6 +17,7 @@ import {
   ResetPasswordDto,
   UpdateMyContactDto,
   ToggleAllMustChangePasswordDto,
+  TransferDepartmentDto,
 } from './dto/student.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -129,6 +130,21 @@ export class StudentsController {
     @Body() dto: ToggleAllMustChangePasswordDto,
   ) {
     return this.studentsService.toggleAllMustChangePassword(dto.enabled);
+  }
+
+  @Post('admin/students/transfer-department')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  @ApiOperation({
+    summary:
+      'Transfer students between departments (BIS ⇄ Accounting / General)',
+  })
+  async transferDepartment(@Body() dto: TransferDepartmentDto) {
+    return this.studentsService.transferDepartment(
+      dto.studentIds,
+      dto.targetDepartment,
+      dto.targetLevel,
+    );
   }
 
   // ─── Student Routes ──────────────────────────────────────

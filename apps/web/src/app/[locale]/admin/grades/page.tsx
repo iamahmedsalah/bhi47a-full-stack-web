@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
   Award,
+  CalendarClock,
   Download,
   Edit2,
   Loader2,
@@ -51,6 +52,7 @@ import {
 import { GradeFormDialog } from "@/features/grades/components/grade-form-dialog";
 import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
 import { AuditWarningsModal } from "@/features/grades/components/audit-warnings-modal";
+import { GradesPublishingModal } from "@/features/grades/components/grades-publishing-modal";
 import type { GradeFormValues } from "@/features/grades/schema";
 
 interface CourseOption {
@@ -98,6 +100,7 @@ function GradesPageContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
   const limit = 10;
 
@@ -497,6 +500,14 @@ function GradesPageContent() {
           <AlertTriangle className="h-4 w-4 text-amber-400" />
           {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => setIsPublishModalOpen(true)}
+          className="rounded-squircle border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
+        >
+          <CalendarClock className="h-4 w-4 text-cyan-400" />
+          {isAr ? "نشر وجدولة النتائج" : "Publish & Schedule Grades"}
+        </Button>
         <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
           <Plus className="h-4 w-4" />
           {isAr ? "إضافة درجة" : "Add Grade"}
@@ -687,6 +698,11 @@ function GradesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ["students"] });
           void queryClient.invalidateQueries({ queryKey: ["advising"] });
         }}
+      />
+      <GradesPublishingModal
+        open={isPublishModalOpen}
+        onOpenChange={setIsPublishModalOpen}
+        isAr={isAr}
       />
     </div>
   );

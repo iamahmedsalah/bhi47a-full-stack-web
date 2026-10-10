@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { Edit2, ExternalLink, Eye, Lock, MoreVertical, Trash2, UserCheck, UserX } from 'lucide-react';
+import { ArrowLeftRight, Edit2, ExternalLink, Eye, Lock, MoreVertical, Trash2, UserCheck, UserX } from 'lucide-react';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -104,6 +104,8 @@ interface StudentTableProps {
   onDeactivateStudent: (ids: string[]) => void;
   onBulkEdit: () => void;
   onOpenBulkDeactivate: () => void;
+  onTransferDepartment?: (student: Student) => void;
+  onBulkTransferDepartment?: () => void;
   onRetry: () => void;
   t: (key: string) => string;
   tCommon: (key: string) => string;
@@ -125,6 +127,8 @@ export function StudentTable({
   onDeactivateStudent,
   onBulkEdit,
   onOpenBulkDeactivate,
+  onTransferDepartment,
+  onBulkTransferDepartment,
   onRetry,
   t,
   tCommon,
@@ -293,6 +297,15 @@ export function StudentTable({
             ),
           },
           {
+            value: 'transfer',
+            label: (
+              <div className="flex items-center gap-2 text-xs py-0.5">
+                <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
+                <span>{locale === 'ar' ? 'تحويل الشعبة (BIS ⇄ محاسبة)' : 'Transfer Department'}</span>
+              </div>
+            ),
+          },
+          {
             value: 'advising',
             label: (
               <div className="flex items-center gap-2 text-xs py-0.5">
@@ -334,6 +347,7 @@ export function StudentTable({
                   if (val === 'profile') onViewStudent(student);
                   else if (val === 'edit') onEditStudent(student);
                   else if (val === 'resetPassword') onResetPassword(student);
+                  else if (val === 'transfer') onTransferDepartment?.(student);
                   else if (val === 'advising') router.push(`/${locale}/admin/academic-advising?student=${student.studentCode}`);
                   else if (val === 'deactivate') setStudentToDeactivate(student);
                   else if (val === 'activate') onActivateStudent(student);
@@ -374,6 +388,12 @@ export function StudentTable({
                 icon: <Edit2 className="h-3.5 w-3.5" />,
               }]
             : []),
+          {
+            label: locale === 'ar' ? 'تحويل الشعبة / القسم' : 'Transfer Department',
+            onClick: onBulkTransferDepartment || (() => {}),
+            variant: 'outline' as const,
+            icon: <ArrowLeftRight className="h-3.5 w-3.5" />,
+          },
           {
             label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
             onClick: onOpenBulkDeactivate,

@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
+  IsArray,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -131,9 +132,41 @@ export class PublishGradesDto {
   @IsString()
   courseCode?: string;
 
+  @ApiPropertyOptional({
+    example: '1',
+    description:
+      'Target student academic level (1, 2, 3, 4) - omit for all levels',
+  })
+  @IsOptional()
+  @IsString()
+  level?: string;
+
   @ApiProperty({ example: true })
   @IsBoolean()
   isPublished!: boolean;
+}
+
+export class UpdateGradesSettingsDto {
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  gradesSystemOpen?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-10-15T08:00:00.000Z' })
+  @IsOptional()
+  @IsString()
+  gradesOpenAt?: string;
+
+  @ApiPropertyOptional({ example: '2026-10-30T23:59:59.000Z' })
+  @IsOptional()
+  @IsString()
+  gradesCloseAt?: string;
+
+  @ApiPropertyOptional({ example: ['1', '2', '3', '4'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  gradesPublishedLevels?: string[];
 }
 
 export class RecalculateAcademicProgressDto {

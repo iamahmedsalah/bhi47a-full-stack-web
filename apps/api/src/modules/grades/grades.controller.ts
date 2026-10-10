@@ -14,6 +14,7 @@ import {
   SaveGradeDto,
   QueryGradeDto,
   PublishGradesDto,
+  UpdateGradesSettingsDto,
   RecalculateAcademicProgressDto,
   AuditAcademicWarningsDto,
   UpdateGradeDto,
@@ -49,7 +50,39 @@ export class GradesController {
     return this.gradesService.findStudentQuizzes(studentId);
   }
 
+  @Get('students/me/results-window')
+  @Roles('student')
+  @ApiOperation({
+    summary: 'Check if grades publishing window is open for current student',
+  })
+  async getMyResultsWindow(@CurrentUser('_id') studentId: string) {
+    return this.gradesService.getStudentResultsStatus(studentId);
+  }
+
   // ─── Admin Endpoints ─────────────────────────────────────────────
+
+  @Get('admin/grades/settings')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.GRADES_READ)
+  @ApiOperation({
+    summary: 'Get current grades system publishing window and settings',
+  })
+  async getSettings() {
+    return this.gradesService.getGradesSettings();
+  }
+
+  @Patch('admin/grades/settings')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  @ApiOperation({
+    summary: 'Update grades system publishing window and settings',
+  })
+  async updateSettings(
+    @Body() dto: UpdateGradesSettingsDto,
+    @CurrentUser('_id') userId: string,
+  ) {
+    return this.gradesService.updateGradesSettings(dto, userId);
+  }
 
   @Get('admin/grades')
   @Roles('admin', 'staff')

@@ -9,6 +9,8 @@ import {
   IsBoolean,
   MinLength,
   MaxLength,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -316,6 +318,13 @@ export class SearchStudentQuery {
   level?: string;
 
   @ApiPropertyOptional({
+    description: 'Filter by department (e.g., BIS, ACCOUNTING, GENERAL)',
+  })
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @ApiPropertyOptional({
     enum: ['active', 'inactive', 'graduated', 'suspended'],
   })
   @IsOptional()
@@ -383,17 +392,25 @@ export class UpdateMyContactDto {
     return trimmed.length ? trimmed : undefined;
   })
   @IsOptional()
-  @IsEmail()
+  @IsEmail(
+    { require_tld: true },
+    { message: 'يجب إدخال بريد إلكتروني بنطاق حقيقي صحيح (مثال: student@gmail.com)' },
+  )
+  @Matches(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, {
+    message: 'يجب أن يحتوي البريد الإلكتروني على اسم نطاق حقيقي صالح بامتداد رسمي (مثل .com أو .edu.eg)',
+  })
   email?: string;
 
   @ApiPropertyOptional({ example: '01012345678' })
   @Transform(({ value }) => {
     if (typeof value !== 'string') return value;
-    const trimmed = value.trim();
+    const trimmed = value.trim().replace(/[\s-]/g, '');
     return trimmed.length ? trimmed : undefined;
   })
   @IsOptional()
-  @Matches(/^\+?\d{10,15}$/)
+  @Matches(/^(?:(?:\+20|0020)?1[0125]\d{8}|01[0125]\d{8})$/, {
+    message: 'رقم الهاتف يجب أن يكون رقماً مصرياً صالحاً يبدأ بـ 010 أو 011 أو 012 أو 015 ومكوناً من 11 رقماً',
+  })
   phone?: string;
 
   @ApiPropertyOptional({ enum: ['light', 'dark', 'system'], example: 'system' })
@@ -409,4 +426,34 @@ export class ToggleAllMustChangePasswordDto {
   })
   @IsBoolean()
   enabled!: boolean;
+}
+
+export class TransferDepartmentDto {
+  @ApiProperty({
+    description: 'Array of student IDs (Mongo IDs or studentCodes)',
+    example: ['674bc1234567890abcdef123', '2024001'],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  studentIds!: string[];
+
+  @ApiProperty({
+    description: 'Target Department (e.g. BIS, ACCOUNTING, GENERAL)',
+    example: 'BIS',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  targetDepartment!: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional target level (e.g., 3)',
+    example: '3',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  @IsIn(['1', '2', '3', '4'])
+  targetLevel?: string;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Loader2, Send, Sparkles, User, X } from "lucide-react";
+import { Bot, Loader2, Send, User, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,7 +148,7 @@ export function StudentChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-4 inset-s-4 z-50 sm:bottom-6 sm:inset-s-6">
+    <div className="fixed bottom-4 end-4 z-50 flex flex-col items-end sm:bottom-6 sm:end-6">
       <AnimatePresence>
         {isOpen ? (
           <motion.section
@@ -177,10 +177,6 @@ export function StudentChatWidget() {
                     className="flex items-center gap-1.5 text-sm font-bold"
                   >
                     {t("title")}
-                    <Sparkles
-                      className="h-3.5 w-3.5 text-primary"
-                      aria-hidden="true"
-                    />
                   </h2>
                   <p className="text-[11px] text-muted-foreground">
                     {advisorEnabled ? t("status") : t("disabledStatus")}
@@ -229,8 +225,8 @@ export function StudentChatWidget() {
                         className="flex w-full items-center justify-between rounded-xl border border-border bg-card/60 px-3 py-2.5 text-start text-xs font-medium transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:opacity-50"
                       >
                         <span>{prompt.label}</span>
-                        <Sparkles
-                          className="h-3.5 w-3.5 text-primary"
+                        <Send
+                          className="h-3 w-3 text-primary shrink-0 ms-2"
                           aria-hidden="true"
                         />
                       </button>

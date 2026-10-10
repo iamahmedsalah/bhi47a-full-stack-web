@@ -112,6 +112,8 @@ export default function StudentProfilePage() {
   const [phoneDraft, setPhoneDraft] = useState<string>();
   const [contactLoading, setContactLoading] = useState(false);
   const [contactError, setContactError] = useState('');
+  const [emailFieldError, setEmailFieldError] = useState('');
+  const [phoneFieldError, setPhoneFieldError] = useState('');
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleUnlinking, setGoogleUnlinking] = useState(false);
   const [isEditingContact, setIsEditingContact] = useState(false);
@@ -209,34 +211,67 @@ export default function StudentProfilePage() {
     },
   });
 
-  useEffect(() => {
-    const pending = profileQuery.data?.googleLinkPending;
-    if (scriptLoaded && isInitialized && pending) {
-      renderButton('google-verify-oauth-btn', {
-        theme: 'filled_black',
-        size: 'large',
-        text: 'continue_with',
-        shape: 'pill',
-        width: '280',
-      });
-    }
-  }, [isInitialized, scriptLoaded, renderButton, profileQuery.data?.googleLinkPending]);
 
   const email = emailDraft ?? profileQuery.data?.email ?? '';
   const phone = phoneDraft ?? profileQuery.data?.phone ?? '';
 
+  const EGYPTIAN_PHONE_REGEX = /^(?:(?:\+20|0020)?1[0125]\d{8}|01[0125]\d{8})$/;
+  const REAL_DOMAIN_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setContactError('');
+    setEmailFieldError('');
+    setPhoneFieldError('');
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const cleanPhone = phone.trim().replace(/[\s-]/g, '');
+
+    let hasError = false;
+
+    if (trimmedEmail) {
+      if (!REAL_DOMAIN_EMAIL_REGEX.test(trimmedEmail)) {
+        const msg = isEnglish
+          ? 'Invalid email format. Please enter a valid email with a real domain (e.g. student@gmail.com)'
+          : 'البريد الإلكتروني غير صحيح. يجب إدخال بريد إلكتروني بنطاق حقيقي رسمي (مثل student@gmail.com أو name@bhi.edu.eg)';
+        setEmailFieldError(msg);
+        setContactError(msg);
+        hasError = true;
+      }
+    }
+
+    if (cleanPhone) {
+      if (!EGYPTIAN_PHONE_REGEX.test(cleanPhone)) {
+        const msg = isEnglish
+          ? 'Invalid phone number. Must be an 11-digit Egyptian mobile number starting with 010, 011, 012, or 015'
+          : 'رقم الهاتف غير صحيح. يجب أن يكون رقماً مصرياً مكوناً من 11 رقماً ويبدأ بـ 010 أو 011 أو 012 أو 015 (مثال: 01012345678)';
+        setPhoneFieldError(msg);
+        if (!hasError) setContactError(msg);
+        hasError = true;
+      }
+    }
+
+    if (!trimmedEmail && !cleanPhone) {
+      const msg = isEnglish
+        ? 'Please enter at least an email address or a mobile phone number.'
+        : 'يرجى إدخال البريد الإلكتروني أو رقم الهاتف المحمول على الأقل.';
+      setContactError(msg);
+      hasError = true;
+    }
+
+    if (hasError) return;
+
     setContactLoading(true);
 
     try {
       await api.patch('/students/me/contact', {
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
+        email: trimmedEmail || undefined,
+        phone: cleanPhone || undefined,
       });
       setEmailDraft(undefined);
       setPhoneDraft(undefined);
+      setEmailFieldError('');
+      setPhoneFieldError('');
       setIsEditingContact(false);
       toast.success(isEnglish ? 'Contact information updated' : 'تم تحديث بيانات التواصل بنجاح');
       void profileQuery.refetch();
@@ -250,6 +285,9 @@ export default function StudentProfilePage() {
   const handleCancelContactEdit = () => {
     setEmailDraft(undefined);
     setPhoneDraft(undefined);
+    setEmailFieldError('');
+    setPhoneFieldError('');
+    setContactError('');
     setIsEditingContact(false);
   };
 
@@ -533,7 +571,7 @@ export default function StudentProfilePage() {
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   {/* Student Code Badge with copy */}
                   <div className="inline-flex items-center gap-1.5 rounded-squircle bg-secondary/60 border border-border/80 px-2.5 py-1 text-xs">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <Hash className="h-3.5 w-3.5 text-primary" />
                     <span className="text-[11px] text-muted-foreground">{isEnglish ? 'Code:' : 'الكود:'}</span>
                     <span className="font-mono font-bold text-foreground">{profile.studentCode}</span>
                     <CopyButton
@@ -886,8 +924,8 @@ export default function StudentProfilePage() {
                     <h3 className="font-bold text-foreground text-sm sm:text-base">
                       {isEnglish ? 'Institutional Academic Email (Microsoft 365)' : 'البريد الإلكتروني الأكاديمي الرسمي (مايكروسوفت 365)'}
                     </h3>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-primary" />
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-primary" />
                       {isEnglish ? 'Official student account for academic services & Office 365 apps' : 'الحساب المعتمد للخدمات الطلابية وتطبيقات مايكروسوفت أوفيس'}
                     </p>
                   </div>
@@ -917,14 +955,18 @@ export default function StudentProfilePage() {
                         readOnly
                         value={academicEmailQuery.data.academicEmail}
                         dir="ltr"
-                        className="w-full rounded-xl border border-border bg-secondary/50 py-3 pe-24 ps-4 font-mono text-sm font-semibold text-foreground outline-none focus:border-primary/50 transition-colors"
+                        style={{ paddingRight: '6.5rem', paddingLeft: '1rem', textAlign: 'left' }}
+                        className="w-full rounded-xl border border-border bg-secondary/50 py-3 font-mono text-sm font-semibold text-foreground outline-none focus:border-primary/50 transition-colors text-left"
                       />
-                      <div className="absolute end-2 top-1/2 -translate-y-1/2">
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 z-10"
+                        style={{ right: '0.75rem', left: 'auto' }}
+                      >
                         <CopyButton
                           value={academicEmailQuery.data.academicEmail}
                           label={isEnglish ? 'Copy' : 'نسخ'}
                           successMessage={isEnglish ? 'Academic email copied' : 'تم نسخ البريد الأكاديمي'}
-                          className="h-8 rounded-lg bg-card hover:bg-secondary border border-border px-3 text-xs font-bold"
+                          className="h-8 rounded-lg bg-card hover:bg-secondary border border-border px-3 text-xs font-bold shadow-xs"
                         />
                       </div>
                     </div>
@@ -1012,12 +1054,26 @@ export default function StudentProfilePage() {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmailDraft(e.target.value)}
+                    onChange={(e) => {
+                      setEmailDraft(e.target.value);
+                      if (emailFieldError) setEmailFieldError('');
+                      if (contactError) setContactError('');
+                    }}
                     placeholder="student@gmail.com"
                     disabled={!isEditingContact}
-                    className="w-full rounded-squircle border border-border bg-secondary/40 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-75 disabled:cursor-not-allowed"
+                    className={`w-full rounded-squircle border bg-secondary/40 px-4 py-2.5 text-sm text-foreground outline-none transition-colors disabled:opacity-75 disabled:cursor-not-allowed ${
+                      emailFieldError
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-border focus:border-primary/50'
+                    }`}
                     dir="ltr"
                   />
+                  {emailFieldError && (
+                    <p className="text-xs text-rose-500 font-medium flex items-center gap-1.5 mt-1">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>{emailFieldError}</span>
+                    </p>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
                     {isEnglish
                       ? 'Preferably use a valid Gmail address to enable 1-click Google Sign-in.'
@@ -1035,16 +1091,30 @@ export default function StudentProfilePage() {
                     type="tel"
                     inputMode="tel"
                     value={phone}
-                    onChange={(e) =>
-                      setPhoneDraft(e.target.value.replace(/[^\d+]/g, '').slice(0, 15))
-                    }
+                    onChange={(e) => {
+                      setPhoneDraft(e.target.value.replace(/[^\d+]/g, '').slice(0, 15));
+                      if (phoneFieldError) setPhoneFieldError('');
+                      if (contactError) setContactError('');
+                    }}
                     placeholder="01012345678"
                     disabled={!isEditingContact}
-                    className="w-full rounded-squircle border border-border bg-secondary/40 px-4 py-2.5 text-sm font-mono text-foreground outline-none focus:border-primary/50 transition-colors disabled:opacity-75 disabled:cursor-not-allowed"
+                    className={`w-full rounded-squircle border bg-secondary/40 px-4 py-2.5 text-sm font-mono text-foreground outline-none transition-colors disabled:opacity-75 disabled:cursor-not-allowed ${
+                      phoneFieldError
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-border focus:border-primary/50'
+                    }`}
                     dir="ltr"
                   />
+                  {phoneFieldError && (
+                    <p className="text-xs text-rose-500 font-medium flex items-center gap-1.5 mt-1">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>{phoneFieldError}</span>
+                    </p>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
-                    {isEnglish ? 'Example: 01012345678' : 'مثال: 01012345678'}
+                    {isEnglish
+                      ? 'Egyptian mobile number: 11 digits starting with 010, 011, 012, or 015'
+                      : 'رقم هاتف محمول مصري: 11 رقماً يبدأ بـ 010 أو 011 أو 012 أو 015'}
                   </p>
                 </div>
 
@@ -1208,10 +1278,6 @@ export default function StudentProfilePage() {
                         <span>{isEnglish ? 'Verify OTP Code' : 'تأكيد رمز التحقق'}</span>
                       </Button>
                     </form>
-
-                    <div className="flex justify-center w-full min-h-[40px] pt-1">
-                      <div id="google-verify-oauth-btn" className="w-full overflow-hidden rounded-full animate-fade-in" />
-                    </div>
 
                     <ConfirmDialog
                       trigger={

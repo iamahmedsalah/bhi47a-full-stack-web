@@ -322,7 +322,7 @@ export default function AdminSidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="fixed inset-e-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground shadow-(--shadow-glow) backdrop-blur md:hidden cursor-pointer"
+        className="fixed start-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground shadow-(--shadow-glow) backdrop-blur md:hidden cursor-pointer"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -330,7 +330,7 @@ export default function AdminSidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 inset-e-0 z-40 hidden p-4 md:block transition-all duration-300",
+          "fixed inset-y-0 start-0 z-40 hidden p-4 md:block transition-all duration-300",
           sidebarOpen ? "w-72" : "w-28",
         )}
       >
@@ -355,10 +355,10 @@ export default function AdminSidebar() {
         />
         <div
           className={cn(
-            "absolute inset-y-0 inset-e-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform",
+            "absolute inset-y-0 start-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform",
             mobileOpen
               ? "translate-x-0"
-              : "translate-x-full rtl:-translate-x-full",
+              : "-translate-x-full rtl:translate-x-full",
           )}
         >
           <button

@@ -787,9 +787,13 @@ export default function StudentDashboard() {
                       readOnly
                       value={academicEmailQuery.data.academicEmail}
                       dir="ltr"
-                      className="w-full rounded-xl border border-border bg-secondary/50 py-2.5 pe-24 ps-3.5 font-mono text-xs sm:text-sm font-semibold text-foreground outline-none"
+                      style={{ paddingRight: '5.5rem', paddingLeft: '0.875rem', textAlign: 'left' }}
+                      className="w-full rounded-xl border border-border bg-secondary/50 py-2.5 font-mono text-xs sm:text-sm font-semibold text-foreground outline-none text-left"
                     />
-                    <div className="absolute end-1.5 top-1/2 -translate-y-1/2">
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 z-10"
+                      style={{ right: '0.5rem', left: 'auto' }}
+                    >
                       <CopyButton
                         value={academicEmailQuery.data.academicEmail}
                         label={locale === "ar" ? "نسخ" : "Copy"}

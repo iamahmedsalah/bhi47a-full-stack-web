@@ -61,6 +61,15 @@ export class UsersService {
       .lean()) as unknown as UserDocument | null;
   }
 
+  async countActiveOnlineStudents(windowMinutes = 30): Promise<number> {
+    const threshold = new Date(Date.now() - windowMinutes * 60 * 1000);
+    return this.userModel.countDocuments({
+      role: 'student',
+      isActive: true,
+      lastLoginAt: { $gte: threshold },
+    });
+  }
+
   async findByIdentifier(identifier: string): Promise<UserDocument | null> {
     const trimmed = identifier.trim();
     return (await this.userModel

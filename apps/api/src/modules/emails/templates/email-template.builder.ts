@@ -1,6 +1,3 @@
-const INSTITUTE_LOGO_URL =
-  'https://res.cloudinary.com/dkocrxpu4/image/upload/w_160,h_160,c_limit/v1770685642/logo_k8bbtk.png';
-
 function escapeHtml(value: string | undefined | null): string {
   if (!value) return '';
   return String(value)
@@ -11,7 +8,7 @@ function escapeHtml(value: string | undefined | null): string {
     .replace(/'/g, '&#039;');
 }
 
-/** Base Email Wrapper with Institute Header & Official Footer */
+/** Base Email Wrapper with High-Fidelity Institute Header & Official Footer */
 function renderBaseEmailLayout({
   preheader,
   headerTitle,
@@ -32,8 +29,8 @@ function renderBaseEmailLayout({
   const safeHeaderTitle = escapeHtml(headerTitle);
 
   const defaultSubtitle = isAr
-    ? 'بوابة الطالب الإلكترونية الرسمية'
-    : 'Official Student Portal';
+    ? 'بوابة الطالب الأكاديمية الرسمية'
+    : 'Official Academic Student Portal';
   const safeHeaderSubtitle = escapeHtml(headerSubtitle || defaultSubtitle);
 
   const instituteName = isAr
@@ -42,12 +39,12 @@ function renderBaseEmailLayout({
 
   const defaultFooter = isAr
     ? `
-      <div>المعهد العالي للعلوم الإدارية المتقدمة والحاسبات &copy; ${new Date().getFullYear()}</div>
-      <div style="margin-top:6px;color:#94a3b8;font-size:10px;">هذه الرسالة رسمية وآلية من نظام البوابة الطلابية، يرجى عدم الرد المباشر عليها.</div>
+      <div style="font-weight:700;color:#334155;">المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47A) &copy; ${new Date().getFullYear()}</div>
+      <div style="margin-top:6px;color:#64748b;font-size:10px;line-height:1.5;">هذه الرسالة إلكترونية رسمية ومعتمدة من نظام البوابة الطلابية، يرجى عدم الرد المباشر على هذا البريد.</div>
     `
     : `
-      <div>Higher Institute for Advanced Administrative Sciences &amp; Computer &copy; ${new Date().getFullYear()}</div>
-      <div style="margin-top:6px;color:#94a3b8;font-size:10px;">This is an automated official email from the Student Portal system. Please do not reply directly.</div>
+      <div style="font-weight:700;color:#334155;">Higher Institute for Advanced Administrative Sciences &amp; Computer (BHI47A) &copy; ${new Date().getFullYear()}</div>
+      <div style="margin-top:6px;color:#64748b;font-size:10px;line-height:1.5;">This is an automated official email notification from the Student Portal system. Please do not reply directly.</div>
     `;
 
   return `<!DOCTYPE html>
@@ -64,17 +61,26 @@ function renderBaseEmailLayout({
     ${safePreheader}
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#04262f;padding:36px 12px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#04262f;padding:32px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.35);border:1px solid #0f766e;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,0.4);border:1px solid #0f766e;">
           <!-- Institute Header Banner -->
           <tr>
-            <td style="background-color:#063b46;background:linear-gradient(135deg, #04262f 0%, #064e5b 55%, #0f766e 100%);padding:32px 24px;text-align:center;color:#ffffff;">
+            <td style="background-color:#063b46;background:linear-gradient(135deg, #04262f 0%, #064e5b 55%, #0f766e 100%);padding:30px 24px;text-align:center;color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <img src="${INSTITUTE_LOGO_URL}" alt="${isAr ? 'شعار المعهد' : 'Institute Logo'}" width="64" height="64" style="display:block;margin:0 auto 12px;border-radius:12px;object-fit:contain;background-color:rgba(255,255,255,0.08);padding:4px;" />
+                    <!-- Resilient Institute Emblem (no broken images) -->
+                    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 12px;">
+                      <tr>
+                        <td align="center" style="width:62px;height:62px;background:linear-gradient(135deg, #0d9488 0%, #042f2e 100%);border:2px solid #5eead4;border-radius:16px;box-shadow:0 6px 16px rgba(0,0,0,0.3);text-align:center;vertical-align:middle;">
+                          <div style="font-family:'Segoe UI', Tahoma, sans-serif;font-size:22px;font-weight:900;color:#ffffff;letter-spacing:1px;line-height:60px;">
+                            BHI
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
                 <tr>
@@ -142,7 +148,8 @@ export function renderOtpEmailTemplate({
 }: OtpTemplateInput): string {
   const isAr = lang === 'ar';
   const safeName = escapeHtml(greetingName);
-  const safeOtp = escapeHtml(otp.split('').join(' ')); // e.g. "5 2 2 5 4 0"
+  // Keep raw 6 digits without injected spaces so copying pastes exactly the code!
+  const cleanOtp = escapeHtml(otp.trim());
 
   const defaultTitle = isAr
     ? 'رمز التحقق من الحساب'
@@ -166,12 +173,15 @@ export function renderOtpEmailTemplate({
 
   const otpHeader = isAr ? 'رمز التحقق السريع' : 'VERIFICATION CODE';
   const otpExpiry = isAr
-    ? '⏱️ صالح لمدة 15 دقيقة فقط'
+    ? '⏱️ صالح للاستخدام لمدة 15 دقيقة فقط'
     : '⏱️ Valid for 15 minutes only';
+  const copyHint = isAr
+    ? 'انقر لتحديد ونسخ الرمز مباشرة'
+    : 'Select or double-click code to copy';
 
   const securityNotice = isAr
-    ? '🛡️ <strong>تنبيه أمني هام:</strong> لا تشارك هذا الرمز السري مع أي شخص. موظفو إدارة المعهد لن يطلبوا هذا الرمز نهائياً. إذا لم تقم بطلب هذا الرمز، يرجى تجاهل الرسالة وتأمين حسابك.'
-    : '🛡️ <strong>Important Security Notice:</strong> Never share this verification code with anyone. Institute staff will never request your code. If you did not initiate this request, please disregard this email and secure your account.';
+    ? '🛡️ <strong>تنبيه أمني هام:</strong> لا تشارك هذا الرمز السري مع أي شخص مطلقاً. إدارة المعهد لن تطلب منك هذا الرمز تحت أي ظرف. إذا لم تكن أنت صاحب هذا الطلب، يرجى تجاهل هذه الرسالة وتأمين حسابك فوراً.'
+    : '🛡️ <strong>Important Security Notice:</strong> Never share this one-time code with anyone. Institute administrators will never request it. If you did not initiate this request, please disregard this email and secure your account immediately.';
 
   const contentHtml = `
     <div style="text-align:${isAr ? 'right' : 'left'};">
@@ -183,18 +193,21 @@ export function renderOtpEmailTemplate({
       </p>
     </div>
 
-    <!-- OTP Display Box -->
+    <!-- OTP Display Box (Clean, Copyable Code Block) -->
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;">
       <tr>
         <td align="center">
-          <div style="background-color:#f0fdfa;border:2px dashed #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:320px;">
-            <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:8px;">
+          <div style="background-color:#f0fdfa;border:2px solid #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:330px;box-shadow:0 4px 14px rgba(13,148,136,0.12);">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:10px;">
               ${otpHeader}
             </div>
-            <div style="font-family:Consolas, 'Courier New', monospace;font-size:32px;font-weight:900;letter-spacing:8px;color:#042f2e;margin:6px 0;text-shadow:0 1px 1px rgba(0,0,0,0.05);" dir="ltr">
-              ${safeOtp}
+            <div style="font-family:Consolas, 'Courier New', Monaco, monospace;font-size:36px;font-weight:900;letter-spacing:10px;color:#042f2e;margin:6px 0;padding:10px 18px;background:#ffffff;border:1px dashed #99f6e4;border-radius:10px;display:inline-block;user-select:all;-webkit-user-select:all;-moz-user-select:all;" dir="ltr">
+              ${cleanOtp}
             </div>
-            <div style="font-size:11px;color:#0d9488;font-weight:600;margin-top:8px;">
+            <div style="font-size:10px;color:#64748b;margin-top:6px;">
+              ${copyHint}
+            </div>
+            <div style="font-size:11px;color:#0d9488;font-weight:700;margin-top:8px;">
               ${otpExpiry}
             </div>
           </div>
@@ -256,7 +269,7 @@ export function renderPasswordResetEmailTemplate({
     ? 'بيانات الدخول الأكاديمية الرسمية'
     : 'Official Academic Login Credentials';
 
-  const codeLabel = isAr ? 'الكود الأكاديمي للطلب:' : 'Student Academic Code:';
+  const codeLabel = isAr ? 'الكود الأكاديمي للطالب:' : 'Academic Student ID:';
   const passLabel = isAr ? 'كلمة المرور المؤقتة:' : 'Temporary Password:';
   const buttonLabel = isAr
     ? 'تسجيل الدخول إلى البوابة'
@@ -287,13 +300,13 @@ export function renderPasswordResetEmailTemplate({
           <div style="background-color:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:20px 24px;text-align:${isAr ? 'right' : 'left'};max-width:380px;">
             <div style="margin-bottom:12px;">
               <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">${codeLabel}</span>
-              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
+              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;user-select:all;-webkit-user-select:all;" dir="ltr">
                 ${safeCode}
               </div>
             </div>
             <div>
               <span style="font-size:11px;color:#0f766e;font-weight:700;text-transform:uppercase;">${passLabel}</span>
-              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f766e;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;" dir="ltr">
+              <div style="font-family:Consolas, monospace;font-size:18px;font-weight:800;color:#0f766e;margin-top:4px;background:#ffffff;padding:8px 12px;border-radius:8px;border:1px solid #ccfbf1;user-select:all;-webkit-user-select:all;" dir="ltr">
                 ${safePassword}
               </div>
             </div>

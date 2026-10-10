@@ -300,6 +300,9 @@ importers:
       framer-motion:
         specifier: ^13.4.0
         version: 13.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      html-to-image:
+        specifier: ^1.11.13
+        version: 1.11.13
       html2canvas:
         specifier: ^1.4.1
         version: 1.4.1
@@ -4847,6 +4850,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  html-to-image@1.11.13:
+    resolution: {integrity: sha512-cuOPoI7WApyhBElTTb9oqsawRvZ0rHhaHwghRLlTuffoD1B2aDemlCruLeZrUIIdvG7gs9xeELEPm6PhuASqrg==}
 
   html2canvas-pro@2.4.4:
     resolution: {integrity: sha512-SKpDtcVCSkbpV8R9ts5SQUC8cZyw5le0F/7kQMO+5s1NigLrDYvOe4Sl5wBe1hZaxAPymzbqgp/KX5ZVHuWghA==}
@@ -12282,6 +12288,8 @@ snapshots:
     optional: true
 
   html-escaper@2.0.2: {}
+
+  html-to-image@1.11.13: {}
 
   html2canvas-pro@2.4.4:
     dependencies:
