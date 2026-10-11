@@ -22,7 +22,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  Sparkles,
   Trash2,
   Wrench,
 } from 'lucide-react';
@@ -580,7 +579,7 @@ function AdminComplaintsContent() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
+              <LifeBuoy className="h-3.5 w-3.5" />
               {isAr ? 'مركز إدارة البلاغات' : 'Complaints Center'}
             </div>
             <div>

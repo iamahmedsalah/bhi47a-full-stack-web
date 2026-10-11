@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   AlertCircle,
   GraduationCap,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';

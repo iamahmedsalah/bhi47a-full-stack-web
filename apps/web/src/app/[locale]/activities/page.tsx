@@ -15,7 +15,6 @@ import {
   Users,
   CheckCircle,
   Camera,
-  Sparkles,
 } from 'lucide-react';
 
 interface PageProps {
@@ -79,7 +78,7 @@ export default async function ActivitiesPage({ params }: PageProps) {
         <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-10">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-semibold mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5" />
               <span>{isAr ? 'الأندية واللجان الطلابية' : 'Student Clubs & Committees'}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-white">

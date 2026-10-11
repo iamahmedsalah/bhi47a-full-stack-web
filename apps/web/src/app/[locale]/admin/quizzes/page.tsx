@@ -19,7 +19,7 @@ import {
   MoreVertical,
   Eye,
   Calendar,
-  Sparkles,
+  ListChecks,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
@@ -383,7 +383,7 @@ function QuizFormDialog({
           <div className="space-y-4 pt-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-primary" />
+                <ListChecks className="h-4 w-4 text-primary" />
                 <span>{isAr ? `أسئلة الاختبار (${questions.length})` : `Questions (${questions.length})`}</span>
               </h3>
               <Button

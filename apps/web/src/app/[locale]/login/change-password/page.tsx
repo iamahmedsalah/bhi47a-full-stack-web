@@ -19,7 +19,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ShieldCheck,
-  Sparkles,
   AlertCircle,
   AlertTriangle,
   X,

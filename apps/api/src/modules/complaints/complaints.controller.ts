@@ -184,4 +184,3 @@ export class ComplaintsController {
     return this.complaintsService.delete(id, adminId);
   }
 }
-

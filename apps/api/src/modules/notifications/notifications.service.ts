@@ -453,7 +453,10 @@ export class NotificationsService implements OnModuleInit {
 
   async clearAllHistory() {
     const result = await this.notificationModel.deleteMany({});
-    return { message: 'تم مسح سجل الإشعارات بالكامل بنجاح', count: result.deletedCount };
+    return {
+      message: 'تم مسح سجل الإشعارات بالكامل بنجاح',
+      count: result.deletedCount,
+    };
   }
 
   async bulkDelete(ids: string[]) {

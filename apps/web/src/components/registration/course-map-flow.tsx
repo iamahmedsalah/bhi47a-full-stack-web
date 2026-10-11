@@ -24,7 +24,7 @@ import {
   Minus,
   Plus,
   Search,
-  Sparkles,
+  Star,
   X,
   XCircle,
 } from "lucide-react";
@@ -322,7 +322,7 @@ function renderStatusIcon(status: CourseProgressStatus) {
   if (status === "failed") return <XCircle className={className} />;
   if (status === "low_grade") return <AlertTriangle className={className} />;
   if (status === "planned") return <Check className={className} />;
-  if (status === "recommended") return <Sparkles className={className} />;
+  if (status === "recommended") return <Star className={className} />;
   return <Circle className={className} />;
 }
 

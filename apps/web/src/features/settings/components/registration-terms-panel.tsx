@@ -7,7 +7,6 @@ import {
   CalendarPlus,
   Lock,
   Unlock,
-  Sparkles,
   Star,
   CheckCircle2,
   Clock,

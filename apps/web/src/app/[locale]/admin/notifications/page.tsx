@@ -13,7 +13,7 @@ import {
   BookOpen,
   Clock,
   CalendarDays,
-  Sparkles,
+  Zap,
   CheckCircle2,
   Smartphone,
   MessageSquare,
@@ -418,7 +418,7 @@ function NotificationsPageContent() {
           <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-card to-card/60 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-400" />
+                <Zap className="h-4 w-4 text-amber-400" />
                 <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                   {t('quickTemplates')}
                 </span>

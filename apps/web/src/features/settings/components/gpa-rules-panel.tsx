@@ -8,7 +8,6 @@ import {
   Trash2,
   ShieldCheck,
   ShieldAlert,
-  Sparkles,
   Info,
   CheckCircle2,
   LayoutGrid,
@@ -167,7 +166,7 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
-              <Sparkles className="h-3.5 w-3.5" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
               {isAr ? 'تسجيل مباشر متاح' : 'Direct Registration'}
             </span>
           )}
@@ -246,7 +245,7 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
             {/* Explanatory Cards Grid */}
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
               <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                <Sparkles className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
                 <div className="text-xs">
                   <strong className="block font-semibold text-emerald-300">
                     {isAr ? 'عند ضبط (Requires Advisor = No):' : 'When Requires Advisor = No:'}
@@ -387,7 +386,7 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
                     </div>
                   ) : (
                     <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
-                      <Sparkles className="h-3.5 w-3.5" />
+                      <CheckCircle2 className="h-3.5 w-3.5" />
                       <span>{isAr ? 'تسجيل مباشر ذاتي متاح' : 'Direct Self-Registration'}</span>
                     </div>
                   )}
@@ -595,7 +594,7 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
                   </>
                 ) : (
                   <>
-                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-500 mt-0.5" />
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500 mt-0.5" />
                     <span>
                       {isAr
                         ? 'إيقاف هذا الخيار يسمح للطلاب في هذا النطاق بالتسجيل المباشر ذاتياً فوراً.'

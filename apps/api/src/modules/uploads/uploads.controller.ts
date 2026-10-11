@@ -113,7 +113,9 @@ export class UploadsController {
     @CurrentUser('_id') adminId: string,
   ) {
     if (
-      !['students', 'grades', 'attendance', 'complaints', 'all'].includes(target)
+      !['students', 'grades', 'attendance', 'complaints', 'all'].includes(
+        target,
+      )
     ) {
       throw new BadRequestException('Invalid wipe target');
     }

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {
   CheckCircle2,
   Send,
-  Sparkles,
+  Award,
   Check,
   RotateCcw,
   BookOpen,
@@ -122,7 +122,7 @@ export function DirectRegistrationTable({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-400">
-              <Sparkles className="h-5 w-5" />
+              <Award className="h-5 w-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">

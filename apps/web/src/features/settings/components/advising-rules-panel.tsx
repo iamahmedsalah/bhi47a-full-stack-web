@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   GraduationCap,
   ShieldCheck,
-  Sparkles,
   Info,
   Loader2,
   CheckCircle2,

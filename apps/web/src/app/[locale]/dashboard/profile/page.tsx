@@ -18,7 +18,6 @@ import {
   Key,
   Mail,
   Phone,
-  Sparkles,
   Lock,
   Calendar,
   Building2,

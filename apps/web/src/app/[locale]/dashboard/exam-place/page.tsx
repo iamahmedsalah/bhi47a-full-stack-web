@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { MapPin, Info, HelpCircle, CheckCircle, Sparkles } from 'lucide-react';
+import { MapPin, Info, HelpCircle, CheckCircle, BadgeCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface ExamAssignmentResponse {
@@ -194,7 +194,7 @@ export default function StudentExamPlacePage() {
 
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-foreground text-start">
             <p className="font-bold text-primary mb-1 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+              <BadgeCheck className="w-3.5 h-3.5" />
               {isEnglish ? 'Seating Seat Number:' : 'تأكيد رقم الجلوس:'}
             </p>
             <p className="text-muted-foreground">

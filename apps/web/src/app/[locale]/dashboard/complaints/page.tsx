@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Search,
   Upload,
-  Sparkles,
+  LifeBuoy,
   Inbox,
   UserCheck,
 } from 'lucide-react';
@@ -330,7 +330,7 @@ export default function StudentComplaintsPage() {
             >
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <h3 className="text-lg font-bold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="w-4.5 h-4.5 text-primary" />
+                  <LifeBuoy className="w-4.5 h-4.5 text-primary" />
                   {isEnglish ? 'Submit Complaint' : 'تقديم شكوى أو عطل'}
                 </h3>
                 <button onClick={() => setIsAddOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">

@@ -15,7 +15,6 @@ import {
   XCircle,
   Award,
   Calendar,
-  Sparkles,
   Clock,
   Play,
   HelpCircle,

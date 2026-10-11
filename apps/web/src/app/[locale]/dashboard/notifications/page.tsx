@@ -16,7 +16,6 @@ import {
   ArrowUpRight,
   Filter,
   CheckCircle2,
-  Sparkle,
   Megaphone,
 } from 'lucide-react';
 import Link from 'next/link';

@@ -600,21 +600,34 @@ export class ComplaintsService {
     return result?.count ?? 0;
   }
 
-  async delete(id: string, actorId: string): Promise<{ success: boolean; id: string }> {
+  async delete(
+    id: string,
+    actorId: string,
+  ): Promise<{ success: boolean; id: string }> {
     const deleted = await this.complaintModel.findByIdAndDelete(id).exec();
     if (!deleted) {
       throw new NotFoundException(`Complaint ticket #${id} not found`);
     }
-    this.logger.warn(`Admin ${actorId} deleted complaint #${id} (${deleted.ticketNumber})`, 'ComplaintsService');
+    this.logger.warn(
+      `Admin ${actorId} deleted complaint #${id} (${deleted.ticketNumber})`,
+      'ComplaintsService',
+    );
     return { success: true, id };
   }
 
-  async bulkDelete(ids: string[], actorId: string): Promise<{ success: boolean; deletedCount: number }> {
-    const validIds = ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id));
+  async bulkDelete(
+    ids: string[],
+    actorId: string,
+  ): Promise<{ success: boolean; deletedCount: number }> {
+    const validIds = ids
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
     if (validIds.length === 0) {
       return { success: true, deletedCount: 0 };
     }
-    const result = await this.complaintModel.deleteMany({ _id: { $in: validIds } }).exec();
+    const result = await this.complaintModel
+      .deleteMany({ _id: { $in: validIds } })
+      .exec();
     this.logger.warn(
       `Admin ${actorId} bulk deleted ${result.deletedCount} complaints`,
       'ComplaintsService',
@@ -622,7 +635,9 @@ export class ComplaintsService {
     return { success: true, deletedCount: result.deletedCount };
   }
 
-  async clearAll(actorId: string): Promise<{ success: boolean; deletedCount: number }> {
+  async clearAll(
+    actorId: string,
+  ): Promise<{ success: boolean; deletedCount: number }> {
     const result = await this.complaintModel.deleteMany({}).exec();
     this.logger.warn(
       `Admin ${actorId} purged all ${result.deletedCount} complaints`,
@@ -631,4 +646,3 @@ export class ComplaintsService {
     return { success: true, deletedCount: result.deletedCount };
   }
 }
-

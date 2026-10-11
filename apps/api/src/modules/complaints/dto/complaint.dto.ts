@@ -291,4 +291,3 @@ export class BulkDeleteComplaintsDto {
   @IsString({ each: true })
   ids!: string[];
 }
-

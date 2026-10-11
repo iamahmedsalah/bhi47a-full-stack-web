@@ -28,7 +28,11 @@ import {
   Printer,
   Search,
   ShieldAlert,
-  Sparkles,
+  Shuffle,
+  Cpu,
+  Star,
+  Lightbulb,
+  Wand2,
   Settings2,
   Trash2,
   UnlockKeyhole,
@@ -1284,7 +1288,7 @@ export function AdvisingWorkspace() {
                       run.mutate();
                     }}
                   >
-                    <Sparkles className="me-2 h-4 w-4" />
+                    <Wand2 className="me-2 h-4 w-4" />
                     {isArabic ? "إنشاء التوصيات" : "Generate"}
                   </Button>
                   <Button
@@ -1547,7 +1551,7 @@ export function AdvisingWorkspace() {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Shuffle className="h-3.5 w-3.5" />
                   <span>{isArabic ? "توزيع تلقائي بالأكواد" : "Auto-Distribute"}</span>
                 </button>
               </div>
@@ -1783,7 +1787,7 @@ export function AdvisingWorkspace() {
                 {/* Live Preview Info Banner */}
                 <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-r from-teal-500/10 to-sky-500/10 p-4 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-sky-300">
-                    <Sparkles className="h-4 w-4" />
+                    <Cpu className="h-4 w-4" />
                     <span>{isArabic ? "آلية عمل خوارزمية التوزيع بالترتيب الرقمي لكود الطالب" : "Distribution Mechanics by Student Code"}</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
@@ -1831,7 +1835,7 @@ export function AdvisingWorkspace() {
                     {autoDistributeMutation.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
+                      <Shuffle className="h-3.5 w-3.5" />
                     )}
                     <span>
                       {isArabic
@@ -2391,7 +2395,7 @@ function Canvas(props: CanvasProps) {
       return (
         <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-sky-500/30 bg-card/40 p-8 text-center">
           <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-sky-500/10 text-sky-400">
-            <Sparkles className="h-8 w-8" />
+            <GraduationCap className="h-8 w-8" />
           </div>
           <h3 className="text-base font-bold">
             {props.isArabic
@@ -3110,7 +3114,7 @@ function CanvasContent({
                                     </span>
                                   ) : isRecommended ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 font-semibold text-purple-300">
-                                      <Sparkles className="h-3 w-3 text-purple-400" />
+                                      <Star className="h-3 w-3 text-purple-400" />
                                       {isArabic ? "موصى به" : "Recommended"}
                                     </span>
                                   ) : !isFailed && !isLowGrade ? (
@@ -3395,7 +3399,7 @@ function RecommendationList({
   if (!items.length) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/15 bg-card/30 text-center text-sm text-muted-foreground">
-        <Sparkles className="h-6 w-6" />
+        <Lightbulb className="h-6 w-6 text-amber-400" />
         <span>
           {isArabic
             ? "أنشئ التوصيات لعرض المقررات المتاحة"
@@ -3409,7 +3413,7 @@ function RecommendationList({
           {isGenerating ? (
             <Loader2 className="me-2 h-4 w-4 animate-spin" />
           ) : (
-            <Sparkles className="me-2 h-4 w-4" />
+            <Wand2 className="me-2 h-4 w-4" />
           )}
           {isArabic ? "إنشاء التوصيات" : "Generate recommendations"}
         </Button>

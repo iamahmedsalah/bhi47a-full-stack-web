@@ -5,7 +5,9 @@ import {
   Trophy,
   Code2,
   Users2,
-  Sparkles,
+  HeartHandshake,
+  Compass,
+  Award,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
@@ -27,7 +29,7 @@ export function ActivitiesSection({ locale }: ActivitiesSectionProps) {
     scientific: <Code2 className="h-4 w-4 text-teal-300" />,
     sports: <Trophy className="h-4 w-4 text-teal-300" />,
     cultural: <Users2 className="h-4 w-4 text-teal-300" />,
-    social: <Sparkles className="h-4 w-4 text-teal-300" />,
+    social: <HeartHandshake className="h-4 w-4 text-teal-300" />,
   };
 
   return (
@@ -55,7 +57,7 @@ export function ActivitiesSection({ locale }: ActivitiesSectionProps) {
           </div>
           <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-squircle self-start md:self-auto">
             <Link href={`/${locale}/activities`}>
-              <Sparkles className="h-4 w-4 text-primary" />
+              <Compass className="h-4 w-4 text-primary" />
               <span>{isAr ? 'استعراض كافة الأنشطة' : 'Explore All Activities'}</span>
               <ArrowIcon className="h-4 w-4" />
             </Link>
@@ -79,7 +81,7 @@ export function ActivitiesSection({ locale }: ActivitiesSectionProps) {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
                 <div className="absolute bottom-3 start-3 flex items-center gap-1.5 rounded-full bg-slate-950/80 px-3 py-1 text-xs font-bold text-white backdrop-blur-md border border-white/10">
-                  {iconMap[activity.category] || <Sparkles className="h-4 w-4 text-teal-300" />}
+                  {iconMap[activity.category] || <Award className="h-4 w-4 text-teal-300" />}
                   <span>{isAr ? activity.categoryAr : activity.categoryEn}</span>
                 </div>
               </div>
