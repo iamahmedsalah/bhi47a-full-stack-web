@@ -167,7 +167,7 @@ function UploadsPageContent() {
   // Data Wipe / Reset State
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [selectedWipeTarget, setSelectedWipeTarget] = useState<
-    'students' | 'grades' | 'attendance' | 'all'
+    'students' | 'grades' | 'attendance' | 'complaints' | 'all'
   >('grades');
   const [wipeConfirmText, setWipeConfirmText] = useState('');
 
@@ -189,7 +189,9 @@ function UploadsPageContent() {
   });
 
   const wipeMutation = useMutation({
-    mutationFn: async (target: 'students' | 'grades' | 'attendance' | 'all') => {
+    mutationFn: async (
+      target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
+    ) => {
       const res = await api.post('/admin/uploads/wipe', { target });
       return res.data;
     },
@@ -828,6 +830,7 @@ function UploadsPageContent() {
                 { id: 'grades', labelAr: 'الدرجات والكويزات', labelEn: 'Grades & Quizzes' },
                 { id: 'attendance', labelAr: 'سجلات الحضور', labelEn: 'Attendance' },
                 { id: 'students', labelAr: 'الطلاب وحساباتهم', labelEn: 'Students' },
+                { id: 'complaints', labelAr: 'شكاوى وتذاكر الطلاب', labelEn: 'Complaints & Tickets' },
                 { id: 'all', labelAr: 'كافة البيانات الأكاديمية', labelEn: 'All Records' },
               ].map((opt) => (
                 <button

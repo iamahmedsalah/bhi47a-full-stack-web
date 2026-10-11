@@ -10,6 +10,8 @@ import { queryKeys } from '@/lib/query-keys';
 import {
   listAdminNotifications,
   deleteAdminNotification,
+  clearAllAdminNotifications,
+  bulkDeleteAdminNotifications,
   getLocalizedNotification,
 } from '@/lib/features/notifications';
 import {
@@ -33,8 +35,11 @@ import {
 import { cn } from '@/lib/cn';
 import { toast } from 'sonner';
 import { SessionTimerWidget } from '@/components/common/session-timer-widget';
+import LangToggle from '@/components/ui/LangToggle';
+import { Themes } from '@/components/ui/Themes';
 
 const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
+const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
 
 export default function AdminHeader() {
   const { logout } = useAuth();
@@ -48,13 +53,18 @@ export default function AdminHeader() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('unread');
   const [readIds, setReadIds] = useState<string[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
-  // Load read notifications from localStorage
+  // Load read and dismissed notifications from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(ADMIN_READ_STORAGE_KEY);
-      if (stored) {
-        setReadIds(JSON.parse(stored));
+      const storedRead = localStorage.getItem(ADMIN_READ_STORAGE_KEY);
+      if (storedRead) {
+        setReadIds(JSON.parse(storedRead));
+      }
+      const storedDismissed = localStorage.getItem(ADMIN_DISMISSED_STORAGE_KEY);
+      if (storedDismissed) {
+        setDismissedIds(JSON.parse(storedDismissed));
       }
     } catch {
       // ignore
@@ -70,6 +80,15 @@ export default function AdminHeader() {
     }
   };
 
+  const saveDismissedIds = (ids: string[]) => {
+    setDismissedIds(ids);
+    try {
+      localStorage.setItem(ADMIN_DISMISSED_STORAGE_KEY, JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+  };
+
   // Admin notifications query
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications.adminList,
@@ -77,7 +96,13 @@ export default function AdminHeader() {
     staleTime: 60 * 1000,
   });
 
-  const notifications = notificationsQuery.data?.items || [];
+  const rawNotifications = notificationsQuery.data?.items || [];
+
+  // Filter out any locally dismissed notifications
+  const notifications = useMemo(
+    () => rawNotifications.filter((item) => !dismissedIds.includes(item._id)),
+    [rawNotifications, dismissedIds],
+  );
 
   const unreadItems = useMemo(
     () => notifications.filter((item) => !readIds.includes(item._id)),
@@ -92,8 +117,8 @@ export default function AdminHeader() {
     mutationFn: (id: string) => deleteAdminNotification(id),
     onSuccess: (_, deletedId) => {
       toast.success(isAr ? 'تم حذف الإشعار بنجاح' : 'Notification deleted');
+      saveDismissedIds(Array.from(new Set([...dismissedIds, deletedId])));
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.adminList });
-      saveReadIds(readIds.filter((id) => id !== deletedId));
     },
     onError: () => {
       toast.error(isAr ? 'فشل حذف الإشعار' : 'Failed to delete notification');
@@ -106,14 +131,39 @@ export default function AdminHeader() {
     toast.success(isAr ? 'تم تحديد جميع الإشعارات كمقروءة' : 'All marked as read');
   };
 
-  const handleClearRead = () => {
-    // Clear read IDs or dismiss read notifications from display
-    const currentUnreadIds = unreadItems.map((n) => n._id);
-    const updated = notifications
-      .map((n) => n._id)
-      .filter((id) => !currentUnreadIds.includes(id));
-    saveReadIds(Array.from(new Set([...readIds, ...updated])));
+  const handleClearRead = async () => {
+    const readToClear = notifications.filter((n) => readIds.includes(n._id)).map((n) => n._id);
+    if (readToClear.length === 0) {
+      toast.info(isAr ? 'لا توجد إشعارات مقروءة لمسحها' : 'No read notifications to clear');
+      return;
+    }
+
+    const nextDismissed = Array.from(new Set([...dismissedIds, ...readToClear]));
+    saveDismissedIds(nextDismissed);
     toast.success(isAr ? 'تم مسح الإشعارات المقروءة' : 'Read notifications cleared');
+
+    try {
+      await bulkDeleteAdminNotifications(readToClear);
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.adminList });
+    } catch {
+      // Optimistic dismissal remains active in localStorage
+    }
+  };
+
+  const handleClearAll = async () => {
+    const allIds = notifications.map((n) => n._id);
+    if (allIds.length === 0) return;
+
+    const nextDismissed = Array.from(new Set([...dismissedIds, ...allIds]));
+    saveDismissedIds(nextDismissed);
+    toast.success(isAr ? 'تم مسح جميع الإشعارات' : 'All notifications cleared');
+
+    try {
+      await clearAllAdminNotifications();
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.adminList });
+    } catch {
+      // Optimistic dismissal remains active
+    }
   };
 
   const toggleItemRead = (id: string) => {
@@ -125,34 +175,39 @@ export default function AdminHeader() {
   };
 
   return (
-    <header className="relative bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-4 rounded-squircle mx-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-      {/* Right section: Logo & Institute Name */}
-      <div className="flex items-center gap-4">
+    <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 pe-14 md:pe-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+      {/* Right/Start section: Logo & Institute Name */}
+      <div className="flex items-center gap-3 min-w-0">
         <Image
           src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_112,h_112,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
           alt={isAr ? 'شعار المعهد' : 'Institute Logo'}
-          width={48}
-          height={48}
-          className="object-contain rounded"
+          width={44}
+          height={44}
+          className="object-contain rounded shrink-0"
           priority
         />
-        <div className="text-start">
-          <h2 className="text-sm md:text-base font-bold text-foreground/90 leading-tight">
+        <div className="text-start min-w-0">
+          <h2 className="text-sm md:text-base font-bold text-foreground/90 leading-tight truncate">
             {isAr ? 'المعهد العالى للعلوم الادارية المتقدمة والحاسبات' : 'Higher Institute for Advanced Administrative Sciences & Computer'}
           </h2>
-          <span className="text-xs text-foreground/70">
-            {isAr ? 'لوحة تحكم الإدارة' : 'Admin Control Panel'}
+          <span className="text-xs text-primary font-semibold flex items-center gap-1.5 mt-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary inline-block" />
+            {isAr ? 'لوحة تحكم الإدارة الأكاديمية' : 'Admin Control Panel'}
           </span>
         </div>
       </div>
 
-      {/* Left section: Session timer, language switcher, logout */}
-      <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+      {/* Left/End section: Session timer, language switcher, themes, notifications */}
+      <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
         {/* Session Expiry Timer widget */}
         <SessionTimerWidget role="admin" />
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
+          <LangToggle hideLabel />
+          <Themes />
+
           {/* Notifications Slide-out Drawer */}
           <Sheet open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen}>
             <SheetTrigger asChild>
@@ -230,16 +285,28 @@ export default function AdminHeader() {
                     <span>{isAr ? 'تحديد الكل كمقروء' : 'Mark all read'}</span>
                   </button>
                 )}
-                {notifications.length > 0 && activeTab === 'all' && (
-                  <button
-                    type="button"
-                    onClick={handleClearRead}
-                    className="ms-auto text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>{isAr ? 'مسح المقروء' : 'Clear read'}</span>
-                  </button>
-                )}
+                <div className="ms-auto flex items-center gap-2">
+                  {notifications.some((n) => readIds.includes(n._id)) && (
+                    <button
+                      type="button"
+                      onClick={handleClearRead}
+                      className="text-[11px] font-bold text-amber-500 hover:text-amber-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>{isAr ? 'مسح المقروء' : 'Clear read'}</span>
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>{isAr ? 'مسح الكل' : 'Clear all'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-3 custom-scroll pr-1">
@@ -265,9 +332,10 @@ export default function AdminHeader() {
                     </Link>
                   </div>
                 ) : (
-                  displayedNotifications.slice(0, 20).map((item) => {
+                  displayedNotifications.slice(0, 30).map((item) => {
                     const isRead = readIds.includes(item._id);
                     const loc = getLocalizedNotification(item, isAr);
+                    const cleanBody = (loc.body || '').replace(/\s*\(undefined\)/g, '').trim();
                     return (
                       <div
                         key={item._id}
@@ -295,7 +363,7 @@ export default function AdminHeader() {
                           </span>
                         </div>
                         <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-3">
-                          <bdi>{loc.body}</bdi>
+                          <bdi>{cleanBody}</bdi>
                         </p>
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1.5 border-t border-border/50">
                           <time className="font-mono flex items-center gap-1 font-medium">
@@ -345,4 +413,3 @@ export default function AdminHeader() {
     </header>
   );
 }
-

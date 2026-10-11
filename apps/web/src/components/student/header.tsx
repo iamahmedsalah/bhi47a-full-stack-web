@@ -185,27 +185,34 @@ export default function StudentHeader() {
 
         {/* Left/End section: Controls bar */}
         <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
-          <div className="flex items-center gap-2 sm:gap-3">
-          {/* Notifications Slide-out Drawer */}
-          <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetTrigger asChild>
-              <button
-                type="button"
-                className="relative flex h-10 w-10 items-center rounded-squircle justify-center border border-white/10 bg-black/20 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
-                aria-label={isAr ? 'الإشعارات' : 'Notifications'}
+          {/* Session Expiry Timer Widget */}
+          <SessionTimerWidget role="student" />
+
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
+            <LangToggle hideLabel />
+            <Themes />
+
+            {/* Notifications Slide-out Drawer */}
+            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  className="relative flex h-10 w-10 items-center rounded-squircle justify-center border border-white/10 bg-black/20 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                  aria-label={isAr ? 'الإشعارات' : 'Notifications'}
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1.5 end-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-white animate-pulse z-10">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              </SheetTrigger>
+              <SheetContent 
+                side={isAr ? 'left' : 'right'} 
+                className="w-80 sm:w-96 bg-card/95 border-border shadow-2xl backdrop-blur-md p-6 flex flex-col h-full z-[100]"
               >
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1.5 end-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-white animate-pulse z-10">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            </SheetTrigger>
-            <SheetContent 
-              side={isAr ? 'left' : 'right'} 
-              className="w-80 sm:w-96 bg-card/95 border-border shadow-2xl backdrop-blur-md p-6 flex flex-col h-full z-[100]"
-            >
               <SheetHeader className="mb-4">
                 <SheetTitle className="text-lg font-bold text-foreground text-start flex items-center gap-2">
                   <Bell className="h-5 w-5 text-primary animate-wiggle" />
@@ -397,15 +404,6 @@ export default function StudentHeader() {
               </div>
             </SheetContent>
           </Sheet>
-
-          {/* Session Expiry Timer Widget */}
-          <SessionTimerWidget role="student" />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
-          <LangToggle hideLabel />
-          <Themes />
         </div>
       </div>
     </header>

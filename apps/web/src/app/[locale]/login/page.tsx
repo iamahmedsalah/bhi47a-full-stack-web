@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import LangToggle from '@/components/ui/LangToggle';
 import { Footer } from '@/components/ui/footer';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
+import { getSiteUrl } from '@/lib/site-url';
 
 interface LoginPageProps {
   params: Promise<{ locale: string }>;
@@ -29,14 +30,48 @@ interface LoginPageProps {
 export async function generateMetadata({ params }: LoginPageProps): Promise<Metadata> {
   const { locale } = await params;
   const isAr = locale === 'ar';
+  const siteUrl = getSiteUrl();
+
+  const title = isAr
+    ? `تسجيل الدخول - البوابة الإلكترونية الموحدة | ${INSTITUTE_INFO.nameAr}`
+    : `Sign In - Unified Electronic Portal | ${INSTITUTE_INFO.nameEn}`;
+
+  const description = isAr
+    ? 'تسجيل الدخول لبوابة الطالب، نتائج الامتحانات، البريد الأكاديمي، ومنظومة الشكاوى والدعم الأكاديمي بالمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 أ).'
+    : 'Unified portal login for student records, exam results, academic mail, and technical support at High Institute for Advanced Management Sciences and Computer (BHI47).';
 
   return {
-    title: isAr
-      ? `البوابة الإلكترونية الموحدة | ${INSTITUTE_INFO.nameAr}`
-      : `Unified Electronic Portal | ${INSTITUTE_INFO.nameEn}`,
-    description: isAr
-      ? 'تسجيل الدخول لبوابة الطالب، نتائج الامتحانات، البريد الأكاديمي، ومنظومة الشكاوى والأعطال الفنية بالمعهد.'
-      : 'Unified portal login for student records, exam results, academic mail, and technical support.',
+    title,
+    description,
+    alternates: {
+      canonical: `${siteUrl}/${locale}/login`,
+      languages: {
+        ar: `${siteUrl}/ar/login`,
+        en: `${siteUrl}/en/login`,
+      },
+    },
+    openGraph: {
+      title,
+      description,
+      url: `${siteUrl}/${locale}/login`,
+      siteName: isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn,
+      locale: isAr ? 'ar_EG' : 'en_US',
+      type: 'website',
+      images: [
+        {
+          url: '/images/og-preview.png',
+          width: 1200,
+          height: 630,
+          alt: isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: ['/images/og-preview.png'],
+    },
   };
 }
 

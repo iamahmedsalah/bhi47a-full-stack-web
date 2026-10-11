@@ -108,10 +108,13 @@ export class UploadsController {
       'Wipe/Reset student and academic data before uploading fresh datasets (Admin)',
   })
   wipeData(
-    @Body('target') target: 'students' | 'grades' | 'attendance' | 'all',
+    @Body('target')
+    target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
     @CurrentUser('_id') adminId: string,
   ) {
-    if (!['students', 'grades', 'attendance', 'all'].includes(target)) {
+    if (
+      !['students', 'grades', 'attendance', 'complaints', 'all'].includes(target)
+    ) {
       throw new BadRequestException('Invalid wipe target');
     }
     return this.uploadsService.wipeData(target, adminId);

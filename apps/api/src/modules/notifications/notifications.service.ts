@@ -451,6 +451,24 @@ export class NotificationsService implements OnModuleInit {
     return { message: 'تم حذف الإشعار بنجاح', id };
   }
 
+  async clearAllHistory() {
+    const result = await this.notificationModel.deleteMany({});
+    return { message: 'تم مسح سجل الإشعارات بالكامل بنجاح', count: result.deletedCount };
+  }
+
+  async bulkDelete(ids: string[]) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return { message: 'لا توجد عناصر للحذف', count: 0 };
+    }
+    const validObjectIds = ids
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    const result = await this.notificationModel.deleteMany({
+      _id: { $in: validObjectIds },
+    });
+    return { message: 'تم حذف الإشعارات بنجاح', count: result.deletedCount };
+  }
+
   private async deliverPush(data: PushNotificationJob) {
     try {
       if (!this.isFirebaseInitialized) {

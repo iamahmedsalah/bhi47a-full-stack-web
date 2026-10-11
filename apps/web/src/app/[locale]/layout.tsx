@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
@@ -8,6 +9,71 @@ import { ThemeProvider } from '@/providers/theme-provider';
 import { NetworkStatusOverlay } from '@/components/ui/NetworkStatusOverlay';
 import { AuthProvider } from '@/providers/auth-provider';
 import { ConsoleBanner } from '@/providers/console-banner';
+import { getSiteUrl } from '@/lib/site-url';
+import { INSTITUTE_INFO } from '@/data/institutional-data';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const isAr = locale === 'ar';
+  const siteUrl = getSiteUrl();
+
+  const titleDefault = isAr
+    ? `${INSTITUTE_INFO.nameAr} | بوابة الطالب والخدمات الأكاديمية (47 أ)`
+    : `${INSTITUTE_INFO.nameEn} | Student & Academic Portal (BHI47)`;
+
+  const titleTemplate = isAr
+    ? `%s | ${INSTITUTE_INFO.nameAr} (47 أ)`
+    : `%s | ${INSTITUTE_INFO.nameEn} (BHI47)`;
+
+  const description = isAr
+    ? 'البوابة الإلكترونية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود التنسيق 47 أ) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، الجداول الدراسية، والبريد الأكاديمي.'
+    : 'Official Student & Academic Portal for High Institute for Advanced Management Sciences and Computer (BHI47, Coordination Code 47/A) - Student Records, Schedules, Results, and LMS.';
+
+  return {
+    metadataBase: new URL(siteUrl),
+    title: {
+      default: titleDefault,
+      template: titleTemplate,
+    },
+    description,
+    alternates: {
+      canonical: `${siteUrl}/${locale}`,
+      languages: {
+        ar: `${siteUrl}/ar`,
+        en: `${siteUrl}/en`,
+        'x-default': `${siteUrl}/ar`,
+      },
+    },
+    openGraph: {
+      title: titleDefault,
+      description,
+      url: `${siteUrl}/${locale}`,
+      siteName: isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn,
+      locale: isAr ? 'ar_EG' : 'en_US',
+      alternateLocale: isAr ? ['en_US'] : ['ar_EG'],
+      type: 'website',
+      images: [
+        {
+          url: '/images/og-preview.png',
+          width: 1200,
+          height: 630,
+          alt: isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn,
+          type: 'image/png',
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: titleDefault,
+      description,
+      images: ['/images/og-preview.png'],
+    },
+  };
+}
 
 const themeInitScript = `
 (() => {
@@ -48,10 +114,11 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={dir} data-theme="light" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon_io/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png" />
-        <link rel="apple-touch-icon" href="/favicon_io/maskable-icon.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon.png" />
+        <link rel="apple-touch-icon" href="/apple-icon.png" />
         <script
           id="theme-init"
           dangerouslySetInnerHTML={{ __html: themeInitScript }}

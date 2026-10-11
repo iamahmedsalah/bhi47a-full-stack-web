@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocale } from 'next-intl';
 import {
   Dialog,
@@ -19,6 +19,9 @@ import {
   Loader2,
   CheckCircle2,
   Users,
+  X,
+  AlertCircle,
+  GraduationCap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { transferDepartment, type Student } from '../api';
@@ -37,27 +40,27 @@ interface DepartmentTransferDialogProps {
 const DEPARTMENTS = [
   {
     id: 'BIS',
-    shortLabel: (isAr: boolean) => (isAr ? 'نظم المعلومات (BIS)' : 'BIS Track'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4' : 'Levels 3 & 4'),
+    shortLabel: (isAr: boolean) => (isAr ? 'نظم معلومات الأعمال (BIS)' : 'Business Info Systems (BIS)'),
+    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Laptop,
     badgeColor: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400',
-    selectedBorder: 'border-cyan-500 ring-cyan-500/40 bg-cyan-500/10',
+    selectedBorder: 'border-cyan-500 ring-2 ring-cyan-500/30 bg-cyan-500/10 shadow-sm',
   },
   {
     id: 'ACCOUNTING',
-    shortLabel: (isAr: boolean) => (isAr ? 'المحاسبة والمراجعة' : 'Accounting'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4' : 'Levels 3 & 4'),
+    shortLabel: (isAr: boolean) => (isAr ? 'المحاسبة والمراجعة' : 'Accounting & Auditing'),
+    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Calculator,
     badgeColor: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
-    selectedBorder: 'border-emerald-500 ring-emerald-500/40 bg-emerald-500/10',
+    selectedBorder: 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-500/10 shadow-sm',
   },
   {
     id: 'GENERAL',
     shortLabel: (isAr: boolean) => (isAr ? 'الشعبة العامة' : 'General Track'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 1 و 2' : 'Levels 1 & 2'),
+    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 1 و 2 • شعبة مشتركة' : 'Levels 1 & 2 • Common Track'),
     icon: BookOpen,
     badgeColor: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
-    selectedBorder: 'border-primary ring-primary/40 bg-primary/10',
+    selectedBorder: 'border-primary ring-2 ring-primary/30 bg-primary/10 shadow-sm',
   },
 ];
 
@@ -75,7 +78,13 @@ export function DepartmentTransferDialog({
   const queryClient = useQueryClient();
 
   const isBulk = !student && selectedStudents.length > 0;
-  const targetStudentList = student ? [student] : selectedStudents;
+  const [activeStudents, setActiveStudents] = useState<Student[]>(() =>
+    student ? [student] : selectedStudents,
+  );
+
+  useEffect(() => {
+    setActiveStudents(student ? [student] : selectedStudents);
+  }, [student, selectedStudents, open]);
 
   const [targetDepartment, setTargetDepartment] = useState<string>(() => {
     if (student) {
@@ -84,16 +93,22 @@ export function DepartmentTransferDialog({
     }
     return 'BIS';
   });
+
   const [updateLevelTo3, setUpdateLevelTo3] = useState<boolean>(() => {
     if (student) {
       return student.level === '1' || student.level === '2';
     }
     return true;
   });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const removeStudentFromList = (id: string) => {
+    setActiveStudents((prev) => prev.filter((s) => s._id !== id));
+  };
+
   const handleTransfer = async () => {
-    if (!targetStudentList.length) {
+    if (!activeStudents.length) {
       toast.error(
         isAr
           ? 'لم يتم تحديد أي طالب للتحويل. يرجى اختيار الطلاب من الجدول أولاً.'
@@ -104,7 +119,7 @@ export function DepartmentTransferDialog({
 
     setIsSubmitting(true);
     try {
-      const studentIds = targetStudentList.map((s) => s._id);
+      const studentIds = activeStudents.map((s) => s._id);
       const res = await transferDepartment({
         studentIds,
         targetDepartment,
@@ -114,11 +129,10 @@ export function DepartmentTransferDialog({
       toast.success(
         res.message ||
           (isAr
-            ? `تم تحويل ${targetStudentList.length} طالب بنجاح إلى التخصص المختار`
-            : `Successfully transferred ${targetStudentList.length} student(s)`),
+            ? `تم تحويل ${activeStudents.length} طالب بنجاح إلى التخصص المختار`
+            : `Successfully transferred ${activeStudents.length} student(s)`),
       );
 
-      // Invalidate relevant student caches
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-stats-students-overview'] }),
@@ -142,78 +156,103 @@ export function DepartmentTransferDialog({
     if (!code) return isAr ? 'الشعبة العامة' : 'General Track';
     const upper = code.toUpperCase();
     if (upper.includes('BIS') || upper.includes('نظم'))
-      return isAr ? 'نظم معلومات الأعمال (BIS)' : 'BIS';
+      return isAr ? 'BIS' : 'BIS';
     if (upper.includes('ACCOUNT') || upper.includes('محاسب'))
-      return isAr ? 'المحاسبة والمراجعة' : 'Accounting';
+      return isAr ? 'محاسبة' : 'Accounting';
     return code;
   };
 
   return (
     <Dialog open={open} onOpenChange={isSubmitting ? undefined : onOpenChange}>
-      <DialogContent className="max-w-lg rounded-2xl border border-border/80 bg-card p-5 shadow-2xl relative overflow-hidden">
-        {/* Compact Header */}
-        <DialogHeader className="text-start rtl:text-right space-y-1">
+      <DialogContent className="max-w-lg rounded-2xl border border-border/80 bg-card p-5 shadow-2xl relative overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
+        {/* Header */}
+        <DialogHeader className="text-start space-y-1">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 shrink-0">
-              <ArrowLeftRight className="h-4.5 w-4.5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 shrink-0">
+              <ArrowLeftRight className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <DialogTitle className="text-base font-bold text-foreground">
-                {isAr ? 'تحويل الشعبة والتخصص (الفرقة 3)' : 'Transfer Specialization (Level 3)'}
+                {isAr ? 'تحويل الشعبة والتخصص الأكاديمي' : 'Transfer Academic Track'}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5 truncate">
                 {isAr
-                  ? 'تسكين وتحويل الطلاب بين شعبتي BIS والمحاسبة بالفرقة الثالثة'
-                  : 'Place and transfer students between BIS and Accounting tracks in Level 3'}
+                  ? 'تسكين وتحويل الطلاب بين شعبتي نظم المعلومات (BIS) والمحاسبة والمراجعة'
+                  : 'Place and transfer students between BIS and Accounting programs'}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-3 pt-1 pb-1">
-          {/* Compact Student Context Strip - Fixed height, never overflows */}
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-secondary/30 px-3 py-2 text-xs">
-            {isBulk ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <Users className="h-4 w-4 text-primary shrink-0" />
-                <span className="font-bold text-foreground truncate">
+        <div className="space-y-4 py-1">
+          {/* Student Context & Selected Chips */}
+          <div className="rounded-xl border border-border/70 bg-secondary/30 p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+              <span className="flex items-center gap-1.5">
+                <Users className="h-4 w-4 text-cyan-500" />
+                {isBulk
+                  ? (isAr ? `الطلاب المحددين للتحويل (${activeStudents.length})` : `Selected Students (${activeStudents.length})`)
+                  : (isAr ? 'بيانات الطالب المراد تحويله' : 'Target Student')}
+              </span>
+              <span className="text-[11px] font-mono text-muted-foreground font-normal">
+                {activeStudents.length > 0
+                  ? (isAr ? 'جاهز للتنفيذ' : 'Ready')
+                  : (isAr ? 'لا يوجد طلاب' : 'Empty')}
+              </span>
+            </div>
+
+            {activeStudents.length === 0 ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>
                   {isAr
-                    ? `تحويل جماعي لـ ${targetStudentList.length} طالب محدد`
-                    : `Bulk Transfer (${targetStudentList.length} Students)`}
-                </span>
-              </div>
-            ) : student ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="font-bold text-foreground truncate">
-                  {student.fullName || student.fullNameAr || student.studentCode}
-                </span>
-                <span className="font-mono text-[11px] text-muted-foreground shrink-0">
-                  ({student.studentCode})
+                    ? 'لم يتم تحديد أي طالب من الجدول. يرجى إغلاق النافذة واختيار الطلاب المطلوب تحويلهم عبر خانات الاختيار أولاً.'
+                    : 'No students selected. Please close this dialog and select students from the table first.'}
                 </span>
               </div>
             ) : (
-              <span className="text-amber-400 font-semibold text-xs">
-                {isAr ? 'لم يتم تحديد أي طالب من الجدول' : 'No students selected'}
-              </span>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pe-1">
+                {activeStudents.map((st) => (
+                  <div
+                    key={st._id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-card/80 border border-border/60 text-xs"
+                  >
+                    <div className="min-w-0 flex items-center gap-2">
+                      <GraduationCap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="font-semibold text-foreground truncate max-w-[160px] sm:max-w-[200px]">
+                        {st.fullName || st.fullNameAr || st.studentCode}
+                      </span>
+                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                        ({st.studentCode})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="rounded-md px-1.5 py-0.5 text-[10px] font-medium border border-border bg-secondary text-muted-foreground">
+                        {getDepartmentLabel(st.department)}
+                      </span>
+                      {isBulk && activeStudents.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeStudentFromList(st._id)}
+                          className="p-1 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                          title={isAr ? 'إزالة من التحويل' : 'Remove from selection'}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-
-            {student ? (
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold border border-border bg-card shrink-0">
-                {getDepartmentLabel(student.department)}
-              </span>
-            ) : targetStudentList.length > 0 ? (
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold border border-primary/30 bg-primary/10 text-primary shrink-0">
-                {isAr ? 'جاهز للتنفيذ' : 'Ready'}
-              </span>
-            ) : null}
           </div>
 
-          {/* 3-Column Horizontal Department Selection Grid */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">
-              {isAr ? 'التخصص المستهدف للتحويل:' : 'Target Department / Track:'}
+          {/* Department Selection Grid */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground block">
+              {isAr ? 'التخصص المستهدف للتحويل:' : 'Target Track / Department:'}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {DEPARTMENTS.map((dept) => {
                 const IconComponent = dept.icon;
                 const isSelected = targetDepartment === dept.id;
@@ -223,9 +262,9 @@ export function DepartmentTransferDialog({
                     type="button"
                     onClick={() => setTargetDepartment(dept.id)}
                     className={cn(
-                      'flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all cursor-pointer relative gap-1.5 min-h-[78px]',
+                      'flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer relative gap-1.5 min-h-[85px]',
                       isSelected
-                        ? cn('shadow-sm ring-1', dept.selectedBorder)
+                        ? dept.selectedBorder
                         : 'border-border/70 bg-card hover:bg-secondary/40 hover:border-border',
                     )}
                   >
@@ -246,7 +285,7 @@ export function DepartmentTransferDialog({
                       </div>
                     </div>
                     {isSelected && (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-primary absolute top-1.5 end-1.5" />
+                      <CheckCircle2 className="h-4 w-4 text-cyan-400 absolute top-2 end-2" />
                     )}
                   </button>
                 );
@@ -254,30 +293,40 @@ export function DepartmentTransferDialog({
             </div>
           </div>
 
-          {/* Compact Level 3 Promotion Toggle */}
-          <div className="rounded-xl border border-border/70 bg-secondary/20 px-3 py-2 flex items-center justify-between gap-3 text-xs">
-            <label
-              htmlFor="update-level-3-check"
-              className="cursor-pointer select-none space-y-0.5 flex-1 min-w-0"
-            >
+          {/* Level 3 Promotion Toggle Switch */}
+          <div className="rounded-xl border border-border/70 bg-secondary/20 p-3 flex items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5 flex-1 min-w-0">
               <div className="font-semibold text-foreground truncate">
                 {isAr
-                  ? 'ترقية / تثبيت الفرقة إلى "المستوى الثالث" (سنة التخصص)'
-                  : 'Promote Level to "Level 3" (Specialization Year)'}
+                  ? 'تثبيت / ترقية الفرقة الدراسية إلى "المستوى الثالث"'
+                  : 'Promote Student Level to "Level 3" (Specialization)'}
               </div>
-              <div className="text-[10px] text-muted-foreground truncate">
+              <div className="text-[11px] text-muted-foreground">
                 {isAr
-                  ? 'تحديث المقررات والجداول تلقائياً وفق لائحة التخصص الجديد'
-                  : 'Sync registered courses and schedules with target track'}
+                  ? 'تحديث لائحة المقررات والجداول تلقائياً بما يتوافق مع متطلبات التخصص الجديد'
+                  : 'Automatically enroll in target specialization curriculum and courses'}
               </div>
-            </label>
-            <input
-              type="checkbox"
-              id="update-level-3-check"
-              checked={updateLevelTo3}
-              onChange={(e) => setUpdateLevelTo3(e.target.checked)}
-              className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary shrink-0"
-            />
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={updateLevelTo3}
+              onClick={() => setUpdateLevelTo3(!updateLevelTo3)}
+              className={cn(
+                'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2',
+                updateLevelTo3 ? 'bg-cyan-500' : 'bg-muted-foreground/30',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out',
+                  updateLevelTo3
+                    ? 'translate-x-5 rtl:-translate-x-5'
+                    : 'translate-x-0',
+                )}
+              />
+            </button>
           </div>
         </div>
 
@@ -286,8 +335,8 @@ export function DepartmentTransferDialog({
           <Button
             type="button"
             onClick={handleTransfer}
-            disabled={isSubmitting || !targetDepartment || targetStudentList.length === 0}
-            className="rounded-squircle px-5 font-bold shadow-sm h-9 text-xs"
+            disabled={isSubmitting || !targetDepartment || activeStudents.length === 0}
+            className="rounded-squircle px-5 font-bold shadow-sm h-9 text-xs bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer"
           >
             {isSubmitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin rtl:ml-1.5 rtl:mr-0 mr-1.5" />
@@ -295,15 +344,15 @@ export function DepartmentTransferDialog({
               <ArrowLeftRight className="h-3.5 w-3.5 rtl:ml-1.5 rtl:mr-0 mr-1.5" />
             )}
             {isAr
-              ? `تأكيد التحويل ${targetStudentList.length > 0 ? `(${targetStudentList.length})` : ''}`
-              : `Confirm Transfer ${targetStudentList.length > 0 ? `(${targetStudentList.length})` : ''}`}
+              ? `تأكيد التحويل ${activeStudents.length > 0 ? `(${activeStudents.length})` : ''}`
+              : `Confirm Transfer ${activeStudents.length > 0 ? `(${activeStudents.length})` : ''}`}
           </Button>
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="rounded-squircle h-9 text-xs"
+            className="rounded-squircle h-9 text-xs cursor-pointer"
           >
             {isAr ? 'إلغاء' : 'Cancel'}
           </Button>
@@ -312,3 +361,4 @@ export function DepartmentTransferDialog({
     </Dialog>
   );
 }
+

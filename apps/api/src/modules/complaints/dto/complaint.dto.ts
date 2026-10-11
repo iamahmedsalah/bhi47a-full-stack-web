@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsBoolean,
   IsArray,
+  ArrayNotEmpty,
   Matches,
   IsDateString,
   Length,
@@ -101,6 +102,14 @@ export class CreateComplaintDto {
     message: 'حجم الصورة المرفقة كبير جداً (الحد الأقصى 2 ميجابايت)',
   })
   screenshotUrl?: string;
+
+  @ApiPropertyOptional({ example: 'data:image/png;base64,...' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(2_800_000, {
+    message: 'حجم الصورة المرفقة كبير جداً (الحد الأقصى 2 ميجابايت)',
+  })
+  screenshot?: string;
 }
 
 export class PublicCreateComplaintDto extends CreateComplaintDto {
@@ -274,3 +283,12 @@ export class QueryComplaintDto {
   @IsOptional()
   limit?: number;
 }
+
+export class BulkDeleteComplaintsDto {
+  @ApiProperty({ example: ['660...'], type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  ids!: string[];
+}
+

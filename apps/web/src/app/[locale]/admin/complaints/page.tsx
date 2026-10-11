@@ -23,6 +23,7 @@ import {
   Send,
   ShieldAlert,
   Sparkles,
+  Trash2,
   Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,12 +42,15 @@ import {
   replyToComplaint,
   updateComplaint,
   updateComplaintSettings,
+  deleteComplaint,
+  bulkDeleteComplaints,
+  clearAllComplaints,
 } from '@/features/complaints/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { CustomDropdown } from '@/components/ui/custom-dropdown';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
@@ -276,6 +280,9 @@ function AdminComplaintsContent() {
   const [replyMessage, setReplyMessage] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
+  const [clearAllConfirmText, setClearAllConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const complaintListParams = {
     limit: 100,
@@ -387,9 +394,13 @@ function AdminComplaintsContent() {
         complaintsSystemOpen: updates.complaintsSystemOpen ?? settings.complaintsSystemOpen,
         blacklistedStudentCodes: updates.blacklistedStudentCodes ?? settings.blacklistedStudentCodes,
         complaintOpenAt:
-          updates.complaintOpenAt ?? dateTimeLocalToIso(windowOpenAt) ?? settings.complaintOpenAt,
+          'complaintOpenAt' in updates
+            ? updates.complaintOpenAt
+            : (dateTimeLocalToIso(windowOpenAt) ?? settings.complaintOpenAt),
         complaintCloseAt:
-          updates.complaintCloseAt ?? dateTimeLocalToIso(windowCloseAt) ?? settings.complaintCloseAt,
+          'complaintCloseAt' in updates
+            ? updates.complaintCloseAt
+            : (dateTimeLocalToIso(windowCloseAt) ?? settings.complaintCloseAt),
       };
       const updatedSettings = await updateComplaintSettings(payload);
       queryClient.setQueryData(complaintKeys.settings(), updatedSettings);
@@ -409,7 +420,11 @@ function AdminComplaintsContent() {
 
     await handleUpdateSettings({ blacklistedStudentCodes: nextCodes });
     setTargetStudentCode('');
-    toast.success(deactivate ? `تم إيقاف كود الطالب ${targetCode}` : `تم تفعيل كود الطالب ${targetCode}`);
+    toast.success(
+      deactivate
+        ? (isAr ? `تم إيقاف كود الطالب ${targetCode}` : `Student code ${targetCode} blocked`)
+        : (isAr ? `تم تفعيل كود الطالب ${targetCode}` : `Student code ${targetCode} unblocked`),
+    );
   };
 
   const patchTicket = async (ticketId: string, payload: Record<string, string | undefined>) => {
@@ -417,11 +432,68 @@ function AdminComplaintsContent() {
     try {
       const ticket = await updateComplaint(ticketId, payload);
       updateCachesAfterTicket(ticket);
-      toast.success('تم تحديث التذكرة وإرسال الإشعارات اللازمة');
+      toast.success(
+        isAr
+          ? 'تم تحديث التذكرة وإرسال الإشعارات اللازمة'
+          : 'Ticket updated and notifications sent successfully',
+      );
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'تعذر تحديث التذكرة'));
+      toast.error(
+        getApiErrorMessage(
+          error,
+          isAr ? 'تعذر تحديث التذكرة' : 'Failed to update ticket',
+        ),
+      );
     } finally {
       setDrawerLoading(false);
+    }
+  };
+
+  const handleDeleteTicket = async (ticketId: string) => {
+    const toastId = toast.loading(isAr ? 'جاري حذف الشكوى...' : 'Deleting complaint...');
+    try {
+      await deleteComplaint(ticketId);
+      toast.success(isAr ? 'تم حذف الشكوى بنجاح' : 'Complaint deleted successfully', { id: toastId });
+      setSelectedTicketIds(selectedTicketIds.filter((id) => id !== ticketId));
+      if (selectedTicket?._id === ticketId) {
+        setSelectedTicket(null);
+      }
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.adminLists() });
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.stats() });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, isAr ? 'فشل حذف الشكوى' : 'Failed to delete complaint'), { id: toastId });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTicketIds.length === 0) return;
+    const toastId = toast.loading(isAr ? 'جاري حذف الشكاوى المحددة...' : 'Deleting selected complaints...');
+    try {
+      await bulkDeleteComplaints(selectedTicketIds);
+      toast.success(isAr ? 'تم حذف الشكاوى المحددة بنجاح' : 'Selected complaints deleted successfully', { id: toastId });
+      setSelectedTicketIds([]);
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.adminLists() });
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.stats() });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, isAr ? 'فشل حذف الشكاوى' : 'Failed to delete complaints'), { id: toastId });
+    }
+  };
+
+  const handleClearAll = async () => {
+    setIsDeleting(true);
+    const toastId = toast.loading(isAr ? 'جاري مسح كافة الشكاوى...' : 'Clearing all complaints...');
+    try {
+      await clearAllComplaints();
+      toast.success(isAr ? 'تم مسح وتفريغ كافة الشكاوى بنجاح' : 'All complaints cleared successfully', { id: toastId });
+      setSelectedTicketIds([]);
+      setClearAllDialogOpen(false);
+      setClearAllConfirmText('');
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.adminLists() });
+      void queryClient.invalidateQueries({ queryKey: complaintKeys.stats() });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, isAr ? 'فشل مسح الشكاوى' : 'Failed to clear complaints'), { id: toastId });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -434,9 +506,9 @@ function AdminComplaintsContent() {
       const ticket = await replyToComplaint(selectedTicket._id, replyMessage.trim());
       setReplyMessage('');
       updateCachesAfterTicket(ticket);
-      toast.success('تم إرسال الرد للطالب');
+      toast.success(isAr ? 'تم إرسال الرد للطالب' : 'Reply sent to student');
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'تعذر إرسال الرد'));
+      toast.error(getApiErrorMessage(error, isAr ? 'تعذر إرسال الرد' : 'Failed to send reply'));
     } finally {
       setDrawerLoading(false);
     }
@@ -554,6 +626,19 @@ function AdminComplaintsContent() {
               {isAr ? 'تحديث' : 'Refresh'}
               <RefreshCw className={`h-4 w-4 ${complaintsQuery.isFetching ? 'animate-spin' : ''}`} />
             </Button>
+            {canManageSettings && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setClearAllConfirmText('');
+                  setClearAllDialogOpen(true);
+                }}
+                className="gap-2 cursor-pointer rounded-squircle bg-rose-600/90 hover:bg-rose-600 text-white transition-all duration-300 h-10 px-4 text-xs font-semibold"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isAr ? 'مسح كافة الشكاوى' : 'Clear All Complaints'}
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -686,6 +771,29 @@ function AdminComplaintsContent() {
                   }
                 }}
               />
+              {canManageSettings && (
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="gap-1.5 cursor-pointer text-xs bg-rose-600 hover:bg-rose-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {isAr ? `حذف المحدد (${selectedTicketIds.length})` : `Delete Selected (${selectedTicketIds.length})`}
+                    </Button>
+                  }
+                  title={isAr ? 'حذف البلاغات المحددة' : 'Delete Selected Complaints'}
+                  description={
+                    isAr
+                      ? `هل أنت متأكد من حذف ${selectedTicketIds.length} شكوى محددة نهائياً من قاعدة البيانات؟ لا يمكن التراجع عن هذا الإجراء.`
+                      : `Are you sure you want to permanently delete ${selectedTicketIds.length} selected complaints? This action cannot be undone.`
+                  }
+                  confirmLabel={isAr ? 'تأكيد الحذف' : 'Confirm Delete'}
+                  cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+                  onConfirm={handleBulkDelete}
+                />
+              )}
             </div>
           </div>
         )}
@@ -763,16 +871,41 @@ function AdminComplaintsContent() {
                     <td className="px-4 py-4 text-xs text-muted-foreground">{formatDate(ticket.createdAt, locale)}</td>
                     <td className="px-4 py-4 text-xs text-muted-foreground">{formatDate(ticket.updatedAt, locale)}</td>
                     <td className="px-4 py-4">
-                      <CustomDropdown
-                        value={ticket.status}
-                        ariaLabel={isAr ? 'تغيير حالة التذكرة' : 'Change ticket status'}
-                        className="h-8 w-28 text-xs"
-                        options={statusWorkflow.map((item) => ({
-                          value: item,
-                          label: isAr ? statusLabels[item] : statusLabelsEn[item],
-                        }))}
-                        onValueChange={(val) => patchTicket(ticket._id, { status: val as ComplaintStatus })}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <CustomDropdown
+                          value={ticket.status}
+                          ariaLabel={isAr ? 'تغيير حالة التذكرة' : 'Change ticket status'}
+                          className="h-8 w-28 text-xs"
+                          options={statusWorkflow.map((item) => ({
+                            value: item,
+                            label: isAr ? statusLabels[item] : statusLabelsEn[item],
+                          }))}
+                          onValueChange={(val) => patchTicket(ticket._id, { status: val as ComplaintStatus })}
+                        />
+                        {canManageSettings && (
+                          <ConfirmDialog
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-rose-500 cursor-pointer"
+                                title={isAr ? 'حذف الشكوى' : 'Delete Complaint'}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                            title={isAr ? 'حذف الشكوى' : 'Delete Complaint'}
+                            description={
+                              isAr
+                                ? `هل أنت متأكد من حذف الشكوى #${ticket.ticketNumber} نهائياً؟`
+                                : `Are you sure you want to delete complaint #${ticket.ticketNumber} permanently?`
+                            }
+                            confirmLabel={isAr ? 'حذف نهائي' : 'Delete'}
+                            cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+                            onConfirm={() => handleDeleteTicket(ticket._id)}
+                          />
+                        )}
+                      </div>
                       <div className="hidden">
                       <Select
                         value={ticket.status}
@@ -997,11 +1130,104 @@ function AdminComplaintsContent() {
                   {isAr ? 'إغلاق التذكرة' : 'Close Ticket'}
                   <Lock className="h-4 w-4" />
                 </Button>
+                {canManageSettings && (
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="destructive" className="gap-2 cursor-pointer bg-rose-600 hover:bg-rose-500">
+                        {isAr ? 'حذف التذكرة' : 'Delete Ticket'}
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    }
+                    title={isAr ? 'حذف التذكرة نهائياً' : 'Permanently Delete Ticket'}
+                    description={
+                      isAr
+                        ? `هل أنت متأكد من حذف التذكرة #${selectedTicket.ticketNumber} نهائياً؟`
+                        : `Are you sure you want to delete ticket #${selectedTicket.ticketNumber} permanently?`
+                    }
+                    confirmLabel={isAr ? 'حذف نهائي' : 'Delete'}
+                    cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+                    onConfirm={() => handleDeleteTicket(selectedTicket._id)}
+                  />
+                )}
               </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Clear All Complaints Danger Modal */}
+      <Dialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl border border-border/70 bg-card">
+          <DialogHeader className="text-start">
+            <div className="flex items-center gap-2 text-rose-600">
+              <Trash2 className="w-5 h-5" />
+              <DialogTitle className="text-base font-bold">
+                {isAr ? 'تأكيد مسح كافة الشكاوى والتذاكر' : 'Confirm Clear All Complaints'}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {isAr
+                ? 'سيتم حذف كافة الشكاوى وسجلات الردود الخاصة بجميع الطلاب نهائياً من قاعدة البيانات. هذا الإجراء لا يمكن التراجع عنه.'
+                : 'All student complaints, attachments, and replies will be permanently deleted from the database. This action cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <span>⚠️ {isAr ? 'تحذير أمني خطير' : 'Irreversible Action'}</span>
+              </p>
+              <p>
+                {isAr
+                  ? 'لتأكيد المسح الشامل لكافة الشكاوى، يرجى كتابة كلمة: "مسح"'
+                  : 'To confirm purging all complaints, type "DELETE":'}
+              </p>
+            </div>
+
+            <Input
+              type="text"
+              value={clearAllConfirmText}
+              onChange={(e) => setClearAllConfirmText(e.target.value)}
+              placeholder={isAr ? 'اكتب "مسح" للتأكيد' : 'Type "DELETE" to confirm'}
+              className="text-xs h-9 text-center font-bold"
+            />
+          </div>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-start gap-2 pt-2 border-t border-border/70">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setClearAllDialogOpen(false)}
+              className="text-xs h-9 cursor-pointer"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                isDeleting ||
+                (isAr
+                  ? clearAllConfirmText.trim() !== 'مسح'
+                  : clearAllConfirmText.trim().toUpperCase() !== 'DELETE')
+              }
+              onClick={handleClearAll}
+              className="text-xs h-9 bg-rose-600 hover:bg-rose-500 text-white font-semibold cursor-pointer shadow-xs"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{isAr ? 'جاري المسح...' : 'Clearing...'}</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isAr ? 'تأكيد المسح الشامل' : 'Confirm Purge'}</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

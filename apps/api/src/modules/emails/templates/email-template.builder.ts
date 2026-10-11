@@ -55,29 +55,27 @@ function renderBaseEmailLayout({
   <meta name="color-scheme" content="light">
   <title>${safeHeaderTitle}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#04262f;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#0f172a;">
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#0f172a;">
   <!-- Preheader text hidden in client inbox list -->
-  <div style="display:none;font-size:1px;color:#04262f;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+  <div style="display:none;font-size:1px;color:#f1f5f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">
     ${safePreheader}
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#04262f;padding:32px 12px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:32px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,0.4);border:1px solid #0f766e;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,118,110,0.08);border:1px solid #e2e8f0;">
           <!-- Institute Header Banner -->
           <tr>
-            <td style="background-color:#063b46;background:linear-gradient(135deg, #04262f 0%, #064e5b 55%, #0f766e 100%);padding:30px 24px;text-align:center;color:#ffffff;">
+            <td style="background:linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #14b8a6 100%);padding:30px 24px;text-align:center;color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
-                    <!-- Resilient Institute Emblem (no broken images) -->
+                    <!-- Official Institute Emblem -->
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 12px;">
                       <tr>
-                        <td align="center" style="width:62px;height:62px;background:linear-gradient(135deg, #0d9488 0%, #042f2e 100%);border:2px solid #5eead4;border-radius:16px;box-shadow:0 6px 16px rgba(0,0,0,0.3);text-align:center;vertical-align:middle;">
-                          <div style="font-family:'Segoe UI', Tahoma, sans-serif;font-size:22px;font-weight:900;color:#ffffff;letter-spacing:1px;line-height:60px;">
-                            BHI
-                          </div>
+                        <td align="center">
+                          <img src="https://bhi47a-support.vercel.app/logo.png" alt="BHI" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:2px solid #ffffff;box-shadow:0 4px 14px rgba(0,0,0,0.2);margin:0 auto;background-color:#0f766e;" />
                         </td>
                       </tr>
                     </table>
@@ -85,7 +83,7 @@ function renderBaseEmailLayout({
                 </tr>
                 <tr>
                   <td align="center">
-                    <div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#99f6e4;margin-bottom:6px;">
+                    <div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#ccfbf1;margin-bottom:6px;">
                       ${instituteName}
                     </div>
                     <h1 style="margin:0 0 6px 0;font-size:20px;font-weight:800;color:#ffffff;line-height:1.4;">
@@ -197,11 +195,11 @@ export function renderOtpEmailTemplate({
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;">
       <tr>
         <td align="center">
-          <div style="background-color:#f0fdfa;border:2px solid #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:330px;box-shadow:0 4px 14px rgba(13,148,136,0.12);">
+          <div style="background-color:#f0fdfa;border:2px solid #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:340px;box-shadow:0 4px 16px rgba(13,148,136,0.1);">
             <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:10px;">
               ${otpHeader}
             </div>
-            <div style="font-family:Consolas, 'Courier New', Monaco, monospace;font-size:36px;font-weight:900;letter-spacing:10px;color:#042f2e;margin:6px 0;padding:10px 18px;background:#ffffff;border:1px dashed #99f6e4;border-radius:10px;display:inline-block;user-select:all;-webkit-user-select:all;-moz-user-select:all;" dir="ltr">
+            <div style="font-family:Consolas, 'Courier New', Monaco, monospace;font-size:36px;font-weight:900;letter-spacing:10px;color:#0f766e;margin:6px 0;padding:12px 20px;background:#ffffff;border:2px dashed #0d9488;border-radius:12px;display:inline-block;user-select:all;-webkit-user-select:all;-moz-user-select:all;" dir="ltr">
               ${cleanOtp}
             </div>
             <div style="font-size:10px;color:#64748b;margin-top:6px;">
@@ -216,8 +214,8 @@ export function renderOtpEmailTemplate({
     </table>
 
     <!-- Security Warning -->
-    <div style="margin-top:22px;padding:14px 18px;background-color:#fff7ed;border-radius:10px;border-${isAr ? 'right' : 'left'}:4px solid #f97316;text-align:${isAr ? 'right' : 'left'};">
-      <div style="font-size:11px;color:#9a3412;line-height:1.6;">
+    <div style="margin-top:22px;padding:14px 18px;background-color:#f0fdfa;border-radius:10px;border-${isAr ? 'right' : 'left'}:4px solid #0d9488;text-align:${isAr ? 'right' : 'left'};">
+      <div style="font-size:11px;color:#134e4a;line-height:1.6;">
         ${securityNotice}
       </div>
     </div>

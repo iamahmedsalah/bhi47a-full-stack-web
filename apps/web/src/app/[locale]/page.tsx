@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { hasLocale } from 'next-intl';
 import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
+import { getSiteUrl } from '@/lib/site-url';
 
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { HeroSection } from '@/components/institutional/HeroSection';
@@ -37,7 +38,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ? 'الموقع الرسمي للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47a). يقدم برامج بكالوريوس معتمدة في نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة مع بوابة إلكترونية متطورة للطلاب.'
     : 'Official website of the High Institute for Advanced Management Sciences and Computer (BHI47a). Offering accredited bachelor programs in BIS and Accounting & Auditing with a modern student electronic portal.';
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bhi47a.edu.eg';
+  const baseUrl = getSiteUrl();
 
   return {
     title,
@@ -83,6 +84,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       type: 'website',
       images: [
         {
+          url: `${baseUrl}/images/og-preview.png`,
+          width: 1200,
+          height: 630,
+          alt: isAr ? INSTITUTE_INFO.name.ar : INSTITUTE_INFO.name.en,
+          type: 'image/png',
+        },
+        {
           url: `${baseUrl}/images/institutional/campus-hero.jpg`,
           width: 1200,
           height: 630,
@@ -94,7 +102,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       card: 'summary_large_image',
       title,
       description,
-      images: [`${baseUrl}/images/institutional/campus-hero.jpg`],
+      images: [`${baseUrl}/images/og-preview.png`],
     },
   };
 }
@@ -107,7 +115,7 @@ export default async function InstitutionalHomePage({ params }: PageProps) {
   }
 
   const isAr = locale === 'ar';
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bhi47a.edu.eg';
+  const baseUrl = getSiteUrl();
 
   // EducationalOrganization & WebSite JSON-LD structured data
   const jsonLd = {

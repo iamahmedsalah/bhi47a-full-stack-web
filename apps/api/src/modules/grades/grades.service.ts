@@ -386,13 +386,15 @@ export class GradesService implements OnModuleInit {
             ? 'منتصف الفصل'
             : dto.examType === 'final'
               ? 'نهائي'
-              : dto.examType;
+              : dto.examType || '';
+        const examSuffix = examTypeLabel ? ` (${examTypeLabel})` : '';
+        const courseTitle = course?.nameAr || course?.name || 'المقرر';
         await this.notificationsService.sendNotification(
           {
             targetType: 'student',
             targetStudentCode: student.studentCode,
             title: 'إعلان الدرجات | Grades Published',
-            body: `تم نشر نتيجة مادة ${course.name} (${examTypeLabel})`,
+            body: `تم نشر نتيجة مادة ${courseTitle}${examSuffix}`,
           },
           'system',
         );
@@ -568,19 +570,20 @@ export class GradesService implements OnModuleInit {
 
       for (const grade of gradesToPublish) {
         try {
-          const courseName = course?.name || grade.courseCode;
+          const courseName = course?.nameAr || course?.name || grade.courseCode;
           const examTypeLabel =
             dto.examType === 'midterm'
               ? 'منتصف الفصل'
               : dto.examType === 'final'
                 ? 'نهائي'
-                : dto.examType;
+                : dto.examType || '';
+          const examSuffix = examTypeLabel ? ` (${examTypeLabel})` : '';
           await this.notificationsService.sendNotification(
             {
               targetType: 'student',
               targetStudentCode: grade.studentCode,
               title: 'إعلان الدرجات | Grades Published',
-              body: `تم نشر نتيجة مادة ${courseName} (${examTypeLabel})`,
+              body: `تم نشر نتيجة مادة ${courseName}${examSuffix}`,
             },
             'system',
           );

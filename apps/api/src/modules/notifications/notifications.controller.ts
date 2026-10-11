@@ -164,6 +164,22 @@ export class NotificationsController {
     return this.notificationsService.listSentHistory(query);
   }
 
+  @Delete('admin/notifications/clear-all')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.NOTIFICATIONS_SEND)
+  @ApiOperation({ summary: 'Clear all notification history logs (Admin)' })
+  async clearAllNotifications() {
+    return this.notificationsService.clearAllHistory();
+  }
+
+  @Post('admin/notifications/bulk-delete')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.NOTIFICATIONS_SEND)
+  @ApiOperation({ summary: 'Bulk delete notification logs by IDs (Admin)' })
+  async bulkDeleteNotifications(@Body('ids') ids: string[]) {
+    return this.notificationsService.bulkDelete(ids);
+  }
+
   @Delete('admin/notifications/:id')
   @Roles('admin')
   @RequirePermissions(PERMISSIONS.NOTIFICATIONS_SEND)

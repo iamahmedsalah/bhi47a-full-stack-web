@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { hasLocale } from 'next-intl';
 import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO, NEWS_ITEMS } from '@/data/institutional-data';
+import { getSiteUrl } from '@/lib/site-url';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
 import { Calendar, Tag, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft, LogIn, Share2 } from 'lucide-react';
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const title = isAr ? item.titleAr : item.titleEn;
   const description = isAr ? item.summaryAr : item.summaryEn;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bhi47a.edu.eg';
+  const baseUrl = getSiteUrl();
 
   return {
     title: `${title} | ${isAr ? INSTITUTE_INFO.nameAr : INSTITUTE_INFO.nameEn}`,
@@ -86,7 +87,7 @@ export default async function NewsDetailPage({ params }: PageProps) {
   const ChevronIcon = isAr ? ChevronLeft : ChevronRight;
   const ArrowIcon = isAr ? ArrowLeft : ArrowRight;
   const BackArrow = isAr ? ArrowRight : ArrowLeft;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bhi47a.edu.eg';
+  const baseUrl = getSiteUrl();
 
   // Article JSON-LD
   const articleJsonLd = {

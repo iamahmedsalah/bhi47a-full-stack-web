@@ -1,8 +1,9 @@
 import type { MetadataRoute } from 'next';
 import { NEWS_ITEMS } from '@/data/institutional-data';
+import { getSiteUrl } from '@/lib/site-url';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bhi47a.edu.eg';
+  const baseUrl = getSiteUrl();
   const locales = ['ar', 'en'];
 
   const staticRoutes = [

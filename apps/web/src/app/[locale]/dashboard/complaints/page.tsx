@@ -132,7 +132,7 @@ export default function StudentComplaintsPage() {
         department,
         title: title.trim(),
         description: description.trim(),
-        screenshot: screenshotBase64,
+        screenshotUrl: screenshotBase64,
       });
       toast.success(isEnglish ? 'Complaint submitted successfully' : 'تم تقديم الشكوى بنجاح');
       setIsAddOpen(false);
@@ -347,40 +347,68 @@ export default function StudentComplaintsPage() {
 
               <form onSubmit={handleAddSubmit} className="space-y-4">
                 <div className="space-y-1.5 text-start">
-                  <label className="text-xs font-bold text-foreground">{t('type')} *</label>
+                  <label className="text-xs font-bold text-foreground">
+                    {isEnglish ? 'Type of Issue *' : 'نوع البلاغ أو الشكوى *'}
+                  </label>
                   <Select value={type} onValueChange={(val) => setType(val as Complaint['type'])}>
                     <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-squircle cursor-pointer">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="border-border bg-card">
-                      <SelectItem value="complaint" className="cursor-pointer">{t('type_complaint') || 'شكوى'}</SelectItem>
-                      <SelectItem value="technical_issue" className="cursor-pointer">{t('type_technical_issue') || 'عطل فني'}</SelectItem>
-                      <SelectItem value="academic" className="cursor-pointer">أكاديمية</SelectItem>
-                      <SelectItem value="financial" className="cursor-pointer">مالية</SelectItem>
-                      <SelectItem value="facility" className="cursor-pointer">خدمات ومرافق</SelectItem>
-                      <SelectItem value="other" className="cursor-pointer">{t('type_other') || 'أخرى'}</SelectItem>
+                      <SelectItem value="complaint" className="cursor-pointer">
+                        {isEnglish ? 'General Complaint' : 'شكوى عامة'}
+                      </SelectItem>
+                      <SelectItem value="technical_issue" className="cursor-pointer">
+                        {isEnglish ? 'Technical Issue' : 'عطل فني'}
+                      </SelectItem>
+                      <SelectItem value="academic" className="cursor-pointer">
+                        {isEnglish ? 'Academic Issue' : 'استفسار أو مشكلة أكاديمية'}
+                      </SelectItem>
+                      <SelectItem value="financial" className="cursor-pointer">
+                        {isEnglish ? 'Financial Matter' : 'معاملة مالية'}
+                      </SelectItem>
+                      <SelectItem value="facility" className="cursor-pointer">
+                        {isEnglish ? 'Facilities & Services' : 'خدمات ومرافق'}
+                      </SelectItem>
+                      <SelectItem value="other" className="cursor-pointer">
+                        {isEnglish ? 'Other' : 'أخرى'}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1.5 text-start">
-                  <label className="text-xs font-bold text-foreground">القسم الموجه إليه *</label>
+                  <label className="text-xs font-bold text-foreground">
+                    {isEnglish ? 'Target Department *' : 'القسم الموجه إليه *'}
+                  </label>
                   <Select value={department} onValueChange={(val) => setDepartment(val as ComplaintDepartment)}>
                     <SelectTrigger className="w-full border-border bg-secondary/50 text-sm rounded-squircle cursor-pointer">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="border-border bg-card">
-                      <SelectItem value="student_affairs" className="cursor-pointer">شؤون الطلاب</SelectItem>
-                      <SelectItem value="technical_support" className="cursor-pointer">الدعم الفني</SelectItem>
-                      <SelectItem value="finance" className="cursor-pointer">المالية</SelectItem>
-                      <SelectItem value="control" className="cursor-pointer">الكنترول</SelectItem>
-                      <SelectItem value="academic_advising" className="cursor-pointer">الإرشاد الأكاديمي</SelectItem>
+                      <SelectItem value="student_affairs" className="cursor-pointer">
+                        {isEnglish ? 'Student Affairs' : 'شؤون الطلاب'}
+                      </SelectItem>
+                      <SelectItem value="technical_support" className="cursor-pointer">
+                        {isEnglish ? 'Technical Support & IT' : 'الدعم الفني وتكنولوجيا المعلومات'}
+                      </SelectItem>
+                      <SelectItem value="finance" className="cursor-pointer">
+                        {isEnglish ? 'Finance & Tuition' : 'المالية والخزينة'}
+                      </SelectItem>
+                      <SelectItem value="control" className="cursor-pointer">
+                        {isEnglish ? 'Exams Control' : 'الكنترول والامتحانات'}
+                      </SelectItem>
+                      <SelectItem value="academic_advising" className="cursor-pointer">
+                        {isEnglish ? 'Academic Advising' : 'الإرشاد الأكاديمي'}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-foreground">الموضوع *</label>
+                <div className="space-y-1.5 text-start">
+                  <label className="text-xs font-bold text-foreground">
+                    {isEnglish ? 'Subject *' : 'الموضوع *'}
+                  </label>
                   <input
                     type="text"
                     required
@@ -388,20 +416,22 @@ export default function StudentComplaintsPage() {
                     maxLength={TITLE_MAX_LENGTH}
                     value={title}
                     onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
-                    placeholder="عنوان مختصر للشكوى..."
+                    placeholder={isEnglish ? 'Brief summary of the issue...' : 'عنوان مختصر للشكوى أو العطل...'}
                     className="w-full px-3.5 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm"
                   />
                 </div>
 
                 <div className="space-y-1.5 text-start">
-                  <label className="text-xs font-bold text-foreground">{isEnglish ? 'Attach Screenshot' : 'إرفاق صورة (اختياري)'}</label>
+                  <label className="text-xs font-bold text-foreground">
+                    {isEnglish ? 'Attach Screenshot (Optional)' : 'إرفاق صورة أو لقطة شاشة (اختياري)'}
+                  </label>
                   <label
                     htmlFor="screenshot-dash"
                     className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-squircle border border-dashed border-border bg-secondary/30 px-3 text-sm text-muted-foreground transition-all hover:border-primary hover:text-foreground"
                   >
                     <Upload className="h-4 w-4" />
                     <span className="truncate">
-                      {screenshotName || (isEnglish ? 'Choose image' : 'اختر صورة')}
+                      {screenshotName || (isEnglish ? 'Choose image (PNG, JPG, WebP)' : 'اختر صورة (PNG, JPG, WebP)')}
                     </span>
                   </label>
                   <input
@@ -453,7 +483,9 @@ export default function StudentComplaintsPage() {
                 </div>
 
                 <div className="space-y-1.5 text-start">
-                  <label className="text-xs font-bold text-foreground">التفاصيل والشرح *</label>
+                  <label className="text-xs font-bold text-foreground">
+                    {isEnglish ? 'Details & Explanation *' : 'التفاصيل والشرح *'}
+                  </label>
                   <textarea
                     required
                     minLength={DESCRIPTION_MIN_LENGTH}
@@ -461,7 +493,11 @@ export default function StudentComplaintsPage() {
                     rows={4}
                     value={description}
                     onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
-                    placeholder="اكتب شرحاً تفصيلياً للمشكلة هنا..."
+                    placeholder={
+                      isEnglish
+                        ? 'Write a detailed explanation of the problem here...'
+                        : 'اكتب شرحاً تفصيلياً للمشكلة هنا...'
+                    }
                     className="w-full px-3.5 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 text-sm leading-relaxed"
                   />
                   <p className="text-end text-[10px] text-muted-foreground font-mono">
@@ -475,15 +511,15 @@ export default function StudentComplaintsPage() {
                     onClick={() => setIsAddOpen(false)}
                     className="px-4 py-2.5 rounded-squircle border border-border text-muted-foreground hover:text-foreground hover:bg-secondary text-sm font-semibold transition-all cursor-pointer"
                   >
-                    {tCommon('cancel')}
+                    {isEnglish ? 'Cancel' : 'إلغاء'}
                   </button>
                   <button
                     type="submit"
                     disabled={!canSubmitComplaint}
-                    className="px-5 py-2.5 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-5 py-2.5 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground text-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {formLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {tCommon('confirm')}
+                    {isEnglish ? 'Submit Complaint' : 'تقديم الشكوى'}
                   </button>
                 </div>
               </form>
@@ -507,27 +543,28 @@ export default function StudentComplaintsPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-xl bg-card border border-border p-6 rounded-squircle shadow-2xl z-10 flex flex-col max-h-[85vh] space-y-4"
+              dir={isEnglish ? 'ltr' : 'rtl'}
+              className="relative w-full max-w-xl bg-card border border-border/80 p-6 rounded-2xl shadow-2xl z-10 flex flex-col max-h-[85vh] space-y-4"
             >
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <div>
                   <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                    <span>المحادثة والردود</span>
+                    <span>{isEnglish ? 'Chat & Replies' : 'المحادثة والردود'}</span>
                     <span className="text-xs text-primary font-mono">({selectedTicket.ticketNumber})</span>
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-xs">{selectedTicket.title}</p>
                 </div>
-                <button onClick={() => setIsReplyOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                <button onClick={() => setIsReplyOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded-lg hover:bg-secondary transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Chat list */}
-              <div className="flex-1 overflow-y-auto space-y-4 p-3 bg-secondary/50 rounded-squircle border border-border/80 min-h-[220px]">
+              <div className="flex-1 overflow-y-auto space-y-4 p-3.5 bg-secondary/30 rounded-xl border border-border/70 min-h-[220px]">
                 {/* Main Ticket Desc */}
-                <div className="p-4 border border-border/70 bg-card rounded-squircle space-y-1">
+                <div className="p-4 border border-border/70 bg-card rounded-xl space-y-1.5 shadow-xs">
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold">
-                    <span>تاريخ التقديم</span>
+                    <span>{isEnglish ? 'Submission Date' : 'تاريخ التقديم'}</span>
                     <span>{new Date(selectedTicket.createdAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG')}</span>
                   </div>
                   <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mt-1">
@@ -551,16 +588,16 @@ export default function StudentComplaintsPage() {
                             }`}
                         >
                           <div
-                            className={`p-3.5 rounded-squircle text-sm leading-relaxed ${isMyReply
+                            className={`p-3.5 rounded-2xl text-sm leading-relaxed ${isMyReply
                                 ? 'bg-primary text-primary-foreground rounded-te-none'
-                                : 'bg-card border border-border text-foreground rounded-ts-none shadow-sm'
+                                : 'bg-card border border-border text-foreground rounded-ts-none shadow-xs'
                               }`}
                           >
                             <p className="whitespace-pre-wrap">{reply.message}</p>
                           </div>
                           <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground px-1 font-bold">
                             <span>
-                              {isMyReply ? 'أنت' : `${reply.senderName} - فريق الإدارة`}
+                              {isMyReply ? (isEnglish ? 'You' : 'أنت') : `${reply.senderName} - ${isEnglish ? 'Support Team' : 'فريق الإدارة'}`}
                             </span>
                             <span>•</span>
                             <span>{new Date(reply.createdAt).toLocaleTimeString(isEnglish ? 'en-US' : 'ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -573,15 +610,17 @@ export default function StudentComplaintsPage() {
               </div>
 
               {formError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-squircle px-4 py-2 text-xs">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl px-4 py-2 text-xs">
                   {formError}
                 </div>
               )}
 
               {/* Send Message Form */}
               {selectedTicket.status === 'closed' ? (
-                <div className="bg-secondary border border-border text-muted-foreground rounded-squircle p-3.5 text-center text-xs font-bold">
-                  تم إغلاق هذه الشكوى ولا يمكن إضافة ردود إضافية.
+                <div className="bg-secondary/60 border border-border text-muted-foreground rounded-xl p-3.5 text-center text-xs font-bold">
+                  {isEnglish
+                    ? 'This ticket is closed and cannot receive additional replies.'
+                    : 'تم إغلاق هذه الشكوى ولا يمكن إضافة ردود إضافية.'}
                 </div>
               ) : (
                 <form onSubmit={handleSendReply} className="flex gap-2">
@@ -592,13 +631,13 @@ export default function StudentComplaintsPage() {
                     maxLength={REPLY_MAX_LENGTH}
                     value={replyMsg}
                     onChange={(e) => setReplyMsg(e.target.value.slice(0, REPLY_MAX_LENGTH))}
-                    placeholder="اكتب رسالتك أو استفسارك هنا..."
-                    className="flex-1 px-4 py-3 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 transition-all text-sm"
+                    placeholder={isEnglish ? 'Type your message or inquiry here...' : 'اكتب رسالتك أو استفسارك هنا...'}
+                    className="flex-1 px-4 py-2.5 rounded-squircle bg-secondary/50 border border-border text-foreground outline-none focus:border-primary/50 transition-all text-sm"
                   />
                   <button
                     type="submit"
                     disabled={!canSendReply}
-                    className="px-5 py-3 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 text-sm font-bold cursor-pointer"
+                    className="px-5 py-2.5 rounded-squircle bg-primary hover:bg-primary/80 text-primary-foreground transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 text-sm font-bold cursor-pointer"
                   >
                     {formLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />

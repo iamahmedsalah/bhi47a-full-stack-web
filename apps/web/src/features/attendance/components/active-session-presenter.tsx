@@ -119,7 +119,7 @@ export function ActiveSessionPresenter({
   );
   const [locVenueName, setLocVenueName] = useState(
     currentSession.location?.venueName ||
-      "معهد كينج مريوط - مبنى نظم المعلومات",
+      "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات",
   );
   const [locLatitude, setLocLatitude] = useState<string>(
     currentSession.location?.latitude !== undefined

@@ -228,7 +228,7 @@ export class ComplaintsService {
       status: 'open',
       replies: [],
       internalNotes: [],
-      screenshotUrl: dto.screenshotUrl,
+      screenshotUrl: dto.screenshotUrl || dto.screenshot,
       statusHistory: [
         {
           fromStatus: 'new',
@@ -465,18 +465,24 @@ export class ComplaintsService {
 
     if (dto.status) {
       try {
-        const statusLabel =
+        const statusLabelAr =
           dto.status === 'open'
             ? 'مفتوحة'
             : dto.status === 'in_progress'
               ? 'قيد المعالجة'
               : 'مغلقة';
+        const statusLabelEn =
+          dto.status === 'open'
+            ? 'Open'
+            : dto.status === 'in_progress'
+              ? 'In Progress'
+              : 'Closed';
         await this.notificationsService.sendNotification(
           {
             targetType: 'student',
             targetStudentCode: savedTicket.studentCode,
             title: 'تحديث حالة الشكوى | Complaint Status',
-            body: `تم تحديث حالة الشكوى رقم #${savedTicket.ticketNumber} إلى: ${statusLabel}`,
+            body: `تم تحديث حالة الشكوى رقم #${savedTicket.ticketNumber} إلى: ${statusLabelAr} (${statusLabelEn})`,
           },
           String(actorId || 'system'),
         );
@@ -593,4 +599,36 @@ export class ComplaintsService {
 
     return result?.count ?? 0;
   }
+
+  async delete(id: string, actorId: string): Promise<{ success: boolean; id: string }> {
+    const deleted = await this.complaintModel.findByIdAndDelete(id).exec();
+    if (!deleted) {
+      throw new NotFoundException(`Complaint ticket #${id} not found`);
+    }
+    this.logger.warn(`Admin ${actorId} deleted complaint #${id} (${deleted.ticketNumber})`, 'ComplaintsService');
+    return { success: true, id };
+  }
+
+  async bulkDelete(ids: string[], actorId: string): Promise<{ success: boolean; deletedCount: number }> {
+    const validIds = ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id));
+    if (validIds.length === 0) {
+      return { success: true, deletedCount: 0 };
+    }
+    const result = await this.complaintModel.deleteMany({ _id: { $in: validIds } }).exec();
+    this.logger.warn(
+      `Admin ${actorId} bulk deleted ${result.deletedCount} complaints`,
+      'ComplaintsService',
+    );
+    return { success: true, deletedCount: result.deletedCount };
+  }
+
+  async clearAll(actorId: string): Promise<{ success: boolean; deletedCount: number }> {
+    const result = await this.complaintModel.deleteMany({}).exec();
+    this.logger.warn(
+      `Admin ${actorId} purged all ${result.deletedCount} complaints`,
+      'ComplaintsService',
+    );
+    return { success: true, deletedCount: result.deletedCount };
+  }
 }
+

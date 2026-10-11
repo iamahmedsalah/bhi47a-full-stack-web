@@ -117,6 +117,21 @@ export async function deleteAdminNotification(id: string) {
   return response.data;
 }
 
+export async function clearAllAdminNotifications() {
+  const response = await api.delete<{ message: string; count: number }>(
+    '/admin/notifications/clear-all',
+  );
+  return response.data;
+}
+
+export async function bulkDeleteAdminNotifications(ids: string[]) {
+  const response = await api.post<{ message: string; count: number }>(
+    '/admin/notifications/bulk-delete',
+    { ids },
+  );
+  return response.data;
+}
+
 /**
  * Cleanly localizes notification title & body to avoid displaying mixed/duplicate
  * Arabic & English strings in the notification card.

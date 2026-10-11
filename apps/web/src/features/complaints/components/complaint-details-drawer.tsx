@@ -153,7 +153,7 @@ export function ComplaintDetailsDrawer({
               <MessageSquareReply className="h-4 w-4 text-primary" />
               <h3 className="font-bold text-foreground">{isAr ? 'المحادثة والردود' : 'Chat & Replies'}</h3>
             </div>
-            <div className="max-h-64 space-y-3 overflow-y-auto rounded-squircle border border-border/70 bg-background/40 p-3">
+            <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl border border-border/70 bg-background/40 p-3">
               {ticket.replies.length === 0 ? (
                 <p className="py-8 text-center text-xs text-muted-foreground">{isAr ? 'لا توجد ردود بعد.' : 'No replies yet.'}</p>
               ) : (

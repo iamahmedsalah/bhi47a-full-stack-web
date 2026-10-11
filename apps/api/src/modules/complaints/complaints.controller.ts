@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -16,6 +17,7 @@ import {
   UpdateComplaintStatusDto,
   UpdateSystemSettingsDto,
   QueryComplaintDto,
+  BulkDeleteComplaintsDto,
 } from './dto/complaint.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -151,4 +153,35 @@ export class ComplaintsController {
   ) {
     return this.complaintsService.addReply(id, dto, adminId, role);
   }
+
+  @Delete('admin/complaints/all')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_WRITE)
+  @ApiOperation({ summary: 'Purge / Clear all complaint tickets (Admin)' })
+  async clearAllComplaints(@CurrentUser('_id') adminId: string) {
+    return this.complaintsService.clearAll(adminId);
+  }
+
+  @Post('admin/complaints/bulk-delete')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_WRITE)
+  @ApiOperation({ summary: 'Bulk delete selected complaint tickets (Admin)' })
+  async bulkDeleteComplaints(
+    @Body() dto: BulkDeleteComplaintsDto,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.complaintsService.bulkDelete(dto.ids, adminId);
+  }
+
+  @Delete('admin/complaints/:id')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_WRITE)
+  @ApiOperation({ summary: 'Delete single complaint ticket (Admin)' })
+  async deleteComplaint(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.complaintsService.delete(id, adminId);
+  }
 }
+

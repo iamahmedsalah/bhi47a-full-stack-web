@@ -24,7 +24,7 @@ export interface ComplaintSettingsPanelProps {
   setWindowOpenAt: (val: string) => void;
   windowCloseAt: string;
   setWindowCloseAt: (val: string) => void;
-  handleUpdateSettings: (patch: { complaintsSystemOpen?: boolean }) => void;
+  handleUpdateSettings: (patch: { complaintsSystemOpen?: boolean; complaintOpenAt?: string; complaintCloseAt?: string }) => void;
   targetStudentCode: string;
   setTargetStudentCode: (code: string) => void;
   handleStudentCodeStatus: (disable: boolean) => void;
@@ -126,7 +126,13 @@ export function ComplaintSettingsPanel({
             <CheckCircle2 className="h-4 w-4" />
           </Button>
           <Button
-            onClick={() => handleUpdateSettings({ complaintsSystemOpen: true })}
+            onClick={() =>
+              handleUpdateSettings({
+                complaintsSystemOpen: true,
+                complaintOpenAt: new Date().toISOString(),
+                complaintCloseAt: undefined,
+              })
+            }
             className="gap-2 cursor-pointer"
           >
             {isAr ? 'فتح الآن' : 'Force Open'}

@@ -168,7 +168,7 @@ export class UploadsService {
   }
 
   async wipeData(
-    target: 'students' | 'grades' | 'attendance' | 'all',
+    target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
     adminId: string,
   ) {
     const db = this.connection.db;
@@ -181,6 +181,14 @@ export class UploadsService {
       'UploadsService',
     );
     const result: Record<string, number> = {};
+
+    if (target === 'complaints') {
+      const deletedComplaints = await db
+        .collection('complaints')
+        .deleteMany({});
+      result.complaints = deletedComplaints.deletedCount;
+      return { success: true, target, deletedCounts: result };
+    }
 
     if (target === 'grades') {
       const [deletedGrades, deletedQuizzes] = await Promise.all([

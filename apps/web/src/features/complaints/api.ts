@@ -1,5 +1,5 @@
 import type { PaginatedResponse } from '@/lib/api';
-import { apiGet, apiPatch, apiPost } from '@/lib/api-client';
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
 
 export type ComplaintType =
   | 'complaint'
@@ -146,3 +146,21 @@ export function replyToComplaint(id: string, message: string) {
     { message },
   );
 }
+
+export function deleteComplaint(id: string) {
+  return apiDelete<{ success: boolean; id: string }>(`/admin/complaints/${id}`);
+}
+
+export function bulkDeleteComplaints(ids: string[]) {
+  return apiPost<{ success: boolean; deletedCount: number }, { ids: string[] }>(
+    '/admin/complaints/bulk-delete',
+    { ids },
+  );
+}
+
+export function clearAllComplaints() {
+  return apiDelete<{ success: boolean; deletedCount: number }>(
+    '/admin/complaints/all',
+  );
+}
+

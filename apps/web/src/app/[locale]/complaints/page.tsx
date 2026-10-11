@@ -186,7 +186,8 @@ function PublicComplaintsContent() {
     return activeSchema.safeParse(form);
   }, [form, isAuthenticatedStudent]);
 
-  const canSubmit = !authLoading && validationResult.success && !isSubmitting;
+  const isWindowClosed =
+    systemStatusMessage?.type === 'closed' || systemStatusMessage?.type === 'pending';
 
   const updateField = <Key extends keyof typeof form>(
     key: Key,
@@ -197,7 +198,37 @@ function PublicComplaintsContent() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (isWindowClosed) {
+      toast.error(
+        systemStatusMessage?.text ||
+          (isAr
+            ? 'نظام استقبال الشكاوى مغلق حالياً'
+            : 'Complaints system is currently closed'),
+      );
+      return;
+    }
+
+    if (!validationResult.success) {
+      const firstError = validationResult.error.issues?.[0];
+      const fieldNames: Record<string, string> = {
+        requesterName: isAr ? 'اسم مقدم الطلب' : 'Requester Name',
+        studentCode: isAr ? 'كود الطالب' : 'Student Code',
+        contactPhone: isAr ? 'رقم الهاتف المحمول' : 'Contact Phone',
+        nationalId: isAr ? 'الرقم القومي (14 رقماً)' : 'National ID (14 digits)',
+        title: isAr ? 'موضوع الشكوى' : 'Subject',
+        description: isAr
+          ? 'تفاصيل الشكوى (10 أحرف على الأقل)'
+          : 'Description (min 10 characters)',
+      };
+      const fieldKey = (firstError?.path?.[0] as string) || '';
+      const friendlyName = fieldNames[fieldKey] || fieldKey;
+      toast.error(
+        isAr
+          ? `يرجى مراجعة حقل (${friendlyName}): ${firstError?.message || 'قيمة غير مكتملة'}`
+          : `Please check (${friendlyName}): ${firstError?.message || 'Invalid value'}`,
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     setTicketNumber(null);
@@ -552,17 +583,29 @@ function PublicComplaintsContent() {
                 </p>
               </div>
 
-              <Button type="submit" disabled={!canSubmit} className="h-11 w-full gap-2">
+              <Button
+                type="submit"
+                disabled={isSubmitting || isWindowClosed}
+                className="h-11 w-full gap-2 cursor-pointer disabled:opacity-60"
+              >
                 <span>
                   {isSubmitting
                     ? isAr
                       ? 'جاري إرسال البلاغ...'
                       : 'Submitting...'
-                    : isAr
-                      ? 'إرسال البلاغ'
-                      : 'Submit Issue'}
+                    : isWindowClosed
+                      ? isAr
+                        ? 'استقبال الشكاوى مغلق حالياً'
+                        : 'Complaints Portal Closed'
+                      : isAr
+                        ? 'إرسال البلاغ'
+                        : 'Submit Issue'}
                 </span>
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
 
               <div className="rounded-squircle border border-primary/25 bg-primary/10 p-4 text-xs leading-6 text-muted-foreground">
