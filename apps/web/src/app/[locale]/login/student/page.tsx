@@ -257,15 +257,7 @@ function StudentLoginContent() {
 
   const onSubmit = async (data: StudentLoginInput) => {
     if (isLocked) {
-      const remainingSeconds =
-        banRemainingSeconds ??
-        (banExpiresAt
-          ? Math.max(
-              0,
-              Math.ceil((new Date(banExpiresAt).getTime() - Date.now()) / 1000),
-            )
-          : 0);
-
+      const remainingSeconds = banRemainingSeconds ?? 0;
       const timeLeftText =
         remainingSeconds > 0
           ? formatLockoutDuration(remainingSeconds, locale)

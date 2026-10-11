@@ -243,15 +243,7 @@ function AdminLoginContent() {
 
   const onSubmit = async (data: AdminLoginInput) => {
     if (isLocked) {
-      const remainingSeconds =
-        banRemainingSeconds ??
-        (banExpiresAt
-          ? Math.max(
-              0,
-              Math.ceil((new Date(banExpiresAt).getTime() - Date.now()) / 1000),
-            )
-          : 0);
-
+      const remainingSeconds = banRemainingSeconds ?? 0;
       const timeLeftText =
         remainingSeconds > 0
           ? formatLockoutDuration(remainingSeconds, locale)
