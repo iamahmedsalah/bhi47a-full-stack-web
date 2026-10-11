@@ -15,6 +15,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { formatLockoutDuration, normalizeAuthErrorMessage } from '@/lib/auth-toast';
 import { 
   ArrowRight, 
   UserCircle, 
@@ -23,8 +24,7 @@ import {
   Clock, 
   Eye, 
   EyeOff,
-  AlertCircle,
-  ShieldAlert
+  ShieldAlert,
 } from 'lucide-react';
 import { Footer } from '@/components/ui/footer';
 import LangToggle from '@/components/ui/LangToggle';
@@ -181,9 +181,18 @@ function AdminLoginContent() {
         searchParams.get('reason') === 'session_expired'
       ) {
         setShowExpiredToast(true);
+        toast.warning(
+          locale === 'ar' ? 'انتهت الجلسة' : 'Session Expired',
+          {
+            description:
+              locale === 'ar'
+                ? 'انتهت صلاحية جلستك السابقة تلقائياً لدواعي الأمان. يرجى تسجيل الدخول مجدداً.'
+                : 'Your previous session expired for security reasons. Please log in again.',
+          },
+        );
       }
     }
-  }, []);
+  }, [locale]);
 
   // Initialize remainingAttempts & lockouts from session
   useEffect(() => {
@@ -234,7 +243,25 @@ function AdminLoginContent() {
 
   const onSubmit = async (data: AdminLoginInput) => {
     if (isLocked) {
-      toast.error(locale === 'ar' ? 'تم حظر الدخول مؤقتاً' : 'Login temporarily locked');
+      const remainingSeconds =
+        banRemainingSeconds ??
+        (banExpiresAt
+          ? Math.max(
+              0,
+              Math.ceil((new Date(banExpiresAt).getTime() - Date.now()) / 1000),
+            )
+          : 0);
+
+      const timeLeftText =
+        remainingSeconds > 0
+          ? formatLockoutDuration(remainingSeconds, locale)
+          : locale === 'ar'
+            ? 'بضع لحظات'
+            : 'a few seconds';
+
+      toast.error(t('lockedTitle'), {
+        description: t('lockedDesc', { time: timeLeftText }),
+      });
       return;
     }
 
@@ -264,12 +291,10 @@ function AdminLoginContent() {
           sessionStorage.setItem('adminAttempts', String(maxAttempts + 1));
         } catch (e) {}
 
-        const minutesLeft = Math.ceil(lockSecs / 60);
-        toast.error(
-          locale === 'ar'
-            ? `تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة. حاول بعد ${minutesLeft} دقيقة`
-            : `Account locked due to multiple attempts. Try again after ${minutesLeft} minutes`
-        );
+        const timeLeftText = formatLockoutDuration(lockSecs, locale);
+        toast.error(t('lockedTitle'), {
+          description: t('lockedAttemptsDesc', { time: timeLeftText }),
+        });
       } else if (typeof errorData?.attemptsLeft === 'number') {
         const left = errorData.attemptsLeft;
         const failedCount = maxAttempts - left;
@@ -278,15 +303,16 @@ function AdminLoginContent() {
           sessionStorage.setItem('adminAttempts', String(failedCount));
         } catch (e) {}
 
-        const errMsg = errorData.message || t('loginError');
-        toast.error(
-          locale === 'ar'
-            ? `${errMsg}. (محاولة ${failedCount}/${maxAttempts})`
-            : `${errMsg}. (Attempt ${failedCount}/${maxAttempts})`
-        );
+        toast.error(t('loginError'), {
+          description:
+            locale === 'ar'
+              ? `المحاولات المتبقية: ${left} من ${maxAttempts}`
+              : `Remaining attempts: ${left} of ${maxAttempts}`,
+        });
       } else {
-        const errMsg = getApiErrorMessage(err, t('loginError'));
-        toast.error(errMsg);
+        const localizedFallback = t('loginError');
+        const errMsg = getApiErrorMessage(err, localizedFallback);
+        toast.error(normalizeAuthErrorMessage(errMsg, locale));
       }
     } finally {
       setLoading(false);
@@ -374,28 +400,6 @@ function AdminLoginContent() {
 
       <Footer role="admin" locale={locale} className="mt-8" />
 
-      {/* Floating Expiry Notification Toast */}
-      {showExpiredToast && (
-        <div className="fixed bottom-6 end-6 max-w-sm z-50 bg-[#ef4444] text-white rounded-xl shadow-2xl border border-red-500/30 p-4 animate-fade-in flex gap-3 items-start">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <h4 className="font-bold text-sm">
-              {locale === 'ar' ? 'انتهت الجلسة' : 'Session Expired'}
-            </h4>
-            <p className="text-xs text-white/90 leading-normal">
-              {locale === 'ar' 
-                ? 'لقد انتهت صلاحية جلستك. الرجاء تسجيل الدخول مرة أخرى.' 
-                : 'Your session has expired. Please log in again.'}
-            </p>
-          </div>
-          <button
-            onClick={() => setShowExpiredToast(false)}
-            className="text-white/60 hover:text-white text-xs font-bold font-mono px-1 rounded hover:bg-white/10 cursor-pointer"
-          >
-            ×
-          </button>
-        </div>
-      )}
     </div>
   );
 }

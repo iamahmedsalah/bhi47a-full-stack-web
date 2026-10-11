@@ -14,7 +14,6 @@ import {
   Clock,
   CalendarDays,
   Zap,
-  CheckCircle2,
   Smartphone,
   MessageSquare,
   Users,
@@ -25,8 +24,6 @@ import {
   ExternalLink,
   User,
   Trash2,
-  Eye,
-  CheckCheck,
 } from 'lucide-react';
 import { COURSE_LEVEL_VALUES } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';

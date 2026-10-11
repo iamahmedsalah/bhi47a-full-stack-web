@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { formatLockoutDuration, normalizeAuthErrorMessage } from "@/lib/auth-toast";
 import {
   ArrowRight,
   UserCircle,
@@ -256,9 +257,25 @@ function StudentLoginContent() {
 
   const onSubmit = async (data: StudentLoginInput) => {
     if (isLocked) {
-      toast.error(
-        locale === "ar" ? "تم حظر الدخول مؤقتاً" : "Login temporarily locked",
-      );
+      const remainingSeconds =
+        banRemainingSeconds ??
+        (banExpiresAt
+          ? Math.max(
+              0,
+              Math.ceil((new Date(banExpiresAt).getTime() - Date.now()) / 1000),
+            )
+          : 0);
+
+      const timeLeftText =
+        remainingSeconds > 0
+          ? formatLockoutDuration(remainingSeconds, locale)
+          : locale === "ar"
+            ? "بضع لحظات"
+            : "a few seconds";
+
+      toast.error(t("lockedTitle"), {
+        description: t("lockedDesc", { time: timeLeftText }),
+      });
       return;
     }
 
@@ -295,12 +312,10 @@ function StudentLoginContent() {
           sessionStorage.setItem("remainingAttempts", "0");
         } catch {}
 
-        const minutesLeft = Math.ceil(lockSecs / 60);
-        toast.error(
-          locale === "ar"
-            ? `تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة. حاول بعد ${minutesLeft} دقيقة`
-            : `Account locked due to multiple attempts. Try again after ${minutesLeft} minutes`,
-        );
+        const timeLeftText = formatLockoutDuration(lockSecs, locale);
+        toast.error(t("lockedTitle"), {
+          description: t("lockedAttemptsDesc", { time: timeLeftText }),
+        });
       } else if (typeof errorData?.attemptsLeft === "number") {
         const left = errorData.attemptsLeft;
         setLockoutState({ remainingAttempts: left });
@@ -308,15 +323,13 @@ function StudentLoginContent() {
           sessionStorage.setItem("remainingAttempts", String(left));
         } catch {}
 
-        const errMsg = errorData.message || t("loginError");
-        toast.error(
-          locale === "ar"
-            ? `${errMsg}. المحاولات المتبقية: ${left}`
-            : `${errMsg}. Remaining attempts: ${left}`,
-        );
+        toast.error(t("loginError"), {
+          description: t("remainingAttemptsDesc", { count: left }),
+        });
       } else {
-        const errMsg = getApiErrorMessage(err, t("loginError"));
-        toast.error(errMsg);
+        const localizedFallback = t("loginError");
+        const errMsg = getApiErrorMessage(err, localizedFallback);
+        toast.error(normalizeAuthErrorMessage(errMsg, locale));
       }
     } finally {
       setLoading(false);

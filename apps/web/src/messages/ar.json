@@ -89,7 +89,13 @@
     "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
     "backToLogin": "الرجوع لتسجيل الدخول",
     "otpSentSuccess": "تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح",
-    "passwordResetSuccess": "تمت إعادة تعيين كلمة المرور بنجاح وتم تسجيل دخولك"
+    "passwordResetSuccess": "تمت إعادة تعيين كلمة المرور بنجاح وتم تسجيل دخولك",
+    "lockedTitle": "الحساب مقفل مؤقتاً",
+    "lockedDesc": "يرجى الانتظار، الوقت المتبقي لرفع الحظر: {time}",
+    "lockedAttemptsDesc": "تم قفل الحساب بسبب تكرار المحاولات الخاطئة. حاول بعد {time}",
+    "remainingAttemptsDesc": "المحاولات المتبقية قبل قفل الحساب: {count}",
+    "sessionExpiredTitle": "انتهت الجلسة",
+    "sessionExpiredDesc": "انتهت صلاحية جلستك السابقة تلقائياً لدواعي الأمان. يرجى تسجيل الدخول مجدداً."
   },
   "dashboard": {
     "title": "لوحة التحكم",

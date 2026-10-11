@@ -89,7 +89,13 @@
     "confirmNewPassword": "Confirm New Password",
     "backToLogin": "Back to Login",
     "otpSentSuccess": "Verification OTP sent to your email successfully",
-    "passwordResetSuccess": "Password reset successfully and you are logged in"
+    "passwordResetSuccess": "Password reset successfully and you are logged in",
+    "lockedTitle": "Account Temporarily Locked",
+    "lockedDesc": "Please wait, time remaining until unlock: {time}",
+    "lockedAttemptsDesc": "Locked due to multiple failed attempts. Try again in {time}",
+    "remainingAttemptsDesc": "Remaining attempts before lockout: {count}",
+    "sessionExpiredTitle": "Session Expired",
+    "sessionExpiredDesc": "Your previous session expired for security reasons. Please log in again."
   },
   "dashboard": {
     "title": "Dashboard",
