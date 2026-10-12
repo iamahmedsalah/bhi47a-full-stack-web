@@ -113,11 +113,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
                 ? { messageEn: (body as any).messageEn }
                 : {}),
               ...((body as any).errors ? { errors: (body as any).errors } : {}),
+              ...((body as any).locked !== undefined
+                ? { locked: (body as any).locked }
+                : {}),
+              ...((body as any).lockRemainingSeconds !== undefined
+                ? { lockRemainingSeconds: (body as any).lockRemainingSeconds }
+                : {}),
               ...((body as any).attemptsLeft !== undefined
                 ? { attemptsLeft: (body as any).attemptsLeft }
                 : {}),
               ...((body as any).lockSecs !== undefined
                 ? { lockSecs: (body as any).lockSecs }
+                : {}),
+              ...((body as any).maxAttempts !== undefined
+                ? { maxAttempts: (body as any).maxAttempts }
                 : {}),
             }
           : {}),

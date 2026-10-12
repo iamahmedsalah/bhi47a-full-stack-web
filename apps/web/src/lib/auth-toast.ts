@@ -72,6 +72,13 @@ export function normalizeAuthErrorMessage(
     trimmed.includes('تم قفل الحساب') ||
     trimmed.toLowerCase().includes('locked')
   ) {
+    const minMatch = trimmed.match(/(\d+)\s*(?:دقيقة|minute)/i);
+    if (minMatch && minMatch[1]) {
+      const minutes = minMatch[1];
+      return locale === 'ar'
+        ? `تم قفل الحساب مؤقتاً. حاول مجدداً بعد ${minutes} دقيقة`
+        : `Account is temporarily locked. Try again in ${minutes} minute(s)`;
+    }
     return locale === 'ar'
       ? 'تم قفل الحساب مؤقتاً لأسباب أمنية'
       : 'Account is temporarily locked for security';

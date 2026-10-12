@@ -271,8 +271,31 @@ function AdminLoginContent() {
     } catch (err: any) {
       const errorData = err;
 
-      if (errorData?.locked) {
-        const lockSecs = errorData.lockRemainingSeconds || 1800;
+      const isLockedResponse =
+        Boolean(errorData?.locked) ||
+        errorData?.code === 'ACCOUNT_LOCKED' ||
+        typeof errorData?.lockRemainingSeconds === 'number' ||
+        typeof errorData?.lockSecs === 'number' ||
+        (typeof errorData?.message === 'string' &&
+          (errorData.message.includes('قفل الحساب') ||
+            errorData.message.toLowerCase().includes('locked')));
+
+      if (isLockedResponse) {
+        let lockSecs =
+          errorData?.lockRemainingSeconds ??
+          errorData?.lockSecs;
+
+        if (typeof lockSecs !== 'number' && typeof errorData?.message === 'string') {
+          const match = errorData.message.match(/(\d+)\s*(?:دقيقة|minute)/i);
+          if (match && match[1]) {
+            lockSecs = parseInt(match[1], 10) * 60;
+          }
+        }
+
+        if (typeof lockSecs !== 'number' || lockSecs <= 0) {
+          lockSecs = 1800;
+        }
+
         const banExpiry = new Date(Date.now() + lockSecs * 1000).toISOString();
         setBanExpiresAt(banExpiry);
         setIsLocked(true);
