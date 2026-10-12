@@ -12,6 +12,8 @@ export type AdvisingStatus =
 export interface AdvisingStudent {
   id: string;
   name: string;
+  nameAr?: string;
+  fullNameAr?: string;
   studentCode?: string;
   avatarUrl?: string;
   department?: string;
@@ -29,6 +31,8 @@ export interface AdvisingStudent {
 export interface AdvisingCourseMap {
   student: {
     name?: string;
+    nameAr?: string;
+    fullNameAr?: string;
     studentCode?: string;
     avatarUrl?: string;
     department?: string;

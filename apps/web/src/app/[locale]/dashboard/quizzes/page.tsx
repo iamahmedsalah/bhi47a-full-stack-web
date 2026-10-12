@@ -160,6 +160,11 @@ function TakeQuizModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<SubmitQuizResult | null>(null);
 
+  const STORAGE_KEY = useMemo(
+    () => (quizId ? `student_quiz_attempt_${quizId}` : null),
+    [quizId],
+  );
+
   const quizDataQuery = useQuery({
     queryKey: ['take-quiz-data', quizId],
     queryFn: () => getQuizForTaking(quizId!),
@@ -168,41 +173,148 @@ function TakeQuizModal({
 
   const quiz = quizDataQuery.data;
 
-  // Initialize timer on load
+  const selectedAnswersRef = React.useRef(selectedAnswers);
   useEffect(() => {
-    if (quiz && open && !submissionResult) {
-      const totalSeconds = (quiz.durationMinutes || 15) * 60;
-      setSecondsRemaining(totalSeconds);
-      setStartTime(new Date());
-      setSelectedAnswers({});
-    }
-  }, [quiz, open, submissionResult]);
+    selectedAnswersRef.current = selectedAnswers;
+  }, [selectedAnswers]);
 
-  const handleSelectOption = React.useCallback((questionId: string, optIndex: number) => {
-    setSelectedAnswers((prev) => ({ ...prev, [questionId]: optIndex }));
-  }, []);
+  const startTimeRef = React.useRef(startTime);
+  useEffect(() => {
+    startTimeRef.current = startTime;
+  }, [startTime]);
+
+  // Load existing in-progress attempt or initialize new timer
+  useEffect(() => {
+    if (!quiz || !open || submissionResult || !STORAGE_KEY) return;
+
+    let initialStart = new Date();
+    let initialAnswers: Record<string, number> = {};
+    const totalDurationSeconds = (quiz.durationMinutes || 15) * 60;
+    let initialRemaining = totalDurationSeconds;
+
+    if (typeof window !== 'undefined') {
+      try {
+        const rawSaved = localStorage.getItem(STORAGE_KEY);
+        if (rawSaved) {
+          const parsed = JSON.parse(rawSaved);
+          if (parsed.startedAt) {
+            const parsedStart = new Date(parsed.startedAt);
+            const elapsed = Math.max(0, Math.floor((Date.now() - parsedStart.getTime()) / 1000));
+            let rem = Math.max(0, totalDurationSeconds - elapsed);
+
+            // Cap remaining time with quiz endsAt if closer
+            if (quiz.endsAt) {
+              const remToEnd = Math.floor((new Date(quiz.endsAt).getTime() - Date.now()) / 1000);
+              rem = Math.min(rem, Math.max(0, remToEnd));
+            }
+
+            initialStart = parsedStart;
+            initialRemaining = rem;
+            if (parsed.selectedAnswers && typeof parsed.selectedAnswers === 'object') {
+              initialAnswers = parsed.selectedAnswers;
+            }
+
+            if (rem > 0 && Object.keys(initialAnswers).length > 0) {
+              toast.info(
+                isAr
+                  ? 'تمت استعادة إجاباتك السابقة والوقت المتبقي للاختبار بنجاح'
+                  : 'Resumed quiz: previously selected answers and remaining time have been restored',
+              );
+            }
+          }
+        } else {
+          // First attempt initiation
+          if (quiz.endsAt) {
+            const remToEnd = Math.floor((new Date(quiz.endsAt).getTime() - Date.now()) / 1000);
+            initialRemaining = Math.min(totalDurationSeconds, Math.max(0, remToEnd));
+          }
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+              quizId,
+              startedAt: initialStart.toISOString(),
+              selectedAnswers: {},
+            }),
+          );
+        }
+      } catch {
+        // Ignore localStorage error
+      }
+    }
+
+    setStartTime(initialStart);
+    setSecondsRemaining(initialRemaining);
+    setSelectedAnswers(initialAnswers);
+  }, [quiz, open, submissionResult, STORAGE_KEY, isAr, quizId]);
+
+  const handleSelectOption = React.useCallback(
+    (questionId: string, optIndex: number) => {
+      setSelectedAnswers((prev) => {
+        const next = { ...prev, [questionId]: optIndex };
+        if (typeof window !== 'undefined' && STORAGE_KEY) {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : {};
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({
+                ...parsed,
+                quizId,
+                startedAt:
+                  parsed.startedAt ||
+                  (startTimeRef.current
+                    ? startTimeRef.current.toISOString()
+                    : new Date().toISOString()),
+                selectedAnswers: next,
+              }),
+            );
+          } catch {
+            // Ignore storage quota
+          }
+        }
+        return next;
+      });
+    },
+    [STORAGE_KEY, quizId],
+  );
 
   const performSubmit = async () => {
     if (!quiz || !quizId) return;
     setIsSubmitting(true);
     try {
+      const currentAnswers = selectedAnswersRef.current;
+      const currentStart = startTimeRef.current;
+
       const answersPayload = (quiz.questions || []).map((q) => ({
         questionId: q.id,
         selectedOptionIndex:
-          selectedAnswers[q.id] !== undefined ? selectedAnswers[q.id] : -1,
+          currentAnswers[q.id] !== undefined ? currentAnswers[q.id] : -1,
       }));
 
       const res = await submitQuiz(quizId, {
-        startedAt: startTime ? startTime.toISOString() : new Date().toISOString(),
+        startedAt: currentStart
+          ? currentStart.toISOString()
+          : new Date().toISOString(),
         answers: answersPayload,
       });
 
+      if (typeof window !== 'undefined' && STORAGE_KEY) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+
       setSubmissionResult(res);
-      toast.success(isAr ? 'تم تسليم الاختبار وتصحيحه بنجاح' : 'Quiz submitted and graded successfully');
+      toast.success(
+        isAr
+          ? 'تم تسليم الاختبار وتصحيحه بنجاح'
+          : 'Quiz submitted and graded successfully',
+      );
       onSubmitted();
     } catch (err: any) {
       const backendMsg = err?.response?.data?.message;
-      let errorMsg = getApiErrorMessage(err, isAr ? 'فشل تسليم الاختبار' : 'Failed to submit quiz');
+      let errorMsg = getApiErrorMessage(
+        err,
+        isAr ? 'فشل تسليم الاختبار' : 'Failed to submit quiz',
+      );
       if (backendMsg === 'لقد قمت بتسليم هذا الاختبار مسبقاً' && !isAr) {
         errorMsg = 'You have already submitted this quiz';
       }
@@ -214,7 +326,11 @@ function TakeQuizModal({
 
   const handleAutoSubmit = async () => {
     if (!quiz || isSubmitting || submissionResult) return;
-    toast.warning(isAr ? 'انتهى الوقت المحدد! جاري تسليم الإجابات...' : 'Time is up! Submitting answers...');
+    toast.warning(
+      isAr
+        ? 'انتهى الوقت المحدد للاختبار! جاري تسليم الإجابات تلقائياً...'
+        : 'Quiz time is up! Auto-submitting answers...',
+    );
     await performSubmit();
   };
 
@@ -239,7 +355,15 @@ function TakeQuizModal({
     return () => clearInterval(interval);
   }, [open, submissionResult]);
 
-
+  useEffect(() => {
+    if (!open || submissionResult) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [open, submissionResult]);
 
   const formatTimer = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -251,20 +375,19 @@ function TakeQuizModal({
   const answeredCount = Object.keys(selectedAnswers).length;
   const isTimeCritical = secondsRemaining < 120; // under 2 minutes
 
-  const handleClose = () => {
-    if (!submissionResult && answeredCount > 0) {
-      if (
-        !confirm(
-          isAr
-            ? 'هل أنت متأكد من مغادرة الاختبار؟ ستفقد إجاباتك غير المسلمة.'
-            : 'Are you sure you want to leave? Unsubmitted answers will be lost.',
-        )
-      ) {
-        return;
-      }
+  const handleClose = async () => {
+    if (submissionResult) {
+      setSubmissionResult(null);
+      onOpenChange(false);
+      return;
     }
-    setSubmissionResult(null);
-    onOpenChange(false);
+    const msg = isAr
+      ? '⚠️ تحذير: هذا الاختبار بنظام الدخول لمرة واحدة فقط. إغلاق هذه النافذة أو مغادرتها سيؤدي فوراً إلى إنهاء الاختبار وتسليمه تلقائياً بما قمت بحله. هل تريد الاستمرار في المغادرة والتسليم الآن؟'
+      : '⚠️ Warning: Single-entry quiz. Closing or leaving this window now will immediately finish and auto-submit your attempt with your current answers. Are you sure you want to leave and submit?';
+    if (!confirm(msg)) {
+      return;
+    }
+    await performSubmit();
   };
 
   return (
@@ -358,18 +481,40 @@ function TakeQuizModal({
                   <p className="text-xs text-primary font-mono mt-0.5">
                     {quiz?.courseCode} - {isAr ? (quiz?.courseNameAr || quiz?.courseName) : (quiz?.courseNameEn || quiz?.courseName)}
                   </p>
+                  {quiz?.endsAt && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono mt-1">
+                      <Clock className="h-3 w-3 text-rose-400 shrink-0" />
+                      <span>{isAr ? 'موعد إغلاق الاختبار:' : 'Closes at:'}</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(quiz.endsAt).toLocaleString(isAr ? 'ar-EG' : 'en-GB', {
+                          timeZone: 'Africa/Cairo',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Floating Timer Badge */}
-                <div
-                  className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 font-mono text-sm font-bold border ${
-                    isTimeCritical
-                      ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 animate-pulse'
-                      : 'bg-primary/15 border-primary/30 text-primary'
-                  }`}
-                >
-                  <Clock className="h-4 w-4" />
-                  <span>{formatTimer(secondsRemaining)}</span>
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  {/* Floating Timer Badge */}
+                  <div
+                    className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 font-mono text-sm font-bold border ${
+                      isTimeCritical
+                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 animate-pulse'
+                        : 'bg-primary/15 border-primary/30 text-primary'
+                    }`}
+                  >
+                    <Clock className="h-4 w-4" />
+                    <span>{formatTimer(secondsRemaining)}</span>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
+                    <Check className="h-2.5 w-2.5" />
+                    <span>{isAr ? 'يتم الحفظ تلقائياً' : 'Auto-saved'}</span>
+                  </span>
                 </div>
               </div>
 
@@ -393,6 +538,16 @@ function TakeQuizModal({
                 />
               </div>
             </DialogHeader>
+
+            {/* Single-Entry Warning Banner */}
+            <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+              <span className="font-semibold leading-relaxed">
+                {isAr
+                  ? 'تنبيه مشدد: هذا الاختبار ذو دخول لمرة واحدة فقط. أي خروج أو إغلاق للنافذة سيؤدي فوراً إلى إنهاء الاختبار وتسليمه تلقائياً بما قمت بحله.'
+                  : 'Important notice: Single-entry quiz. Leaving or closing this window will immediately finish and auto-submit your quiz with current answers.'}
+              </span>
+            </div>
 
             {/* Questions List (Memoized against timer ticks) */}
             <QuizQuestionsList
@@ -439,6 +594,116 @@ function TakeQuizModal({
   );
 }
 
+/* ─── Quiz Start Instructions Dialog ───────────────────── */
+interface QuizStartInstructionDialogProps {
+  quiz: StudentQuizViewItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirmStart: () => void;
+  isAr: boolean;
+}
+
+function QuizStartInstructionDialog({
+  quiz,
+  open,
+  onOpenChange,
+  onConfirmStart,
+  isAr,
+}: QuizStartInstructionDialogProps) {
+  if (!quiz) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="glass max-w-lg rounded-2xl border border-white/10 p-6 space-y-4" dir={isAr ? 'rtl' : 'ltr'}>
+        <DialogHeader className="text-start space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold text-foreground">
+                {isAr ? 'تعليمات وتأكيد دخول الاختبار الإلكتروني' : 'Online Quiz Instructions & Confirmation'}
+              </DialogTitle>
+              <p className="text-xs text-primary font-mono mt-0.5">
+                {quiz.courseCode} - {isAr ? (quiz.courseNameAr || quiz.courseName) : (quiz.courseNameEn || quiz.courseName)}
+              </p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* Quiz details summary */}
+        <div className="grid grid-cols-3 gap-2 rounded-xl border border-border/70 bg-secondary/30 p-3 text-center">
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground block">{isAr ? 'المدة' : 'Duration'}</span>
+            <span className="font-mono text-xs font-bold text-foreground">
+              {quiz.durationMinutes} {isAr ? 'دقيقة' : 'mins'}
+            </span>
+          </div>
+          <div className="space-y-0.5 border-x border-border/70">
+            <span className="text-[10px] text-muted-foreground block">{isAr ? 'الأسئلة' : 'Questions'}</span>
+            <span className="font-mono text-xs font-bold text-foreground">
+              {quiz.questionsCount} {isAr ? 'سؤال' : 'questions'}
+            </span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground block">{isAr ? 'الدرجة' : 'Total Marks'}</span>
+            <span className="font-mono text-xs font-bold text-primary">
+              {quiz.totalMarks} {isAr ? 'درجة' : 'marks'}
+            </span>
+          </div>
+        </div>
+
+        {/* Warning & Instructions rules */}
+        <div className="space-y-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3.5 text-xs text-amber-200/90">
+          <div className="flex items-center gap-2 font-bold text-amber-300">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{isAr ? 'يرجى قراءة التعليمات بعناية قبل البدء:' : 'Please review instructions carefully:'}</span>
+          </div>
+          <ul className="space-y-1.5 list-disc list-inside text-[11px] leading-relaxed">
+            <li>
+              <strong>{isAr ? 'دخول لمرة واحدة فقط:' : 'Single entry only:'}</strong>{' '}
+              {isAr
+                ? 'الاختبار متاح للدخول لمرة واحدة فقط دون إمكانية الخروج والعودة لاحقاً.'
+                : 'You have only one attempt. Rejoining after leaving is not permitted.'}
+            </li>
+            <li>
+              <strong>{isAr ? 'تسليم تلقائي فوري عند المغادرة:' : 'Auto-submit on leave:'}</strong>{' '}
+              {isAr
+                ? 'أي إغلاق للنافذة، أو مغادرة للمتصفح، أو تبديل الصفحة سيؤدي فوراً إلى إنهاء الاختبار وتسليمه تلقائياً بما قمت بحله.'
+                : 'Closing the window or navigating away will immediately finalize and submit your current answers.'}
+            </li>
+            <li>
+              <strong>{isAr ? 'العداد الزمني:' : 'Timer countdown:'}</strong>{' '}
+              {isAr
+                ? 'سيبدأ احتساب وقت الاختبار التنازلي فور الضغط على زر البدء.'
+                : 'Countdown timer begins immediately upon entering the quiz.'}
+            </li>
+          </ul>
+        </div>
+
+        <DialogFooter className="rtl:sm:justify-start gap-2 pt-2 border-t border-border/70">
+          <Button
+            type="button"
+            onClick={onConfirmStart}
+            className="rounded-squircle bg-primary hover:bg-primary-hover text-white font-bold text-xs gap-1.5 px-5"
+          >
+            <Play className="h-3.5 w-3.5 fill-white" />
+            <span>{isAr ? 'أوافق وأبدأ الاختبار الآن' : 'I Understand & Start Quiz'}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="rounded-squircle text-xs"
+          >
+            {isAr ? 'إلغاء وتراجع' : 'Cancel'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Main Student Quizzes Page ────────────────────────── */
 export default function StudentQuizzesPage() {
   const t = useTranslations('studentPortal');
@@ -451,6 +716,7 @@ export default function StudentQuizzesPage() {
   const [activeTab, setActiveTab] = useState<'online' | 'history'>('online');
   const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
   const [takingQuizId, setTakingQuizId] = useState<string | null>(null);
+  const [confirmStartQuiz, setConfirmStartQuiz] = useState<StudentQuizViewItem | null>(null);
 
   // 1. Fetch Online Quizzes from Quizzes module
   const onlineQuizzesQuery = useQuery({
@@ -467,15 +733,15 @@ export default function StudentQuizzesPage() {
     },
   });
 
+  const onlineQuizzes = onlineQuizzesQuery.data || [];
+  const historyItems = historyQuery.data || [];
+
   const toggleExpand = (courseId: string) => {
     setExpandedCourses((prev) => ({
       ...prev,
       [courseId]: !prev[courseId],
     }));
   };
-
-  const onlineQuizzes = onlineQuizzesQuery.data || [];
-  const historyItems = historyQuery.data || [];
 
   const totalQuizScore = historyItems.reduce((acc, curr) => acc + curr.totalGrade, 0);
   const totalMaxScore = historyItems.reduce((acc, curr) => acc + curr.maxTotalGrade, 0);
@@ -603,6 +869,49 @@ export default function StudentQuizzesPage() {
                           )}
                         </div>
 
+                        {/* Schedule Open/Close Info */}
+                        {(quiz.startsAt || quiz.endsAt) && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {quiz.startsAt && !quiz.isOpen && !quiz.isEnded && (
+                              <span className="inline-flex items-center gap-1.5 rounded-squircle bg-secondary/50 border border-border/70 px-2.5 py-1 text-[11px] font-mono text-muted-foreground">
+                                <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span>{isAr ? 'يفتح:' : 'Opens:'}</span>
+                                <span className="font-semibold text-foreground">
+                                  {new Date(quiz.startsAt).toLocaleString(isAr ? 'ar-EG' : 'en-GB', {
+                                    timeZone: 'Africa/Cairo',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </span>
+                            )}
+
+                            {quiz.endsAt && (
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-squircle border px-2.5 py-1 text-[11px] font-mono ${
+                                  quiz.isEnded
+                                    ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                                    : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                                }`}
+                              >
+                                <Clock className="h-3.5 w-3.5 shrink-0" />
+                                <span>{isAr ? 'موعد الإغلاق:' : 'Closes:'}</span>
+                                <span className="font-semibold">
+                                  {new Date(quiz.endsAt).toLocaleString(isAr ? 'ar-EG' : 'en-GB', {
+                                    timeZone: 'Africa/Cairo',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         {/* Metadata row */}
                         <div className="flex flex-wrap items-center gap-3 pt-2 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1 font-mono">
@@ -644,7 +953,7 @@ export default function StudentQuizzesPage() {
                           </div>
                         ) : canTake ? (
                           <Button
-                            onClick={() => setTakingQuizId(quiz._id)}
+                            onClick={() => setConfirmStartQuiz(quiz)}
                             className="w-full bg-primary font-bold text-white hover:bg-primary-hover rounded-squircle gap-2 shadow-lg shadow-primary/20"
                           >
                             <Play className="h-4 w-4 fill-white" />
@@ -847,12 +1156,28 @@ export default function StudentQuizzesPage() {
         </div>
       )}
 
+      {/* Quiz Start Instructions Dialog */}
+      <QuizStartInstructionDialog
+        quiz={confirmStartQuiz}
+        open={Boolean(confirmStartQuiz)}
+        onOpenChange={(op) => !op && setConfirmStartQuiz(null)}
+        onConfirmStart={() => {
+          if (confirmStartQuiz) {
+            setTakingQuizId(confirmStartQuiz._id);
+            setConfirmStartQuiz(null);
+          }
+        }}
+        isAr={isAr}
+      />
+
       {/* Taking Quiz Interactive Modal */}
       <TakeQuizModal
         quizId={takingQuizId}
         open={Boolean(takingQuizId)}
         onOpenChange={(open) => {
-          if (!open) setTakingQuizId(null);
+          if (!open) {
+            setTakingQuizId(null);
+          }
         }}
         isAr={isAr}
         onSubmitted={() => {

@@ -80,6 +80,19 @@ interface QuizFormDialogProps {
   onSuccess: () => void;
 }
 
+function toDateTimeLocal(isoString?: string): string {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function QuizFormDialog({
   open,
   onOpenChange,
@@ -94,6 +107,8 @@ function QuizFormDialog({
   const [title, setTitle] = useState(initialValues.title || '');
   const [description, setDescription] = useState(initialValues.description || '');
   const [durationMinutes, setDurationMinutes] = useState(initialValues.durationMinutes || 15);
+  const [startsAt, setStartsAt] = useState(toDateTimeLocal(initialValues.startsAt));
+  const [endsAt, setEndsAt] = useState(toDateTimeLocal(initialValues.endsAt));
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? true);
 
@@ -124,6 +139,8 @@ function QuizFormDialog({
       setTitle(initialValues.title || '');
       setDescription(initialValues.description || '');
       setDurationMinutes(initialValues.durationMinutes || 15);
+      setStartsAt(toDateTimeLocal(initialValues.startsAt));
+      setEndsAt(toDateTimeLocal(initialValues.endsAt));
       setIsPublished(initialValues.isPublished ?? true);
       setAllowReview(initialValues.allowReview ?? true);
       setQuestions(
@@ -216,6 +233,17 @@ function QuizFormDialog({
       }
     }
 
+    if (startsAt && endsAt) {
+      if (new Date(endsAt) <= new Date(startsAt)) {
+        setError(
+          isAr
+            ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
+            : 'Quiz close time must be after open time',
+        );
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const payload = {
@@ -223,6 +251,8 @@ function QuizFormDialog({
         title,
         description,
         durationMinutes: Number(durationMinutes),
+        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+        endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
         isPublished,
         allowReview,
         questions,
@@ -350,6 +380,41 @@ function QuizFormDialog({
               placeholder={isAr ? 'تعليمات وإرشادات الاختبار للطلاب...' : 'Quiz instructions for students...'}
               className="rounded-squircle text-sm"
             />
+          </div>
+
+          {/* Schedule Window (Open and Close Times) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 rounded-xl border border-border/70 bg-background/50 p-3.5">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-primary" />
+                <span>{isAr ? 'موعد فتح الاختبار (اختياري)' : 'Quiz Open Time (Optional)'}</span>
+              </label>
+              <Input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+                className="rounded-squircle font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {isAr ? 'الوقت الذي سيصبح فيه الاختبار متاحاً للطلاب' : 'When the quiz becomes available to students'}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-danger" />
+                <span>{isAr ? 'موعد إغلاق الاختبار (اختياري)' : 'Quiz Close Time (Optional)'}</span>
+              </label>
+              <Input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                className="rounded-squircle font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {isAr ? 'الموعد النهائي الذي لن يتمكن الطلاب بعده من تقديم الاختبار' : 'Deadline after which students cannot submit the quiz'}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-6 rounded-xl border border-border/70 bg-background/50 p-3.5">
@@ -806,6 +871,48 @@ function AdminQuizzesContent() {
             <Clock className="h-3 w-3 text-muted-foreground" />
             <span>{quiz.durationMinutes} {isAr ? 'د' : 'm'}</span>
           </span>
+        </TableCell>
+      ),
+    },
+    {
+      key: 'schedule',
+      header: isAr ? 'المواعيد' : 'Schedule',
+      render: (quiz) => (
+        <TableCell className="p-4 text-start">
+          {quiz.startsAt || quiz.endsAt ? (
+            <div className="space-y-0.5 text-[11px] font-mono">
+              {quiz.startsAt && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <span className="text-[10px] font-bold text-primary">{isAr ? 'فتح:' : 'Open:'}</span>
+                  <span>
+                    {new Date(quiz.startsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              )}
+              {quiz.endsAt && (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <span className="text-[10px] font-bold text-rose-400">{isAr ? 'إغلاق:' : 'Close:'}</span>
+                  <span>
+                    {new Date(quiz.endsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-muted-foreground/60 text-xs italic">
+              {isAr ? 'متاح دائماً' : 'Always open'}
+            </span>
+          )}
         </TableCell>
       ),
     },

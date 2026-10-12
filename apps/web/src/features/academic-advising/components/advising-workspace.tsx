@@ -1148,7 +1148,7 @@ export function AdvisingWorkspace() {
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div
                       role="img"
-                      aria-label={student.name}
+                      aria-label={isArabic ? (student.nameAr || student.fullNameAr || student.name) : (student.name || student.nameAr)}
                       style={
                         student.avatarUrl
                           ? { backgroundImage: `url(${student.avatarUrl})` }
@@ -1157,11 +1157,11 @@ export function AdvisingWorkspace() {
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-sky-500/15 bg-cover bg-center text-xs font-bold text-sky-200"
                     >
                       {!student.avatarUrl
-                        ? student.name.trim().charAt(0)
+                        ? ((isArabic ? (student.nameAr || student.fullNameAr || student.name) : (student.name || student.nameAr)) || '').trim().charAt(0)
                         : null}
                     </div>
                     <strong className="text-sm truncate">
-                      <bdi>{student.name}</bdi>
+                      <bdi>{isArabic ? (student.nameAr || student.fullNameAr || student.name) : (student.name || student.nameAr)}</bdi>
                     </strong>
                   </div>
                   <span className="font-mono text-xs text-sky-300">
@@ -1228,7 +1228,7 @@ export function AdvisingWorkspace() {
                 <div className="flex items-center gap-3">
                   <div
                     role="img"
-                    aria-label={active.name}
+                    aria-label={isArabic ? (courseMap.data?.student?.nameAr || courseMap.data?.student?.fullNameAr || active.nameAr || active.fullNameAr || active.name) : (courseMap.data?.student?.name || active.name)}
                     style={
                       active.avatarUrl
                         ? { backgroundImage: `url(${active.avatarUrl})` }
@@ -1236,15 +1236,32 @@ export function AdvisingWorkspace() {
                     }
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-sky-500/15 bg-cover bg-center font-bold text-sky-200"
                   >
-                    {!active.avatarUrl ? active.name.trim().charAt(0) : null}
+                    {!active.avatarUrl
+                      ? ((isArabic
+                          ? (courseMap.data?.student?.nameAr || courseMap.data?.student?.fullNameAr || active.nameAr || active.fullNameAr || active.name)
+                          : (courseMap.data?.student?.name || active.name)
+                        ) || '').trim().charAt(0)
+                      : null}
                   </div>
                   <div>
                     <p className="text-xs uppercase text-muted-foreground">
                       {active.studentCode}
                     </p>
-                    <h2 className="text-xl font-bold">{active.name}</h2>
+                    <h2 className="text-xl font-bold">
+                      <bdi>{isArabic ? (courseMap.data?.student?.nameAr || courseMap.data?.student?.fullNameAr || active.nameAr || active.fullNameAr || active.name) : (courseMap.data?.student?.name || active.name)}</bdi>
+                    </h2>
                     <p className="text-sm text-muted-foreground">
-                      {active.department ?? "—"} ·{" "}
+                      {active.department
+                        ? (isArabic
+                            ? active.department.toUpperCase().includes('ACC') || active.department.includes('محاسب')
+                              ? 'شعبة المحاسبة والمراجعة'
+                              : active.department.toUpperCase().includes('BIS') || active.department.includes('نظم')
+                                ? 'نظم معلومات الأعمال (BIS)'
+                                : active.department.toUpperCase().includes('GEN') || active.department.includes('عام')
+                                  ? 'الشعبة العامة'
+                                  : active.department
+                            : active.department)
+                        : (isArabic ? 'الشعبة العامة' : 'General Track')} ·{" "}
                       {semesterLabel(active.semester, locale)} ·{" "}
                       {advisingStatusLabel(
                         caseDetails.data?.status ?? active.advisingStatus,
@@ -2287,11 +2304,12 @@ const COURSE_DEPT_BY_CODE: Record<string, "BIS" | "ACCOUNTING"> = {
   "315": "BIS", "512": "BIS", "S17": "BIS", "S22": "BIS", "S23": "BIS",
 };
 
-function normalizeDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
+function normalizeDept(dept?: string | null): "BIS" | "ACCOUNTING" | "GENERAL" | null {
   if (!dept) return null;
   const upper = dept.toUpperCase();
   if (upper.includes("ACC") || upper.includes("محاسب")) return "ACCOUNTING";
   if (upper.includes("BIS") || upper.includes("نظم")) return "BIS";
+  if (upper.includes("GEN") || upper.includes("عام")) return "GENERAL";
   return null;
 }
 
@@ -2462,8 +2480,13 @@ function CanvasContent({
   const [viewMode, setViewMode] = useState<"grid" | "flow">("grid");
   const [gridLevelFilter, setGridLevelFilter] = useState<string>("all");
   const [gridSemesterFilter, setGridSemesterFilter] = useState<"all" | "first" | "second">("all");
-  const studentTrack = normalizeDept(activeStudent?.department || courseMap.student?.department) ?? "BIS";
-  const [gridDeptFilter, setGridDeptFilter] = useState<"auto" | "all" | "BIS" | "ACCOUNTING">("auto");
+  const studentLevelNum = parseInt((activeStudent?.academicLevel || courseMap.student?.academicLevel || "1").replace(/\D/g, ""), 10);
+  const rawDept = normalizeDept(activeStudent?.department || courseMap.student?.department);
+  const studentTrack: "GENERAL" | "BIS" | "ACCOUNTING" =
+    studentLevelNum <= 2
+      ? "GENERAL"
+      : (rawDept === "ACCOUNTING" ? "ACCOUNTING" : "BIS");
+  const [gridDeptFilter, setGridDeptFilter] = useState<"auto" | "all" | "GENERAL" | "BIS" | "ACCOUNTING">("auto");
   const [courseSearch, setCourseSearch] = useState<string>("");
 
   const recommendationByCode = useMemo(
@@ -2586,7 +2609,11 @@ function CanvasContent({
       // Department filter for Level 3 & Level 4
       if (targetDept && (level === 3 || level === 4)) {
         const courseDept = getCourseDepartment(course);
-        if (
+        if (targetDept === "GENERAL") {
+          if (courseDept && courseDept !== "GENERAL") {
+            return false;
+          }
+        } else if (
           courseDept &&
           courseDept !== "GENERAL" &&
           courseDept !== targetDept
@@ -2757,10 +2784,11 @@ function CanvasContent({
                   {
                     id: "auto",
                     label: isArabic
-                      ? `طالب (${studentTrack === "ACCOUNTING" ? "محاسبة" : "نظم"})`
-                      : `Auto (${studentTrack === "ACCOUNTING" ? "Acc" : "BIS"})`,
+                      ? `طالب (${studentTrack === "GENERAL" ? "عامة" : studentTrack === "ACCOUNTING" ? "محاسبة" : "نظم"})`
+                      : `Auto (${studentTrack === "GENERAL" ? "General" : studentTrack === "ACCOUNTING" ? "Acc" : "BIS"})`,
                   },
                   { id: "all", label: isArabic ? "الكل" : "All" },
+                  { id: "GENERAL", label: isArabic ? "عامة" : "General" },
                   { id: "BIS", label: isArabic ? "نظم BIS" : "BIS" },
                   {
                     id: "ACCOUNTING",
@@ -2772,7 +2800,7 @@ function CanvasContent({
                     type="button"
                     onClick={() =>
                       setGridDeptFilter(
-                        dept.id as "auto" | "all" | "BIS" | "ACCOUNTING",
+                        dept.id as "auto" | "all" | "GENERAL" | "BIS" | "ACCOUNTING",
                       )
                     }
                     className={cn(

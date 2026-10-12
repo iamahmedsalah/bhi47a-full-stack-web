@@ -258,11 +258,12 @@ const COURSE_DEPT_BY_CODE: Record<string, "BIS" | "ACCOUNTING"> = {
   "315": "BIS", "512": "BIS", "S17": "BIS", "S22": "BIS", "S23": "BIS",
 };
 
-function normalizeFlowDept(dept?: string | null): "BIS" | "ACCOUNTING" | null {
+function normalizeFlowDept(dept?: string | null): "BIS" | "ACCOUNTING" | "GENERAL" | null {
   if (!dept) return null;
   const upper = dept.toUpperCase();
   if (upper.includes("ACC") || upper.includes("محاسب")) return "ACCOUNTING";
   if (upper.includes("BIS") || upper.includes("نظم")) return "BIS";
+  if (upper.includes("GEN") || upper.includes("عام")) return "GENERAL";
   return null;
 }
 
@@ -511,7 +512,7 @@ export function CourseMapFlow({
   const [filter, setFilter] = useState<CanvasFilter>("all");
   const [levelView, setLevelView] = useState("all");
   const [semesterView, setSemesterView] = useState("all");
-  const [deptView, setDeptView] = useState<"auto" | "all" | "BIS" | "ACCOUNTING">("auto");
+  const [deptView, setDeptView] = useState<"auto" | "all" | "GENERAL" | "BIS" | "ACCOUNTING">("auto");
   const [focusedCourseCode, setFocusedCourseCode] = useState<string>();
 
   const selected = useMemo(
@@ -621,7 +622,11 @@ export function CourseMapFlow({
           let matchesDept = true;
           if (targetDept && (courseLvlNum === 3 || courseLvlNum === 4)) {
             const courseDept = getFlowCourseDept(course);
-            if (courseDept && courseDept !== "GENERAL" && courseDept !== targetDept) {
+            if (targetDept === "GENERAL") {
+              if (courseDept && courseDept !== "GENERAL") {
+                matchesDept = false;
+              }
+            } else if (courseDept && courseDept !== "GENERAL" && courseDept !== targetDept) {
               matchesDept = false;
             }
           }
@@ -940,17 +945,18 @@ export function CourseMapFlow({
           <div className="w-36 shrink-0">
             <CustomDropdown
               value={deptView}
-              onValueChange={(val) => setDeptView(val as "auto" | "all" | "BIS" | "ACCOUNTING")}
+              onValueChange={(val) => setDeptView(val as "auto" | "all" | "GENERAL" | "BIS" | "ACCOUNTING")}
               ariaLabel={isEnglish ? "Filter by department" : "تصفية حسب الشعبة"}
               className="h-8 border-white/15 bg-background/70 text-xs font-semibold"
               options={[
                 {
                   value: "auto",
                   label: isEnglish
-                    ? `My track (${studentTrack})`
-                    : `شعبتي (${studentTrack === "BIS" ? "نظم BIS" : "محاسبة"})`,
+                    ? `My track (${studentTrack === "GENERAL" ? "General" : studentTrack === "ACCOUNTING" ? "Accounting" : "BIS"})`
+                    : `شعبتي (${studentTrack === "GENERAL" ? "الشعبة العامة" : studentTrack === "ACCOUNTING" ? "شعبة المحاسبة" : "نظم BIS"})`,
                 },
                 { value: "all", label: isEnglish ? "All tracks" : "كافة الشعب" },
+                { value: "GENERAL", label: isEnglish ? "General track" : "الشعبة العامة" },
                 { value: "BIS", label: isEnglish ? "BIS track" : "شعبة نظم BIS" },
                 { value: "ACCOUNTING", label: isEnglish ? "Accounting track" : "شعبة المحاسبة" },
               ]}

@@ -217,6 +217,20 @@ export class StudentImporter implements Importer {
           },
         });
 
+        const normalizedLevel = normalizeStudentLevel(row.level);
+        let resolvedDept = (row.department as string)?.trim();
+        if (normalizedLevel === '1' || normalizedLevel === '2') {
+          resolvedDept = 'GENERAL';
+        } else if (normalizedLevel === '3' || normalizedLevel === '4') {
+          if (
+            !resolvedDept ||
+            resolvedDept === 'GENERAL' ||
+            resolvedDept === 'General'
+          ) {
+            resolvedDept = 'BIS';
+          }
+        }
+
         profileOps.push({
           updateOne: {
             filter: { studentCode },
@@ -228,8 +242,8 @@ export class StudentImporter implements Importer {
                 studentCode,
                 nationalIdMasked: maskedId,
                 nationalId,
-                level: normalizeStudentLevel(row.level),
-                department: row.department,
+                level: normalizedLevel,
+                department: resolvedDept,
                 group: row.group,
                 section: row.section,
                 academicEmail: row.academicEmail,

@@ -65,11 +65,13 @@ function StudentLoginContent() {
   const {
     loading,
     isLocked,
+    lockedIdentifier,
     banExpiresAt,
     banRemainingSeconds,
     setLoading,
     setLockoutState,
     tickRemainingSeconds,
+    resetLockout,
   } = useAuthStore();
 
   const studentCodeInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +99,13 @@ function StudentLoginContent() {
     control,
     name: ["studentCode", "password"],
   });
+
+  const normalizedInputCode = (studentCodeVal || "").trim();
+  const isCurrentAccountLocked =
+    isLocked &&
+    Boolean(lockedIdentifier) &&
+    normalizedInputCode === lockedIdentifier &&
+    (banRemainingSeconds ?? 0) > 0;
   const [googleAuthNotice, setGoogleAuthNotice] = useState<{
     title: string;
     description: string;
@@ -213,26 +222,33 @@ function StudentLoginContent() {
   // Initialize remainingAttempts & lockouts from session
   useEffect(() => {
     try {
-      const storedRem = sessionStorage.getItem("remainingAttempts");
-      if (storedRem !== null)
-        setLockoutState({ remainingAttempts: Number(storedRem) });
+      // 1. Clean up legacy un-scoped storage keys that trapped users across accounts
+      sessionStorage.removeItem("remainingAttempts");
+      sessionStorage.removeItem("banExpiresAt");
+      localStorage.removeItem("remainingAttempts");
+      localStorage.removeItem("banExpiresAt");
 
-      const storedBan = sessionStorage.getItem("banExpiresAt");
-      if (storedBan) {
-        const msLeft = new Date(storedBan).getTime() - Date.now();
-        if (msLeft > 0) {
-          setLockoutState({
-            banExpiresAt: storedBan,
-            isLocked: true,
-            banRemainingSeconds: Math.ceil(msLeft / 1000),
-          });
-        } else {
-          sessionStorage.removeItem("banExpiresAt");
-          sessionStorage.removeItem("remainingAttempts");
+      // 2. Check for scoped student lockout
+      const stored = sessionStorage.getItem("student_lockout");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.identifier && parsed?.expiresAt) {
+          const msLeft = new Date(parsed.expiresAt).getTime() - Date.now();
+          if (msLeft > 0) {
+            setLockoutState({
+              lockedIdentifier: String(parsed.identifier),
+              banExpiresAt: parsed.expiresAt,
+              isLocked: true,
+              banRemainingSeconds: Math.ceil(msLeft / 1000),
+              remainingAttempts: 0,
+            });
+          } else {
+            sessionStorage.removeItem("student_lockout");
+          }
         }
       }
     } catch {
-      // ignore sessionStorage security errors
+      // ignore storage access errors
     }
   }, [setLockoutState]);
 
@@ -246,6 +262,9 @@ function StudentLoginContent() {
       const state = useAuthStore.getState();
       if (!state.isLocked) {
         clearInterval(id);
+        try {
+          sessionStorage.removeItem("student_lockout");
+        } catch {}
         toast.info(
           locale === "ar"
             ? "تم رفع الحظر. يمكنك المحاولة مرة أخرى."
@@ -258,7 +277,12 @@ function StudentLoginContent() {
   }, [banExpiresAt, locale, tickRemainingSeconds]);
 
   const onSubmit = async (data: StudentLoginInput) => {
-    if (isLocked) {
+    const inputCode = data.studentCode.trim();
+    if (
+      isLocked &&
+      lockedIdentifier === inputCode &&
+      (banRemainingSeconds ?? 0) > 0
+    ) {
       const remainingSeconds = banRemainingSeconds ?? 0;
       const timeLeftText =
         remainingSeconds > 0
@@ -278,15 +302,19 @@ function StudentLoginContent() {
       await login(
         "student",
         {
-          studentCode: data.studentCode,
+          studentCode: inputCode,
           password: data.password,
         },
         { returnUrl },
       );
-      // Reset attempts on successful login
+      // Reset lockout and attempts on successful login
+      resetLockout();
       try {
+        sessionStorage.removeItem("student_lockout");
         sessionStorage.removeItem("remainingAttempts");
         sessionStorage.removeItem("banExpiresAt");
+        localStorage.removeItem("remainingAttempts");
+        localStorage.removeItem("banExpiresAt");
       } catch {}
     } catch (err: unknown) {
       const errorData = err as StudentLoginError;
@@ -317,6 +345,7 @@ function StudentLoginContent() {
 
         const banExpiry = createBanExpiry(lockSecs);
         setLockoutState({
+          lockedIdentifier: inputCode,
           banExpiresAt: banExpiry,
           isLocked: true,
           banRemainingSeconds: lockSecs,
@@ -324,8 +353,10 @@ function StudentLoginContent() {
         });
 
         try {
-          sessionStorage.setItem("banExpiresAt", banExpiry);
-          sessionStorage.setItem("remainingAttempts", "0");
+          sessionStorage.setItem(
+            "student_lockout",
+            JSON.stringify({ identifier: inputCode, expiresAt: banExpiry }),
+          );
         } catch {}
 
         const timeLeftText = formatLockoutDuration(lockSecs, locale);
@@ -335,9 +366,6 @@ function StudentLoginContent() {
       } else if (typeof errorData?.attemptsLeft === "number") {
         const left = errorData.attemptsLeft;
         setLockoutState({ remainingAttempts: left });
-        try {
-          sessionStorage.setItem("remainingAttempts", String(left));
-        } catch {}
 
         toast.error(t("loginError"), {
           description: t("remainingAttemptsDesc", { count: left }),
@@ -488,7 +516,7 @@ function StudentLoginContent() {
               </div>
             </div>
 
-            {isLocked && banRemainingSeconds !== null && (
+            {isCurrentAccountLocked && banRemainingSeconds !== null && (
               <Alert
                 variant="destructive"
                 className="bg-destructive/10 border-destructive animate-in fade-in slide-in-from-top-2 duration-300"

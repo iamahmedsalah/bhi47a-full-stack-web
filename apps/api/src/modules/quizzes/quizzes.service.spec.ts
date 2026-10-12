@@ -153,6 +153,25 @@ describe('QuizzesService Unit Tests', () => {
 
       expect(result).toBe(savedQuiz);
     });
+
+    it('throws BadRequestException if endsAt is before or equal to startsAt', async () => {
+      mockCourseModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(courseId),
+        code: 'CS101',
+        name: 'Computer Science',
+      });
+
+      await expect(
+        service.create(adminUser, {
+          courseId,
+          title: 'Quiz 1',
+          durationMinutes: 15,
+          startsAt: '2026-10-15T12:00:00Z',
+          endsAt: '2026-10-15T10:00:00Z',
+          questions: [],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('findOne()', () => {
@@ -204,6 +223,9 @@ describe('QuizzesService Unit Tests', () => {
     });
 
     it('strips correctOptionIndex and explanations so student cannot see answers', async () => {
+      const testStartsAt = new Date(Date.now() - 3600000);
+      const testEndsAt = new Date(Date.now() + 3600000);
+
       mockQuizModel.findById.mockResolvedValue({
         _id: new Types.ObjectId(quizId),
         title: 'Exam Quiz',
@@ -225,6 +247,8 @@ describe('QuizzesService Unit Tests', () => {
             points: 5,
           },
         ],
+        startsAt: testStartsAt,
+        endsAt: testEndsAt,
       });
       mockSubmissionModel.findOne.mockResolvedValue(null);
 
@@ -235,6 +259,8 @@ describe('QuizzesService Unit Tests', () => {
       expect((result.questions[0] as any).explanation).toBeUndefined();
       expect(result.questions[0].options).toEqual(['3', '4', '5']);
       expect(result.questions[0].text).toBe('What is 2 + 2?');
+      expect(result.startsAt).toEqual(testStartsAt);
+      expect(result.endsAt).toEqual(testEndsAt);
     });
   });
 

@@ -93,6 +93,20 @@ export class StudentsService {
       mustChangePassword: dto.mustChangePassword ?? false,
     });
 
+    // Department auto-rule: Levels 1 & 2 -> GENERAL; Level 3+ default -> BIS
+    let resolvedDepartment = dto.department;
+    if (dto.level === '1' || dto.level === '2') {
+      resolvedDepartment = 'GENERAL';
+    } else if (dto.level === '3' || dto.level === '4') {
+      if (
+        !resolvedDepartment ||
+        resolvedDepartment === 'GENERAL' ||
+        resolvedDepartment === 'General'
+      ) {
+        resolvedDepartment = 'BIS';
+      }
+    }
+
     // Create student profile
     const profile = new this.studentProfileModel({
       userId: user._id,
@@ -102,7 +116,7 @@ export class StudentsService {
       fullNameEn,
       nationalIdMasked: user.nationalIdMasked,
       nationalId: dto.nationalId,
-      department: dto.department,
+      department: resolvedDepartment,
       level: dto.level,
       group: dto.group,
       section: dto.section,

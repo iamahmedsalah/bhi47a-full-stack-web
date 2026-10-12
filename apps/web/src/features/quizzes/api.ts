@@ -104,6 +104,8 @@ export interface TakeQuizResponse {
   durationMinutes: number;
   totalMarks: number;
   passingMarks: number;
+  startsAt?: string;
+  endsAt?: string;
   questions: Array<{
     id: string;
     text: string;

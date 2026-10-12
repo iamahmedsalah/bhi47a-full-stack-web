@@ -164,45 +164,57 @@ export function DepartmentTransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={isSubmitting ? undefined : onOpenChange}>
-      <DialogContent className="max-w-lg rounded-2xl border border-border/80 bg-card p-5 shadow-2xl relative overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
+      <DialogContent className="max-w-xl sm:max-w-2xl rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-2xl relative overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
         {/* Header */}
         <DialogHeader className="text-start space-y-1">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 shrink-0">
               <ArrowLeftRight className="h-5 w-5" />
             </div>
-            <div className="min-w-0">
-              <DialogTitle className="text-base font-bold text-foreground">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
                 {isAr ? 'تحويل الشعبة والتخصص الأكاديمي' : 'Transfer Academic Track'}
               </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5 truncate">
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {isAr
-                  ? 'تسكين وتحويل الطلاب بين شعبتي نظم المعلومات (BIS) والمحاسبة والمراجعة'
-                  : 'Place and transfer students between BIS and Accounting programs'}
+                  ? 'تسكين وتحويل الطلاب بين الشعب الدراسية (الشعبة العامة، نظم المعلومات BIS، المحاسبة والمراجعة)'
+                  : 'Place and transfer students between academic tracks (General, BIS, Accounting & Auditing)'}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
-          {/* Student Context & Selected Chips */}
-          <div className="rounded-xl border border-border/70 bg-secondary/30 p-3 space-y-2">
+        <div className="space-y-4 py-2">
+          {/* Student Context & Selected Cards */}
+          <div className="rounded-xl border border-border/70 bg-secondary/25 p-3.5 space-y-2.5">
             <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-cyan-500" />
-                {isBulk
-                  ? (isAr ? `الطلاب المحددين للتحويل (${activeStudents.length})` : `Selected Students (${activeStudents.length})`)
-                  : (isAr ? 'بيانات الطالب المراد تحويله' : 'Target Student')}
+                <span>
+                  {isBulk
+                    ? (isAr ? `الطلاب المحددين للتحويل (${activeStudents.length})` : `Selected Students (${activeStudents.length})`)
+                    : (isAr ? 'بيانات الطالب المراد تحويله' : 'Target Student')}
+                </span>
+                {activeStudents.length > 0 && (
+                  <span className="rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-bold">
+                    {activeStudents.length} {isAr ? 'طالب' : 'students'}
+                  </span>
+                )}
               </span>
-              <span className="text-[11px] font-mono text-muted-foreground font-normal">
-                {activeStudents.length > 0
-                  ? (isAr ? 'جاهز للتنفيذ' : 'Ready')
-                  : (isAr ? 'لا يوجد طلاب' : 'Empty')}
-              </span>
+
+              {isBulk && activeStudents.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveStudents([])}
+                  className="text-[11px] text-muted-foreground hover:text-rose-400 cursor-pointer transition-colors"
+                >
+                  {isAr ? 'إلغاء تحديد الكل' : 'Clear all'}
+                </button>
+              )}
             </div>
 
             {activeStudents.length === 0 ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs">
+              <div className="flex items-center gap-2.5 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-500 text-xs">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>
                   {isAr
@@ -211,38 +223,50 @@ export function DepartmentTransferDialog({
                 </span>
               </div>
             ) : (
-              <div className="max-h-36 overflow-y-auto space-y-1.5 pe-1">
-                {activeStudents.map((st) => (
-                  <div
-                    key={st._id}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-card/80 border border-border/60 text-xs"
-                  >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <GraduationCap className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="font-semibold text-foreground truncate max-w-[160px] sm:max-w-[200px]">
-                        {st.fullName || st.fullNameAr || st.studentCode}
-                      </span>
-                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">
-                        ({st.studentCode})
-                      </span>
+              <div className="max-h-52 overflow-y-auto pe-1.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {activeStudents.map((st) => {
+                  const displayName = isAr
+                    ? (st.fullNameAr || st.fullName || st.studentCode)
+                    : (st.fullName || st.fullNameAr || st.studentCode);
+                  return (
+                    <div
+                      key={st._id}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-card border border-border/70 text-xs hover:border-border transition-colors shadow-xs"
+                    >
+                      <div className="min-w-0 flex items-center gap-2 flex-1">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-secondary/80 text-muted-foreground border border-border/50">
+                          <GraduationCap className="h-3.5 w-3.5 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-foreground truncate leading-tight">
+                            <bdi>{displayName}</bdi>
+                          </p>
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                            <span className="font-mono">{st.studentCode}</span>
+                            <span>·</span>
+                            <span>{isAr ? `المستوى ${st.level || '1'}` : `L${st.level || '1'}`}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="rounded-md px-1.5 py-0.5 text-[10px] font-medium border border-border/70 bg-secondary/50 text-muted-foreground">
+                          {getDepartmentLabel(st.department)}
+                        </span>
+                        {isBulk && activeStudents.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeStudentFromList(st._id)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                            title={isAr ? 'إزالة من التحويل' : 'Remove from selection'}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="rounded-md px-1.5 py-0.5 text-[10px] font-medium border border-border bg-secondary text-muted-foreground">
-                        {getDepartmentLabel(st.department)}
-                      </span>
-                      {isBulk && activeStudents.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeStudentFromList(st._id)}
-                          className="p-1 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-colors"
-                          title={isAr ? 'إزالة من التحويل' : 'Remove from selection'}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -250,9 +274,9 @@ export function DepartmentTransferDialog({
           {/* Department Selection Grid */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-foreground block">
-              {isAr ? 'التخصص المستهدف للتحويل:' : 'Target Track / Department:'}
+              {isAr ? 'الشعبة / التخصص المستهدف للتحويل:' : 'Target Track / Department:'}
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {DEPARTMENTS.map((dept) => {
                 const IconComponent = dept.icon;
                 const isSelected = targetDepartment === dept.id;
@@ -262,7 +286,7 @@ export function DepartmentTransferDialog({
                     type="button"
                     onClick={() => setTargetDepartment(dept.id)}
                     className={cn(
-                      'flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer relative gap-1.5 min-h-[85px]',
+                      'flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all cursor-pointer relative gap-2 min-h-[95px]',
                       isSelected
                         ? dept.selectedBorder
                         : 'border-border/70 bg-card hover:bg-secondary/40 hover:border-border',
@@ -270,11 +294,11 @@ export function DepartmentTransferDialog({
                   >
                     <div
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-lg border transition-colors',
+                        'flex h-9 w-9 items-center justify-center rounded-xl border transition-colors',
                         dept.badgeColor,
                       )}
                     >
-                      <IconComponent className="h-4 w-4" />
+                      <IconComponent className="h-4.5 w-4.5" />
                     </div>
                     <div className="min-w-0 w-full px-1">
                       <div className="text-xs font-bold text-foreground truncate leading-tight">
@@ -285,7 +309,7 @@ export function DepartmentTransferDialog({
                       </div>
                     </div>
                     {isSelected && (
-                      <CheckCircle2 className="h-4 w-4 text-cyan-400 absolute top-2 end-2" />
+                      <CheckCircle2 className="h-4 w-4 text-cyan-400 absolute top-2.5 end-2.5" />
                     )}
                   </button>
                 );
@@ -294,7 +318,7 @@ export function DepartmentTransferDialog({
           </div>
 
           {/* Level 3 Promotion Toggle Switch */}
-          <div className="rounded-xl border border-border/70 bg-secondary/20 p-3 flex items-center justify-between gap-3 text-xs">
+          <div className="rounded-xl border border-border/70 bg-secondary/20 p-3.5 flex items-center justify-between gap-3 text-xs">
             <div className="space-y-0.5 flex-1 min-w-0">
               <div className="font-semibold text-foreground truncate">
                 {isAr
@@ -303,7 +327,7 @@ export function DepartmentTransferDialog({
               </div>
               <div className="text-[11px] text-muted-foreground">
                 {isAr
-                  ? 'تحديث لائحة المقررات والجداول تلقائياً بما يتوافق مع متطلبات التخصص الجديد'
+                  ? 'تحديث خطة المقررات والجداول تلقائياً وفقاً للائحة التخصص الجديد للفرقة الثالثة'
                   : 'Automatically enroll in target specialization curriculum and courses'}
               </div>
             </div>
@@ -331,12 +355,12 @@ export function DepartmentTransferDialog({
         </div>
 
         {/* Footer */}
-        <DialogFooter className="rtl:sm:justify-start gap-2 pt-2 border-t border-border/60">
+        <DialogFooter className="rtl:sm:justify-start gap-2 pt-3 border-t border-border/60">
           <Button
             type="button"
             onClick={handleTransfer}
             disabled={isSubmitting || !targetDepartment || activeStudents.length === 0}
-            className="rounded-squircle px-5 font-bold shadow-sm h-9 text-xs bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer"
+            className="rounded-squircle px-6 font-bold shadow-sm h-9 text-xs bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer"
           >
             {isSubmitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin rtl:ml-1.5 rtl:mr-0 mr-1.5" />

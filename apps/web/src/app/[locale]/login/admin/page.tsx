@@ -33,6 +33,7 @@ interface AdminLoginFormProps {
   onSubmit: (data: AdminLoginInput) => Promise<void>;
   loading: boolean;
   isLocked: boolean;
+  lockedEmail: string | null;
   banRemainingSeconds: number | null;
   locale: string;
   t: any;
@@ -44,6 +45,7 @@ function AdminLoginForm({
   onSubmit,
   loading,
   isLocked,
+  lockedEmail,
   banRemainingSeconds,
   locale,
   t,
@@ -70,6 +72,12 @@ function AdminLoginForm({
 
   const emailVal = watch('email');
   const passwordVal = watch('password');
+  const normalizedEmail = (emailVal || '').trim().toLowerCase();
+  const isCurrentAccountLocked =
+    isLocked &&
+    Boolean(lockedEmail) &&
+    normalizedEmail === lockedEmail?.toLowerCase() &&
+    (banRemainingSeconds ?? 0) > 0;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
@@ -108,7 +116,7 @@ function AdminLoginForm({
         )}
       </div>
 
-      {isLocked && banRemainingSeconds !== null && (
+      {isCurrentAccountLocked && banRemainingSeconds !== null && (
         <Alert variant="destructive" className="bg-destructive/10 border-destructive animate-in fade-in slide-in-from-top-2 duration-300">
           <Clock className="h-4 w-4" />
           <AlertDescription className="space-y-3">
@@ -164,6 +172,7 @@ function AdminLoginContent() {
   // Security lockout states (5 attempts, 30 minutes cooldown)
   const [attempts, setAttempts] = useState<number>(0);
   const [isLocked, setIsLocked] = useState(false);
+  const [lockedEmail, setLockedEmail] = useState<string | null>(null);
   const [banExpiresAt, setBanExpiresAt] = useState<string | null>(null);
   const [banRemainingSeconds, setBanRemainingSeconds] = useState<number | null>(null);
   const adminCodeInputRef = useRef<HTMLInputElement | null>(null);
@@ -197,19 +206,26 @@ function AdminLoginContent() {
   // Initialize remainingAttempts & lockouts from session
   useEffect(() => {
     try {
-      const storedAttempts = sessionStorage.getItem('adminAttempts');
-      if (storedAttempts !== null) setAttempts(Number(storedAttempts));
-      
-      const storedBan = sessionStorage.getItem('adminBanExpiresAt');
-      if (storedBan) {
-        const msLeft = new Date(storedBan).getTime() - Date.now();
-        if (msLeft > 0) {
-          setBanExpiresAt(storedBan);
-          setIsLocked(true);
-          setBanRemainingSeconds(Math.ceil(msLeft / 1000));
-        } else {
-          sessionStorage.removeItem('adminBanExpiresAt');
-          sessionStorage.removeItem('adminAttempts');
+      // 1. Clean up legacy un-scoped storage keys that trapped users across accounts
+      sessionStorage.removeItem('adminAttempts');
+      sessionStorage.removeItem('adminBanExpiresAt');
+      localStorage.removeItem('adminAttempts');
+      localStorage.removeItem('adminBanExpiresAt');
+
+      // 2. Check for scoped admin lockout
+      const stored = sessionStorage.getItem('admin_lockout');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email && parsed?.expiresAt) {
+          const msLeft = new Date(parsed.expiresAt).getTime() - Date.now();
+          if (msLeft > 0) {
+            setLockedEmail(String(parsed.email).toLowerCase());
+            setBanExpiresAt(parsed.expiresAt);
+            setIsLocked(true);
+            setBanRemainingSeconds(Math.ceil(msLeft / 1000));
+          } else {
+            sessionStorage.removeItem('admin_lockout');
+          }
         }
       }
     } catch (e) { /* ignore */ }
@@ -227,12 +243,12 @@ function AdminLoginContent() {
       if (secs <= 0) {
         clearInterval(id);
         setIsLocked(false);
+        setLockedEmail(null);
         setBanExpiresAt(null);
         setBanRemainingSeconds(null);
         setAttempts(0);
         try {
-          sessionStorage.removeItem('adminBanExpiresAt');
-          sessionStorage.removeItem('adminAttempts');
+          sessionStorage.removeItem('admin_lockout');
         } catch (e) { /* ignore */ }
         toast.info(locale === 'ar' ? 'تم رفع الحظر. يمكنك المحاولة مرة أخرى.' : 'Lockout lifted. You can try again.');
       }
@@ -242,7 +258,12 @@ function AdminLoginContent() {
   }, [banExpiresAt, locale]);
 
   const onSubmit = async (data: AdminLoginInput) => {
-    if (isLocked) {
+    const inputEmail = data.email.trim().toLowerCase();
+    if (
+      isLocked &&
+      lockedEmail === inputEmail &&
+      (banRemainingSeconds ?? 0) > 0
+    ) {
       const remainingSeconds = banRemainingSeconds ?? 0;
       const timeLeftText =
         remainingSeconds > 0
@@ -260,13 +281,21 @@ function AdminLoginContent() {
     setLoading(true);
     try {
       await login('admin', {
-        email: data.email,
+        email: inputEmail,
         password: data.password,
       });
-      // Reset attempts on successful login
+      // Reset attempts and lockout on successful login
+      setIsLocked(false);
+      setLockedEmail(null);
+      setBanExpiresAt(null);
+      setBanRemainingSeconds(null);
+      setAttempts(0);
       try {
+        sessionStorage.removeItem('admin_lockout');
         sessionStorage.removeItem('adminAttempts');
         sessionStorage.removeItem('adminBanExpiresAt');
+        localStorage.removeItem('adminAttempts');
+        localStorage.removeItem('adminBanExpiresAt');
       } catch (e) {}
     } catch (err: any) {
       const errorData = err;
@@ -292,18 +321,21 @@ function AdminLoginContent() {
           }
         }
 
-        if (typeof lockSecs !== 'number' || lockSecs <= 0) {
+        if (typeof lockSecs !== "number" || lockSecs <= 0) {
           lockSecs = 1800;
         }
 
         const banExpiry = new Date(Date.now() + lockSecs * 1000).toISOString();
+        setLockedEmail(inputEmail);
         setBanExpiresAt(banExpiry);
         setIsLocked(true);
         setBanRemainingSeconds(lockSecs);
         setAttempts(maxAttempts + 1);
         try {
-          sessionStorage.setItem('adminBanExpiresAt', banExpiry);
-          sessionStorage.setItem('adminAttempts', String(maxAttempts + 1));
+          sessionStorage.setItem(
+            'admin_lockout',
+            JSON.stringify({ email: inputEmail, expiresAt: banExpiry }),
+          );
         } catch (e) {}
 
         const timeLeftText = formatLockoutDuration(lockSecs, locale);
@@ -314,9 +346,6 @@ function AdminLoginContent() {
         const left = errorData.attemptsLeft;
         const failedCount = maxAttempts - left;
         setAttempts(failedCount);
-        try {
-          sessionStorage.setItem('adminAttempts', String(failedCount));
-        } catch (e) {}
 
         toast.error(t('loginError'), {
           description:
@@ -404,6 +433,7 @@ function AdminLoginContent() {
             onSubmit={onSubmit}
             loading={loading}
             isLocked={isLocked}
+            lockedEmail={lockedEmail}
             banRemainingSeconds={banRemainingSeconds}
             locale={locale}
             t={t}

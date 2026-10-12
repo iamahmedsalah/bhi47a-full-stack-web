@@ -107,6 +107,14 @@ export class QuizzesService {
     );
     const passingMarks = Math.max(1, Math.round(totalMarks * 0.5));
 
+    if (dto.startsAt && dto.endsAt) {
+      if (new Date(dto.endsAt) <= new Date(dto.startsAt)) {
+        throw new BadRequestException(
+          'موعد نهاية الاختبار يجب أن يكون بعد موعد البداية',
+        );
+      }
+    }
+
     const quiz = new this.quizModel({
       ...dto,
       courseId: new Types.ObjectId(dto.courseId),
@@ -250,6 +258,22 @@ export class QuizzesService {
 
     if (dto.startsAt) updatePayload.startsAt = new Date(dto.startsAt);
     if (dto.endsAt) updatePayload.endsAt = new Date(dto.endsAt);
+
+    const effectiveStartsAt =
+      updatePayload.startsAt !== undefined
+        ? updatePayload.startsAt
+        : quiz.startsAt;
+    const effectiveEndsAt =
+      updatePayload.endsAt !== undefined ? updatePayload.endsAt : quiz.endsAt;
+    if (
+      effectiveStartsAt &&
+      effectiveEndsAt &&
+      new Date(effectiveEndsAt) <= new Date(effectiveStartsAt)
+    ) {
+      throw new BadRequestException(
+        'موعد نهاية الاختبار يجب أن يكون بعد موعد البداية',
+      );
+    }
 
     const updated = await this.quizModel.findByIdAndUpdate(
       id,
@@ -479,6 +503,8 @@ export class QuizzesService {
       durationMinutes: quiz.durationMinutes,
       totalMarks: quiz.totalMarks,
       passingMarks: quiz.passingMarks,
+      startsAt: quiz.startsAt,
+      endsAt: quiz.endsAt,
       questions: sanitizedQuestions,
     };
   }

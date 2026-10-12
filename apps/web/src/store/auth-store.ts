@@ -4,11 +4,12 @@ interface AuthState {
   loading: boolean;
   remainingAttempts: number;
   isLocked: boolean;
+  lockedIdentifier: string | null;
   banExpiresAt: string | null;
   banRemainingSeconds: number | null;
   
   setLoading: (loading: boolean) => void;
-  setLockoutState: (state: Partial<Pick<AuthState, 'remainingAttempts' | 'isLocked' | 'banExpiresAt' | 'banRemainingSeconds'>>) => void;
+  setLockoutState: (state: Partial<Pick<AuthState, 'remainingAttempts' | 'isLocked' | 'lockedIdentifier' | 'banExpiresAt' | 'banRemainingSeconds'>>) => void;
   decrementAttempts: () => void;
   tickRemainingSeconds: () => void;
   resetLockout: () => void;
@@ -18,6 +19,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   loading: false,
   remainingAttempts: 5,
   isLocked: false,
+  lockedIdentifier: null,
   banExpiresAt: null,
   banRemainingSeconds: null,
 
@@ -35,6 +37,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (nextSecs <= 0) {
         return {
           isLocked: false,
+          lockedIdentifier: null,
           banExpiresAt: null,
           banRemainingSeconds: null,
           remainingAttempts: 5,
@@ -46,6 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({
       remainingAttempts: 5,
       isLocked: false,
+      lockedIdentifier: null,
       banExpiresAt: null,
       banRemainingSeconds: null,
     }),

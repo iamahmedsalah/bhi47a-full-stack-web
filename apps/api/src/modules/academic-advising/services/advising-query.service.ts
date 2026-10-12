@@ -52,6 +52,8 @@ interface CourseGradeSummary {
 export interface AdvisingCourseMapResponse {
   student: {
     name?: string;
+    nameAr?: string;
+    fullNameAr?: string;
     studentCode?: string;
     avatarUrl?: string;
     department?: string;
@@ -264,6 +266,8 @@ export class AdvisingQueryService {
         return {
           id: user._id,
           name: user.name,
+          nameAr: profile.fullNameAr || user.name,
+          fullNameAr: profile.fullNameAr || user.name,
           studentCode: user.studentCode,
           avatarUrl: user.avatarUrl,
           department: profile.department,
@@ -757,6 +761,8 @@ export class AdvisingQueryService {
     return {
       student: {
         name: studentObj.name,
+        nameAr: studentProfile?.fullNameAr || studentObj.name,
+        fullNameAr: studentProfile?.fullNameAr || studentObj.name,
         studentCode: studentObj.studentCode,
         avatarUrl: studentObj.avatarUrl,
         department: studentProfile?.department,
