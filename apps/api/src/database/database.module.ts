@@ -9,6 +9,7 @@ import { ConnectionHolder } from '../common/rate-limit/connection-holder';
 
 import { createMongooseMetricsPlugin } from './mongoose-metrics.plugin';
 import { MetricsService } from '../core/metrics/metrics.service';
+import { isServerlessRuntime } from '../common/utils/runtime.util';
 
 type ParsedDatabaseError = Error & {
   code?: string;
@@ -138,21 +139,29 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
 
         logger.log('Attempting database connection...', 'DatabaseModule');
 
+        const serverless = isServerlessRuntime();
+        const defaultMinPool = serverless ? '1' : '5';
+        const defaultMaxPool = serverless ? '10' : '50';
+
         const minPoolSize = Number(
-          configService.get<string>('MONGODB_MIN_POOL_SIZE', '5'),
+          configService.get<string>('MONGODB_MIN_POOL_SIZE', defaultMinPool),
         );
         const maxPoolSize = Number(
-          configService.get<string>('MONGODB_MAX_POOL_SIZE', '50'),
+          configService.get<string>('MONGODB_MAX_POOL_SIZE', defaultMaxPool),
         );
 
         return {
           uri,
           serverSelectionTimeoutMS: 15000,
           socketTimeoutMS: 45000,
-          // Keep warm connections so the first burst of parallel queries after
-          // boot/idle does not pay TCP + TLS + SCRAM handshakes per query.
-          minPoolSize: Number.isFinite(minPoolSize) ? minPoolSize : 5,
-          maxPoolSize: Number.isFinite(maxPoolSize) ? maxPoolSize : 50,
+          // Keep warm connections in persistent servers to avoid TLS handshakes per query burst.
+          // In serverless (Vercel), default to min=1 / max=10 to avoid connection exhaustion across lambda instances.
+          minPoolSize: Number.isFinite(minPoolSize)
+            ? minPoolSize
+            : Number(defaultMinPool),
+          maxPoolSize: Number.isFinite(maxPoolSize)
+            ? maxPoolSize
+            : Number(defaultMaxPool),
           maxIdleTimeMS: 300000,
           lookup: customLookup,
           connectionFactory: (connection: mongoose.Connection) => {
