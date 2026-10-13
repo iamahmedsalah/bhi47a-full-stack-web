@@ -66,3 +66,4 @@ export const QuizSubmissionSchema =
   SchemaFactory.createForClass(QuizSubmission);
 QuizSubmissionSchema.index({ quizId: 1, studentId: 1 }, { unique: true });
 QuizSubmissionSchema.index({ courseId: 1 });
+QuizSubmissionSchema.index({ studentId: 1, createdAt: -1 });

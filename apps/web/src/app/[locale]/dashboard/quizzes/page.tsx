@@ -158,7 +158,7 @@ const QuizQuestionsList = React.memo(function QuizQuestionsList({
   );
 });
 
-function LiveCountdown({
+const LiveCountdown = React.memo(function LiveCountdown({
   targetDate,
   isAr,
 }: {
@@ -219,7 +219,71 @@ function LiveCountdown({
       </span>
     </div>
   );
+});
+
+interface QuizTimerBadgeProps {
+  initialSeconds: number;
+  onTimeUp: () => void;
+  isAr: boolean;
 }
+
+const QuizTimerBadge = React.memo(function QuizTimerBadge({
+  initialSeconds,
+  onTimeUp,
+  isAr,
+}: QuizTimerBadgeProps) {
+  const [secondsRemaining, setSecondsRemaining] = useState(initialSeconds);
+  const onTimeUpRef = React.useRef(onTimeUp);
+
+  useEffect(() => {
+    onTimeUpRef.current = onTimeUp;
+  }, [onTimeUp]);
+
+  const [prevInitial, setPrevInitial] = useState(initialSeconds);
+  if (initialSeconds !== prevInitial) {
+    setPrevInitial(initialSeconds);
+    setSecondsRemaining(initialSeconds);
+  }
+
+  useEffect(() => {
+    if (secondsRemaining <= 0) return;
+    const interval = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onTimeUpRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [secondsRemaining]);
+
+  const mins = Math.floor(secondsRemaining / 60);
+  const secs = secondsRemaining % 60;
+  const isTimeCritical = secondsRemaining < 120;
+
+  return (
+    <div className="flex flex-col items-end gap-1.5 shrink-0">
+      <div
+        className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 font-mono text-sm font-bold border transition-colors ${
+          isTimeCritical
+            ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 animate-pulse'
+            : 'bg-primary/15 border-primary/30 text-primary'
+        }`}
+      >
+        <Clock className="h-4 w-4" />
+        <span>{`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`}</span>
+      </div>
+
+      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
+        <Check className="h-2.5 w-2.5" />
+        <span>{isAr ? 'يتم الحفظ تلقائياً' : 'Auto-saved'}</span>
+      </span>
+    </div>
+  );
+});
 
 function TakeQuizModal({
   quizId,
@@ -230,7 +294,6 @@ function TakeQuizModal({
 }: TakeQuizModalProps) {
   const queryClient = useQueryClient();
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<SubmitQuizResult | null>(null);
   const [terminatedByExit, setTerminatedByExit] = useState(false);
@@ -248,7 +311,7 @@ function TakeQuizModal({
 
   const attemptData = attemptQuery.data;
   const quiz = attemptData?.quiz;
-  const allowResume = attemptData?.allowResume ?? false;
+  const allowResume = (attemptData?.allowResume ?? (attemptData?.quiz as any)?.allowResume) !== false;
 
   const selectedAnswersRef = React.useRef(selectedAnswers);
   useEffect(() => {
@@ -258,7 +321,6 @@ function TakeQuizModal({
   // Load server attempt data and restore draft answers if resumed
   useEffect(() => {
     if (!attemptData || !open || submissionResult) return;
-    setSecondsRemaining(attemptData.remainingSeconds || 0);
 
     const initialAnswers: Record<string, number> = {};
     if (Array.isArray(attemptData.draftAnswers)) {
@@ -287,6 +349,14 @@ function TakeQuizModal({
   }, [attemptData, open, submissionResult, isAr]);
 
   const draftSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (draftSaveTimeoutRef.current) {
+        clearTimeout(draftSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectOption = React.useCallback(
     (questionId: string, optIndex: number) => {
@@ -369,22 +439,6 @@ function TakeQuizModal({
     handleAutoSubmitRef.current = handleAutoSubmit;
   });
 
-  // Countdown timer ticks every 1 second
-  useEffect(() => {
-    if (!open || submissionResult || terminatedByExit) return;
-    const interval = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleAutoSubmitRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [open, submissionResult, terminatedByExit]);
-
   // Anti-Cheat: Visibility change, pagehide, and beforeunload
   useEffect(() => {
     if (!open || submissionResult || terminatedByExit || !quizId) return;
@@ -450,19 +504,12 @@ function TakeQuizModal({
     };
   }, [open, submissionResult, terminatedByExit, quizId, allowResume, quiz, isAr]);
 
-  const formatTimer = (totalSec: number) => {
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const questionsCount = quiz?.questions?.length || 0;
   const answeredCount = useMemo(() => {
     return Object.values(selectedAnswers).filter(
       (idx) => typeof idx === 'number' && idx >= 0,
     ).length;
   }, [selectedAnswers]);
-  const isTimeCritical = secondsRemaining < 120; // under 2 minutes
 
   const handleClose = async () => {
     if (
@@ -514,7 +561,6 @@ function TakeQuizModal({
       setSubmissionResult(null);
       setTerminatedByExit(false);
       setSelectedAnswers({});
-      setSecondsRemaining(0);
       onOpenChange(false);
       onSubmitted();
       return;
@@ -745,24 +791,11 @@ function TakeQuizModal({
                   )}
                 </div>
 
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {/* Floating Timer Badge */}
-                  <div
-                    className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 font-mono text-sm font-bold border ${
-                      isTimeCritical
-                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 animate-pulse'
-                        : 'bg-primary/15 border-primary/30 text-primary'
-                    }`}
-                  >
-                    <Clock className="h-4 w-4" />
-                    <span>{formatTimer(secondsRemaining)}</span>
-                  </div>
-
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-medium">
-                    <Check className="h-2.5 w-2.5" />
-                    <span>{isAr ? 'يتم الحفظ تلقائياً' : 'Auto-saved'}</span>
-                  </span>
-                </div>
+                <QuizTimerBadge
+                  initialSeconds={attemptData?.remainingSeconds || 0}
+                  onTimeUp={handleAutoSubmit}
+                  isAr={isAr}
+                />
               </div>
 
               {/* Progress info */}
@@ -917,13 +950,13 @@ function QuizStartInstructionDialog({
         {/* Warning & Instructions rules */}
         <div
           className={`space-y-2.5 rounded-xl border p-3.5 text-xs ${
-            quiz.allowResume
+            quiz.allowResume !== false
               ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200/90'
               : 'border-amber-500/25 bg-amber-500/10 text-amber-200/90'
           }`}
         >
           <div className="flex items-center gap-2 font-bold">
-            {quiz.allowResume ? (
+            {quiz.allowResume !== false ? (
               <>
                 <RotateCcw className="h-4 w-4 text-cyan-400 shrink-0" />
                 <span className="text-cyan-300">
@@ -940,7 +973,7 @@ function QuizStartInstructionDialog({
             )}
           </div>
           <ul className="space-y-1.5 list-disc list-inside text-[11px] leading-relaxed">
-            {quiz.allowResume ? (
+            {quiz.allowResume !== false ? (
               <>
                 <li>
                   <strong>{isAr ? 'استئناف المحاولة عند الانقطاع:' : 'Resume on Disconnect:'}</strong>{' '}
@@ -1283,11 +1316,75 @@ export default function StudentQuizzesPage() {
     }));
   };
 
-  const totalQuizScore = historyItems.reduce((acc, curr) => acc + curr.totalGrade, 0);
-  const totalMaxScore = historyItems.reduce((acc, curr) => acc + curr.maxTotalGrade, 0);
-  const overallPercentage =
-    totalMaxScore > 0 ? Math.round((totalQuizScore / totalMaxScore) * 100) : 0;
-  const totalCourses = historyItems.length;
+  const combinedCourses = useMemo(() => {
+    const coursesMap: Record<
+      string,
+      {
+        courseId: string;
+        courseCode: string;
+        courseName: string;
+        uploadedQuizzes: QuizEntry[];
+        onlineQuizzes: StudentQuizViewItem[];
+        totalGrade: number;
+        maxTotalGrade: number;
+      }
+    > = {};
+
+    for (const c of historyItems) {
+      coursesMap[c.courseCode] = {
+        courseId: c._id,
+        courseCode: c.courseCode,
+        courseName: c.courseName,
+        uploadedQuizzes: c.quizzes || [],
+        onlineQuizzes: [],
+        totalGrade: c.totalGrade,
+        maxTotalGrade: c.maxTotalGrade,
+      };
+    }
+
+    for (const q of onlineQuizzes) {
+      if (!q.isSubmitted && q.attemptStatus !== 'terminated_by_exit') continue;
+      const code = q.courseCode;
+      if (!coursesMap[code]) {
+        coursesMap[code] = {
+          courseId: q.courseId,
+          courseCode: q.courseCode,
+          courseName: isAr
+            ? q.courseNameAr || q.courseName
+            : q.courseNameEn || q.courseName,
+          uploadedQuizzes: [],
+          onlineQuizzes: [],
+          totalGrade: 0,
+          maxTotalGrade: 0,
+        };
+      }
+      coursesMap[code].onlineQuizzes.push(q);
+      if (q.submission) {
+        coursesMap[code].totalGrade += q.submission.score;
+        coursesMap[code].maxTotalGrade += q.submission.totalMarks;
+      }
+    }
+
+    return Object.values(coursesMap);
+  }, [historyItems, onlineQuizzes, isAr]);
+
+  const { allTotalGrade, allMaxTotalGrade, combinedOverallPct, totalCompletedQuizzes } =
+    useMemo(() => {
+      const allTotal = combinedCourses.reduce((acc, c) => acc + c.totalGrade, 0);
+      const allMax = combinedCourses.reduce((acc, c) => acc + c.maxTotalGrade, 0);
+      const overallPct =
+        allMax > 0 ? Math.round((allTotal / allMax) * 100) : 0;
+      const completed = combinedCourses.reduce(
+        (acc, c) => acc + c.uploadedQuizzes.length + c.onlineQuizzes.length,
+        0,
+      );
+      return {
+        allTotalGrade: allTotal,
+        allMaxTotalGrade: allMax,
+        combinedOverallPct: overallPct,
+        totalCompletedQuizzes: completed,
+      };
+    }, [combinedCourses]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
@@ -1363,10 +1460,10 @@ export default function StudentQuizzesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {onlineQuizzes.map((quiz) => {
-                const isStrictLocked = quiz.attemptStatus === 'in_progress' && !quiz.allowResume;
+                const isStrictLocked = quiz.attemptStatus === 'in_progress' && quiz.allowResume === false;
                 const isTerminated = quiz.attemptStatus === 'terminated_by_exit' || isStrictLocked;
                 const isInProgress = quiz.attemptStatus === 'in_progress';
-                const canTake = quiz.isOpen && !quiz.isSubmitted && !isTerminated && (!isInProgress || quiz.allowResume);
+                const canTake = quiz.isOpen && !quiz.isSubmitted && !isTerminated && (!isInProgress || quiz.allowResume !== false);
 
                 return (
                   <motion.div
@@ -1392,7 +1489,7 @@ export default function StudentQuizzesPage() {
                               <AlertTriangle className="h-3 w-3" />
                               <span>{isAr ? 'ملغى (خروج)' : 'Terminated'}</span>
                             </span>
-                          ) : isInProgress && quiz.allowResume ? (
+                          ) : isInProgress && quiz.allowResume !== false ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-xs font-bold text-cyan-400">
                               <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                               <span>{isAr ? 'جارٍ وقابل للاستئناف' : 'In Progress (Resumable)'}</span>
@@ -1573,12 +1670,12 @@ export default function StudentQuizzesPage() {
                           <Button
                             onClick={() => setConfirmStartQuiz(quiz)}
                             className={`w-full font-bold text-white rounded-squircle gap-2 shadow-lg ${
-                              isInProgress && quiz.allowResume
+                              isInProgress && quiz.allowResume !== false
                                 ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-600/20'
                                 : 'bg-primary hover:bg-primary-hover shadow-primary/20'
                             }`}
                           >
-                            {isInProgress && quiz.allowResume ? (
+                            {isInProgress && quiz.allowResume !== false ? (
                               <>
                                 <RotateCcw className="h-4 w-4" />
                                 <span>{isAr ? 'استئناف الاختبار الجاري' : 'Resume Quiz in Progress'}</span>
@@ -1631,85 +1728,19 @@ export default function StudentQuizzesPage() {
               error={historyQuery.error}
               onRetry={() => historyQuery.refetch()}
             />
+          ) : combinedCourses.length === 0 ? (
+            <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)]">
+              <EmptyState
+                title={isEnglish ? 'No quiz records found' : 'لا توجد سجلات درجات للكويزات'}
+                description={
+                  isEnglish
+                    ? 'No online quizzes submitted or coursework evaluations uploaded yet.'
+                    : 'لم يتم تسليم أي اختبارات إلكترونية أو رفع درجات أعمال سنة لك بعد.'
+                }
+              />
+            </Card>
           ) : (
-            (() => {
-              // Build unified course grades combining Excel uploads & live Online Quizzes
-              const coursesMap: Record<
-                string,
-                {
-                  courseId: string;
-                  courseCode: string;
-                  courseName: string;
-                  uploadedQuizzes: QuizEntry[];
-                  onlineQuizzes: StudentQuizViewItem[];
-                  totalGrade: number;
-                  maxTotalGrade: number;
-                }
-              > = {};
-
-              for (const c of historyItems) {
-                coursesMap[c.courseCode] = {
-                  courseId: c._id,
-                  courseCode: c.courseCode,
-                  courseName: c.courseName,
-                  uploadedQuizzes: c.quizzes || [],
-                  onlineQuizzes: [],
-                  totalGrade: c.totalGrade,
-                  maxTotalGrade: c.maxTotalGrade,
-                };
-              }
-
-              for (const q of onlineQuizzes) {
-                if (!q.isSubmitted && q.attemptStatus !== 'terminated_by_exit') continue;
-                const code = q.courseCode;
-                if (!coursesMap[code]) {
-                  coursesMap[code] = {
-                    courseId: q.courseId,
-                    courseCode: q.courseCode,
-                    courseName: isAr
-                      ? q.courseNameAr || q.courseName
-                      : q.courseNameEn || q.courseName,
-                    uploadedQuizzes: [],
-                    onlineQuizzes: [],
-                    totalGrade: 0,
-                    maxTotalGrade: 0,
-                  };
-                }
-                coursesMap[code].onlineQuizzes.push(q);
-                if (q.submission) {
-                  coursesMap[code].totalGrade += q.submission.score;
-                  coursesMap[code].maxTotalGrade += q.submission.totalMarks;
-                }
-              }
-
-              const combinedCourses = Object.values(coursesMap);
-
-              if (combinedCourses.length === 0) {
-                return (
-                  <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)]">
-                    <EmptyState
-                      title={isEnglish ? 'No quiz records found' : 'لا توجد سجلات درجات للكويزات'}
-                      description={
-                        isEnglish
-                          ? 'No online quizzes submitted or coursework evaluations uploaded yet.'
-                          : 'لم يتم تسليم أي اختبارات إلكترونية أو رفع درجات أعمال سنة لك بعد.'
-                      }
-                    />
-                  </Card>
-                );
-              }
-
-              const allTotalGrade = combinedCourses.reduce((acc, c) => acc + c.totalGrade, 0);
-              const allMaxTotalGrade = combinedCourses.reduce((acc, c) => acc + c.maxTotalGrade, 0);
-              const combinedOverallPct =
-                allMaxTotalGrade > 0 ? Math.round((allTotalGrade / allMaxTotalGrade) * 100) : 0;
-              const totalCompletedQuizzes = combinedCourses.reduce(
-                (acc, c) => acc + c.uploadedQuizzes.length + c.onlineQuizzes.length,
-                0,
-              );
-
-              return (
-                <>
+            <>
                   {/* Summary widgets */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
@@ -1975,8 +2006,6 @@ export default function StudentQuizzesPage() {
                     })}
                   </div>
                 </>
-              );
-            })()
           )}
         </div>
       )}

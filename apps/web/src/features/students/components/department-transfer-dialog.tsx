@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLocale } from 'next-intl';
 import {
   Dialog,
@@ -82,9 +82,15 @@ export function DepartmentTransferDialog({
     student ? [student] : selectedStudents,
   );
 
-  useEffect(() => {
+  const [prevDeps, setPrevDeps] = useState({ student, selectedStudents, open });
+  if (
+    prevDeps.student !== student ||
+    prevDeps.selectedStudents !== selectedStudents ||
+    prevDeps.open !== open
+  ) {
+    setPrevDeps({ student, selectedStudents, open });
     setActiveStudents(student ? [student] : selectedStudents);
-  }, [student, selectedStudents, open]);
+  }
 
   const [targetDepartment, setTargetDepartment] = useState<string>(() => {
     if (student) {

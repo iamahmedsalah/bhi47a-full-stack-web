@@ -111,7 +111,7 @@ export class CreateQuizDto {
   @IsBoolean()
   allowReview?: boolean;
 
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   allowResume?: boolean;
@@ -176,7 +176,7 @@ export class UpdateQuizDto {
   @IsBoolean()
   allowReview?: boolean;
 
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   allowResume?: boolean;

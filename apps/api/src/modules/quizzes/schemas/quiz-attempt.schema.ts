@@ -60,3 +60,5 @@ export class QuizAttempt {
 
 export const QuizAttemptSchema = SchemaFactory.createForClass(QuizAttempt);
 QuizAttemptSchema.index({ quizId: 1, studentId: 1 }, { unique: true });
+QuizAttemptSchema.index({ studentId: 1, status: 1 });
+QuizAttemptSchema.index({ quizId: 1, status: 1 });

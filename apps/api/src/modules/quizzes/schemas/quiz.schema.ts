@@ -90,7 +90,7 @@ export class Quiz {
   @Prop({ default: true })
   allowReview!: boolean;
 
-  @Prop({ default: false })
+  @Prop({ default: true })
   allowResume!: boolean;
 
   @Prop({ type: Array, default: [] })
@@ -99,4 +99,5 @@ export class Quiz {
 
 export const QuizSchema = SchemaFactory.createForClass(Quiz);
 QuizSchema.index({ courseId: 1, isPublished: 1 });
+QuizSchema.index({ courseId: 1, isPublished: 1, startsAt: 1, endsAt: 1 });
 QuizSchema.index({ creatorId: 1 });

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   GraduationCap,
@@ -46,20 +46,20 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
   const [summerMaxCredits, setSummerMaxCredits] = useState(9);
   const [summerProbationMaxCredits, setSummerProbationMaxCredits] = useState(6);
 
-  useEffect(() => {
-    if (rulesQuery.data) {
-      const data = rulesQuery.data;
-      setMaxCoursesLimit(data.maxCoursesLimit ?? 6);
-      setPreventHigherLevelCourses(data.preventHigherLevelCourses ?? true);
-      setAllowLowGradeImprovementFallback(data.allowLowGradeImprovementFallback ?? true);
-      setEnforceDepartmentLevel3And4(data.enforceDepartmentLevel3And4 ?? true);
-      setProbationMaxCredits(data.probationMaxCredits ?? 12);
-      setRegularMaxCredits(data.regularMaxCredits ?? 18);
-      setGraduatingMaxCredits(data.graduatingMaxCredits ?? 21);
-      setSummerMaxCredits(data.summerMaxCredits ?? 9);
-      setSummerProbationMaxCredits(data.summerProbationMaxCredits ?? 6);
-    }
-  }, [rulesQuery.data]);
+  const [prevData, setPrevData] = useState<typeof rulesQuery.data>(undefined);
+  if (rulesQuery.data && rulesQuery.data !== prevData) {
+    setPrevData(rulesQuery.data);
+    const data = rulesQuery.data;
+    setMaxCoursesLimit(data.maxCoursesLimit ?? 6);
+    setPreventHigherLevelCourses(data.preventHigherLevelCourses ?? true);
+    setAllowLowGradeImprovementFallback(data.allowLowGradeImprovementFallback ?? true);
+    setEnforceDepartmentLevel3And4(data.enforceDepartmentLevel3And4 ?? true);
+    setProbationMaxCredits(data.probationMaxCredits ?? 12);
+    setRegularMaxCredits(data.regularMaxCredits ?? 18);
+    setGraduatingMaxCredits(data.graduatingMaxCredits ?? 21);
+    setSummerMaxCredits(data.summerMaxCredits ?? 9);
+    setSummerProbationMaxCredits(data.summerProbationMaxCredits ?? 6);
+  }
 
   const updateMutation = useMutation({
     mutationFn: async () => {

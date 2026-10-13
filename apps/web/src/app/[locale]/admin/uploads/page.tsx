@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense, useMemo, useEffect } from 'react';
+import React, { useState, Suspense, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import {
@@ -142,11 +142,13 @@ function UploadsPageContent() {
     uploadType === 'grades' || uploadType === 'quizzes' || uploadType === 'attendance',
   );
 
-  useEffect(() => {
+  const [prevUploadType, setPrevUploadType] = useState(uploadType);
+  if (uploadType !== prevUploadType) {
+    setPrevUploadType(uploadType);
     setAllowDuplicateStudentCode(
       uploadType === 'grades' || uploadType === 'quizzes' || uploadType === 'attendance',
     );
-  }, [uploadType]);
+  }
 
   const reInspectWithOption = async (newAllowDuplicate: boolean) => {
     setAllowDuplicateStudentCode(newAllowDuplicate);

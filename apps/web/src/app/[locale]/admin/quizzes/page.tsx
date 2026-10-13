@@ -120,7 +120,7 @@ function QuizFormDialog({
   const [endsAt, setEndsAt] = useState(toDateTimeLocal(initialValues.endsAt));
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? true);
-  const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? false);
+  const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
   const [uploadingExcel, setUploadingExcel] = useState(false);
   const [excelErrors, setExcelErrors] = useState<string[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -156,7 +156,7 @@ function QuizFormDialog({
       setEndsAt(toDateTimeLocal(initialValues.endsAt));
       setIsPublished(initialValues.isPublished ?? true);
       setAllowReview(initialValues.allowReview ?? true);
-      setAllowResume(initialValues.allowResume ?? false);
+      setAllowResume(initialValues.allowResume ?? true);
       setUploadingExcel(false);
       setExcelErrors([]);
       setQuestions(
@@ -614,7 +614,7 @@ function QuizFormDialog({
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className={`h-4 w-4 shrink-0 ${allowResume ? 'text-amber-400' : 'text-cyan-400'}`} />
+                  <ShieldAlert className={`h-4 w-4 shrink-0 ${allowResume ? 'text-teal-400' : 'text-amber-400'}`} />
                   <span className="text-xs font-bold text-foreground">
                     {isAr
                       ? 'سماح للطالب باستئناف الاختبار عند الانقطاع أو الخروج (Anti-Cheat / Resume)'
@@ -622,19 +622,19 @@ function QuizFormDialog({
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     allowResume
-                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
-                      : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400'
+                      ? 'border-teal-500/30 bg-teal-500/10 text-teal-400'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-400'
                   }`}>
                     {allowResume
-                      ? (isAr ? 'الوضع المرن' : 'Flexible Resume')
+                      ? (isAr ? 'الوضع المرن (افتراضي)' : 'Flexible Resume (Default)')
                       : (isAr ? 'الوضع المشدد ضد الغش' : 'Strict Anti-Cheat')}
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
                   {allowResume
                     ? (isAr
-                        ? 'الوضع المرن: في حالة انقطاع الاتصال أو تحديث الصفحة، يحتفظ النظام بإجابات الطالب ويستأنف العداد التنازلي من الوقت المتبقي المحسوب خادمياً.'
-                        : 'Flexible Mode: If disconnected or refreshed, answers are restored and countdown resumes from server-calculated time remaining.')
+                        ? 'الوضع المرن (موصى به): في حالة انقطاع الاتصال أو تحديث الصفحة أو الخروج المؤقت، يحتفظ النظام بإجابات الطالب ويستأنف العداد التنازلي من الوقت المتبقي المحسوب خادمياً دون حظر الطالب أو إنهاء محاولته.'
+                        : 'Flexible Mode (Recommended): If disconnected, refreshed, or closed temporarily, answers are autosaved and countdown resumes from server-calculated time remaining without locking the student.')
                     : (isAr
                         ? 'الوضع المشدد (محاولة واحدة ضد الغش): يُمنع خروج الطالب أو تبديل التبويب أو تصغير النافذة؛ يؤدي الخروج فوراً إلى تسليم الإجابات وإنهاء المحاولة نهائياً.'
                         : 'Strict Anti-Cheat Mode: Single entry. Switching tabs, minimizing, or exiting immediately finalizes and locks the attempt.')}

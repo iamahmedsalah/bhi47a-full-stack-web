@@ -152,7 +152,8 @@ export class QuizzesService {
       passingMarks,
       startsAt: startsAtVal ? new Date(startsAtVal) : undefined,
       endsAt: endsAtVal ? new Date(endsAtVal) : undefined,
-      allowResume: Boolean(dto.allowResume),
+      allowResume:
+        dto.allowResume !== undefined ? Boolean(dto.allowResume) : true,
     });
 
     const saved = await quiz.save();
@@ -397,12 +398,13 @@ export class QuizzesService {
 
     const studentUserObjectId = new Types.ObjectId(studentUserId);
 
-    // 1. Find registered courses for current term
+    // 1. Find registered courses for current term (project only courses field)
     const registrations = await this.registrationModel
       .find({
         studentId: studentUserObjectId,
         status: { $in: ['approved', 'registered', 'confirmed'] },
       })
+      .select('courses')
       .sort({ createdAt: -1 })
       .limit(3)
       .lean();
@@ -450,14 +452,14 @@ export class QuizzesService {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt allowResume questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
 
     if (quizzes.length === 0) return [];
 
-    // 3. Find student's submissions and active attempts
+    // 3. Find student's submissions and active attempts in parallel with narrow projections
     const quizIds = quizzes.map((q) => q._id);
     const [submissions, attempts] = await Promise.all([
       this.submissionModel
@@ -465,12 +467,16 @@ export class QuizzesService {
           quizId: { $in: quizIds },
           studentId: studentUserObjectId,
         })
+        .select(
+          'quizId score totalMarks percentage isPassed submittedAt durationSeconds',
+        )
         .lean(),
       this.attemptModel
         .find({
           quizId: { $in: quizIds },
           studentId: studentUserObjectId,
         })
+        .select('quizId status')
         .lean(),
     ]);
 
@@ -479,13 +485,16 @@ export class QuizzesService {
     );
     const attemptsMap = new Map(attempts.map((a) => [a.quizId.toString(), a]));
 
-    const now = new Date();
+    const nowMs = Date.now();
 
     return quizzes.map((quiz) => {
-      const submission = submissionsMap.get(quiz._id.toString());
-      const attempt = attemptsMap.get(quiz._id.toString());
-      const isStarted = !quiz.startsAt || new Date(quiz.startsAt) <= now;
-      const isEnded = quiz.endsAt && new Date(quiz.endsAt) < now;
+      const qIdStr = quiz._id.toString();
+      const submission = submissionsMap.get(qIdStr);
+      const attempt = attemptsMap.get(qIdStr);
+      const startsAtMs = quiz.startsAt ? new Date(quiz.startsAt).getTime() : 0;
+      const endsAtMs = quiz.endsAt ? new Date(quiz.endsAt).getTime() : 0;
+      const isStarted = !startsAtMs || startsAtMs <= nowMs;
+      const isEnded = Boolean(endsAtMs && endsAtMs < nowMs);
       const isOpen = isStarted && !isEnded;
 
       return {
@@ -505,7 +514,7 @@ export class QuizzesService {
         questionsCount: quiz.questions?.length || 0,
         startsAt: quiz.startsAt,
         endsAt: quiz.endsAt,
-        allowResume: Boolean(quiz.allowResume),
+        allowResume: quiz.allowResume !== false,
         allowReview: Boolean(quiz.allowReview ?? true),
         isOpen,
         isEnded,
@@ -526,7 +535,16 @@ export class QuizzesService {
   }
 
   async getQuizForTaking(quizId: string, studentUserId: string) {
-    const quiz = await this.findOne(quizId);
+    const studentUserObjectId = new Types.ObjectId(studentUserId);
+
+    const [quiz, existing] = await Promise.all([
+      this.findOne(quizId),
+      this.submissionModel.findOne({
+        quizId: new Types.ObjectId(quizId),
+        studentId: studentUserObjectId,
+      }),
+    ]);
+
     if (!quiz.isPublished) {
       throw new ForbiddenException('هذا الاختبار غير متاح حالياً');
     }
@@ -539,13 +557,7 @@ export class QuizzesService {
       throw new ForbiddenException('انتهى موعد تقديم الاختبار');
     }
 
-    const studentUserObjectId = new Types.ObjectId(studentUserId);
-
     // Check if already submitted
-    const existing = await this.submissionModel.findOne({
-      quizId: new Types.ObjectId(quizId),
-      studentId: studentUserObjectId,
-    });
     if (existing) {
       throw new ConflictException('لقد قمت بتقديم هذا الاختبار بالفعل');
     }
@@ -601,7 +613,7 @@ export class QuizzesService {
       }
 
       if (attempt.status === 'in_progress') {
-        if (!quiz.allowResume) {
+        if (quiz.allowResume === false) {
           // Strict anti-cheat: Disconnect or exit lock
           attempt.status = 'terminated_by_exit';
           await attempt.save();
@@ -689,7 +701,7 @@ export class QuizzesService {
       startedAt: new Date(now),
       expiresAt,
       status: 'in_progress',
-      allowResume: Boolean(quiz.allowResume),
+      allowResume: quiz.allowResume !== false,
       draftAnswers: [],
       exitCount: 0,
       lastActiveAt: new Date(now),
@@ -703,7 +715,7 @@ export class QuizzesService {
       startedAt: attempt.startedAt,
       expiresAt: attempt.expiresAt,
       remainingSeconds,
-      allowResume: Boolean(quiz.allowResume),
+      allowResume: quiz.allowResume !== false,
       draftAnswers: [],
       isResumed: false,
     };
@@ -781,7 +793,7 @@ export class QuizzesService {
       attempt.draftAnswers = cleanAnswers;
     }
 
-    if (!quiz.allowResume) {
+    if (quiz.allowResume === false) {
       // Strict Anti-Cheat Mode: Auto-submit immediate payload and terminate attempt
       const submission = await this.autoSubmitAttempt(
         quiz,
@@ -829,12 +841,17 @@ export class QuizzesService {
    * Submit quiz with automated grading and atomic state locking.
    */
   async submitQuiz(quizId: string, studentUserId: string, dto: SubmitQuizDto) {
-    const quiz = await this.findOne(quizId);
+    const studentUserObjectId = new Types.ObjectId(studentUserId);
+
+    // Concurrently fetch quiz and student profile to reduce submission latency
+    const [quiz, studentProfile] = await Promise.all([
+      this.findOne(quizId),
+      this.studentProfileModel.findOne({ userId: studentUserObjectId }).lean(),
+    ]);
+
     if (!quiz.isPublished) {
       throw new ForbiddenException('هذا الاختبار غير متاح');
     }
-
-    const studentUserObjectId = new Types.ObjectId(studentUserId);
 
     // Atomically lock active attempt to prevent submission race conditions
     await this.attemptModel.findOneAndUpdate(
@@ -859,11 +876,6 @@ export class QuizzesService {
     if (existing) {
       throw new ConflictException('لقد قمت بتسليم هذا الاختبار مسبقاً');
     }
-
-    // Fetch student info
-    const studentProfile = await this.studentProfileModel
-      .findOne({ userId: studentUserObjectId })
-      .lean();
 
     const studentCode = studentProfile?.studentCode || 'N/A';
     const studentName =
