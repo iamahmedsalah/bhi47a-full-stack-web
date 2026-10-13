@@ -97,6 +97,75 @@ interface QuizQuestionsListProps {
   isAr: boolean;
 }
 
+interface QuizQuestionItemProps {
+  question: {
+    id: string;
+    text: string;
+    type?: string;
+    options: string[];
+    points?: number;
+  };
+  qIndex: number;
+  selectedOptionIndex: number | undefined;
+  onSelectOption: (questionId: string, optIndex: number) => void;
+  isAr: boolean;
+}
+
+const QuizQuestionItem = React.memo(function QuizQuestionItem({
+  question,
+  qIndex,
+  selectedOptionIndex,
+  onSelectOption,
+  isAr,
+}: QuizQuestionItemProps) {
+  return (
+    <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+            {qIndex + 1}
+          </span>
+          <p className="text-sm font-bold text-foreground leading-snug">
+            {question.text}
+          </p>
+        </div>
+        <span className="shrink-0 text-[11px] font-semibold text-muted-foreground font-mono">
+          {question.points} {isAr ? 'درجة' : 'pts'}
+        </span>
+      </div>
+
+      {/* Options */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+        {(question.options || []).map((opt, optIndex) => {
+          const isSelected = selectedOptionIndex === optIndex;
+          return (
+            <div
+              key={optIndex}
+              onClick={() => onSelectOption(question.id, optIndex)}
+              className={`flex items-center gap-2.5 rounded-squircle border p-3 cursor-pointer text-xs transition-all ${
+                isSelected
+                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-sm'
+                  : 'border-border/60 bg-secondary/30 hover:bg-secondary/50 text-foreground'
+              }`}
+            >
+              <div
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                  isSelected
+                    ? 'border-primary bg-primary text-white'
+                    : 'border-muted-foreground/60'
+                }`}
+              >
+                {isSelected && <Check className="h-3 w-3" />}
+              </div>
+              <span>{opt}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
 const QuizQuestionsList = React.memo(function QuizQuestionsList({
   questions,
   selectedAnswers,
@@ -106,57 +175,48 @@ const QuizQuestionsList = React.memo(function QuizQuestionsList({
   return (
     <div className="space-y-4 max-h-[55vh] overflow-y-auto pe-1 text-start">
       {questions.map((q, qIndex) => (
-        <div
+        <QuizQuestionItem
           key={q.id}
-          className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-3"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-                {qIndex + 1}
-              </span>
-              <p className="text-sm font-bold text-foreground leading-snug">
-                {q.text}
-              </p>
-            </div>
-            <span className="shrink-0 text-[11px] font-semibold text-muted-foreground font-mono">
-              {q.points} {isAr ? 'درجة' : 'pts'}
-            </span>
-          </div>
-
-          {/* Options */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-            {(q.options || []).map((opt, optIndex) => {
-              const isSelected = selectedAnswers[q.id] === optIndex;
-              return (
-                <div
-                  key={optIndex}
-                  onClick={() => onSelectOption(q.id, optIndex)}
-                  className={`flex items-center gap-2.5 rounded-squircle border p-3 cursor-pointer text-xs transition-all ${
-                    isSelected
-                      ? 'border-primary bg-primary/10 text-primary font-semibold shadow-sm'
-                      : 'border-border/60 bg-secondary/30 hover:bg-secondary/50 text-foreground'
-                  }`}
-                >
-                  <div
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                      isSelected
-                        ? 'border-primary bg-primary text-white'
-                        : 'border-muted-foreground/60'
-                    }`}
-                  >
-                    {isSelected && <Check className="h-3 w-3" />}
-                  </div>
-                  <span>{opt}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+          question={q}
+          qIndex={qIndex}
+          selectedOptionIndex={selectedAnswers[q.id]}
+          onSelectOption={onSelectOption}
+          isAr={isAr}
+        />
       ))}
     </div>
   );
 });
+
+// Centralized 1-second ticker listeners to eliminate N intervals across cards
+const globalTimerListeners = new Set<() => void>();
+let globalTimerInterval: NodeJS.Timeout | null = null;
+
+function subscribeToGlobalTimer(callback: () => void) {
+  globalTimerListeners.add(callback);
+  if (!globalTimerInterval) {
+    globalTimerInterval = setInterval(() => {
+      globalTimerListeners.forEach((cb) => cb());
+    }, 1000);
+  }
+  return () => {
+    globalTimerListeners.delete(callback);
+    if (globalTimerListeners.size === 0 && globalTimerInterval) {
+      clearInterval(globalTimerInterval);
+      globalTimerInterval = null;
+    }
+  };
+}
+
+function useGlobalSecondsTicker() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    return subscribeToGlobalTimer(() => {
+      setNow(Date.now());
+    });
+  }, []);
+  return now;
+}
 
 const LiveCountdown = React.memo(function LiveCountdown({
   targetDate,
@@ -165,42 +225,13 @@ const LiveCountdown = React.memo(function LiveCountdown({
   targetDate: string;
   isAr: boolean;
 }) {
-  const [timeLeft, setTimeLeft] = useState<{
-    hours: number;
-    minutes: number;
-    seconds: number;
-    isPast: boolean;
-  }>(() => {
-    const diff = Math.max(
-      0,
-      Math.floor((new Date(targetDate).getTime() - Date.now()) / 1000),
-    );
-    return {
-      hours: Math.floor(diff / 3600),
-      minutes: Math.floor((diff % 3600) / 60),
-      seconds: diff % 60,
-      isPast: diff <= 0,
-    };
-  });
+  const now = useGlobalSecondsTicker();
+  const diff = Math.max(
+    0,
+    Math.floor((new Date(targetDate).getTime() - now) / 1000),
+  );
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const diff = Math.max(
-        0,
-        Math.floor((new Date(targetDate).getTime() - Date.now()) / 1000),
-      );
-      setTimeLeft({
-        hours: Math.floor(diff / 3600),
-        minutes: Math.floor((diff % 3600) / 60),
-        seconds: diff % 60,
-        isPast: diff <= 0,
-      });
-      if (diff <= 0) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [targetDate]);
-
-  if (timeLeft.isPast) {
+  if (diff <= 0) {
     return (
       <span className="text-xs text-teal-400 font-bold">
         {isAr ? 'يفتح الآن!' : 'Opening now!'}
@@ -208,6 +239,9 @@ const LiveCountdown = React.memo(function LiveCountdown({
     );
   }
 
+  const hours = Math.floor(diff / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+  const seconds = diff % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
 
   return (
@@ -215,7 +249,7 @@ const LiveCountdown = React.memo(function LiveCountdown({
       <Clock className="h-3.5 w-3.5 animate-spin" />
       <span>{isAr ? 'يبدأ خلال:' : 'Opens in:'}</span>
       <span>
-        {pad(timeLeft.hours)}:{pad(timeLeft.minutes)}:{pad(timeLeft.seconds)}
+        {pad(hours)}:{pad(minutes)}:{pad(seconds)}
       </span>
     </div>
   );
@@ -349,6 +383,7 @@ function TakeQuizModal({
   }, [attemptData, open, submissionResult, isAr]);
 
   const draftSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const lastSavedHashRef = React.useRef<string>('');
 
   useEffect(() => {
     return () => {
@@ -361,6 +396,7 @@ function TakeQuizModal({
   const handleSelectOption = React.useCallback(
     (questionId: string, optIndex: number) => {
       setSelectedAnswers((prev) => {
+        if (prev[questionId] === optIndex) return prev;
         const next = { ...prev, [questionId]: optIndex };
         selectedAnswersRef.current = next;
         return next;
@@ -380,10 +416,15 @@ function TakeQuizModal({
             questionId: qId,
             selectedOptionIndex: idx,
           }));
+
+        const hash = JSON.stringify(answersPayload);
+        if (hash === lastSavedHashRef.current) return;
+        lastSavedHashRef.current = hash;
+
         if (answersPayload.length > 0) {
           saveQuizDraft(quizId, answersPayload).catch(() => {});
         }
-      }, 300);
+      }, 1000);
     },
     [quizId],
   );
@@ -484,6 +525,19 @@ function TakeQuizModal({
           questionId: qId,
           selectedOptionIndex: idx,
         }));
+
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        try {
+          const blob = new Blob(
+            [JSON.stringify({ answers: answersPayload, eventType: 'pagehide' })],
+            { type: 'application/json' },
+          );
+          navigator.sendBeacon(`/api/quizzes/${quizId}/exit`, blob);
+          return;
+        } catch {
+          // Fallback to recordQuizExit
+        }
+      }
       void recordQuizExit(quizId, answersPayload, 'pagehide');
     };
 
@@ -1386,6 +1440,10 @@ export default function StudentQuizzesPage() {
       };
     }, [combinedCourses]);
 
+  const activeOpenQuizzesCount = useMemo(() => {
+    return onlineQuizzes.filter((q) => q.isOpen && !q.isSubmitted).length;
+  }, [onlineQuizzes]);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
       {/* Title */}
@@ -1414,9 +1472,9 @@ export default function StudentQuizzesPage() {
         >
           <HelpCircle className="h-4 w-4" />
           <span>{isAr ? 'الاختبارات الإلكترونية النشطة' : 'Active Online Quizzes'}</span>
-          {onlineQuizzes.filter((q) => q.isOpen && !q.isSubmitted).length > 0 && (
+          {activeOpenQuizzesCount > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/20 px-1 text-[11px] font-bold text-primary">
-              {onlineQuizzes.filter((q) => q.isOpen && !q.isSubmitted).length}
+              {activeOpenQuizzesCount}
             </span>
           )}
         </button>

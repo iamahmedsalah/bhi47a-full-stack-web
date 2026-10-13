@@ -854,7 +854,7 @@ export class QuizzesService {
     }
 
     // Atomically lock active attempt to prevent submission race conditions
-    await this.attemptModel.findOneAndUpdate(
+    const lockedAttempt = await this.attemptModel.findOneAndUpdate(
       {
         quizId: quiz._id,
         studentId: studentUserObjectId,
@@ -866,15 +866,21 @@ export class QuizzesService {
           submittedAt: new Date(),
         },
       },
+      { new: false },
     );
 
-    // Prevent duplicate submissions in QuizSubmission
-    const existing = await this.submissionModel.findOne({
-      quizId: new Types.ObjectId(quizId),
-      studentId: studentUserObjectId,
-    });
-    if (existing) {
-      throw new ConflictException('لقد قمت بتسليم هذا الاختبار مسبقاً');
+    if (!lockedAttempt) {
+      // Prevent duplicate submissions in QuizSubmission if already locked or finished
+      const existing = await this.submissionModel.findOne({
+        quizId: new Types.ObjectId(quizId),
+        studentId: studentUserObjectId,
+      });
+      if (existing) {
+        throw new ConflictException('لقد قمت بتسليم هذا الاختبار مسبقاً');
+      }
+      throw new ForbiddenException(
+        'لا توجد جلسة اختبار نشطة للتسليم أو تم إنهاؤها مسبقاً',
+      );
     }
 
     const studentCode = studentProfile?.studentCode || 'N/A';
