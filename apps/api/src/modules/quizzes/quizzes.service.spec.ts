@@ -416,9 +416,9 @@ describe('QuizzesService Unit Tests', () => {
         allowReview: false,
       });
 
-      await expect(service.getQuizReview(quizId, studentUserId)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.getQuizReview(quizId, studentUserId),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws ForbiddenException if endsAt is in the future', async () => {
@@ -429,9 +429,9 @@ describe('QuizzesService Unit Tests', () => {
         endsAt: new Date(Date.now() + 3600000), // 1 hour in future
       });
 
-      await expect(service.getQuizReview(quizId, studentUserId)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.getQuizReview(quizId, studentUserId),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('returns questions with correct answers and student answers when period has ended', async () => {

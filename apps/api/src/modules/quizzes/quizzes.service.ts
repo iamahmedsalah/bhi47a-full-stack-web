@@ -1087,7 +1087,8 @@ export class QuizzesService {
 
     const questionsWithReview = (quiz.questions || []).map((q, idx) => {
       const studentAnswer = studentAnswersMap.get(q.id);
-      const isSelected = studentAnswer !== undefined && studentAnswer.selectedOptionIndex !== -1;
+      const isSelected =
+        studentAnswer !== undefined && studentAnswer.selectedOptionIndex !== -1;
       return {
         id: q.id,
         index: idx + 1,
