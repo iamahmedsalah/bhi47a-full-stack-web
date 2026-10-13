@@ -336,7 +336,7 @@ function TakeQuizModal({
   const attemptQuery = useQuery({
     queryKey: ['start-quiz-attempt', quizId],
     queryFn: () => startQuizAttempt(quizId!),
-    enabled: Boolean(quizId && open),
+    enabled: Boolean(quizId && open && !submissionResult),
     refetchOnWindowFocus: false,
     retry: false,
     staleTime: 0,
@@ -445,7 +445,6 @@ function TakeQuizModal({
         answers: answersPayload,
       });
 
-      queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
       setSubmissionResult(res);
       toast.success(
         isAr
@@ -684,75 +683,7 @@ function TakeQuizModal({
           }}
           className="glass max-h-[92vh] max-w-3xl overflow-y-auto rounded-2xl border border-white/10 p-6"
         >
-        {attemptQuery.isLoading ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-xs text-muted-foreground">
-              {isAr ? 'جاري تحميل أسئلة الاختبار...' : 'Loading quiz questions...'}
-            </p>
-          </div>
-        ) : attemptQuery.isError ? (
-          <div className="space-y-4 py-8 text-center" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
-              <AlertTriangle className="h-8 w-8" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-foreground">
-                {isAr ? 'تم إنهاء المحاولة وإغلاق الاختبار' : 'Attempt Terminated & Quiz Closed'}
-              </h3>
-              <p className="text-xs text-rose-400 font-semibold max-w-md mx-auto">
-                {getApiErrorMessage(attemptQuery.error)}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1 max-w-sm mx-auto">
-                {isAr
-                  ? 'النمط المشدد ضد الغش يمنع إعادة الدخول أو الاستئناف بعد مغادرة الصفحة أو تحديثها.'
-                  : 'Strict anti-cheat mode prevents re-entering or resuming after leaving or refreshing the page.'}
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                onOpenChange(false);
-                onSubmitted();
-              }}
-              className="rounded-squircle px-8 font-bold"
-            >
-              {isAr ? 'فهمت ذلك، إغلاق' : 'Got it, Close'}
-            </Button>
-          </div>
-        ) : terminatedByExit && !submissionResult ? (
-          <div className="space-y-4 py-8 text-center" dir={isAr ? 'rtl' : 'ltr'}>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
-              <AlertTriangle className="h-8 w-8" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-foreground">
-                {isAr ? 'تم إنهاء الاختبار وتسليمه تلقائياً' : 'Quiz Terminated & Auto-Submitted'}
-              </h3>
-              <p className="text-xs text-rose-400 font-semibold max-w-md mx-auto">
-                {isAr
-                  ? 'تم تسجيل مغادرة الصفحة أو تبديل التبويب أثناء تفعيل الوضع المشدد ضد الغش.'
-                  : 'Tab switch or window exit was detected under strict anti-cheat monitoring.'}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1 max-w-sm mx-auto">
-                {isAr
-                  ? 'تم حفظ وتسليم إجاباتك الحالية تلقائياً ولا يمكن إعادة فتح الاختبار.'
-                  : 'Your answers were automatically saved and submitted. You cannot re-enter.'}
-              </p>
-            </div>
-            <Button
-              onClick={() => {
-                setSubmissionResult(null);
-                setTerminatedByExit(false);
-                onOpenChange(false);
-                onSubmitted();
-              }}
-              className="rounded-squircle px-8 font-bold bg-primary text-white"
-            >
-              {isAr ? 'إغلاق ومغادرة' : 'Close & Leave'}
-            </Button>
-          </div>
-        ) : submissionResult ? (
+        {submissionResult ? (
           /* ─── Result Celebration Card ─── */
           <div className="space-y-6 py-4 text-center">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-teal-500/25 border border-primary/30 shadow-lg">
@@ -805,6 +736,7 @@ function TakeQuizModal({
 
             <Button
               onClick={() => {
+                queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
                 setSubmissionResult(null);
                 setTerminatedByExit(false);
                 onOpenChange(false);
@@ -813,6 +745,80 @@ function TakeQuizModal({
               className="bg-primary px-8 text-white hover:bg-primary-hover rounded-squircle font-semibold"
             >
               {isAr ? 'تم ومغادرة' : 'Done & Exit'}
+            </Button>
+          </div>
+        ) : attemptQuery.isLoading ? (
+          <div className="flex h-64 flex-col items-center justify-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">
+              {isAr ? 'جاري تحميل أسئلة الاختبار...' : 'Loading quiz questions...'}
+            </p>
+          </div>
+        ) : attemptQuery.isError ? (
+          <div className="space-y-4 py-8 text-center" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+              <AlertTriangle className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-foreground">
+                {!allowResume
+                  ? (isAr ? 'تم إنهاء المحاولة وإغلاق الاختبار' : 'Attempt Terminated & Quiz Closed')
+                  : (isAr ? 'تعذر فتح الاختبار' : 'Unable to Open Quiz')}
+              </h3>
+              <p className="text-xs text-rose-400 font-semibold max-w-md mx-auto">
+                {getApiErrorMessage(attemptQuery.error)}
+              </p>
+              {!allowResume && (
+                <p className="text-[11px] text-muted-foreground mt-1 max-w-sm mx-auto">
+                  {isAr
+                    ? 'النمط المشدد ضد الغش يمنع إعادة الدخول أو الاستئناف بعد مغادرة الصفحة أو تحديثها.'
+                    : 'Strict anti-cheat mode prevents re-entering or resuming after leaving or refreshing the page.'}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
+                onOpenChange(false);
+                onSubmitted();
+              }}
+              className="rounded-squircle px-8 font-bold"
+            >
+              {isAr ? 'فهمت ذلك، إغلاق' : 'Got it, Close'}
+            </Button>
+          </div>
+        ) : terminatedByExit ? (
+          <div className="space-y-4 py-8 text-center" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+              <AlertTriangle className="h-8 w-8" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-foreground">
+                {isAr ? 'تم إنهاء الاختبار وتسليمه تلقائياً' : 'Quiz Terminated & Auto-Submitted'}
+              </h3>
+              <p className="text-xs text-rose-400 font-semibold max-w-md mx-auto">
+                {isAr
+                  ? 'تم تسجيل مغادرة الصفحة أو تبديل التبويب أثناء تفعيل الوضع المشدد ضد الغش.'
+                  : 'Tab switch or window exit was detected under strict anti-cheat monitoring.'}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1 max-w-sm mx-auto">
+                {isAr
+                  ? 'تم حفظ وتسليم إجاباتك الحالية تلقائياً ولا يمكن إعادة فتح الاختبار.'
+                  : 'Your answers were automatically saved and submitted. You cannot re-enter.'}
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
+                setSubmissionResult(null);
+                setTerminatedByExit(false);
+                onOpenChange(false);
+                onSubmitted();
+              }}
+              className="rounded-squircle px-8 font-bold bg-primary text-white"
+            >
+              {isAr ? 'إغلاق ومغادرة' : 'Close & Leave'}
             </Button>
           </div>
         ) : (
@@ -902,37 +908,26 @@ function TakeQuizModal({
               isAr={isAr}
             />
 
-            <DialogFooter className="border-t border-border/80 pt-3 flex items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">
-                {answeredCount < questionsCount && (
-                  <span className="text-amber-400">
-                    {isAr
-                      ? `تنبيه: متبقي ${questionsCount - answeredCount} سؤال دون إجابة`
-                      : `Warning: ${questionsCount - answeredCount} unanswered`}
-                  </span>
-                )}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleClose}
-                  className="rounded-squircle text-xs"
-                >
-                  {allowResume
-                    ? (isAr ? 'حفظ وخروج مؤقت' : 'Save & Exit')
-                    : (isAr ? 'إلغاء وخروج' : 'Cancel & Exit')}
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={isSubmitting}
-                  onClick={performSubmit}
-                  className="bg-primary text-white hover:bg-primary-hover rounded-squircle font-semibold text-xs gap-1.5"
-                >
-                  {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span>{isAr ? 'تسليم الاختبار الآن' : 'Submit Quiz Now'}</span>
-                </Button>
-              </div>
+            <DialogFooter className="border-t border-border/80 pt-3 flex items-center justify-end rtl:sm:justify-start gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleClose}
+                className="rounded-squircle text-xs"
+              >
+                {allowResume
+                  ? (isAr ? 'حفظ وخروج مؤقت' : 'Save & Exit')
+                  : (isAr ? 'إلغاء وخروج' : 'Cancel & Exit')}
+              </Button>
+              <Button
+                size="sm"
+                disabled={isSubmitting}
+                onClick={performSubmit}
+                className="bg-primary text-white hover:bg-primary-hover rounded-squircle font-semibold text-xs gap-1.5"
+              >
+                {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <span>{isAr ? 'تسليم الاختبار الآن' : 'Submit Quiz Now'}</span>
+              </Button>
             </DialogFooter>
           </div>
         )}
