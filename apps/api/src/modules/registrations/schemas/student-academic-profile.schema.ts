@@ -52,5 +52,8 @@ export const StudentAcademicProfileSchema = SchemaFactory.createForClass(
   StudentAcademicProfile,
 );
 
+StudentAcademicProfileSchema.index({ studentId: 1 }, { unique: true });
 StudentAcademicProfileSchema.index({ advisorId: 1 });
 StudentAcademicProfileSchema.index({ academicLevel: 1, semester: 1 });
+StudentAcademicProfileSchema.index({ updatedAt: -1 });
+StudentAcademicProfileSchema.index({ createdAt: -1 });

@@ -1,7 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
 import { QueueModule } from './core/queues/queue.module';
+import { MetricsModule } from './core/metrics/metrics.module';
+import { HttpMetricsInterceptor } from './core/metrics/http-metrics.interceptor';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { StudentsModule } from './modules/students/students.module';
@@ -32,6 +36,7 @@ import { HealthController } from './health.controller';
       envFilePath: ['.env', '../../.env'],
       validate: validateEnv,
     }),
+    MetricsModule,
     QueueModule,
     AppLoggerModule,
     DatabaseModule,
@@ -56,5 +61,15 @@ import { HealthController } from './health.controller';
     QuizzesModule,
   ],
   controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpMetricsInterceptor,
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

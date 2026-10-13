@@ -16,6 +16,7 @@ import {
   Menu,
   MessageSquareWarning,
   MessagesSquare,
+  Activity,
   Settings,
   Upload,
   Users,
@@ -117,6 +118,12 @@ export default function AdminSidebar() {
             key: "chatAudit",
             href: `/${locale}/admin/chat-audit`,
             icon: <MessagesSquare className="h-5 w-5" />,
+            adminOnly: true,
+          },
+          {
+            key: "metrics",
+            href: `/${locale}/admin/metrics`,
+            icon: <Activity className="h-5 w-5" />,
             adminOnly: true,
           },
         ]

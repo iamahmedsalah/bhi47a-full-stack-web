@@ -80,6 +80,8 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
   },
 };
 
+import { MetricsService } from '../../core/metrics/metrics.service';
+
 @Injectable()
 export class RateLimiterService {
   private readonly store: RateLimiterStore;
@@ -88,6 +90,7 @@ export class RateLimiterService {
     private readonly configService: ConfigService,
     private readonly logger: AppLoggerService,
     @Optional() @InjectConnection() private readonly connection?: Connection,
+    @Optional() private readonly metricsService?: MetricsService,
   ) {
     const storeType = this.configService.get<string>(
       'RATE_LIMIT_STORE',
@@ -143,6 +146,7 @@ export class RateLimiterService {
       this.setRateLimitHeaders(res, rule, hit);
 
       if (hit.count > rule.max) {
+        this.metricsService?.recordRateLimitBlock(rule.name);
         const ruleMessage = MESSAGES[rule.name]?.[lang] || rule.message;
         res.setHeader('Retry-After', String(hit.retryAfterSeconds));
         res.status(429).json({

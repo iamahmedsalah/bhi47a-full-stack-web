@@ -19,6 +19,10 @@ spec:
     metadata:
       labels:
         app: student-portal-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/api/metrics"
+        prometheus.io/port: "4000"
     spec:
       containers:
         - name: api

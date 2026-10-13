@@ -110,6 +110,12 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
     nameAr: 'سجل محادثات المساعد الذكي',
     nameEn: 'AI Chat Audit',
   },
+  {
+    pattern: /^\/[^/]+\/admin\/metrics/,
+    adminOnly: true,
+    nameAr: 'مؤشرات الأداء والخادم (APM)',
+    nameEn: 'System Metrics & APM Monitor',
+  },
 ];
 
 export default function AdminLayout({

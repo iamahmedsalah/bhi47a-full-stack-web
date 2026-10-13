@@ -254,7 +254,32 @@ Mode:        ${MODE.toUpperCase()}
     results.push(loginStats);
   }
 
-  // Scenario 3: Authenticated Quizzes & Draft Writes
+  // Scenario 3: Database Read Stress (Courses & Collections)
+  if (MODE === 'db' || MODE === 'all') {
+    const dbStats = await runConcurrentScenario(
+      'Database Reads (GET /courses)',
+      CONCURRENCY,
+      DURATION_SEC,
+      async () => {
+        const res = await fetch(`${TARGET_URL}/courses`);
+        return { status: res.status, isError: !res.ok };
+      }
+    );
+    results.push(dbStats);
+
+    const metricsStats = await runConcurrentScenario(
+      'Prometheus Metrics (GET /metrics)',
+      Math.min(CONCURRENCY, 30),
+      DURATION_SEC,
+      async () => {
+        const res = await fetch(`${TARGET_URL}/metrics`);
+        return { status: res.status, isError: !res.ok };
+      }
+    );
+    results.push(metricsStats);
+  }
+
+  // Scenario 4: Authenticated Quizzes & Draft Writes
   if ((MODE === 'quiz' || MODE === 'all') && authToken) {
     const quizStats = await runConcurrentScenario(
       'Authenticated Student Quizzes (GET /quizzes/student)',

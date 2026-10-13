@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, FilterQuery } from 'mongoose';
@@ -66,6 +67,8 @@ export interface QuizListItem extends Record<string, unknown> {
   updatedAt?: Date;
 }
 
+import { MetricsService } from '../../core/metrics/metrics.service';
+
 @Injectable()
 export class QuizzesService {
   constructor(
@@ -81,6 +84,7 @@ export class QuizzesService {
     private studentProfileModel: Model<StudentProfileDocument>,
     private readonly notificationsService: NotificationsService,
     private readonly excelService: QuizQuestionExcelService,
+    @Optional() private readonly metricsService?: MetricsService,
   ) {}
 
   // ─── Staff / Admin Management ─────────────────────────────────────
@@ -708,6 +712,7 @@ export class QuizzesService {
     });
 
     await attempt.save();
+    this.metricsService?.updateActiveQuizAttempts(1);
 
     return {
       quiz: this.sanitizeQuiz(quiz),
@@ -794,7 +799,8 @@ export class QuizzesService {
     }
 
     if (quiz.allowResume === false) {
-      // Strict Anti-Cheat Mode: Auto-submit immediate payload and terminate attempt
+      this.metricsService?.recordAntiCheatViolation(dto.reason || 'exit');
+      this.metricsService?.updateActiveQuizAttempts(-1);
       const submission = await this.autoSubmitAttempt(
         quiz,
         attempt,
@@ -938,6 +944,8 @@ export class QuizzesService {
 
     try {
       await submission.save();
+      this.metricsService?.updateActiveQuizAttempts(-1);
+      this.metricsService?.recordQuizSubmission(isPassed);
       await this.attemptModel.updateOne(
         {
           quizId: quiz._id,

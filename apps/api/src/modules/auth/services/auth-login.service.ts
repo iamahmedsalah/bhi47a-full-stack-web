@@ -26,6 +26,9 @@ function normalizeArabicNumerals(value?: string): string {
   return value.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
 }
 
+import { Optional } from '@nestjs/common';
+import { MetricsService } from '../../../core/metrics/metrics.service';
+
 @Injectable()
 export class AuthLoginService {
   private readonly googleOAuthClient = new OAuth2Client();
@@ -36,6 +39,7 @@ export class AuthLoginService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailsService: EmailsService,
+    @Optional() private readonly metricsService?: MetricsService,
   ) {}
 
   async studentLogin(dto: StudentLoginDto) {
@@ -43,13 +47,20 @@ export class AuthLoginService {
     const cleanPassword = normalizeArabicNumerals(dto.password);
 
     const user = await this.usersService.findByIdentifier(cleanStudentCode);
-    if (!user) throw new UnauthorizedException('بيانات الدخول غير صحيحة');
-    if (!user.isActive) throw new UnauthorizedException('الحساب غير مفعّل');
+    if (!user) {
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
+      throw new UnauthorizedException('بيانات الدخول غير صحيحة');
+    }
+    if (!user.isActive) {
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
+      throw new UnauthorizedException('الحساب غير مفعّل');
+    }
 
     const maxAttempts = Number(process.env.AUTH_MAX_FAILED_ATTEMPTS) || 5;
     const lockDurationMinutes = Number(process.env.AUTH_LOCK_MINUTES) || 30;
 
     if (this.usersService.isAccountLocked(user)) {
+      this.metricsService?.recordLoginAttempt('locked');
       const remaining = this.usersService.getLockRemainingMinutes(user);
       const lockedUntil = user.lockUntil || user.lockedUntil;
       const secondsLeft = lockedUntil
@@ -86,6 +97,7 @@ export class AuthLoginService {
       const attemptsLeft = Math.max(0, maxAttempts - currentAttempts);
 
       if (this.usersService.isAccountLocked(updatedUser)) {
+        this.metricsService?.recordLoginAttempt('locked');
         throw new UnauthorizedException({
           message: 'تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة خاطئة',
           locked: true,
@@ -93,6 +105,7 @@ export class AuthLoginService {
         });
       }
 
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException({
         message: 'بيانات الدخول غير صحيحة',
         attemptsLeft,
@@ -103,6 +116,7 @@ export class AuthLoginService {
     await this.usersService.resetAttemptsAndUpdateLastLogin(
       user._id.toString(),
     );
+    this.metricsService?.recordLoginAttempt('success');
 
     const token = this.sessionService.generateToken(
       user._id.toString(),
@@ -128,15 +142,24 @@ export class AuthLoginService {
 
   async adminLogin(dto: AdminLoginDto) {
     const user = await this.usersService.findByIdentifier(dto.email);
-    if (!user) throw new UnauthorizedException('بيانات الدخول غير صحيحة');
-    if (!user.isActive) throw new UnauthorizedException('الحساب غير مفعّل');
-    if (user.role === 'student')
+    if (!user) {
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
+      throw new UnauthorizedException('بيانات الدخول غير صحيحة');
+    }
+    if (!user.isActive) {
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
+      throw new UnauthorizedException('الحساب غير مفعّل');
+    }
+    if (user.role === 'student') {
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('غير مصرح بالدخول');
+    }
 
     const maxAttempts = Number(process.env.AUTH_MAX_FAILED_ATTEMPTS) || 5;
     const lockDurationMinutes = Number(process.env.AUTH_LOCK_MINUTES) || 30;
 
     if (this.usersService.isAccountLocked(user)) {
+      this.metricsService?.recordLoginAttempt('locked');
       const remaining = this.usersService.getLockRemainingMinutes(user);
       const lockedUntil = user.lockUntil || user.lockedUntil;
       const secondsLeft = lockedUntil
@@ -161,6 +184,7 @@ export class AuthLoginService {
       const attemptsLeft = Math.max(0, maxAttempts - currentAttempts);
 
       if (this.usersService.isAccountLocked(updatedUser)) {
+        this.metricsService?.recordLoginAttempt('locked');
         throw new UnauthorizedException({
           message: 'تم قفل الحساب مؤقتاً بسبب محاولات دخول متكررة خاطئة',
           locked: true,
@@ -168,6 +192,7 @@ export class AuthLoginService {
         });
       }
 
+      this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException({
         message: 'بيانات الدخول غير صحيحة',
         attemptsLeft,
@@ -178,6 +203,7 @@ export class AuthLoginService {
     await this.usersService.resetAttemptsAndUpdateLastLogin(
       user._id.toString(),
     );
+    this.metricsService?.recordLoginAttempt('success');
 
     const token = this.sessionService.generateToken(
       user._id.toString(),

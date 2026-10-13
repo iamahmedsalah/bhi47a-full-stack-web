@@ -7,6 +7,9 @@ import { AppLoggerModule } from '../core/logger/logger.module';
 import { AppLoggerService } from '../core/logger/logger.service';
 import { ConnectionHolder } from '../common/rate-limit/connection-holder';
 
+import { createMongooseMetricsPlugin } from './mongoose-metrics.plugin';
+import { MetricsService } from '../core/metrics/metrics.service';
+
 type ParsedDatabaseError = Error & {
   code?: string;
   customMessage?: string;
@@ -60,8 +63,12 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
   imports: [
     MongooseModule.forRootAsync({
       imports: [ConfigModule, AppLoggerModule],
-      inject: [ConfigService, AppLoggerService],
-      useFactory: (configService: ConfigService, logger: AppLoggerService) => {
+      inject: [ConfigService, AppLoggerService, MetricsService],
+      useFactory: (
+        configService: ConfigService,
+        logger: AppLoggerService,
+        metricsService: MetricsService,
+      ) => {
         const dnsServers = String(configService.get<string>('DNS_SERVERS', ''))
           .split(',')
           .map((server) => server.trim())
@@ -131,20 +138,44 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
 
         logger.log('Attempting database connection...', 'DatabaseModule');
 
+        const minPoolSize = Number(
+          configService.get<string>('MONGODB_MIN_POOL_SIZE', '5'),
+        );
+        const maxPoolSize = Number(
+          configService.get<string>('MONGODB_MAX_POOL_SIZE', '50'),
+        );
+
         return {
           uri,
           serverSelectionTimeoutMS: 15000,
           socketTimeoutMS: 45000,
+          // Keep warm connections so the first burst of parallel queries after
+          // boot/idle does not pay TCP + TLS + SCRAM handshakes per query.
+          minPoolSize: Number.isFinite(minPoolSize) ? minPoolSize : 5,
+          maxPoolSize: Number.isFinite(maxPoolSize) ? maxPoolSize : 50,
+          maxIdleTimeMS: 300000,
           lookup: customLookup,
           connectionFactory: (connection: mongoose.Connection) => {
             ConnectionHolder.connection = connection;
+
+            // Register Mongoose metrics & slow query tracker plugin
+            connection.plugin(
+              createMongooseMetricsPlugin(metricsService, logger),
+            );
+
             connection.on('connected', () => {
+              metricsService.setDbConnected(true);
               logger.log(
                 'Database connection established successfully',
                 'DatabaseModule',
               );
             });
+            connection.on('disconnected', () => {
+              metricsService.setDbConnected(false);
+              logger.warn('Database connection disconnected', 'DatabaseModule');
+            });
             connection.on('error', (err) => {
+              metricsService.setDbConnected(false);
               const parsedError = parseDatabaseError(err);
               logger.error(
                 parsedError.customMessage || parsedError.message,

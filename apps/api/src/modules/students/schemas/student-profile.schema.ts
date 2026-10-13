@@ -89,6 +89,8 @@ StudentProfileSchema.index({ level: 1, enrollmentStatus: 1, createdAt: -1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, createdAt: -1 });
 StudentProfileSchema.index({ createdAt: -1 });
 StudentProfileSchema.index({ department: 1, level: 1, createdAt: -1 });
+StudentProfileSchema.index({ enrollmentStatus: 1, level: 1 });
+StudentProfileSchema.index({ enrollmentStatus: 1, department: 1, level: 1 });
 StudentProfileSchema.index({ level: 1, studentCode: 1 });
 StudentProfileSchema.index({ fullName: 1, studentCode: 1 });
 

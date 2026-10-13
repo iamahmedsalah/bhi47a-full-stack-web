@@ -5,7 +5,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import {
+  IS_PUBLIC_KEY,
+  IS_PUBLIC_IN_DEV_KEY,
+} from '../decorators/public.decorator';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -20,6 +23,14 @@ export class CsrfGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    const isPublicInDev = this.reflector.getAllAndOverride<boolean>(
+      IS_PUBLIC_IN_DEV_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isPublicInDev && process.env.NODE_ENV !== 'production') {
+      return true;
+    }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (!UNSAFE_METHODS.has(request.method.toUpperCase())) {

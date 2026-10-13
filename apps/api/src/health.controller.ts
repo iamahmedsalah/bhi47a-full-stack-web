@@ -1,5 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
+import mongoose from 'mongoose';
 import { Public } from './modules/auth/decorators/public.decorator';
+import { ConnectionHolder } from './common/rate-limit/connection-holder';
 
 @Controller()
 export class HealthController {
@@ -18,6 +20,7 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       endpoints: {
         health: '/api/health',
+        metrics: '/api/metrics',
         documentation: isSwaggerAllowed
           ? '/api/docs'
           : 'Access Denied (Disabled in production)',
@@ -27,12 +30,35 @@ export class HealthController {
 
   @Public()
   @Get('health')
-  check() {
+  async check() {
+    const conn = ConnectionHolder.connection || mongoose.connection;
+    const readyState = conn?.readyState ?? 0;
+    const isConnected = Number(readyState) === 1;
+    let dbStatus = isConnected ? 'connected' : 'disconnected';
+    let pingLatencyMs = -1;
+
+    if (isConnected && conn?.db) {
+      try {
+        const start = process.hrtime.bigint();
+        await conn.db.admin().ping();
+        const diffNs = Number(process.hrtime.bigint() - start);
+        pingLatencyMs = Math.round((diffNs / 1e6) * 100) / 100;
+        dbStatus = 'connected';
+      } catch (err: any) {
+        dbStatus = `ping_failed: ${err?.message || 'unknown'}`;
+      }
+    }
+
     return {
-      status: 'ok',
+      status: dbStatus === 'connected' ? 'ok' : 'degraded',
       environment: process.env.NODE_ENV || 'development',
       version: process.env.APP_VERSION || '1.0.0',
       uptime: process.uptime(),
+      database: {
+        status: dbStatus,
+        pingLatencyMs,
+        readyState,
+      },
       timestamp: new Date().toISOString(),
     };
   }
