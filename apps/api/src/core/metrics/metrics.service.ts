@@ -57,6 +57,63 @@ export interface LabelCount {
   count: number;
 }
 
+export const CANONICAL_OPERATIONS = [
+  'find',
+  'findOne',
+  'findOneAndUpdate',
+  'findOneAndDelete',
+  'findOneAndReplace',
+  'updateOne',
+  'updateMany',
+  'deleteOne',
+  'deleteMany',
+  'countDocuments',
+  'estimatedDocumentCount',
+  'distinct',
+  'aggregate',
+  'save',
+  'insertMany',
+  'bulkWrite',
+] as const;
+
+export const CANONICAL_COLLECTIONS = [
+  'users',
+  'student_profiles',
+  'student_academic_profiles',
+  'courses',
+  'quizzes',
+  'course_quizzes',
+  'quiz_attempts',
+  'quiz_submissions',
+  'course_registrations',
+  'registration_terms',
+  'gpa_registration_rules',
+  'academic_advising_requests',
+  'advising_cases',
+  'advising_plans',
+  'advising_notes',
+  'advising_rules',
+  'advising_graphs',
+  'advising_audit_logs',
+  'course_recommendations',
+  'grades',
+  'attendance',
+  'attendance_records',
+  'attendance_sessions',
+  'course_staff_assignments',
+  'complaints',
+  'notifications',
+  'academic_emails',
+  'exam_schedules',
+  'email_logs',
+  'faqs',
+  'ai_settings',
+  'ai_usage_logs',
+  'chat_sessions',
+  'system_settings',
+  'staff_audit_logs',
+] as const;
+
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private readonly registry: Registry;
@@ -122,7 +179,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   >();
 
-  // Route statistics (capped at 100 items)
+  // Route statistics (capped at 500 items)
   private readonly routeStats = new Map<
     string,
     {
@@ -134,6 +191,13 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       errorCount: number;
     }
   >();
+
+  // Catalog of all defined routes registered on boot (e.g. from Swagger / Route Explorer)
+  private catalogRoutes: Array<{ method: string; path: string }> = [];
+
+  registerCatalogRoutes(routes: Array<{ method: string; path: string }>) {
+    this.catalogRoutes = routes;
+  }
 
   // Event loop delay histogram: high lag inflates every measured query time
   private eventLoopHistogram?: ReturnType<typeof monitorEventLoopDelay>;
@@ -458,17 +522,48 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         ? Math.round((errorCount / this.totalHttpRequests) * 1000) / 10
         : 0;
 
-    const allRoutes: RouteLatencyStat[] = Array.from(this.routeStats.values())
-      .map((stat) => ({
-        route: `${stat.method} ${stat.route}`,
+    // Build unified route catalogue: seed from Swagger catalog, overlay observed traffic
+    const mergedRoutesMap = new Map<string, RouteLatencyStat>();
+
+    // 1. Seed with all routes discovered from the Swagger/NestJS controller catalog
+    for (const ep of this.catalogRoutes) {
+      const cleanPath = ep.path.startsWith('/api')
+        ? ep.path
+        : `/api${ep.path.startsWith('/') ? '' : '/'}${ep.path}`;
+      const routeKey = `${ep.method} ${cleanPath}`;
+      mergedRoutesMap.set(routeKey, {
+        route: routeKey,
+        method: ep.method,
+        count: 0,
+        avgLatencyMs: 0,
+        maxLatencyMs: 0,
+        errorCount: 0,
+      });
+    }
+
+    // 2. Overlay live traffic stats
+    for (const stat of this.routeStats.values()) {
+      const routeKey = `${stat.method} ${stat.route}`;
+      mergedRoutesMap.set(routeKey, {
+        route: routeKey,
         method: stat.method,
         count: stat.count,
         avgLatencyMs: Math.round(stat.totalMs / stat.count),
         maxLatencyMs: Math.round(stat.maxMs),
         errorCount: stat.errorCount,
-      }))
-      .sort((a, b) => b.avgLatencyMs - a.avgLatencyMs);
-    const topSlowestRoutes = allRoutes.slice(0, 5);
+      });
+    }
+
+    const allRoutes: RouteLatencyStat[] = Array.from(
+      mergedRoutesMap.values(),
+    ).sort((a, b) => {
+      // Active routes with traffic first, sorted by latency desc; then unused catalog routes
+      if (b.count > 0 && a.count > 0) return b.avgLatencyMs - a.avgLatencyMs;
+      if (b.count > 0) return 1;
+      if (a.count > 0) return -1;
+      return a.route.localeCompare(b.route);
+    });
+    const topSlowestRoutes = allRoutes.filter((r) => r.count > 0).slice(0, 5);
 
     const slowQueriesByCollection: SlowQueryAggregate[] = Array.from(
       this.slowQueryAggregates.values(),
@@ -482,6 +577,18 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         coldStartCount: agg.coldStartCount,
       }))
       .sort((a, b) => b.count - a.count);
+
+    const collectionsSet = new Set<string>([
+      ...CANONICAL_COLLECTIONS,
+      ...this.recentSlowQueries.map((q) => q.collection),
+      ...Array.from(this.slowQueryAggregates.values()).map((a) => a.collection),
+    ]);
+
+    const operationsSet = new Set<string>([
+      ...CANONICAL_OPERATIONS,
+      ...this.recentSlowQueries.map((q) => q.operation),
+      ...Array.from(this.slowQueryAggregates.values()).map((a) => a.operation),
+    ]);
 
     const elh = this.eventLoopHistogram;
     const nsToMs = (ns: number) =>
@@ -533,6 +640,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         avgLatencyMs,
         topSlowestRoutes,
         routes: allRoutes,
+        availableMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       },
       infrastructure: {
         redis:
@@ -552,6 +660,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         coldStartWindowSeconds: COLD_START_WINDOW_SECONDS,
         recentSlowQueries: this.recentSlowQueries,
         slowQueriesByCollection,
+        availableCollections: Array.from(collectionsSet).sort(),
+        availableOperations: Array.from(operationsSet).sort(),
       },
       security: {
         successfulLogins: this.successfulLogins,

@@ -35,6 +35,63 @@ export interface SlowQueryAggregate {
   coldStartCount: number;
 }
 
+export const CANONICAL_OPERATIONS = [
+  'find',
+  'findOne',
+  'findOneAndUpdate',
+  'findOneAndDelete',
+  'findOneAndReplace',
+  'updateOne',
+  'updateMany',
+  'deleteOne',
+  'deleteMany',
+  'countDocuments',
+  'estimatedDocumentCount',
+  'distinct',
+  'aggregate',
+  'save',
+  'insertMany',
+  'bulkWrite',
+] as const;
+
+export const CANONICAL_COLLECTIONS = [
+  'users',
+  'student_profiles',
+  'student_academic_profiles',
+  'courses',
+  'quizzes',
+  'course_quizzes',
+  'quiz_attempts',
+  'quiz_submissions',
+  'course_registrations',
+  'registration_terms',
+  'gpa_registration_rules',
+  'academic_advising_requests',
+  'advising_cases',
+  'advising_plans',
+  'advising_notes',
+  'advising_rules',
+  'advising_graphs',
+  'advising_audit_logs',
+  'course_recommendations',
+  'grades',
+  'attendance',
+  'attendance_records',
+  'attendance_sessions',
+  'course_staff_assignments',
+  'complaints',
+  'notifications',
+  'academic_emails',
+  'exam_schedules',
+  'email_logs',
+  'faqs',
+  'ai_settings',
+  'ai_usage_logs',
+  'chat_sessions',
+  'system_settings',
+  'staff_audit_logs',
+] as const;
+
 export interface MetricsSummaryResponse {
   timestamp: string;
   uptimeSeconds: number;
@@ -69,6 +126,7 @@ export interface MetricsSummaryResponse {
     avgLatencyMs: number;
     topSlowestRoutes?: RouteLatencyStat[];
     routes?: RouteLatencyStat[];
+    availableMethods?: string[];
   };
   infrastructure?: {
     redis: 'online' | 'inline_fallback';
@@ -85,6 +143,8 @@ export interface MetricsSummaryResponse {
     coldStartWindowSeconds?: number;
     recentSlowQueries: RecentSlowQuery[];
     slowQueriesByCollection?: SlowQueryAggregate[];
+    availableCollections?: string[];
+    availableOperations?: string[];
   };
   security: {
     successfulLogins: number;

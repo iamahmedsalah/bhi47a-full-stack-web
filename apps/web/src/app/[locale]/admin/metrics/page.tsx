@@ -52,11 +52,14 @@ import { downloadFileBlob } from '@/lib/export-utils';
 import {
   getMetricsSummary,
   getRawPrometheusMetrics,
+  CANONICAL_COLLECTIONS,
+  CANONICAL_OPERATIONS,
   type LabelCount,
   type MetricsSummaryResponse,
 } from '@/features/metrics/api';
 
-type RouteSort = 'latency' | 'max' | 'count' | 'errors';
+type RouteSort = 'latency' | 'max' | 'count' | 'errors' | 'route';
+type RouteTraffic = 'all' | 'active' | 'uncalled';
 type SlowPhase = 'all' | 'cold' | 'steady';
 
 const CARD_CLASS =
@@ -175,6 +178,7 @@ export default function AdminMetricsPage() {
   // Endpoints filter & sort state
   const [routeSearch, setRouteSearch] = useState<string>('');
   const [routeMethod, setRouteMethod] = useState<string>('all');
+  const [routeTraffic, setRouteTraffic] = useState<RouteTraffic>('all');
   const [routeSort, setRouteSort] = useState<RouteSort>('latency');
 
   // Raw Prometheus exposition viewer
@@ -201,14 +205,23 @@ export default function AdminMetricsPage() {
     [data?.database?.recentSlowQueries],
   );
 
-  const availableCollections = useMemo(
-    () => Array.from(new Set(slowQueries.map((q) => q.collection))).sort(),
-    [slowQueries],
-  );
-  const availableOperations = useMemo(
-    () => Array.from(new Set(slowQueries.map((q) => q.operation))).sort(),
-    [slowQueries],
-  );
+  const availableCollections = useMemo(() => {
+    const set = new Set<string>([
+      ...CANONICAL_COLLECTIONS,
+      ...(data?.database?.availableCollections ?? []),
+      ...slowQueries.map((q) => q.collection),
+    ]);
+    return Array.from(set).sort();
+  }, [data?.database?.availableCollections, slowQueries]);
+
+  const availableOperations = useMemo(() => {
+    const set = new Set<string>([
+      ...CANONICAL_OPERATIONS,
+      ...(data?.database?.availableOperations ?? []),
+      ...slowQueries.map((q) => q.operation),
+    ]);
+    return Array.from(set).sort();
+  }, [data?.database?.availableOperations, slowQueries]);
 
   const filteredSlowQueries = useMemo(() => {
     const minMs = Number(sqThreshold) || 0;
@@ -247,30 +260,39 @@ export default function AdminMetricsPage() {
     [data?.http?.routes, data?.http?.topSlowestRoutes],
   );
 
-  const availableMethods = useMemo(
-    () =>
-      Array.from(
-        new Set(allRoutes.map((r) => r.method ?? r.route.split(' ')[0] ?? 'GET')),
-      ).sort(),
-    [allRoutes],
-  );
+  const availableMethods = useMemo(() => {
+    const methods = new Set<string>([
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      ...(data?.http?.availableMethods ?? []),
+      ...allRoutes.map((r) => r.method ?? r.route.split(' ')[0]),
+    ]);
+    return Array.from(methods).filter(Boolean);
+  }, [data?.http?.availableMethods, allRoutes]);
 
   const filteredRoutes = useMemo(() => {
     const term = routeSearch.trim().toLowerCase();
     const list = allRoutes.filter((r) => {
-      const method = r.method ?? r.route.split(' ')[0];
+      const parts = r.route.split(' ');
+      const method = r.method ?? (parts.length > 1 ? parts[0] : 'GET');
       if (routeMethod !== 'all' && method !== routeMethod) return false;
+      if (routeTraffic === 'active' && r.count === 0) return false;
+      if (routeTraffic === 'uncalled' && r.count > 0) return false;
       if (term && !r.route.toLowerCase().includes(term)) return false;
       return true;
     });
-    const sorters: Record<RouteSort, (a: typeof list[number], b: typeof list[number]) => number> = {
+    const sorters: Record<RouteSort, (a: (typeof list)[number], b: (typeof list)[number]) => number> = {
       latency: (a, b) => b.avgLatencyMs - a.avgLatencyMs,
       max: (a, b) => (b.maxLatencyMs ?? 0) - (a.maxLatencyMs ?? 0),
       count: (a, b) => b.count - a.count,
       errors: (a, b) => (b.errorCount ?? 0) - (a.errorCount ?? 0),
+      route: (a, b) => a.route.localeCompare(b.route),
     };
     return [...list].sort(sorters[routeSort]);
-  }, [allRoutes, routeSearch, routeMethod, routeSort]);
+  }, [allRoutes, routeSearch, routeMethod, routeTraffic, routeSort]);
 
   const rawLines = useMemo(() => {
     const text = rawQuery.data ?? '';
@@ -770,7 +792,7 @@ export default function AdminMetricsPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -793,6 +815,16 @@ export default function AdminMetricsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={routeTraffic} onValueChange={(v) => setRouteTraffic(v as RouteTraffic)}>
+                <SelectTrigger id="metrics-route-traffic" className="rounded-squircle text-xs">
+                  <SelectValue placeholder={isAr ? 'حالة النشاط' : 'Traffic status'} />
+                </SelectTrigger>
+                <SelectContent dir={dir}>
+                  <SelectItem value="all">{isAr ? 'كل المسارات' : 'All endpoints'}</SelectItem>
+                  <SelectItem value="active">{isAr ? 'مسارات نشطة' : 'Active with traffic'}</SelectItem>
+                  <SelectItem value="uncalled">{isAr ? 'مسارات خاملة (كتالوج)' : 'Catalog only (idle)'}</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={routeSort} onValueChange={(v) => setRouteSort(v as RouteSort)}>
                 <SelectTrigger id="metrics-route-sort" className="rounded-squircle text-xs">
                   <SelectValue placeholder={isAr ? 'ترتيب حسب' : 'Sort by'} />
@@ -802,6 +834,7 @@ export default function AdminMetricsPage() {
                   <SelectItem value="max">{isAr ? 'أقصى تأخير' : 'Max latency'}</SelectItem>
                   <SelectItem value="count">{isAr ? 'عدد الطلبات' : 'Call count'}</SelectItem>
                   <SelectItem value="errors">{isAr ? 'عدد الأخطاء' : 'Error count'}</SelectItem>
+                  <SelectItem value="route">{isAr ? 'المسار (أبجدي)' : 'Route name (A-Z)'}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -823,25 +856,50 @@ export default function AdminMetricsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40 font-mono">
-                    {filteredRoutes.map((r) => (
-                      <tr key={r.route} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2.5 px-3 font-semibold text-foreground">
-                          <bdi dir="ltr">{r.route}</bdi>
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground">{r.count}</td>
-                        <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded-squircle font-bold ${latencyTone(r.avgLatencyMs)}`} dir="ltr">
-                            {r.avgLatencyMs} ms
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">
-                          {r.maxLatencyMs !== undefined ? `${r.maxLatencyMs} ms` : '-'}
-                        </td>
-                        <td className={`py-2.5 px-3 ${(r.errorCount ?? 0) > 0 ? 'text-rose-400 font-bold' : 'text-muted-foreground'}`}>
-                          {r.errorCount ?? 0}
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredRoutes.map((r) => {
+                      const isUncalled = r.count === 0;
+                      return (
+                        <tr key={r.route} className="hover:bg-secondary/20 transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-foreground">
+                            <div className="flex items-center gap-2">
+                              <bdi dir="ltr">{r.route}</bdi>
+                              {isUncalled && (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-squircle px-1.5 py-0 text-[10px] text-muted-foreground border-border/50"
+                                >
+                                  {isAr ? 'كتالوج' : 'Catalog'}
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className={`py-2.5 px-3 ${isUncalled ? 'text-muted-foreground/50' : 'text-foreground'}`}>
+                            {r.count}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {isUncalled ? (
+                              <span className="text-muted-foreground/50">—</span>
+                            ) : (
+                              <span className={`px-2 py-0.5 rounded-squircle font-bold ${latencyTone(r.avgLatencyMs)}`} dir="ltr">
+                                {r.avgLatencyMs} ms
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">
+                            {isUncalled ? (
+                              <span className="text-muted-foreground/50">—</span>
+                            ) : r.maxLatencyMs !== undefined ? (
+                              `${r.maxLatencyMs} ms`
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td className={`py-2.5 px-3 ${isUncalled ? 'text-muted-foreground/50' : (r.errorCount ?? 0) > 0 ? 'text-rose-400 font-bold' : 'text-muted-foreground'}`}>
+                            {r.errorCount ?? 0}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -20,6 +20,7 @@ import {
 } from './config/cors-origins';
 import { NotificationsService } from './modules/notifications/notifications.service';
 import { QueueService } from './core/queues/queue.service';
+import { MetricsService } from './core/metrics/metrics.service';
 
 function resolveAppVersion(): string {
   if (process.env.APP_VERSION) {
@@ -137,17 +138,38 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter(logger));
   app.useGlobalInterceptors(new TransformInterceptor());
 
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Student Portal API')
+    .setDescription('Student Portal API Documentation')
+    .setVersion('1.0')
+    .addCookieAuth('access_token')
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+
+  // Register all endpoints from the API catalog into MetricsService
+  try {
+    const metricsService = app.get(MetricsService);
+    const catalogRoutes: Array<{ method: string; path: string }> = [];
+    const validMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+    for (const [rawPath, pathItem] of Object.entries(document.paths || {})) {
+      if (!pathItem || typeof pathItem !== 'object') continue;
+      const cleanPath = rawPath.replace(/\{([^}]+)\}/g, ':$1');
+      for (const methodKey of Object.keys(pathItem)) {
+        const upperMethod = methodKey.toUpperCase();
+        if (validMethods.has(upperMethod)) {
+          catalogRoutes.push({ method: upperMethod, path: cleanPath });
+        }
+      }
+    }
+    metricsService.registerCatalogRoutes(catalogRoutes);
+  } catch {
+    // Non-fatal if route scanning fails
+  }
+
   const isSwaggerAllowed =
     !isProduction || configService.get<string>('ENABLE_SWAGGER') === 'true';
 
   if (isSwaggerAllowed) {
-    const swaggerConfig = new DocumentBuilder()
-      .setTitle('Student Portal API')
-      .setDescription('Student Portal API Documentation')
-      .setVersion('1.0')
-      .addCookieAuth('access_token')
-      .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document);
     logger.log(
       `Swagger docs available at http://localhost:${port}/api/docs`,
