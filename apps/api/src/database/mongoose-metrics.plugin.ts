@@ -24,16 +24,26 @@ function safeStringify(value: unknown, max = 200): string | undefined {
  * Builds a compact description of the query shape so slow-query logs reveal
  * whether a `{}` filter was a paginated list (limit set) or a full scan.
  */
-function describeQueryShape(
-  query: QueryLike,
-  op: string,
-): string | undefined {
+function describeQueryShape(query: QueryLike, op: string): string | undefined {
   const parts: string[] = [];
   const options =
     typeof query.getOptions === 'function' ? query.getOptions() : {};
-  if (options.limit !== undefined) parts.push(`limit=${String(options.limit)}`);
-  else if (op === 'find') parts.push('limit=NONE');
-  if (options.skip !== undefined) parts.push(`skip=${String(options.skip)}`);
+  if (options.limit !== undefined) {
+    const limitStr =
+      typeof options.limit === 'number' || typeof options.limit === 'string'
+        ? String(options.limit)
+        : safeStringify(options.limit);
+    if (limitStr) parts.push(`limit=${limitStr}`);
+  } else if (op === 'find') {
+    parts.push('limit=NONE');
+  }
+  if (options.skip !== undefined) {
+    const skipStr =
+      typeof options.skip === 'number' || typeof options.skip === 'string'
+        ? String(options.skip)
+        : safeStringify(options.skip);
+    if (skipStr) parts.push(`skip=${skipStr}`);
+  }
   const sort = safeStringify(options.sort, 80);
   if (sort) parts.push(`sort=${sort}`);
   const fields = safeStringify(query._fields, 80);

@@ -36,8 +36,7 @@ export class MetricsController {
       const bearerMatch = authHeader.startsWith('Bearer ')
         ? authHeader.slice(7).trim()
         : '';
-      hasValidSecret =
-        customSecretHeader === secret || bearerMatch === secret;
+      hasValidSecret = customSecretHeader === secret || bearerMatch === secret;
     }
 
     // Check if user is an authenticated Admin
