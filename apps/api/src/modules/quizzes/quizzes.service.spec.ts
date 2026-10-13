@@ -489,4 +489,110 @@ describe('QuizzesService Unit Tests', () => {
       expect(res.questions[0].explanation).toBe('Math basic');
     });
   });
+
+  describe('startQuizAttempt & saveDraft - Flexible Resume Mode', () => {
+    it('creates a new attempt when starting for the first time', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        courseId: new Types.ObjectId(courseId),
+        courseCode: 'CS101',
+        courseName: 'Intro to CS',
+        durationMinutes: 15,
+        totalMarks: 5,
+        passingMarks: 3,
+        isPublished: true,
+        allowResume: true,
+        questions: [{ id: 'q1', text: 'Q1', options: ['A', 'B'], points: 5 }],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+      mockAttemptModel.findOne.mockResolvedValue(null);
+
+      function MockAttemptInstance(this: any, data: any) {
+        Object.assign(this, data);
+        this._id = new Types.ObjectId();
+        this.save = jest.fn().mockResolvedValue(this);
+      }
+      mockAttemptModel.mockImplementation(MockAttemptInstance);
+
+      const result = await service.startQuizAttempt(quizId, studentUserId);
+      expect(result.isResumed).toBe(false);
+      expect(result.allowResume).toBe(true);
+      expect(result.draftAnswers).toEqual([]);
+      expect(result.remainingSeconds).toBe(15 * 60);
+    });
+
+    it('resumes in-progress attempt, recalculates remaining time, and restores clean draft answers', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        courseId: new Types.ObjectId(courseId),
+        courseCode: 'CS101',
+        courseName: 'Intro to CS',
+        durationMinutes: 15,
+        totalMarks: 5,
+        passingMarks: 3,
+        isPublished: true,
+        allowResume: true,
+        questions: [{ id: 'q1', text: 'Q1', options: ['A', 'B'], points: 5 }],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+
+      const startedAt = new Date(Date.now() - 120 * 1000); // 2 minutes ago
+      const existingAttempt = {
+        _id: new Types.ObjectId(),
+        quizId: new Types.ObjectId(quizId),
+        studentId: new Types.ObjectId(studentUserId),
+        status: 'in_progress',
+        startedAt,
+        expiresAt: new Date(startedAt.getTime() + 15 * 60 * 1000),
+        allowResume: true,
+        draftAnswers: [
+          { questionId: 'q1', selectedOptionIndex: 1 },
+          { questionId: 'q2', selectedOptionIndex: -1 }, // Should be stripped out
+        ],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockAttemptModel.findOne.mockResolvedValue(existingAttempt);
+
+      const result = await service.startQuizAttempt(quizId, studentUserId);
+      expect(result.isResumed).toBe(true);
+      expect(result.allowResume).toBe(true);
+      expect(result.remainingSeconds).toBeLessThanOrEqual(13 * 60);
+      expect(result.remainingSeconds).toBeGreaterThanOrEqual(12 * 60);
+      expect(result.draftAnswers).toEqual([
+        { questionId: 'q1', selectedOptionIndex: 1 },
+      ]);
+      expect(existingAttempt.save).toHaveBeenCalled();
+    });
+
+    it('saves draft answers and filters invalid negative options', async () => {
+      mockAttemptModel.findOneAndUpdate.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        draftAnswers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+      });
+
+      const res = await service.saveDraft(quizId, studentUserId, {
+        answers: [
+          { questionId: 'q1', selectedOptionIndex: 0 },
+          { questionId: 'q2', selectedOptionIndex: -1 },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockAttemptModel.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'in_progress',
+        }),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            draftAnswers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+          }),
+        }),
+        { new: true },
+      );
+    });
+  });
 });

@@ -648,6 +648,15 @@ export class QuizzesService {
         attempt.lastActiveAt = new Date();
         await attempt.save();
 
+        const cleanDraftAnswers = (attempt.draftAnswers || []).filter(
+          (a) =>
+            a &&
+            typeof a.questionId === 'string' &&
+            a.questionId.trim().length > 0 &&
+            typeof a.selectedOptionIndex === 'number' &&
+            a.selectedOptionIndex >= 0,
+        );
+
         return {
           quiz: this.sanitizeQuiz(quiz),
           attemptId: attempt._id,
@@ -655,7 +664,7 @@ export class QuizzesService {
           expiresAt: attempt.expiresAt,
           remainingSeconds: remSec,
           allowResume: true,
-          draftAnswers: attempt.draftAnswers || [],
+          draftAnswers: cleanDraftAnswers,
           isResumed: true,
         };
       }
@@ -709,6 +718,15 @@ export class QuizzesService {
     dto: SaveQuizDraftDto,
   ) {
     const now = new Date();
+    const cleanAnswers = (dto.answers || []).filter(
+      (a) =>
+        a &&
+        typeof a.questionId === 'string' &&
+        a.questionId.trim().length > 0 &&
+        typeof a.selectedOptionIndex === 'number' &&
+        a.selectedOptionIndex >= 0,
+    );
+
     const updated = await this.attemptModel.findOneAndUpdate(
       {
         quizId: new Types.ObjectId(quizId),
@@ -717,7 +735,7 @@ export class QuizzesService {
       },
       {
         $set: {
-          draftAnswers: dto.answers || [],
+          draftAnswers: cleanAnswers,
           lastActiveAt: now,
         },
       },
@@ -750,8 +768,17 @@ export class QuizzesService {
       return { handled: false };
     }
 
-    if (dto.answers && dto.answers.length > 0) {
-      attempt.draftAnswers = dto.answers;
+    const cleanAnswers = (dto.answers || []).filter(
+      (a) =>
+        a &&
+        typeof a.questionId === 'string' &&
+        a.questionId.trim().length > 0 &&
+        typeof a.selectedOptionIndex === 'number' &&
+        a.selectedOptionIndex >= 0,
+    );
+
+    if (cleanAnswers.length > 0) {
+      attempt.draftAnswers = cleanAnswers;
     }
 
     if (!quiz.allowResume) {
@@ -774,9 +801,7 @@ export class QuizzesService {
     // Flexible Resume Mode
     const now = new Date();
     const draftAnswers =
-      dto.answers && dto.answers.length > 0
-        ? dto.answers
-        : attempt.draftAnswers;
+      cleanAnswers.length > 0 ? cleanAnswers : attempt.draftAnswers || [];
 
     const updated = await this.attemptModel.findOneAndUpdate(
       {

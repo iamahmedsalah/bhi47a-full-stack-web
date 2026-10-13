@@ -228,6 +228,7 @@ function TakeQuizModal({
   isAr,
   onSubmitted,
 }: TakeQuizModalProps) {
+  const queryClient = useQueryClient();
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -241,6 +242,8 @@ function TakeQuizModal({
     enabled: Boolean(quizId && open),
     refetchOnWindowFocus: false,
     retry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const attemptData = attemptQuery.data;
@@ -260,10 +263,18 @@ function TakeQuizModal({
     const initialAnswers: Record<string, number> = {};
     if (Array.isArray(attemptData.draftAnswers)) {
       attemptData.draftAnswers.forEach((ans) => {
-        initialAnswers[ans.questionId] = ans.selectedOptionIndex;
+        if (
+          ans &&
+          typeof ans.questionId === 'string' &&
+          typeof ans.selectedOptionIndex === 'number' &&
+          ans.selectedOptionIndex >= 0
+        ) {
+          initialAnswers[ans.questionId] = ans.selectedOptionIndex;
+        }
       });
     }
     setSelectedAnswers(initialAnswers);
+    selectedAnswersRef.current = initialAnswers;
     setTerminatedByExit(false);
 
     if (attemptData.isResumed) {
@@ -279,7 +290,11 @@ function TakeQuizModal({
 
   const handleSelectOption = React.useCallback(
     (questionId: string, optIndex: number) => {
-      setSelectedAnswers((prev) => ({ ...prev, [questionId]: optIndex }));
+      setSelectedAnswers((prev) => {
+        const next = { ...prev, [questionId]: optIndex };
+        selectedAnswersRef.current = next;
+        return next;
+      });
 
       if (!quizId) return;
 
@@ -289,12 +304,16 @@ function TakeQuizModal({
 
       draftSaveTimeoutRef.current = setTimeout(() => {
         const current = selectedAnswersRef.current;
-        const answersPayload = Object.entries(current).map(([qId, idx]) => ({
-          questionId: qId,
-          selectedOptionIndex: idx,
-        }));
-        saveQuizDraft(quizId, answersPayload).catch(() => {});
-      }, 400);
+        const answersPayload = Object.entries(current)
+          .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+          .map(([qId, idx]) => ({
+            questionId: qId,
+            selectedOptionIndex: idx,
+          }));
+        if (answersPayload.length > 0) {
+          saveQuizDraft(quizId, answersPayload).catch(() => {});
+        }
+      }, 300);
     },
     [quizId],
   );
@@ -315,6 +334,7 @@ function TakeQuizModal({
         answers: answersPayload,
       });
 
+      queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
       setSubmissionResult(res);
       toast.success(
         isAr
@@ -371,10 +391,13 @@ function TakeQuizModal({
 
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
-        const answersPayload = (quiz?.questions || []).map((q) => ({
-          questionId: q.id,
-          selectedOptionIndex: selectedAnswersRef.current[q.id] ?? -1,
-        }));
+        const currentAnswers = selectedAnswersRef.current;
+        const answersPayload = Object.entries(currentAnswers)
+          .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+          .map(([qId, idx]) => ({
+            questionId: qId,
+            selectedOptionIndex: idx,
+          }));
 
         if (!allowResume) {
           // Strict Anti-Cheat Mode: immediately submit payload & terminate
@@ -400,10 +423,13 @@ function TakeQuizModal({
     };
 
     const handlePageHide = () => {
-      const answersPayload = (quiz?.questions || []).map((q) => ({
-        questionId: q.id,
-        selectedOptionIndex: selectedAnswersRef.current[q.id] ?? -1,
-      }));
+      const currentAnswers = selectedAnswersRef.current;
+      const answersPayload = Object.entries(currentAnswers)
+        .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+        .map(([qId, idx]) => ({
+          questionId: qId,
+          selectedOptionIndex: idx,
+        }));
       void recordQuizExit(quizId, answersPayload, 'pagehide');
     };
 
@@ -431,7 +457,11 @@ function TakeQuizModal({
   };
 
   const questionsCount = quiz?.questions?.length || 0;
-  const answeredCount = Object.keys(selectedAnswers).length;
+  const answeredCount = useMemo(() => {
+    return Object.values(selectedAnswers).filter(
+      (idx) => typeof idx === 'number' && idx >= 0,
+    ).length;
+  }, [selectedAnswers]);
   const isTimeCritical = secondsRemaining < 120; // under 2 minutes
 
   const handleClose = async () => {
@@ -443,6 +473,7 @@ function TakeQuizModal({
     ) {
       setSubmissionResult(null);
       setTerminatedByExit(false);
+      queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
       onOpenChange(false);
       onSubmitted();
       return;
@@ -452,17 +483,29 @@ function TakeQuizModal({
     // Student can freely close the modal or exit.
     // Draft answers are saved and attempt stays in progress so they can resume anytime before time runs out.
     if (allowResume) {
-      const answersPayload = (quiz?.questions || []).map((q) => ({
-        questionId: q.id,
-        selectedOptionIndex: selectedAnswersRef.current[q.id] ?? -1,
-      }));
-      if (answersPayload.length > 0 && quizId) {
+      if (draftSaveTimeoutRef.current) {
+        clearTimeout(draftSaveTimeoutRef.current);
+        draftSaveTimeoutRef.current = null;
+      }
+
+      const currentAnswers = selectedAnswersRef.current;
+      const answersPayload = Object.entries(currentAnswers)
+        .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+        .map(([qId, idx]) => ({
+          questionId: qId,
+          selectedOptionIndex: idx,
+        }));
+
+      if (quizId && answersPayload.length > 0) {
         try {
           await saveQuizDraft(quizId, answersPayload);
         } catch {
-          // Silent
+          // Handled
         }
       }
+
+      queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
+
       toast.info(
         isAr
           ? 'تم حفظ إجاباتك كمسودة، يمكنك استئناف الاختبار لاحقاً.'
@@ -470,6 +513,8 @@ function TakeQuizModal({
       );
       setSubmissionResult(null);
       setTerminatedByExit(false);
+      setSelectedAnswers({});
+      setSecondsRemaining(0);
       onOpenChange(false);
       onSubmitted();
       return;
@@ -484,6 +529,7 @@ function TakeQuizModal({
     try {
       await performSubmit();
     } finally {
+      queryClient.removeQueries({ queryKey: ['start-quiz-attempt', quizId] });
       setSubmissionResult(null);
       setTerminatedByExit(false);
       onOpenChange(false);
@@ -1942,6 +1988,9 @@ export default function StudentQuizzesPage() {
         onOpenChange={(op) => !op && setConfirmStartQuiz(null)}
         onConfirmStart={() => {
           if (confirmStartQuiz) {
+            queryClient.removeQueries({
+              queryKey: ['start-quiz-attempt', confirmStartQuiz._id],
+            });
             setTakingQuizId(confirmStartQuiz._id);
             setConfirmStartQuiz(null);
           }
@@ -1950,19 +1999,22 @@ export default function StudentQuizzesPage() {
       />
 
       {/* Taking Quiz Interactive Modal */}
-      <TakeQuizModal
-        quizId={takingQuizId}
-        open={Boolean(takingQuizId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setTakingQuizId(null);
-          }
-        }}
-        isAr={isAr}
-        onSubmitted={() => {
-          void queryClient.invalidateQueries({ queryKey: ['student-online-quizzes'] });
-        }}
-      />
+      {takingQuizId && (
+        <TakeQuizModal
+          key={takingQuizId}
+          quizId={takingQuizId}
+          open={Boolean(takingQuizId)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTakingQuizId(null);
+            }
+          }}
+          isAr={isAr}
+          onSubmitted={() => {
+            void queryClient.invalidateQueries({ queryKey: ['student-online-quizzes'] });
+          }}
+        />
+      )}
 
       {/* Quiz Questions & Model Answers Review Modal */}
       <QuizReviewModal
