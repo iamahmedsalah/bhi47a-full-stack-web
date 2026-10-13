@@ -243,3 +243,62 @@ export function exportMultiSheetExcel(
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
+
+export const EXCEL_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const CSV_MIME_TYPE = 'text/csv; charset=utf-8';
+
+/**
+ * Standardized global helper for downloading binary Excel (.xlsx), CSV, or other binary files.
+ * Accurately handles Axios response unwrapping (whether the interceptor returned `response.data` or AxiosResponse).
+ * Also guards against server error JSON disguised as blob and 0-byte corrupt files.
+ */
+export async function downloadFileBlob(
+  raw: unknown,
+  filename: string,
+  defaultMimeType: string = EXCEL_MIME_TYPE,
+): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  const rawRecord =
+    typeof raw === 'object' && raw !== null
+      ? (raw as Record<string, unknown>)
+      : null;
+
+  let blob: Blob;
+  if (raw instanceof Blob) {
+    blob = raw;
+  } else if (rawRecord && rawRecord.data instanceof Blob) {
+    blob = rawRecord.data;
+  } else if (rawRecord && rawRecord.data !== undefined) {
+    blob = new Blob([rawRecord.data as BlobPart], { type: defaultMimeType });
+  } else {
+    blob = new Blob([raw as BlobPart], { type: defaultMimeType });
+  }
+
+  // Check if server returned an error JSON disguised as blob
+  if (blob.type.includes('application/json')) {
+    const errorText = await blob.text();
+    try {
+      const errObj = JSON.parse(errorText) as Record<string, unknown>;
+      const msg = typeof errObj.message === 'string' ? errObj.message : '';
+      throw new Error(msg || 'فشل تحميل الملف');
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message !== 'فشل تحميل الملف') throw e;
+      throw new Error(errorText || 'فشل تحميل الملف');
+    }
+  }
+
+  if (blob.size === 0) {
+    throw new Error('الملف المستلم فارغ');
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

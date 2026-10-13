@@ -390,7 +390,8 @@ export function GradesPublishingModal({
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     <SelectItem value="all">{isAr ? 'جميع الاختبارات' : 'All Exam Types'}</SelectItem>
-                    <SelectItem value="midterm">{isAr ? 'ميدتيرم وأعمال سنة' : 'Midterm & Coursework'}</SelectItem>
+                    <SelectItem value="midterm">{isAr ? 'الميدتيرم' : 'Midterm Exam'}</SelectItem>
+                    <SelectItem value="coursework">{isAr ? 'أعمال السنة' : 'Coursework'}</SelectItem>
                     <SelectItem value="final">{isAr ? 'الامتحان النهائي' : 'Final Exam'}</SelectItem>
                     <SelectItem value="quiz">{isAr ? 'الكويزات والأنشطة' : 'Quizzes'}</SelectItem>
                   </SelectContent>

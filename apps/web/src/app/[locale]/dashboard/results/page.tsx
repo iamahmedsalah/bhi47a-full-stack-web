@@ -373,8 +373,8 @@ export default function StudentResultsPage() {
           </h2>
           <p className="text-sm text-muted-foreground">
             {isEnglish
-              ? 'View your final transcripts and semester performance'
-              : 'عرض نتائج أعمال السنة والامتحانات النهائية للفصل الدراسي الحالي'}
+              ? 'View your midterm and final exam transcripts for the current term'
+              : 'عرض نتائج امتحانات الميدتيرم والنهائي للفصل الدراسي الحالي'}
           </p>
         </div>
 
@@ -535,7 +535,7 @@ export default function StudentResultsPage() {
                   <th className="p-4 text-center">
                     <span className="flex items-center justify-center gap-1.5">
                       <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground" />
-                      {isEnglish ? 'Coursework' : 'أعمال السنة'}
+                      {isEnglish ? 'Midterm Exam' : 'الميدتيرم'}
                     </span>
                   </th>
                   <th className="p-4 text-center">

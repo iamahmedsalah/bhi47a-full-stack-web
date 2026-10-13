@@ -171,10 +171,11 @@ export const rateLimitRules: RateLimitRule[] = [
   {
     name: 'quiz-submit',
     methods: ['POST'],
-    pattern: /^\/api\/courses\/[^/]+\/quizzes\/[^/]+\/submit$/,
+    pattern:
+      /^\/api\/(courses\/[^/]+\/quizzes\/[^/]+\/submit|students\/me\/quizzes\/[^/]+\/(submit|start|save-draft|exit))$/,
     windowMs: minute,
-    max: readLimit('QUIZ_SUBMIT_RATE_LIMIT', 10),
-    message: 'Too many quiz submissions. Please wait a moment.',
+    max: readLimit('QUIZ_SUBMIT_RATE_LIMIT', 30),
+    message: 'Too many quiz requests. Please wait a moment.',
   },
 ];
 

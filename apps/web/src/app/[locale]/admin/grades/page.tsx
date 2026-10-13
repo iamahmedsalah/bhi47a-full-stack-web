@@ -518,11 +518,15 @@ function GradesPageContent() {
         {[
           {
             key: "final",
-            label: isAr ? "الامتحان النهائي (Final)" : "Final Exam",
+            label: isAr ? "الامتحان النهائي" : "Final Exam",
           },
           {
             key: "midterm",
-            label: isAr ? "أعمال السنة والميدتيرم" : "Midterm & Coursework",
+            label: isAr ? "الميدتيرم" : "Midterm Exam",
+          },
+          {
+            key: "coursework",
+            label: isAr ? "أعمال السنة" : "Coursework",
           },
         ].map((tab) => (
           <Button

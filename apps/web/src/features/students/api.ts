@@ -1,5 +1,6 @@
 import api, { type PaginatedResponse } from '@/lib/api';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
+import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 
 
 export interface StudentUserRef {
@@ -242,46 +243,6 @@ export async function exportStudentsStreamingExcel(
     responseType: 'blob',
   })) as unknown;
 
-  // Handle axios response interceptor unwrapping:
-  // If response interceptor returned response.data, raw is already the Blob.
-  // Otherwise if raw is an AxiosResponse object, extract raw.data.
-  const rawRecord =
-    typeof raw === 'object' && raw !== null
-      ? (raw as Record<string, unknown>)
-      : null;
-
-  let blob: Blob;
-  if (raw instanceof Blob) {
-    blob = raw;
-  } else if (rawRecord && rawRecord.data instanceof Blob) {
-    blob = rawRecord.data;
-  } else if (rawRecord && rawRecord.data !== undefined) {
-    blob = new Blob([rawRecord.data as BlobPart], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-  } else {
-    blob = new Blob([raw as BlobPart], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-  }
-
-  // Check if server returned an error JSON disguised as blob
-  if (blob.type.includes('application/json')) {
-    const errorText = await blob.text();
-    try {
-      const errObj = JSON.parse(errorText) as Record<string, unknown>;
-      const msg = typeof errObj.message === 'string' ? errObj.message : '';
-      throw new Error(msg || 'فشل تصدير كشف الطلاب');
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message !== 'فشل تصدير كشف الطلاب') throw e;
-      throw new Error(errorText || 'فشل تصدير كشف الطلاب');
-    }
-  }
-
-  if (blob.size === 0) {
-    throw new Error('الملف المستلم فارغ');
-  }
-
   const filename = buildStudentExportSlug({
     level: params.level,
     enrollmentStatus: params.enrollmentStatus,
@@ -289,14 +250,7 @@ export async function exportStudentsStreamingExcel(
     ext: 'xlsx',
   });
 
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+  await downloadFileBlob(raw, filename, EXCEL_MIME_TYPE);
 }
 
 

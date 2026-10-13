@@ -119,6 +119,19 @@ Every feature table across the Student Portal must follow these unified standard
    - Frontend detail fetch: `GET /api/courses/by-slug/:slug`
    - Administrative mutations: `PATCH /api/admin/courses/:id`, `DELETE /api/admin/courses/:id`
 
+## Excel Export & Template Download Architecture Standards
+
+1. **Always Use Standard `.xlsx` MIME Type & File Format**:
+   - MIME Type: `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+   - Content-Disposition: `attachment; filename="...xlsx"; filename*=UTF-8''...`.
+   - Backend Generation: Always use `exceljs` (`workbook.xlsx.writeBuffer()`) with styled teal header row (`#0D9488`), bold white text, centered alignment, and auto-computed column widths.
+2. **Axios Response Interceptor Unwrapping Safety**:
+   - Because `api.interceptors.response` in `apps/web/src/lib/api.ts` unwraps `response.data`, any endpoint request with `responseType: 'blob'` yields the binary `Blob` directly as `res`.
+   - **Never** do `new Blob([res.data])` (which yields an invalid 0-byte or corrupted file because `res.data` is `undefined`).
+   - Always use the global helper `downloadFileBlob(raw, filename, defaultMimeType)` from `@/lib/export-utils`.
+3. **CSV Export & Template Fallback**:
+   - When generating or downloading CSV files, ALWAYS prepend UTF-8 BOM (`\uFEFF`) so Microsoft Excel on Windows correctly detects UTF-8 Arabic text encoding without garbled characters.
+
 ## Request workflow
 
 ### 1. Classify the task

@@ -1,4 +1,5 @@
 import api from '@/lib/api';
+import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 import type { PreFlightIssue, UploadCatalogConfig, UploadCatalogType } from './types';
 
 export const UPLOAD_CATALOGS: Record<UploadCatalogType, UploadCatalogConfig> = {
@@ -892,36 +893,13 @@ export async function downloadOfficialTemplate(
   const res = (await api.get(`/admin/uploads/templates/${type}`, {
     params: { lang },
     responseType: 'blob',
-  })) as Blob | { data?: BlobPart } | BlobPart;
-
-  // api interceptor returns response.data directly. If responseType is 'blob', res is already the Blob.
-  const blob =
-    res instanceof Blob
-      ? res
-      : new Blob(
-          [
-            typeof res === 'object' && res && 'data' in res && res.data
-              ? res.data
-              : (res as BlobPart),
-          ],
-          {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          },
-        );
-
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
+  })) as unknown;
 
   const defaultFilename =
     lang === 'ar' ? `قالب_${type}.xlsx` : `${type}_template.xlsx`;
   const filename = TEMPLATE_FILENAMES[type]?.[lang] || defaultFilename;
 
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  downloadFileBlob(res, filename, EXCEL_MIME_TYPE);
 }
 
 /**
@@ -985,34 +963,14 @@ export async function downloadAllTemplatesBundle(
   const res = (await api.get('/admin/uploads/templates/bundle', {
     params: { lang },
     responseType: 'blob',
-  })) as Blob | { data?: BlobPart } | BlobPart;
-
-  const blob =
-    res instanceof Blob
-      ? res
-      : new Blob(
-          [
-            typeof res === 'object' && res && 'data' in res && res.data
-              ? res.data
-              : (res as BlobPart),
-          ],
-          { type: 'application/zip' },
-        );
-
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
+  })) as unknown;
 
   const filename =
     lang === 'ar'
       ? 'حزمة_نماذج_إكسيل_بوابة_الطلاب.zip'
       : 'Student_Portal_Excel_Templates_Bundle.zip';
 
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  downloadFileBlob(res, filename, 'application/zip');
 }
 
 /**

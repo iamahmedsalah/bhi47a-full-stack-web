@@ -1,4 +1,9 @@
 import api from '@/lib/api';
+import {
+  downloadFileBlob,
+  EXCEL_MIME_TYPE,
+  CSV_MIME_TYPE,
+} from '@/lib/export-utils';
 
 export type QuestionType = 'mcq' | 'true_false';
 
@@ -31,8 +36,11 @@ export interface QuizItem {
   passingMarks: number;
   startsAt?: string;
   endsAt?: string;
+  open_at?: string;
+  close_at?: string;
   isPublished: boolean;
   allowReview: boolean;
+  allowResume?: boolean;
   questions?: QuizQuestion[];
   submissionsCount?: number;
   createdAt?: string;
@@ -78,9 +86,12 @@ export interface StudentQuizViewItem {
   questionsCount: number;
   startsAt?: string;
   endsAt?: string;
+  allowResume?: boolean;
+  allowReview?: boolean;
   isOpen: boolean;
   isEnded: boolean;
   isSubmitted: boolean;
+  attemptStatus?: 'in_progress' | 'submitted' | 'terminated_by_exit' | 'timed_out';
   submission?: {
     score: number;
     totalMarks: number;
@@ -106,6 +117,7 @@ export interface TakeQuizResponse {
   passingMarks: number;
   startsAt?: string;
   endsAt?: string;
+  allowResume?: boolean;
   questions: Array<{
     id: string;
     text: string;
@@ -113,6 +125,20 @@ export interface TakeQuizResponse {
     options: string[];
     points: number;
   }>;
+}
+
+export interface StartQuizAttemptResponse {
+  quiz: TakeQuizResponse;
+  attemptId: string;
+  startedAt: string;
+  expiresAt: string;
+  remainingSeconds: number;
+  allowResume: boolean;
+  draftAnswers: Array<{
+    questionId: string;
+    selectedOptionIndex: number;
+  }>;
+  isResumed: boolean;
 }
 
 export interface SubmitQuizPayload {
@@ -136,6 +162,13 @@ export interface SubmitQuizResult {
     isCorrect: boolean;
     pointsAwarded: number;
   }>;
+}
+
+export interface ParseQuestionsResult {
+  questions: QuizQuestion[];
+  errors: string[];
+  totalRows: number;
+  validCount: number;
 }
 
 // ─── Admin / Staff API Calls ─────────────────────────────────────────
@@ -182,6 +215,36 @@ export async function getQuizSubmissions(quizId: string) {
   return res.data;
 }
 
+export async function parseQuestionsExcel(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await api.post<ParseQuestionsResult>(
+    '/admin/quizzes/parse-questions-file',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    },
+  );
+  return res.data;
+}
+
+export async function downloadQuestionsTemplate(
+  format: 'xlsx' | 'csv' = 'xlsx',
+) {
+  const isCsv = format === 'csv';
+  const raw = await api.get('/admin/quizzes/questions-template', {
+    params: { format },
+    responseType: 'blob',
+  });
+
+  const mimeType = isCsv ? CSV_MIME_TYPE : EXCEL_MIME_TYPE;
+  const filename = isCsv
+    ? 'quiz-questions-template.csv'
+    : 'quiz-questions-template.xlsx';
+
+  downloadFileBlob(raw, filename, mimeType);
+}
+
 // ─── Student API Calls ───────────────────────────────────────────────
 
 export async function getStudentQuizzes() {
@@ -194,6 +257,44 @@ export async function getQuizForTaking(quizId: string) {
   return res.data;
 }
 
+export async function startQuizAttempt(quizId: string) {
+  const res = await api.post<StartQuizAttemptResponse>(
+    `/students/me/quizzes/${quizId}/start`,
+  );
+  return res.data;
+}
+
+export async function saveQuizDraft(
+  quizId: string,
+  answers: Array<{ questionId: string; selectedOptionIndex: number }>,
+) {
+  const res = await api.post<{ success: boolean; savedAt?: string }>(
+    `/students/me/quizzes/${quizId}/save-draft`,
+    { answers },
+  );
+  return res.data;
+}
+
+export interface ExitQuizAttemptResult {
+  status: 'in_progress' | 'terminated_by_exit';
+  message?: string;
+  exitCount?: number;
+  allowResume?: boolean;
+  submission?: SubmitQuizResult;
+}
+
+export async function recordQuizExit(
+  quizId: string,
+  answers?: Array<{ questionId: string; selectedOptionIndex: number }>,
+  reason?: string,
+) {
+  const res = await api.post<ExitQuizAttemptResult>(
+    `/students/me/quizzes/${quizId}/exit`,
+    { answers, reason },
+  );
+  return res.data;
+}
+
 export async function submitQuiz(quizId: string, payload: SubmitQuizPayload) {
   const res = await api.post<SubmitQuizResult>(
     `/students/me/quizzes/${quizId}/submit`,
@@ -201,3 +302,50 @@ export async function submitQuiz(quizId: string, payload: SubmitQuizPayload) {
   );
   return res.data;
 }
+
+export interface QuizReviewQuestion {
+  id: string;
+  index: number;
+  text: string;
+  type: QuestionType;
+  options: string[];
+  correctOptionIndex: number;
+  points: number;
+  explanation?: string | null;
+  studentSelectedOptionIndex: number;
+  isAnswered: boolean;
+  isCorrect: boolean;
+  pointsAwarded: number;
+}
+
+export interface QuizReviewResponse {
+  quiz: {
+    id: string;
+    title: string;
+    titleAr?: string;
+    courseCode: string;
+    courseName: string;
+    courseNameAr?: string;
+    courseNameEn?: string;
+    totalMarks: number;
+    passingMarks: number;
+    endsAt?: string;
+  };
+  submission: {
+    score: number;
+    totalMarks: number;
+    percentage: number;
+    isPassed: boolean;
+    submittedAt: string;
+    durationSeconds: number;
+  };
+  questions: QuizReviewQuestion[];
+}
+
+export async function getQuizReview(quizId: string) {
+  const res = await api.get<QuizReviewResponse>(
+    `/students/me/quizzes/${quizId}/review`,
+  );
+  return res.data;
+}
+

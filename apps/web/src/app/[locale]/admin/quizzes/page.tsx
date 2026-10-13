@@ -20,6 +20,11 @@ import {
   Eye,
   Calendar,
   ListChecks,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
@@ -40,6 +45,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import {
   Dialog,
   DialogContent,
@@ -63,6 +69,8 @@ import {
   updateQuiz,
   deleteQuiz,
   getQuizSubmissions,
+  parseQuestionsExcel,
+  downloadQuestionsTemplate,
   type QuizItem,
   type QuizQuestion,
   type QuizSubmission,
@@ -103,6 +111,7 @@ function QuizFormDialog({
   isAr,
   onSuccess,
 }: QuizFormDialogProps) {
+  const locale = isAr ? 'ar' : 'en';
   const [courseId, setCourseId] = useState(initialValues.courseId || '');
   const [title, setTitle] = useState(initialValues.title || '');
   const [description, setDescription] = useState(initialValues.description || '');
@@ -111,6 +120,10 @@ function QuizFormDialog({
   const [endsAt, setEndsAt] = useState(toDateTimeLocal(initialValues.endsAt));
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? true);
+  const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? false);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const [excelErrors, setExcelErrors] = useState<string[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [questions, setQuestions] = useState<QuizQuestion[]>(
     initialValues.questions && initialValues.questions.length > 0
@@ -143,9 +156,20 @@ function QuizFormDialog({
       setEndsAt(toDateTimeLocal(initialValues.endsAt));
       setIsPublished(initialValues.isPublished ?? true);
       setAllowReview(initialValues.allowReview ?? true);
+      setAllowResume(initialValues.allowResume ?? false);
+      setUploadingExcel(false);
+      setExcelErrors([]);
       setQuestions(
         initialValues.questions && initialValues.questions.length > 0
-          ? initialValues.questions
+          ? initialValues.questions.map((q) => ({
+              ...q,
+              options:
+                Array.isArray(q.options) && q.options.length > 0
+                  ? q.options
+                  : q.type === 'true_false'
+                    ? [isAr ? 'صح' : 'True', isAr ? 'خطأ' : 'False']
+                    : ['', '', '', ''],
+            }))
           : [
               {
                 id: 'q1',
@@ -160,6 +184,65 @@ function QuizFormDialog({
       setError('');
     }
   }
+
+  const handleDownloadTemplate = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      await downloadQuestionsTemplate(format);
+      toast.success(
+        isAr
+          ? `تم تحميل نموذج الأسئلة (${format === 'csv' ? 'CSV' : 'Excel'}) بنجاح`
+          : `Downloaded ${format.toUpperCase()} questions template successfully`,
+      );
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل تحميل القالب' : 'Failed to download template',
+        ),
+      );
+    }
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingExcel(true);
+    setExcelErrors([]);
+    try {
+      const res = await parseQuestionsExcel(file);
+      if (res.questions.length > 0) {
+        setQuestions((prev) => {
+          if (prev.length === 1 && !prev[0].text.trim()) {
+            return res.questions;
+          }
+          return [...prev, ...res.questions];
+        });
+        toast.success(
+          isAr
+            ? `تم استيراد ${res.questions.length} سؤال بنجاح من الملف`
+            : `Imported ${res.questions.length} questions successfully`,
+        );
+      }
+      if (res.errors && res.errors.length > 0) {
+        setExcelErrors(res.errors);
+        toast.warning(
+          isAr
+            ? `يوجد ${res.errors.length} أخطاء في تنسيق بعض الصفوف`
+            : `${res.errors.length} rows had formatting errors`,
+        );
+      }
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل معالجة ملف الأسئلة' : 'Failed to parse questions file',
+        ),
+      );
+    } finally {
+      setUploadingExcel(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleAddQuestion = () => {
     setQuestions((prev) => [
@@ -185,7 +268,16 @@ function QuizFormDialog({
 
   const handleQuestionChange = (index: number, updates: Partial<QuizQuestion>) => {
     setQuestions((prev) =>
-      prev.map((q, idx) => (idx === index ? { ...q, ...updates } : q)),
+      prev.map((q, idx) => {
+        if (idx !== index) return q;
+        const merged = { ...q, ...updates };
+        if (updates.type === 'true_false' && (!merged.options || merged.options.length < 2)) {
+          merged.options = [isAr ? 'صح' : 'True', isAr ? 'خطأ' : 'False'];
+        } else if (updates.type === 'mcq' && (!merged.options || merged.options.length === 0)) {
+          merged.options = ['', '', '', ''];
+        }
+        return merged;
+      }),
     );
   };
 
@@ -193,7 +285,7 @@ function QuizFormDialog({
     setQuestions((prev) =>
       prev.map((q, idx) => {
         if (idx !== qIndex) return q;
-        const newOptions = [...q.options];
+        const newOptions = [...(q.options || ['', '', '', ''])];
         newOptions[optIndex] = value;
         return { ...q, options: newOptions };
       }),
@@ -221,7 +313,8 @@ function QuizFormDialog({
         return;
       }
       if (q.type === 'mcq') {
-        const filled = q.options.filter((o) => o.trim() !== '');
+        const opts = q.options || [];
+        const filled = opts.filter((o) => o && o.trim() !== '');
         if (filled.length < 2) {
           setError(
             isAr
@@ -233,15 +326,10 @@ function QuizFormDialog({
       }
     }
 
-    if (startsAt && endsAt) {
-      if (new Date(endsAt) <= new Date(startsAt)) {
-        setError(
-          isAr
-            ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
-            : 'Quiz close time must be after open time',
-        );
-        return;
-      }
+    if (scheduleValidationError) {
+      setError(scheduleValidationError);
+      toast.error(scheduleValidationError);
+      return;
     }
 
     setLoading(true);
@@ -255,6 +343,7 @@ function QuizFormDialog({
         endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
         isPublished,
         allowReview,
+        allowResume,
         questions,
       };
 
@@ -274,6 +363,39 @@ function QuizFormDialog({
       setLoading(false);
     }
   };
+
+  const scheduleValidationError = useMemo(() => {
+    if (!startsAt || !endsAt) return null;
+    const s = new Date(startsAt);
+    const e = new Date(endsAt);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
+    if (e <= s) {
+      return isAr
+        ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
+        : 'Quiz close time must be after open time';
+    }
+    const windowMin = (e.getTime() - s.getTime()) / (60 * 1000);
+    if (windowMin < Number(durationMinutes || 0)) {
+      return isAr
+        ? `نافذة إتاحة الاختبار (${Math.round(windowMin)} دقيقة) أقل من مدة الاختبار (${durationMinutes} دقيقة). يرجى توسيع نافذة الاختبار.`
+        : `Quiz window (${Math.round(windowMin)}m) is shorter than quiz duration (${durationMinutes}m). Please expand window.`;
+    }
+    return null;
+  }, [startsAt, endsAt, durationMinutes, isAr]);
+
+  const scheduleWindowSummary = useMemo(() => {
+    if (!startsAt || !endsAt || scheduleValidationError) return null;
+    const s = new Date(startsAt);
+    const e = new Date(endsAt);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return null;
+    const windowMin = Math.round((e.getTime() - s.getTime()) / (60 * 1000));
+    const hours = Math.floor(windowMin / 60);
+    const mins = windowMin % 60;
+    if (hours > 0) {
+      return isAr ? `${hours} ساعة و ${mins} دقيقة` : `${hours}h ${mins}m`;
+    }
+    return isAr ? `${mins} دقيقة` : `${mins} mins`;
+  }, [startsAt, endsAt, scheduleValidationError, isAr]);
 
   const totalPoints = useMemo(
     () => questions.reduce((acc, q) => acc + (Number(q.points) || 1), 0),
@@ -382,39 +504,82 @@ function QuizFormDialog({
             />
           </div>
 
-          {/* Schedule Window (Open and Close Times) */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 rounded-xl border border-border/70 bg-background/50 p-3.5">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-primary" />
-                <span>{isAr ? 'موعد فتح الاختبار (اختياري)' : 'Quiz Open Time (Optional)'}</span>
-              </label>
-              <Input
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                className="rounded-squircle font-mono text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                {isAr ? 'الوقت الذي سيصبح فيه الاختبار متاحاً للطلاب' : 'When the quiz becomes available to students'}
-              </p>
+          {/* Schedule Window (Open and Close Times) with Radix DateTimePicker */}
+          <div className="space-y-2.5 rounded-xl border border-border/70 bg-background/50 p-3.5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    <span>{isAr ? 'موعد فتح الاختبار (اختياري)' : 'Quiz Open Time (Optional)'}</span>
+                  </span>
+                  {startsAt && (
+                    <button
+                      type="button"
+                      onClick={() => setStartsAt('')}
+                      className="text-[10px] text-muted-foreground hover:text-rose-400 cursor-pointer"
+                    >
+                      {isAr ? 'مسح' : 'Clear'}
+                    </button>
+                  )}
+                </label>
+                <DateTimePicker
+                  value={startsAt}
+                  onChange={setStartsAt}
+                  locale={locale}
+                  isError={Boolean(scheduleValidationError)}
+                  placeholder={isAr ? 'اختر تاريخ ووقت الفتح...' : 'Select open date & time...'}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {isAr ? 'الوقت الذي سيصبح فيه الاختبار متاحاً للطلاب' : 'When the quiz becomes available to students'}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-danger" />
+                    <span>{isAr ? 'موعد إغلاق الاختبار (اختياري)' : 'Quiz Close Time (Optional)'}</span>
+                  </span>
+                  {endsAt && (
+                    <button
+                      type="button"
+                      onClick={() => setEndsAt('')}
+                      className="text-[10px] text-muted-foreground hover:text-rose-400 cursor-pointer"
+                    >
+                      {isAr ? 'مسح' : 'Clear'}
+                    </button>
+                  )}
+                </label>
+                <DateTimePicker
+                  value={endsAt}
+                  onChange={setEndsAt}
+                  locale={locale}
+                  isError={Boolean(scheduleValidationError)}
+                  placeholder={isAr ? 'اختر تاريخ ووقت الإغلاق...' : 'Select close date & time...'}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {isAr ? 'الموعد النهائي الذي لن يتمكن الطلاب بعده من تقديم الاختبار' : 'Deadline after which students cannot submit the quiz'}
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-danger" />
-                <span>{isAr ? 'موعد إغلاق الاختبار (اختياري)' : 'Quiz Close Time (Optional)'}</span>
-              </label>
-              <Input
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                className="rounded-squircle font-mono text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                {isAr ? 'الموعد النهائي الذي لن يتمكن الطلاب بعده من تقديم الاختبار' : 'Deadline after which students cannot submit the quiz'}
-              </p>
-            </div>
+            {/* Validation Feedback Banner */}
+            {scheduleValidationError ? (
+              <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs font-semibold text-rose-300">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
+                <span>{scheduleValidationError}</span>
+              </div>
+            ) : scheduleWindowSummary ? (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-2.5 text-xs text-emerald-300 font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span>
+                  {isAr
+                    ? `نافذة إتاحة الاختبار: ${scheduleWindowSummary} (صالحة وتكفي مدة الاختبار ${durationMinutes} دقيقة)`
+                    : `Availability Window: ${scheduleWindowSummary} (Valid, covers ${durationMinutes} mins duration)`}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-6 rounded-xl border border-border/70 bg-background/50 p-3.5">
@@ -442,6 +607,125 @@ function QuizFormDialog({
               <span>{isAr ? 'إجمالي الدرجات:' : 'Total Marks:'}</span>
               <span className="font-mono text-sm">{totalPoints}</span>
             </div>
+          </div>
+
+          {/* Anti-Cheat Session Control Toggle */}
+          <div className="rounded-xl border border-border/80 bg-secondary/20 p-4 space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5 min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className={`h-4 w-4 shrink-0 ${allowResume ? 'text-amber-400' : 'text-cyan-400'}`} />
+                  <span className="text-xs font-bold text-foreground">
+                    {isAr
+                      ? 'سماح للطالب باستئناف الاختبار عند الانقطاع أو الخروج (Anti-Cheat / Resume)'
+                      : 'Allow Student to Resume on Disconnect / Exit'}
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    allowResume
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                      : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400'
+                  }`}>
+                    {allowResume
+                      ? (isAr ? 'الوضع المرن' : 'Flexible Resume')
+                      : (isAr ? 'الوضع المشدد ضد الغش' : 'Strict Anti-Cheat')}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                  {allowResume
+                    ? (isAr
+                        ? 'الوضع المرن: في حالة انقطاع الاتصال أو تحديث الصفحة، يحتفظ النظام بإجابات الطالب ويستأنف العداد التنازلي من الوقت المتبقي المحسوب خادمياً.'
+                        : 'Flexible Mode: If disconnected or refreshed, answers are restored and countdown resumes from server-calculated time remaining.')
+                    : (isAr
+                        ? 'الوضع المشدد (محاولة واحدة ضد الغش): يُمنع خروج الطالب أو تبديل التبويب أو تصغير النافذة؛ يؤدي الخروج فوراً إلى تسليم الإجابات وإنهاء المحاولة نهائياً.'
+                        : 'Strict Anti-Cheat Mode: Single entry. Switching tabs, minimizing, or exiting immediately finalizes and locks the attempt.')}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allowResume}
+                onClick={() => setAllowResume(!allowResume)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary ${
+                  allowResume ? 'bg-primary' : 'bg-muted-foreground/30'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    allowResume ? 'translate-x-5 rtl:-translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Bulk Excel / CSV Upload Area */}
+          <div className="rounded-xl border border-border/80 bg-secondary/15 p-3.5 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs font-bold text-foreground">
+                  {isAr ? 'الاستيراد السريع للأسئلة عبر Excel (.xlsx / .csv)' : 'Bulk Questions Import via Excel (.xlsx / .csv)'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownloadTemplate('xlsx')}
+                  className="h-7 text-[11px] rounded-squircle gap-1.5 border-border/80 hover:bg-secondary/60 cursor-pointer"
+                  title={isAr ? 'تحميل نموذج الأسئلة بصيغة Excel' : 'Download Excel template (.xlsx)'}
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{isAr ? 'نموذج Excel (.xlsx)' : 'Excel Template (.xlsx)'}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownloadTemplate('csv')}
+                  className="h-7 text-[11px] rounded-squircle gap-1.5 border-border/80 hover:bg-secondary/60 cursor-pointer"
+                  title={isAr ? 'تحميل نموذج الأسئلة بصيغة CSV' : 'Download CSV template (.csv)'}
+                >
+                  <Download className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>{isAr ? 'نموذج CSV (.csv)' : 'CSV Template (.csv)'}</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={uploadingExcel}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-7 text-[11px] rounded-squircle gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold cursor-pointer"
+                >
+                  {uploadingExcel ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isAr ? 'رفع ملف الأسئلة' : 'Upload Questions File'}</span>
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
+              </div>
+            </div>
+            {excelErrors.length > 0 && (
+              <div className="rounded-lg border border-danger/30 bg-danger/10 p-2.5 text-xs text-danger space-y-1 max-h-28 overflow-y-auto">
+                <p className="font-bold flex items-center gap-1">
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  <span>{isAr ? 'تنبيهات وتعارضات صفوف الملف:' : 'File Warnings / Errors:'}</span>
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                  {excelErrors.map((errStr, errIdx) => (
+                    <li key={errIdx}>{errStr}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Questions Section */}
@@ -548,7 +832,7 @@ function QuizFormDialog({
                     </p>
                     {q.type === 'mcq' ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {q.options.map((opt, optIndex) => (
+                        {(q.options || ['', '', '', '']).map((opt, optIndex) => (
                           <div
                             key={optIndex}
                             className="flex items-center gap-2 rounded-squircle border border-border/60 bg-background/50 px-2.5 py-1.5"
@@ -578,7 +862,10 @@ function QuizFormDialog({
                       </div>
                     ) : (
                       <div className="flex gap-4">
-                        {q.options.map((opt, optIndex) => (
+                        {(q.options && q.options.length > 0
+                          ? q.options
+                          : [isAr ? 'صح' : 'True', isAr ? 'خطأ' : 'False']
+                        ).map((opt, optIndex) => (
                           <label
                             key={optIndex}
                             className="flex items-center gap-2 rounded-squircle border border-border/60 bg-background/50 px-3 py-1.5 cursor-pointer text-xs"

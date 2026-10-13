@@ -14,11 +14,16 @@ describe('QuizzesService Unit Tests', () => {
 
   const mockQuizModel: any = jest.fn();
   const mockSubmissionModel: any = jest.fn();
+  const mockAttemptModel: any = jest.fn();
   const mockCourseModel: any = {};
   const mockRegistrationModel: any = {};
   const mockStudentProfileModel: any = {};
   const mockNotificationsService: any = {
     sendNotification: jest.fn().mockResolvedValue({}),
+  };
+  const mockExcelService: any = {
+    parseQuestionsFile: jest.fn(),
+    generateQuestionsTemplate: jest.fn(),
   };
 
   const adminUser: AuthenticatedUser = {
@@ -44,6 +49,15 @@ describe('QuizzesService Unit Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    mockAttemptModel.findOne = jest.fn();
+    mockAttemptModel.findOneAndUpdate = jest
+      .fn()
+      .mockResolvedValue({ _id: new Types.ObjectId() });
+    mockAttemptModel.updateOne = jest
+      .fn()
+      .mockResolvedValue({ acknowledged: true });
+    mockAttemptModel.create = jest.fn();
+    mockAttemptModel.find = jest.fn();
     mockCourseModel.findById = jest.fn();
     mockCourseModel.find = jest.fn();
     mockQuizModel.findById = jest.fn();
@@ -61,10 +75,12 @@ describe('QuizzesService Unit Tests', () => {
     service = new QuizzesService(
       mockQuizModel,
       mockSubmissionModel,
+      mockAttemptModel,
       mockCourseModel,
       mockRegistrationModel,
       mockStudentProfileModel,
       mockNotificationsService,
+      mockExcelService,
     );
   });
 
@@ -389,6 +405,88 @@ describe('QuizzesService Unit Tests', () => {
       expect(result.percentage).toBe(0);
       expect(result.isPassed).toBe(false);
       expect(result.answers?.filter((a: any) => a.isCorrect)).toHaveLength(0);
+    });
+  });
+
+  describe('getQuizReview', () => {
+    it('throws ForbiddenException if quiz allowReview is false', async () => {
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        allowReview: false,
+      });
+
+      await expect(service.getQuizReview(quizId, studentUserId)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('throws ForbiddenException if endsAt is in the future', async () => {
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        allowReview: true,
+        endsAt: new Date(Date.now() + 3600000), // 1 hour in future
+      });
+
+      await expect(service.getQuizReview(quizId, studentUserId)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('returns questions with correct answers and student answers when period has ended', async () => {
+      const pastDate = new Date(Date.now() - 3600000);
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        courseCode: 'CS101',
+        courseName: 'Intro to CS',
+        allowReview: true,
+        endsAt: pastDate,
+        totalMarks: 5,
+        passingMarks: 3,
+        questions: [
+          {
+            id: 'q1',
+            text: 'What is 2+2?',
+            type: 'mcq',
+            options: ['3', '4', '5'],
+            correctOptionIndex: 1,
+            points: 2,
+            explanation: 'Math basic',
+          },
+        ],
+      });
+
+      mockSubmissionModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          quizId: new Types.ObjectId(quizId),
+          studentId: new Types.ObjectId(studentUserId),
+          score: 2,
+          totalMarks: 2,
+          percentage: 100,
+          isPassed: true,
+          submittedAt: pastDate,
+          durationSeconds: 120,
+          answers: [
+            {
+              questionId: 'q1',
+              selectedOptionIndex: 1,
+              isCorrect: true,
+              pointsAwarded: 2,
+            },
+          ],
+        }),
+      });
+
+      const res = await service.getQuizReview(quizId, studentUserId);
+      expect(res.quiz.title).toBe('Quiz 1');
+      expect(res.submission.score).toBe(2);
+      expect(res.questions).toHaveLength(1);
+      expect(res.questions[0].correctOptionIndex).toBe(1);
+      expect(res.questions[0].studentSelectedOptionIndex).toBe(1);
+      expect(res.questions[0].isCorrect).toBe(true);
+      expect(res.questions[0].explanation).toBe('Math basic');
     });
   });
 });

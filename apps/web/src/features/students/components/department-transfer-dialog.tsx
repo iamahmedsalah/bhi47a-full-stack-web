@@ -164,7 +164,7 @@ export function DepartmentTransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={isSubmitting ? undefined : onOpenChange}>
-      <DialogContent className="max-w-xl sm:max-w-2xl rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-2xl relative overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
+      <DialogContent className="max-w-xl sm:max-w-2xl rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-2xl overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
         {/* Header */}
         <DialogHeader className="text-start space-y-1">
           <div className="flex items-center gap-3">

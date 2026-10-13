@@ -111,6 +111,21 @@ export class CreateQuizDto {
   @IsBoolean()
   allowReview?: boolean;
 
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  allowResume?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  open_at?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  close_at?: string;
+
   @ApiProperty({ type: [QuizQuestionDto] })
   @IsArray()
   @ValidateNested({ each: true })
@@ -161,6 +176,21 @@ export class UpdateQuizDto {
   @IsBoolean()
   allowReview?: boolean;
 
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  allowResume?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  open_at?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  close_at?: string;
+
   @ApiPropertyOptional({ type: [QuizQuestionDto] })
   @IsOptional()
   @IsArray()
@@ -177,8 +207,29 @@ export class SubmitQuizAnswerDto {
 
   @ApiProperty({ example: 1 })
   @IsNumber()
-  @Min(0)
   selectedOptionIndex!: number;
+}
+
+export class SaveQuizDraftDto {
+  @ApiProperty({ type: [SubmitQuizAnswerDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubmitQuizAnswerDto)
+  answers!: SubmitQuizAnswerDto[];
+}
+
+export class ExitQuizAttemptDto {
+  @ApiPropertyOptional({ type: [SubmitQuizAnswerDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubmitQuizAnswerDto)
+  answers?: SubmitQuizAnswerDto[];
+
+  @ApiPropertyOptional({ example: 'visibilitychange' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 export class SubmitQuizDto {

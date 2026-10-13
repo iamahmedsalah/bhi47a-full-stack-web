@@ -53,7 +53,7 @@ function labels(locale: "ar" | "en") {
         semester: "الفصل الدراسي",
         courseCode: "كود المقرر",
         courseTitle: "اسم المقرر الدراسي",
-        midterm: "أعمال السنة",
+        midterm: "الميدتيرم",
         final: "الامتحان النهائي",
         total: "المجموع",
         status: "الحالة / التقدير",
