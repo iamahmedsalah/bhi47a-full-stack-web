@@ -65,6 +65,12 @@ export class Grade {
 
   @Prop({ type: Number })
   gradePoints?: number;
+
+  @Prop({ type: String })
+  courseNameAr?: string;
+
+  @Prop({ type: String })
+  courseNameEn?: string;
 }
 
 export const GradeSchema = SchemaFactory.createForClass(Grade);

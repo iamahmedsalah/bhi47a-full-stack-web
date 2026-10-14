@@ -3,7 +3,26 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "@/lib/utils";
 
-const Tabs = TabsPrimitive.Root;
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ dir, ...props }, ref) => {
+  const [direction, setDirection] = React.useState<'ltr' | 'rtl' | undefined>(dir);
+
+  React.useEffect(() => {
+    if (dir) {
+      setDirection(dir);
+      return;
+    }
+    if (typeof document !== 'undefined') {
+      const docDir = (document.documentElement.getAttribute('dir') || document.body.getAttribute('dir')) as 'ltr' | 'rtl';
+      if (docDir) setDirection(docDir);
+    }
+  }, [dir]);
+
+  return <TabsPrimitive.Root ref={ref} dir={dir ?? direction} {...props} />;
+});
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,

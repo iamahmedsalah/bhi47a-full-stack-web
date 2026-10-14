@@ -184,6 +184,8 @@ export class GradeImporter implements Importer {
           studentCode,
           courseId: course._id,
           courseName: course.name,
+          courseNameAr: course.nameAr,
+          courseNameEn: course.nameEn || course.name,
           courseCode: course.code,
           examType: entry.examType,
           grade: entry.grade,

@@ -30,6 +30,9 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { calculateGradeScale, GRADE_SCALE, type GradeScaleItem } from '@student-portal/shared';
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -89,6 +92,8 @@ export interface CourseGradeRow {
   key: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   academicYear: string;
   semester: string;
   midterm?: Grade;
@@ -97,6 +102,7 @@ export interface CourseGradeRow {
   totalScore: number;
   totalMaxGrade: number;
   percentage: number;
+  letterGrade?: string;
   status: 'passed' | 'failed' | 'in_progress';
 }
 
@@ -104,6 +110,8 @@ export interface Grade {
   _id: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   examType: string;
   grade: number;
   maxGrade: number;
@@ -111,6 +119,9 @@ export interface Grade {
   academicYear: string;
   semester: string;
   isPublished: boolean;
+  percentage?: number;
+  letterGrade?: string;
+  gradePoints?: number;
 }
 
 export interface Complaint {
@@ -139,6 +150,15 @@ function formatDate(value?: string, locale?: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+function getGpaScale(gpa: number): GradeScaleItem {
+  for (const item of GRADE_SCALE) {
+    if (gpa >= item.points) {
+      return item;
+    }
+  }
+  return GRADE_SCALE[GRADE_SCALE.length - 1];
 }
 
 function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -233,26 +253,63 @@ export function StudentDetailDialog({
     withdrawn: isAr ? 'منسحب' : 'Withdrawn',
   };
 
+  const coursesQuery = useQuery({
+    queryKey: ['courses-lookup-dialog'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ items: Array<{ code: string; name: string; nameAr?: string; nameEn?: string }> }>(
+          '/courses',
+          { params: { limit: 200 } }
+        );
+        return res.data?.items ?? [];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const coursesMap = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; nameAr?: string; nameEn?: string }>();
+    for (const c of coursesQuery.data ?? []) {
+      if (c.code) {
+        map.set(c.code.toUpperCase(), c);
+      }
+    }
+    return map;
+  }, [coursesQuery.data]);
+
   const groupedCourses = useMemo(() => {
     const map = new Map<string, CourseGradeRow>();
 
     for (const g of grades) {
       const key = `${g.courseCode}-${g.academicYear}-${g.semester}`;
       let row = map.get(key);
+      const courseMeta = coursesMap.get(g.courseCode.toUpperCase());
       if (!row) {
         row = {
           key,
           courseCode: g.courseCode,
           courseName: g.courseName,
+          courseNameAr: g.courseNameAr || courseMeta?.nameAr,
+          courseNameEn: g.courseNameEn || courseMeta?.nameEn,
           academicYear: g.academicYear,
           semester: g.semester,
           otherGrades: [],
           totalScore: 0,
           totalMaxGrade: 0,
           percentage: 0,
+          letterGrade: g.letterGrade,
           status: 'in_progress',
         };
         map.set(key, row);
+      } else {
+        if (!row.courseNameAr && (g.courseNameAr || courseMeta?.nameAr)) {
+          row.courseNameAr = g.courseNameAr || courseMeta?.nameAr;
+        }
+        if (!row.courseNameEn && (g.courseNameEn || courseMeta?.nameEn)) {
+          row.courseNameEn = g.courseNameEn || courseMeta?.nameEn;
+        }
       }
 
       const examType = (g.examType || '').toLowerCase();
@@ -273,6 +330,9 @@ export function StudentDetailDialog({
       const percentage = Math.round((row.totalScore / totalMax) * 100);
       row.percentage = percentage;
 
+      const scale = calculateGradeScale(percentage, row.final?.status);
+      row.letterGrade = row.final?.letterGrade || scale.letter;
+
       if (row.final) {
         const finalStatus = (row.final.status || '').toLowerCase();
         if (finalStatus === 'absent' || finalStatus === 'failed' || percentage < 50) {
@@ -288,18 +348,24 @@ export function StudentDetailDialog({
 
       return row;
     });
-  }, [grades]);
+  }, [grades, coursesMap]);
 
   const filteredCourses = useMemo(() => {
     if (!gradeSearch.trim()) return groupedCourses;
     const query = gradeSearch.toLowerCase();
-    return groupedCourses.filter(
-      (c) =>
+    return groupedCourses.filter((c) => {
+      const courseMeta = coursesMap.get(c.courseCode.toUpperCase());
+      const nameAr = c.courseNameAr || courseMeta?.nameAr || '';
+      const nameEn = c.courseNameEn || courseMeta?.nameEn || '';
+      return (
         c.courseCode.toLowerCase().includes(query) ||
         c.courseName.toLowerCase().includes(query) ||
+        nameAr.toLowerCase().includes(query) ||
+        nameEn.toLowerCase().includes(query) ||
         c.academicYear.toLowerCase().includes(query)
-    );
-  }, [groupedCourses, gradeSearch]);
+      );
+    });
+  }, [groupedCourses, gradeSearch, coursesMap]);
 
   const stats = useMemo(() => {
     const rawGpa = student?.gpa ?? student?.academicProfile?.gpa;
@@ -401,28 +467,45 @@ export function StudentDetailDialog({
           {/* Quick Metrics Bar (Strictly 4 Cards: GPA, Warnings, Failed Courses, Total Courses) */}
           {student && (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-border/40">
-              {/* Card 1: GPA */}
+              {/* Card 1: GPA with Final Grade */}
               <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
                 <span className="text-xs text-muted-foreground block">
                   {isAr ? 'المعدل التراكمي (GPA)' : 'Cumulative GPA'}
                 </span>
-                <span
-                  className={cn(
-                    'text-lg font-bold font-mono',
-                    stats.rawGpa !== null && stats.rawGpa < 2.0
-                      ? 'text-danger'
-                      : stats.rawGpa !== null && stats.rawGpa >= 3.0
-                        ? 'text-success'
-                        : 'text-foreground'
-                  )}
-                >
-                  {stats.gpa}
+                <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                  <span
+                    dir="ltr"
+                    className={cn(
+                      'text-lg font-bold font-mono inline-block',
+                      stats.rawGpa !== null && stats.rawGpa < 2.0
+                        ? 'text-danger'
+                        : stats.rawGpa !== null && stats.rawGpa >= 3.0
+                          ? 'text-success'
+                          : 'text-foreground'
+                    )}
+                  >
+                    {stats.gpa}
+                    {stats.rawGpa !== null && (
+                      <span className="text-xs text-muted-foreground font-normal font-sans ms-1">
+                        / 4.00
+                      </span>
+                    )}
+                  </span>
                   {stats.rawGpa !== null && (
-                    <span className="text-xs text-muted-foreground font-normal font-sans ms-1">
-                      / 4.00
+                    <span
+                      className={cn(
+                        'text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap',
+                        stats.rawGpa < 2.0
+                          ? 'bg-danger/10 text-danger border-danger/20'
+                          : stats.rawGpa >= 3.0
+                            ? 'bg-success/10 text-success border-success/20'
+                            : 'bg-primary/10 text-primary border-primary/20'
+                      )}
+                    >
+                      {isAr ? getGpaScale(stats.rawGpa).nameAr : getGpaScale(stats.rawGpa).nameEn} ({getGpaScale(stats.rawGpa).letter})
                     </span>
                   )}
-                </span>
+                </div>
               </div>
 
               {/* Card 2: Academic Warnings */}
@@ -474,7 +557,7 @@ export function StudentDetailDialog({
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <Tabs value={activeTab} onValueChange={setActiveTab} dir={isAr ? 'rtl' : 'ltr'} className="flex-1 flex flex-col min-h-0">
             {/* Pinned Tab Bar with Compact Rounded Pill Container */}
             <div className="border-b border-border/60 bg-surface/30 px-5 py-2 shrink-0">
               <TabsList className="inline-flex h-auto items-center gap-1 rounded-full border border-border/70 bg-surface/40 p-1">
@@ -557,26 +640,32 @@ export function StudentDetailDialog({
                           <th className="p-3 text-start">{isAr ? 'السنة / الفصل' : 'Year / Term'}</th>
                           <th className="p-3 text-center">{isAr ? 'الميدتيرم' : 'Midterm'}</th>
                           <th className="p-3 text-center">{isAr ? 'الامتحان النهائي' : 'Final Exam'}</th>
-                          <th className="p-3 text-center">{isAr ? 'المجموع الكلي' : 'Total Score'}</th>
+                          <th className="p-3 text-center">{isAr ? 'النسبة والتقدير' : 'Percentage & Grade'}</th>
                           <th className="p-3 text-center">{isAr ? 'النتيجة النهائية' : 'Final Result'}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40 font-medium">
                         {filteredCourses.map((row) => {
+                          const courseMeta = coursesMap.get(row.courseCode.toUpperCase());
+                          const courseDisplayName = isAr
+                            ? (row.courseNameAr || courseMeta?.nameAr || row.courseName)
+                            : (row.courseNameEn || courseMeta?.nameEn || row.courseName);
+                          const scale = calculateGradeScale(row.percentage, row.final?.status);
+
                           return (
                             <tr key={row.key} className="hover:bg-surface/40 transition-colors">
                               <td className="p-3 font-mono font-bold text-primary text-xs">
                                 {row.courseCode}
                               </td>
                               <td className="p-3 text-foreground font-semibold">
-                                {row.courseName}
+                                {courseDisplayName}
                               </td>
                               <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                                 {row.academicYear} · {semesterMap[row.semester] ?? row.semester}
                               </td>
                               <td className="p-3 text-center">
                                 {row.midterm ? (
-                                  <span className="font-mono text-xs font-bold text-foreground">
+                                  <span dir="ltr" className="font-mono text-xs font-bold text-foreground inline-block">
                                     <span className={row.midterm.grade < row.midterm.maxGrade * 0.5 ? 'text-amber-500' : 'text-emerald-500'}>
                                       {row.midterm.grade}
                                     </span>
@@ -588,7 +677,7 @@ export function StudentDetailDialog({
                               </td>
                               <td className="p-3 text-center">
                                 {row.final ? (
-                                  <span className="font-mono text-xs font-bold text-foreground">
+                                  <span dir="ltr" className="font-mono text-xs font-bold text-foreground inline-block">
                                     <span className={row.final.grade < row.final.maxGrade * 0.5 ? 'text-danger' : 'text-emerald-500'}>
                                       {row.final.grade}
                                     </span>
@@ -598,14 +687,22 @@ export function StudentDetailDialog({
                                   <span className="text-muted-foreground text-xs">{isAr ? 'قيد الانتظار' : 'Pending'}</span>
                                 )}
                               </td>
-                              <td className="p-3 text-center font-mono font-bold">
-                                <span className={row.status === 'failed' ? 'text-danger' : 'text-foreground'}>
-                                  {row.totalScore}
-                                </span>
-                                <span className="text-muted-foreground text-xs font-normal">/{row.totalMaxGrade}</span>
-                                <span className="ms-1.5 text-xs text-muted-foreground font-normal">
-                                  ({row.percentage}%)
-                                </span>
+                              <td className="p-3 text-center">
+                                <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                                  <span className="font-mono text-xs font-bold text-foreground">
+                                    {row.percentage}%
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap',
+                                      scale.isPass
+                                        ? 'bg-primary/10 text-primary border-primary/20'
+                                        : 'bg-danger/10 text-danger border-danger/20'
+                                    )}
+                                  >
+                                    {scale.letter} · {isAr ? scale.nameAr : scale.nameEn}
+                                  </span>
+                                </div>
                               </td>
                               <td className="p-3 text-center">
                                 {row.status === 'passed' ? (
@@ -713,9 +810,14 @@ export function StudentDetailDialog({
                     <InfoItem
                       label={isAr ? 'عدد الساعات المعتمدة المسجلة' : 'Registered Credit Hours'}
                       value={
-                        student.registrationSummary?.totalCreditHours != null
-                          ? `${student.registrationSummary.totalCreditHours} ${isAr ? 'ساعة' : 'hrs'}`
-                          : '—'
+                        student.registrationSummary?.totalCreditHours != null ? (
+                          <span className="inline-flex items-center gap-1">
+                            <bdi className="font-mono">{student.registrationSummary.totalCreditHours}</bdi>
+                            <span>{isAr ? 'ساعة' : 'hrs'}</span>
+                          </span>
+                        ) : (
+                          '—'
+                        )
                       }
                     />
                   </div>

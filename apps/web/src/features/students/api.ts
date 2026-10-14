@@ -61,9 +61,14 @@ export interface GradeSummary {
   _id: string;
   courseCode: string;
   courseName: string;
+  courseNameAr?: string;
+  courseNameEn?: string;
   examType: string;
   grade: number;
   maxGrade: number;
+  percentage?: number;
+  letterGrade?: string;
+  gradePoints?: number;
   status: string;
   academicYear: string;
   semester: string;

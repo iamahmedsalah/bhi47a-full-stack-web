@@ -441,11 +441,31 @@ export class GradesService implements OnModuleInit {
       this.gradeModel.countDocuments(filter),
     ]);
 
-    // Map items to include student name directly for convenience
-    const formattedItems = items.map((item: any) => ({
-      ...item,
-      studentName: item.studentId?.name || '—',
-    }));
+    const courseCodes = [
+      ...new Set(
+        items.map((item: any) => item.courseCode).filter(Boolean),
+      ),
+    ];
+    const matchedCourses = courseCodes.length
+      ? await this.courseModel
+          .find({ code: { $in: courseCodes } })
+          .select('code name nameAr nameEn creditHours academicLevel level')
+          .lean()
+      : [];
+    const coursesByCode = new Map(
+      matchedCourses.map((course) => [course.code.toUpperCase(), course]),
+    );
+
+    // Map items to include student name and localized course names directly for convenience
+    const formattedItems = items.map((item: any) => {
+      const course = coursesByCode.get(item.courseCode?.toUpperCase());
+      return {
+        ...item,
+        studentName: item.studentId?.name || '—',
+        courseNameAr: course?.nameAr || item.courseNameAr,
+        courseNameEn: course?.nameEn || item.courseNameEn || item.courseName,
+      };
+    });
 
     return createPaginatedResult(formattedItems, total, page, limit);
   }
