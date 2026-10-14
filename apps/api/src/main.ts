@@ -21,6 +21,8 @@ import {
 import { NotificationsService } from './modules/notifications/notifications.service';
 import { QueueService } from './core/queues/queue.service';
 import { MetricsService } from './core/metrics/metrics.service';
+import mongoose from 'mongoose';
+import { ConnectionHolder } from './common/rate-limit/connection-holder';
 
 function resolveAppVersion(): string {
   if (process.env.APP_VERSION) {
@@ -253,6 +255,23 @@ async function bootstrap() {
     }
   } catch {
     // Continue with default
+  }
+
+  // Pre-warm database connection pool to eliminate initial request cold-start latency
+  try {
+    const conn = ConnectionHolder.connection || mongoose.connection;
+    if (conn?.db) {
+      await conn.db.admin().ping();
+      logger.log(
+        'Database connection pool pre-warmed successfully',
+        'Bootstrap',
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      `Database warm-up ping skipped: ${(err as Error).message}`,
+      'Bootstrap',
+    );
   }
 
   await app.listen(port);

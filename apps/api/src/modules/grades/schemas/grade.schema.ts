@@ -75,6 +75,7 @@ GradeSchema.index(
   { unique: true },
 );
 GradeSchema.index({ studentId: 1 });
+GradeSchema.index({ studentId: 1, isPublished: 1 });
 GradeSchema.index({ courseId: 1 });
 GradeSchema.index({ examType: 1 });
 GradeSchema.index({ isPublished: 1 });

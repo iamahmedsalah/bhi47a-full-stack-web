@@ -79,3 +79,4 @@ CourseRegistrationSchema.index(
   { unique: true },
 );
 CourseRegistrationSchema.index({ status: 1 });
+CourseRegistrationSchema.index({ studentId: 1, status: 1, createdAt: -1 });

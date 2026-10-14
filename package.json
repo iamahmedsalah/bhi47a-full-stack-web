@@ -18,6 +18,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "test:stress": "node scripts/stress-test.mjs",
+    "test:db-speed": "node scripts/db-query-benchmark.mjs",
     "docker:prod": "docker compose up --build -d",
     "docker:prod:down": "docker compose down",
     "clean": "turbo run clean && rimraf .turbo"

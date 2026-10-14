@@ -153,4 +153,5 @@ CourseSchema.index({
 CourseSchema.index({ level: 1 });
 CourseSchema.index({ academicLevel: 1, semester: 1 });
 CourseSchema.index({ isActive: 1, code: 1 });
+CourseSchema.index({ code: 1, isActive: 1 });
 CourseSchema.index({ isActive: 1, level: 1 });

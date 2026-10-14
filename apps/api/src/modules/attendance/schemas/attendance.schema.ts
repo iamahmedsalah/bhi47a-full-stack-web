@@ -46,3 +46,9 @@ AttendanceSchema.index(
 );
 AttendanceSchema.index({ studentId: 1 });
 AttendanceSchema.index({ isPublished: 1 });
+AttendanceSchema.index({
+  studentId: 1,
+  isPublished: 1,
+  academicYear: -1,
+  semester: -1,
+});

@@ -13,6 +13,25 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly userCache = new Map<
+    string,
+    {
+      user: {
+        _id: string;
+        role: string;
+        name: string;
+        email?: string;
+        studentCode?: string;
+        permissions?: string[];
+        mustChangePassword?: boolean;
+        tokenVersion: number;
+        isActive: boolean;
+      };
+      cachedAt: number;
+    }
+  >();
+  private readonly CACHE_TTL_MS = 30_000; // 30 seconds
+
   constructor(
     private configService: ConfigService,
     private usersService: UsersService,
@@ -27,7 +46,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  invalidate(userId?: string) {
+    if (!userId) {
+      this.userCache.clear();
+      return;
+    }
+    this.userCache.delete(userId);
+  }
+
   async validate(payload: JwtPayload) {
+    const now = Date.now();
+    const cached = this.userCache.get(payload.sub);
+
+    if (
+      cached &&
+      now - cached.cachedAt < this.CACHE_TTL_MS &&
+      (payload.tokenVersion ?? 0) === cached.user.tokenVersion
+    ) {
+      if (!cached.user.isActive) {
+        throw new UnauthorizedException('User not found or inactive');
+      }
+      return cached.user;
+    }
+
     const user = await this.usersService.findById(payload.sub);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User not found or inactive');
@@ -35,7 +76,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Session has expired');
     }
-    return {
+
+    const authUser = {
       _id: user._id.toString(),
       role: user.role,
       name: user.name,
@@ -44,6 +86,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       permissions: user.permissions,
       mustChangePassword: user.mustChangePassword,
       tokenVersion: user.tokenVersion ?? 0,
+      isActive: user.isActive,
     };
+
+    if (this.userCache.size > 2000) {
+      const threshold = now - this.CACHE_TTL_MS;
+      for (const [k, v] of this.userCache.entries()) {
+        if (v.cachedAt < threshold) this.userCache.delete(k);
+      }
+    }
+    this.userCache.set(payload.sub, { user: authUser, cachedAt: now });
+
+    return authUser;
   }
 }

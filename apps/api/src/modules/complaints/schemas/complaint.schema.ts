@@ -175,9 +175,12 @@ export class Complaint {
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);
 
 ComplaintSchema.index({ status: 1 });
+ComplaintSchema.index({ status: 1, createdAt: -1 });
 ComplaintSchema.index({ priority: 1 });
 ComplaintSchema.index({ type: 1 });
 ComplaintSchema.index({ department: 1 });
 ComplaintSchema.index({ studentCode: 1 });
+ComplaintSchema.index({ studentId: 1, createdAt: -1 });
 ComplaintSchema.index({ assignedGroup: 1 });
 ComplaintSchema.index({ assignedStaffId: 1 });
+ComplaintSchema.index({ assignedStaffId: 1, status: 1 });

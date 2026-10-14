@@ -426,20 +426,27 @@ export class QuizzesService {
       return [];
     }
 
+    const rawCodes = Array.from(registeredCodes);
+    const validObjectIds = rawCodes
+      .filter((code) => Types.ObjectId.isValid(code))
+      .map((id) => new Types.ObjectId(id));
+
+    const courseFilter =
+      validObjectIds.length > 0
+        ? {
+            $or: [
+              { code: { $in: rawCodes } },
+              { _id: { $in: validObjectIds } },
+            ],
+            isActive: true,
+          }
+        : {
+            code: { $in: rawCodes },
+            isActive: true,
+          };
+
     const registeredCourses = await this.courseModel
-      .find({
-        $or: [
-          { code: { $in: Array.from(registeredCodes) } },
-          {
-            _id: {
-              $in: Array.from(registeredCodes)
-                .filter((code) => Types.ObjectId.isValid(code))
-                .map((id) => new Types.ObjectId(id)),
-            },
-          },
-        ],
-        isActive: true,
-      })
+      .find(courseFilter)
       .select('_id')
       .lean();
 
