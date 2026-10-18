@@ -7,7 +7,7 @@ import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO, EVENTS } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { Calendar, Clock, MapPin, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react';
+import { Clock, MapPin, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string }>;

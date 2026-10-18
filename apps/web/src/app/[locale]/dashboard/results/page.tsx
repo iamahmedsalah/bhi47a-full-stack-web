@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { Award, FileSpreadsheet, CheckSquare, Printer, Download, GraduationCap, Calendar, BookOpen, Percent, Trophy } from 'lucide-react';
+import { Award, FileSpreadsheet, CheckSquare, Printer, Download, GraduationCap, Calendar, BookOpen, Percent } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';

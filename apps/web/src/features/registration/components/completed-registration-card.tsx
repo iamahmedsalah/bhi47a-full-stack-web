@@ -6,7 +6,7 @@ import { CheckCircle2, Eye, FileText, Printer } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { Course, Eligibility, Registration } from '../api';
+import type { Eligibility, Registration } from '../api';
 
 interface CompletedRegistrationCardProps {
   registration: Registration;

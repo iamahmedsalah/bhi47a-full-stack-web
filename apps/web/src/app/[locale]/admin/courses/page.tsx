@@ -991,7 +991,7 @@ function CoursesPageContent() {
           const fd = new FormData();
           fd.append('file', syllabusFile);
           await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
-        } catch (uploadErr) {
+        } catch {
           toast.error(
             locale === 'ar'
               ? 'تم إضافة المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
@@ -1004,7 +1004,7 @@ function CoursesPageContent() {
           const fd = new FormData();
           fd.append('file', coverImageFile);
           await api.post(`/admin/courses/${newCourseId}/cover-image`, fd);
-        } catch (uploadErr) {
+        } catch {
           toast.error(
             locale === 'ar'
               ? 'تم إضافة المادة ولكن فشل رفع صورة الغلاف'
@@ -1052,7 +1052,7 @@ function CoursesPageContent() {
         const fd = new FormData();
         fd.append('file', syllabusFile);
         await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
-      } catch (uploadErr) {
+      } catch {
         toast.error(
           locale === 'ar'
             ? 'تم تحديث المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
@@ -1072,7 +1072,7 @@ function CoursesPageContent() {
         const fd = new FormData();
         fd.append('file', coverImageFile);
         await api.post(`/admin/courses/${selectedCourse._id}/cover-image`, fd);
-      } catch (uploadErr) {
+      } catch {
         toast.error(
           locale === 'ar'
             ? 'تم تحديث المادة ولكن فشل رفع صورة الغلاف'

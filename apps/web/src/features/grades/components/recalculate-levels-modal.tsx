@@ -5,7 +5,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowRight,
-  ArrowUpRight,
   Check,
   CheckCircle2,
   GraduationCap,
@@ -17,7 +16,6 @@ import {
   TrendingUp,
   Users,
   X,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,7 +24,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CustomDropdown } from "@/components/ui/custom-dropdown";
@@ -34,7 +31,6 @@ import { cn } from "@/lib/cn";
 import { getApiErrorMessage } from "@/lib/api";
 import {
   recalculateAcademicProgress,
-  type StudentPromotionEvaluation,
 } from "../api";
 
 interface RecalculateLevelsModalProps {

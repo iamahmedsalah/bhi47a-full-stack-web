@@ -4,43 +4,29 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   ClipboardList,
   CheckCircle2,
-  AlertTriangle,
   Clock,
   ShieldCheck,
   QrCode,
   BookOpen,
   Calendar,
-  Filter,
-  Search,
   ChevronRight,
-  Info,
   XCircle,
-  HelpCircle,
-  Play,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/feedback";
-import {
-  CustomDropdown,
-  type CustomDropdownOption,
-} from "@/components/ui/custom-dropdown";
+import { LoadingState, ErrorState } from "@/components/ui/feedback";
+import { CustomDropdown } from "@/components/ui/custom-dropdown";
 import {
   attendanceApi,
-  type AttendanceRecordDto,
   type CourseAttendanceSummary,
-  type StudentLiveSessionItem,
 } from "@/features/attendance/api/attendance-api";
 import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
 
 export default function StudentAttendancePage() {
-  const tCommon = useTranslations("common");
   const params = useParams();
   const locale = (params.locale as string) || "ar";
   const isAr = locale.startsWith("ar");
@@ -48,9 +34,6 @@ export default function StudentAttendancePage() {
   // Filters state
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeCourseDetail, setActiveCourseDetail] =
-    useState<CourseAttendanceSummary | null>(null);
   const [showScanDialog, setShowScanDialog] = useState<boolean>(false);
 
   // Fetch student active/live sessions
@@ -89,15 +72,9 @@ export default function StudentAttendancePage() {
       if (selectedCourse !== "all" && r.courseCode !== selectedCourse)
         return false;
       if (selectedStatus !== "all" && r.status !== selectedStatus) return false;
-      if (searchQuery.trim()) {
-        const query = searchQuery.trim().toLowerCase();
-        const code = r.courseCode.toLowerCase();
-        const type = r.sessionType.toLowerCase();
-        if (!code.includes(query) && !type.includes(query)) return false;
-      }
       return true;
     });
-  }, [records, selectedCourse, selectedStatus, searchQuery]);
+  }, [records, selectedCourse, selectedStatus]);
 
   if (isLoading) {
     return (

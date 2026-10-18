@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, Suspense, useMemo } from 'react';
-import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import {
   UploadCloud,
@@ -23,7 +22,6 @@ import {
   Trash2,
   AlertOctagon,
   RotateCcw,
-  Check,
   Copy,
   XCircle,
   Search,
@@ -79,7 +77,6 @@ function UploadsPageContent() {
   const locale = (params?.locale as string) || 'ar';
   const isAr = locale === 'ar';
 
-  const t = useTranslations('uploads');
 
   // Form State
   const [uploadType, setUploadType] = useState<UploadCatalogType>('students');

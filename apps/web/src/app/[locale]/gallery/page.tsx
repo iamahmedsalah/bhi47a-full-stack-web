@@ -8,7 +8,7 @@ import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO, GALLERY_ITEMS } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { Camera, ChevronRight, ChevronLeft, Building2, Laptop, BookOpen } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 
 interface PageProps {

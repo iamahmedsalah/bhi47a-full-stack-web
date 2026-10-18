@@ -2,7 +2,6 @@
 
 import React, { Suspense, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import {
   CalendarDays,
@@ -14,7 +13,6 @@ import {
   MapPin,
   Clock,
   BookOpen,
-  UserCheck,
   GraduationCap,
   Loader2,
   FileSpreadsheet,
@@ -23,11 +21,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  X,
-  FileText,
   User,
-  Building2,
-  Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -268,7 +262,6 @@ function SchedulesManagementContent() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const isStaff = user?.role === 'staff';
-  const isDoctor = isStaff && (user as any)?.staffType === 'doctor';
 
   // Filters State
   const [search, setSearch] = useState('');

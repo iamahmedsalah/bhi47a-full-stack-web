@@ -11,17 +11,14 @@ import {
   FileText,
   History,
   Loader2,
-  RefreshCw,
   Search,
   UploadCloud,
   Users,
-  WifiOff,
   X,
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import api, { getApiErrorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { downloadExcel } from '@/lib/utils';
 import { Button } from '@/components/ui/button';

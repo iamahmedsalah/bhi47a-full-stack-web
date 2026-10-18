@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -28,7 +28,6 @@ import {
   Send,
   ExternalLink,
   Calendar,
-  Check,
   Trash2,
   CheckCheck,
 } from 'lucide-react';
@@ -42,10 +41,7 @@ const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
 const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
 
 export default function AdminHeader() {
-  const { logout } = useAuth();
   const params = useParams();
-  const pathname = usePathname();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const locale = params.locale as string;
 

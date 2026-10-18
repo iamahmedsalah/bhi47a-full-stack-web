@@ -18,7 +18,6 @@ import {
   Send,
   Ticket,
   Upload,
-  Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -63,7 +62,7 @@ function PublicComplaintsContent() {
   const params = useParams();
   const locale = params.locale as string;
   const isAr = locale === 'ar';
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const isAuthenticatedStudent = user?.role === 'student';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ticketNumber, setTicketNumber] = useState<string | null>(null);

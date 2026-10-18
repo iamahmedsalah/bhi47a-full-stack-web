@@ -1,17 +1,15 @@
 "use client";
 
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
-  AlertTriangle,
   Clock,
   XCircle,
   QrCode,
   ShieldCheck,
   BookOpen,
-  ArrowRight,
   LogIn,
   RefreshCw,
 } from "lucide-react";
@@ -49,7 +47,6 @@ export default function StudentCheckInPage() {
   const [result, setResult] = useState<CheckInResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [manualToken, setManualToken] = useState<string>("");
-  const [isPending, startTransition] = useTransition();
 
   const handleVerifyToken = async (tokenToVerify: string) => {
     if (!tokenToVerify) return;

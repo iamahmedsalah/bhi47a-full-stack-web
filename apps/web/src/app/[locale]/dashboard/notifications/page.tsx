@@ -14,15 +14,14 @@ import {
   Award,
   ClipboardList,
   ArrowUpRight,
-  Filter,
   CheckCircle2,
   Megaphone,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/feedback';
+import { ErrorState, LoadingState } from '@/components/ui/feedback';
 import { getApiErrorMessage } from '@/lib/api';
 import {
   listStudentNotifications,
@@ -38,10 +37,8 @@ import { NotificationDetailsDialog } from '@/components/notifications/notificati
 type FilterCategory = 'all' | 'unread' | 'quiz' | 'grade' | 'attendance' | 'system';
 
 export default function StudentNotificationsPage() {
-  const t = useTranslations('studentPortal');
   const tCommon = useTranslations('common');
   const queryClient = useQueryClient();
-  const router = useRouter();
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
   const isArabic = locale === 'ar';

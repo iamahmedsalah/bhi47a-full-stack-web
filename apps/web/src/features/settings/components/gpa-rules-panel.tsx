@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   LayoutGrid,
   Table as TableIcon,
-  HelpCircle,
   AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';

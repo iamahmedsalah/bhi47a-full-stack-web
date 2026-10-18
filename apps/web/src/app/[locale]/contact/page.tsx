@@ -8,7 +8,7 @@ import { INSTITUTE_INFO } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
 import { ContactForm } from '@/components/institutional/ContactForm';
-import { MapPin, Phone, Mail, Clock, ShieldCheck, ChevronRight, ChevronLeft, MessageSquare } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, ChevronRight, ChevronLeft, MessageSquare } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string }>;

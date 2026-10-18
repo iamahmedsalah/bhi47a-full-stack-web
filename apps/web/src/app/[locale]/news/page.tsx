@@ -8,7 +8,7 @@ import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO, NEWS_ITEMS } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { Calendar, Tag, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Calendar, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string }>;

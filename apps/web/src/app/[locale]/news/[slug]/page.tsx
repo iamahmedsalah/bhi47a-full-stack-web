@@ -9,7 +9,7 @@ import { INSTITUTE_INFO, NEWS_ITEMS } from '@/data/institutional-data';
 import { getSiteUrl } from '@/lib/site-url';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { Calendar, Tag, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft, LogIn, Share2 } from 'lucide-react';
+import { Calendar, ChevronRight, ChevronLeft, ArrowRight, ArrowLeft, LogIn } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string; slug: string }>;
@@ -85,7 +85,6 @@ export default async function NewsDetailPage({ params }: PageProps) {
   }
 
   const ChevronIcon = isAr ? ChevronLeft : ChevronRight;
-  const ArrowIcon = isAr ? ArrowLeft : ArrowRight;
   const BackArrow = isAr ? ArrowRight : ArrowLeft;
   const baseUrl = getSiteUrl();
 

@@ -25,7 +25,6 @@ import {
   AlertTriangle,
   Loader2,
   UserCheck,
-  Filter,
   BookOpen,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';

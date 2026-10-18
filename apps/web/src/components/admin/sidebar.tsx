@@ -45,7 +45,6 @@ interface NavItem {
 
 export default function AdminSidebar() {
   const t = useTranslations("nav");
-  const tHeader = useTranslations("header");
   const params = useParams();
   const pathname = usePathname();
   const { user, logout, isLoggingOut } = useAuth();

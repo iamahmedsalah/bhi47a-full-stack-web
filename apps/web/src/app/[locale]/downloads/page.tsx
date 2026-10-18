@@ -7,7 +7,7 @@ import { routing } from '@/i18n/routing';
 import { INSTITUTE_INFO, DOWNLOAD_DOCUMENTS } from '@/data/institutional-data';
 import { InstitutionalHeader } from '@/components/institutional/InstitutionalHeader';
 import { InstitutionalFooter } from '@/components/institutional/InstitutionalFooter';
-import { FileText, Download, ChevronRight, ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Download, ChevronRight, ChevronLeft, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ locale: string }>;

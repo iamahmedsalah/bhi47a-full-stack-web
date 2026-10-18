@@ -9,9 +9,7 @@ import {
   Layers,
   Loader2,
   CheckCircle2,
-  AlertCircle,
   GraduationCap,
-  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 

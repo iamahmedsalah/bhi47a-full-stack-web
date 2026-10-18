@@ -107,7 +107,6 @@ function GradesPageContent() {
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [isRecalculating, setIsRecalculating] = useState(false);
   const limit = 10;
 
   const coursesQuery = useQuery({
@@ -216,21 +215,6 @@ function GradesPageContent() {
     }
   };
 
-  const handleRecalculate = async () => {
-    setIsRecalculating(true);
-    try {
-      await recalculateAcademicProgress();
-      toast.success(
-        isAr
-          ? "تمت إعادة حساب التقدم الأكاديمي"
-          : "Academic progress recalculated",
-      );
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
 
   const handleExport = async () => {
     setIsExporting(true);

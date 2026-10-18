@@ -4,10 +4,10 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import api, { getApiErrorMessage } from '@/lib/api';
-import { Calendar, Download, Eye, FileImage, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
+import api from '@/lib/api';
+import { Calendar, Download, Eye, FileImage, CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
+import { LoadingState, EmptyState } from '@/components/ui/feedback';
 import { motion } from 'framer-motion';
 
 interface ExamSchedule {
@@ -65,7 +65,6 @@ function semesterLabel(locale: string, semester: string) {
 }
 
 export default function StudentExamSchedulePage() {
-  const t = useTranslations('studentPortal');
   const tCommon = useTranslations('common');
   const params = useParams();
   const locale = params.locale as string;

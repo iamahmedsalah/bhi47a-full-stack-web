@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Resolver, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EXAM_TYPE_VALUES, GRADE_STATUS_VALUES } from "@student-portal/shared";
+import { GRADE_STATUS_VALUES } from "@student-portal/shared";
 import {
   Dialog,
   DialogContent,

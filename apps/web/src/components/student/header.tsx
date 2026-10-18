@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Inbox, Calendar, Loader2, Check, Trash2 } from 'lucide-react';
@@ -26,7 +26,6 @@ import { NotificationDetailsDialog } from '@/components/notifications/notificati
 export default function StudentHeader() {
   const { user } = useAuth();
   const params = useParams();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const locale = params.locale as string;
   const isAr = locale === 'ar';

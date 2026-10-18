@@ -6,7 +6,6 @@ import {
   AlertCircle,
   AlertTriangle,
   Archive,
-  BookOpen,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -40,7 +39,6 @@ import {
   Users,
   Workflow,
   X,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocale } from "next-intl";

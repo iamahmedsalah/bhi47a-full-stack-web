@@ -9,7 +9,7 @@ import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/s
 import { toast } from 'sonner';
 
 import api, { getApiErrorMessage } from '@/lib/api';
-import { cn, downloadExcel } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { useTableState } from '@/hooks/use-table-state';
@@ -21,11 +21,9 @@ import {
   getMustChangePasswordSummary,
   getStudent,
   getStudentAcademicEmail,
-  listAllStudentsForExport,
   listStudentComplaints,
   listStudentGrades,
   listStudents,
-  resetStudentPassword,
   studentKeys,
   toggleAllMustChangePassword,
   updateStudent,
@@ -49,24 +47,6 @@ import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CustomDropdown } from '@/components/ui/custom-dropdown';
 
-const initialForm = {
-  fullName: '',
-  studentCode: '',
-  nationalId: '',
-  academicEmail: '',
-  department: '',
-  level: '1',
-  group: '',
-  section: '',
-  academicYear: '2024-2025',
-  semester: 'first',
-  seatNumber: '',
-  examRoom: '',
-  examFloor: '',
-  examBuilding: '',
-  enrollmentStatus: 'active',
-  mustChangePassword: false,
-};
 
 const studentImportColumns = [
   'studentCode',
@@ -157,11 +137,7 @@ function StudentsPageContent() {
   const [transferStudent, setTransferStudent] = useState<Student | null>(null);
   const [profileStudent, setProfileStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [form, setForm] = useState(initialForm);
-  const [newPassword, setNewPassword] = useState('');
-  const [forcePasswordChange, setForcePasswordChange] = useState(false);
-  const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError] = useState('');
+
   const [isExporting, setIsExporting] = useState(false);
   const [isAutoRegistering, setIsAutoRegistering] = useState(false);
   const [isAutoRegisterModalOpen, setIsAutoRegisterModalOpen] = useState(false);

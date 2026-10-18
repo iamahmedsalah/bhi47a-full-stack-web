@@ -7,7 +7,6 @@ import { Bot, Calendar, Settings, ShieldCheck } from 'lucide-react';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { PermissionGuard } from '@/components/ui/permission-guard';
-import { Button } from '@/components/ui/button';
 import { GpaRulesPanel } from '@/features/settings/components/gpa-rules-panel';
 import { RegistrationTermsPanel } from '@/features/settings/components/registration-terms-panel';
 import { AiSettingsPanel } from '@/features/settings/components/ai-settings-panel';

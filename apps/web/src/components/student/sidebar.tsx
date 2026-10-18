@@ -10,7 +10,6 @@ import { queryKeys } from '@/lib/query-keys';
 import { listStudentNotifications } from '@/lib/features/notifications';
 import {
   Award,
-  Bell,
   Calendar,
   ClipboardList,
   BookOpenCheck,
@@ -18,7 +17,6 @@ import {
   Home,
   Loader2,
   LogOut,
-  Mail,
   MapPin,
   Menu,
   MessageCircle,

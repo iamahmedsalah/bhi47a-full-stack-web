@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -21,21 +20,11 @@ import {
   GraduationCap,
   MessageCircle,
   QrCode,
-  ShieldAlert,
-  Download,
-  BookOpen,
-  Loader2,
-  ExternalLink,
-  Eye,
-  Play,
-  Clock,
-  Check,
   Building2,
   Globe,
   CalendarClock,
   Layers,
   UserCheck,
-  Compass,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -82,8 +71,6 @@ interface Eligibility {
 }
 
 export default function StudentDashboard() {
-  const t = useTranslations("studentPortal");
-  const tCommon = useTranslations("common");
   const params = useParams();
   const locale = params.locale as string;
   const { user } = useAuth();

@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, Suspense } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   HelpCircle,
@@ -10,12 +9,10 @@ import {
   Edit2,
   Trash2,
   Loader2,
-  BookOpen,
   Users,
   Clock,
   CheckCircle2,
   XCircle,
-  Award,
   MoreVertical,
   Eye,
   Calendar,
@@ -28,7 +25,6 @@ import {
   BarChart3,
   TrendingUp,
   CheckCircle,
-  Percent,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -59,7 +55,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { TableCell } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
 import {
   Dialog,
@@ -90,7 +85,6 @@ import {
   downloadQuestionsTemplate,
   type QuizItem,
   type QuizQuestion,
-  type QuizSubmission,
 } from '@/features/quizzes/api';
 import { QuizPreviewModal } from '@/features/quizzes/components/quiz-preview-modal';
 
@@ -160,6 +154,7 @@ function QuizFormDialog({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [nowTime] = useState(() => Date.now());
 
   // Reset or initialize on open and sync whenever initialValues updates
   React.useEffect(() => {
@@ -393,7 +388,6 @@ function QuizFormDialog({
   };
 
   const scheduleValidationError = useMemo(() => {
-    const nowTime = Date.now();
     const isNew = mode === 'add';
 
     // 1. Check startsAt
@@ -1505,7 +1499,7 @@ function AdminQuizzesContent() {
 
   const isDoctor = user?.role === 'staff' && user?.staffType === 'doctor';
 
-  const [page, setPage] = useState(1);
+  const [page] = useState(1);
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState(urlCourseId);
   const [isAddOpen, setIsAddOpen] = useState(autoCreate && canWrite);

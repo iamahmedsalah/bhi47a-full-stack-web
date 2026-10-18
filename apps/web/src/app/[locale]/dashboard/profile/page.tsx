@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import api, { getApiErrorDetails, getApiErrorMessage } from '@/lib/api';
@@ -12,7 +12,6 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { CopyButton } from '@/components/ui/copy-button';
 import { useGoogleSignIn } from '@/hooks/use-google-signin';
 import {
-  User,
   Loader2,
   GraduationCap,
   Key,
@@ -29,14 +28,12 @@ import {
   Unlink,
   XCircle,
   MapPin,
-  CheckCircle2,
   ShieldCheck,
   Check,
   X,
   AlertCircle,
   Edit3,
   BadgeCheck,
-  ShieldAlert,
   AlertTriangle,
   ExternalLink,
 } from 'lucide-react';
@@ -191,7 +188,7 @@ export default function StudentProfilePage() {
     return newPassword === confirmPassword;
   }, [newPassword, confirmPassword]);
 
-  const { renderButton, scriptLoaded, isInitialized } = useGoogleSignIn({
+  useGoogleSignIn({
     locale: isEnglish ? 'en' : 'ar',
     onSuccess: async (credential) => {
       setVerifyingGoogleOtp(true);
@@ -507,13 +504,6 @@ export default function StudentProfilePage() {
       ? 'pending'
       : 'unlinked';
 
-  // Fallback initial letter for avatar
-  const initials = (profile.fullName || 'S')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((s) => s[0])
-    .join('');
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12" dir={isEnglish ? 'ltr' : 'rtl'}>

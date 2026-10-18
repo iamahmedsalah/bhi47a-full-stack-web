@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
 import { Mail, Copy, Check, ExternalLink, HelpCircle, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';

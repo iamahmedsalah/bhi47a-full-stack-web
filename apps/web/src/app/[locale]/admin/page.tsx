@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  Activity,
   BarChart3,
   Users,
   BookOpen,
@@ -31,7 +30,6 @@ import {
   Maximize2,
   FileImage,
 } from 'lucide-react';
-import { EmptyState } from '@/components/ui/feedback';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/auth-provider';
@@ -41,9 +39,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -128,8 +123,6 @@ interface ChartDatum {
   name: string;
   value: number;
 }
-
-const chartColors = ['#0d9488', '#0284c7', '#f59e0b', '#8b5cf6', '#ef4444'];
 
 function formatStatusLabel(value: string) {
   return value

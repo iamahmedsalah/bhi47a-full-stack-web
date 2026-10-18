@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from "react";
-import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { getApiErrorMessage } from "@/lib/api";
@@ -32,7 +31,6 @@ import {
 } from "@student-portal/shared";
 
 export default function ChangePasswordPage() {
-  const t = useTranslations("auth");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const params = useParams();
