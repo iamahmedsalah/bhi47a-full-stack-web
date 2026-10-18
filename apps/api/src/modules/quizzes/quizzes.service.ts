@@ -131,6 +131,21 @@ export class QuizzesService {
     const startsAtVal = dto.startsAt || dto.open_at;
     const endsAtVal = dto.endsAt || dto.close_at;
 
+    if (
+      startsAtVal &&
+      new Date(startsAtVal).getTime() < Date.now() - 5 * 60 * 1000
+    ) {
+      throw new BadRequestException(
+        'موعد فتح الاختبار لا يمكن أن يكون في وقت سابق لتاريخ ولحظة الآن',
+      );
+    }
+
+    if (endsAtVal && new Date(endsAtVal).getTime() < Date.now()) {
+      throw new BadRequestException(
+        'موعد إغلاق الاختبار لا يمكن أن يكون في الماضي',
+      );
+    }
+
     if (startsAtVal && endsAtVal) {
       const s = new Date(startsAtVal);
       const e = new Date(endsAtVal);
@@ -143,6 +158,14 @@ export class QuizzesService {
       if (windowMinutes < durationMinutes) {
         throw new BadRequestException(
           `نافذة إتاحة الاختبار (${Math.round(windowMinutes)} دقيقة) يجب أن تكون كافية لمدة الاختبار على الأقل (${durationMinutes} دقيقة)`,
+        );
+      }
+    } else if (!startsAtVal && endsAtVal) {
+      const remainingMinutes =
+        (new Date(endsAtVal).getTime() - Date.now()) / (60 * 1000);
+      if (remainingMinutes < durationMinutes) {
+        throw new BadRequestException(
+          `الوقت المتبقي حتى إغلاق الاختبار أقل من مدة الاختبار (${durationMinutes} دقيقة)`,
         );
       }
     }
@@ -305,6 +328,27 @@ export class QuizzesService {
 
     const startsAtVal = dto.startsAt !== undefined ? dto.startsAt : dto.open_at;
     const endsAtVal = dto.endsAt !== undefined ? dto.endsAt : dto.close_at;
+
+    if (
+      startsAtVal &&
+      new Date(startsAtVal).getTime() !==
+        new Date(quiz.startsAt || 0).getTime() &&
+      new Date(startsAtVal).getTime() < Date.now() - 5 * 60 * 1000
+    ) {
+      throw new BadRequestException(
+        'لا يمكن تحديد موعد فتح الاختبار في وقت سابق لتاريخ ولحظة الآن',
+      );
+    }
+
+    if (
+      endsAtVal &&
+      new Date(endsAtVal).getTime() !== new Date(quiz.endsAt || 0).getTime() &&
+      new Date(endsAtVal).getTime() < Date.now()
+    ) {
+      throw new BadRequestException(
+        'لا يمكن تحديد موعد إغلاق الاختبار في وقت سابق لتاريخ ولحظة الآن',
+      );
+    }
 
     if (startsAtVal !== undefined) {
       updatePayload.startsAt = startsAtVal ? new Date(startsAtVal) : undefined;

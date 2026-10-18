@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import { StatCard, StatCardRow } from '@/components/ui/stat-card';
+import { FilterBar } from '@/components/ui/filter-bar';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
 interface TuitionStudent {
@@ -390,165 +392,45 @@ export function StudentTuitionManagement({
   return (
     <div className="space-y-6">
       {/* 1. Summary Statistics Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        {/* Total Students */}
-        <div className="rounded-2xl border border-border/80 bg-secondary/20 p-4 transition-all hover:bg-secondary/30">
-          <div className="flex items-center justify-between pb-2">
-            <span className="text-xs font-semibold text-muted-foreground">
-              {isAr ? 'إجمالي الطلاب المقيدين' : 'Total Students'}
-            </span>
-            <Users className="h-4 w-4 text-primary" />
-          </div>
-          <div className="text-2xl font-black text-foreground">
-            {isStatsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : stats?.total ?? 0}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {isAr ? 'المسجلين بالمنظومة' : 'Active Registry'}
-          </p>
+      <StatCardRow>
+        <StatCard
+          title={isAr ? 'إجمالي الطلاب المقيدين' : 'Total Students'}
+          value={isStatsLoading ? '...' : (stats?.total ?? 0).toLocaleString()}
+          icon={<Users className="h-5 w-5" />}
+          color="#0D9488"
+          subtitle={isAr ? 'المسجلين بالمنظومة' : 'Active Registry'}
+        />
+        <StatCard
+          title={isAr ? 'مسددي المصروفات (مفعل)' : 'Paid Tuition (Active)'}
+          value={isStatsLoading ? '...' : (stats?.paid ?? 0).toLocaleString()}
+          icon={<ShieldCheck className="h-5 w-5" />}
+          color="#10B981"
+          subtitle={isAr ? 'مسموح لهم بالخدمات والكويزات' : 'Full system & quiz access'}
+        />
+        <StatCard
+          title={isAr ? 'غير مسددين (محجوب)' : 'Unpaid (Blocked)'}
+          value={isStatsLoading ? '...' : (stats?.blocked ?? 0).toLocaleString()}
+          icon={<ShieldAlert className="h-5 w-5" />}
+          color="#F43F5E"
+          subtitle={isAr ? 'محجوب عنهم الكويزات والمنهج' : 'Syllabus & quizzes withheld'}
+        />
+        <StatCard
+          title={isAr ? 'حالات الإعفاء' : 'Fee Exemptions'}
+          value={isStatsLoading ? '...' : (stats?.exempt ?? 0).toLocaleString()}
+          icon={<CreditCard className="h-5 w-5" />}
+          color="#0EA5E9"
+          subtitle={isAr ? 'معفيون بقرار إداري' : 'Special grant / exempt'}
+        />
+      </StatCardRow>
+
+      {/* 2. Action Header: Bulk Excel Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-xs text-muted-foreground font-medium">
+          {isAr
+            ? 'تصفية وبحث الطلاب للتحكم في سداد الرسوم وحجب الحسابات'
+            : 'Filter and manage student tuition payment and account access'}
         </div>
 
-        {/* Paid / Active */}
-        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4 transition-all hover:bg-emerald-500/10">
-          <div className="flex items-center justify-between pb-2">
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              {isAr ? 'مسددي المصروفات (مفعل)' : 'Paid Tuition (Active)'}
-            </span>
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-            {isStatsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : stats?.paid ?? 0}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {isAr ? 'مسموح لهم بالخدمات والكويزات' : 'Full system & quiz access'}
-          </p>
-        </div>
-
-        {/* Blocked / Unpaid */}
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4 transition-all hover:bg-rose-500/10">
-          <div className="flex items-center justify-between pb-2">
-            <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-              {isAr ? 'غير مسددين (محجوب)' : 'Unpaid (Blocked)'}
-            </span>
-            <ShieldAlert className="h-4 w-4 text-rose-500" />
-          </div>
-          <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
-            {isStatsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : stats?.blocked ?? 0}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {isAr ? 'محجوب عنهم الكويزات والمنهج' : 'Syllabus & quizzes withheld'}
-          </p>
-        </div>
-
-        {/* Exempt */}
-        <div className="rounded-2xl border border-sky-500/25 bg-sky-500/5 p-4 transition-all hover:bg-sky-500/10">
-          <div className="flex items-center justify-between pb-2">
-            <span className="text-xs font-semibold text-sky-600 dark:text-sky-400">
-              {isAr ? 'حالات الإعفاء' : 'Fee Exemptions'}
-            </span>
-            <CreditCard className="h-4 w-4 text-sky-500" />
-          </div>
-          <div className="text-2xl font-black text-sky-600 dark:text-sky-400">
-            {isStatsLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : stats?.exempt ?? 0}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {isAr ? 'معفيون بقرار إداري' : 'Special grant / exempt'}
-          </p>
-        </div>
-      </div>
-
-      {/* 2. Top Action Bar: Search, Filters & Bulk Excel Buttons */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          {/* Search */}
-          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-            <Search className="absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder={isAr ? 'بحث بالكود أو الاسم...' : 'Search by code or name...'}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="h-9 ps-9 text-xs rounded-squircle bg-secondary/30"
-            />
-          </div>
-
-          {/* Level Filter */}
-          <Select
-            value={selectedLevel}
-            onValueChange={(val) => {
-              setSelectedLevel(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[130px] rounded-squircle border-border bg-secondary/30 text-xs">
-              <SelectValue placeholder={isAr ? 'الفرقة' : 'Level'} />
-            </SelectTrigger>
-            <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
-              <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
-              <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-              <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-              <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-              <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Block Status Filter */}
-          <Select
-            value={selectedBlockStatus}
-            onValueChange={(val) => {
-              setSelectedBlockStatus(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[140px] rounded-squircle border-border bg-secondary/30 text-xs">
-              <SelectValue placeholder={isAr ? 'حالة الحجب' : 'Block Status'} />
-            </SelectTrigger>
-            <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
-              <SelectItem value="all">{isAr ? 'جميع الحالات' : 'All Status'}</SelectItem>
-              <SelectItem value="false">{isAr ? 'مفعل (نشط)' : 'Active (Unblocked)'}</SelectItem>
-              <SelectItem value="true">{isAr ? 'محجوب (غير مسدد)' : 'Blocked (Unpaid)'}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Tuition Status Filter */}
-          <Select
-            value={selectedTuitionStatus}
-            onValueChange={(val) => {
-              setSelectedTuitionStatus(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[140px] rounded-squircle border-border bg-secondary/30 text-xs">
-              <SelectValue placeholder={isAr ? 'حالة المصروفات' : 'Tuition Status'} />
-            </SelectTrigger>
-            <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
-              <SelectItem value="all">{isAr ? 'جميع المصروفات' : 'All Tuition'}</SelectItem>
-              <SelectItem value="paid">{isAr ? 'مسدد بالكامل' : 'Paid'}</SelectItem>
-              <SelectItem value="unpaid">{isAr ? 'غير مسدد' : 'Unpaid'}</SelectItem>
-              <SelectItem value="exempt">{isAr ? 'معفى من الرسوم' : 'Exempt'}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Refresh Button */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void refetchList();
-              void refetchStats();
-            }}
-            disabled={isFetching}
-            className="h-9 rounded-squircle px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-
-        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Download Template */}
           <Button
@@ -557,7 +439,7 @@ export function StudentTuitionManagement({
             size="sm"
             onClick={() => handleDownloadTemplate('xlsx')}
             disabled={isDownloadingTemplate}
-            className="h-9 rounded-squircle border-border text-xs font-semibold gap-1.5 cursor-pointer"
+            className="h-9 rounded-squircle border-border text-xs font-semibold gap-1.5 cursor-pointer bg-card/60 hover:bg-secondary/70"
           >
             {isDownloadingTemplate ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -591,6 +473,89 @@ export function StudentTuitionManagement({
           )}
         </div>
       </div>
+
+      {/* 3. FilterBar matching Students Directory */}
+      <FilterBar
+        search={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        searchPlaceholder={isAr ? 'بحث بالكود أو الاسم...' : 'Search by code or name...'}
+      >
+        {/* Level Filter */}
+        <Select
+          value={selectedLevel}
+          onValueChange={(val) => {
+            setSelectedLevel(val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[150px] text-xs h-10 rounded-squircle">
+            <SelectValue placeholder={isAr ? 'الفرقة' : 'Level'} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
+            <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
+            <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
+            <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
+            <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
+            <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Block Status Filter */}
+        <Select
+          value={selectedBlockStatus}
+          onValueChange={(val) => {
+            setSelectedBlockStatus(val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[160px] text-xs h-10 rounded-squircle">
+            <SelectValue placeholder={isAr ? 'حالة الحجب' : 'Block Status'} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
+            <SelectItem value="all">{isAr ? 'الحجب: الكل' : 'All Block Status'}</SelectItem>
+            <SelectItem value="false">{isAr ? 'مفعل (نشط)' : 'Active (Unblocked)'}</SelectItem>
+            <SelectItem value="true">{isAr ? 'محجوب (غير مسدد)' : 'Blocked (Unpaid)'}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Tuition Status Filter */}
+        <Select
+          value={selectedTuitionStatus}
+          onValueChange={(val) => {
+            setSelectedTuitionStatus(val);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[160px] text-xs h-10 rounded-squircle">
+            <SelectValue placeholder={isAr ? 'حالة المصروفات' : 'Tuition Status'} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
+            <SelectItem value="all">{isAr ? 'المصروفات: الكل' : 'All Tuition'}</SelectItem>
+            <SelectItem value="paid">{isAr ? 'مسدد بالكامل' : 'Paid'}</SelectItem>
+            <SelectItem value="unpaid">{isAr ? 'غير مسدد' : 'Unpaid'}</SelectItem>
+            <SelectItem value="exempt">{isAr ? 'معفى من الرسوم' : 'Exempt'}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Refresh Button */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void refetchList();
+            void refetchStats();
+          }}
+          disabled={isFetching}
+          className="h-10 w-10 p-0 rounded-squircle text-xs text-muted-foreground hover:text-foreground cursor-pointer shrink-0 border-border bg-secondary/50"
+          title={isAr ? 'تحديث البيانات' : 'Refresh'}
+        >
+          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+        </Button>
+      </FilterBar>
 
       {/* 3. Bulk Action Bar (Visible when rows selected) */}
       {selectedIds.length > 0 && canWrite && (

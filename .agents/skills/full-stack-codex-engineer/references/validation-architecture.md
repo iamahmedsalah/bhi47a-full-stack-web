@@ -116,3 +116,35 @@ When request validation fails, the API must return a structured error envelope e
 - Field-specific errors are indexed by their exact dot-separated path (e.g. `guardian.phone`).
 - Form-level or cross-field errors use the special `_form` key.
 - Error codes are stable translation keys consumed by `next-intl` on the frontend, ensuring bilingual support for validation messages.
+
+---
+
+## 6. Academic Timing, Scheduling & Date-Time Picker Validation Architecture
+
+### A. Quiz Availability Window & Duration Rules
+1. **No Past Open Dates:**
+   - When creating a quiz or updating its schedule, `startsAt` cannot be set before the current date and time (`startsAt >= now - 5min` tolerance window).
+2. **No Past Deadlines:**
+   - `endsAt` cannot be in the past (`endsAt >= now`).
+3. **Strict Chronological Ordering:**
+   - If both `startsAt` and `endsAt` are provided, `endsAt` must be strictly after `startsAt` (`new Date(endsAt) > new Date(startsAt)`).
+4. **Availability Window Must Cover Quiz Duration:**
+   - The time window between `startsAt` and `endsAt` must be greater than or equal to the quiz duration (`(endsAt - startsAt) >= durationMinutes`).
+   - If `startsAt` is omitted (immediate open upon publishing), the remaining time until `endsAt` must cover `durationMinutes`.
+5. **Dual-Layer Enforcement:**
+   - **Frontend:** Instant inline error alert with `AlertTriangle` in the modal dialog, disabling the Submit button when `Boolean(scheduleValidationError)` is true.
+   - **Backend:** `QuizzesService.create` and `QuizzesService.update` reject invalid windows with `BadRequestException`.
+
+### B. Lecture & Timetable Scheduling Validation
+1. **Time Parsing & Chronological Ordering:**
+   - Times must be parsed to normalized minutes from midnight (`parseTimeToMinutes`).
+   - `endMinutes` must be strictly greater than `startMinutes` (`endMinutes > startMinutes`).
+   - Slot duration must be between 30 minutes and 6 hours.
+2. **RTL Form Isolation for Time Pickers:**
+   - Time input fields must explicitly specify `dir="ltr"` and `text-left font-mono` to prevent inverted time rendering (e.g. `AM 09:00` instead of `09:00 AM`).
+   - Provide dual inputs: a native `<input type="time">` picker + 12-hour formatted display + quick presets pills (`09:00 - 11:00 AM`, `11:00 AM - 01:00 PM`).
+3. **Multi-Dimensional Conflict Detection:**
+   - **Hall Collision:** The same room/auditorium cannot be booked for multiple sessions at overlapping times on the same day.
+   - **Staff Collision:** An instructor/teaching assistant cannot be scheduled in multiple places at the same time.
+   - **Batch Collision:** The same cohort (level + department + group) cannot have simultaneous overlapping sessions.
+

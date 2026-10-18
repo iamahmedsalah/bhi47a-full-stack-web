@@ -148,13 +148,15 @@ export function StudentTable({
       header: t('studentCode'),
       className: 'w-28 text-start',
       render: (student) => (
-        <TableCell className="w-28 py-2.5 px-3 font-mono">
+        <TableCell className="w-28 py-2.5 px-3 font-mono font-bold text-foreground">
           <button
             type="button"
             onClick={() => onViewStudent(student)}
-            className="text-start font-bold text-primary hover:underline"
+            className="text-start hover:opacity-85 transition-opacity cursor-pointer"
           >
-            {student.studentCode}
+            <span className="bg-secondary/50 px-2.5 py-1 rounded-squircle border border-border/60 hover:border-primary/40 hover:bg-primary/10 transition-colors inline-block text-primary">
+              {student.studentCode}
+            </span>
           </button>
         </TableCell>
       ),

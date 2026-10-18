@@ -22,6 +22,7 @@ interface DateTimePickerProps {
   locale?: string;
   isError?: boolean;
   disabled?: boolean;
+  minDate?: Date;
 }
 
 export function DateTimePicker({
@@ -32,6 +33,7 @@ export function DateTimePicker({
   locale = 'ar',
   isError = false,
   disabled = false,
+  minDate,
 }: DateTimePickerProps) {
   const isAr = locale === 'ar';
   const [open, setOpen] = React.useState(false);
@@ -158,6 +160,15 @@ export function DateTimePicker({
               <Calendar
                 mode="single"
                 selected={date}
+                disabled={
+                  minDate
+                    ? (d) =>
+                        d <
+                        new Date(
+                          new Date(minDate).setHours(0, 0, 0, 0),
+                        )
+                    : undefined
+                }
                 onSelect={(selectedDate) =>
                   handleUpdate(selectedDate, hour, minute, ampm)
                 }

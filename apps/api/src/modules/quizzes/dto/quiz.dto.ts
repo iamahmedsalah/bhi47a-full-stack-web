@@ -134,7 +134,9 @@ export class CreateQuizDto {
 }
 
 export class UpdateQuizDto {
-  @ApiPropertyOptional({ description: 'Target course ID (immutable after creation)' })
+  @ApiPropertyOptional({
+    description: 'Target course ID (immutable after creation)',
+  })
   @IsOptional()
   @IsString()
   courseId?: string;

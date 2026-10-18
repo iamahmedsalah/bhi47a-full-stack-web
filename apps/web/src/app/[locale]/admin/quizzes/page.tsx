@@ -393,23 +393,71 @@ function QuizFormDialog({
   };
 
   const scheduleValidationError = useMemo(() => {
-    if (!startsAt || !endsAt) return null;
-    const s = new Date(startsAt);
-    const e = new Date(endsAt);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
-    if (e <= s) {
-      return isAr
-        ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
-        : 'Quiz close time must be after open time';
+    const nowTime = Date.now();
+    const isNew = mode === 'add';
+
+    // 1. Check startsAt
+    if (startsAt) {
+      const s = new Date(startsAt);
+      if (isNaN(s.getTime())) {
+        return isAr
+          ? 'صيغة موعد فتح الاختبار غير صالحة'
+          : 'Invalid quiz open time format';
+      }
+      const startsChanged = isNew || startsAt !== initialValues.startsAt;
+      if (startsChanged && s.getTime() < nowTime - 5 * 60 * 1000) {
+        return isAr
+          ? 'لا يمكن تحديد موعد فتح الاختبار في وقت سابق لتاريخ ولحظة الآن'
+          : 'Quiz open time cannot be in the past';
+      }
     }
-    const windowMin = (e.getTime() - s.getTime()) / (60 * 1000);
-    if (windowMin < Number(durationMinutes || 0)) {
-      return isAr
-        ? `نافذة إتاحة الاختبار (${Math.round(windowMin)} دقيقة) أقل من مدة الاختبار (${durationMinutes} دقيقة). يرجى توسيع نافذة الاختبار.`
-        : `Quiz window (${Math.round(windowMin)}m) is shorter than quiz duration (${durationMinutes}m). Please expand window.`;
+
+    // 2. Check endsAt
+    if (endsAt) {
+      const e = new Date(endsAt);
+      if (isNaN(e.getTime())) {
+        return isAr
+          ? 'صيغة موعد إغلاق الاختبار غير صالحة'
+          : 'Invalid quiz close time format';
+      }
+      const endsChanged = isNew || endsAt !== initialValues.endsAt;
+      if (endsChanged && e.getTime() < nowTime) {
+        return isAr
+          ? 'لا يمكن تحديد موعد إغلاق الاختبار في وقت سابق لتاريخ ولحظة الآن'
+          : 'Quiz close time cannot be in the past';
+      }
     }
+
+    // 3. Both startsAt and endsAt provided
+    if (startsAt && endsAt) {
+      const s = new Date(startsAt);
+      const e = new Date(endsAt);
+      if (e <= s) {
+        return isAr
+          ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
+          : 'Quiz close time must be strictly after open time';
+      }
+      const windowMin = (e.getTime() - s.getTime()) / (60 * 1000);
+      if (windowMin < Number(durationMinutes || 0)) {
+        return isAr
+          ? `نافذة إتاحة الاختبار (${Math.round(windowMin)} دقيقة) أقل من مدة الاختبار (${durationMinutes} دقيقة). يرجى توسيع نافذة الاختبار.`
+          : `Quiz window (${Math.round(windowMin)}m) is shorter than quiz duration (${durationMinutes}m). Please expand window.`;
+      }
+    }
+
+    // 4. Only endsAt provided without startsAt
+    if (!startsAt && endsAt) {
+      const e = new Date(endsAt);
+      const remainingMin = (e.getTime() - nowTime) / (60 * 1000);
+      if (remainingMin < Number(durationMinutes || 0)) {
+        return isAr
+          ? `الوقت المتبقي حتى إغلاق الاختبار (${Math.max(0, Math.round(remainingMin))} دقيقة) أقل من مدة الاختبار (${durationMinutes} دقيقة).`
+          : `Remaining time until deadline is shorter than quiz duration (${durationMinutes}m).`;
+      }
+    }
+
     return null;
-  }, [startsAt, endsAt, durationMinutes, isAr]);
+  }, [startsAt, endsAt, durationMinutes, mode, initialValues.startsAt, initialValues.endsAt, isAr]);
 
   const scheduleWindowSummary = useMemo(() => {
     if (!startsAt || !endsAt || scheduleValidationError) return null;
@@ -555,6 +603,7 @@ function QuizFormDialog({
                   value={startsAt}
                   onChange={setStartsAt}
                   locale={locale}
+                  minDate={mode === 'add' ? new Date() : undefined}
                   isError={Boolean(scheduleValidationError)}
                   placeholder={isAr ? 'اختر تاريخ ووقت الفتح...' : 'Select open date & time...'}
                 />
@@ -583,6 +632,7 @@ function QuizFormDialog({
                   value={endsAt}
                   onChange={setEndsAt}
                   locale={locale}
+                  minDate={startsAt ? new Date(startsAt) : new Date()}
                   isError={Boolean(scheduleValidationError)}
                   placeholder={isAr ? 'اختر تاريخ ووقت الإغلاق...' : 'Select close date & time...'}
                 />
@@ -931,8 +981,8 @@ function QuizFormDialog({
             </Button>
             <Button
               type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle"
+              disabled={loading || Boolean(scheduleValidationError)}
+              className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle disabled:opacity-50 cursor-pointer"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {isAr ? 'حفظ الاختبار' : 'Save Quiz'}
