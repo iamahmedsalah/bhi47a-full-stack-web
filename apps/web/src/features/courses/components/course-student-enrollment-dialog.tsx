@@ -26,10 +26,13 @@ import {
   Loader2,
   UserCheck,
   Filter,
+  BookOpen,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 import { toast } from 'sonner';
+import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
 export interface CourseStudentEnrollmentDialogProps {
   open: boolean;
@@ -73,13 +76,24 @@ export function CourseStudentEnrollmentDialog({
   const [academicYear, setAcademicYear] = useState<string>('2026-2027');
   const [semester, setSemester] = useState<'first' | 'second' | 'summer'>('first');
   const [filterLevel, setFilterLevel] = useState<string>('all');
-  const [filterSemester, setFilterSemester] = useState<string>('all');
-  const [skipBlocked, setSkipBlocked] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [progressState, setProgressState] = useState<BatchUploadProgressState>({
+    isUploading: false,
+    phase: 'idle',
+    percentage: 0,
+    currentBatch: 1,
+    totalBatches: 1,
+    processedRows: 0,
+    totalRows: 0,
+    elapsedSeconds: 0,
+    estimatedSecondsLeft: null,
+    rowsPerSecond: 0,
+    isNetworkInterrupted: false,
+    retrySecondsLeft: 0,
+  });
   const [result, setResult] = useState<EnrollmentResult | null>(null);
 
   // Load all institute courses independently so all levels (1..4) and semesters are selectable
@@ -109,10 +123,10 @@ export function CourseStudentEnrollmentDialog({
       ? allCoursesQuery.data
       : initialCourses;
 
-  // Filter courses by selected level and semester filters
+  // Filter courses by selected level and registration semester
   const filteredCourses = availableCourses.filter((c) => {
     if (filterLevel !== 'all' && String(c.level) !== filterLevel) return false;
-    if (filterSemester !== 'all' && c.semester !== filterSemester) return false;
+    if (semester && c.semester && c.semester !== 'both' && c.semester !== semester) return false;
     return true;
   });
 
@@ -122,11 +136,8 @@ export function CourseStudentEnrollmentDialog({
       const match = availableCourses.find((c) => c._id === initialCourseId);
       if (match) {
         if (match.level) setFilterLevel(String(match.level));
-        if (match.semester) {
-          setFilterSemester(match.semester);
-          if (['first', 'second', 'summer'].includes(match.semester)) {
-            setSemester(match.semester as 'first' | 'second' | 'summer');
-          }
+        if (match.semester && ['first', 'second', 'summer'].includes(match.semester)) {
+          setSemester(match.semester as 'first' | 'second' | 'summer');
         }
       }
     } else if (filteredCourses.length > 0 && !courseId) {
@@ -140,7 +151,13 @@ export function CourseStudentEnrollmentDialog({
       setSelectedFile(null);
       setResult(null);
       setIsUploading(false);
-      setUploadProgress(0);
+      setProgressState((prev) => ({
+        ...prev,
+        isUploading: false,
+        phase: 'idle',
+        percentage: 0,
+        processedRows: 0,
+      }));
     }
   }, [open]);
 
@@ -178,7 +195,12 @@ export function CourseStudentEnrollmentDialog({
     if (file) {
       setSelectedFile(file);
       setResult(null);
-      setUploadProgress(0);
+      setProgressState((prev) => ({
+        ...prev,
+        phase: 'idle',
+        percentage: 0,
+        processedRows: 0,
+      }));
     }
   };
 
@@ -194,15 +216,48 @@ export function CourseStudentEnrollmentDialog({
 
     try {
       setIsUploading(true);
-      setUploadProgress(15);
       setResult(null);
 
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => (prev < 85 ? prev + 15 : prev));
+      const startTime = Date.now();
+      setProgressState({
+        isUploading: true,
+        phase: 'uploading',
+        percentage: 10,
+        currentBatch: 1,
+        totalBatches: 1,
+        processedRows: 0,
+        totalRows: 0,
+        elapsedSeconds: 0,
+        estimatedSecondsLeft: null,
+        rowsPerSecond: 0,
+        isNetworkInterrupted: false,
+        retrySecondsLeft: 0,
+      });
+
+      const timer = setInterval(() => {
+        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        setProgressState((prev) => ({
+          ...prev,
+          elapsedSeconds: elapsed,
+          percentage:
+            prev.phase === 'uploading'
+              ? Math.min(75, prev.percentage + 10)
+              : prev.phase === 'processing'
+                ? Math.min(95, prev.percentage + 5)
+                : prev.percentage,
+        }));
       }, 400);
 
       const formData = new FormData();
       formData.append('file', selectedFile);
+
+      setTimeout(() => {
+        setProgressState((prev) => ({
+          ...prev,
+          phase: 'processing',
+          percentage: Math.max(prev.percentage, 80),
+        }));
+      }, 700);
 
       const res = await api.post<EnrollmentResult>(
         `/admin/courses/${courseId}/enroll-students-excel`,
@@ -211,18 +266,47 @@ export function CourseStudentEnrollmentDialog({
           params: {
             academicYear,
             semester,
-            skipBlocked,
           },
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const bytePercent = Math.min(
+                75,
+                Math.max(10, Math.round((progressEvent.loaded * 75) / progressEvent.total)),
+              );
+              setProgressState((prev) => ({
+                ...prev,
+                percentage: bytePercent,
+                phase: bytePercent >= 70 ? 'processing' : 'uploading',
+              }));
+            }
+          },
         },
       );
 
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
+      clearInterval(timer);
       const data = res.data ?? (res as unknown as EnrollmentResult);
+      const total = data.totalRows || (data.enrolledCount + data.alreadyEnrolledCount);
+      const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      const speed = Math.round((total / elapsed) * 10) / 10;
+
+      setProgressState({
+        isUploading: false,
+        phase: 'completed',
+        percentage: 100,
+        currentBatch: 1,
+        totalBatches: 1,
+        processedRows: total,
+        totalRows: total,
+        elapsedSeconds: elapsed,
+        estimatedSecondsLeft: 0,
+        rowsPerSecond: speed,
+        isNetworkInterrupted: false,
+        retrySecondsLeft: 0,
+      });
+
       setResult(data);
 
       toast.success(
@@ -235,7 +319,12 @@ export function CourseStudentEnrollmentDialog({
         onSuccess();
       }
     } catch (err) {
-      setUploadProgress(0);
+      setProgressState((prev) => ({
+        ...prev,
+        isUploading: false,
+        phase: 'error',
+        percentage: 0,
+      }));
       toast.error(
         getApiErrorMessage(
           err,
@@ -274,51 +363,40 @@ export function CourseStudentEnrollmentDialog({
         </DialogHeader>
 
         <div className="mt-4 space-y-4">
-          {/* Level and Semester Filters to easily find courses from ANY level */}
-          <div className="rounded-xl border border-border/80 bg-secondary/20 p-3 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Filter className="h-3.5 w-3.5 text-primary" />
-              <span>{isAr ? 'تصفية المواد المتاحة للاختيار:' : 'Filter Available Courses:'}</span>
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          {/* Unified Configuration Card */}
+          <div className="rounded-xl border border-border/80 bg-secondary/15 p-3.5 space-y-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+              {/* 1. Academic Year */}
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-foreground">
-                  {isAr ? 'الفرقة الدراسية' : 'Academic Level'}
+                <label className="text-[11px] font-semibold text-foreground">
+                  {isAr ? 'العام الأكاديمي' : 'Academic Year'}
                 </label>
-                <Select
-                  value={filterLevel}
-                  onValueChange={(val) => {
-                    setFilterLevel(val);
-                    // auto select first matching course if any
-                    const matched = availableCourses.filter(
-                      (c) => (val === 'all' || String(c.level) === val) && (filterSemester === 'all' || c.semester === filterSemester),
-                    );
-                    if (matched.length > 0) setCourseId(matched[0]._id);
-                  }}
-                >
+                <Select value={academicYear} onValueChange={setAcademicYear}>
                   <SelectTrigger disabled={isUploading} className="h-8 rounded-squircle border-border bg-card text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                    <SelectItem value="all">{isAr ? 'جميع الفرق الدراسية (الكل)' : 'All Levels'}</SelectItem>
-                    <SelectItem value="1">{isAr ? 'الفرقة الأولى (Level 1)' : 'Level 1'}</SelectItem>
-                    <SelectItem value="2">{isAr ? 'الفرقة الثانية (Level 2)' : 'Level 2'}</SelectItem>
-                    <SelectItem value="3">{isAr ? 'الفرقة الثالثة (Level 3)' : 'Level 3'}</SelectItem>
-                    <SelectItem value="4">{isAr ? 'الفرقة الرابعة (Level 4)' : 'Level 4'}</SelectItem>
+                    <SelectItem value="2026-2027">2026-2027</SelectItem>
+                    <SelectItem value="2025-2026">2025-2026</SelectItem>
+                    <SelectItem value="2024-2025">2024-2025</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
+              {/* 2. Registration Semester */}
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-foreground">
-                  {isAr ? 'فصل المقرر الدراسي' : 'Course Semester'}
+                <label className="text-[11px] font-semibold text-foreground">
+                  {isAr ? 'الفصل الدراسي' : 'Semester'}
                 </label>
                 <Select
-                  value={filterSemester}
+                  value={semester}
                   onValueChange={(val) => {
-                    setFilterSemester(val);
+                    const s = val as 'first' | 'second' | 'summer';
+                    setSemester(s);
                     const matched = availableCourses.filter(
-                      (c) => (filterLevel === 'all' || String(c.level) === filterLevel) && (val === 'all' || c.semester === val),
+                      (c) =>
+                        (filterLevel === 'all' || String(c.level) === filterLevel) &&
+                        (!c.semester || c.semester === 'both' || c.semester === s),
                     );
                     if (matched.length > 0) setCourseId(matched[0]._id);
                   }}
@@ -327,98 +405,84 @@ export function CourseStudentEnrollmentDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                    <SelectItem value="all">{isAr ? 'جميع الفصول (الكل)' : 'All Semesters'}</SelectItem>
                     <SelectItem value="first">{isAr ? 'الفصل الدراسي الأول' : 'First Semester'}</SelectItem>
                     <SelectItem value="second">{isAr ? 'الفصل الدراسي الثاني' : 'Second Semester'}</SelectItem>
                     <SelectItem value="summer">{isAr ? 'الفصل الصيفي' : 'Summer Semester'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* 3. Level Filter */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-foreground">
+                  {isAr ? 'الفرقة الدراسية' : 'Level'}
+                </label>
+                <Select
+                  value={filterLevel}
+                  onValueChange={(val) => {
+                    setFilterLevel(val);
+                    const matched = availableCourses.filter(
+                      (c) =>
+                        (val === 'all' || String(c.level) === val) &&
+                        (!c.semester || c.semester === 'both' || c.semester === semester),
+                    );
+                    if (matched.length > 0) setCourseId(matched[0]._id);
+                  }}
+                >
+                  <SelectTrigger disabled={isUploading} className="h-8 rounded-squircle border-border bg-card text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
+                    <SelectItem value="all">{isAr ? 'جميع الفرق (الكل)' : 'All Levels'}</SelectItem>
+                    <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
+                    <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
+                    <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
+                    <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
 
-          {/* Target Course Selector */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-foreground">
-                {isAr ? 'المقرر الدراسي المستهدف *' : 'Target Course *'}
-              </label>
-              <span className="text-[11px] text-muted-foreground">
-                {isAr
-                  ? `(${filteredCourses.length} مادة دراسية متاحة)`
-                  : `(${filteredCourses.length} courses available)`}
-              </span>
-            </div>
+            {/* Target Course Selector */}
+            <div className="space-y-1 pt-2 border-t border-border/60">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'المقرر الدراسي المستهدف *' : 'Target Course *'}</span>
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {isAr
+                    ? `(${filteredCourses.length} مادة دراسية متاحة)`
+                    : `(${filteredCourses.length} courses available)`}
+                </span>
+              </div>
 
-            <Select value={courseId} onValueChange={setCourseId}>
-              <SelectTrigger disabled={isUploading} className="w-full rounded-squircle border-border bg-secondary/40 text-sm">
-                <SelectValue
-                  placeholder={
-                    filteredCourses.length === 0
-                      ? isAr
-                        ? 'لا توجد مواد مطابقة للفلتر المختار'
-                        : 'No courses match filter'
-                      : isAr
-                        ? 'اختر المقرر المطلوب تسجيل الطلاب به'
-                        : 'Select target course'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent className="max-h-60 border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                {filteredCourses.map((c) => (
-                  <SelectItem key={c._id} value={c._id}>
-                    <span className="font-mono text-xs font-bold text-primary">
-                      {c.code}
-                    </span>{' '}
-                    - {isAr ? c.nameAr || c.name : c.name}{' '}
-                    <span className="text-[10px] text-muted-foreground">
-                      ({isAr ? `الفرقة ${c.level || 1}` : `L${c.level || 1}`})
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Academic Year and Registration Term Row */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                {isAr ? 'العام الأكاديمي' : 'Academic Year'}
-              </label>
-              <Select value={academicYear} onValueChange={setAcademicYear}>
-                <SelectTrigger disabled={isUploading} className="w-full rounded-squircle border-border bg-secondary/40 text-sm">
-                  <SelectValue />
+              <Select value={courseId} onValueChange={setCourseId}>
+                <SelectTrigger disabled={isUploading} className="w-full rounded-squircle border-border bg-card text-xs h-9">
+                  <SelectValue
+                    placeholder={
+                      filteredCourses.length === 0
+                        ? isAr
+                          ? 'لا توجد مواد مطابقة للخيارات المحددة'
+                          : 'No courses match criteria'
+                        : isAr
+                          ? 'اختر المقرر المطلوب تسجيل الطلاب به'
+                          : 'Select target course'
+                    }
+                  />
                 </SelectTrigger>
-                <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                  <SelectItem value="2026-2027">2026-2027</SelectItem>
-                  <SelectItem value="2025-2026">2025-2026</SelectItem>
-                  <SelectItem value="2024-2025">2024-2025</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                {isAr ? 'الفصل الدراسي للتسجيل' : 'Registration Semester'}
-              </label>
-              <Select
-                value={semester}
-                onValueChange={(val) => setSemester(val as 'first' | 'second' | 'summer')}
-              >
-                <SelectTrigger disabled={isUploading} className="w-full rounded-squircle border-border bg-secondary/40 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                  <SelectItem value="first">
-                    {isAr ? 'الفصل الأول (الترم الأول)' : 'First Semester'}
-                  </SelectItem>
-                  <SelectItem value="second">
-                    {isAr ? 'الفصل الثاني (الترم الثاني)' : 'Second Semester'}
-                  </SelectItem>
-                  <SelectItem value="summer">
-                    {isAr ? 'الفصل الصيفي' : 'Summer Semester'}
-                  </SelectItem>
+                <SelectContent className="max-h-60 border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
+                  {filteredCourses.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      <span className="font-mono text-xs font-bold text-primary">
+                        {c.code}
+                      </span>{' '}
+                      - {isAr ? c.nameAr || c.name : c.name}{' '}
+                      <span className="text-[10px] text-muted-foreground">
+                        ({isAr ? `الفرقة ${c.level || 1}` : `L${c.level || 1}`})
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -455,29 +519,6 @@ export function CourseStudentEnrollmentDialog({
               <span>{isAr ? 'تحميل النموذج' : 'Download Template'}</span>
             </Button>
           </div>
-
-          {/* Skip Blocked Toggle */}
-          <label className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-secondary/30 p-3 cursor-pointer hover:bg-secondary/50 transition-colors">
-            <input
-              type="checkbox"
-              checked={skipBlocked}
-              onChange={(e) => setSkipBlocked(e.target.checked)}
-              disabled={isUploading}
-              className="h-4 w-4 rounded text-primary focus:ring-primary"
-            />
-            <div className="space-y-0.5 text-start">
-              <span className="text-xs font-semibold text-foreground">
-                {isAr
-                  ? 'استبعاد الطلاب المحجوبين لعدم سداد المصروفات تلقائياً (الحجب = محجوب)'
-                  : 'Automatically skip students blocked for unpaid tuition (Status = محجوب)'}
-              </span>
-              <p className="text-[11px] text-muted-foreground">
-                {isAr
-                  ? 'عند التفعيل، لن يتم تسجيل الطلاب الموسومين بـ "محجوب" في هذا المقرر الدراسي'
-                  : 'When checked, students marked as blocked in the sheet will be skipped from enrollment'}
-              </p>
-            </div>
-          </label>
 
           {/* File Upload Zone */}
           <div className="space-y-1.5">
@@ -518,22 +559,10 @@ export function CourseStudentEnrollmentDialog({
             </div>
           </div>
 
-          {/* Upload Progress Bar */}
-          {isUploading && (
-            <div className="space-y-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3 animate-in fade-in">
-              <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                  {isAr ? 'جاري معالجة وتسجيل الطلاب بالمقرر...' : 'Processing and enrolling students...'}
-                </span>
-                <span className="font-mono text-primary">{uploadProgress}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="h-full bg-primary transition-all duration-300 ease-out"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
+          {/* Upload Progress Bar (Unified Batch Architecture) */}
+          {progressState.isUploading && (
+            <div className="pt-1">
+              <DataUploadProgress state={progressState} locale={locale} />
             </div>
           )}
 

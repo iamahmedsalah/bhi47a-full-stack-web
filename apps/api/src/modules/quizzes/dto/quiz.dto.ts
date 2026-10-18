@@ -134,6 +134,11 @@ export class CreateQuizDto {
 }
 
 export class UpdateQuizDto {
+  @ApiPropertyOptional({ description: 'Target course ID (immutable after creation)' })
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -237,6 +242,11 @@ export class SubmitQuizDto {
   @IsOptional()
   @IsDateString()
   startedAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  durationSeconds?: number;
 
   @ApiProperty({ type: [SubmitQuizAnswerDto] })
   @IsArray()

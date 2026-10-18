@@ -32,6 +32,8 @@ describe('QuizzesService Unit Tests', () => {
     email: 'admin@institute.edu',
     role: 'admin',
     permissions: [PERMISSIONS.QUIZZES_READ, PERMISSIONS.QUIZZES_WRITE],
+    mustChangePassword: false,
+    tokenVersion: 0,
   };
 
   const staffUser: AuthenticatedUser = {
@@ -40,6 +42,8 @@ describe('QuizzesService Unit Tests', () => {
     email: 'doctor@institute.edu',
     role: 'staff',
     permissions: [],
+    mustChangePassword: false,
+    tokenVersion: 0,
   };
 
   const courseId = new Types.ObjectId().toString();

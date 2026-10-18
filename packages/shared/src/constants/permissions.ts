@@ -43,6 +43,8 @@
   QUIZZES_SUBMISSIONS_READ: 'quizzes.submissions_read',
   COURSE_SCHEDULES_READ: 'course_schedules.read',
   COURSE_SCHEDULES_WRITE: 'course_schedules.write',
+  TUITION_READ: 'tuition.read',
+  TUITION_WRITE: 'tuition.write',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -98,6 +100,8 @@ export const STAFF_ASSIGNABLE_PERMISSIONS = [
   PERMISSIONS.QUIZZES_SUBMISSIONS_READ,
   PERMISSIONS.COURSE_SCHEDULES_READ,
   PERMISSIONS.COURSE_SCHEDULES_WRITE,
+  PERMISSIONS.TUITION_READ,
+  PERMISSIONS.TUITION_WRITE,
 ] as const satisfies readonly Permission[];
 
 export type StaffAssignablePermission =
@@ -148,5 +152,7 @@ export const STAFF_TYPE_DEFAULT_PERMISSIONS = {
     PERMISSIONS.REGISTRATION_PROXY,
     PERMISSIONS.ADVISING_READ,
     PERMISSIONS.ADVISING_WRITE,
+    PERMISSIONS.TUITION_READ,
+    PERMISSIONS.TUITION_WRITE,
   ],
 } as const satisfies Record<string, readonly StaffAssignablePermission[]>;

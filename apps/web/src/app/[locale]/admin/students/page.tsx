@@ -139,6 +139,14 @@ function StudentsPageContent() {
   const canViewSensitiveStudentData = Boolean(
     isAdmin || user?.permissions?.includes('students.view_national_id'),
   );
+  const canManageTuition = Boolean(
+    isAdmin ||
+      user?.permissions?.includes('tuition.read') ||
+      user?.permissions?.includes('tuition.write'),
+  );
+  const canWriteTuition = Boolean(
+    isAdmin || user?.permissions?.includes('tuition.write'),
+  );
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -489,45 +497,47 @@ function StudentsPageContent() {
         )}
       </PageTitleBanner>
 
-      {/* Navigation Tabs: Students Directory vs Tuition Fees & Blocking */}
-      <div className="flex items-center gap-2 border-b border-border/80 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('students')}
-          className={cn(
-            'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
-            activeTab === 'students'
-              ? 'bg-primary text-white shadow-sm'
-              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          )}
-        >
-          <Users className="h-4 w-4" />
-          <span>{locale === 'ar' ? 'سجل وقيد الطلاب' : 'Students Directory'}</span>
-        </button>
+      {/* Navigation Tabs: Students Directory vs Tuition Fees & Blocking (Restricted by permission) */}
+      {canManageTuition && (
+        <div className="flex items-center gap-2 border-b border-border/80 pb-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('students')}
+            className={cn(
+              'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
+              activeTab === 'students'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+            )}
+          >
+            <Users className="h-4 w-4" />
+            <span>{locale === 'ar' ? 'سجل وقيد الطلاب' : 'Students Directory'}</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('tuition')}
-          className={cn(
-            'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
-            activeTab === 'tuition'
-              ? 'bg-primary text-white shadow-sm'
-              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
-          )}
-        >
-          <CreditCard className="h-4 w-4" />
-          <span>
-            {locale === 'ar'
-              ? 'المصروفات الدراسية وحجب الحسابات'
-              : 'Tuition Fees & Blocking'}
-          </span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('tuition')}
+            className={cn(
+              'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
+              activeTab === 'tuition'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+            )}
+          >
+            <CreditCard className="h-4 w-4" />
+            <span>
+              {locale === 'ar'
+                ? 'المصروفات الدراسية وحجب الحسابات'
+                : 'Tuition Fees & Blocking'}
+            </span>
+          </button>
+        </div>
+      )}
 
-      {activeTab === 'tuition' ? (
+      {canManageTuition && activeTab === 'tuition' ? (
         <StudentTuitionManagement
           locale={locale}
-          canWrite={canWriteStudents}
+          canWrite={canWriteTuition}
         />
       ) : (
         <>

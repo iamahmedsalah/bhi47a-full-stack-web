@@ -291,6 +291,7 @@ export class QuizzesService {
     }
 
     const updatePayload: Record<string, any> = { ...dto };
+    delete updatePayload.courseId;
     if (dto.questions) {
       updatePayload.totalMarks = dto.questions.reduce(
         (sum, q) => sum + (Number(q.points) || 1),

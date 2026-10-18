@@ -75,7 +75,7 @@ describe('Attendance Excel export', () => {
   it('exports every record, text codes, GPS, Cairo times, session totals, corrections and empty sessions', async () => {
     const buffer = await createAttendanceWorkbook(entries(), 'en');
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    await workbook.xlsx.load(buffer as any);
     const attendance = workbook.getWorksheet('Attendance')!;
     expect(attendance.rowCount).toBe(206);
     const headers = attendance.getRow(1).values as string[];
@@ -101,7 +101,7 @@ describe('Attendance Excel export', () => {
   });
   it('creates Arabic headers and right-to-left worksheets', async () => {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await createAttendanceWorkbook(entries(), 'ar'));
+    await workbook.xlsx.load((await createAttendanceWorkbook(entries(), 'ar')) as any);
     const sheet = workbook.getWorksheet('الحضور')!;
     expect(sheet.views[0].rightToLeft).toBe(true);
     expect(sheet.getRow(1).values).toContain('كود الطالب');

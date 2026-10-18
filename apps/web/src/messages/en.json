@@ -529,7 +529,8 @@
         "attendance": "Attendance tracking",
         "registration": "Registration",
         "advising": "Academic advising",
-        "courseSchedules": "Lecture & Section Schedules"
+        "courseSchedules": "Lecture & Section Schedules",
+        "tuition": "Tuition Fees & Blocking"
       },
       "labels": {
         "students_read": "View students",
@@ -573,7 +574,9 @@
         "advising_override_max_hours": "Override maximum hours",
         "study_plan_manage": "Manage study plans",
         "course_schedules_read": "View lecture & section schedules",
-        "course_schedules_write": "Manage & upload lecture schedules"
+        "course_schedules_write": "Manage & upload lecture schedules",
+        "tuition_read": "View tuition fees & student blocking status",
+        "tuition_write": "Manage tuition fees, block/unblock students & upload Excel"
       }
     }
   },

@@ -529,7 +529,8 @@
         "attendance": "الحضور والغياب",
         "registration": "التسجيل",
         "advising": "الإرشاد الأكاديمي",
-        "courseSchedules": "جداول المحاضرات والسكاشن"
+        "courseSchedules": "جداول المحاضرات والسكاشن",
+        "tuition": "المصروفات الدراسية والحجب"
       },
       "labels": {
         "students_read": "عرض الطلاب",
@@ -573,7 +574,9 @@
         "advising_override_max_hours": "تجاوز الحد الأقصى للساعات",
         "study_plan_manage": "إدارة الخطط الدراسية",
         "course_schedules_read": "عرض جدول المحاضرات والسكاشن",
-        "course_schedules_write": "إدارة وتعديل جدول المحاضرات والقاعات والرفع"
+        "course_schedules_write": "إدارة وتعديل جدول المحاضرات والقاعات والرفع",
+        "tuition_read": "عرض كشف المصروفات الدراسية وحالة الحجب",
+        "tuition_write": "إدارة وتحديث المصروفات وحجب الطلاب واستيراد الإكسيل"
       }
     }
   },

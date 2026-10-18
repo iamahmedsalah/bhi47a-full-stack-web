@@ -21,6 +21,7 @@ import {
   Upload,
   Download,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   X,
   FileText,
@@ -55,6 +56,8 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { EmptyState } from '@/components/ui/feedback';
 import { downloadFileBlob, EXCEL_MIME_TYPE, CSV_MIME_TYPE } from '@/lib/export-utils';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
 export interface CourseScheduleItem {
   _id: string;
@@ -135,6 +138,128 @@ const LOCATION_SUGGESTIONS = [
   'معمل حاسب 3',
 ];
 
+const TIME_SLOT_PRESETS = [
+  {
+    labelAr: '09:00 - 11:00 ص (محاضرة)',
+    labelEn: '09:00 - 11:00 AM (Lecture)',
+    start: '09:00 AM',
+    end: '11:00 AM',
+  },
+  {
+    labelAr: '11:00 ص - 01:00 م (محاضرة)',
+    labelEn: '11:00 AM - 01:00 PM (Lecture)',
+    start: '11:00 AM',
+    end: '01:00 PM',
+  },
+  {
+    labelAr: '01:00 - 03:00 م (محاضرة)',
+    labelEn: '01:00 - 03:00 PM (Lecture)',
+    start: '01:00 PM',
+    end: '03:00 PM',
+  },
+  {
+    labelAr: '03:00 - 05:00 م (محاضرة)',
+    labelEn: '03:00 - 05:00 PM (Lecture)',
+    start: '03:00 PM',
+    end: '05:00 PM',
+  },
+  {
+    labelAr: '08:30 - 10:00 ص (سكشن)',
+    labelEn: '08:30 - 10:00 AM (Section)',
+    start: '08:30 AM',
+    end: '10:00 AM',
+  },
+  {
+    labelAr: '10:00 - 11:30 ص (سكشن)',
+    labelEn: '10:00 - 11:30 AM (Section)',
+    start: '10:00 AM',
+    end: '11:30 AM',
+  },
+  {
+    labelAr: '11:30 ص - 01:00 م (سكشن)',
+    labelEn: '11:30 AM - 01:00 PM (Section)',
+    start: '11:30 AM',
+    end: '01:00 PM',
+  },
+  {
+    labelAr: '01:00 - 02:30 م (سكشن)',
+    labelEn: '01:00 - 02:30 PM (Section)',
+    start: '01:00 PM',
+    end: '02:30 PM',
+  },
+  {
+    labelAr: '02:30 - 04:00 م (سكشن)',
+    labelEn: '02:30 - 04:00 PM (Section)',
+    start: '02:30 PM',
+    end: '04:00 PM',
+  },
+];
+
+function parseTimeToMinutes(t?: string | null): number | null {
+  if (!t || typeof t !== 'string') return null;
+  const raw = t.trim();
+  if (!raw) return null;
+
+  const match12 = raw.match(/^(\d{1,2}):(\d{2})\s*(am|pm|ص|م)?$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const modifier = (match12[3] || '').toLowerCase();
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    if (modifier === 'pm' || modifier === 'م') {
+      if (hours < 12) hours += 12;
+    } else if (modifier === 'am' || modifier === 'ص') {
+      if (hours === 12) hours = 0;
+    }
+    return hours * 60 + minutes;
+  }
+
+  const match24 = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const minutes = parseInt(match24[2], 10);
+    if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60) {
+      return hours * 60 + minutes;
+    }
+  }
+
+  return null;
+}
+
+function minutesTo12h(totalMinutes: number): string {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${String(h12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+}
+
+function minutesTo24h(totalMinutes: number): string {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function formatDurationText(mins: number, isAr: boolean): string {
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  if (isAr) {
+    if (hours === 1 && remainingMins === 0) return 'ساعة واحدة';
+    if (hours === 1 && remainingMins === 30) return 'ساعة ونصف';
+    if (hours === 2 && remainingMins === 0) return 'ساعتان';
+    if (hours === 2 && remainingMins === 30) return 'ساعتان ونصف';
+    if (hours === 3 && remainingMins === 0) return '3 ساعات';
+    if (hours > 0 && remainingMins > 0) return `${hours} ساعة و ${remainingMins} دقيقة`;
+    if (hours > 0) return `${hours} ساعات`;
+    return `${remainingMins} دقيقة`;
+  }
+  if (hours > 0 && remainingMins > 0) return `${hours}h ${remainingMins}m`;
+  if (hours > 0) return `${hours}h`;
+  return `${remainingMins}m`;
+}
+
 function SchedulesManagementContent() {
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
@@ -162,7 +287,20 @@ function SchedulesManagementContent() {
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgressState, setUploadProgressState] = useState<BatchUploadProgressState>({
+    isUploading: false,
+    phase: 'idle',
+    percentage: 0,
+    currentBatch: 1,
+    totalBatches: 1,
+    processedRows: 0,
+    totalRows: 0,
+    elapsedSeconds: 0,
+    estimatedSecondsLeft: null,
+    rowsPerSecond: 0,
+    isNetworkInterrupted: false,
+    retrySecondsLeft: 0,
+  });
   const [uploadResult, setUploadResult] = useState<{
     totalRows: number;
     insertedCount: number;
@@ -245,18 +383,137 @@ function SchedulesManagementContent() {
   const courses = coursesQuery.data ?? [];
   const staffMembers = staffQuery.data ?? [];
 
-  // Filter staff to doctors & teaching assistants
-  const teachingStaff = useMemo(() => {
-    const filtered = staffMembers.filter(
-      (s: any) =>
-        s.staffType === 'doctor' ||
-        s.staffType === 'teaching_assistant' ||
-        s.staffType === 'assistant' ||
-        !s.staffType ||
-        s.role === 'staff',
-    );
-    return filtered.length > 0 ? filtered : staffMembers;
+  // Filter staff strictly: separate Doctors and Teaching Assistants, excluding Administrative staff
+  const doctorsList = useMemo(() => {
+    return staffMembers.filter((s: any) => s.staffType === 'doctor');
   }, [staffMembers]);
+
+  const teachingAssistantsList = useMemo(() => {
+    return staffMembers.filter(
+      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant',
+    );
+  }, [staffMembers]);
+
+  const teachingStaff = useMemo(() => {
+    const combined = [...doctorsList, ...teachingAssistantsList];
+    return combined.length > 0 ? combined : staffMembers;
+  }, [doctorsList, teachingAssistantsList, staffMembers]);
+
+  const startMins = parseTimeToMinutes(formStartTime);
+  const endMins = parseTimeToMinutes(formEndTime);
+
+  const start24h = useMemo(() => {
+    return startMins !== null ? minutesTo24h(startMins) : '';
+  }, [startMins]);
+
+  const end24h = useMemo(() => {
+    return endMins !== null ? minutesTo24h(endMins) : '';
+  }, [endMins]);
+
+  const timeValidationError = useMemo(() => {
+    if (!formStartTime.trim() || !formEndTime.trim()) {
+      return isAr
+        ? 'يرجى تحديد وقت البدء ووقت الانتهاء'
+        : 'Please specify both start and end times';
+    }
+    if (startMins === null) {
+      return isAr
+        ? 'صيغة وقت البدء غير صالحة (مثال: 09:00 AM)'
+        : 'Invalid start time format (e.g. 09:00 AM)';
+    }
+    if (endMins === null) {
+      return isAr
+        ? 'صيغة وقت الانتهاء غير صالحة (مثال: 11:00 AM)'
+        : 'Invalid end time format (e.g. 11:00 AM)';
+    }
+    if (endMins <= startMins) {
+      return isAr
+        ? 'وقت الانتهاء يجب أن يكون بعد وقت البدء (مثال: 09:00 AM إلى 11:00 AM)'
+        : 'End time must be strictly after start time';
+    }
+    const duration = endMins - startMins;
+    if (duration < 30) {
+      return isAr
+        ? 'مدة الموعد يجب ألا تقل عن 30 دقيقة'
+        : 'Slot duration must be at least 30 minutes';
+    }
+    if (duration > 360) {
+      return isAr
+        ? 'مدة الموعد يجب ألا تتجاوز 6 ساعات'
+        : 'Slot duration cannot exceed 6 hours';
+    }
+    return null;
+  }, [formStartTime, formEndTime, startMins, endMins, isAr]);
+
+  const scheduleConflicts = useMemo(() => {
+    if (startMins === null || endMins === null || endMins <= startMins) return [];
+    if (!formLocation.trim() && !formStaffId) return [];
+
+    const conflicts: string[] = [];
+    const normalizedLoc = formLocation.trim().toLowerCase();
+
+    for (const item of schedules) {
+      if (editingItem && item._id === editingItem._id) continue;
+      if (item.dayOfWeek !== formDay) continue;
+
+      const itemStart = parseTimeToMinutes(item.startTime);
+      const itemEnd = parseTimeToMinutes(item.endTime);
+      if (itemStart === null || itemEnd === null) continue;
+
+      // Overlap condition
+      const overlaps = startMins < itemEnd && endMins > itemStart;
+      if (!overlaps) continue;
+
+      // Hall collision
+      if (normalizedLoc && item.location && item.location.trim().toLowerCase() === normalizedLoc) {
+        conflicts.push(
+          isAr
+            ? `تعارض القاعة: "${item.location}" محجوزة بالفعل لمقرر (${item.courseNameAr || item.courseName}) من ${item.startTime} إلى ${item.endTime}`
+            : `Room Conflict: "${item.location}" is already booked for (${item.courseName}) from ${item.startTime} to ${item.endTime}`,
+        );
+      }
+
+      // Staff collision
+      if (formStaffId && item.staffId === formStaffId) {
+        conflicts.push(
+          isAr
+            ? `تعارض عضو هيئة التدريس: لديه موعد آخر (${item.courseNameAr || item.courseName} - ${item.location}) من ${item.startTime} إلى ${item.endTime}`
+            : `Staff Conflict: Already scheduled for (${item.courseName} - ${item.location}) from ${item.startTime} to ${item.endTime}`,
+        );
+      }
+
+      // Batch / Department collision
+      if (
+        formLevel &&
+        formDepartment &&
+        item.level === formLevel &&
+        item.department === formDepartment &&
+        (item.group === formGroup || !item.group || !formGroup) &&
+        (item.section === formSection || !item.section || !formSection)
+      ) {
+        conflicts.push(
+          isAr
+            ? `تعارض جدول الدفعة: الفرقة ${item.level} (${item.department}) لديها موعد آخر (${item.courseNameAr || item.courseName}) في نفس التوقيت`
+            : `Batch Conflict: Level ${item.level} (${item.department}) has another session (${item.courseName}) at the same time`,
+        );
+      }
+    }
+
+    return Array.from(new Set(conflicts));
+  }, [
+    startMins,
+    endMins,
+    formDay,
+    formLocation,
+    formStaffId,
+    formLevel,
+    formDepartment,
+    formGroup,
+    formSection,
+    schedules,
+    editingItem,
+    isAr,
+  ]);
 
   const handleOpenAdd = () => {
     setEditingItem(null);
@@ -303,6 +560,25 @@ function SchedulesManagementContent() {
           : 'Please select course, staff member, and provide lecture location',
       );
       return;
+    }
+
+    if (timeValidationError) {
+      toast.error(timeValidationError);
+      return;
+    }
+
+    if (scheduleConflicts.length > 0) {
+      const hasHallCollision = scheduleConflicts.some(
+        (c) => c.includes('القاعة') || c.includes('Room'),
+      );
+      if (hasHallCollision) {
+        toast.error(
+          isAr
+            ? 'لا يمكن حفظ الموعد: يوجد تعارض مباشر في حجز القاعة/المدرج مع موعد آخر في نفس التوقيت'
+            : 'Cannot save: direct hall/room collision with another schedule slot',
+        );
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -411,16 +687,50 @@ function SchedulesManagementContent() {
       return;
     }
     setIsUploading(true);
-    setUploadProgress(15);
     setUploadResult(null);
 
-    const progressTimer = setInterval(() => {
-      setUploadProgress((prev) => (prev < 85 ? prev + 15 : prev));
-    }, 350);
+    const startTime = Date.now();
+    setUploadProgressState({
+      isUploading: true,
+      phase: 'uploading',
+      percentage: 10,
+      currentBatch: 1,
+      totalBatches: 1,
+      processedRows: 0,
+      totalRows: 0,
+      elapsedSeconds: 0,
+      estimatedSecondsLeft: null,
+      rowsPerSecond: 0,
+      isNetworkInterrupted: false,
+      retrySecondsLeft: 0,
+    });
+
+    const timer = setInterval(() => {
+      const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      setUploadProgressState((prev) => ({
+        ...prev,
+        elapsedSeconds: elapsed,
+        percentage:
+          prev.phase === 'uploading'
+            ? Math.min(75, prev.percentage + 10)
+            : prev.phase === 'processing'
+              ? Math.min(95, prev.percentage + 5)
+              : prev.percentage,
+      }));
+    }, 400);
 
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+
+      setTimeout(() => {
+        setUploadProgressState((prev) => ({
+          ...prev,
+          phase: 'processing',
+          percentage: Math.max(prev.percentage, 80),
+        }));
+      }, 700);
+
       const res = await api.post<{
         totalRows: number;
         insertedCount: number;
@@ -429,10 +739,40 @@ function SchedulesManagementContent() {
         errors: string[];
       }>('/admin/course-schedules/upload-excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const bytePercent = Math.min(
+              75,
+              Math.max(10, Math.round((progressEvent.loaded * 75) / progressEvent.total)),
+            );
+            setUploadProgressState((prev) => ({
+              ...prev,
+              percentage: bytePercent,
+              phase: bytePercent >= 70 ? 'processing' : 'uploading',
+            }));
+          }
+        },
       });
 
-      clearInterval(progressTimer);
-      setUploadProgress(100);
+      clearInterval(timer);
+      const total = res.data.totalRows || (res.data.insertedCount + res.data.updatedCount);
+      const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      const speed = Math.round((total / elapsed) * 10) / 10;
+
+      setUploadProgressState({
+        isUploading: false,
+        phase: 'completed',
+        percentage: 100,
+        currentBatch: 1,
+        totalBatches: 1,
+        processedRows: total,
+        totalRows: total,
+        elapsedSeconds: elapsed,
+        estimatedSecondsLeft: 0,
+        rowsPerSecond: speed,
+        isNetworkInterrupted: false,
+        retrySecondsLeft: 0,
+      });
 
       setUploadResult(res.data);
       if (res.data.insertedCount > 0 || res.data.updatedCount > 0) {
@@ -445,21 +785,25 @@ function SchedulesManagementContent() {
       } else if (res.data.errorCount > 0) {
         toast.error(
           isAr
-            ? 'حدثت أخطاء أثناء استيراد بعض الصفوف'
-            : 'Errors occurred during import',
+            ? `فشل استيراد الملف، تم رصد ${res.data.errorCount} خطأ`
+            : `Import failed with ${res.data.errorCount} errors`,
         );
       }
     } catch (err) {
-      clearInterval(progressTimer);
-      setUploadProgress(0);
+      clearInterval(timer);
+      setUploadProgressState((prev) => ({
+        ...prev,
+        isUploading: false,
+        phase: 'error',
+        percentage: 0,
+      }));
       toast.error(
         getApiErrorMessage(
           err,
-          isAr ? 'فشل استيراد الملف' : 'Failed to import schedule file',
+          isAr ? 'فشل استيراد ملف الجداول' : 'Failed to import schedule sheet',
         ),
       );
     } finally {
-      clearInterval(progressTimer);
       setIsUploading(false);
     }
   };
@@ -576,16 +920,39 @@ function SchedulesManagementContent() {
                 placeholder={isAr ? 'جميع الدكاترة والمعيدين' : 'All Staff / Doctors'}
               />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
               <SelectItem value="all">
-                {isAr ? 'جميع أعضاء هيئة التدريس' : 'All Doctors & Staff'}
+                {isAr ? 'جميع أعضاء هيئة التدريس والمعيدين' : 'All Doctors & TAs'}
               </SelectItem>
-              {teachingStaff.map((s: any) => (
+              {doctorsList.length > 0 && (
+                <div className="px-2 py-1 text-[10px] font-bold text-teal-400 bg-teal-500/10 rounded-sm my-0.5">
+                  {isAr ? 'أعضاء هيئة التدريس (الدكاترة)' : 'Doctors & Lecturers'}
+                </div>
+              )}
+              {doctorsList.map((s: any) => (
                 <SelectItem key={s._id} value={s._id}>
-                  {s.name}{' '}
-                  <span className="text-muted-foreground text-[10px]">
-                    ({s.staffType === 'teaching_assistant' ? (isAr ? 'معيد' : 'TA') : (isAr ? 'دكتور' : 'Doctor')})
-                  </span>
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <span>{s.name}</span>
+                    <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-300">
+                      {isAr ? 'دكتور' : 'Doctor'}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+
+              {teachingAssistantsList.length > 0 && (
+                <div className="px-2 py-1 text-[10px] font-bold text-purple-400 bg-purple-500/10 rounded-sm my-0.5 mt-1.5">
+                  {isAr ? 'الهيئة المعاونة (المعيدين)' : 'Teaching Assistants'}
+                </div>
+              )}
+              {teachingAssistantsList.map((s: any) => (
+                <SelectItem key={s._id} value={s._id}>
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <span>{s.name}</span>
+                    <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 text-purple-300">
+                      {isAr ? 'معيد' : 'TA'}
+                    </span>
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -727,14 +1094,21 @@ function SchedulesManagementContent() {
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-muted-foreground ms-5">
-                          {item.staffType === 'doctor' ? (
-                            <span className="text-teal-400">
+                        <div className="text-[11px] ms-5 mt-0.5">
+                          {item.staffType === 'teaching_assistant' ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-purple-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                              {isAr ? 'هيئة معاونة (معيد)' : 'Teaching Assistant'}
+                            </span>
+                          ) : item.staffType === 'doctor' ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-teal-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
                               {isAr ? 'أستاذ مقرر (دكتور)' : 'Doctor'}
                             </span>
                           ) : (
-                            <span className="text-purple-400">
-                              {isAr ? 'معيد' : 'Teaching Assistant'}
+                            <span className="inline-flex items-center gap-1 font-semibold text-amber-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                              {isAr ? 'إداري' : 'Administrative'}
                             </span>
                           )}
                         </div>
@@ -908,25 +1282,34 @@ function SchedulesManagementContent() {
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
-                    {teachingStaff.map((s: any) => (
+                  <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
+                    {doctorsList.length > 0 && (
+                      <div className="px-2 py-1 text-[10px] font-bold text-teal-400 bg-teal-500/10 rounded-sm my-0.5">
+                        {isAr ? 'أعضاء هيئة التدريس (الدكاترة)' : 'Doctors & Lecturers'}
+                      </div>
+                    )}
+                    {doctorsList.map((s: any) => (
                       <SelectItem key={s._id} value={s._id}>
                         <div className="flex items-center justify-between w-full gap-2">
                           <span className="font-medium">{s.name}</span>
-                          <span
-                            className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
-                              s.staffType === 'teaching_assistant'
-                                ? 'border border-purple-500/30 bg-purple-500/10 text-purple-300'
-                                : 'border border-teal-500/30 bg-teal-500/10 text-teal-300'
-                            }`}
-                          >
-                            {s.staffType === 'teaching_assistant'
-                              ? isAr
-                                ? 'معيد'
-                                : 'TA'
-                              : isAr
-                                ? 'دكتور'
-                                : 'Doctor'}
+                          <span className="rounded px-1.5 py-0.2 text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-300">
+                            {isAr ? 'دكتور' : 'Doctor'}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+
+                    {teachingAssistantsList.length > 0 && (
+                      <div className="px-2 py-1 text-[10px] font-bold text-purple-400 bg-purple-500/10 rounded-sm my-0.5 mt-2">
+                        {isAr ? 'الهيئة المعاونة (المعيدين)' : 'Teaching Assistants'}
+                      </div>
+                    )}
+                    {teachingAssistantsList.map((s: any) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="font-medium">{s.name}</span>
+                          <span className="rounded px-1.5 py-0.2 text-[10px] font-bold border border-purple-500/30 bg-purple-500/10 text-purple-300">
+                            {isAr ? 'معيد' : 'TA'}
                           </span>
                         </div>
                       </SelectItem>
@@ -995,35 +1378,142 @@ function SchedulesManagementContent() {
               </div>
             </div>
 
-            {/* Row 3: Start Time & End Time */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+            {/* Row 3: Start Time & End Time with Time Picker & Quick Presets */}
+            <div className="space-y-2.5 rounded-xl border border-border/70 bg-secondary/10 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span>{isAr ? 'وقت البدء *' : 'Start Time *'}</span>
-                </label>
-                <Input
-                  value={formStartTime}
-                  onChange={(e) => setFormStartTime(e.target.value)}
-                  placeholder="09:00 AM"
-                  className="rounded-squircle text-xs"
-                  required
-                />
+                  <span>{isAr ? 'توقيت المحاضرة / السكشن *' : 'Lecture / Section Timing *'}</span>
+                </span>
+                {startMins !== null && endMins !== null && endMins > startMins && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold text-teal-300">
+                    <CheckCircle2 className="h-3 w-3 text-teal-400" />
+                    <span>
+                      {isAr
+                        ? `المدة: ${formatDurationText(endMins - startMins, isAr)}`
+                        : `Duration: ${formatDurationText(endMins - startMins, isAr)}`}
+                    </span>
+                  </span>
+                )}
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span>{isAr ? 'وقت الانتهاء *' : 'End Time *'}</span>
-                </label>
-                <Input
-                  value={formEndTime}
-                  onChange={(e) => setFormEndTime(e.target.value)}
-                  placeholder="11:00 AM"
-                  className="rounded-squircle text-xs"
-                  required
-                />
+              {/* Time Inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    {isAr ? 'وقت البدء *' : 'Start Time *'}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={start24h}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const mins = parseTimeToMinutes(val);
+                          if (mins !== null) setFormStartTime(minutesTo12h(mins));
+                        }
+                      }}
+                      className="h-9 w-12 shrink-0 rounded-squircle border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      title={isAr ? 'اختر وقت البدء' : 'Pick start time'}
+                    />
+                    <Input
+                      value={formStartTime}
+                      onChange={(e) => setFormStartTime(e.target.value)}
+                      placeholder="09:00 AM"
+                      dir="ltr"
+                      className="rounded-squircle text-xs font-mono text-left"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    {isAr ? 'وقت الانتهاء *' : 'End Time *'}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="time"
+                      value={end24h}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const mins = parseTimeToMinutes(val);
+                          if (mins !== null) setFormEndTime(minutesTo12h(mins));
+                        }
+                      }}
+                      className="h-9 w-12 shrink-0 rounded-squircle border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      title={isAr ? 'اختر وقت الانتهاء' : 'Pick end time'}
+                    />
+                    <Input
+                      value={formEndTime}
+                      onChange={(e) => setFormEndTime(e.target.value)}
+                      placeholder="11:00 AM"
+                      dir="ltr"
+                      className="rounded-squircle text-xs font-mono text-left"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Quick Time Presets */}
+              <div className="pt-1">
+                <span className="text-[10px] text-muted-foreground block mb-1">
+                  {isAr ? 'فترات سريعة شائعة:' : 'Quick time presets:'}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {TIME_SLOT_PRESETS.map((preset) => {
+                    const isSelected =
+                      formStartTime === preset.start && formEndTime === preset.end;
+                    return (
+                      <button
+                        key={preset.start + preset.end}
+                        type="button"
+                        onClick={() => {
+                          setFormStartTime(preset.start);
+                          setFormEndTime(preset.end);
+                        }}
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'border-primary bg-primary/20 text-primary font-bold'
+                            : 'border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                        }`}
+                      >
+                        {isAr ? preset.labelAr : preset.labelEn}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Time Validation Error Banner */}
+              {timeValidationError && (
+                <div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span>{timeValidationError}</span>
+                </div>
+              )}
+
+              {/* Conflict Warning Banner */}
+              {scheduleConflicts.length > 0 && (
+                <div className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>
+                      {isAr
+                        ? 'تنبيه: تم رصد تعارض في الجدول!'
+                        : 'Warning: Schedule conflicts detected!'}
+                    </span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-200/90 pr-1">
+                    {scheduleConflicts.map((c, idx) => (
+                      <li key={idx}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {/* Row 4: Location / Hall Place + Quick Presets */}
@@ -1110,8 +1600,8 @@ function SchedulesManagementContent() {
             <DialogFooter className="mt-4 gap-2 border-t border-border/80 pt-4 rtl:sm:justify-start">
               <Button
                 type="submit"
-                disabled={submitting}
-                className="rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
+                disabled={submitting || !!timeValidationError}
+                className="rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 <span>
@@ -1257,24 +1747,10 @@ function SchedulesManagementContent() {
               </div>
             </div>
 
-            {/* Upload Progress Bar */}
-            {isUploading && (
-              <div className="space-y-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3 animate-in fade-in">
-                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    {isAr
-                      ? 'جاري استيراد ومعالجة جدول المحاضرات والسكاشن...'
-                      : 'Importing schedule timetable...'}
-                  </span>
-                  <span className="font-mono text-primary">{uploadProgress}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full bg-primary transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
+            {/* Upload Progress Bar (Unified Batch Architecture) */}
+            {uploadProgressState.isUploading && (
+              <div className="pt-1">
+                <DataUploadProgress state={uploadProgressState} locale={locale} />
               </div>
             )}
 

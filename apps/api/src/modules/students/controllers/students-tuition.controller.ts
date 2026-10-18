@@ -32,7 +32,7 @@ export class StudentsTuitionController {
 
   @Get('stats')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @RequirePermissions(PERMISSIONS.TUITION_READ)
   @ApiOperation({
     summary: 'Get summary statistics of tuition fees and block status',
   })
@@ -42,7 +42,7 @@ export class StudentsTuitionController {
 
   @Get('list')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @RequirePermissions(PERMISSIONS.TUITION_READ)
   @ApiOperation({
     summary:
       'List students with tuition fee status and blocked flags with filtering',
@@ -53,7 +53,7 @@ export class StudentsTuitionController {
 
   @Get('template')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @RequirePermissions(PERMISSIONS.TUITION_READ)
   @ApiOperation({
     summary:
       'Download official Excel (.xlsx) or CSV template for tuition fees and blocking',
@@ -75,7 +75,7 @@ export class StudentsTuitionController {
 
   @Patch(':id/status')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  @RequirePermissions(PERMISSIONS.TUITION_WRITE)
   @ApiOperation({
     summary:
       'Update single student tuition payment and portal block status (Admin/Staff)',
@@ -89,7 +89,7 @@ export class StudentsTuitionController {
 
   @Post('bulk-toggle')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  @RequirePermissions(PERMISSIONS.TUITION_WRITE)
   @ApiOperation({
     summary:
       'Bulk toggle block status and tuition fees for selected students (Admin/Staff)',
@@ -100,7 +100,7 @@ export class StudentsTuitionController {
 
   @Post('upload-excel')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  @RequirePermissions(PERMISSIONS.TUITION_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB

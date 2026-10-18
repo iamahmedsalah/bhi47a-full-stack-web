@@ -36,6 +36,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
 interface TuitionStudent {
   _id: string;
@@ -88,7 +90,20 @@ export function StudentTuitionManagement({
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [progressState, setProgressState] = useState<BatchUploadProgressState>({
+    isUploading: false,
+    phase: 'idle',
+    percentage: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    processedRows: 0,
+    totalRows: 0,
+    elapsedSeconds: 0,
+    estimatedSecondsLeft: null,
+    rowsPerSecond: 0,
+    isNetworkInterrupted: false,
+    retrySecondsLeft: 0,
+  });
   const [uploadResult, setUploadResult] = useState<{
     totalRows: number;
     updatedCount: number;
@@ -241,15 +256,48 @@ export function StudentTuitionManagement({
 
     try {
       setIsUploading(true);
-      setUploadProgress(15);
       setUploadResult(null);
 
-      const progressTimer = setInterval(() => {
-        setUploadProgress((prev) => (prev < 85 ? prev + 15 : prev));
-      }, 350);
+      const startTime = Date.now();
+      setProgressState({
+        isUploading: true,
+        phase: 'uploading',
+        percentage: 10,
+        currentBatch: 1,
+        totalBatches: 1,
+        processedRows: 0,
+        totalRows: 0,
+        elapsedSeconds: 0,
+        estimatedSecondsLeft: null,
+        rowsPerSecond: 0,
+        isNetworkInterrupted: false,
+        retrySecondsLeft: 0,
+      });
+
+      const timer = setInterval(() => {
+        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        setProgressState((prev) => ({
+          ...prev,
+          elapsedSeconds: elapsed,
+          percentage:
+            prev.phase === 'uploading'
+              ? Math.min(75, prev.percentage + 10)
+              : prev.phase === 'processing'
+                ? Math.min(95, prev.percentage + 5)
+                : prev.percentage,
+        }));
+      }, 400);
 
       const formData = new FormData();
       formData.append('file', uploadFile);
+
+      setTimeout(() => {
+        setProgressState((prev) => ({
+          ...prev,
+          phase: 'processing',
+          percentage: Math.max(prev.percentage, 80),
+        }));
+      }, 700);
 
       const res = await api.post<{
         totalRows: number;
@@ -258,26 +306,66 @@ export function StudentTuitionManagement({
         errors: string[];
       }>('/admin/students/tuition/upload-excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const bytePercent = Math.min(
+              75,
+              Math.max(10, Math.round((progressEvent.loaded * 75) / progressEvent.total)),
+            );
+            setProgressState((prev) => ({
+              ...prev,
+              percentage: bytePercent,
+              phase: bytePercent >= 70 ? 'processing' : 'uploading',
+            }));
+          }
+        },
       });
 
-      clearInterval(progressTimer);
-      setUploadProgress(100);
+      clearInterval(timer);
+      const data = res.data ?? (res as unknown as {
+        totalRows: number;
+        updatedCount: number;
+        errorCount: number;
+        errors: string[];
+      });
+      const total = data.totalRows || data.updatedCount;
+      const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      const speed = Math.round((total / elapsed) * 10) / 10;
 
-      setUploadResult(res.data);
-      if (res.data.updatedCount > 0) {
+      setProgressState({
+        isUploading: false,
+        phase: 'completed',
+        percentage: 100,
+        currentBatch: 1,
+        totalBatches: 1,
+        processedRows: total,
+        totalRows: total,
+        elapsedSeconds: elapsed,
+        estimatedSecondsLeft: 0,
+        rowsPerSecond: speed,
+        isNetworkInterrupted: false,
+        retrySecondsLeft: 0,
+      });
+
+      setUploadResult(data);
+      if (data.updatedCount > 0) {
         toast.success(
           isAr
-            ? `تم تحديث حالة المصروفات والحجب لـ ${res.data.updatedCount} طالب بنجاح!`
-            : `Updated tuition & block status for ${res.data.updatedCount} students successfully!`,
+            ? `تم تحديث حالة المصروفات والحجب لـ ${data.updatedCount} طالب بنجاح!`
+            : `Updated tuition & block status for ${data.updatedCount} students successfully!`,
         );
         void queryClient.invalidateQueries({ queryKey: ['admin-tuition-list'] });
         void queryClient.invalidateQueries({ queryKey: ['admin-tuition-stats'] });
         void queryClient.invalidateQueries({ queryKey: ['students'] });
-      } else if (res.data.errorCount > 0) {
+      } else if (data.errorCount > 0) {
         toast.error(isAr ? 'حدثت أخطاء في بعض السطور' : 'Errors occurred during import');
       }
     } catch (err) {
-      setUploadProgress(0);
+      setProgressState((prev) => ({
+        ...prev,
+        isUploading: false,
+        phase: 'error',
+      }));
       toast.error(getApiErrorMessage(err, isAr ? 'فشل استيراد الملف' : 'Failed to import file'));
     } finally {
       setIsUploading(false);
@@ -487,7 +575,12 @@ export function StudentTuitionManagement({
               onClick={() => {
                 setUploadFile(null);
                 setUploadResult(null);
-                setUploadProgress(0);
+                setProgressState((prev) => ({
+                  ...prev,
+                  phase: 'idle',
+                  percentage: 0,
+                  processedRows: 0,
+                }));
                 setIsUploadOpen(true);
               }}
               className="h-9 rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 shadow-sm cursor-pointer"
@@ -827,7 +920,12 @@ export function StudentTuitionManagement({
                   if (f) {
                     setUploadFile(f);
                     setUploadResult(null);
-                    setUploadProgress(0);
+                    setProgressState((prev) => ({
+                      ...prev,
+                      phase: 'idle',
+                      percentage: 0,
+                      processedRows: 0,
+                    }));
                   }
                 }}
                 disabled={isUploading}
@@ -853,22 +951,10 @@ export function StudentTuitionManagement({
               )}
             </div>
 
-            {/* Upload Progress Bar */}
-            {isUploading && (
-              <div className="space-y-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3 animate-in fade-in">
-                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    {isAr ? 'جاري معالجة وتحديث كشف المصروفات والحجب...' : 'Processing tuition updates...'}
-                  </span>
-                  <span className="font-mono text-primary">{uploadProgress}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                  <div
-                    className="h-full bg-primary transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
+            {/* Unified Batch/Upload Progress Bar */}
+            {(isUploading || progressState.phase === 'completed') && (
+              <div className="mt-2">
+                <DataUploadProgress state={progressState} locale={locale} />
               </div>
             )}
 

@@ -27,6 +27,9 @@ import {
   CalendarDays,
   MapPin,
   Clock,
+  Eye,
+  Maximize2,
+  FileImage,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/feedback';
 import { useParams, useRouter } from 'next/navigation';
@@ -132,6 +135,32 @@ function formatStatusLabel(value: string) {
   return value
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatCourseLevel(lvl: string | number | undefined, isAr: boolean) {
+  const l = String(lvl ?? '');
+  if (isAr) {
+    if (l === '1') return 'المستوى الأول';
+    if (l === '2') return 'المستوى الثاني';
+    if (l === '3') return 'المستوى الثالث';
+    if (l === '4') return 'المستوى الرابع';
+    return l ? `المستوى ${l}` : '—';
+  }
+  return l ? `Level ${l}` : '—';
+}
+
+function formatCourseSemester(sem: string | number | undefined, isAr: boolean) {
+  const s = String(sem ?? '').toLowerCase();
+  if (isAr) {
+    if (s === 'first' || s === '1') return 'الترم الأول';
+    if (s === 'second' || s === '2') return 'الترم الثاني';
+    if (s === 'summer') return 'الفصل الصيفي';
+    return s || '—';
+  }
+  if (s === 'first' || s === '1') return 'First Term';
+  if (s === 'second' || s === '2') return 'Second Term';
+  if (s === 'summer') return 'Summer Term';
+  return s || '—';
 }
 
 function countBy<T>(items: T[], getKey: (item: T) => string | undefined): ChartDatum[] {
@@ -308,6 +337,29 @@ export default function AdminDashboard() {
     if (doctorScheduleDayFilter === 'all') return mySchedules;
     return mySchedules.filter((s: any) => s.dayOfWeek === doctorScheduleDayFilter);
   }, [mySchedules, doctorScheduleDayFilter]);
+
+  const [previewExamSchedule, setPreviewExamSchedule] = useState<{
+    _id: string;
+    title: string;
+    examType: string;
+    academicYear: string;
+    semester: string;
+    fileUrl: string;
+  } | null>(null);
+
+  const doctorExamSchedulesQuery = useQuery({
+    queryKey: ['doctor-dashboard-exam-schedules'],
+    queryFn: async () => {
+      try {
+        const res = await api.get<any[]>('/admin/exam-schedules');
+        return Array.isArray(res.data) ? res.data : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: isStaff,
+  });
+  const doctorExamSchedules = doctorExamSchedulesQuery.data ?? [];
 
   const hasPerm = (p: string) => isAdmin || Boolean(user?.permissions?.includes(p));
 
@@ -819,8 +871,10 @@ export default function AdminDashboard() {
                         <span className="font-mono text-xs font-bold text-primary">
                           {c.code}
                         </span>
-                        <span className="rounded-md border border-border/60 bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground">
-                          {isAr ? `الفرقة ${c.level ?? '—'} · ترم ${c.semester ?? '—'}` : `L${c.level ?? '—'} · S${c.semester ?? '—'}`}
+                        <span className="rounded-md border border-border/60 bg-secondary/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {isAr
+                            ? `${formatCourseLevel(c.level, true)} · ${formatCourseSemester(c.semester, true)}`
+                            : `${formatCourseLevel(c.level, false)} · ${formatCourseSemester(c.semester, false)}`}
                         </span>
                       </div>
 
@@ -1256,177 +1310,133 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* DOCTOR LECTURE & SECTION SCHEDULE (PLACES OF LECTURES) */}
-          <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
-              <div>
-                <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
-                  <CalendarDays className="h-5 w-5 text-teal-400" />
-                  <span>{isAr ? 'جدول المحاضرات والسكاشن وأماكن القاعات' : 'Lecture & Section Schedule (Hall Locations)'}</span>
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {isAr
-                    ? 'جدول مواعيدك التدريسية الأسبوعية وأماكن المدرجات والقاعات والمعامل المعتمدة'
-                    : 'Your weekly teaching timetable and allocated lecture halls/auditoriums'}
-                </p>
-              </div>
-
-              {/* Day filter pills */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[
-                  { key: 'all', label: isAr ? 'جميع الأيام' : 'All Days' },
-                  { key: 'saturday', label: isAr ? 'السبت' : 'Sat' },
-                  { key: 'sunday', label: isAr ? 'الأحد' : 'Sun' },
-                  { key: 'monday', label: isAr ? 'الاثنين' : 'Mon' },
-                  { key: 'tuesday', label: isAr ? 'الثلاثاء' : 'Tue' },
-                  { key: 'wednesday', label: isAr ? 'الأربعاء' : 'Wed' },
-                  { key: 'thursday', label: isAr ? 'الخميس' : 'Thu' },
-                ].map((pill) => (
-                  <button
-                    key={pill.key}
-                    type="button"
-                    onClick={() => setDoctorScheduleDayFilter(pill.key)}
-                    className={`rounded-squircle px-3 py-1 text-xs font-semibold transition-all cursor-pointer ${
-                      doctorScheduleDayFilter === pill.key
-                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                        : 'border border-border/60 bg-background/50 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
-                    }`}
-                  >
-                    {pill.label}
-                  </button>
-                ))}
+          {/* DOCTOR EXAM SCHEDULES THUMBNAILS (INLINE VIEW - NO REDIRECT BUTTON) */}
+          <div className="space-y-4 rounded-2xl border border-primary/25 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-squircle border border-teal-500/30 bg-teal-500/10 text-teal-400">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-foreground">
+                    {isAr ? 'جداول الامتحانات المعتمدة (الميدترم والنهائي)' : 'Official Exam Timetables (Midterm & Final)'}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr
+                      ? 'استعراض مصغر وتحميل جدول الامتحانات الرسمي المعتمد للفصل الدراسي'
+                      : 'Preview and download official examination schedules for the current academic semester'}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {myScheduleQuery.isLoading ? (
-              <div className="py-12 flex justify-center">
+            {doctorExamSchedulesQuery.isLoading ? (
+              <div className="flex min-h-32 items-center justify-center py-6">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            ) : filteredDoctorSchedules.length === 0 ? (
-              <div className="py-8">
-                <EmptyState
-                  title={isAr ? 'لا توجد مواعيد مسجلة في هذا اليوم' : 'No schedule entries for this day'}
-                  description={
-                    isAr
-                      ? 'لم يتم إدراج مواعيد محاضرات أو سكاشن لك في هذا اليوم. سيقوم مسؤول الجداول باعتمادها قريباً.'
-                      : 'No lecture or section slots allocated yet. Administration will publish timings soon.'
-                  }
-                />
+            ) : doctorExamSchedules.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
+                <FileImage className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+                <span>
+                  {isAr
+                    ? 'لم يتم اعتماد أو نشر جداول الامتحانات الرسمية لهذا الفصل حتى الآن.'
+                    : 'No approved examination schedules published for this term yet.'}
+                </span>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-border/60 bg-background/40">
-                <table className="w-full text-start text-xs">
-                  <thead className="border-b border-border/80 bg-background/70 text-muted-foreground uppercase text-[11px] font-semibold">
-                    <tr>
-                      <th className="px-4 py-3 text-start">{isAr ? 'اليوم والتوقيت' : 'Day & Time'}</th>
-                      <th className="px-4 py-3 text-start">{isAr ? 'المقرر الدراسي' : 'Course'}</th>
-                      <th className="px-4 py-3 text-center">{isAr ? 'النوع' : 'Type'}</th>
-                      <th className="px-4 py-3 text-start">{isAr ? 'مكان المحاضرة / القاعة / المدرج' : 'Hall / Location'}</th>
-                      <th className="px-4 py-3 text-start">{isAr ? 'الفرقة / المجموعة' : 'Level & Group'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60 font-medium">
-                    {filteredDoctorSchedules.map((slot: any) => {
-                      const isLecture = slot.type === 'lecture';
-                      const isLab = slot.type === 'lab';
-                      const dayLabel = isAr
-                        ? slot.dayOfWeek === 'saturday'
-                          ? 'السبت'
-                          : slot.dayOfWeek === 'sunday'
-                            ? 'الأحد'
-                            : slot.dayOfWeek === 'monday'
-                              ? 'الاثنين'
-                              : slot.dayOfWeek === 'tuesday'
-                                ? 'الثلاثاء'
-                                : slot.dayOfWeek === 'wednesday'
-                                  ? 'الأربعاء'
-                                  : 'الخميس'
-                        : slot.dayOfWeek;
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {doctorExamSchedules.map((schedule: any) => {
+                  const isFinal = schedule.examType === 'final';
+                  const isPdf = schedule.fileUrl?.toLowerCase().endsWith('.pdf');
+                  return (
+                    <div
+                      key={schedule._id}
+                      className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border/70 bg-surface/50 p-3 transition-all duration-200 hover:border-primary/50 hover:shadow-lg"
+                    >
+                      {/* Thumbnail Header */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-squircle px-2.5 py-0.5 text-[11px] font-bold border ${
+                            isFinal
+                              ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                              : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                          }`}
+                        >
+                          {isFinal
+                            ? isAr ? 'امتحان نهائي (Final)' : 'Final Exam'
+                            : isAr ? 'امتحان ميدترم (Midterm)' : 'Midterm Exam'}
+                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {schedule.academicYear || '2026-2027'}
+                        </span>
+                      </div>
 
-                      return (
-                        <tr key={slot._id} className="hover:bg-primary/5 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="font-bold text-foreground">{dayLabel}</div>
-                            <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-                              <Clock className="h-3 w-3 text-primary/70" />
-                              <span>{slot.startTime} - {slot.endTime}</span>
+                      {/* Visual Thumbnail */}
+                      <div
+                        onClick={() => setPreviewExamSchedule(schedule)}
+                        className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-black/40 cursor-pointer group-hover:border-primary/60 transition-all"
+                      >
+                        {isPdf ? (
+                          <div className="flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+                            <FileText className="h-10 w-10 text-rose-400" />
+                            <span className="text-xs font-semibold text-foreground">
+                              {schedule.title || (isAr ? 'مستند PDF' : 'PDF Document')}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {isAr ? 'اضغط للمعاينة والتحميل' : 'Click to preview and download'}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={schedule.fileUrl}
+                              alt={schedule.title || 'Exam Schedule'}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+                              <span className="flex items-center gap-1.5 rounded-squircle bg-primary/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur">
+                                <Maximize2 className="h-3.5 w-3.5" />
+                                <span>{isAr ? 'معاينة كاملة' : 'Full Preview'}</span>
+                              </span>
                             </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="font-bold text-foreground">
-                              {isAr ? (slot.courseNameAr || slot.courseName) : slot.courseName}
-                            </div>
-                            <div className="font-mono text-[11px] text-primary">{slot.courseCode}</div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`inline-flex items-center rounded-squircle border px-2.5 py-0.5 text-[11px] font-bold ${
-                                isLecture
-                                  ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
-                                  : isLab
-                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                                    : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
-                              }`}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Caption & Actions */}
+                      <div className="mt-2.5 flex items-center justify-between gap-2 pt-1 border-t border-border/40 text-xs">
+                        <span className="font-semibold text-foreground truncate max-w-[200px]">
+                          {schedule.title || (isFinal ? (isAr ? 'جدول النهائي' : 'Final Schedule') : (isAr ? 'جدول الميدترم' : 'Midterm Schedule'))}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewExamSchedule(schedule)}
+                            className="flex items-center gap-1 rounded-squircle border border-border/70 bg-secondary/50 px-2 py-1 text-[11px] font-medium text-foreground hover:bg-secondary cursor-pointer"
+                          >
+                            <Eye className="h-3 w-3 text-primary" />
+                            <span>{isAr ? 'معاينة' : 'View'}</span>
+                          </button>
+                          {schedule.fileUrl && (
+                            <a
+                              href={schedule.fileUrl}
+                              download
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 rounded-squircle border border-teal-500/30 bg-teal-500/10 px-2 py-1 text-[11px] font-medium text-teal-300 hover:bg-teal-500/20 cursor-pointer"
                             >
-                              {isLecture ? (isAr ? 'محاضرة' : 'Lecture') : isLab ? (isAr ? 'معمل' : 'Lab') : (isAr ? 'سكشن' : 'Section')}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-300 shadow-sm shadow-teal-500/10">
-                              <MapPin className="h-3.5 w-3.5 text-teal-400" />
-                              <span>{slot.location}</span>
-                            </span>
-                            {slot.notes && (
-                              <div className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[200px]">
-                                {slot.notes}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-foreground">
-                            <div>
-                              {isAr ? `الفرقة ${slot.level}` : `Level ${slot.level}`}
-                              {slot.department && ` · ${slot.department}`}
-                            </div>
-                            {(slot.group || slot.section) && (
-                              <div className="text-[11px] text-muted-foreground">
-                                {slot.group && `${slot.group} `}
-                                {slot.section && `(${slot.section})`}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                              <Download className="h-3 w-3" />
+                              <span>{isAr ? 'تحميل' : 'Download'}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </div>
-
-          {/* DOCTOR EXAM SCHEDULE VIEWER BANNER (STUDENT VIEW) */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-gradient-to-r from-teal-950/40 via-card to-background p-5 shadow-lg backdrop-blur">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/25 shrink-0">
-                <Calendar className="h-6 w-6" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-foreground">
-                  {isAr ? 'جداول الامتحانات المعتمدة (الميدترم والنهائي)' : 'Official Exam Timetables (Midterm & Final)'}
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  {isAr
-                    ? 'استعراض وتحميل جدول الامتحانات الرسمي المعتمد للفصل الدراسي بصيغة عالية الجودة'
-                    : 'View and download official examination schedules and approved committee timetables'}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push(`/${locale}/admin/exam-schedules`)}
-              className="rounded-squircle bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md shadow-primary/20 hover:bg-primary-hover active:scale-[0.98] transition-all shrink-0 cursor-pointer"
-            >
-              {isAr ? 'عرض جدول الامتحانات' : 'View Exam Timetables'}
-            </button>
           </div>
         </div>
       )}
@@ -2008,6 +2018,48 @@ export default function AdminDashboard() {
           void queryClient.invalidateQueries();
         }}
       />
+
+      {/* Exam Schedule Preview Lightbox Dialog */}
+      <Dialog
+        open={Boolean(previewExamSchedule)}
+        onOpenChange={(open) => !open && setPreviewExamSchedule(null)}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-4 rounded-2xl border-border bg-card">
+          <DialogHeader className="border-b border-border/70 pb-3 text-start">
+            <DialogTitle className="flex items-center justify-between gap-2 text-base font-bold text-foreground">
+              <span>{previewExamSchedule?.title || (isAr ? 'معاينة جدول الامتحانات' : 'Exam Schedule Preview')}</span>
+              {previewExamSchedule?.fileUrl && (
+                <a
+                  href={previewExamSchedule.fileUrl}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>{isAr ? 'تحميل الملف الأصلي' : 'Download File'}</span>
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-[72vh] items-center justify-center overflow-auto p-2 bg-black/40 rounded-xl">
+            {previewExamSchedule?.fileUrl?.toLowerCase().endsWith('.pdf') ? (
+              <iframe
+                src={previewExamSchedule.fileUrl}
+                title="Exam Schedule PDF"
+                className="h-[70vh] w-full rounded-lg border-0"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewExamSchedule?.fileUrl}
+                alt="Exam Schedule Full"
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain shadow-2xl"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -23,6 +27,37 @@ const DAY_ORDER: Record<string, number> = {
   thursday: 6,
 };
 
+function parseTimeToMinutes(t?: string | null): number | null {
+  if (!t || typeof t !== 'string') return null;
+  const raw = t.trim();
+  if (!raw) return null;
+
+  const match12 = raw.match(/^(\d{1,2}):(\d{2})\s*(am|pm|ص|م)?$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const modifier = (match12[3] || '').toLowerCase();
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    if (modifier === 'pm' || modifier === 'م') {
+      if (hours < 12) hours += 12;
+    } else if (modifier === 'am' || modifier === 'ص') {
+      if (hours === 12) hours = 0;
+    }
+    return hours * 60 + minutes;
+  }
+
+  const match24 = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const minutes = parseInt(match24[2], 10);
+    if (hours >= 0 && hours < 24 && minutes >= 0 && minutes < 60) {
+      return hours * 60 + minutes;
+    }
+  }
+
+  return null;
+}
+
 @Injectable()
 export class CourseSchedulesService {
   constructor(
@@ -35,6 +70,12 @@ export class CourseSchedulesService {
   ) {}
 
   async create(dto: CreateCourseScheduleDto): Promise<CourseScheduleDocument> {
+    const startMins = parseTimeToMinutes(dto.startTime);
+    const endMins = parseTimeToMinutes(dto.endTime);
+    if (startMins !== null && endMins !== null && endMins <= startMins) {
+      throw new BadRequestException('وقت الانتهاء يجب أن يكون بعد وقت البدء');
+    }
+
     let courseCode = dto.courseCode;
     let courseName = dto.courseName;
     let courseNameAr = dto.courseNameAr;
@@ -168,6 +209,21 @@ export class CourseSchedulesService {
   ): Promise<CourseScheduleDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('الموعد غير موجود');
+    }
+
+    const existing = await this.scheduleModel.findById(id);
+    if (!existing) {
+      throw new NotFoundException('الموعد غير موجود');
+    }
+
+    const effectiveStart =
+      dto.startTime !== undefined ? dto.startTime : existing.startTime;
+    const effectiveEnd =
+      dto.endTime !== undefined ? dto.endTime : existing.endTime;
+    const startMins = parseTimeToMinutes(effectiveStart);
+    const endMins = parseTimeToMinutes(effectiveEnd);
+    if (startMins !== null && endMins !== null && endMins <= startMins) {
+      throw new BadRequestException('وقت الانتهاء يجب أن يكون بعد وقت البدء');
     }
 
     const payload: any = { ...dto };

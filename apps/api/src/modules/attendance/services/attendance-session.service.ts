@@ -132,27 +132,18 @@ export class AttendanceSessionService {
         })
         .lean();
 
-      if (!assignment) {
-        // Fallback: Check if user is assigned in Course or has admin permission
-        // If strict assignment required, reject unauthorized staff:
-        const hasAssignment = await this.staffAssignmentModel.exists({
-          staffId: new Types.ObjectId(currentUser._id),
-          courseCode,
-        });
+      const isCourseDoctor =
+        course.doctorId &&
+        course.doctorId.toString() === currentUser._id.toString();
 
-        if (!hasAssignment) {
-          // Allow creation only if assigned or explicitly granted
-          // To make onboarding smooth, if no assignment exists yet institute-wide, allow with default role
-          const totalAssignments =
-            await this.staffAssignmentModel.countDocuments();
-          if (totalAssignments > 0) {
-            throw new ForbiddenException(
-              `غير مصرح لك ببدء حضور للمقرر [${courseCode}]؛ لست مدرجاً في طاقم التدريس الخاص به.`,
-            );
-          }
-        }
-      } else {
+      if (!assignment && !isCourseDoctor) {
+        throw new ForbiddenException(
+          `غير مصرح لك ببدء حضور للمقرر [${courseCode}]؛ لست مدرجاً في طاقم التدريس الخاص به.`,
+        );
+      } else if (assignment) {
         academicPosition = assignment.academicPosition;
+      } else {
+        academicPosition = 'doctor';
       }
     }
 
@@ -441,34 +432,56 @@ export class AttendanceSessionService {
       }));
     }
 
-    // Staff query
+    if (!Types.ObjectId.isValid(currentUser._id)) {
+      return [];
+    }
+
+    const userObjectId = new Types.ObjectId(currentUser._id);
+
+    // 1. Staff explicit assignments
     const assignments = await this.staffAssignmentModel
       .find({
-        staffId: new Types.ObjectId(currentUser._id),
+        staffId: userObjectId,
         isActive: true,
       })
       .sort({ courseCode: 1 })
       .lean();
 
-    if (assignments.length > 0) {
-      return assignments;
-    }
-
-    // Fallback: If no explicit assignment rows exist yet, return active courses to keep dev/testing usable
-    const allCourses = await this.courseModel
-      .find({ isActive: true })
-      .limit(10)
+    // 2. Courses where staff member is assigned as doctorId
+    const doctorCourses = await this.courseModel
+      .find({
+        doctorId: userObjectId,
+        isActive: true,
+      })
+      .sort({ level: 1, code: 1 })
       .lean();
 
-    return allCourses.map((c) => ({
-      courseCode: c.code,
-      courseName: c.nameAr || c.name,
-      level: c.level,
-      semester: c.semester,
-      academicPosition: 'doctor' as const,
-      groups: [],
-      sections: [],
-    }));
+    const seenCodes = new Set<string>();
+    const result: any[] = [];
+
+    for (const a of assignments) {
+      if (!seenCodes.has(a.courseCode)) {
+        seenCodes.add(a.courseCode);
+        result.push(a);
+      }
+    }
+
+    for (const c of doctorCourses) {
+      if (!seenCodes.has(c.code)) {
+        seenCodes.add(c.code);
+        result.push({
+          courseCode: c.code,
+          courseName: c.nameAr || c.name,
+          level: c.level,
+          semester: c.semester,
+          academicPosition: 'doctor' as const,
+          groups: ['1', '2'],
+          sections: ['1', '2', '3', '4'],
+        });
+      }
+    }
+
+    return result;
   }
 
   /**
