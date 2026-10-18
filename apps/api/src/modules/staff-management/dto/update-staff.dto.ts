@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsIn,
   IsEmail,
   IsOptional,
   IsString,
@@ -7,8 +8,13 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
 
 export class UpdateStaffDto {
+  @ApiPropertyOptional({ enum: STAFF_TYPE_VALUES, example: 'doctor' })
+  @IsOptional()
+  @IsIn(STAFF_TYPE_VALUES)
+  staffType?: StaffType;
   @ApiPropertyOptional({ example: 'Ahmed Hassan' })
   @IsOptional()
   @IsString()

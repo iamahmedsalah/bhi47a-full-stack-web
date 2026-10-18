@@ -4,7 +4,7 @@ import { useDeferredValue, useState } from 'react';
 import { Edit2, KeyRound, Plus, Search, ShieldCheck, UserCheck, UserX, Users } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { STAFF_ASSIGNABLE_PERMISSIONS, type Permission } from '@student-portal/shared';
+import { STAFF_ASSIGNABLE_PERMISSIONS, STAFF_TYPE_VALUES, type Permission, type StaffType } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { Input } from '@/components/ui/input';
@@ -26,12 +26,13 @@ export function StaffManagementPage() {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [staffType, setStaffType] = useState<'all' | StaffType>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [permissionsTarget, setPermissionsTarget] = useState<StaffMember | null>(null);
   const [passwordTarget, setPasswordTarget] = useState<StaffMember | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<StaffMember | null>(null);
-  const query = useStaffList({ page, limit: 20, search: deferredSearch || undefined, status });
+  const query = useStaffList({ page, limit: 20, search: deferredSearch || undefined, status, staffType });
   const mutations = useStaffMutations();
 
   const fail = (error: unknown) => toast.error(getApiErrorMessage(error, t('toasts.failed')));
@@ -43,6 +44,7 @@ export function StaffManagementPage() {
         email: values.email,
         username: values.username || undefined,
         phone: values.phone || undefined,
+        staffType: values.staffType as StaffType,
       };
       if (editing) {
         await mutations.update.mutateAsync({ id: editing._id, input: profile });
@@ -94,7 +96,12 @@ export function StaffManagementPage() {
     {
       key: 'staff', header: t('table.staff'), render: (staff) => (
         <TableCell className="px-4 py-3">
-          <div className="font-semibold text-foreground">{staff.name}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-foreground">{staff.name}</span>
+            <span className="inline-flex rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400">
+              {t(`types.${staff.staffType ?? 'administrative'}`)}
+            </span>
+          </div>
           <div className="font-mono text-xs text-muted-foreground">{staff.userCode ?? '—'} · {staff.email ?? '—'}</div>
         </TableCell>
       ),
@@ -149,8 +156,19 @@ export function StaffManagementPage() {
             <Input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={t('searchPlaceholder')} className="ps-9" />
           </div>
           <Select value={status} onValueChange={(value) => { setStatus(value as typeof status); setPage(1); }}>
-            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder={t('filters.all')} /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder={t('filters.all')} /></SelectTrigger>
             <SelectContent><SelectItem value="all">{t('filters.all')}</SelectItem><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="inactive">{t('inactive')}</SelectItem></SelectContent>
+          </Select>
+          <Select value={staffType} onValueChange={(value) => { setStaffType(value as typeof staffType); setPage(1); }}>
+            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder={t('filters.allTypes')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
+              {STAFF_TYPE_VALUES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {t(`types.${type}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }} className="gap-2"><Plus className="h-4 w-4" />{t('addStaff')}</Button>

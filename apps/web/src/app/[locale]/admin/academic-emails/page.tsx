@@ -20,6 +20,7 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { TableActionButton } from '@/components/ui/table-action-button';
+import { useAuth } from '@/providers/auth-provider';
 
 // shadcn
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,10 @@ function AcademicEmailsPageContent() {
   const params = useParams();
   const locale = params.locale as string;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const canWriteEmails = isAdmin || Boolean(user?.permissions?.includes('academicEmails.write'));
+  const canUploadEmails = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
 
   // Filter States
   const [search, setSearch] = useState('');
@@ -219,47 +224,51 @@ function AcademicEmailsPageContent() {
         </TableCell>
       ),
     },
-    {
-      key: 'actions',
-      header: tCommon('actions'),
-      className: 'text-center',
-      render: (r) => (
-        <TableCell className="p-4 text-center">
-          <div className="flex items-center justify-center gap-2">
-            <TableActionButton
-              onClick={() => openEditModal(r)}
-              title={tCommon('edit')}
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-              <span>{tCommon('edit')}</span>
-            </TableActionButton>
-            <ConfirmDialog
-              trigger={
-                <TableActionButton
-                  title={r.status === 'active' ? tCommon('disable') : tCommon('enable')}
-                  variant={r.status === 'active' ? 'danger' : 'success'}
-                >
-                  {r.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                  <span>{r.status === 'active' ? tCommon('disable') : tCommon('enable')}</span>
-                </TableActionButton>
-              }
-              title={r.status === 'active' ? tCommon('deactivateConfirmTitle') : tCommon('confirm')}
-              description={
-                r.status === 'active'
-                  ? tCommon('deactivateConfirmMessage')
-                  : locale === 'ar'
-                  ? 'هل أنت متأكد من تفعيل هذا الحساب؟'
-                  : 'Are you sure you want to activate this account?'
-              }
-              confirmLabel={r.status === 'active' ? tCommon('disable') : tCommon('enable')}
-              cancelLabel={tCommon('cancel')}
-              onConfirm={() => toggleEmailStatus(r)}
-              destructive={r.status === 'active'}
-            />
-          </div>
-        </TableCell>
-      ),
-    },
+    ...((canWriteEmails)
+      ? [
+          {
+            key: 'actions',
+            header: tCommon('actions'),
+            className: 'text-center',
+            render: (r: AcademicEmail) => (
+              <TableCell className="p-4 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <TableActionButton
+                    onClick={() => openEditModal(r)}
+                    title={tCommon('edit')}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>{tCommon('edit')}</span>
+                  </TableActionButton>
+                  <ConfirmDialog
+                    trigger={
+                      <TableActionButton
+                        title={r.status === 'active' ? tCommon('disable') : tCommon('enable')}
+                        variant={r.status === 'active' ? 'danger' : 'success'}
+                      >
+                        {r.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        <span>{r.status === 'active' ? tCommon('disable') : tCommon('enable')}</span>
+                      </TableActionButton>
+                    }
+                    title={r.status === 'active' ? tCommon('deactivateConfirmTitle') : tCommon('confirm')}
+                    description={
+                      r.status === 'active'
+                        ? tCommon('deactivateConfirmMessage')
+                        : locale === 'ar'
+                        ? 'هل أنت متأكد من تفعيل هذا الحساب؟'
+                        : 'Are you sure you want to activate this account?'
+                    }
+                    confirmLabel={r.status === 'active' ? tCommon('disable') : tCommon('enable')}
+                    cancelLabel={tCommon('cancel')}
+                    onConfirm={() => toggleEmailStatus(r)}
+                    destructive={r.status === 'active'}
+                  />
+                </div>
+              </TableCell>
+            ),
+          } satisfies ColumnDef<AcademicEmail>,
+        ]
+      : []),
   ];
 
   return (
@@ -270,10 +279,12 @@ function AcademicEmailsPageContent() {
         icon={<Mail className="h-5 w-5" />}
         subtitle={t('subtitle')}
       >
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
-          <UploadCloud className="h-4 w-4" />
-          Upload Emails
-        </Button>
+        {canUploadEmails && (
+          <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
+            <UploadCloud className="h-4 w-4" />
+            Upload Emails
+          </Button>
+        )}
         <Button variant="outline" onClick={exportAcademicEmails} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Export

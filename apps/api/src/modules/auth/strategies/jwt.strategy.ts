@@ -80,6 +80,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const authUser = {
       _id: user._id.toString(),
       role: user.role,
+      staffType: user.staffType,
       name: user.name,
       email: user.email,
       studentCode: user.studentCode,

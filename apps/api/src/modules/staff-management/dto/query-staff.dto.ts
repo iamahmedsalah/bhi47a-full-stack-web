@@ -10,6 +10,8 @@ import {
   Min,
 } from 'class-validator';
 
+import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
+
 export class QueryStaffDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
@@ -36,4 +38,12 @@ export class QueryStaffDto {
   @IsOptional()
   @IsIn(['all', 'active', 'inactive'])
   status: 'all' | 'active' | 'inactive' = 'all';
+
+  @ApiPropertyOptional({
+    enum: ['all', ...STAFF_TYPE_VALUES],
+    default: 'all',
+  })
+  @IsOptional()
+  @IsIn(['all', ...STAFF_TYPE_VALUES])
+  staffType: 'all' | StaffType = 'all';
 }

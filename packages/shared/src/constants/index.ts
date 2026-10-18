@@ -9,4 +9,5 @@ export * from "./permissions";
 export * from "./password";
 export * from "./attendance";
 export * from "./grading";
+export * from "./staff";
 

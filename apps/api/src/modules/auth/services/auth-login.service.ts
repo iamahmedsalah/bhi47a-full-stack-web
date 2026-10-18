@@ -217,6 +217,7 @@ export class AuthLoginService {
         _id: user._id,
         name: user.name,
         role: user.role,
+        staffType: user.staffType,
         email: user.email,
         permissions: user.permissions,
         mustChangePassword: user.mustChangePassword,

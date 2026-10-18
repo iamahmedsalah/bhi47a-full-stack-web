@@ -25,6 +25,11 @@ describe('CoursesService Unit Tests', () => {
     mockCourseModel.findById = jest.fn();
     mockCourseModel.countDocuments = jest.fn();
     mockCourseRegistrationModel.findOne = jest.fn();
+    mockCourseRegistrationModel.find = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      }),
+    });
     mockStudentProfileModel.findOne = jest.fn();
     mockUserModel.findById = jest.fn();
 
@@ -112,9 +117,19 @@ describe('CoursesService Unit Tests', () => {
       mockCourseModel.find.mockReturnValue({
         lean: jest.fn().mockResolvedValue(assignedCourses),
       });
+      mockCourseRegistrationModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest
+            .fn()
+            .mockResolvedValue([{ courses: ['CS101'], status: 'approved' }]),
+        }),
+      });
 
       const result = await service.findDoctorCourses(doctorId);
-      expect(result).toEqual(assignedCourses);
+      expect(result).toEqual([
+        { ...assignedCourses[0], enrolledStudentsCount: 1 },
+        { ...assignedCourses[1], enrolledStudentsCount: 0 },
+      ]);
       expect(mockCourseModel.find).toHaveBeenCalledWith({
         doctorId: doctorObjectId,
         isActive: true,

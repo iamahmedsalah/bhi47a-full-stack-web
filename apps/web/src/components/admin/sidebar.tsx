@@ -144,12 +144,21 @@ export default function AdminSidebar() {
       key: "settings",
       href: `/${locale}/admin/settings`,
       icon: <Settings className="h-5 w-5" />,
-      permission: PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS,
+      permissions: [
+        PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS,
+        PERMISSIONS.ADVISING_WRITE,
+        PERMISSIONS.REGISTRATION_WRITE,
+        PERMISSIONS.STUDY_PLAN_MANAGE,
+      ],
     },
-  ].filter((item) =>
-    user?.role === "admin" ||
-    (!item.adminOnly && (!item.permission || user?.permissions?.includes(item.permission))),
-  );
+  ].filter((item) => {
+    if (user?.role === "admin") return true;
+    if (item.adminOnly) return false;
+    if ('permissions' in item && Array.isArray((item as any).permissions)) {
+      return (item as any).permissions.some((p: string) => user?.permissions?.includes(p));
+    }
+    return !item.permission || user?.permissions?.includes(item.permission);
+  });
 
   const renderContent = (isForceOpen: boolean) => {
     const isSidebarOpen = isForceOpen || sidebarOpen;

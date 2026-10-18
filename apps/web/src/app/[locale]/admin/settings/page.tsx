@@ -22,25 +22,43 @@ function AdminSettingsContent() {
   const isAr = locale === 'ar';
   const t = useTranslations('settings');
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'rules' | 'terms' | 'ai'>('rules');
-  const [rulesSubTab, setRulesSubTab] = useState<'advising' | 'gpa'>('advising');
+  const canAccessRules =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('advising.write')) ||
+    Boolean(user?.permissions?.includes('study_plan.manage')) ||
+    Boolean(user?.permissions?.includes('complaints.manage_settings'));
+
+  const canAccessTerms =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('registration.write')) ||
+    Boolean(user?.permissions?.includes('complaints.manage_settings'));
+
+  const canAccessAi = user?.role === 'admin';
 
   const tabs = [
-    {
-      id: 'rules' as const,
-      label: isAr ? 'قواعد الإرشاد والساعات والمعدل' : 'Advising & Course Rules',
-      icon: GraduationCap,
-      description: isAr
-        ? 'ضوابط التوصية التلقائية، الساعات المعتمدة، وشرائح المعدل التراكمي'
-        : 'Academic advising policies, credit hours, and GPA limits',
-    },
-    {
-      id: 'terms' as const,
-      label: isAr ? 'فصول وسنوات التسجيل' : 'Registration Terms',
-      icon: Calendar,
-      description: isAr ? 'مواعيد فتح وغلق فصول التسجيل والسنة المعتمدة' : 'Semesters & authoritative year',
-    },
-    ...(user?.role === 'admin'
+    ...(canAccessRules
+      ? [
+          {
+            id: 'rules' as const,
+            label: isAr ? 'قواعد الإرشاد والساعات والمعدل' : 'Advising & Course Rules',
+            icon: GraduationCap,
+            description: isAr
+              ? 'ضوابط التوصية التلقائية، الساعات المعتمدة، وشرائح المعدل التراكمي'
+              : 'Academic advising policies, credit hours, and GPA limits',
+          },
+        ]
+      : []),
+    ...(canAccessTerms
+      ? [
+          {
+            id: 'terms' as const,
+            label: isAr ? 'فصول وسنوات التسجيل' : 'Registration Terms',
+            icon: Calendar,
+            description: isAr ? 'مواعيد فتح وغلق فصول التسجيل والسنة المعتمدة' : 'Semesters & authoritative year',
+          },
+        ]
+      : []),
+    ...(canAccessAi
       ? [
           {
             id: 'ai' as const,
@@ -51,6 +69,11 @@ function AdminSettingsContent() {
         ]
       : []),
   ];
+
+  const defaultTab = tabs[0]?.id ?? 'rules';
+  const [activeTabState, setActiveTabState] = useState<'rules' | 'terms' | 'ai'>(defaultTab);
+  const activeTab = tabs.some((t) => t.id === activeTabState) ? activeTabState : defaultTab;
+  const [rulesSubTab, setRulesSubTab] = useState<'advising' | 'gpa'>('advising');
 
   return (
     <div className="animate-fade-in space-y-6 p-2 md:p-6" dir={isAr ? 'rtl' : 'ltr'}>
@@ -69,7 +92,7 @@ function AdminSettingsContent() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setActiveTabState(tab.id)}
               className={cn(
                 'flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
                 isActive
@@ -135,6 +158,19 @@ function AdminSettingsContent() {
   );
 }
 
+const SETTINGS_PERMISSIONS = [
+  'complaints.manage_settings',
+  'advising.write',
+  'registration.write',
+  'study_plan.manage',
+];
+
 export default function SettingsPage() {
-  return <Suspense fallback={<PageSkeletonLoader />}><PermissionGuard permission="complaints.manage_settings"><AdminSettingsContent /></PermissionGuard></Suspense>;
+  return (
+    <Suspense fallback={<PageSkeletonLoader />}>
+      <PermissionGuard permissions={SETTINGS_PERMISSIONS} anyOf>
+        <AdminSettingsContent />
+      </PermissionGuard>
+    </Suspense>
+  );
 }

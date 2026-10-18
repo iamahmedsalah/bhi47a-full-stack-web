@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CheckSquare, Loader2, Square } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { STAFF_ASSIGNABLE_PERMISSIONS, type Permission } from '@student-portal/shared';
+import { STAFF_ASSIGNABLE_PERMISSIONS, STAFF_TYPE_VALUES, STAFF_TYPE_DEFAULT_PERMISSIONS, type Permission } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { STAFF_PERMISSION_GROUPS } from '../permission-groups';
@@ -32,9 +32,26 @@ export function StaffPermissionsDialog({ staff, pending, onClose, onSave }: Prop
           <DialogTitle>{t('permissions.title', { name: staff.name })}</DialogTitle>
           <DialogDescription>{t('permissions.description')}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => setSelected([...STAFF_ASSIGNABLE_PERMISSIONS])}>{t('permissions.selectAll')}</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => setSelected([])}>{t('permissions.clearAll')}</Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{t('permissions.presets')}:</span>
+            {STAFF_TYPE_VALUES.map((type) => (
+              <Button
+                key={type}
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 text-xs"
+                onClick={() => setSelected([...STAFF_TYPE_DEFAULT_PERMISSIONS[type]])}
+              >
+                {t(`types.${type}`)}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setSelected([...STAFF_ASSIGNABLE_PERMISSIONS])}>{t('permissions.selectAll')}</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setSelected([])}>{t('permissions.clearAll')}</Button>
+          </div>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto py-2">
           {STAFF_PERMISSION_GROUPS.map((group) => (

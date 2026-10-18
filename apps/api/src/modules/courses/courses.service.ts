@@ -210,11 +210,53 @@ export class CoursesService {
     return updated;
   }
 
-  async findDoctorCourses(doctorId: string): Promise<CourseDocument[]> {
+  async findDoctorCourses(
+    doctorId: string,
+  ): Promise<
+    Array<Record<string, unknown> & { enrolledStudentsCount: number }>
+  > {
     if (!Types.ObjectId.isValid(doctorId)) return [];
-    return this.courseModel
+    const courses = (await this.courseModel
       .find({ doctorId: new Types.ObjectId(doctorId), isActive: true })
-      .lean() as unknown as Promise<CourseDocument[]>;
+      .lean()) as unknown as Array<
+      Record<string, unknown> & { _id: Types.ObjectId; code: string }
+    >;
+
+    if (!courses || courses.length === 0) return [];
+
+    const courseCodes = courses.map((c) => String(c.code).toUpperCase());
+    const courseIdStrs = courses.map((c) => c._id.toString());
+    const allMatches = [...courseCodes, ...courseIdStrs];
+
+    const approvedRegistrations = await this.courseRegistrationModel
+      .find({
+        status: 'approved',
+        courses: { $in: allMatches },
+      })
+      .select('courses')
+      .lean();
+
+    const countMap: Record<string, number> = {};
+    for (const reg of approvedRegistrations) {
+      const regCourses = (reg.courses || []).map((c: string) =>
+        c.toUpperCase(),
+      );
+      for (const course of courses) {
+        const cCode = String(course.code).toUpperCase();
+        const cId = course._id.toString();
+        if (
+          regCourses.includes(cCode) ||
+          regCourses.includes(cId.toUpperCase())
+        ) {
+          countMap[cId] = (countMap[cId] || 0) + 1;
+        }
+      }
+    }
+
+    return courses.map((c) => ({
+      ...c,
+      enrolledStudentsCount: countMap[c._id.toString()] || 0,
+    }));
   }
 
   async remove(id: string): Promise<{ message: string }> {

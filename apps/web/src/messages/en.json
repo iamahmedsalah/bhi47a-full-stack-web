@@ -450,10 +450,20 @@
     "previous": "Previous",
     "next": "Next",
     "pagination": "Page {page} of {totalPages} · {total} accounts",
-    "filters": { "all": "All accounts" },
+    "types": {
+      "doctor": "Doctor / Lecturer",
+      "teaching_assistant": "Teaching Assistant",
+      "administrative": "Administrative Staff"
+    },
+    "filters": {
+      "all": "All statuses",
+      "allTypes": "All staff roles"
+    },
     "fields": {
       "name": "Full name",
       "email": "Email",
+      "staffType": "Staff Role",
+      "selectStaffType": "Select staff role",
       "username": "Username (optional)",
       "phone": "Phone (optional)",
       "temporaryPassword": "Temporary password"
@@ -501,6 +511,7 @@
     "permissions": {
       "title": "Permissions for {name}",
       "description": "Only the selected capabilities will be available to this staff account.",
+      "presets": "Role presets",
       "selectAll": "Select all",
       "clearAll": "Clear all",
       "groups": {

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TableCell } from '@/components/ui/table';
 import { CopyButton } from '@/components/ui/copy-button';
 import { CustomDropdown, type CustomDropdownOption } from '@/components/ui/custom-dropdown';
+import { useAuth } from '@/providers/auth-provider';
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -134,6 +135,11 @@ export function StudentTable({
   tCommon,
 }: StudentTableProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const canWriteStudents = isAdmin || Boolean(user?.permissions?.includes('students.write'));
+  const canResetPassword = isAdmin || Boolean(user?.permissions?.includes('students.reset_password'));
+  const canAdvising = isAdmin || Boolean(user?.permissions?.includes('advising.read')) || Boolean(user?.permissions?.includes('advising.write'));
   const [studentToDeactivate, setStudentToDeactivate] = React.useState<Student | null>(null);
 
   const columns: ColumnDef<Student>[] = [
@@ -278,61 +284,83 @@ export function StudentTable({
               </div>
             ),
           },
-          {
-            value: 'edit',
-            label: (
-              <div className="flex items-center gap-2 text-xs py-0.5">
-                <Edit2 className="h-3.5 w-3.5 text-primary" />
-                <span>{tCommon('edit')}</span>
-              </div>
-            ),
-          },
-          {
-            value: 'resetPassword',
-            label: (
-              <div className="flex items-center gap-2 text-xs py-0.5">
-                <Lock className="h-3.5 w-3.5 text-warning" />
-                <span>{t('resetPassword')}</span>
-              </div>
-            ),
-          },
-          {
-            value: 'transfer',
-            label: (
-              <div className="flex items-center gap-2 text-xs py-0.5">
-                <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
-                <span>{locale === 'ar' ? 'تحويل الشعبة (BIS ⇄ محاسبة)' : 'Transfer Department'}</span>
-              </div>
-            ),
-          },
-          {
-            value: 'advising',
-            label: (
-              <div className="flex items-center gap-2 text-xs py-0.5">
-                <ExternalLink className="h-3.5 w-3.5 text-info" />
-                <span>{locale === 'ar' ? 'التسجيل والإرشاد الأكاديمي' : 'Academic Advising'}</span>
-              </div>
-            ),
-          },
-          ...(student.enrollmentStatus === 'active'
-            ? [{
-                value: 'deactivate',
-                label: (
-                  <div className="flex items-center gap-2 text-xs py-0.5 text-danger font-medium">
-                    <UserX className="h-3.5 w-3.5 text-danger" />
-                    <span>{t('deactivate')}</span>
-                  </div>
-                ),
-              }]
-            : [{
-                value: 'activate',
-                label: (
-                  <div className="flex items-center gap-2 text-xs py-0.5 text-success font-medium">
-                    <UserCheck className="h-3.5 w-3.5 text-success" />
-                    <span>{locale === 'ar' ? 'تفعيل الحساب' : 'Activate'}</span>
-                  </div>
-                ),
-              }]),
+          ...(canWriteStudents
+            ? [
+                {
+                  value: 'edit',
+                  label: (
+                    <div className="flex items-center gap-2 text-xs py-0.5">
+                      <Edit2 className="h-3.5 w-3.5 text-primary" />
+                      <span>{tCommon('edit')}</span>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          ...(canResetPassword
+            ? [
+                {
+                  value: 'resetPassword',
+                  label: (
+                    <div className="flex items-center gap-2 text-xs py-0.5">
+                      <Lock className="h-3.5 w-3.5 text-warning" />
+                      <span>{t('resetPassword')}</span>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          ...(canWriteStudents
+            ? [
+                {
+                  value: 'transfer',
+                  label: (
+                    <div className="flex items-center gap-2 text-xs py-0.5">
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
+                      <span>{locale === 'ar' ? 'تحويل الشعبة (BIS ⇄ محاسبة)' : 'Transfer Department'}</span>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          ...(canAdvising
+            ? [
+                {
+                  value: 'advising',
+                  label: (
+                    <div className="flex items-center gap-2 text-xs py-0.5">
+                      <ExternalLink className="h-3.5 w-3.5 text-info" />
+                      <span>{locale === 'ar' ? 'التسجيل والإرشاد الأكاديمي' : 'Academic Advising'}</span>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          ...(canWriteStudents
+            ? student.enrollmentStatus === 'active'
+              ? [
+                  {
+                    value: 'deactivate',
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5 text-danger font-medium">
+                        <UserX className="h-3.5 w-3.5 text-danger" />
+                        <span>{t('deactivate')}</span>
+                      </div>
+                    ),
+                  },
+                ]
+              : [
+                  {
+                    value: 'activate',
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5 text-success font-medium">
+                        <UserCheck className="h-3.5 w-3.5 text-success" />
+                        <span>{locale === 'ar' ? 'تفعيل الحساب' : 'Activate'}</span>
+                      </div>
+                    ),
+                  },
+                ]
+            : []),
         ];
 
         return (
@@ -380,7 +408,7 @@ export function StudentTable({
         selectedKeys={selectedKeys}
         onSelectedKeysChange={onSelectedKeysChange}
         bulkActions={[
-          ...(selectedKeys.length === 1
+          ...(canWriteStudents && selectedKeys.length === 1
             ? [{
                 label: locale === 'ar' ? 'تعديل' : 'Edit',
                 onClick: onBulkEdit,
@@ -388,18 +416,22 @@ export function StudentTable({
                 icon: <Edit2 className="h-3.5 w-3.5" />,
               }]
             : []),
-          {
-            label: locale === 'ar' ? 'تحويل الشعبة / القسم' : 'Transfer Department',
-            onClick: onBulkTransferDepartment || (() => {}),
-            variant: 'outline' as const,
-            icon: <ArrowLeftRight className="h-3.5 w-3.5" />,
-          },
-          {
-            label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
-            onClick: onOpenBulkDeactivate,
-            variant: 'destructive' as const,
-            icon: <Trash2 className="h-3.5 w-3.5" />,
-          },
+          ...(canWriteStudents
+            ? [
+                {
+                  label: locale === 'ar' ? 'تحويل الشعبة / القسم' : 'Transfer Department',
+                  onClick: onBulkTransferDepartment || (() => {}),
+                  variant: 'outline' as const,
+                  icon: <ArrowLeftRight className="h-3.5 w-3.5" />,
+                },
+                {
+                  label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
+                  onClick: onOpenBulkDeactivate,
+                  variant: 'destructive' as const,
+                  icon: <Trash2 className="h-3.5 w-3.5" />,
+                },
+              ]
+            : []),
         ]}
       />
       <ConfirmDialog

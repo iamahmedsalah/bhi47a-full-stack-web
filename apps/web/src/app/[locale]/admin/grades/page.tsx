@@ -20,6 +20,7 @@ import { toast } from "sonner";
 
 import api, { getApiErrorMessage, type PaginatedResponse } from "@/lib/api";
 import { downloadExcel } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -86,6 +87,11 @@ function GradesPageContent() {
   const locale = params.locale as string;
   const isAr = locale === "ar";
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const canWriteGrades = isAdmin || Boolean(user?.permissions?.includes("grades.write"));
+  const canDeleteGrades = isAdmin || Boolean(user?.permissions?.includes("grades.delete"));
+  const canUploadGrades = isAdmin || Boolean(user?.permissions?.includes("uploads.import"));
 
   const [activeTab, setActiveTab] = useState("midterm");
   const [search, setSearch] = useState("");
@@ -416,44 +422,52 @@ function GradesPageContent() {
         </TableCell>
       ),
     },
-    {
-      key: "actions",
-      header: tCommon("actions"),
-      className: "text-center",
-      render: (item) => (
-        <TableCell className="p-4">
-          <div className="flex justify-center gap-2">
-            <TableActionButton
-              variant="primary"
-              onClick={() => {
-                setSelectedGrade(item);
-                setIsEditOpen(true);
-              }}
-            >
-              <Edit2 className="h-4 w-4" />
-              {tCommon("edit")}
-            </TableActionButton>
-            <ConfirmDialog
-              title={isAr ? "حذف الدرجة" : "Delete grade"}
-              description={
-                isAr
-                  ? "هل أنت متأكد من حذف هذه الدرجة؟"
-                  : "Are you sure you want to delete this grade?"
-              }
-              confirmLabel={tCommon("delete")}
-              cancelLabel={tCommon("cancel")}
-              onConfirm={() => void handleDelete(item._id)}
-              trigger={
-                <TableActionButton variant="danger">
-                  <Trash2 className="h-4 w-4" />
-                  {tCommon("delete")}
-                </TableActionButton>
-              }
-            />
-          </div>
-        </TableCell>
-      ),
-    },
+    ...((canWriteGrades || canDeleteGrades)
+      ? [
+          {
+            key: "actions",
+            header: tCommon("actions"),
+            className: "text-center",
+            render: (item: GradeItem) => (
+              <TableCell className="p-4">
+                <div className="flex justify-center gap-2">
+                  {canWriteGrades && (
+                    <TableActionButton
+                      variant="primary"
+                      onClick={() => {
+                        setSelectedGrade(item);
+                        setIsEditOpen(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      {tCommon("edit")}
+                    </TableActionButton>
+                  )}
+                  {canDeleteGrades && (
+                    <ConfirmDialog
+                      title={isAr ? "حذف الدرجة" : "Delete grade"}
+                      description={
+                        isAr
+                          ? "هل أنت متأكد من حذف هذه الدرجة؟"
+                          : "Are you sure you want to delete this grade?"
+                      }
+                      confirmLabel={tCommon("delete")}
+                      cancelLabel={tCommon("cancel")}
+                      onConfirm={() => void handleDelete(item._id)}
+                      trigger={
+                        <TableActionButton variant="danger">
+                          <Trash2 className="h-4 w-4" />
+                          {tCommon("delete")}
+                        </TableActionButton>
+                      }
+                    />
+                  )}
+                </div>
+              </TableCell>
+            ),
+          } satisfies ColumnDef<GradeItem>,
+        ]
+      : []),
   ];
 
   return (
@@ -467,10 +481,12 @@ function GradesPageContent() {
             : "Manage exam grades, results, and student academic progress."
         }
       >
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)} className="rounded-squircle">
-          <UploadCloud className="h-4 w-4" />
-          {isAr ? "رفع الدرجات" : "Upload Grades"}
-        </Button>
+        {canUploadGrades && (
+          <Button variant="outline" onClick={() => setIsUploadOpen(true)} className="rounded-squircle">
+            <UploadCloud className="h-4 w-4" />
+            {isAr ? "رفع الدرجات" : "Upload Grades"}
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => void handleExport()}
@@ -484,34 +500,38 @@ function GradesPageContent() {
           )}
           {isAr ? "تصدير" : "Export"}
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => setIsRecalculateOpen(true)}
-          className="rounded-squircle border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
-        >
-          <RefreshCw className="h-4 w-4 text-sky-400" />
-          {isAr ? "إعادة حساب المستويات" : "Recalculate levels"}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => setIsAuditWarningsOpen(true)}
-          className="rounded-squircle border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-        >
-          <AlertTriangle className="h-4 w-4 text-amber-400" />
-          {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => setIsPublishModalOpen(true)}
-          className="rounded-squircle border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
-        >
-          <CalendarClock className="h-4 w-4 text-cyan-400" />
-          {isAr ? "نشر وجدولة النتائج" : "Publish & Schedule Grades"}
-        </Button>
-        <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
-          <Plus className="h-4 w-4" />
-          {isAr ? "إضافة درجة" : "Add Grade"}
-        </Button>
+        {canWriteGrades && (
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setIsRecalculateOpen(true)}
+              className="rounded-squircle border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
+            >
+              <RefreshCw className="h-4 w-4 text-sky-400" />
+              {isAr ? "إعادة حساب المستويات" : "Recalculate levels"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsAuditWarningsOpen(true)}
+              className="rounded-squircle border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+            >
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsPublishModalOpen(true)}
+              className="rounded-squircle border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
+            >
+              <CalendarClock className="h-4 w-4 text-cyan-400" />
+              {isAr ? "نشر وجدولة النتائج" : "Publish & Schedule Grades"}
+            </Button>
+            <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
+              <Plus className="h-4 w-4" />
+              {isAr ? "إضافة درجة" : "Add Grade"}
+            </Button>
+          </>
+        )}
       </PageTitleBanner>
 
       <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">

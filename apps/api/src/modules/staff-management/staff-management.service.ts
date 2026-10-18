@@ -18,9 +18,13 @@ import {
   StaffAuditLog,
   StaffAuditLogDocument,
 } from './schemas/staff-audit-log.schema';
+import {
+  STAFF_TYPE_DEFAULT_PERMISSIONS,
+  type StaffType,
+} from '@student-portal/shared';
 
 const STAFF_PUBLIC_PROJECTION =
-  '_id userCode name username email phone role permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
+  '_id userCode name username email phone role staffType permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
 
 export interface StaffItem {
   _id: string;
@@ -30,6 +34,7 @@ export interface StaffItem {
   email?: string;
   phone?: string;
   role: 'staff';
+  staffType: StaffType;
   permissions: string[];
   isActive: boolean;
   deactivatedAt?: Date;
@@ -46,6 +51,7 @@ interface StaffRecord {
   username?: string;
   email?: string;
   phone?: string;
+  staffType?: StaffType;
   permissions?: string[];
   isActive?: boolean;
   deactivatedAt?: Date;
@@ -80,6 +86,9 @@ export class StaffManagementService {
     const filter: FilterQuery<UserDocument> = { role: 'staff' };
     if (query.status !== 'all') {
       filter.isActive = query.status === 'active';
+    }
+    if (query.staffType && query.staffType !== 'all') {
+      filter.staffType = query.staffType;
     }
     if (query.search?.trim()) {
       const search = new RegExp(escapeRegExp(query.search.trim()), 'i');
@@ -124,10 +133,16 @@ export class StaffManagementService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const userCode = await this.generateStaffCode();
+    const staffType = dto.staffType || 'administrative';
+    const permissions =
+      dto.permissions && dto.permissions.length > 0
+        ? dto.permissions
+        : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType] || [])];
 
     try {
       const created = await this.users.create({
         role: 'staff',
+        staffType,
         userCode,
         name: dto.name.trim(),
         email,
@@ -135,10 +150,11 @@ export class StaffManagementService {
         phone: dto.phone?.trim() || undefined,
         passwordHash,
         mustChangePassword: true,
-        permissions: dto.permissions ?? [],
+        permissions,
         isActive: true,
       });
       await this.recordAudit(actorId, created._id.toString(), 'created', {
+        staffType: created.staffType,
         permissions: created.permissions,
       });
       return this.getById(created._id.toString());
@@ -170,6 +186,7 @@ export class StaffManagementService {
       ...(dto.phone !== undefined
         ? { phone: dto.phone.trim() || undefined }
         : {}),
+      ...(dto.staffType !== undefined ? { staffType: dto.staffType } : {}),
     };
 
     for (const [key, value] of Object.entries(nextValues)) {
@@ -320,6 +337,7 @@ export class StaffManagementService {
       email: record.email,
       phone: record.phone,
       role: 'staff',
+      staffType: record.staffType || 'administrative',
       permissions: record.permissions ?? [],
       isActive: record.isActive ?? true,
       deactivatedAt: record.deactivatedAt,

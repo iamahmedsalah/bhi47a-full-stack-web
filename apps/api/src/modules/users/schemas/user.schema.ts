@@ -1,6 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
-import { ROLE_VALUES, type Role } from '@student-portal/shared';
+import {
+  ROLE_VALUES,
+  STAFF_TYPE_VALUES,
+  type Role,
+  type StaffType,
+} from '@student-portal/shared';
 
 export type UserDocument = User & Document;
 
@@ -11,6 +16,9 @@ export type UserDocument = User & Document;
 export class User {
   @Prop({ type: String, required: true, enum: ROLE_VALUES })
   role!: Role;
+
+  @Prop({ type: String, enum: STAFF_TYPE_VALUES, default: 'administrative' })
+  staffType?: StaffType;
 
   @Prop({
     trim: true,

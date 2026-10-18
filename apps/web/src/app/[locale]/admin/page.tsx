@@ -21,9 +21,13 @@ import {
   FileSpreadsheet,
   Download,
   GraduationCap,
+  Award,
+  ClipboardCheck,
+  FileText,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/providers/auth-provider';
 import {
   Area,
   AreaChart,
@@ -88,6 +92,21 @@ interface DashboardCourse {
   level?: string;
   academicLevel?: string;
   isActive?: boolean;
+}
+
+interface AssignedCourse {
+  _id: string;
+  code: string;
+  name: string;
+  nameAr?: string;
+  nameEn?: string;
+  credits?: number;
+  level?: number | string;
+  semester?: number | string;
+  department?: string;
+  syllabusUrl?: string;
+  syllabusFileName?: string;
+  enrolledStudentsCount?: number;
 }
 
 interface DashboardComplaint {
@@ -220,6 +239,57 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
   const locale = (params?.locale as string) || 'ar';
   const isAr = locale === 'ar';
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+  const isDoctor = isStaff && user?.staffType === 'doctor';
+  const isTeachingAssistant = isStaff && user?.staffType === 'teaching_assistant';
+  const isAdministrative = isStaff && (user?.staffType === 'administrative' || !user?.staffType);
+
+  const assignedCoursesQuery = useQuery({
+    queryKey: ['staff-assigned-courses', user?._id],
+    queryFn: async () => {
+      const res = await api.get<AssignedCourse[]>('/staff/me/assigned-courses');
+      return res.data ?? [];
+    },
+    enabled: isStaff,
+  });
+  const assignedCourses = assignedCoursesQuery.data ?? [];
+
+  const staffTotalEnrolledStudents = React.useMemo(() => {
+    return assignedCourses.reduce((sum, c) => sum + (c.enrolledStudentsCount || 0), 0);
+  }, [assignedCourses]);
+
+  const staffTotalCredits = React.useMemo(() => {
+    return assignedCourses.reduce((sum, c) => sum + (c.credits || 0), 0);
+  }, [assignedCourses]);
+
+  const doctorCourseEnrollmentData = React.useMemo(() => {
+    return assignedCourses.map((c) => ({
+      code: c.code,
+      name: isAr ? (c.nameAr || c.name) : (c.nameEn || c.name),
+      students: c.enrolledStudentsCount || 0,
+      credits: c.credits || 0,
+    }));
+  }, [assignedCourses, isAr]);
+
+  const doctorLevelDistributionData = React.useMemo(() => {
+    const counts = new Map<string, { level: string; courses: number; students: number }>();
+    assignedCourses.forEach((c) => {
+      const lvl = String(c.level ?? '1');
+      const existing = counts.get(lvl) || {
+        level: isAr ? `الفرقة ${lvl}` : `Level ${lvl}`,
+        courses: 0,
+        students: 0,
+      };
+      existing.courses += 1;
+      existing.students += (c.enrolledStudentsCount || 0);
+      counts.set(lvl, existing);
+    });
+    return Array.from(counts.values());
+  }, [assignedCourses, isAr]);
+
+  const hasPerm = (p: string) => isAdmin || Boolean(user?.permissions?.includes(p));
 
   // Modal State for Quick Actions
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
@@ -656,23 +726,150 @@ export default function AdminDashboard() {
         subtitle={isAr ? 'لوحة المتابعة التشغيلية والإحصاءات الأكاديمية للمعهد.' : 'Quick operational view for portal activity.'}
       >
         <div data-no-export="true" className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExportComprehensiveExcel}
-            disabled={isExportingExcel}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-secondary/40 text-muted-foreground hover:text-foreground border border-border/60 hover:bg-secondary/60 shadow-sm disabled:opacity-50"
-          >
-            {isExportingExcel ? (
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            ) : (
-              <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-            )}
-            <span>{isAr ? 'تصدير التحليلات (Excel)' : 'Export Analytics (Excel)'}</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleExportComprehensiveExcel}
+              disabled={isExportingExcel}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-secondary/40 text-muted-foreground hover:text-foreground border border-border/60 hover:bg-secondary/60 shadow-sm disabled:opacity-50"
+            >
+              {isExportingExcel ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+              )}
+              <span>{isAr ? 'تصدير التحليلات (Excel)' : 'Export Analytics (Excel)'}</span>
+            </button>
+          )}
         </div>
       </PageTitleBanner>
 
       <div ref={dashboardContainerRef} id="analytics-dashboard-export" className="space-y-6">
+
+      {/* STAFF / DOCTOR ASSIGNED COURSES WORKSPACE */}
+      {isStaff && (
+        <div className="space-y-4 rounded-2xl border border-primary/20 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-squircle border border-primary/30 bg-primary/10 text-primary">
+                <GraduationCap className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">
+                  {isAr ? 'المقررات الدراسية المسندة إليك' : 'Your Assigned Courses'}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {isAr
+                    ? `مرحباً ${user?.name} · الدور الأكاديمي: ${user?.staffType === 'doctor' ? 'أستاذ مقرر (دكتور)' : user?.staffType === 'teaching_assistant' ? 'معيد (هيئة تدريس)' : 'موظف إداري'}`
+                    : `Welcome ${user?.name} · Role: ${user?.staffType === 'doctor' ? 'Doctor / Lecturer' : user?.staffType === 'teaching_assistant' ? 'Teaching Assistant' : 'Administrative Staff'}`}
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-semibold text-teal-600 dark:text-teal-400 sm:self-auto">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>
+                {isAr
+                  ? `${assignedCourses.length} مقررات مسندة`
+                  : `${assignedCourses.length} Assigned Courses`}
+              </span>
+            </span>
+          </div>
+
+          {assignedCoursesQuery.isLoading ? (
+            <div className="flex min-h-32 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : assignedCourses.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
+              {isAr
+                ? 'لا توجد مقررات دراسية مسندة إلى حسابك حالياً. يمكنك استخدام الخيارات والصلاحيات المتاحة لك من القائمة الجانبية.'
+                : 'No courses are currently assigned to your account. You can use your permitted tools from the sidebar.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {assignedCourses.map((c) => {
+                const displayName = isAr ? c.nameAr || c.name : c.nameEn || c.name;
+                return (
+                  <div
+                    key={c._id}
+                    className="flex flex-col justify-between rounded-xl border border-border/70 bg-card/90 p-4 transition-all duration-200 hover:border-primary/40 hover:shadow-md"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-bold text-primary">
+                          {c.code}
+                        </span>
+                        <span className="rounded-md border border-border/60 bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground">
+                          {isAr ? `الفرقة ${c.level ?? '—'} · ترم ${c.semester ?? '—'}` : `L${c.level ?? '—'} · S${c.semester ?? '—'}`}
+                        </span>
+                      </div>
+
+                      <h4 className="font-bold text-foreground leading-snug">
+                        {displayName}
+                      </h4>
+
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{c.department || (isAr ? 'عام' : 'General')}</span>
+                        {c.credits ? (
+                          <>
+                            <span>·</span>
+                            <span>{c.credits} {isAr ? 'ساعات' : 'Credits'}</span>
+                          </>
+                        ) : null}
+                      </div>
+
+                      {/* Prominent Enrolled Students Count */}
+                      <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
+                        <span className="flex items-center gap-1.5">
+                          <Users className="h-4 w-4 shrink-0 text-primary" />
+                          <span>{isAr ? 'الطلاب المسجلون:' : 'Enrolled Students:'}</span>
+                        </span>
+                        <span className="font-mono text-sm font-bold text-primary">
+                          {c.enrolledStudentsCount ?? 0}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                      {c.syllabusUrl && (
+                        <a
+                          href={c.syllabusUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 rounded-lg border border-border/70 bg-secondary/40 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/70 transition-colors"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-primary" />
+                          <span>{isAr ? 'المحتوى (PDF)' : 'Syllabus (PDF)'}</span>
+                        </a>
+                      )}
+                      {hasPerm('quizzes.read') && (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/${locale}/admin/quizzes?courseId=${c._id}`)}
+                          className="flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                        >
+                          <Award className="h-3.5 w-3.5" />
+                          <span>{isAr ? 'الاختبارات' : 'Quizzes'}</span>
+                        </button>
+                      )}
+                      {hasPerm('attendance.read') && (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/${locale}/admin/attendance?courseId=${c._id}`)}
+                          className="flex items-center gap-1 rounded-lg border border-border/70 bg-secondary/40 px-2.5 py-1 text-xs font-medium text-foreground hover:bg-secondary/70 transition-colors cursor-pointer"
+                        >
+                          <ClipboardCheck className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>{isAr ? 'الحضور' : 'Attendance'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* QUICK ACTIONS SECTION (TRIGGER MODALS DIRECTLY) */}
       <div className="space-y-4">
@@ -680,150 +877,523 @@ export default function AdminDashboard() {
           {t('quickActions')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <QuickAction
-            title={tStudents('addStudent')}
-            icon={<UserPlus className="w-5 h-5" />}
-            onClick={() => setIsAddStudentOpen(true)}
-          />
-          <QuickAction
-            title={tNav('uploads')}
-            icon={<Upload className="w-5 h-5" />}
-            onClick={() => setIsUploadOpen(true)}
-          />
-          <QuickAction
-            title={tNav('examSchedules')}
-            icon={<Calendar className="w-5 h-5" />}
-            onClick={() => setIsAddScheduleOpen(true)}
-          />
-          <QuickAction
-            title={tNav('complaints')}
-            icon={<MessageSquareWarning className="w-5 h-5" />}
-            onClick={() => setIsComplaintLookupOpen(true)}
-          />
-          <QuickAction
-            title={tNav('grades')}
-            icon={<Users className="w-5 h-5" />}
-            onClick={() => setIsAddGradeOpen(true)}
-          />
-          <QuickAction
-            title={tNav('courses')}
-            icon={<BookOpen className="w-5 h-5" />}
-            onClick={() => setIsAddCourseOpen(true)}
-          />
+          {hasPerm('students.write') && (
+            <QuickAction
+              title={tStudents('addStudent')}
+              icon={<UserPlus className="w-5 h-5" />}
+              onClick={() => setIsAddStudentOpen(true)}
+            />
+          )}
+          {hasPerm('uploads.import') && (
+            <QuickAction
+              title={tNav('uploads')}
+              icon={<Upload className="w-5 h-5" />}
+              onClick={() => setIsUploadOpen(true)}
+            />
+          )}
+          {(hasPerm('exam_schedules.manage') || hasPerm('exam_schedules.read')) && (
+            <QuickAction
+              title={tNav('examSchedules')}
+              icon={<Calendar className="w-5 h-5" />}
+              onClick={() => setIsAddScheduleOpen(true)}
+            />
+          )}
+          {hasPerm('complaints.read') && (
+            <QuickAction
+              title={tNav('complaints')}
+              icon={<MessageSquareWarning className="w-5 h-5" />}
+              onClick={() => setIsComplaintLookupOpen(true)}
+            />
+          )}
+          {(hasPerm('grades.write') || hasPerm('grades.read')) && (
+            <QuickAction
+              title={tNav('grades')}
+              icon={<Users className="w-5 h-5" />}
+              onClick={() => setIsAddGradeOpen(true)}
+            />
+          )}
+          {(hasPerm('courses.write') || hasPerm('courses.read')) && (
+            <QuickAction
+              title={tNav('courses')}
+              icon={<BookOpen className="w-5 h-5" />}
+              onClick={() => setIsAddCourseOpen(true)}
+            />
+          )}
+          {(hasPerm('quizzes.read') || hasPerm('quizzes.create')) && (
+            <QuickAction
+              title={isAr ? 'بنك الاختبارات والكويزات' : 'Course Quizzes'}
+              icon={<Award className="w-5 h-5" />}
+              onClick={() => router.push(`/${locale}/admin/quizzes`)}
+            />
+          )}
+          {(hasPerm('attendance.read') || hasPerm('attendance.manage')) && (
+            <QuickAction
+              title={isAr ? 'جلسات الحضور والغياب' : 'Attendance Sessions'}
+              icon={<ClipboardCheck className="w-5 h-5" />}
+              onClick={() => router.push(`/${locale}/admin/attendance`)}
+            />
+          )}
         </div>
       </div>
 
-      <StatCardRow>
-        <StatCard
-          title={t('totalStudents')}
-          value={totalStudents}
-          icon={<Users className="w-6 h-6" />}
-          color="#0d9488"
-        />
-        <StatCard
-          title={t('totalCourses')}
-          value={totalCourses}
-          icon={<BookOpen className="w-6 h-6" />}
-          color="#22d3ee"
-        />
-        <StatCard
-          title={t('activeComplaints')}
-          value={activeComplaints}
-          icon={<MessageSquareWarning className="w-6 h-6" />}
-          color="#f59e0b"
-        />
-        <StatCard
-          title={t('recentActivity')}
-          value="Online"
-          icon={<TrendingUp className="w-6 h-6" />}
-          color="#8b5cf6"
-        />
-      </StatCardRow>
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 1. DOCTOR DASHBOARD VIEW (STAFF TYPE = DOCTOR)              */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {isDoctor && (
+        <div className="space-y-6">
+          <StatCardRow>
+            <StatCard
+              title={isAr ? 'المقررات المسندة' : 'Assigned Courses'}
+              value={String(assignedCourses.length)}
+              icon={<BookOpen className="w-6 h-6" />}
+              color="#0d9488"
+            />
+            <StatCard
+              title={isAr ? 'إجمالي الطلاب المسجلين' : 'Total Enrolled Students'}
+              value={String(staffTotalEnrolledStudents)}
+              icon={<Users className="w-6 h-6" />}
+              color="#22d3ee"
+            />
+            <StatCard
+              title={isAr ? 'الساعات المعتمدة التدريسية' : 'Teaching Credit Hours'}
+              value={String(staffTotalCredits)}
+              icon={<Award className="w-6 h-6" />}
+              color="#8b5cf6"
+            />
+            <StatCard
+              title={isAr ? 'الدور الأكاديمي' : 'Academic Standing'}
+              value={isAr ? 'أستاذ مقرر' : 'Course Lecturer'}
+              icon={<GraduationCap className="w-6 h-6" />}
+              color="#f59e0b"
+            />
+          </StatCardRow>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <InsightCard
-          label={isAr ? 'معدل إنجاز الشكاوى' : 'Resolution Rate'}
-          value={`${resolutionRate}%`}
-          helper={isAr ? 'الشكاوى المحلولة والمغلقة من إجمالي التذاكر.' : 'Resolved and closed complaints out of all tickets.'}
-          icon={<CheckCircle2 className="h-4 w-4" />}
-          tone={resolutionRate >= 70 ? 'success' : resolutionRate >= 40 ? 'warning' : 'danger'}
-        />
-        <InsightCard
-          label={isAr ? 'شكاوى حرجة وعاجلة' : 'High Priority'}
-          value={String(urgentComplaints)}
-          helper={isAr ? 'تذاكر تتطلب متابعة تشغيلية عاجلة.' : 'Tickets that require faster operational follow-up.'}
-          icon={<AlertTriangle className="h-4 w-4" />}
-          tone={urgentComplaints > 0 ? 'warning' : 'success'}
-        />
-        <InsightCard
-          label={isAr ? 'نسبة الطلاب النشطين' : 'Active Student Ratio'}
-          value={`${activeStudentRate}%`}
-          helper={isAr ? 'الطلاب المقيدون بحالة دراسية نشطة.' : 'Students with active enrollment status.'}
-          icon={<UserCheck className="h-4 w-4" />}
-          tone={activeStudentRate >= 80 ? 'success' : 'warning'}
-        />
-        <InsightCard
-          label={isAr ? 'المقررات المطروحة' : 'Course Offerings'}
-          value={totalCourses}
-          helper={isAr ? 'دليل المواد المتاحة بجميع المستويات.' : 'Available course catalog across all levels.'}
-          icon={<BookOpen className="h-4 w-4" />}
-          tone="primary"
-        />
-      </div>
+          {/* DOCTOR RECHARTS: COURSE ENROLLMENT + LEVEL DISTRIBUTION */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    {isAr ? 'أعداد الطلاب المسجلين بكل مقرر' : 'Enrolled Students per Course'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr ? 'مقارنة حجم الطلاب المسجلين في مقرراتك الدراسية' : 'Comparison of enrolled student volume per course'}
+                  </p>
+                </div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-teal-500/30 bg-teal-500/10 text-teal-500">
+                  <BarChart3 className="h-4 w-4" />
+                </span>
+              </div>
+              {doctorCourseEnrollmentData.length === 0 ? (
+                <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                  {isAr ? 'لا توجد مقررات دراسية مسندة حالياً' : 'No assigned courses available'}
+                </div>
+              ) : (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={doctorCourseEnrollmentData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="code" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderColor: 'rgba(51, 65, 85, 0.6)',
+                          borderRadius: '12px',
+                          color: '#f8fafc',
+                        }}
+                        formatter={(val: unknown) => [String(val), isAr ? 'طالب مسجل' : 'Enrolled Students']}
+                        labelFormatter={(lbl: unknown) => {
+                          const item = doctorCourseEnrollmentData.find((d) => d.code === String(lbl));
+                          return `${lbl} - ${item?.name || ''}`;
+                        }}
+                      />
+                      <Bar dataKey="students" fill="#0d9488" radius={[6, 6, 0, 0]} name={isAr ? 'الطلاب' : 'Students'} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
 
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ComplaintsWeeklyTrendChart
-          data={weeklyTrendData}
-          isAr={isAr}
-          isLoading={isAnalyticsLoading}
-        />
-        <ComplaintsStatusChart
-          data={complaintStatusData}
-          isAr={isAr}
-          isLoading={isAnalyticsLoading}
-        />
-      </section>
-
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <EnrollmentStatusChart
-          data={enrollmentStatusData}
-          isAr={isAr}
-          isLoading={isAnalyticsLoading}
-          totalStudents={totalStudentsCountNum}
-          liveOnline={studentsStatsQuery.data?.liveOnline}
-        />
-        <CoursesByLevelChart
-          data={courseLevelData}
-          isAr={isAr}
-          isLoading={isAnalyticsLoading}
-        />
-      </section>
-
-      {/* ─── ADVANCED ACADEMIC & INSTITUTIONAL ANALYTICS ─────────────── */}
-      <section className="space-y-6 pt-2">
-        <div className="flex items-center justify-between border-b border-border/70 pb-3">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <GraduationCap className="h-5 w-5 text-primary" />
-              {isAr ? 'تحليلات الأداء الأكاديمي واستبقاء الطلاب' : 'Academic Performance & Retention Analytics'}
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {isAr
-                ? 'توزيع المعدلات التراكمية، ومعدلات استبقاء الفرق الدراسية، وطاقة الأقسام العلمية (الشعبة العامة، BIS، المحاسبة)'
-                : 'GPA standing distributions, cohort retention rates, and academic department capacity (General Track, BIS, Accounting)'}
-            </p>
+            <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    {isAr ? 'توزيع الطلاب حسب الفرق الدراسية' : 'Student Distribution by Level'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr ? 'إجمالي أعداد الطلاب المقيدين بمقرراتك مقسمين على الفرق' : 'Total enrolled students distributed by academic level'}
+                  </p>
+                </div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
+                  <Users className="h-4 w-4" />
+                </span>
+              </div>
+              {doctorLevelDistributionData.length === 0 ? (
+                <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                  {isAr ? 'لا توجد بيانات فرق دراسية' : 'No cohort data available'}
+                </div>
+              ) : (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={doctorLevelDistributionData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <defs>
+                        <linearGradient id="doctorAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="level" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderColor: 'rgba(51, 65, 85, 0.6)',
+                          borderRadius: '12px',
+                          color: '#f8fafc',
+                        }}
+                        formatter={(val: unknown) => [String(val), isAr ? 'طالب' : 'Students']}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="students"
+                        stroke="#06b6d4"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#doctorAreaGrad)"
+                        name={isAr ? 'الطلاب' : 'Students'}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Row 1: GPA Distribution & Cohort Retention */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <GpaDistributionChart data={gpaChartData} isAr={isAr} />
-          <CohortRetentionChart data={cohortChartData} isAr={isAr} />
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 2. TEACHING ASSISTANT VIEW (STAFF TYPE = TEACHING ASSISTANT) */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {isTeachingAssistant && (
+        <div className="space-y-6">
+          <StatCardRow>
+            <StatCard
+              title={isAr ? 'السكاشن والمواد العملية' : 'Lab / Practical Sections'}
+              value={String(assignedCourses.length)}
+              icon={<BookOpen className="w-6 h-6" />}
+              color="#0d9488"
+            />
+            <StatCard
+              title={isAr ? 'الطلاب في السكاشن' : 'Supervised Students'}
+              value={String(staffTotalEnrolledStudents)}
+              icon={<Users className="w-6 h-6" />}
+              color="#22d3ee"
+            />
+            <StatCard
+              title={isAr ? 'ساعات التدريب العملي' : 'Practical Hours'}
+              value={String(staffTotalCredits)}
+              icon={<ClipboardCheck className="w-6 h-6" />}
+              color="#10b981"
+            />
+            <StatCard
+              title={isAr ? 'الدور الأكاديمي' : 'Academic Role'}
+              value={isAr ? 'هيئة تدريس معاونة' : 'Teaching Assistant'}
+              icon={<GraduationCap className="w-6 h-6" />}
+              color="#f59e0b"
+            />
+          </StatCardRow>
+
+          {/* TA RECHARTS: SECTION LOAD + LEVEL SPREAD */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    {isAr ? 'كثافة الطلاب بالسكاشن العملية' : 'Students per Practical Section'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr ? 'حجم المجموعات الطلابية في المواد التي تقوم بمعاونة تدريسها' : 'Supervised student volume across your assigned labs'}
+                  </p>
+                </div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                  <BarChart3 className="h-4 w-4" />
+                </span>
+              </div>
+              {doctorCourseEnrollmentData.length === 0 ? (
+                <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                  {isAr ? 'لا توجد سكاشن مسندة حالياً' : 'No assigned sections available'}
+                </div>
+              ) : (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={doctorCourseEnrollmentData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="code" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderColor: 'rgba(51, 65, 85, 0.6)',
+                          borderRadius: '12px',
+                          color: '#f8fafc',
+                        }}
+                        formatter={(val: unknown) => [String(val), isAr ? 'طالب بالسكشن' : 'Lab Students']}
+                        labelFormatter={(lbl: unknown) => {
+                          const item = doctorCourseEnrollmentData.find((d) => d.code === String(lbl));
+                          return `${lbl} - ${item?.name || ''}`;
+                        }}
+                      />
+                      <Bar dataKey="students" fill="#10b981" radius={[6, 6, 0, 0]} name={isAr ? 'الطلاب' : 'Students'} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    {isAr ? 'توزيع المواد العملية على الفرق' : 'Practical Sections by Level'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr ? 'توزيع السكاشن المعاونة حسب الفرق الأكاديمية بالمعهد' : 'Practical courses spread across academic levels'}
+                  </p>
+                </div>
+                <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-violet-500/30 bg-violet-500/10 text-violet-400">
+                  <ClipboardCheck className="h-4 w-4" />
+                </span>
+              </div>
+              {doctorLevelDistributionData.length === 0 ? (
+                <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                  {isAr ? 'لا توجد بيانات' : 'No data available'}
+                </div>
+              ) : (
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={doctorLevelDistributionData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="level" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderColor: 'rgba(51, 65, 85, 0.6)',
+                          borderRadius: '12px',
+                          color: '#f8fafc',
+                        }}
+                        formatter={(val: unknown, name: unknown) => [
+                          String(val),
+                          String(name) === 'courses' ? (isAr ? 'المواد العملية' : 'Practical Courses') : (isAr ? 'الطلاب' : 'Students'),
+                        ]}
+                      />
+                      <Bar dataKey="courses" fill="#8b5cf6" radius={[6, 6, 0, 0]} name={isAr ? 'المواد العملية' : 'Practical Courses'} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+      )}
 
-        {/* Row 2: Department Seat Capacity & Utilization */}
-        <DepartmentCapacityChart data={departmentChartData} isAr={isAr} />
-      </section>
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 3. ADMINISTRATIVE STAFF VIEW (STAFF TYPE = ADMINISTRATIVE)  */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {isAdministrative && (
+        <div className="space-y-6">
+          <StatCardRow>
+            {hasPerm('complaints.read') && (
+              <StatCard
+                title={t('activeComplaints')}
+                value={activeComplaints}
+                icon={<MessageSquareWarning className="w-6 h-6" />}
+                color="#f59e0b"
+              />
+            )}
+            {hasPerm('students.read') && (
+              <StatCard
+                title={t('totalStudents')}
+                value={totalStudents}
+                icon={<Users className="w-6 h-6" />}
+                color="#0d9488"
+              />
+            )}
+            {hasPerm('courses.read') && (
+              <StatCard
+                title={t('totalCourses')}
+                value={totalCourses}
+                icon={<BookOpen className="w-6 h-6" />}
+                color="#22d3ee"
+              />
+            )}
+            <StatCard
+              title={isAr ? 'حالة الحساب الإداري' : 'Administrative Status'}
+              value={isAr ? 'موظف مصرح' : 'Staff Online'}
+              icon={<TrendingUp className="w-6 h-6" />}
+              color="#8b5cf6"
+            />
+          </StatCardRow>
+
+          {/* Charts based on staff permissions */}
+          {hasPerm('complaints.read') && (
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ComplaintsWeeklyTrendChart
+                data={weeklyTrendData}
+                isAr={isAr}
+                isLoading={isAnalyticsLoading}
+              />
+              <ComplaintsStatusChart
+                data={complaintStatusData}
+                isAr={isAr}
+                isLoading={isAnalyticsLoading}
+              />
+            </section>
+          )}
+
+          {(hasPerm('students.read') || hasPerm('courses.read')) && (
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {hasPerm('students.read') && (
+                <EnrollmentStatusChart
+                  data={enrollmentStatusData}
+                  isAr={isAr}
+                  isLoading={isAnalyticsLoading}
+                  totalStudents={totalStudentsCountNum}
+                  liveOnline={studentsStatsQuery.data?.liveOnline}
+                />
+              )}
+              {hasPerm('courses.read') && (
+                <CoursesByLevelChart
+                  data={courseLevelData}
+                  isAr={isAr}
+                  isLoading={isAnalyticsLoading}
+                />
+              )}
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 4. ADMIN DASHBOARD VIEW (ROLE = ADMIN)                       */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {isAdmin && (
+        <div className="space-y-6">
+          <StatCardRow>
+            <StatCard
+              title={t('totalStudents')}
+              value={totalStudents}
+              icon={<Users className="w-6 h-6" />}
+              color="#0d9488"
+            />
+            <StatCard
+              title={t('totalCourses')}
+              value={totalCourses}
+              icon={<BookOpen className="w-6 h-6" />}
+              color="#22d3ee"
+            />
+            <StatCard
+              title={t('activeComplaints')}
+              value={activeComplaints}
+              icon={<MessageSquareWarning className="w-6 h-6" />}
+              color="#f59e0b"
+            />
+            <StatCard
+              title={t('recentActivity')}
+              value="Online"
+              icon={<TrendingUp className="w-6 h-6" />}
+              color="#8b5cf6"
+            />
+          </StatCardRow>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <InsightCard
+              label={isAr ? 'معدل إنجاز الشكاوى' : 'Resolution Rate'}
+              value={`${resolutionRate}%`}
+              helper={isAr ? 'الشكاوى المحلولة والمغلقة من إجمالي التذاكر.' : 'Resolved and closed complaints out of all tickets.'}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              tone={resolutionRate >= 70 ? 'success' : resolutionRate >= 40 ? 'warning' : 'danger'}
+            />
+            <InsightCard
+              label={isAr ? 'شكاوى حرجة وعاجلة' : 'High Priority'}
+              value={String(urgentComplaints)}
+              helper={isAr ? 'تذاكر تتطلب متابعة تشغيلية عاجلة.' : 'Tickets that require faster operational follow-up.'}
+              icon={<AlertTriangle className="h-4 w-4" />}
+              tone={urgentComplaints > 0 ? 'warning' : 'success'}
+            />
+            <InsightCard
+              label={isAr ? 'نسبة الطلاب النشطين' : 'Active Student Ratio'}
+              value={`${activeStudentRate}%`}
+              helper={isAr ? 'الطلاب المقيدون بحالة دراسية نشطة.' : 'Students with active enrollment status.'}
+              icon={<UserCheck className="h-4 w-4" />}
+              tone={activeStudentRate >= 80 ? 'success' : 'warning'}
+            />
+            <InsightCard
+              label={isAr ? 'المقررات المطروحة' : 'Course Offerings'}
+              value={totalCourses}
+              helper={isAr ? 'دليل المواد المتاحة بجميع المستويات.' : 'Available course catalog across all levels.'}
+              icon={<BookOpen className="h-4 w-4" />}
+              tone="primary"
+            />
+          </div>
+
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <ComplaintsWeeklyTrendChart
+              data={weeklyTrendData}
+              isAr={isAr}
+              isLoading={isAnalyticsLoading}
+            />
+            <ComplaintsStatusChart
+              data={complaintStatusData}
+              isAr={isAr}
+              isLoading={isAnalyticsLoading}
+            />
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <EnrollmentStatusChart
+              data={enrollmentStatusData}
+              isAr={isAr}
+              isLoading={isAnalyticsLoading}
+              totalStudents={totalStudentsCountNum}
+              liveOnline={studentsStatsQuery.data?.liveOnline}
+            />
+            <CoursesByLevelChart
+              data={courseLevelData}
+              isAr={isAr}
+              isLoading={isAnalyticsLoading}
+            />
+          </section>
+
+          {/* ADVANCED ACADEMIC & INSTITUTIONAL ANALYTICS */}
+          <section className="space-y-6 pt-2">
+            <div className="flex items-center justify-between border-b border-border/70 pb-3">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-primary" />
+                  {isAr ? 'تحليلات الأداء الأكاديمي واستبقاء الطلاب' : 'Academic Performance & Retention Analytics'}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isAr
+                    ? 'توزيع المعدلات التراكمية، ومعدلات استبقاء الفرق الدراسية، وطاقة الأقسام العلمية (الشعبة العامة، BIS، المحاسبة)'
+                    : 'GPA standing distributions, cohort retention rates, and academic department capacity (General Track, BIS, Accounting)'}
+                </p>
+              </div>
+            </div>
+
+            {/* Row 1: GPA Distribution & Cohort Retention */}
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <GpaDistributionChart data={gpaChartData} isAr={isAr} />
+              <CohortRetentionChart data={cohortChartData} isAr={isAr} />
+            </div>
+
+            {/* Row 2: Department Seat Capacity & Utilization */}
+            <DepartmentCapacityChart data={departmentChartData} isAr={isAr} />
+          </section>
+        </div>
+      )}
     </div>
 
     {/* ─── ACTION MODALS MOUNTED ON DASHBOARD ─────────────────── */}

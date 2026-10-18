@@ -933,6 +933,11 @@ function CoursesPageContent() {
     setSelectedKeys,
   } = useCourseStore();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const canWriteCourses = isAdmin || Boolean(user?.permissions?.includes('courses.write'));
+  const canUploadCourses = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
+  const canCreateQuiz = isAdmin || Boolean(user?.permissions?.includes('quizzes.write')) || Boolean(user?.permissions?.includes('quizzes.create'));
+  const canReadQuizzes = isAdmin || Boolean(user?.permissions?.includes('quizzes.read'));
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -1335,60 +1340,71 @@ function CoursesPageContent() {
                 align="end"
                 className="z-50 min-w-52 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
               >
-                <DropdownMenu.Item
-                  onClick={() => {
-                    setSelectedCourse(course);
-                    setIsEditOpen(true);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{locale === 'ar' ? 'تعديل بيانات المادة' : 'Edit Course'}</span>
-                </DropdownMenu.Item>
+                {canWriteCourses && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      setSelectedCourse(course);
+                      setIsEditOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                  >
+                    <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{locale === 'ar' ? 'تعديل بيانات المادة' : 'Edit Course'}</span>
+                  </DropdownMenu.Item>
+                )}
 
-                <DropdownMenu.Item
-                  onClick={() => {
-                    setSelectedCourseForPdf(course);
-                    setIsPdfModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
-                >
-                  <FileText className="h-3.5 w-3.5 text-primary" />
-                  <span>{locale === 'ar' ? 'رفع / تحديث منهج المقرر (PDF)' : 'Upload / Update Syllabus PDF'}</span>
-                </DropdownMenu.Item>
+                {canWriteCourses && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      setSelectedCourseForPdf(course);
+                      setIsPdfModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    <span>{locale === 'ar' ? 'رفع / تحديث منهج المقرر (PDF)' : 'Upload / Update Syllabus PDF'}</span>
+                  </DropdownMenu.Item>
+                )}
 
-                <DropdownMenu.Item
-                  onClick={() => {
-                    router.push(`/${locale}/admin/quizzes?courseId=${course._id}&create=true`);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
-                >
-                  <HelpCircle className="h-3.5 w-3.5 text-primary" />
-                  <span>{locale === 'ar' ? 'إنشاء كويز للمقرر' : 'Create Quiz for Course'}</span>
-                </DropdownMenu.Item>
+                {canCreateQuiz && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      router.push(`/${locale}/admin/quizzes?courseId=${course._id}&create=true`);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5 text-primary" />
+                    <span>{locale === 'ar' ? 'إنشاء كويز للمقرر' : 'Create Quiz for Course'}</span>
+                  </DropdownMenu.Item>
+                )}
 
-                <DropdownMenu.Item
-                  onClick={() => {
-                    router.push(`/${locale}/admin/quizzes?courseId=${course._id}`);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-                >
-                  <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{locale === 'ar' ? 'إدارة كويزات المقرر' : 'Manage Course Quizzes'}</span>
-                </DropdownMenu.Item>
+                {canReadQuizzes && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      router.push(`/${locale}/admin/quizzes?courseId=${course._id}`);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                  >
+                    <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>{locale === 'ar' ? 'إدارة كويزات المقرر' : 'Manage Course Quizzes'}</span>
+                  </DropdownMenu.Item>
+                )}
 
-                <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
-
-                <DropdownMenu.Item
-                  onClick={() => {
-                    setCourseToDelete(course);
-                    setIsDeleteConfirmOpen(true);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>{tCommon('delete')}</span>
-                </DropdownMenu.Item>
+                {canWriteCourses && (
+                  <>
+                    <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+                    <DropdownMenu.Item
+                      onClick={() => {
+                        setCourseToDelete(course);
+                        setIsDeleteConfirmOpen(true);
+                      }}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{tCommon('delete')}</span>
+                    </DropdownMenu.Item>
+                  </>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
@@ -1405,21 +1421,25 @@ function CoursesPageContent() {
         icon={<BookOpen className="h-5 w-5" />}
         subtitle={t('title')}
       >
-        <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
-          <UploadCloud className="h-4 w-4" />
-          {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
-        </Button>
+        {canUploadCourses && (
+          <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
+            <UploadCloud className="h-4 w-4" />
+            {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
+          </Button>
+        )}
         <Button variant="outline" onClick={exportCourses} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {locale === 'ar' ? 'تصدير' : 'Export'}
         </Button>
-        <Button
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-primary font-semibold text-white shadow-lg hover:bg-primary-hover active:scale-[0.98]"
-        >
-          <Plus className="h-5 w-5" />
-          <span>{t('addCourse')}</span>
-        </Button>
+        {canWriteCourses && (
+          <Button
+            onClick={() => setIsAddOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-primary font-semibold text-white shadow-lg hover:bg-primary-hover active:scale-[0.98]"
+          >
+            <Plus className="h-5 w-5" />
+            <span>{t('addCourse')}</span>
+          </Button>
+        )}
       </PageTitleBanner>
 
       {/* Level Filter Dropdown */}
@@ -1505,12 +1525,16 @@ function CoursesPageContent() {
               },
             ]
             : []),
-          {
-            label: locale === 'ar' ? 'حذف المادة' : 'Delete',
-            onClick: () => setIsBulkDeleteOpen(true),
-            variant: 'destructive',
-            icon: <Trash2 className="w-3.5 h-3.5" />,
-          },
+          ...(canWriteCourses
+            ? [
+                {
+                  label: locale === 'ar' ? 'حذف المادة' : 'Delete',
+                  onClick: () => setIsBulkDeleteOpen(true),
+                  variant: 'destructive' as const,
+                  icon: <Trash2 className="w-3.5 h-3.5" />,
+                },
+              ]
+            : []),
         ]}
       />
 

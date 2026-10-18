@@ -1,4 +1,4 @@
-import type { Permission } from '@student-portal/shared';
+import type { Permission, StaffType } from '@student-portal/shared';
 
 export interface StaffMember {
   _id: string;
@@ -8,6 +8,7 @@ export interface StaffMember {
   email?: string;
   phone?: string;
   role: 'staff';
+  staffType?: StaffType;
   permissions: Permission[];
   isActive: boolean;
   deactivatedAt?: string;
@@ -30,6 +31,7 @@ export interface StaffListParams {
   limit: number;
   search?: string;
   status: 'all' | 'active' | 'inactive';
+  staffType?: 'all' | StaffType;
 }
 
 export interface StaffProfileInput {
@@ -37,9 +39,11 @@ export interface StaffProfileInput {
   email: string;
   username?: string;
   phone?: string;
+  staffType?: StaffType;
 }
 
 export interface CreateStaffInput extends StaffProfileInput {
   password: string;
   permissions?: Permission[];
 }
+

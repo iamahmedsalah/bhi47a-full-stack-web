@@ -13,6 +13,7 @@ interface User {
   _id: string;
   name: string;
   role: 'admin' | 'staff' | 'student';
+  staffType?: string;
   email?: string;
   studentCode?: string;
   permissions?: string[];

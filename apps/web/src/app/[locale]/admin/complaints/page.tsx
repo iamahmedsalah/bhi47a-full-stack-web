@@ -242,7 +242,7 @@ function AdminComplaintsContent() {
   const { user } = useAuth();
   const params = useParams();
   const locale = params.locale as string;
-  const canManageSettings = user?.role === 'admin';
+  const canManageSettings = user?.role === 'admin' || Boolean(user?.permissions?.includes('complaints.manage_settings'));
 
 
   const {

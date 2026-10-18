@@ -450,10 +450,20 @@
     "previous": "السابق",
     "next": "التالي",
     "pagination": "الصفحة {page} من {totalPages} · إجمالي {total}",
-    "filters": { "all": "كل الحسابات" },
+    "types": {
+      "doctor": "أستاذ مقرر (دكتور)",
+      "teaching_assistant": "معيد (هيئة تدريس)",
+      "administrative": "موظف إداري"
+    },
+    "filters": {
+      "all": "كل الحالات",
+      "allTypes": "كل الأدوار الوظيفية"
+    },
     "fields": {
       "name": "الاسم الكامل",
       "email": "البريد الإلكتروني",
+      "staffType": "الدور الوظيفي",
+      "selectStaffType": "اختر الدور الوظيفي للموظف",
       "username": "اسم المستخدم (اختياري)",
       "phone": "الهاتف (اختياري)",
       "temporaryPassword": "كلمة المرور المؤقتة"
@@ -501,6 +511,7 @@
     "permissions": {
       "title": "صلاحيات {name}",
       "description": "لن تتاح لهذا الحساب إلا الإمكانات المحددة.",
+      "presets": "قوالب الأدوار الجاهزة",
       "selectAll": "تحديد الكل",
       "clearAll": "إلغاء الكل",
       "groups": {

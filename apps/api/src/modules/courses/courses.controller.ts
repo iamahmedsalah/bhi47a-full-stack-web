@@ -67,7 +67,7 @@ export class CoursesController {
     return this.coursesService.downloadSyllabus(id, res);
   }
 
-  @Get('staff/me/assigned-courses')
+  @Get(['staff/me/assigned-courses', 'courses/staff/me/assigned-courses'])
   @Roles('admin', 'staff')
   @ApiOperation({
     summary: 'Get courses assigned to current doctor/staff member',

@@ -27,6 +27,7 @@ export class AuthSessionService {
       _id: user._id,
       name: user.name,
       role: user.role,
+      staffType: user.staffType,
       email: user.email,
       phone: user.phone,
       studentCode: user.studentCode,

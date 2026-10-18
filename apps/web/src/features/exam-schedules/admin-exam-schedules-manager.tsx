@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GlassCard } from '@/components/ui/glass-card';
+import { useAuth } from '@/providers/auth-provider';
 
 interface ExamSchedule {
   _id: string;
@@ -89,6 +90,9 @@ function AdminExamSchedulesManagerContent() {
   const params = useParams();
   const locale = params.locale as string;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const canWriteSchedules = isAdmin || Boolean(user?.permissions?.includes('exam_schedules.write'));
 
   const [selectedType, setSelectedType] = useState<ExamScheduleType>('final');
   const [title, setTitle] = useState('');
@@ -300,7 +304,7 @@ function AdminExamSchedulesManagerContent() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className={canWriteSchedules ? "grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]" : "grid grid-cols-1 gap-5"}>
         <GlassCard className="space-y-4 rounded-3xl border border-border/70 p-5 md:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -328,32 +332,34 @@ function AdminExamSchedulesManagerContent() {
                       {currentSchedule.academicYear} • {semesterLabel(locale, currentSchedule.semester)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleTogglePublish}
-                      className="rounded-xl border border-border bg-surface/60 p-2 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
-                      title={currentSchedule.isPublished ? (locale === 'ar' ? 'إخفاء' : 'Hide') : (locale === 'ar' ? 'نشر' : 'Publish')}
-                    >
-                      {currentSchedule.isPublished ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    </button>
-                    <ConfirmDialog
-                      trigger={
-                        <button
-                          type="button"
-                          className="rounded-xl border border-border bg-surface/60 p-2 text-muted-foreground transition hover:border-danger/40 hover:text-danger"
-                          title={locale === 'ar' ? 'حذف الجدول' : 'Delete schedule'}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      }
-                      title={locale === 'ar' ? 'حذف الجدول' : 'Delete schedule'}
-                      description={locale === 'ar' ? 'هل أنت متأكد من حذف هذا الجدول؟' : 'Are you sure you want to delete this schedule?'}
-                      confirmLabel={tCommon('delete')}
-                      cancelLabel={tCommon('cancel')}
-                      onConfirm={() => void handleDelete()}
-                    />
-                  </div>
+                  {canWriteSchedules && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleTogglePublish}
+                        className="rounded-xl border border-border bg-surface/60 p-2 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+                        title={currentSchedule.isPublished ? (locale === 'ar' ? 'إخفاء' : 'Hide') : (locale === 'ar' ? 'نشر' : 'Publish')}
+                      >
+                        {currentSchedule.isPublished ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </button>
+                      <ConfirmDialog
+                        trigger={
+                          <button
+                            type="button"
+                            className="rounded-xl border border-border bg-surface/60 p-2 text-muted-foreground transition hover:border-danger/40 hover:text-danger"
+                            title={locale === 'ar' ? 'حذف الجدول' : 'Delete schedule'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        }
+                        title={locale === 'ar' ? 'حذف الجدول' : 'Delete schedule'}
+                        description={locale === 'ar' ? 'هل أنت متأكد من حذف هذا الجدول؟' : 'Are you sure you want to delete this schedule?'}
+                        confirmLabel={tCommon('delete')}
+                        cancelLabel={tCommon('cancel')}
+                        onConfirm={() => void handleDelete()}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-border bg-black/20">
@@ -403,133 +409,135 @@ function AdminExamSchedulesManagerContent() {
           </div>
         </GlassCard>
 
-        <GlassCard className="space-y-4 rounded-3xl border border-border/70 p-5 md:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-bold text-foreground">
-                {locale === 'ar' ? 'رفع صورة جديدة' : 'Upload New Image'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {locale === 'ar'
-                  ? 'ارفع صورة جدول الامتحانات إلى Cloudinary ثم احفظها مباشرة.'
-                  : 'Upload the exam schedule image to Cloudinary and save it directly.'}
-              </p>
+        {canWriteSchedules && (
+          <GlassCard className="space-y-4 rounded-3xl border border-border/70 p-5 md:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-foreground">
+                  {locale === 'ar' ? 'رفع صورة جديدة' : 'Upload New Image'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {locale === 'ar'
+                    ? 'ارفع صورة جدول الامتحانات إلى Cloudinary ثم احفظها مباشرة.'
+                    : 'Upload the exam schedule image to Cloudinary and save it directly.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface/50 p-3 text-primary">
+                <UploadCloud className="h-6 w-6" />
+              </div>
             </div>
-            <div className="rounded-2xl border border-border bg-surface/50 p-3 text-primary">
-              <UploadCloud className="h-6 w-6" />
-            </div>
-          </div>
 
-          <div className="space-y-3 rounded-3xl border border-dashed border-border bg-surface/30 p-4">
-            <label className="block text-sm font-semibold text-foreground">
-              {locale === 'ar' ? 'اختر صورة جديدة' : 'Choose a new image'}
-            </label>
-            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-2xl border border-border bg-card/70 px-4 py-5 text-center transition hover:border-primary/60 hover:bg-primary/5">
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="sr-only"
-                onChange={(event) => void handleUploadPick(event.target.files?.[0])}
-              />
-              {imageUploading ? (
-                <>
-                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
-                  <p className="mt-2 text-sm font-semibold text-foreground">
-                    {locale === 'ar' ? 'جارٍ رفع الصورة...' : 'Uploading image...'}
-                  </p>
-                </>
-              ) : uploadedImageName ? (
-                <>
-                  <UploadCloud className="h-7 w-7 text-success" />
-                  <p className="mt-2 max-w-full truncate text-sm font-semibold text-foreground">
-                    {uploadedImageName}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {locale === 'ar' ? 'تم الرفع إلى Cloudinary' : 'Uploaded to Cloudinary'}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="h-7 w-7 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-semibold text-foreground">
-                    {locale === 'ar' ? 'No file chosen' : 'No file chosen'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {locale === 'ar' ? 'PNG / JPG / WEBP / PDF' : 'PNG / JPG / WEBP / PDF'}
-                  </p>
-                </>
-              )}
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-semibold text-foreground">
-                {locale === 'ar' ? 'عنوان الجدول' : 'Schedule title'}
+            <div className="space-y-3 rounded-3xl border border-dashed border-border bg-surface/30 p-4">
+              <label className="block text-sm font-semibold text-foreground">
+                {locale === 'ar' ? 'اختر صورة جديدة' : 'Choose a new image'}
               </label>
-              <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={locale === 'ar' ? 'مثال: جدول امتحانات نهاية الفصل' : 'e.g. Final exam schedule'} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">
-                {locale === 'ar' ? 'السنة الدراسية' : 'Academic year'}
+              <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-2xl border border-border bg-card/70 px-4 py-5 text-center transition hover:border-primary/60 hover:bg-primary/5">
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  className="sr-only"
+                  onChange={(event) => void handleUploadPick(event.target.files?.[0])}
+                />
+                {imageUploading ? (
+                  <>
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                    <p className="mt-2 text-sm font-semibold text-foreground">
+                      {locale === 'ar' ? 'جارٍ رفع الصورة...' : 'Uploading image...'}
+                    </p>
+                  </>
+                ) : uploadedImageName ? (
+                  <>
+                    <UploadCloud className="h-7 w-7 text-success" />
+                    <p className="mt-2 max-w-full truncate text-sm font-semibold text-foreground">
+                      {uploadedImageName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {locale === 'ar' ? 'تم الرفع إلى Cloudinary' : 'Uploaded to Cloudinary'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-7 w-7 text-muted-foreground" />
+                    <p className="mt-2 text-sm font-semibold text-foreground">
+                      {locale === 'ar' ? 'No file chosen' : 'No file chosen'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {locale === 'ar' ? 'PNG / JPG / WEBP / PDF' : 'PNG / JPG / WEBP / PDF'}
+                    </p>
+                  </>
+                )}
               </label>
-              <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">{locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}</label>
-              <Select value={semester} onValueChange={(value) => setSemester(value as 'first' | 'second' | 'summer')}>
-                <SelectTrigger className="border-border bg-card/70">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SEMESTER_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {semesterLabel(locale, value)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between rounded-2xl border border-border bg-surface/35 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {locale === 'ar' ? 'منشور للطلاب' : 'Published to students'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {locale === 'ar' ? 'سيظهر الجدول في بوابة الطالب مباشرة' : 'Students will see it immediately'}
-              </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-sm font-semibold text-foreground">
+                  {locale === 'ar' ? 'عنوان الجدول' : 'Schedule title'}
+                </label>
+                <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={locale === 'ar' ? 'مثال: جدول امتحانات نهاية الفصل' : 'e.g. Final exam schedule'} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">
+                  {locale === 'ar' ? 'السنة الدراسية' : 'Academic year'}
+                </label>
+                <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-foreground">{locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}</label>
+                <Select value={semester} onValueChange={(value) => setSemester(value as 'first' | 'second' | 'summer')}>
+                  <SelectTrigger className="border-border bg-card/70">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEMESTER_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {semesterLabel(locale, value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsPublished((value) => !value)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${isPublished ? 'bg-primary' : 'bg-border'}`}
-            >
-              <span
-                className={`inline-block h-5 w-5 rounded-full bg-white transition ${isPublished ? 'translate-x-5' : 'translate-x-1'}`}
-              />
-            </button>
-          </div>
 
-          {previewUrl && isImageFile(previewUrl) && (
-            <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
-              <img src={previewUrl} alt={title || 'Schedule preview'} className="h-44 w-full object-cover" />
+            <div className="flex items-center justify-between rounded-2xl border border-border bg-surface/35 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {locale === 'ar' ? 'منشور للطلاب' : 'Published to students'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'سيظهر الجدول في بوابة الطالب مباشرة' : 'Students will see it immediately'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPublished((value) => !value)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${isPublished ? 'bg-primary' : 'bg-border'}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white transition ${isPublished ? 'translate-x-5' : 'translate-x-1'}`}
+                />
+              </button>
             </div>
-          )}
-          {previewUrl && isPdfFile(previewUrl) && (
-            <div className="rounded-2xl border border-border bg-surface/35 px-4 py-4 text-sm text-muted-foreground">
-              {locale === 'ar' ? 'تم رفع ملف PDF وسيظهر للطلاب كرابط تنزيل/عرض.' : 'The PDF file is uploaded and will be shown to students as a view/download link.'}
-            </div>
-          )}
 
-          <div className="flex flex-col gap-3">
-            <Button type="button" onClick={() => void handleSave()} disabled={formLoading || imageUploading} className="w-full gap-2 bg-primary text-white hover:bg-primary-hover">
-              {formLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {currentSchedule ? (locale === 'ar' ? 'حفظ التحديث' : 'Save changes') : (locale === 'ar' ? 'إنشاء الجدول' : 'Create schedule')}
-            </Button>
-          </div>
-        </GlassCard>
+            {previewUrl && isImageFile(previewUrl) && (
+              <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
+                <img src={previewUrl} alt={title || 'Schedule preview'} className="h-44 w-full object-cover" />
+              </div>
+            )}
+            {previewUrl && isPdfFile(previewUrl) && (
+              <div className="rounded-2xl border border-border bg-surface/35 px-4 py-4 text-sm text-muted-foreground">
+                {locale === 'ar' ? 'تم رفع ملف PDF وسيظهر للطلاب كرابط تنزيل/عرض.' : 'The PDF file is uploaded and will be shown to students as a view/download link.'}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <Button type="button" onClick={() => void handleSave()} disabled={formLoading || imageUploading} className="w-full gap-2 bg-primary text-white hover:bg-primary-hover">
+                {formLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {currentSchedule ? (locale === 'ar' ? 'حفظ التحديث' : 'Save changes') : (locale === 'ar' ? 'إنشاء الجدول' : 'Create schedule')}
+              </Button>
+            </div>
+          </GlassCard>
+        )}
       </div>
     </div>
   );

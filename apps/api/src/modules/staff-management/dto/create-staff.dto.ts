@@ -11,9 +11,17 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { STAFF_ASSIGNABLE_PERMISSIONS } from '@student-portal/shared';
+import {
+  STAFF_ASSIGNABLE_PERMISSIONS,
+  STAFF_TYPE_VALUES,
+  type StaffType,
+} from '@student-portal/shared';
 
 export class CreateStaffDto {
+  @ApiPropertyOptional({ enum: STAFF_TYPE_VALUES, example: 'doctor' })
+  @IsOptional()
+  @IsIn(STAFF_TYPE_VALUES)
+  staffType?: StaffType;
   @ApiProperty({ example: 'Ahmed Hassan' })
   @IsString()
   @Length(2, 160)

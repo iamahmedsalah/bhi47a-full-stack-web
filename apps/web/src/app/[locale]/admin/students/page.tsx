@@ -129,9 +129,12 @@ function StudentsPageContent() {
     else setTableFilter(key as any, value !== undefined ? String(value) : undefined);
   };
 
+  const isAdmin = user?.role === 'admin';
+  const canWriteStudents = isAdmin || Boolean(user?.permissions?.includes('students.write'));
+  const canResetPassword = isAdmin || Boolean(user?.permissions?.includes('students.reset_password'));
+  const canUploadStudents = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
   const canViewSensitiveStudentData = Boolean(
-    user?.role === 'admin' ||
-    user?.permissions?.includes('students.view_national_id'),
+    isAdmin || user?.permissions?.includes('students.view_national_id'),
   );
 
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -369,97 +372,107 @@ function StudentsPageContent() {
           <span>{locale === 'ar' ? 'تصدير Excel' : 'Export Excel'}</span>
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isTogglingMustChange || mustChangeSummaryQuery.isLoading}
-          onClick={() => setIsBulkMustChangeOpen(true)}
-          className={cn(
-            'h-9 rounded-squircle border-amber-500/40 bg-card/60 px-3 text-xs font-medium text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
-            mustChangeSummaryQuery.data?.allEnabled &&
-              'border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400',
-          )}
-        >
-          {isTogglingMustChange ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <KeyRound className="h-3.5 w-3.5" />
-          )}
-          <span>
-            {locale === 'ar'
-              ? mustChangeSummaryQuery.data?.allEnabled
-                ? 'إلغاء إلزام كلمة المرور'
-                : 'إلزام تغيير كلمة المرور'
-              : mustChangeSummaryQuery.data?.allEnabled
-                ? 'Disable Forced Reset'
-                : 'Force Password Reset'}
-          </span>
-          {mustChangeSummaryQuery.data && (
-            <span className="ms-1.5 rounded-full bg-secondary/80 px-1.5 py-0.5 text-[10px] font-mono">
-              {mustChangeSummaryQuery.data.mustChangeCount}/
-              {mustChangeSummaryQuery.data.totalStudents}
+        {canResetPassword && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isTogglingMustChange || mustChangeSummaryQuery.isLoading}
+            onClick={() => setIsBulkMustChangeOpen(true)}
+            className={cn(
+              'h-9 rounded-squircle border-amber-500/40 bg-card/60 px-3 text-xs font-medium text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
+              mustChangeSummaryQuery.data?.allEnabled &&
+                'border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400',
+            )}
+          >
+            {isTogglingMustChange ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <KeyRound className="h-3.5 w-3.5" />
+            )}
+            <span>
+              {locale === 'ar'
+                ? mustChangeSummaryQuery.data?.allEnabled
+                  ? 'إلغاء إلزام كلمة المرور'
+                  : 'إلزام تغيير كلمة المرور'
+                : mustChangeSummaryQuery.data?.allEnabled
+                  ? 'Disable Forced Reset'
+                  : 'Force Password Reset'}
             </span>
-          )}
-        </Button>
+            {mustChangeSummaryQuery.data && (
+              <span className="ms-1.5 rounded-full bg-secondary/80 px-1.5 py-0.5 text-[10px] font-mono">
+                {mustChangeSummaryQuery.data.mustChangeCount}/
+                {mustChangeSummaryQuery.data.totalStudents}
+              </span>
+            )}
+          </Button>
+        )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isAutoRegistering}
-          onClick={() => setIsAutoRegisterModalOpen(true)}
-          className="h-9 rounded-squircle border-primary/40 bg-card/60 px-3 text-xs font-medium text-primary hover:bg-primary/10"
-        >
-          {isAutoRegistering ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <BookOpenCheck className="h-3.5 w-3.5" />
-          )}
-          <span>
-            {locale === 'ar'
-              ? 'تسجيل الفرقة الأولى'
-              : 'Auto-Register Level 1'}
-          </span>
-        </Button>
+        {canWriteStudents && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isAutoRegistering}
+            onClick={() => setIsAutoRegisterModalOpen(true)}
+            className="h-9 rounded-squircle border-primary/40 bg-card/60 px-3 text-xs font-medium text-primary hover:bg-primary/10"
+          >
+            {isAutoRegistering ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <BookOpenCheck className="h-3.5 w-3.5" />
+            )}
+            <span>
+              {locale === 'ar'
+                ? 'تسجيل الفرقة الأولى'
+                : 'Auto-Register Level 1'}
+            </span>
+          </Button>
+        )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setTransferStudent(null);
-            setIsTransferOpen(true);
-          }}
-          className="h-9 rounded-squircle border-cyan-500/40 bg-card/60 px-3 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          <span>
-            {locale === 'ar'
-              ? 'تحويل تخصص الفرقة 3'
-              : 'Transfer Specialization (Level 3)'}
-          </span>
-        </Button>
+        {canWriteStudents && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setTransferStudent(null);
+              setIsTransferOpen(true);
+            }}
+            className="h-9 rounded-squircle border-cyan-500/40 bg-card/60 px-3 text-xs font-semibold text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            <span>
+              {locale === 'ar'
+                ? 'تحويل تخصص الفرقة 3'
+                : 'Transfer Specialization (Level 3)'}
+            </span>
+          </Button>
+        )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsUploadOpen(true)}
-          className="h-9 rounded-squircle border-border/80 bg-card/60 px-3.5 text-xs font-medium hover:bg-secondary/70"
-        >
-          <UploadCloud className="h-3.5 w-3.5" />
-          <span>{locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}</span>
-        </Button>
+        {canUploadStudents && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsUploadOpen(true)}
+            className="h-9 rounded-squircle border-border/80 bg-card/60 px-3.5 text-xs font-medium hover:bg-secondary/70"
+          >
+            <UploadCloud className="h-3.5 w-3.5" />
+            <span>{locale === 'ar' ? 'رفع الطلاب' : 'Upload Students'}</span>
+          </Button>
+        )}
 
-        <Button
-          size="sm"
-          onClick={() => {
-            setSelectedStudent(null);
-            setForm(initialForm);
-            setIsAddOpen(true);
-          }}
-          className="h-9 rounded-squircle px-4 text-xs font-bold shadow-sm"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>{t('addStudent')}</span>
-        </Button>
+        {canWriteStudents && (
+          <Button
+            size="sm"
+            onClick={() => {
+              setSelectedStudent(null);
+              setForm(initialForm);
+              setIsAddOpen(true);
+            }}
+            className="h-9 rounded-squircle px-4 text-xs font-bold shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{t('addStudent')}</span>
+          </Button>
+        )}
       </PageTitleBanner>
 
       <FilterBar search={search} onSearchChange={(val) => setFilter('search', val)} searchPlaceholder={t('searchPlaceholder')}>

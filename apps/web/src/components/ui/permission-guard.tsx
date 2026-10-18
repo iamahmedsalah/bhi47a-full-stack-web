@@ -8,11 +8,18 @@ import { Button } from './button';
 import { GlassCard } from './glass-card';
 
 interface PermissionGuardProps {
-  permission: string;
+  permission?: string;
+  permissions?: string[];
+  anyOf?: boolean;
   children: React.ReactNode;
 }
 
-export function PermissionGuard({ permission, children }: PermissionGuardProps) {
+export function PermissionGuard({
+  permission,
+  permissions,
+  anyOf = false,
+  children,
+}: PermissionGuardProps) {
   const { user, loading } = useAuth();
   const params = useParams();
   const router = useRouter();
@@ -28,7 +35,17 @@ export function PermissionGuard({ permission, children }: PermissionGuardProps) 
 
   // Admin bypasses all checks
   const isAdmin = user?.role === 'admin';
-  const hasPermission = isAdmin || user?.permissions?.includes(permission);
+  let hasPermission = isAdmin;
+
+  if (!hasPermission) {
+    if (permissions && permissions.length > 0) {
+      hasPermission = anyOf
+        ? permissions.some((p) => user?.permissions?.includes(p))
+        : permissions.every((p) => user?.permissions?.includes(p));
+    } else if (permission) {
+      hasPermission = Boolean(user?.permissions?.includes(permission));
+    }
+  }
 
   if (!hasPermission) {
     const title = locale === 'ar' ? 'صلاحيات غير كافية' : 'Insufficient Permissions';
