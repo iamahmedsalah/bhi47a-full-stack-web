@@ -12,6 +12,7 @@ import {
   BadRequestException,
   Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import {
@@ -63,8 +64,9 @@ export class CoursesController {
   async downloadSyllabus(
     @Param('id', ParseObjectIdPipe) id: string,
     @Res() res: any,
+    @CurrentUser() user: any,
   ) {
-    return this.coursesService.downloadSyllabus(id, res);
+    return this.coursesService.downloadSyllabus(id, res, user);
   }
 
   @Get(['staff/me/assigned-courses', 'courses/staff/me/assigned-courses'])
@@ -84,6 +86,76 @@ export class CoursesController {
   @ApiOperation({ summary: 'List all courses with filters (Admin/Staff)' })
   async findAll(@Query() query: QueryCourseDto, @CurrentUser() user: any) {
     return this.coursesService.findAll(query, user);
+  }
+
+  @Get('admin/courses/enrollment-template')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_READ)
+  @ApiOperation({
+    summary:
+      'Download standard Excel or CSV template for bulk student course enrollment',
+  })
+  async downloadEnrollmentTemplate(
+    @Query('format') format: 'xlsx' | 'csv' = 'xlsx',
+    @Res() res: Response,
+  ) {
+    const selectedFormat = format === 'csv' ? 'csv' : 'xlsx';
+    const result =
+      await this.coursesService.generateEnrollmentTemplate(selectedFormat);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+    );
+    res.send(result.buffer);
+  }
+
+  @Post('admin/courses/:id/enroll-students-excel')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Bulk enroll students in this course from Excel (.xlsx) or CSV',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  async enrollStudentsFromExcel(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @UploadedFile() file: CourseSyllabusFile,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+    @Query('skipBlocked') skipBlocked?: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        'Please select an Excel or CSV file to upload',
+      );
+    }
+    return this.coursesService.enrollStudentsFromExcel(
+      id,
+      file.buffer,
+      file.originalname,
+      {
+        academicYear,
+        semester,
+        skipBlocked: skipBlocked === 'true' || skipBlocked === '1',
+      },
+    );
   }
 
   @Post('admin/courses')

@@ -528,7 +528,8 @@
         "quizzes": "كويزات واختبارات المقررات",
         "attendance": "الحضور والغياب",
         "registration": "التسجيل",
-        "advising": "الإرشاد الأكاديمي"
+        "advising": "الإرشاد الأكاديمي",
+        "courseSchedules": "جداول المحاضرات والسكاشن"
       },
       "labels": {
         "students_read": "عرض الطلاب",
@@ -570,7 +571,9 @@
         "advising_write": "إدارة حالات الإرشاد",
         "advising_override_prerequisites": "تجاوز المتطلبات السابقة",
         "advising_override_max_hours": "تجاوز الحد الأقصى للساعات",
-        "study_plan_manage": "إدارة الخطط الدراسية"
+        "study_plan_manage": "إدارة الخطط الدراسية",
+        "course_schedules_read": "عرض جدول المحاضرات والسكاشن",
+        "course_schedules_write": "إدارة وتعديل جدول المحاضرات والقاعات والرفع"
       }
     }
   },

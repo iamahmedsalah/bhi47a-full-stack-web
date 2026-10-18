@@ -528,7 +528,8 @@
         "quizzes": "Course quizzes & assessments",
         "attendance": "Attendance tracking",
         "registration": "Registration",
-        "advising": "Academic advising"
+        "advising": "Academic advising",
+        "courseSchedules": "Lecture & Section Schedules"
       },
       "labels": {
         "students_read": "View students",
@@ -570,7 +571,9 @@
         "advising_write": "Manage advising cases",
         "advising_override_prerequisites": "Override prerequisites",
         "advising_override_max_hours": "Override maximum hours",
-        "study_plan_manage": "Manage study plans"
+        "study_plan_manage": "Manage study plans",
+        "course_schedules_read": "View lecture & section schedules",
+        "course_schedules_write": "Manage & upload lecture schedules"
       }
     }
   },

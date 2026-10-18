@@ -80,6 +80,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 // Quiz API
 import {
   listQuizzes,
+  getQuiz,
   createQuiz,
   updateQuiz,
   deleteQuiz,
@@ -91,6 +92,7 @@ import {
   type QuizQuestion,
   type QuizSubmission,
 } from '@/features/quizzes/api';
+import { QuizPreviewModal } from '@/features/quizzes/components/quiz-preview-modal';
 
 /* ─── Question Builder Modal Component ─────────────────── */
 interface QuizFormDialogProps {
@@ -101,7 +103,7 @@ interface QuizFormDialogProps {
   courses: Array<{ _id: string; code: string; name: string; nameAr?: string }>;
   coursesLoading?: boolean;
   isAr: boolean;
-  onSuccess: () => void;
+  onSuccess: (savedQuiz?: QuizItem) => void;
 }
 
 function toDateTimeLocal(isoString?: string): string {
@@ -159,47 +161,56 @@ function QuizFormDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Reset or initialize on open
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (open) {
-      setCourseId(initialValues.courseId || '');
-      setTitle(initialValues.title || '');
-      setDescription(initialValues.description || '');
-      setDurationMinutes(initialValues.durationMinutes || 15);
-      setStartsAt(toDateTimeLocal(initialValues.startsAt));
-      setEndsAt(toDateTimeLocal(initialValues.endsAt));
-      setIsPublished(initialValues.isPublished ?? true);
-      setAllowReview(initialValues.allowReview ?? true);
-      setAllowResume(initialValues.allowResume ?? true);
-      setUploadingExcel(false);
-      setExcelErrors([]);
+  // Reset or initialize on open and sync whenever initialValues updates
+  React.useEffect(() => {
+    if (!open) return;
+
+    setCourseId(initialValues.courseId || '');
+    setTitle(initialValues.title || '');
+    setDescription(initialValues.description || '');
+    setDurationMinutes(initialValues.durationMinutes || 15);
+    setStartsAt(toDateTimeLocal(initialValues.startsAt));
+    setEndsAt(toDateTimeLocal(initialValues.endsAt));
+    setIsPublished(initialValues.isPublished ?? true);
+    setAllowReview(initialValues.allowReview ?? true);
+    setAllowResume(initialValues.allowResume ?? true);
+    setUploadingExcel(false);
+    setExcelErrors([]);
+    setError('');
+
+    if (initialValues.questions && initialValues.questions.length > 0) {
       setQuestions(
-        initialValues.questions && initialValues.questions.length > 0
-          ? initialValues.questions.map((q) => ({
-              ...q,
-              options:
-                Array.isArray(q.options) && q.options.length > 0
-                  ? q.options
-                  : q.type === 'true_false'
-                    ? [isAr ? 'صح' : 'True', isAr ? 'خطأ' : 'False']
-                    : ['', '', '', ''],
-            }))
-          : [
-              {
-                id: 'q1',
-                text: '',
-                type: 'mcq',
-                options: ['', '', '', ''],
-                correctOptionIndex: 0,
-                points: 1,
-              },
-            ],
+        initialValues.questions.map((q, idx) => ({
+          id: q.id || `q_${idx + 1}_${Date.now()}`,
+          text: q.text || '',
+          type: (q.type as 'mcq' | 'true_false') || 'mcq',
+          options:
+            Array.isArray(q.options) && q.options.length > 0
+              ? q.options
+              : q.type === 'true_false'
+                ? [isAr ? 'صواب' : 'True', isAr ? 'خطأ' : 'False']
+                : ['', '', '', ''],
+          correctOptionIndex:
+            typeof q.correctOptionIndex === 'number'
+              ? q.correctOptionIndex
+              : 0,
+          points: typeof q.points === 'number' ? q.points : 1,
+          explanation: q.explanation || '',
+        })),
       );
-      setError('');
+    } else {
+      setQuestions([
+        {
+          id: 'q1',
+          text: '',
+          type: 'mcq',
+          options: ['', '', '', ''],
+          correctOptionIndex: 0,
+          points: 1,
+        },
+      ]);
     }
-  }
+  }, [open, initialValues, isAr]);
 
   const handleDownloadTemplate = async (format: 'xlsx' | 'csv' = 'xlsx') => {
     try {
@@ -363,15 +374,16 @@ function QuizFormDialog({
         questions,
       };
 
+      let savedResult: QuizItem | undefined = undefined;
       if (mode === 'add') {
-        await createQuiz(payload);
+        savedResult = await createQuiz(payload);
         toast.success(isAr ? 'تم إنشاء الاختبار بنجاح' : 'Quiz created successfully');
       } else if (initialValues._id) {
-        await updateQuiz(initialValues._id, payload);
+        savedResult = await updateQuiz(initialValues._id, payload);
         toast.success(isAr ? 'تم تحديث الاختبار بنجاح' : 'Quiz updated successfully');
       }
 
-      onSuccess();
+      onSuccess(savedResult);
       onOpenChange(false);
     } catch (err) {
       setError(getApiErrorMessage(err, isAr ? 'حدث خطأ أثناء الحفظ' : 'Failed to save quiz'));
@@ -775,7 +787,7 @@ function QuizFormDialog({
                         {qIndex + 1}
                       </span>
                       <Select
-                        value={q.type}
+                        value={q.type || 'mcq'}
                         onValueChange={(val: string) => {
                           const qType = val as 'mcq' | 'true_false';
                           const newOptions =
@@ -806,7 +818,7 @@ function QuizFormDialog({
                           type="number"
                           min={0.5}
                           step={0.5}
-                          value={q.points}
+                          value={q.points ?? 1}
                           onChange={(e) =>
                             handleQuestionChange(qIndex, {
                               points: Number(e.target.value) || 1,
@@ -831,7 +843,7 @@ function QuizFormDialog({
                   <Input
                     type="text"
                     required
-                    value={q.text}
+                    value={q.text || ''}
                     onChange={(e) =>
                       handleQuestionChange(qIndex, { text: e.target.value })
                     }
@@ -859,14 +871,14 @@ function QuizFormDialog({
                               checked={q.correctOptionIndex === optIndex}
                               onChange={() =>
                                 handleQuestionChange(qIndex, {
-                                  correctOptionIndex: optIndex,
+                                   correctOptionIndex: optIndex,
                                 })
                               }
                               className="h-4 w-4 text-primary focus:ring-primary cursor-pointer"
                             />
                             <Input
                               type="text"
-                              value={opt}
+                              value={opt || ''}
                               onChange={(e) =>
                                 handleOptionChange(qIndex, optIndex, e.target.value)
                               }
@@ -1452,6 +1464,35 @@ function AdminQuizzesContent() {
   const [submissionsQuiz, setSubmissionsQuiz] = useState<QuizItem | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [quizToDelete, setQuizToDelete] = useState<QuizItem | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewQuiz, setPreviewQuiz] = useState<QuizItem | null>(null);
+  const [, setLoadingQuizId] = useState<string | null>(null);
+
+  const handleOpenEdit = async (quiz: QuizItem) => {
+    try {
+      setLoadingQuizId(quiz._id);
+      const full = await getQuiz(quiz._id);
+      setSelectedQuiz(full);
+    } catch {
+      setSelectedQuiz(quiz);
+    } finally {
+      setLoadingQuizId(null);
+      setIsEditOpen(true);
+    }
+  };
+
+  const handleOpenPreview = async (quiz: QuizItem) => {
+    try {
+      setLoadingQuizId(quiz._id);
+      const full = await getQuiz(quiz._id);
+      setPreviewQuiz(full);
+    } catch {
+      setPreviewQuiz(quiz);
+    } finally {
+      setLoadingQuizId(null);
+      setIsPreviewOpen(true);
+    }
+  };
 
   // Fetch quizzes
   const quizzesQuery = useQuery({
@@ -1551,7 +1592,13 @@ function AdminQuizzesContent() {
       header: isAr ? 'عنوان الاختبار' : 'Quiz Title',
       render: (quiz) => (
         <TableCell className="p-4 text-start">
-          <p className="font-bold text-foreground text-sm">{quiz.title}</p>
+          <button
+            type="button"
+            onClick={() => handleOpenPreview(quiz)}
+            className="text-start font-bold text-foreground text-sm hover:text-primary hover:underline transition-colors cursor-pointer block"
+          >
+            {quiz.title}
+          </button>
           {quiz.description && (
             <p className="text-xs text-muted-foreground line-clamp-1">{quiz.description}</p>
           )}
@@ -1669,6 +1716,13 @@ function AdminQuizzesContent() {
                 align="end"
                 className="z-50 min-w-48 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95"
               >
+                <DropdownMenu.Item
+                  onClick={() => handleOpenPreview(quiz)}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'معاينة الاختبار' : 'Preview Quiz'}</span>
+                </DropdownMenu.Item>
                 {canViewSubmissions && (
                   <>
                     <DropdownMenu.Item
@@ -1697,10 +1751,7 @@ function AdminQuizzesContent() {
                 {canWrite && (
                   <>
                     <DropdownMenu.Item
-                      onClick={() => {
-                        setSelectedQuiz(quiz);
-                        setIsEditOpen(true);
-                      }}
+                      onClick={() => handleOpenEdit(quiz)}
                       className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
                     >
                       <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1819,8 +1870,27 @@ function AdminQuizzesContent() {
         courses={coursesList}
         coursesLoading={coursesQuery.isLoading}
         isAr={isAr}
-        onSuccess={() => {
+        onSuccess={(savedQuiz) => {
           void queryClient.invalidateQueries({ queryKey: ['admin-quizzes'] });
+          if (savedQuiz) {
+            handleOpenPreview(savedQuiz);
+          }
+        }}
+      />
+
+      {/* Quiz Preview Modal */}
+      <QuizPreviewModal
+        quiz={previewQuiz}
+        open={isPreviewOpen}
+        onOpenChange={(open) => {
+          setIsPreviewOpen(open);
+          if (!open) setPreviewQuiz(null);
+        }}
+        isAr={isAr}
+        canEdit={canWrite}
+        onEdit={(quiz) => {
+          setIsPreviewOpen(false);
+          handleOpenEdit(quiz);
         }}
       />
 

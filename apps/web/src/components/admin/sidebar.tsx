@@ -107,18 +107,18 @@ export default function AdminSidebar() {
       icon: <MessageSquareWarning className="h-5 w-5" />,
       permission: PERMISSIONS.COMPLAINTS_READ,
     },
+    {
+      key: "lectureSchedules",
+      href: `/${locale}/admin/schedules`,
+      icon: <CalendarDays className="h-5 w-5" />,
+      permission: PERMISSIONS.COURSE_SCHEDULES_READ,
+    },
     ...(user?.role === "admin"
       ? [
           {
             key: "staff",
             href: `/${locale}/admin/staff`,
             icon: <UserCog className="h-5 w-5" />,
-            adminOnly: true,
-          },
-          {
-            key: "lectureSchedules",
-            href: `/${locale}/admin/schedules`,
-            icon: <CalendarDays className="h-5 w-5" />,
             adminOnly: true,
           },
           {

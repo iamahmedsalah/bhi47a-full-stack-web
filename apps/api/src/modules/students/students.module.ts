@@ -31,6 +31,7 @@ import {
 } from '../registrations/schemas/student-academic-profile.schema';
 import { StudentQueryService } from './services/student-query.service';
 import { StudentsExportController } from './controllers/students-export.controller';
+import { StudentsTuitionController } from './controllers/students-tuition.controller';
 
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 
@@ -51,7 +52,11 @@ import { Course, CourseSchema } from '../courses/schemas/course.schema';
     UsersModule,
     EmailsModule,
   ],
-  controllers: [StudentsController, StudentsExportController],
+  controllers: [
+    StudentsController,
+    StudentsExportController,
+    StudentsTuitionController,
+  ],
   providers: [StudentsService, StudentQueryService],
   exports: [StudentsService, StudentQueryService],
 })

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -29,6 +30,7 @@ import {
   StudentProfileDocument,
 } from '../students/schemas/student-profile.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import * as ExcelJS from 'exceljs';
 
 export interface CourseSyllabusFile {
   fieldname: string;
@@ -415,7 +417,18 @@ export class CoursesService {
     };
   }
 
-  async downloadSyllabus(courseId: string, res: any) {
+  async downloadSyllabus(courseId: string, res: any, caller?: any) {
+    if (caller && caller.role === 'student') {
+      const studentProfile = await this.studentProfileModel
+        .findOne({ userId: caller._id })
+        .lean();
+      if (studentProfile?.isBlocked) {
+        throw new ForbiddenException(
+          'عفواً، لا يمكنك تحميل منهج المقرر الدراسي نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة إدارة المعهد.',
+        );
+      }
+    }
+
     const course = await this.courseModel
       .findById(courseId)
       .select('+syllabusPdfData')
@@ -649,5 +662,482 @@ export class CoursesService {
     course.coverImageUrl = undefined;
     await course.save();
     return { message: 'تم إزالة صورة غلاف المقرر بنجاح' };
+  }
+
+  /**
+   * Generate downloadable Excel template for course student enrollment matching institute format.
+   */
+  async generateEnrollmentTemplate(
+    format: 'xlsx' | 'csv' = 'xlsx',
+  ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    if (format === 'csv') {
+      const csvHeaders = [
+        'كود الطالب',
+        'الفرقة',
+        'الحجب',
+        'اسم الطالب (اختياري)',
+      ];
+      const sampleRows = [
+        '260402,الفرقة الثانية,مفعل,عبدالرحمن صابر علي محمود وحيده',
+        '260104,الفرقة الثانية,مفعل,فارس ابراهيم نصر ابراهيم عبدالوهاب المالح',
+        '260464,الفرقة الثانية,محجوب,مصطفى ايهاب العوضي عريب محمد',
+        '260791,الفرقة الثانية,مفعل,ملك محمد رضا عبدالسلام عثمان',
+        '261556,الفرقة الثانية,محجوب,خلود نشأت رمضان عبدالعزيز علي',
+        '260646,الفرقة الثانية,مفعل,مصطفى عصمت حسن صديق احمد',
+      ];
+      const csvContent =
+        '\uFEFF' + [csvHeaders.join(','), ...sampleRows].join('\n');
+      return {
+        buffer: Buffer.from(csvContent, 'utf-8'),
+        contentType: 'text/csv; charset=utf-8',
+        filename: 'course-students-enrollment-template.csv',
+      };
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BH47A Student Portal';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('تسجيل الطلاب بالمقرر', {
+      views: [{ rightToLeft: true }],
+    });
+
+    sheet.columns = [
+      { header: 'كود الطالب', key: 'student_code', width: 20 },
+      { header: 'الفرقة', key: 'level', width: 22 },
+      { header: 'الحجب', key: 'status', width: 18 },
+      { header: 'اسم الطالب (اختياري)', key: 'student_name', width: 38 },
+    ];
+
+    // Style header row
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' }, // Dark Teal
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Sample data rows matching institute format
+    const sampleRows = [
+      {
+        student_code: '260402',
+        level: 'الفرقة الثانية',
+        status: 'مفعل',
+        student_name: 'عبدالرحمن صابر علي محمود وحيده',
+      },
+      {
+        student_code: '260104',
+        level: 'الفرقة الثانية',
+        status: 'مفعل',
+        student_name: 'فارس ابراهيم نصر ابراهيم عبدالوهاب المالح',
+      },
+      {
+        student_code: '260464',
+        level: 'الفرقة الثانية',
+        status: 'محجوب',
+        student_name: 'مصطفى ايهاب العوضي عريب محمد',
+      },
+      {
+        student_code: '260791',
+        level: 'الفرقة الثانية',
+        status: 'مفعل',
+        student_name: 'ملك محمد رضا عبدالسلام عثمان',
+      },
+      {
+        student_code: '261556',
+        level: 'الفرقة الثانية',
+        status: 'محجوب',
+        student_name: 'خلود نشأت رمضان عبدالعزيز علي',
+      },
+      {
+        student_code: '260646',
+        level: 'الفرقة الثانية',
+        status: 'مفعل',
+        student_name: 'مصطفى عصمت حسن صديق احمد',
+      },
+    ];
+
+    sampleRows.forEach((row) => {
+      const addedRow = sheet.addRow(row);
+      addedRow.height = 24;
+      addedRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      addedRow.font = { name: 'Segoe UI', size: 10 };
+    });
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return {
+      buffer: Buffer.from(uint8Array),
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: 'course-students-enrollment-template.xlsx',
+    };
+  }
+
+  /**
+   * Bulk enroll students into a single course from uploaded Excel sheet.
+   */
+  async enrollStudentsFromExcel(
+    courseId: string,
+    buffer: Buffer,
+    originalname: string,
+    options: {
+      academicYear?: string;
+      semester?: string;
+      skipBlocked?: boolean;
+    } = {},
+  ): Promise<{
+    courseId: string;
+    courseCode: string;
+    courseName: string;
+    totalRows: number;
+    enrolledCount: number;
+    alreadyEnrolledCount: number;
+    skippedBlockedCount: number;
+    errorCount: number;
+    errors: string[];
+  }> {
+    const course = await this.findOne(courseId);
+    const academicYear = options.academicYear || '2026-2027';
+    const semester =
+      (options.semester as 'first' | 'second' | 'summer') || 'first';
+    const skipBlocked = options.skipBlocked === true;
+
+    const rawRows = await this.parseEnrollmentWorkbookRows(
+      buffer,
+      originalname,
+    );
+    if (rawRows.length === 0) {
+      throw new BadRequestException(
+        'الملف فارغ أو لا يحتوي على صفوف بيانات صالحة',
+      );
+    }
+
+    // Preload student profiles and users
+    const [allProfiles, allStudentUsers] = await Promise.all([
+      this.studentProfileModel.find({}).lean(),
+      this.userModel.find({ role: 'student' }).lean(),
+    ]);
+
+    const profileByCode = new Map<string, any>();
+    allProfiles.forEach((p) => {
+      if (p.studentCode) {
+        profileByCode.set(String(p.studentCode).trim().toLowerCase(), p);
+      }
+    });
+
+    const userByCode = new Map<string, any>();
+    allStudentUsers.forEach((u) => {
+      if ((u as any).code) {
+        userByCode.set(
+          String((u as any).code)
+            .trim()
+            .toLowerCase(),
+          u,
+        );
+      }
+      if (u.username) {
+        userByCode.set(String(u.username).trim().toLowerCase(), u);
+      }
+    });
+
+    let enrolledCount = 0;
+    let alreadyEnrolledCount = 0;
+    let skippedBlockedCount = 0;
+    const errors: string[] = [];
+
+    const courseCodeUpper = course.code.toUpperCase();
+    const courseCreditHours = course.creditHours || 3;
+
+    for (let index = 0; index < rawRows.length; index++) {
+      const row = rawRows[index];
+      const rowNum = index + 2;
+
+      const rawCode = this.extractFieldValue(row, [
+        'كود الطالب',
+        'كود_الطالب',
+        'كود',
+        'student_code',
+        'studentcode',
+        'code',
+      ]);
+
+      const rawLevel = this.extractFieldValue(row, [
+        'الفرقة',
+        'فرقة',
+        'level',
+        'السنة',
+        'الصف',
+      ]);
+
+      const rawBlock = this.extractFieldValue(row, [
+        'الحجب',
+        'حجب',
+        'الحالة',
+        'status',
+        'block',
+        'حالة المصروفات',
+        'المصروفات',
+      ]);
+
+      const rawName = this.extractFieldValue(row, [
+        'اسم الطالب',
+        'اسم_الطالب',
+        'الاسم',
+        'student_name',
+        'name',
+      ]);
+
+      if (!rawCode) {
+        errors.push(`السطر ${rowNum}: لم يتم العثور على كود الطالب في الصف`);
+        continue;
+      }
+
+      const cleanCode = rawCode.trim().toLowerCase();
+      const profile = profileByCode.get(cleanCode);
+      const studentUser = userByCode.get(cleanCode);
+
+      const studentUserId = profile?.userId || studentUser?._id;
+
+      if (!studentUserId) {
+        errors.push(
+          `السطر ${rowNum}: لم يتم العثور على طالب مسجل بالكود "${rawCode}" (${rawName || ''})`,
+        );
+        continue;
+      }
+
+      // Sync level & block/tuition status if profile exists
+      let isStudentBlocked = profile?.isBlocked || false;
+      const profileUpdates: Record<string, any> = {};
+
+      if (rawBlock) {
+        const isMarkedBlocked =
+          rawBlock.includes('محجوب') ||
+          rawBlock.toLowerCase() === 'blocked' ||
+          rawBlock.toLowerCase() === 'unpaid';
+        const isMarkedActive =
+          rawBlock.includes('مفعل') ||
+          rawBlock.toLowerCase() === 'active' ||
+          rawBlock.toLowerCase() === 'paid';
+
+        if (isMarkedBlocked) {
+          isStudentBlocked = true;
+          profileUpdates.isBlocked = true;
+          profileUpdates.tuitionFeesStatus = 'unpaid';
+          profileUpdates.blockReason = 'عدم سداد المصروفات الدراسية';
+          profileUpdates.blockedAt = new Date();
+        } else if (isMarkedActive) {
+          isStudentBlocked = false;
+          profileUpdates.isBlocked = false;
+          profileUpdates.tuitionFeesStatus = 'paid';
+          profileUpdates.unblockedAt = new Date();
+        }
+      }
+
+      if (rawLevel) {
+        let normalizedLevel: string | undefined;
+        if (
+          rawLevel.includes('أولى') ||
+          rawLevel.includes('اولى') ||
+          rawLevel === '1'
+        ) {
+          normalizedLevel = '1';
+        } else if (
+          rawLevel.includes('ثاني') ||
+          rawLevel.includes('ثانيه') ||
+          rawLevel === '2'
+        ) {
+          normalizedLevel = '2';
+        } else if (
+          rawLevel.includes('ثالث') ||
+          rawLevel.includes('ثالثه') ||
+          rawLevel === '3'
+        ) {
+          normalizedLevel = '3';
+        } else if (
+          rawLevel.includes('رابع') ||
+          rawLevel.includes('رابعه') ||
+          rawLevel === '4'
+        ) {
+          normalizedLevel = '4';
+        } else if (['1', '2', '3', '4'].includes(rawLevel.trim())) {
+          normalizedLevel = rawLevel.trim();
+        }
+
+        if (normalizedLevel && profile?.level !== normalizedLevel) {
+          profileUpdates.level = normalizedLevel;
+        }
+      }
+
+      if (profile?._id && Object.keys(profileUpdates).length > 0) {
+        await this.studentProfileModel.updateOne(
+          { _id: profile._id },
+          { $set: profileUpdates },
+        );
+      }
+
+      // Check blocked status if skipBlocked enabled
+      if (skipBlocked && isStudentBlocked) {
+        skippedBlockedCount++;
+        continue;
+      }
+
+      const studentUserObjId = new Types.ObjectId(studentUserId);
+
+      // Check existing registration for this academicYear and semester
+      const existingReg = await this.courseRegistrationModel.findOne({
+        studentId: studentUserObjId,
+        academicYear,
+        semester,
+      });
+
+      if (existingReg) {
+        const existingCourses = (existingReg.courses || []).map((c) =>
+          c.toUpperCase(),
+        );
+
+        if (existingCourses.includes(courseCodeUpper)) {
+          alreadyEnrolledCount++;
+        } else {
+          existingReg.courses.push(courseCodeUpper);
+          existingReg.status = 'approved';
+          existingReg.approvedAt = new Date();
+          existingReg.totalCreditHours =
+            (existingReg.totalCreditHours || 0) + courseCreditHours;
+          await existingReg.save();
+          enrolledCount++;
+        }
+      } else {
+        await this.courseRegistrationModel.create({
+          studentId: studentUserObjId,
+          courses: [courseCodeUpper],
+          academicYear,
+          semester,
+          totalCreditHours: courseCreditHours,
+          source: 'system',
+          status: 'approved',
+          approvedAt: new Date(),
+        });
+        enrolledCount++;
+      }
+    }
+
+    return {
+      courseId: course._id.toString(),
+      courseCode: course.code,
+      courseName: course.name,
+      totalRows: rawRows.length,
+      enrolledCount,
+      alreadyEnrolledCount,
+      skippedBlockedCount,
+      errorCount: errors.length,
+      errors: errors.slice(0, 20),
+    };
+  }
+
+  private cleanFieldValue(val: any): string {
+    if (val === null || val === undefined) return '';
+    return String(val).trim();
+  }
+
+  private extractFieldValue(
+    row: Record<string, any>,
+    possibleKeys: string[],
+  ): string {
+    for (const key of possibleKeys) {
+      const cleanKey = key.toLowerCase().replace(/[\s_\-()]/g, '');
+      for (const [rowKey, rowValue] of Object.entries(row)) {
+        const cleanRowKey = rowKey.toLowerCase().replace(/[\s_\-()]/g, '');
+        if (cleanRowKey === cleanKey || cleanRowKey.includes(cleanKey)) {
+          if (rowValue !== undefined && rowValue !== null) {
+            return this.cleanFieldValue(rowValue);
+          }
+        }
+      }
+    }
+    return '';
+  }
+
+  private async parseEnrollmentWorkbookRows(
+    buffer: Buffer,
+    originalname: string,
+  ): Promise<Record<string, any>[]> {
+    const isCsv = originalname.toLowerCase().endsWith('.csv');
+
+    if (isCsv) {
+      const text = buffer.toString('utf-8');
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      if (lines.length <= 1) return [];
+
+      const headers = lines[0].split(/[,;\t]/).map((h) =>
+        this.cleanFieldValue(h)
+          .replace(/^["']|["']$/g, '')
+          .toLowerCase(),
+      );
+
+      const rows: Record<string, any>[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i]
+          .split(/[,;\t]/)
+          .map((p) => this.cleanFieldValue(p).replace(/^["']|["']$/g, ''));
+        if (parts.some((p) => p.length > 0)) {
+          const rowData: Record<string, any> = {};
+          headers.forEach((h, idx) => {
+            if (h) rowData[h] = parts[idx] ?? '';
+          });
+          rows.push(rowData);
+        }
+      }
+      return rows;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount <= 1) return [];
+
+    const rows: Record<string, any>[] = [];
+    let headers: string[] = [];
+
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) {
+        const values = row.values as any[];
+        headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
+          this.cleanFieldValue(v).toLowerCase(),
+        );
+        return;
+      }
+
+      const values = row.values as any[];
+      if (!Array.isArray(values)) return;
+
+      const rowData: Record<string, any> = {};
+      let hasData = false;
+      headers.forEach((h, idx) => {
+        if (!h) return;
+        const cell = values[idx + 1];
+        if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+          hasData = true;
+          rowData[h] = typeof cell === 'object' && cell.text ? cell.text : cell;
+        }
+      });
+
+      if (hasData) {
+        rows.push(rowData);
+      }
+    });
+
+    return rows;
   }
 }

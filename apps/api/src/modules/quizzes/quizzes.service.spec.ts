@@ -70,7 +70,11 @@ describe('QuizzesService Unit Tests', () => {
     mockSubmissionModel.create = jest.fn();
     mockSubmissionModel.aggregate = jest.fn();
     mockRegistrationModel.find = jest.fn();
-    mockStudentProfileModel.findOne = jest.fn();
+    mockStudentProfileModel.findOne = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      }),
+    });
 
     service = new QuizzesService(
       mockQuizModel,

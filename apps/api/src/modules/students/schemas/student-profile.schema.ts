@@ -75,6 +75,25 @@ export class StudentProfile {
 
   @Prop({ trim: true })
   examBuilding?: string;
+
+  @Prop({ type: Boolean, default: false })
+  isBlocked!: boolean;
+
+  @Prop({
+    type: String,
+    enum: ['paid', 'unpaid', 'exempt'],
+    default: 'paid',
+  })
+  tuitionFeesStatus!: 'paid' | 'unpaid' | 'exempt';
+
+  @Prop({ trim: true, default: 'عدم سداد المصروفات الدراسية' })
+  blockReason?: string;
+
+  @Prop()
+  blockedAt?: Date;
+
+  @Prop()
+  unblockedAt?: Date;
 }
 
 export const StudentProfileSchema =
@@ -93,6 +112,8 @@ StudentProfileSchema.index({ enrollmentStatus: 1, level: 1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, department: 1, level: 1 });
 StudentProfileSchema.index({ level: 1, studentCode: 1 });
 StudentProfileSchema.index({ fullName: 1, studentCode: 1 });
+StudentProfileSchema.index({ isBlocked: 1, tuitionFeesStatus: 1, level: 1 });
+StudentProfileSchema.index({ isBlocked: 1, studentCode: 1 });
 
 // Weighted Text Search Index
 StudentProfileSchema.index(

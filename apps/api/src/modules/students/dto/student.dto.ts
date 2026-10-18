@@ -338,6 +338,18 @@ export class SearchStudentQuery {
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by blocked status' })
+  @IsOptional()
+  isBlocked?: string | boolean;
+
+  @ApiPropertyOptional({
+    enum: ['paid', 'unpaid', 'exempt'],
+    description: 'Filter by tuition payment status',
+  })
+  @IsOptional()
+  @IsString()
+  tuitionFeesStatus?: string;
+
   @ApiPropertyOptional({ enum: ['studentCode', 'createdAt'] })
   @IsOptional()
   @IsString()

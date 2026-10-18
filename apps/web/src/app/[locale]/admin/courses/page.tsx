@@ -39,6 +39,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { TableActionButton } from '@/components/ui/table-action-button';
+import { CourseStudentEnrollmentDialog } from '@/features/courses/components/course-student-enrollment-dialog';
 
 // shadcn
 import { Button } from '@/components/ui/button';
@@ -950,6 +951,8 @@ function CoursesPageContent() {
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
+  const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -1368,6 +1371,19 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
+                {(canWriteCourses || isDoctor) && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      setEnrollmentCourseId(course._id);
+                      setIsEnrollmentDialogOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-teal-500/10 hover:text-teal-600 transition-colors"
+                  >
+                    <UserCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                    <span>{locale === 'ar' ? 'تسجيل الطلاب في المقرر (Excel)' : 'Enroll Students in Course (Excel)'}</span>
+                  </DropdownMenu.Item>
+                )}
+
                 {canCreateQuiz && (
                   <DropdownMenu.Item
                     onClick={() => {
@@ -1431,6 +1447,19 @@ function CoursesPageContent() {
           <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
             <UploadCloud className="h-4 w-4" />
             {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
+          </Button>
+        )}
+        {canWriteCourses && !isDoctor && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEnrollmentCourseId(null);
+              setIsEnrollmentDialogOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-squircle border-teal-500/30 text-teal-700 hover:bg-teal-500/10 dark:text-teal-300"
+          >
+            <UserCheck className="h-4 w-4" />
+            <span>{locale === 'ar' ? 'تسجيل طلاب بمقرر (Excel)' : 'Enroll Students (Excel)'}</span>
           </Button>
         )}
         <Button variant="outline" onClick={exportCourses} disabled={isExporting}>
@@ -1705,6 +1734,24 @@ function CoursesPageContent() {
         onConfirm={() => {
           setIsBulkDeleteOpen(false);
           void handleBulkDelete(selectedKeys);
+        }}
+      />
+
+      {/* Bulk Student Enrollment in Course Dialog */}
+      <CourseStudentEnrollmentDialog
+        open={isEnrollmentDialogOpen}
+        onOpenChange={setIsEnrollmentDialogOpen}
+        courses={courses.map((c) => ({
+          _id: c._id,
+          code: c.code,
+          name: c.name,
+          nameAr: c.nameAr,
+          level: c.level,
+        }))}
+        selectedCourseId={enrollmentCourseId}
+        locale={locale}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: ['courses'] });
         }}
       />
     </div>

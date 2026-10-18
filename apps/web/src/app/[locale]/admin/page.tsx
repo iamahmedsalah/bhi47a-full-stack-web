@@ -888,6 +888,164 @@ export default function AdminDashboard() {
               })}
             </div>
           )}
+
+          {/* DOCTOR / STAFF WEEKLY SCHEDULE & ROOM TIMETABLE */}
+          <div className="mt-6 space-y-4 rounded-2xl border border-primary/20 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-squircle border border-teal-500/30 bg-teal-500/10 text-teal-400">
+                  <CalendarDays className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">
+                    {isAr ? 'جدول المحاضرات والسكاشن والقاعات الخاصة بك' : 'Your Lecture, Section & Hall Timetable'}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {isAr
+                      ? 'مواعيد المحاضرات الأسبوعية وأماكن القاعات والمدرجات المسندة إليك'
+                      : 'Weekly lecture and section timings with allocated hall/room numbers'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Day Filter */}
+              <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setDoctorScheduleDayFilter('all')}
+                  className={`rounded-squircle px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                    doctorScheduleDayFilter === 'all'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {isAr ? 'جميع الأيام' : 'All Days'}
+                </button>
+                {(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'] as const).map((day) => {
+                  const dayNamesAr: Record<string, string> = {
+                    saturday: 'السبت',
+                    sunday: 'الأحد',
+                    monday: 'الاثنين',
+                    tuesday: 'الثلاثاء',
+                    wednesday: 'الأربعاء',
+                    thursday: 'الخميس',
+                  };
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setDoctorScheduleDayFilter(day)}
+                      className={`rounded-squircle px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                        doctorScheduleDayFilter === day
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {isAr ? dayNamesAr[day] : day.slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {myScheduleQuery.isLoading ? (
+              <div className="flex min-h-32 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : filteredDoctorSchedules.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
+                {isAr
+                  ? 'لا توجد محاضرات أو سكاشن مسجلة لك في هذا اليوم.'
+                  : 'No lectures or sections scheduled for your account on this day.'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border/70">
+                <table className="w-full text-start text-xs">
+                  <thead className="bg-secondary/40 text-muted-foreground font-semibold">
+                    <tr className="border-b border-border/70">
+                      <th className="px-4 py-3 text-start">{isAr ? 'المقرر الدراسي' : 'Course'}</th>
+                      <th className="px-4 py-3 text-center">{isAr ? 'النوع' : 'Type'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'اليوم والتوقيت' : 'Day & Time'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'المكان / القاعة' : 'Hall / Location'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'الفرقة / المجموعة' : 'Level & Group'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'ملاحظات' : 'Notes'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60 bg-card/60">
+                    {filteredDoctorSchedules.map((slot: any) => {
+                      const dayArMap: Record<string, string> = {
+                        saturday: 'السبت',
+                        sunday: 'الأحد',
+                        monday: 'الاثنين',
+                        tuesday: 'الثلاثاء',
+                        wednesday: 'الأربعاء',
+                        thursday: 'الخميس',
+                      };
+                      return (
+                        <tr key={slot._id} className="hover:bg-secondary/20 transition-colors">
+                          <td className="px-4 py-3 font-medium text-foreground">
+                            <div className="font-mono text-[11px] text-primary font-bold">
+                              {slot.courseCode}
+                            </div>
+                            <div className="text-sm">
+                              {isAr ? slot.courseNameAr || slot.courseName : slot.courseName}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-block rounded-squircle border px-2 py-0.5 text-[11px] font-bold ${
+                                slot.type === 'lecture'
+                                  ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                                  : slot.type === 'lab'
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                              }`}
+                            >
+                              {slot.type === 'lecture'
+                                ? isAr ? 'محاضرة' : 'Lecture'
+                                : slot.type === 'lab'
+                                  ? isAr ? 'معمل' : 'Lab'
+                                  : isAr ? 'سكشن' : 'Section'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-foreground">
+                            <div className="font-semibold">
+                              {isAr ? dayArMap[slot.dayOfWeek] || slot.dayOfWeek : slot.dayOfWeek}
+                            </div>
+                            <div className="flex items-center gap-1 text-muted-foreground text-[11px]">
+                              <Clock className="h-3 w-3 text-primary/70" />
+                              <span>{slot.startTime} - {slot.endTime}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                              <MapPin className="h-3.5 w-3.5" />
+                              <span>{slot.location}</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-foreground">
+                            <div>
+                              {isAr ? `الفرقة ${slot.level}` : `Level ${slot.level}`}
+                              {slot.department && ` · ${slot.department}`}
+                            </div>
+                            {(slot.group || slot.section) && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {slot.group && `${slot.group} `}
+                                {slot.section && `(${slot.section})`}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground text-[11px]">
+                            {slot.notes || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

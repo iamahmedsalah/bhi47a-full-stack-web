@@ -156,6 +156,22 @@ export class StudentQueryService {
       filter.enrollmentStatus = effectiveStatus;
     }
 
+    if (
+      query.isBlocked !== undefined &&
+      query.isBlocked !== 'all' &&
+      query.isBlocked !== ''
+    ) {
+      filter.isBlocked = query.isBlocked === true || query.isBlocked === 'true';
+    }
+
+    if (
+      query.tuitionFeesStatus &&
+      query.tuitionFeesStatus !== 'all' &&
+      query.tuitionFeesStatus !== ''
+    ) {
+      filter.tuitionFeesStatus = query.tuitionFeesStatus;
+    }
+
     return filter;
   }
 

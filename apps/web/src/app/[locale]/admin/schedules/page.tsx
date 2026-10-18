@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
@@ -17,12 +17,30 @@ import {
   UserCheck,
   GraduationCap,
   Loader2,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  AlertCircle,
+  CheckCircle2,
+  X,
+  FileText,
+  User,
+  Building2,
+  Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import api, { getApiErrorMessage } from '@/lib/api';
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -35,6 +53,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { EmptyState } from '@/components/ui/feedback';
+import { downloadFileBlob, EXCEL_MIME_TYPE, CSV_MIME_TYPE } from '@/lib/export-utils';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 export interface CourseScheduleItem {
@@ -103,20 +122,55 @@ const TYPE_LABELS: Record<string, { ar: string; en: string; color: string }> = {
   },
 };
 
+const LOCATION_SUGGESTIONS = [
+  'مدرج 1',
+  'مدرج 2',
+  'مدرج 3',
+  'قاعة 101',
+  'قاعة 102',
+  'قاعة 203',
+  'قاعة 204',
+  'معمل حاسب 1',
+  'معمل حاسب 2',
+  'معمل حاسب 3',
+];
+
 function SchedulesManagementContent() {
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+  const isDoctor = isStaff && (user as any)?.staffType === 'doctor';
 
+  // Filters State
   const [search, setSearch] = useState('');
+  const [selectedStaff, setSelectedStaff] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
 
+  // Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CourseScheduleItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<CourseScheduleItem | null>(null);
+
+  // Excel Bulk Import Modal State
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResult, setUploadResult] = useState<{
+    totalRows: number;
+    insertedCount: number;
+    updatedCount: number;
+    errorCount: number;
+    errors: string[];
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
   const [formCourseId, setFormCourseId] = useState('');
@@ -136,10 +190,18 @@ function SchedulesManagementContent() {
 
   // 1. Fetch schedules
   const schedulesQuery = useQuery({
-    queryKey: ['admin-schedules', selectedDay, selectedType, selectedLevel, search],
+    queryKey: [
+      'admin-schedules',
+      selectedStaff,
+      selectedDay,
+      selectedType,
+      selectedLevel,
+      search,
+    ],
     queryFn: async () => {
       const res = await api.get<CourseScheduleItem[]>('/admin/course-schedules', {
         params: {
+          staffId: selectedStaff !== 'all' ? selectedStaff : undefined,
           dayOfWeek: selectedDay !== 'all' ? selectedDay : undefined,
           type: selectedType !== 'all' ? selectedType : undefined,
           level: selectedLevel !== 'all' ? selectedLevel : undefined,
@@ -154,7 +216,7 @@ function SchedulesManagementContent() {
   const coursesQuery = useQuery({
     queryKey: ['admin-courses-dropdown'],
     queryFn: async () => {
-      const res = await api.get<any>('/admin/courses', { params: { limit: 100 } });
+      const res = await api.get<any>('/admin/courses', { params: { limit: 200 } });
       return res.data?.items ?? [];
     },
   });
@@ -163,8 +225,19 @@ function SchedulesManagementContent() {
   const staffQuery = useQuery({
     queryKey: ['admin-staff-dropdown'],
     queryFn: async () => {
-      const res = await api.get<any>('/admin/staff', { params: { limit: 100 } });
-      return res.data?.items ?? [];
+      try {
+        const res = await api.get<any>('/admin/staff', {
+          params: { page: 1, limit: 300, status: 'all' },
+        });
+        const payload = (res as any)?.data ?? res;
+        return Array.isArray(payload?.items)
+          ? payload.items
+          : Array.isArray(payload)
+            ? payload
+            : [];
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -172,10 +245,23 @@ function SchedulesManagementContent() {
   const courses = coursesQuery.data ?? [];
   const staffMembers = staffQuery.data ?? [];
 
+  // Filter staff to doctors & teaching assistants
+  const teachingStaff = useMemo(() => {
+    const filtered = staffMembers.filter(
+      (s: any) =>
+        s.staffType === 'doctor' ||
+        s.staffType === 'teaching_assistant' ||
+        s.staffType === 'assistant' ||
+        !s.staffType ||
+        s.role === 'staff',
+    );
+    return filtered.length > 0 ? filtered : staffMembers;
+  }, [staffMembers]);
+
   const handleOpenAdd = () => {
     setEditingItem(null);
     setFormCourseId(courses[0]?._id || '');
-    setFormStaffId(staffMembers[0]?._id || '');
+    setFormStaffId(teachingStaff[0]?._id || '');
     setFormType('lecture');
     setFormDay('saturday');
     setFormStartTime('09:00 AM');
@@ -286,6 +372,98 @@ function SchedulesManagementContent() {
     }
   };
 
+  // Download Excel Template
+  const handleDownloadTemplate = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    try {
+      setIsDownloadingTemplate(true);
+      const res = await api.get('/admin/course-schedules/template', {
+        params: { format },
+        responseType: 'blob',
+      });
+      await downloadFileBlob(
+        res,
+        format === 'csv'
+          ? 'lecture-schedules-template.csv'
+          : 'lecture-schedules-template.xlsx',
+        format === 'csv' ? CSV_MIME_TYPE : EXCEL_MIME_TYPE,
+      );
+      toast.success(
+        isAr ? 'تم تحميل نموذج الجداول بنجاح' : 'Schedule template downloaded',
+      );
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل تحميل النموذج' : 'Failed to download template',
+        ),
+      );
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
+  };
+
+  // Bulk Upload File
+  const handleUploadFile = async () => {
+    if (!selectedFile) {
+      toast.error(
+        isAr ? 'يرجى اختيار ملف Excel أولاً' : 'Please select an Excel file first',
+      );
+      return;
+    }
+    setIsUploading(true);
+    setUploadProgress(15);
+    setUploadResult(null);
+
+    const progressTimer = setInterval(() => {
+      setUploadProgress((prev) => (prev < 85 ? prev + 15 : prev));
+    }, 350);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const res = await api.post<{
+        totalRows: number;
+        insertedCount: number;
+        updatedCount: number;
+        errorCount: number;
+        errors: string[];
+      }>('/admin/course-schedules/upload-excel', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      clearInterval(progressTimer);
+      setUploadProgress(100);
+
+      setUploadResult(res.data);
+      if (res.data.insertedCount > 0 || res.data.updatedCount > 0) {
+        toast.success(
+          isAr
+            ? `تم استيراد ${res.data.insertedCount} موعد جديد وتحديث ${res.data.updatedCount} موعد بنجاح!`
+            : `Imported ${res.data.insertedCount} new slots and updated ${res.data.updatedCount} slots successfully!`,
+        );
+        void queryClient.invalidateQueries({ queryKey: ['admin-schedules'] });
+      } else if (res.data.errorCount > 0) {
+        toast.error(
+          isAr
+            ? 'حدثت أخطاء أثناء استيراد بعض الصفوف'
+            : 'Errors occurred during import',
+        );
+      }
+    } catch (err) {
+      clearInterval(progressTimer);
+      setUploadProgress(0);
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل استيراد الملف' : 'Failed to import schedule file',
+        ),
+      );
+    } finally {
+      clearInterval(progressTimer);
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6 p-2 md:p-6" dir={isAr ? 'rtl' : 'ltr'}>
       {/* Title Banner */}
@@ -298,18 +476,85 @@ function SchedulesManagementContent() {
         }
         icon={<CalendarDays className="h-5 w-5 text-primary" />}
       >
-        <Button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 rounded-squircle bg-primary font-semibold text-white shadow-lg shadow-primary/20 hover:bg-primary-hover active:scale-[0.98]"
-        >
-          <Plus className="h-4 w-4" />
-          <span>{isAr ? 'إضافة موعد / قاعة' : 'Add Schedule Slot'}</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {isAdmin && (
+            <Button
+              type="button"
+              onClick={() => {
+                setUploadResult(null);
+                setSelectedFile(null);
+                setIsUploadModalOpen(true);
+              }}
+              variant="outline"
+              className="flex items-center gap-2 rounded-squircle border-primary/30 bg-primary/10 text-primary font-semibold hover:bg-primary/20 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+              <span>{isAr ? 'رفع شيت Excel' : 'Import Excel'}</span>
+            </Button>
+          )}
+
+          {isAdmin && (
+            <Button
+              onClick={handleOpenAdd}
+              className="flex items-center gap-2 rounded-squircle bg-primary font-semibold text-white shadow-lg shadow-primary/20 hover:bg-primary-hover active:scale-[0.98] cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{isAr ? 'إضافة موعد / قاعة' : 'Add Schedule Slot'}</span>
+            </Button>
+          )}
+        </div>
       </PageTitleBanner>
 
-      {/* Filter Bar */}
+      {/* Doctor / Staff Info Notice */}
+      {isStaff && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-500/30 bg-teal-500/10 p-4 text-xs backdrop-blur-md">
+          <div className="flex items-center gap-2.5 text-teal-300">
+            <GraduationCap className="h-5 w-5 shrink-0 text-teal-400" />
+            <div>
+              <span className="font-bold">
+                {isAr
+                  ? `أهلاً دكتور/محاضر ${user?.name}`
+                  : `Welcome Instructor ${user?.name}`}
+              </span>
+              <p className="text-muted-foreground text-[11px] mt-0.5">
+                {isAr
+                  ? 'يمكنك تصفية الجدول لعرض مواعيدك وقاعاتك فقط أو استعراض جدول المعهد بالكامل.'
+                  : 'You can filter the timetable to see only your lectures and rooms, or browse all institute schedules.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedStaff(user?._id || 'all')}
+              className={`rounded-squircle px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                selectedStaff === user?._id
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'border border-primary/30 bg-background/60 text-primary hover:bg-primary/10'
+              }`}
+            >
+              {isAr ? 'مواعيدي فقط' : 'My Slots Only'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStaff('all')}
+              className={`rounded-squircle px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+                selectedStaff === 'all'
+                  ? 'bg-secondary text-foreground font-semibold'
+                  : 'border border-border/60 bg-background/40 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isAr ? 'الجدول العام' : 'All Schedules'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Bar with Radix Selects */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card/60 p-4 backdrop-blur-md">
-        <div className="relative min-w-[220px] flex-1">
+        {/* Search */}
+        <div className="relative min-w-[200px] flex-1">
           <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -319,134 +564,195 @@ function SchedulesManagementContent() {
                 ? 'بحث باسم المادة، الدكتور، القاعة، السكشن...'
                 : 'Search course, staff, hall, section...'
             }
-            className="ps-9 rounded-squircle"
+            className="ps-9 rounded-squircle text-xs"
           />
         </div>
 
+        {/* Doctor / Staff Filter Dropdown */}
+        <div className="min-w-[190px]">
+          <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+            <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue
+                placeholder={isAr ? 'جميع الدكاترة والمعيدين' : 'All Staff / Doctors'}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                {isAr ? 'جميع أعضاء هيئة التدريس' : 'All Doctors & Staff'}
+              </SelectItem>
+              {teachingStaff.map((s: any) => (
+                <SelectItem key={s._id} value={s._id}>
+                  {s.name}{' '}
+                  <span className="text-muted-foreground text-[10px]">
+                    ({s.staffType === 'teaching_assistant' ? (isAr ? 'معيد' : 'TA') : (isAr ? 'دكتور' : 'Doctor')})
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Day Filter */}
-        <select
-          value={selectedDay}
-          onChange={(e) => setSelectedDay(e.target.value)}
-          className="h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-        >
-          <option value="all">{isAr ? 'جميع الأيام' : 'All Days'}</option>
-          {Object.entries(isAr ? DAY_LABELS_AR : DAY_LABELS_EN).map(([val, label]) => (
-            <option key={val} value={val}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <div className="w-[140px]">
+          <Select value={selectedDay} onValueChange={setSelectedDay}>
+            <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue placeholder={isAr ? 'جميع الأيام' : 'All Days'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{isAr ? 'جميع الأيام' : 'All Days'}</SelectItem>
+              {Object.entries(isAr ? DAY_LABELS_AR : DAY_LABELS_EN).map(
+                ([val, label]) => (
+                  <SelectItem key={val} value={val}>
+                    {label}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Type Filter */}
-        <select
-          value={selectedType}
-          onChange={(e) => setSelectedType(e.target.value)}
-          className="h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-        >
-          <option value="all">{isAr ? 'جميع الأنواع' : 'All Types'}</option>
-          <option value="lecture">{isAr ? 'محاضرة' : 'Lecture'}</option>
-          <option value="section">{isAr ? 'سكشن' : 'Section'}</option>
-          <option value="lab">{isAr ? 'معمل' : 'Lab'}</option>
-        </select>
+        <div className="w-[130px]">
+          <Select value={selectedType} onValueChange={setSelectedType}>
+            <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue placeholder={isAr ? 'جميع الأنواع' : 'All Types'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{isAr ? 'جميع الأنواع' : 'All Types'}</SelectItem>
+              <SelectItem value="lecture">{isAr ? 'محاضرة' : 'Lecture'}</SelectItem>
+              <SelectItem value="section">{isAr ? 'سكشن' : 'Section'}</SelectItem>
+              <SelectItem value="lab">{isAr ? 'معمل' : 'Lab'}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Level Filter */}
-        <select
-          value={selectedLevel}
-          onChange={(e) => setSelectedLevel(e.target.value)}
-          className="h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-        >
-          <option value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</option>
-          <option value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</option>
-          <option value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</option>
-          <option value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</option>
-          <option value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</option>
-        </select>
+        <div className="w-[130px]">
+          <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+            <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue placeholder={isAr ? 'جميع الفرق' : 'All Levels'} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
+              <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
+              <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
+              <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
+              <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Schedules Table */}
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md shadow-[var(--shadow-card)]">
+      <div className="rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md shadow-sm overflow-hidden">
         {schedulesQuery.isLoading ? (
-          <div className="p-12">
-            <PageSkeletonLoader />
+          <div className="flex min-h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : schedules.length === 0 ? (
-          <div className="p-8">
-            <EmptyState
-              title={isAr ? 'لا توجد مواعيد مسجلة' : 'No schedule slots recorded'}
-              description={
-                isAr
-                  ? 'اضغط على زر "إضافة موعد / قاعة" لتسجيل وتوزيع المحاضرات والسكاشن والقاعات.'
-                  : 'Click "Add Schedule Slot" to register lecture and section room allocations.'
-              }
-            />
-          </div>
+          <EmptyState
+            title={isAr ? 'لا توجد مواعيد محاضرات مسجلة' : 'No schedules found'}
+            description={
+              isAr
+                ? 'لم يتم العثور على أي مواعيد مطابقة لخيارات البحث المحددة. يمكنك إضافة موعد جديد أو رفع شيت Excel.'
+                : 'No schedules match the selected filters. Add a new slot or upload an Excel sheet.'
+            }
+            action={
+              isAdmin ? (
+                <Button
+                  onClick={handleOpenAdd}
+                  className="rounded-squircle bg-primary text-xs font-semibold text-white"
+                >
+                  <Plus className="h-4 w-4 me-1.5" />
+                  <span>{isAr ? 'إضافة موعد الآن' : 'Add Slot Now'}</span>
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-start text-xs">
-              <thead className="border-b border-border/80 bg-background/70 text-muted-foreground uppercase text-[11px] font-semibold tracking-wider">
+              <thead className="bg-secondary/40 text-muted-foreground font-semibold border-b border-border/80">
                 <tr>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'المقرر الدراسي' : 'Course'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'القائم بالتدريس' : 'Staff / Doctor'}</th>
-                  <th className="px-4 py-3.5 text-center">{isAr ? 'النوع' : 'Type'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'اليوم والميعاد' : 'Day & Time'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'مكان المحاضرة / القاعة' : 'Hall / Location'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'الفرقة والشعبة' : 'Level & Group'}</th>
-                  <th className="px-4 py-3.5 text-center">{isAr ? 'إجراءات' : 'Actions'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'المقرر الدراسي' : 'COURSE'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'القائم بالتدريس / دكتور' : 'STAFF / DOCTOR'}</th>
+                  <th className="px-4 py-3.5 text-center">{isAr ? 'النوع' : 'TYPE'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'اليوم والتوقيت' : 'DAY & TIME'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'المكان / القاعة' : 'HALL / LOCATION'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'الفرقة والمجموعة' : 'LEVEL & GROUP'}</th>
+                  <th className="px-4 py-3.5 text-center">{isAr ? 'الإجراءات' : 'ACTIONS'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60 font-medium">
+              <tbody className="divide-y divide-border/60">
                 {schedules.map((item) => {
                   const typeMeta = TYPE_LABELS[item.type] || TYPE_LABELS.lecture;
+                  const dayName = isAr
+                    ? DAY_LABELS_AR[item.dayOfWeek] || item.dayOfWeek
+                    : DAY_LABELS_EN[item.dayOfWeek] || item.dayOfWeek;
+
+                  const isMySlot = user?._id === item.staffId;
+
                   return (
                     <tr
                       key={item._id}
-                      className="hover:bg-primary/5 transition-colors group"
+                      className={`hover:bg-secondary/30 transition-colors ${
+                        isMySlot ? 'bg-primary/5' : ''
+                      }`}
                     >
                       {/* Course */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-squircle bg-primary/10 text-primary shrink-0 border border-primary/20">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
                             <BookOpen className="h-4 w-4" />
                           </div>
                           <div>
-                            <div className="font-bold text-foreground">
-                              {isAr ? (item.courseNameAr || item.courseName) : item.courseName}
+                            <div className="font-bold text-foreground text-sm">
+                              {isAr ? item.courseNameAr || item.courseName : item.courseName}
                             </div>
-                            <div className="font-mono text-[11px] text-primary">
+                            <div className="font-mono text-[11px] text-primary font-medium">
                               {item.courseCode}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Staff */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5 text-foreground font-semibold">
-                          <UserCheck className="h-3.5 w-3.5 text-emerald-400" />
-                          <span>{item.staffName}</span>
+                      {/* Staff / Doctor */}
+                      <td className="px-4 py-3.5 text-foreground font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-primary/80 shrink-0" />
+                          <span className="font-semibold">{item.staffName}</span>
+                          {isMySlot && (
+                            <span className="rounded-full bg-teal-500/20 px-1.5 py-0.2 text-[9px] font-bold text-teal-400">
+                              {isAr ? 'أنت' : 'You'}
+                            </span>
+                          )}
                         </div>
-                        <span className="text-[10px] text-muted-foreground">
-                          {item.staffType === 'doctor'
-                            ? (isAr ? 'أستاذ مقرر (دكتور)' : 'Doctor')
-                            : (isAr ? 'معيد / مدرس مساعد' : 'Instructor')}
-                        </span>
+                        <div className="text-[11px] text-muted-foreground ms-5">
+                          {item.staffType === 'doctor' ? (
+                            <span className="text-teal-400">
+                              {isAr ? 'أستاذ مقرر (دكتور)' : 'Doctor'}
+                            </span>
+                          ) : (
+                            <span className="text-purple-400">
+                              {isAr ? 'معيد' : 'Teaching Assistant'}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Type Badge */}
                       <td className="px-4 py-3.5 text-center">
                         <span
-                          className={`inline-flex items-center rounded-squircle border px-2.5 py-0.5 text-[11px] font-bold ${typeMeta.color}`}
+                          className={`inline-block rounded-squircle border px-2.5 py-1 text-xs font-bold ${typeMeta.color}`}
                         >
                           {isAr ? typeMeta.ar : typeMeta.en}
                         </span>
                       </td>
 
                       {/* Day & Time */}
-                      <td className="px-4 py-3.5">
-                        <div className="font-semibold text-foreground">
-                          {isAr ? DAY_LABELS_AR[item.dayOfWeek] : DAY_LABELS_EN[item.dayOfWeek]}
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
+                      <td className="px-4 py-3.5 text-foreground">
+                        <div className="font-semibold text-xs">{dayName}</div>
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 font-mono">
                           <Clock className="h-3 w-3 text-primary/70" />
                           <span>
                             {item.startTime} - {item.endTime}
@@ -483,41 +789,45 @@ function SchedulesManagementContent() {
 
                       {/* Actions (3-dots) */}
                       <td className="px-4 py-3.5 text-center">
-                        <DropdownMenu.Root dir={isAr ? 'rtl' : 'ltr'}>
-                          <DropdownMenu.Trigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 rounded-squircle text-muted-foreground hover:bg-secondary/60 hover:text-foreground cursor-pointer"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content
-                              align="end"
-                              className="z-50 min-w-40 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
-                            >
-                              <DropdownMenu.Item
-                                onClick={() => handleOpenEdit(item)}
-                                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                        {isAdmin ? (
+                          <DropdownMenu.Root dir={isAr ? 'rtl' : 'ltr'}>
+                            <DropdownMenu.Trigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 rounded-squircle text-muted-foreground hover:bg-secondary/60 hover:text-foreground cursor-pointer"
                               >
-                                <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span>{isAr ? 'تعديل الموعد' : 'Edit Slot'}</span>
-                              </DropdownMenu.Item>
-
-                              <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
-
-                              <DropdownMenu.Item
-                                onClick={() => setItemToDelete(item)}
-                                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Portal>
+                              <DropdownMenu.Content
+                                align="end"
+                                className="z-50 min-w-40 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span>{isAr ? 'حذف الموعد' : 'Delete Slot'}</span>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
+                                <DropdownMenu.Item
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span>{isAr ? 'تعديل الموعد' : 'Edit Slot'}</span>
+                                </DropdownMenu.Item>
+
+                                <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+
+                                <DropdownMenu.Item
+                                  onClick={() => setItemToDelete(item)}
+                                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>{isAr ? 'حذف الموعد' : 'Delete Slot'}</span>
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                          </DropdownMenu.Root>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -528,68 +838,101 @@ function SchedulesManagementContent() {
         )}
       </div>
 
-      {/* Add / Edit Dialog */}
+      {/* Add / Edit Dialog with Radix Selects */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-xl rounded-2xl border-border bg-card p-6 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+        <DialogContent
+          className="max-w-xl rounded-2xl border-border bg-card p-6 shadow-2xl"
+          dir={isAr ? 'rtl' : 'ltr'}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
               <CalendarDays className="h-5 w-5 text-primary" />
               <span>
                 {editingItem
-                  ? (isAr ? 'تعديل موعد محاضرة / سكشن' : 'Edit Schedule Slot')
-                  : (isAr ? 'إضافة موعد محاضرة / سكشن وقاعة' : 'Add Lecture / Section Slot')}
+                  ? isAr
+                    ? 'تعديل موعد محاضرة / سكشن'
+                    : 'Edit Schedule Slot'
+                  : isAr
+                    ? 'إضافة موعد محاضرة / سكشن وقاعة'
+                    : 'Add Lecture / Section Slot'}
               </span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {isAr
-                ? 'حدد المادة وعضو هيئة التدريس والقاعة والتوقيت الأسبوعي'
-                : 'Select course, teaching staff, room location, and weekly timetable'}
+                ? 'حدد المقرر الدراسي وعضو هيئة التدريس والقاعة والتوقيت الأسبوعي بدقة'
+                : 'Select course, teaching staff, hall location, and weekly timetable'}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-4 pt-2">
-            {/* Row 1: Course & Staff */}
+            {/* Row 1: Course & Doctor / Staff Member Dropdowns */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Course Dropdown */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'المقرر الدراسي *' : 'Course *'}
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'المقرر الدراسي *' : 'Course *'}</span>
                 </label>
-                <select
-                  value={formCourseId}
-                  onChange={(e) => setFormCourseId(e.target.value)}
-                  className="w-full h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
-                  required
-                >
-                  <option value="" disabled>
-                    {isAr ? '-- اختر المادة --' : '-- Select Course --'}
-                  </option>
-                  {courses.map((c: any) => (
-                    <option key={c._id} value={c._id}>
-                      {c.code} - {isAr ? (c.nameAr || c.name) : c.name}
-                    </option>
-                  ))}
-                </select>
+                <Select value={formCourseId} onValueChange={setFormCourseId}>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue
+                      placeholder={isAr ? 'اختر المقرر الدراسي' : 'Select Course'}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courses.map((c: any) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        <span className="font-mono font-bold text-primary me-1.5">
+                          {c.code}
+                        </span>
+                        <span>{isAr ? c.nameAr || c.name : c.name}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
+              {/* Staff / Doctor Member Dropdown */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'القائم بالتدريس (دكتور/معيد) *' : 'Staff Member *'}
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <GraduationCap className="h-3.5 w-3.5 text-teal-400" />
+                  <span>{isAr ? 'القائم بالتدريس (دكتور/معيد) *' : 'Staff Member *'}</span>
                 </label>
-                <select
-                  value={formStaffId}
-                  onChange={(e) => setFormStaffId(e.target.value)}
-                  className="w-full h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
-                  required
-                >
-                  <option value="" disabled>
-                    {isAr ? '-- اختر عضو هيئة التدريس --' : '-- Select Staff Member --'}
-                  </option>
-                  {staffMembers.map((s: any) => (
-                    <option key={s._id} value={s._id}>
-                      {s.name} ({s.staffType === 'doctor' ? (isAr ? 'دكتور' : 'Doctor') : (isAr ? 'معيد' : 'TA')})
-                    </option>
-                  ))}
-                </select>
+                <Select value={formStaffId} onValueChange={setFormStaffId}>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue
+                      placeholder={
+                        isAr
+                          ? 'اختر الدكتور أو المعيد'
+                          : 'Select Doctor or TA'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teachingStaff.map((s: any) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="font-medium">{s.name}</span>
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
+                              s.staffType === 'teaching_assistant'
+                                ? 'border border-purple-500/30 bg-purple-500/10 text-purple-300'
+                                : 'border border-teal-500/30 bg-teal-500/10 text-teal-300'
+                            }`}
+                          >
+                            {s.staffType === 'teaching_assistant'
+                              ? isAr
+                                ? 'معيد'
+                                : 'TA'
+                              : isAr
+                                ? 'دكتور'
+                                : 'Doctor'}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -597,58 +940,67 @@ function SchedulesManagementContent() {
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'النوع' : 'Slot Type'}
+                  {isAr ? 'نوع الموعد' : 'Slot Type'}
                 </label>
-                <select
+                <Select
                   value={formType}
-                  onChange={(e) => setFormType(e.target.value as any)}
-                  className="w-full h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
+                  onValueChange={(val) => setFormType(val as any)}
                 >
-                  <option value="lecture">{isAr ? 'محاضرة' : 'Lecture'}</option>
-                  <option value="section">{isAr ? 'سكشن' : 'Section'}</option>
-                  <option value="lab">{isAr ? 'معمل' : 'Lab'}</option>
-                </select>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lecture">{isAr ? 'محاضرة' : 'Lecture'}</SelectItem>
+                    <SelectItem value="section">{isAr ? 'سكشن' : 'Section'}</SelectItem>
+                    <SelectItem value="lab">{isAr ? 'معمل' : 'Lab'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
                   {isAr ? 'اليوم' : 'Day of Week'}
                 </label>
-                <select
-                  value={formDay}
-                  onChange={(e) => setFormDay(e.target.value)}
-                  className="w-full h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  {Object.entries(isAr ? DAY_LABELS_AR : DAY_LABELS_EN).map(([val, label]) => (
-                    <option key={val} value={val}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <Select value={formDay} onValueChange={setFormDay}>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(isAr ? DAY_LABELS_AR : DAY_LABELS_EN).map(
+                      ([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
                   {isAr ? 'الفرقة' : 'Level'}
                 </label>
-                <select
-                  value={formLevel}
-                  onChange={(e) => setFormLevel(e.target.value)}
-                  className="w-full h-9 rounded-squircle border border-border bg-background px-3 text-xs font-medium text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  <option value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</option>
-                  <option value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</option>
-                  <option value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</option>
-                  <option value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</option>
-                </select>
+                <Select value={formLevel} onValueChange={setFormLevel}>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
+                    <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
+                    <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
+                    <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             {/* Row 3: Start Time & End Time */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'وقت البدء *' : 'Start Time *'}
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'وقت البدء *' : 'Start Time *'}</span>
                 </label>
                 <Input
                   value={formStartTime}
@@ -660,8 +1012,9 @@ function SchedulesManagementContent() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'وقت الانتهاء *' : 'End Time *'}
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'وقت الانتهاء *' : 'End Time *'}</span>
                 </label>
                 <Input
                   value={formEndTime}
@@ -673,43 +1026,82 @@ function SchedulesManagementContent() {
               </div>
             </div>
 
-            {/* Row 4: Location / Hall Place */}
+            {/* Row 4: Location / Hall Place + Quick Presets */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5 text-primary" />
-                <span>{isAr ? 'مكان المحاضرة / القاعة / المدرج *' : 'Hall / Room Location *'}</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-primary" />
+                  <span>{isAr ? 'مكان المحاضرة / القاعة / المدرج *' : 'Hall / Room Location *'}</span>
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                  {isAr ? 'اختر أو اكتب اسم القاعة' : 'Choose or type room'}
+                </span>
+              </div>
               <Input
                 value={formLocation}
                 onChange={(e) => setFormLocation(e.target.value)}
-                placeholder={isAr ? 'مثال: مدرج 1، قاعة 204، معمل حاسب 2' : 'e.g. Auditorium 1, Hall 204, Computer Lab 2'}
+                placeholder={
+                  isAr
+                    ? 'مثال: مدرج 1، قاعة 204، معمل حاسب 2'
+                    : 'e.g. Auditorium 1, Hall 204, Computer Lab 2'
+                }
                 className="rounded-squircle text-xs"
                 required
               />
+              {/* Location Quick Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {LOCATION_SUGGESTIONS.map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => setFormLocation(loc)}
+                    className="rounded-md border border-border/60 bg-secondary/40 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    {loc}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Row 5: Group & Section */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Row 5: Group, Section & Department */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'المجموعة / الفرقة (اختياري)' : 'Group (Optional)'}
+                  {isAr ? 'القسم / التخصص' : 'Department'}
+                </label>
+                <Select value={formDepartment} onValueChange={setFormDepartment}>
+                  <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GENERAL">{isAr ? 'عام (GENERAL)' : 'GENERAL'}</SelectItem>
+                    <SelectItem value="BIS">{isAr ? 'نظم المعلومات (BIS)' : 'BIS'}</SelectItem>
+                    <SelectItem value="CS">{isAr ? 'علوم الحاسب (CS)' : 'CS'}</SelectItem>
+                    <SelectItem value="ACCOUNTING">{isAr ? 'محاسبة (Accounting)' : 'Accounting'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  {isAr ? 'المجموعة / الدفعة' : 'Group'}
                 </label>
                 <Input
                   value={formGroup}
                   onChange={(e) => setFormGroup(e.target.value)}
-                  placeholder={isAr ? 'مجموعة أ' : 'Group A'}
+                  placeholder={isAr ? 'Group A' : 'Group A'}
                   className="rounded-squircle text-xs"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'السكشن (اختياري)' : 'Section (Optional)'}
+                  {isAr ? 'السكشن' : 'Section'}
                 </label>
                 <Input
                   value={formSection}
                   onChange={(e) => setFormSection(e.target.value)}
-                  placeholder={isAr ? 'سكشن 1' : 'Section 1'}
+                  placeholder={isAr ? 'Section 1' : 'Section 1'}
                   className="rounded-squircle text-xs"
                 />
               </div>
@@ -719,25 +1111,234 @@ function SchedulesManagementContent() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5"
+                className="rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
               >
                 {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 <span>
                   {editingItem
-                    ? (isAr ? 'تحديث الموعد' : 'Update Slot')
-                    : (isAr ? 'حفظ وتثبيت الموعد' : 'Save Slot')}
+                    ? isAr
+                      ? 'تحديث الموعد'
+                      : 'Update Slot'
+                    : isAr
+                      ? 'حفظ وتثبيت الموعد'
+                      : 'Save Slot'}
                 </span>
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 onClick={() => setIsAddOpen(false)}
-                className="rounded-squircle text-xs"
+                className="rounded-squircle text-xs cursor-pointer"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Excel Bulk Import Modal */}
+      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+        <DialogContent
+          className="max-w-lg rounded-2xl border-border bg-card p-6 shadow-2xl"
+          dir={isAr ? 'rtl' : 'ltr'}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+              <span>
+                {isAr
+                  ? 'استيراد جدول المحاضرات والسكاشن (Excel)'
+                  : 'Bulk Import Schedules (Excel)'}
+              </span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {isAr
+                ? 'ارفع ملف شيت Excel لتوزيع المحاضرات والسكاشن والقاعات دفعة واحدة وتحديث النظام بسرعة'
+                : 'Upload an Excel (.xlsx) file to allocate lectures, sections, and halls in bulk'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {/* Step 1: Download Template */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Download className="h-4 w-4 text-primary" />
+                  <span>
+                    {isAr
+                      ? 'الخطوة 1: تحميل نموذج Excel المعتمد'
+                      : 'Step 1: Download Official Excel Template'}
+                  </span>
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {isAr
+                  ? 'يحتوي النموذج على الأعمدة المطلوبة (كود المقرر، اسم الدكتور/المعيد، نوع الموعد، اليوم، التوقيت، القاعة، الفرقة) مع أمثلة استرشادية جاهزة.'
+                  : 'Includes all required columns (course code, doctor username, type, day, time, hall, level) with ready-to-use sample rows.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isDownloadingTemplate}
+                  onClick={() => handleDownloadTemplate('xlsx')}
+                  className="rounded-squircle text-xs border-primary/40 bg-background text-primary hover:bg-primary/10 gap-1.5 cursor-pointer"
+                >
+                  {isDownloadingTemplate ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" />
+                  )}
+                  <span>{isAr ? 'تحميل نموذج Excel (.xlsx)' : 'Download Excel (.xlsx)'}</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isDownloadingTemplate}
+                  onClick={() => handleDownloadTemplate('csv')}
+                  className="rounded-squircle text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <span>{isAr ? 'تحميل كملف CSV' : 'Download CSV'}</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Step 2: File Dropzone */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Upload className="h-4 w-4 text-primary" />
+                <span>
+                  {isAr
+                    ? 'الخطوة 2: اختيار ورفع ملف شيت المواعيد'
+                    : 'Step 2: Choose & Upload Schedule File'}
+                </span>
+              </label>
+
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-secondary/20 p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-secondary/40 transition-all"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setSelectedFile(file);
+                      setUploadResult(null);
+                    }
+                  }}
+                />
+                <FileSpreadsheet className="h-10 w-10 text-primary mb-2" />
+                {selectedFile ? (
+                  <div>
+                    <p className="font-bold text-foreground text-xs">{selectedFile.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {(selectedFile.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">
+                      {isAr
+                        ? 'انقر هنا لتحديد ملف Excel أو اسحبه إلى هذا المربع'
+                        : 'Click to select Excel file or drag & drop here'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {isAr ? 'يدعم ملفات XLSX, XLS, CSV حتى 10 ميجابايت' : 'Supports XLSX, XLS, CSV up to 10MB'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upload Progress Bar */}
+            {isUploading && (
+              <div className="space-y-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3 animate-in fade-in">
+                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    {isAr
+                      ? 'جاري استيراد ومعالجة جدول المحاضرات والسكاشن...'
+                      : 'Importing schedule timetable...'}
+                  </span>
+                  <span className="font-mono text-primary">{uploadProgress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="h-full bg-primary transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Upload Result Feedback */}
+            {uploadResult && (
+              <div
+                className={`rounded-xl border p-4 text-xs space-y-2 ${
+                  uploadResult.errorCount > 0 && uploadResult.insertedCount === 0 && uploadResult.updatedCount === 0
+                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold">
+                  {uploadResult.insertedCount > 0 || uploadResult.updatedCount > 0 ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-rose-400" />
+                  )}
+                  <span>
+                    {isAr
+                      ? `تمت معالجة ${uploadResult.totalRows} صف: ${uploadResult.insertedCount} جديد · ${uploadResult.updatedCount} محدث`
+                      : `Processed ${uploadResult.totalRows} rows: ${uploadResult.insertedCount} inserted · ${uploadResult.updatedCount} updated`}
+                  </span>
+                </div>
+
+                {uploadResult.errors.length > 0 && (
+                  <div className="mt-2 space-y-1 text-[11px] text-rose-300 border-t border-rose-500/20 pt-2">
+                    <p className="font-bold">
+                      {isAr ? 'تنبيهات وأخطاء في بعض الصفوف:' : 'Row warnings/errors:'}
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5 max-h-32 overflow-y-auto">
+                      {uploadResult.errors.map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4 gap-2 border-t border-border/80 pt-4 rtl:sm:justify-start">
+            <Button
+              type="button"
+              disabled={!selectedFile || isUploading}
+              onClick={handleUploadFile}
+              className="rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
+            >
+              {isUploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              <span>{isAr ? 'بدء استيراد الشيت' : 'Start Import'}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsUploadModalOpen(false)}
+              className="rounded-squircle text-xs cursor-pointer"
+            >
+              {isAr ? 'إغلاق' : 'Close'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

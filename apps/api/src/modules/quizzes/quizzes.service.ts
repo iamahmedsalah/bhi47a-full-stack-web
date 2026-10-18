@@ -226,7 +226,7 @@ export class QuizzesService {
       this.quizModel
         .find(filter)
         .select(
-          '_id title titleAr description courseId courseCode courseName creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume questions.id createdAt updatedAt',
+          '_id title titleAr description courseId courseCode courseName creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume questions createdAt updatedAt',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -615,13 +615,23 @@ export class QuizzesService {
   async getQuizForTaking(quizId: string, studentUserId: string) {
     const studentUserObjectId = new Types.ObjectId(studentUserId);
 
-    const [quiz, existing] = await Promise.all([
+    const [quiz, existing, profile] = await Promise.all([
       this.findOne(quizId),
       this.submissionModel.findOne({
         quizId: new Types.ObjectId(quizId),
         studentId: studentUserObjectId,
       }),
+      this.studentProfileModel
+        .findOne({ userId: studentUserObjectId })
+        .select('isBlocked')
+        .lean(),
     ]);
+
+    if (profile?.isBlocked) {
+      throw new ForbiddenException(
+        'عفواً، لا يمكنك الوصول للاختبار نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة شؤون الطلاب وإدارة المعهد.',
+      );
+    }
 
     if (!quiz.isPublished) {
       throw new ForbiddenException('هذا الاختبار غير متاح حالياً');
@@ -647,7 +657,22 @@ export class QuizzesService {
    * Start / resume quiz attempt with server-enforced countdown timer and anti-cheat session security.
    */
   async startQuizAttempt(quizId: string, studentUserId: string) {
-    const quiz = await this.findOne(quizId);
+    const studentUserObjectId = new Types.ObjectId(studentUserId);
+
+    const [quiz, profile] = await Promise.all([
+      this.findOne(quizId),
+      this.studentProfileModel
+        .findOne({ userId: studentUserObjectId })
+        .select('isBlocked')
+        .lean(),
+    ]);
+
+    if (profile?.isBlocked) {
+      throw new ForbiddenException(
+        'عفواً، لا يمكنك خوض الاختبار نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة شؤون الطلاب وإدارة المعهد.',
+      );
+    }
+
     if (!quiz.isPublished) {
       throw new ForbiddenException('هذا الاختبار غير متاح حالياً');
     }
@@ -659,8 +684,6 @@ export class QuizzesService {
     if (quiz.endsAt && new Date(quiz.endsAt).getTime() <= now) {
       throw new ForbiddenException('انتهى موعد تقديم الاختبار');
     }
-
-    const studentUserObjectId = new Types.ObjectId(studentUserId);
 
     // Check final submission
     const existingSubmission = await this.submissionModel.findOne({

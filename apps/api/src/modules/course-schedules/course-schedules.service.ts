@@ -12,6 +12,7 @@ import {
   UpdateCourseScheduleDto,
   QueryCourseScheduleDto,
 } from './dto/course-schedule.dto';
+import * as ExcelJS from 'exceljs';
 
 const DAY_ORDER: Record<string, number> = {
   saturday: 1,
@@ -211,5 +212,701 @@ export class CourseSchedulesService {
       throw new NotFoundException('الموعد غير موجود');
     }
     return { message: 'تم حذف موعد المحاضرة/السكشن بنجاح' };
+  }
+
+  /**
+   * Generate standardized Excel template for lecture, section, and lab schedules.
+   */
+  async generateTemplate(
+    format: 'xlsx' | 'csv' = 'xlsx',
+  ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    if (format === 'csv') {
+      const csvHeaders = [
+        'course_code',
+        'course_name',
+        'doctor_code_or_username',
+        'doctor_name',
+        'staff_type',
+        'type',
+        'day_of_week',
+        'start_time',
+        'end_time',
+        'location',
+        'level',
+        'department',
+        'group',
+        'section',
+        'notes',
+      ];
+      const sampleRow = [
+        'CS101',
+        'التفكير الابتكاري',
+        'dr.manar',
+        'د. منار شاهين',
+        'doctor',
+        'lecture',
+        'sunday',
+        '09:00 AM',
+        '11:00 AM',
+        'مدرج 1',
+        '1',
+        'GENERAL',
+        'Group A',
+        '',
+        'محاضرة أسبوعية',
+      ];
+      const csvContent =
+        '\uFEFF' + [csvHeaders.join(','), sampleRow.join(',')].join('\n');
+      return {
+        buffer: Buffer.from(csvContent, 'utf-8'),
+        contentType: 'text/csv; charset=utf-8',
+        filename: 'lecture-schedules-template.csv',
+      };
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BH47A Student Portal';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('جدول المحاضرات والسكاشن', {
+      views: [{ rightToLeft: true }],
+    });
+
+    sheet.columns = [
+      { header: 'كود المقرر (course_code)', key: 'course_code', width: 22 },
+      { header: 'اسم المقرر (course_name)', key: 'course_name', width: 26 },
+      {
+        header: 'كود أو يوزرنيم الدكتور/المعيد (doctor_username)',
+        key: 'doctor_username',
+        width: 30,
+      },
+      {
+        header: 'اسم الدكتور / المعيد (doctor_name)',
+        key: 'doctor_name',
+        width: 25,
+      },
+      {
+        header: 'الصفة (staff_type: doctor / teaching_assistant)',
+        key: 'staff_type',
+        width: 25,
+      },
+      {
+        header: 'نوع الموعد (type: lecture/section/lab)',
+        key: 'type',
+        width: 24,
+      },
+      {
+        header: 'اليوم (day_of_week: sunday..thursday)',
+        key: 'day_of_week',
+        width: 24,
+      },
+      {
+        header: 'وقت البدء (start_time e.g. 09:00 AM)',
+        key: 'start_time',
+        width: 22,
+      },
+      {
+        header: 'وقت الانتهاء (end_time e.g. 11:00 AM)',
+        key: 'end_time',
+        width: 22,
+      },
+      {
+        header: 'المكان / القاعة / المعمل (location)',
+        key: 'location',
+        width: 24,
+      },
+      { header: 'الفرقة (level: 1..4)', key: 'level', width: 16 },
+      {
+        header: 'القسم (department e.g. GENERAL/BIS)',
+        key: 'department',
+        width: 20,
+      },
+      { header: 'المجموعة / الدفعة (group)', key: 'group', width: 18 },
+      { header: 'السكشن (section)', key: 'section', width: 16 },
+      { header: 'ملاحظات (notes)', key: 'notes', width: 22 },
+    ];
+
+    // Style header row
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 32;
+    headerRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' }, // Dark Teal
+    };
+    headerRow.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
+
+    // Add realistic sample rows
+    const sampleRows = [
+      {
+        course_code: 'CS101',
+        course_name: 'التفكير الابتكاري',
+        doctor_username: 'dr.manar',
+        doctor_name: 'د. منار شاهين',
+        staff_type: 'doctor',
+        type: 'lecture',
+        day_of_week: 'sunday',
+        start_time: '09:00 AM',
+        end_time: '11:00 AM',
+        location: 'مدرج 1',
+        level: '1',
+        department: 'GENERAL',
+        group: 'Group A',
+        section: '',
+        notes: 'محاضرة أسبوعية عامة',
+      },
+      {
+        course_code: 'CS101',
+        course_name: 'التفكير الابتكاري',
+        doctor_username: 'ahmed.ta',
+        doctor_name: 'أ. أحمد حسن',
+        staff_type: 'teaching_assistant',
+        type: 'section',
+        day_of_week: 'monday',
+        start_time: '11:30 AM',
+        end_time: '01:00 PM',
+        location: 'قاعة 204',
+        level: '1',
+        department: 'GENERAL',
+        group: 'Group A',
+        section: 'Section 1',
+        notes: 'سكشن تطبيقي',
+      },
+      {
+        course_code: 'BIS201',
+        course_name: 'نظم المعلومات الإدارية',
+        doctor_username: 'dr.mohamed',
+        doctor_name: 'د. محمد علي',
+        staff_type: 'doctor',
+        type: 'lecture',
+        day_of_week: 'tuesday',
+        start_time: '10:00 AM',
+        end_time: '12:00 PM',
+        location: 'مدرج 2',
+        level: '2',
+        department: 'BIS',
+        group: 'Group 1',
+        section: '',
+        notes: 'محاضرة رئيسية',
+      },
+      {
+        course_code: 'BIS202',
+        course_name: 'قواعد البيانات والمعامل',
+        doctor_username: 'eng.sara',
+        doctor_name: 'م. سارة خليل',
+        staff_type: 'teaching_assistant',
+        type: 'lab',
+        day_of_week: 'wednesday',
+        start_time: '01:00 PM',
+        end_time: '03:00 PM',
+        location: 'معمل الحاسب 3',
+        level: '2',
+        department: 'BIS',
+        group: 'Group 1',
+        section: 'Lab 2',
+        notes: 'معمل تدريب عملي',
+      },
+    ];
+
+    sampleRows.forEach((row) => {
+      const addedRow = sheet.addRow(row);
+      addedRow.height = 24;
+      addedRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      addedRow.font = { name: 'Segoe UI', size: 10 };
+    });
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return {
+      buffer: Buffer.from(uint8Array),
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: 'lecture-schedules-template.xlsx',
+    };
+  }
+
+  /**
+   * Bulk import schedules from uploaded Excel or CSV workbook.
+   */
+  async importFromExcel(
+    buffer: Buffer,
+    originalname: string,
+  ): Promise<{
+    totalRows: number;
+    insertedCount: number;
+    updatedCount: number;
+    errorCount: number;
+    errors: string[];
+  }> {
+    const rawRows = await this.parseWorkbookRows(buffer, originalname);
+    if (rawRows.length === 0) {
+      return {
+        totalRows: 0,
+        insertedCount: 0,
+        updatedCount: 0,
+        errorCount: 1,
+        errors: ['الملف فارغ أو لا يحتوي على صفوف بيانات صالحة'],
+      };
+    }
+
+    // Preload courses & staff for fast memory matching
+    const [allCourses, allStaffUsers] = await Promise.all([
+      this.courseModel.find({}).lean(),
+      this.userModel.find({ role: { $in: ['staff', 'admin'] } }).lean(),
+    ]);
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+    const errors: string[] = [];
+
+    const DAY_MAP: Record<string, string> = {
+      saturday: 'saturday',
+      sunday: 'sunday',
+      monday: 'monday',
+      tuesday: 'tuesday',
+      wednesday: 'wednesday',
+      thursday: 'thursday',
+      السبت: 'saturday',
+      الأحد: 'sunday',
+      الاحد: 'sunday',
+      الاثنين: 'monday',
+      الإثنين: 'monday',
+      الثلاثاء: 'tuesday',
+      الأربعاء: 'wednesday',
+      الاربعاء: 'wednesday',
+      الخميس: 'thursday',
+    };
+
+    const TYPE_MAP: Record<string, 'lecture' | 'section' | 'lab'> = {
+      lecture: 'lecture',
+      section: 'section',
+      lab: 'lab',
+      محاضرة: 'lecture',
+      محاضره: 'lecture',
+      سكشن: 'section',
+      معمل: 'lab',
+      مختبر: 'lab',
+    };
+
+    const STAFF_TYPE_MAP: Record<string, 'doctor' | 'teaching_assistant'> = {
+      doctor: 'doctor',
+      dr: 'doctor',
+      teaching_assistant: 'teaching_assistant',
+      ta: 'teaching_assistant',
+      دكتور: 'doctor',
+      دكتورة: 'doctor',
+      استاذ: 'doctor',
+      أستاذ: 'doctor',
+      معيد: 'teaching_assistant',
+      معيدة: 'teaching_assistant',
+      'مدرس مساعد': 'teaching_assistant',
+      مهندس: 'teaching_assistant',
+      مهندسة: 'teaching_assistant',
+    };
+
+    for (let index = 0; index < rawRows.length; index++) {
+      const row = rawRows[index];
+      const rowNum = index + 2; // header is row 1
+
+      // 1. Resolve Course Code & Course
+      const rawCourseCode = this.extractFieldValue(row, [
+        'course_code',
+        'coursecode',
+        'code',
+        'كود المقرر',
+        'كود_المقرر',
+        'كود المادة',
+      ]);
+
+      const rawCourseName = this.extractFieldValue(row, [
+        'course_name',
+        'coursename',
+        'name',
+        'اسم المقرر',
+        'اسم المادة',
+      ]);
+
+      if (!rawCourseCode && !rawCourseName) {
+        errors.push(`السطر ${rowNum}: لم يتم تحديد كود المقرر أو اسمه`);
+        continue;
+      }
+
+      // Match course in preloaded list
+      let matchedCourse = allCourses.find(
+        (c) =>
+          rawCourseCode &&
+          c.code &&
+          c.code.trim().toLowerCase() === rawCourseCode.trim().toLowerCase(),
+      );
+
+      if (!matchedCourse && rawCourseName) {
+        matchedCourse = allCourses.find(
+          (c) =>
+            (c.name &&
+              c.name.trim().toLowerCase() ===
+                rawCourseName.trim().toLowerCase()) ||
+            (c.nameAr &&
+              c.nameAr.trim().toLowerCase() ===
+                rawCourseName.trim().toLowerCase()),
+        );
+      }
+
+      if (!matchedCourse) {
+        errors.push(
+          `السطر ${rowNum}: لم يتم العثور على المقرر بكود "${rawCourseCode || rawCourseName}" في قاعدة البيانات`,
+        );
+        continue;
+      }
+
+      // 2. Resolve Doctor / Staff Member
+      const rawStaffIdentifier = this.extractFieldValue(row, [
+        'doctor_username',
+        'doctor_code_or_username',
+        'staff_username',
+        'username',
+        'doctor_code',
+        'staff_code',
+        'كود الدكتور',
+        'يوزرنيم الدكتور',
+        'اسم مستخدم الدكتور',
+      ]);
+
+      const rawStaffName = this.extractFieldValue(row, [
+        'doctor_name',
+        'staff_name',
+        'name',
+        'اسم الدكتور',
+        'اسم المحاضر',
+        'اسم المعيد',
+        'القائم بالتدريس',
+      ]);
+
+      const rawStaffType = this.extractFieldValue(row, [
+        'staff_type',
+        'stafftype',
+        'role',
+        'الصفة',
+        'نوع المحاضر',
+      ]).toLowerCase();
+
+      let matchedStaff = allStaffUsers.find(
+        (s) =>
+          rawStaffIdentifier &&
+          ((s.username &&
+            s.username.trim().toLowerCase() ===
+              rawStaffIdentifier.trim().toLowerCase()) ||
+            (s.email &&
+              s.email.trim().toLowerCase() ===
+                rawStaffIdentifier.trim().toLowerCase()) ||
+            ((s as any).code &&
+              String((s as any).code)
+                .trim()
+                .toLowerCase() === rawStaffIdentifier.trim().toLowerCase())),
+      );
+
+      if (!matchedStaff && rawStaffName) {
+        matchedStaff = allStaffUsers.find(
+          (s) =>
+            (s.name &&
+              s.name
+                .trim()
+                .toLowerCase()
+                .includes(rawStaffName.trim().toLowerCase())) ||
+            ((s as any).nameAr &&
+              (s as any).nameAr
+                .trim()
+                .toLowerCase()
+                .includes(rawStaffName.trim().toLowerCase())),
+        );
+      }
+
+      // Fallback if no matching user found: use institute first staff/admin or assigned ID
+      const staffId = matchedStaff ? matchedStaff._id : allStaffUsers[0]?._id;
+
+      if (!staffId) {
+        errors.push(
+          `السطر ${rowNum}: لا يوجد أي عضو هيئة تدريس مسجل في النظام`,
+        );
+        continue;
+      }
+
+      const staffName =
+        rawStaffName ||
+        (matchedStaff as any)?.nameAr ||
+        matchedStaff?.name ||
+        'Staff Member';
+
+      const staffType =
+        STAFF_TYPE_MAP[rawStaffType] ||
+        (matchedStaff as any)?.staffType ||
+        'doctor';
+
+      // 3. Resolve Slot Type (lecture | section | lab)
+      const rawType = this.extractFieldValue(row, [
+        'type',
+        'slot_type',
+        'النوع',
+        'نوع الموعد',
+        'نوع المحاضرة',
+      ]).toLowerCase();
+
+      const type: 'lecture' | 'section' | 'lab' =
+        TYPE_MAP[rawType] ||
+        (rawType.includes('lab') || rawType.includes('معمل')
+          ? 'lab'
+          : rawType.includes('sec') || rawType.includes('سكشن')
+            ? 'section'
+            : 'lecture');
+
+      // 4. Resolve Day of Week
+      const rawDay = this.extractFieldValue(row, [
+        'day_of_week',
+        'day',
+        'اليوم',
+        'يوم المحاضرة',
+      ]).toLowerCase();
+
+      const normalizedDay = DAY_MAP[rawDay] as
+        | 'saturday'
+        | 'sunday'
+        | 'monday'
+        | 'tuesday'
+        | 'wednesday'
+        | 'thursday'
+        | undefined;
+
+      if (!normalizedDay) {
+        errors.push(
+          `السطر ${rowNum}: اليوم "${rawDay}" غير صالح. الأيام المقبولة: السبت، الأحد، الاثنين، الثلاثاء، الأربعاء، الخميس`,
+        );
+        continue;
+      }
+
+      // 5. Resolve Timings & Location
+      const startTime = this.extractFieldValue(row, [
+        'start_time',
+        'starttime',
+        'start',
+        'وقت البدء',
+        'وقت البداية',
+        'من الساعة',
+      ]);
+
+      const endTime = this.extractFieldValue(row, [
+        'end_time',
+        'endtime',
+        'end',
+        'وقت الانتهاء',
+        'وقت النهاية',
+        'إلى الساعة',
+      ]);
+
+      const location = this.extractFieldValue(row, [
+        'location',
+        'hall',
+        'room',
+        'place',
+        'المكان',
+        'القاعة',
+        'المدرج',
+        'المعمل',
+      ]);
+
+      if (!startTime || !endTime || !location) {
+        errors.push(
+          `السطر ${rowNum}: يلزم تحديد وقت البداية، وقت النهاية، واسم القاعة/المكان`,
+        );
+        continue;
+      }
+
+      // 6. Optional level, department, group, section, notes
+      const level =
+        this.extractFieldValue(row, ['level', 'year', 'الفرقة', 'السنة']) ||
+        String(matchedCourse.level ?? '1');
+
+      const department =
+        this.extractFieldValue(row, ['department', 'القسم', 'التخصص']) ||
+        matchedCourse.department ||
+        'GENERAL';
+
+      const semester =
+        this.extractFieldValue(row, ['semester', 'الفصل', 'الترم']) || 'first';
+
+      const group = this.extractFieldValue(row, [
+        'group',
+        'المجموعة',
+        'الدفعة',
+      ]);
+      const section = this.extractFieldValue(row, ['section', 'السكشن']);
+      const notes = this.extractFieldValue(row, ['notes', 'ملاحظات']);
+
+      // 7. Check for existing slot to update or create
+      const queryExisting: any = {
+        courseId: matchedCourse._id,
+        dayOfWeek: normalizedDay,
+        startTime,
+        location,
+      };
+      if (group) queryExisting.group = group;
+      if (section) queryExisting.section = section;
+
+      const existingSlot = await this.scheduleModel.findOne(queryExisting);
+
+      if (existingSlot) {
+        existingSlot.staffId = staffId;
+        existingSlot.staffName = staffName;
+        existingSlot.staffType = staffType;
+        existingSlot.type = type;
+        existingSlot.endTime = endTime;
+        existingSlot.level = level;
+        existingSlot.department = department;
+        existingSlot.semester = semester;
+        if (group) existingSlot.group = group;
+        if (section) existingSlot.section = section;
+        if (notes) existingSlot.notes = notes;
+        await existingSlot.save();
+        updatedCount++;
+      } else {
+        await this.scheduleModel.create({
+          courseId: matchedCourse._id,
+          courseCode: matchedCourse.code,
+          courseName: matchedCourse.name,
+          courseNameAr: matchedCourse.nameAr || matchedCourse.name,
+          staffId,
+          staffName,
+          staffType,
+          type,
+          dayOfWeek: normalizedDay,
+          startTime,
+          endTime,
+          location,
+          level,
+          semester,
+          department,
+          group: group || undefined,
+          section: section || undefined,
+          notes: notes || undefined,
+          isActive: true,
+        });
+        insertedCount++;
+      }
+    }
+
+    return {
+      totalRows: rawRows.length,
+      insertedCount,
+      updatedCount,
+      errorCount: errors.length,
+      errors: errors.slice(0, 15), // return top 15 errors to avoid huge responses
+    };
+  }
+
+  private cleanString(val: any): string {
+    if (val === null || val === undefined) return '';
+    return String(val).trim();
+  }
+
+  private extractFieldValue(
+    row: Record<string, any>,
+    possibleKeys: string[],
+  ): string {
+    for (const key of possibleKeys) {
+      const cleanKey = key.toLowerCase().replace(/[\s_\-()]/g, '');
+      for (const [rowKey, rowValue] of Object.entries(row)) {
+        const cleanRowKey = rowKey.toLowerCase().replace(/[\s_\-()]/g, '');
+        if (cleanRowKey === cleanKey || cleanRowKey.includes(cleanKey)) {
+          if (rowValue !== undefined && rowValue !== null) {
+            return this.cleanString(rowValue);
+          }
+        }
+      }
+    }
+    return '';
+  }
+
+  private async parseWorkbookRows(
+    buffer: Buffer,
+    originalname: string,
+  ): Promise<Record<string, any>[]> {
+    const isCsv = originalname.toLowerCase().endsWith('.csv');
+
+    if (isCsv) {
+      const text = buffer.toString('utf-8');
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      if (lines.length <= 1) return [];
+
+      const headers = lines[0].split(/[,;\t]/).map((h) =>
+        this.cleanString(h)
+          .replace(/^["']|["']$/g, '')
+          .toLowerCase(),
+      );
+
+      const rows: Record<string, any>[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i]
+          .split(/[,;\t]/)
+          .map((p) => this.cleanString(p).replace(/^["']|["']$/g, ''));
+        if (parts.some((p) => p.length > 0)) {
+          const rowData: Record<string, any> = {};
+          headers.forEach((h, idx) => {
+            if (h) rowData[h] = parts[idx] ?? '';
+          });
+          rows.push(rowData);
+        }
+      }
+      return rows;
+    }
+
+    // Excel parser
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount <= 1) return [];
+
+    const rows: Record<string, any>[] = [];
+    let headers: string[] = [];
+
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) {
+        const values = row.values as any[];
+        headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
+          this.cleanString(v).toLowerCase(),
+        );
+        return;
+      }
+
+      const values = row.values as any[];
+      if (!Array.isArray(values)) return;
+
+      const rowData: Record<string, any> = {};
+      let hasData = false;
+      headers.forEach((h, idx) => {
+        if (!h) return;
+        const cell = values[idx + 1];
+        if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+          hasData = true;
+          rowData[h] = typeof cell === 'object' && cell.text ? cell.text : cell;
+        }
+      });
+
+      if (hasData) {
+        rows.push(rowData);
+      }
+    });
+
+    return rows;
   }
 }

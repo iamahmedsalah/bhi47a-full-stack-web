@@ -69,6 +69,9 @@ interface StudentProfile {
   examFloor?: string;
   examBuilding?: string;
   academicWarnings?: number;
+  isBlocked?: boolean;
+  tuitionFeesStatus?: 'paid' | 'unpaid' | 'exempt';
+  blockReason?: string;
 }
 
 interface Eligibility {
@@ -274,6 +277,34 @@ export default function StudentDashboard() {
       className="space-y-6 animate-fade-in pb-8"
       dir={locale === "ar" ? "rtl" : "ltr"}
     >
+      {/* Blocked Account / Tuition Fees Alert Banner */}
+      {profile?.isBlocked && (
+        <div className="rounded-2xl border-2 border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-rose-500/5 p-4 md:p-5 text-start shadow-lg shadow-rose-950/20 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-500 border border-rose-500/30">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div className="space-y-1 flex-1">
+              <h3 className="text-sm md:text-base font-bold text-rose-600 dark:text-rose-400">
+                {locale === 'ar'
+                  ? '⚠️ تنبيه هام: الحساب محجوب مؤقتاً لعدم سداد المصروفات الدراسية'
+                  : 'Important Notice: Account Withheld due to Outstanding Tuition Fees'}
+              </h3>
+              <p className="text-xs md:text-sm text-foreground/90 leading-relaxed">
+                {locale === 'ar'
+                  ? 'تم حجب بعض الخدمات الأكاديمية (مثل خوض الكويزات وتحميل مناهج المواد) نظراً لعدم سداد المصروفات الدراسية المقررة. يرجى مراجعة خزينة المعهد وشؤون الطلاب لتسوية الرسوم وإعادة تفعيل كافة الخدمات.'
+                  : 'Certain portal features (including quiz attempts and syllabus PDF downloads) are restricted due to unpaid tuition fees. Please visit the institute treasury and student affairs office to settle fees and restore full access.'}
+              </p>
+              {profile.blockReason && (
+                <div className="pt-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                  {locale === 'ar' ? `السبب المسجل: ${profile.blockReason}` : `Notice: ${profile.blockReason}`}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Welcome Widget */}
       <div className="relative overflow-hidden bg-card/45 backdrop-blur-sm border border-border/70 shadow-[var(--shadow-glow)] rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-primary/30 transition-all duration-300">
         <div className="space-y-2.5 z-10 text-start">

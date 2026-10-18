@@ -36,7 +36,9 @@ import { StudentDetailDialog } from '@/features/students/components/student-deta
 import { ResetStudentPasswordDialog } from '@/features/students/components/reset-student-password-dialog';
 import { DepartmentTransferDialog } from '@/features/students/components/department-transfer-dialog';
 import { StudentTable, type Student } from '@/features/students/components/student-table';
+import { StudentTuitionManagement } from '@/features/students/components/student-tuition-management';
 import { Button } from '@/components/ui/button';
+import { CreditCard } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -160,6 +162,7 @@ function StudentsPageContent() {
   const [autoRegOverwrite, setAutoRegOverwrite] = useState(false);
   const [isBulkMustChangeOpen, setIsBulkMustChangeOpen] = useState(false);
   const [isTogglingMustChange, setIsTogglingMustChange] = useState(false);
+  const [activeTab, setActiveTab] = useState<'students' | 'tuition'>('students');
 
   const handleAutoRegisterFirstYear = async () => {
     setIsAutoRegistering(true);
@@ -486,127 +489,236 @@ function StudentsPageContent() {
         )}
       </PageTitleBanner>
 
-      <FilterBar search={search} onSearchChange={(val) => setFilter('search', val)} searchPlaceholder={t('searchPlaceholder')}>
-        <Select value={level} onValueChange={(val) => setFilter('level', val)}>
-          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
-            <SelectValue placeholder={t('level')} />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-card">
-            <SelectItem value="all">{t('level')}: {tCommon('all')}</SelectItem>
-            {COURSE_LEVEL_VALUES.map((lvl) => (
-              <SelectItem key={lvl} value={lvl}>{locale === 'ar' ? `المستوى ${lvl}` : `Level ${lvl}`}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Navigation Tabs: Students Directory vs Tuition Fees & Blocking */}
+      <div className="flex items-center gap-2 border-b border-border/80 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('students')}
+          className={cn(
+            'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
+            activeTab === 'students'
+              ? 'bg-primary text-white shadow-sm'
+              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+          )}
+        >
+          <Users className="h-4 w-4" />
+          <span>{locale === 'ar' ? 'سجل وقيد الطلاب' : 'Students Directory'}</span>
+        </button>
 
-        <Select value={department} onValueChange={(val) => setFilter('department', val)}>
-          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
-            <SelectValue placeholder={locale === 'ar' ? 'القسم / الشعبة' : 'Department'} />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-card">
-            <SelectItem value="all">{locale === 'ar' ? 'القسم: الكل' : 'Department: All'}</SelectItem>
-            <SelectItem value="GENERAL">{locale === 'ar' ? 'الشعبة العامة (سنة 1 و 2)' : 'General Track (Years 1 & 2)'}</SelectItem>
-            <SelectItem value="BIS">{locale === 'ar' ? 'نظم معلومات الأعمال (BIS)' : 'Business Info Systems (BIS)'}</SelectItem>
-            <SelectItem value="ACCOUNTING">{locale === 'ar' ? 'المحاسبة والمراجعة (Accounting)' : 'Accounting & Auditing'}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={status} onValueChange={(val) => setFilter('status', val)}>
-          <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
-            <SelectValue placeholder={t('status')} />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-card">
-            <SelectItem value="all">{t('status')}: {tCommon('all')}</SelectItem>
-            {ENROLLMENT_STATUS_VALUES.map((st) => (
-              <SelectItem key={st} value={st}>
-                {t(`status_${st}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FilterBar>
-
-      <StudentTable
-        students={students}
-        isLoading={studentsQuery.isLoading}
-        isError={studentsQuery.isError}
-        error={studentsQuery.error}
-        locale={locale}
-        canViewSensitiveStudentData={canViewSensitiveStudentData}
-        selectedKeys={selectedKeys}
-        onSelectedKeysChange={setSelectedKeys}
-        onViewStudent={(st) => setProfileStudent(st)}
-        onEditStudent={(st) => { setSelectedStudent(st); setIsEditOpen(true); }}
-        onResetPassword={(st) => { setSelectedStudent(st); setIsResetOpen(true); }}
-        onTransferDepartment={(st) => {
-          setTransferStudent(st);
-          setIsTransferOpen(true);
-        }}
-        onBulkTransferDepartment={() => {
-          setTransferStudent(null);
-          setIsTransferOpen(true);
-        }}
-        onActivateStudent={async (st) => { await activateStudent(st._id); invalidateStudents(); }}
-        onDeactivateStudent={async (ids) => { await Promise.all(ids.map((id) => deactivateStudent(id))); invalidateStudents(); }}
-        onBulkEdit={() => { if (selectedKeys.length === 1) { const found = students.find((s) => s._id === selectedKeys[0]); if (found) { setSelectedStudent(found); setIsEditOpen(true); } } }}
-        onOpenBulkDeactivate={() => setIsBulkDeactivateOpen(true)}
-        onRetry={() => studentsQuery.refetch()}
-        t={t}
-        tCommon={tCommon}
-      />
-
-      {/* Pagination Bar */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs text-muted-foreground">
+        <button
+          type="button"
+          onClick={() => setActiveTab('tuition')}
+          className={cn(
+            'flex items-center gap-2 rounded-squircle px-4 py-2 text-xs font-bold transition-all cursor-pointer',
+            activeTab === 'tuition'
+              ? 'bg-primary text-white shadow-sm'
+              : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+          )}
+        >
+          <CreditCard className="h-4 w-4" />
+          <span>
             {locale === 'ar'
-              ? `عرض ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} من إجمالي ${total} طالب`
-              : `Showing ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} of ${total} students`}
+              ? 'المصروفات الدراسية وحجب الحسابات'
+              : 'Tuition Fees & Blocking'}
           </span>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{locale === 'ar' ? 'لكل صفحة:' : 'Per page:'}</span>
-            <CustomDropdown
-              ariaLabel={locale === 'ar' ? 'عدد العناصر لكل صفحة' : 'Items per page'}
-              value={String(limit)}
-              onValueChange={(val) => {
-                setLimit(Number(val));
-                setFilter('page', 1);
-              }}
-              options={[
-                { value: '10', label: '10' },
-                { value: '20', label: '20' },
-                { value: '50', label: '50' },
-                { value: '100', label: '100' },
-              ]}
-              className="w-18 h-8 text-xs py-1"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-end sm:self-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setFilter('page', Math.max(1, page - 1))}
-            disabled={page <= 1 || studentsQuery.isLoading}
-            className="cursor-pointer text-xs"
-          >
-            {tCommon('previous')}
-          </Button>
-          <span className="font-mono text-xs text-muted-foreground px-2">
-            {locale === 'ar' ? `الصفحة ${page} من ${totalPages}` : `Page ${page} of ${totalPages}`}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setFilter('page', Math.min(totalPages, page + 1))}
-            disabled={page >= totalPages || studentsQuery.isLoading}
-            className="cursor-pointer text-xs"
-          >
-            {tCommon('next')}
-          </Button>
-        </div>
+        </button>
       </div>
+
+      {activeTab === 'tuition' ? (
+        <StudentTuitionManagement
+          locale={locale}
+          canWrite={canWriteStudents}
+        />
+      ) : (
+        <>
+          <FilterBar
+            search={search}
+            onSearchChange={(val) => setFilter('search', val)}
+            searchPlaceholder={t('searchPlaceholder')}
+          >
+            <Select
+              value={level}
+              onValueChange={(val) => setFilter('level', val)}
+            >
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
+                <SelectValue placeholder={t('level')} />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-card">
+                <SelectItem value="all">
+                  {t('level')}: {tCommon('all')}
+                </SelectItem>
+                {COURSE_LEVEL_VALUES.map((lvl) => (
+                  <SelectItem key={lvl} value={lvl}>
+                    {locale === 'ar' ? `المستوى ${lvl}` : `Level ${lvl}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={department}
+              onValueChange={(val) => setFilter('department', val)}
+            >
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
+                <SelectValue
+                  placeholder={
+                    locale === 'ar' ? 'القسم / الشعبة' : 'Department'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-card">
+                <SelectItem value="all">
+                  {locale === 'ar' ? 'القسم: الكل' : 'Department: All'}
+                </SelectItem>
+                <SelectItem value="GENERAL">
+                  {locale === 'ar'
+                    ? 'الشعبة العامة (سنة 1 و 2)'
+                    : 'General Track (Years 1 & 2)'}
+                </SelectItem>
+                <SelectItem value="BIS">
+                  {locale === 'ar'
+                    ? 'نظم معلومات الأعمال (BIS)'
+                    : 'Business Info Systems (BIS)'}
+                </SelectItem>
+                <SelectItem value="ACCOUNTING">
+                  {locale === 'ar'
+                    ? 'المحاسبة والمراجعة (Accounting)'
+                    : 'Accounting & Auditing'}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={status}
+              onValueChange={(val) => setFilter('status', val)}
+            >
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
+                <SelectValue placeholder={t('status')} />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-card">
+                <SelectItem value="all">
+                  {t('status')}: {tCommon('all')}
+                </SelectItem>
+                {ENROLLMENT_STATUS_VALUES.map((st) => (
+                  <SelectItem key={st} value={st}>
+                    {t(`status_${st}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+
+          <StudentTable
+            students={students}
+            isLoading={studentsQuery.isLoading}
+            isError={studentsQuery.isError}
+            error={studentsQuery.error}
+            locale={locale}
+            canViewSensitiveStudentData={canViewSensitiveStudentData}
+            selectedKeys={selectedKeys}
+            onSelectedKeysChange={setSelectedKeys}
+            onViewStudent={(st) => setProfileStudent(st)}
+            onEditStudent={(st) => {
+              setSelectedStudent(st);
+              setIsEditOpen(true);
+            }}
+            onResetPassword={(st) => {
+              setSelectedStudent(st);
+              setIsResetOpen(true);
+            }}
+            onTransferDepartment={(st) => {
+              setTransferStudent(st);
+              setIsTransferOpen(true);
+            }}
+            onBulkTransferDepartment={() => {
+              setTransferStudent(null);
+              setIsTransferOpen(true);
+            }}
+            onActivateStudent={async (st) => {
+              await activateStudent(st._id);
+              invalidateStudents();
+            }}
+            onDeactivateStudent={async (ids) => {
+              await Promise.all(ids.map((id) => deactivateStudent(id)));
+              invalidateStudents();
+            }}
+            onBulkEdit={() => {
+              if (selectedKeys.length === 1) {
+                const found = students.find((s) => s._id === selectedKeys[0]);
+                if (found) {
+                  setSelectedStudent(found);
+                  setIsEditOpen(true);
+                }
+              }
+            }}
+            onOpenBulkDeactivate={() => setIsBulkDeactivateOpen(true)}
+            onRetry={() => studentsQuery.refetch()}
+            t={t}
+            tCommon={tCommon}
+          />
+
+          {/* Pagination Bar */}
+          <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-muted-foreground">
+                {locale === 'ar'
+                  ? `عرض ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} من إجمالي ${total} طالب`
+                  : `Showing ${total === 0 ? 0 : (page - 1) * limit + 1} - ${Math.min(page * limit, total)} of ${total} students`}
+              </span>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{locale === 'ar' ? 'لكل صفحة:' : 'Per page:'}</span>
+                <CustomDropdown
+                  ariaLabel={
+                    locale === 'ar'
+                      ? 'عدد العناصر لكل صفحة'
+                      : 'Items per page'
+                  }
+                  value={String(limit)}
+                  onValueChange={(val) => {
+                    setLimit(Number(val));
+                    setFilter('page', 1);
+                  }}
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                    { value: '100', label: '100' },
+                  ]}
+                  className="w-18 h-8 text-xs py-1"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilter('page', Math.max(1, page - 1))}
+                disabled={page <= 1 || studentsQuery.isLoading}
+                className="cursor-pointer text-xs"
+              >
+                {tCommon('previous')}
+              </Button>
+              <span className="font-mono text-xs text-muted-foreground px-2">
+                {locale === 'ar'
+                  ? `الصفحة ${page} من ${totalPages}`
+                  : `Page ${page} of ${totalPages}`}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setFilter('page', Math.min(totalPages, page + 1))
+                }
+                disabled={page >= totalPages || studentsQuery.isLoading}
+                className="cursor-pointer text-xs"
+              >
+                {tCommon('next')}
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
 
       <StudentFormDialog
         open={isAddOpen}
