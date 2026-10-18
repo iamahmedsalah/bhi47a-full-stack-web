@@ -442,9 +442,7 @@ export class GradesService implements OnModuleInit {
     ]);
 
     const courseCodes = [
-      ...new Set(
-        items.map((item: any) => item.courseCode).filter(Boolean),
-      ),
+      ...new Set(items.map((item: any) => item.courseCode).filter(Boolean)),
     ];
     const matchedCourses = courseCodes.length
       ? await this.courseModel

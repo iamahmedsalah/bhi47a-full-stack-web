@@ -3,7 +3,7 @@
 import React, { useState, useMemo, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   HelpCircle,
   Plus,
@@ -1030,14 +1030,26 @@ function SubmissionsModal({ quiz, open, onOpenChange, isAr }: SubmissionsModalPr
 /* ─── Main Admin Quizzes Page ──────────────────────────── */
 function AdminQuizzesContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const locale = (params.locale as string) || 'ar';
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const canWrite =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes(PERMISSIONS.QUIZZES_WRITE));
+  const canViewSubmissions =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes(PERMISSIONS.QUIZZES_SUBMISSIONS_READ));
+
+  const urlCourseId = searchParams?.get('courseId') || 'ALL';
+  const autoCreate = searchParams?.get('create') === 'true';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [courseFilter, setCourseFilter] = useState('ALL');
-  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [courseFilter, setCourseFilter] = useState(urlCourseId);
+  const [isAddOpen, setIsAddOpen] = useState(autoCreate && canWrite);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedQuiz, setSelectedQuiz] = useState<QuizItem | null>(null);
   const [submissionsQuiz, setSubmissionsQuiz] = useState<QuizItem | null>(null);
@@ -1260,49 +1272,55 @@ function AdminQuizzesContent() {
                 align="end"
                 className="z-50 min-w-48 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95"
               >
-                <DropdownMenu.Item
-                  onClick={() => setSubmissionsQuiz(quiz)}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
-                >
-                  <Eye className="h-3.5 w-3.5 text-primary" />
-                  <span>{isAr ? 'عرض نتائج وتسليمات الطلاب' : 'View Submissions'}</span>
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onClick={() => {
-                    setSelectedQuiz(quiz);
-                    setIsEditOpen(true);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{isAr ? 'تعديل الاختبار' : 'Edit Quiz'}</span>
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onClick={() => handleTogglePublish(quiz)}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-                >
-                  {quiz.isPublished ? (
-                    <>
-                      <XCircle className="h-3.5 w-3.5 text-amber-400" />
-                      <span>{isAr ? 'تحويل إلى مسودة' : 'Unpublish'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>{isAr ? 'نشر للطلاب' : 'Publish'}</span>
-                    </>
-                  )}
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  onClick={() => {
-                    setQuizToDelete(quiz);
-                    setIsDeleteOpen(true);
-                  }}
-                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>{isAr ? 'حذف الاختبار' : 'Delete Quiz'}</span>
-                </DropdownMenu.Item>
+                {canViewSubmissions && (
+                  <DropdownMenu.Item
+                    onClick={() => setSubmissionsQuiz(quiz)}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                  >
+                    <Eye className="h-3.5 w-3.5 text-primary" />
+                    <span>{isAr ? 'عرض نتائج وتسليمات الطلاب' : 'View Submissions'}</span>
+                  </DropdownMenu.Item>
+                )}
+                {canWrite && (
+                  <>
+                    <DropdownMenu.Item
+                      onClick={() => {
+                        setSelectedQuiz(quiz);
+                        setIsEditOpen(true);
+                      }}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>{isAr ? 'تعديل الاختبار' : 'Edit Quiz'}</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={() => handleTogglePublish(quiz)}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                    >
+                      {quiz.isPublished ? (
+                        <>
+                          <XCircle className="h-3.5 w-3.5 text-amber-400" />
+                          <span>{isAr ? 'تحويل إلى مسودة' : 'Unpublish'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>{isAr ? 'نشر للطلاب' : 'Publish'}</span>
+                        </>
+                      )}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={() => {
+                        setQuizToDelete(quiz);
+                        setIsDeleteOpen(true);
+                      }}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{isAr ? 'حذف الاختبار' : 'Delete Quiz'}</span>
+                    </DropdownMenu.Item>
+                  </>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
@@ -1323,13 +1341,15 @@ function AdminQuizzesContent() {
         }
         icon={<HelpCircle className="h-6 w-6 text-primary" />}
       >
-        <Button
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle"
-        >
-          <Plus className="h-4 w-4" />
-          <span>{isAr ? 'إنشاء كويز جديد' : 'Create Quiz'}</span>
-        </Button>
+        {canWrite && (
+          <Button
+            onClick={() => setIsAddOpen(true)}
+            className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle"
+          >
+            <Plus className="h-4 w-4" />
+            <span>{isAr ? 'إنشاء كويز جديد' : 'Create Quiz'}</span>
+          </Button>
+        )}
       </PageTitleBanner>
 
       {/* Filter Bar */}
@@ -1379,7 +1399,10 @@ function AdminQuizzesContent() {
           }
         }}
         mode={isAddOpen ? 'add' : 'edit'}
-        initialValues={selectedQuiz || {}}
+        initialValues={
+          selectedQuiz ||
+          (urlCourseId !== 'ALL' ? { courseId: urlCourseId } : {})
+        }
         courses={coursesList}
         coursesLoading={coursesQuery.isLoading}
         isAr={isAr}
