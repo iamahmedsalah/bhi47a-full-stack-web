@@ -361,6 +361,11 @@ export class QueryCourseDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  doctorId?: string;
+
   @ApiPropertyOptional({ enum: COURSE_LEVEL_VALUES })
   @IsOptional()
   @IsEnum(COURSE_LEVEL_VALUES)

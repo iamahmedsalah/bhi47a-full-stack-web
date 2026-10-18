@@ -97,9 +97,21 @@ export class CoursesService {
     return course.save();
   }
 
-  async findAll(query: QueryCourseDto) {
+  async findAll(query: QueryCourseDto, caller?: any) {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: any = {};
+
+    if (
+      caller?.role === 'staff' &&
+      caller?.staffType === 'doctor' &&
+      caller?._id
+    ) {
+      if (Types.ObjectId.isValid(caller._id)) {
+        filter.doctorId = new Types.ObjectId(caller._id);
+      }
+    } else if (query.doctorId && Types.ObjectId.isValid(query.doctorId)) {
+      filter.doctorId = new Types.ObjectId(query.doctorId);
+    }
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);

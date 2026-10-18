@@ -24,7 +24,11 @@ import {
   Award,
   ClipboardCheck,
   FileText,
+  CalendarDays,
+  MapPin,
+  Clock,
 } from 'lucide-react';
+import { EmptyState } from '@/components/ui/feedback';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/auth-provider';
@@ -288,6 +292,22 @@ export default function AdminDashboard() {
     });
     return Array.from(counts.values());
   }, [assignedCourses, isAr]);
+
+  const myScheduleQuery = useQuery({
+    queryKey: ['staff-my-schedule', user?._id],
+    queryFn: async () => {
+      const res = await api.get<any[]>('/staff/me/schedule');
+      return res.data ?? [];
+    },
+    enabled: isStaff,
+  });
+  const mySchedules = myScheduleQuery.data ?? [];
+  const [doctorScheduleDayFilter, setDoctorScheduleDayFilter] = useState('all');
+
+  const filteredDoctorSchedules = React.useMemo(() => {
+    if (doctorScheduleDayFilter === 'all') return mySchedules;
+    return mySchedules.filter((s: any) => s.dayOfWeek === doctorScheduleDayFilter);
+  }, [mySchedules, doctorScheduleDayFilter]);
 
   const hasPerm = (p: string) => isAdmin || Boolean(user?.permissions?.includes(p));
 
@@ -871,70 +891,77 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* QUICK ACTIONS SECTION (TRIGGER MODALS DIRECTLY) */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">
-          {t('quickActions')}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {hasPerm('students.write') && (
+      {/* QUICK ACTIONS SECTION (TRIGGER MODALS DIRECTLY) - ONLY FOR ADMIN */}
+      {isAdmin && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-foreground">
+            {t('quickActions')}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {hasPerm('students.write') && (
+              <QuickAction
+                title={tStudents('addStudent')}
+                icon={<UserPlus className="w-5 h-5" />}
+                onClick={() => setIsAddStudentOpen(true)}
+              />
+            )}
+            {hasPerm('uploads.import') && (
+              <QuickAction
+                title={tNav('uploads')}
+                icon={<Upload className="w-5 h-5" />}
+                onClick={() => setIsUploadOpen(true)}
+              />
+            )}
+            {(hasPerm('exam_schedules.manage') || hasPerm('exam_schedules.read')) && (
+              <QuickAction
+                title={tNav('examSchedules')}
+                icon={<Calendar className="w-5 h-5" />}
+                onClick={() => setIsAddScheduleOpen(true)}
+              />
+            )}
             <QuickAction
-              title={tStudents('addStudent')}
-              icon={<UserPlus className="w-5 h-5" />}
-              onClick={() => setIsAddStudentOpen(true)}
+              title={isAr ? 'جدول المحاضرات والسكاشن والقاعات' : 'Lecture & Section Schedules'}
+              icon={<CalendarDays className="w-5 h-5" />}
+              onClick={() => router.push(`/${locale}/admin/schedules`)}
             />
-          )}
-          {hasPerm('uploads.import') && (
-            <QuickAction
-              title={tNav('uploads')}
-              icon={<Upload className="w-5 h-5" />}
-              onClick={() => setIsUploadOpen(true)}
-            />
-          )}
-          {(hasPerm('exam_schedules.manage') || hasPerm('exam_schedules.read')) && (
-            <QuickAction
-              title={tNav('examSchedules')}
-              icon={<Calendar className="w-5 h-5" />}
-              onClick={() => setIsAddScheduleOpen(true)}
-            />
-          )}
-          {hasPerm('complaints.read') && (
-            <QuickAction
-              title={tNav('complaints')}
-              icon={<MessageSquareWarning className="w-5 h-5" />}
-              onClick={() => setIsComplaintLookupOpen(true)}
-            />
-          )}
-          {(hasPerm('grades.write') || hasPerm('grades.read')) && (
-            <QuickAction
-              title={tNav('grades')}
-              icon={<Users className="w-5 h-5" />}
-              onClick={() => setIsAddGradeOpen(true)}
-            />
-          )}
-          {(hasPerm('courses.write') || hasPerm('courses.read')) && (
-            <QuickAction
-              title={tNav('courses')}
-              icon={<BookOpen className="w-5 h-5" />}
-              onClick={() => setIsAddCourseOpen(true)}
-            />
-          )}
-          {(hasPerm('quizzes.read') || hasPerm('quizzes.create')) && (
-            <QuickAction
-              title={isAr ? 'بنك الاختبارات والكويزات' : 'Course Quizzes'}
-              icon={<Award className="w-5 h-5" />}
-              onClick={() => router.push(`/${locale}/admin/quizzes`)}
-            />
-          )}
-          {(hasPerm('attendance.read') || hasPerm('attendance.manage')) && (
-            <QuickAction
-              title={isAr ? 'جلسات الحضور والغياب' : 'Attendance Sessions'}
-              icon={<ClipboardCheck className="w-5 h-5" />}
-              onClick={() => router.push(`/${locale}/admin/attendance`)}
-            />
-          )}
+            {hasPerm('complaints.read') && (
+              <QuickAction
+                title={tNav('complaints')}
+                icon={<MessageSquareWarning className="w-5 h-5" />}
+                onClick={() => setIsComplaintLookupOpen(true)}
+              />
+            )}
+            {(hasPerm('grades.write') || hasPerm('grades.read')) && (
+              <QuickAction
+                title={tNav('grades')}
+                icon={<Users className="w-5 h-5" />}
+                onClick={() => setIsAddGradeOpen(true)}
+              />
+            )}
+            {(hasPerm('courses.write') || hasPerm('courses.read')) && (
+              <QuickAction
+                title={tNav('courses')}
+                icon={<BookOpen className="w-5 h-5" />}
+                onClick={() => setIsAddCourseOpen(true)}
+              />
+            )}
+            {(hasPerm('quizzes.read') || hasPerm('quizzes.create')) && (
+              <QuickAction
+                title={isAr ? 'بنك الاختبارات والكويزات' : 'Course Quizzes'}
+                icon={<Award className="w-5 h-5" />}
+                onClick={() => router.push(`/${locale}/admin/quizzes`)}
+              />
+            )}
+            {(hasPerm('attendance.read') || hasPerm('attendance.manage')) && (
+              <QuickAction
+                title={isAr ? 'جلسات الحضور والغياب' : 'Attendance Sessions'}
+                icon={<ClipboardCheck className="w-5 h-5" />}
+                onClick={() => router.push(`/${locale}/admin/attendance`)}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ──────────────────────────────────────────────────────────── */}
       {/* 1. DOCTOR DASHBOARD VIEW (STAFF TYPE = DOCTOR)              */}
@@ -1069,6 +1096,179 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* DOCTOR LECTURE & SECTION SCHEDULE (PLACES OF LECTURES) */}
+          <div className="rounded-2xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold text-foreground">
+                  <CalendarDays className="h-5 w-5 text-teal-400" />
+                  <span>{isAr ? 'جدول المحاضرات والسكاشن وأماكن القاعات' : 'Lecture & Section Schedule (Hall Locations)'}</span>
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isAr
+                    ? 'جدول مواعيدك التدريسية الأسبوعية وأماكن المدرجات والقاعات والمعامل المعتمدة'
+                    : 'Your weekly teaching timetable and allocated lecture halls/auditoriums'}
+                </p>
+              </div>
+
+              {/* Day filter pills */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { key: 'all', label: isAr ? 'جميع الأيام' : 'All Days' },
+                  { key: 'saturday', label: isAr ? 'السبت' : 'Sat' },
+                  { key: 'sunday', label: isAr ? 'الأحد' : 'Sun' },
+                  { key: 'monday', label: isAr ? 'الاثنين' : 'Mon' },
+                  { key: 'tuesday', label: isAr ? 'الثلاثاء' : 'Tue' },
+                  { key: 'wednesday', label: isAr ? 'الأربعاء' : 'Wed' },
+                  { key: 'thursday', label: isAr ? 'الخميس' : 'Thu' },
+                ].map((pill) => (
+                  <button
+                    key={pill.key}
+                    type="button"
+                    onClick={() => setDoctorScheduleDayFilter(pill.key)}
+                    className={`rounded-squircle px-3 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                      doctorScheduleDayFilter === pill.key
+                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
+                        : 'border border-border/60 bg-background/50 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {myScheduleQuery.isLoading ? (
+              <div className="py-12 flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : filteredDoctorSchedules.length === 0 ? (
+              <div className="py-8">
+                <EmptyState
+                  title={isAr ? 'لا توجد مواعيد مسجلة في هذا اليوم' : 'No schedule entries for this day'}
+                  description={
+                    isAr
+                      ? 'لم يتم إدراج مواعيد محاضرات أو سكاشن لك في هذا اليوم. سيقوم مسؤول الجداول باعتمادها قريباً.'
+                      : 'No lecture or section slots allocated yet. Administration will publish timings soon.'
+                  }
+                />
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border/60 bg-background/40">
+                <table className="w-full text-start text-xs">
+                  <thead className="border-b border-border/80 bg-background/70 text-muted-foreground uppercase text-[11px] font-semibold">
+                    <tr>
+                      <th className="px-4 py-3 text-start">{isAr ? 'اليوم والتوقيت' : 'Day & Time'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'المقرر الدراسي' : 'Course'}</th>
+                      <th className="px-4 py-3 text-center">{isAr ? 'النوع' : 'Type'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'مكان المحاضرة / القاعة / المدرج' : 'Hall / Location'}</th>
+                      <th className="px-4 py-3 text-start">{isAr ? 'الفرقة / المجموعة' : 'Level & Group'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60 font-medium">
+                    {filteredDoctorSchedules.map((slot: any) => {
+                      const isLecture = slot.type === 'lecture';
+                      const isLab = slot.type === 'lab';
+                      const dayLabel = isAr
+                        ? slot.dayOfWeek === 'saturday'
+                          ? 'السبت'
+                          : slot.dayOfWeek === 'sunday'
+                            ? 'الأحد'
+                            : slot.dayOfWeek === 'monday'
+                              ? 'الاثنين'
+                              : slot.dayOfWeek === 'tuesday'
+                                ? 'الثلاثاء'
+                                : slot.dayOfWeek === 'wednesday'
+                                  ? 'الأربعاء'
+                                  : 'الخميس'
+                        : slot.dayOfWeek;
+
+                      return (
+                        <tr key={slot._id} className="hover:bg-primary/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-foreground">{dayLabel}</div>
+                            <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                              <Clock className="h-3 w-3 text-primary/70" />
+                              <span>{slot.startTime} - {slot.endTime}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-foreground">
+                              {isAr ? (slot.courseNameAr || slot.courseName) : slot.courseName}
+                            </div>
+                            <div className="font-mono text-[11px] text-primary">{slot.courseCode}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-flex items-center rounded-squircle border px-2.5 py-0.5 text-[11px] font-bold ${
+                                isLecture
+                                  ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                                  : isLab
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                                    : 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                              }`}
+                            >
+                              {isLecture ? (isAr ? 'محاضرة' : 'Lecture') : isLab ? (isAr ? 'معمل' : 'Lab') : (isAr ? 'سكشن' : 'Section')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-300 shadow-sm shadow-teal-500/10">
+                              <MapPin className="h-3.5 w-3.5 text-teal-400" />
+                              <span>{slot.location}</span>
+                            </span>
+                            {slot.notes && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[200px]">
+                                {slot.notes}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-foreground">
+                            <div>
+                              {isAr ? `الفرقة ${slot.level}` : `Level ${slot.level}`}
+                              {slot.department && ` · ${slot.department}`}
+                            </div>
+                            {(slot.group || slot.section) && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {slot.group && `${slot.group} `}
+                                {slot.section && `(${slot.section})`}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* DOCTOR EXAM SCHEDULE VIEWER BANNER (STUDENT VIEW) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-primary/30 bg-gradient-to-r from-teal-950/40 via-card to-background p-5 shadow-lg backdrop-blur">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/25 shrink-0">
+                <Calendar className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground">
+                  {isAr ? 'جداول الامتحانات المعتمدة (الميدترم والنهائي)' : 'Official Exam Timetables (Midterm & Final)'}
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  {isAr
+                    ? 'استعراض وتحميل جدول الامتحانات الرسمي المعتمد للفصل الدراسي بصيغة عالية الجودة'
+                    : 'View and download official examination schedules and approved committee timetables'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push(`/${locale}/admin/exam-schedules`)}
+              className="rounded-squircle bg-primary px-4 py-2 text-xs font-semibold text-white shadow-md shadow-primary/20 hover:bg-primary-hover active:scale-[0.98] transition-all shrink-0 cursor-pointer"
+            >
+              {isAr ? 'عرض جدول الامتحانات' : 'View Exam Timetables'}
+            </button>
           </div>
         </div>
       )}

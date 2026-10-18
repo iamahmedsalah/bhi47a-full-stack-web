@@ -89,7 +89,7 @@ function AdminLoginForm({
           </div>
           <Input
             type="text"
-            placeholder={locale === 'ar' ? 'كود المدير / البريد الإلكتروني' : 'Manager Code / Email'}
+            placeholder={locale === 'ar' ? 'اسم المستخدم أو البريد الإلكتروني' : 'Username or Email'}
             disabled={loading}
             {...register('email')}
             ref={(e) => {
@@ -414,7 +414,7 @@ function AdminLoginContent() {
               {locale === 'ar' ? 'لوحة الإدارة - البوابة الإلكترونية' : 'Admin & Staff Portal'}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {locale === 'ar' ? 'الرجاء إدخال كود المدير للدخول' : 'Please enter manager code to login'}
+              {locale === 'ar' ? 'الرجاء إدخال اسم المستخدم أو البريد الإلكتروني للدخول' : 'Please enter your username or email to sign in'}
             </p>
           </div>
 

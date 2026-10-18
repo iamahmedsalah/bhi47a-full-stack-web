@@ -257,4 +257,24 @@ export class QuizzesController {
   ) {
     return this.quizzesService.getSubmissions(id, user);
   }
+
+  @Get('admin/quizzes/:id/export-analysis')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.QUIZZES_SUBMISSIONS_READ)
+  @ApiOperation({
+    summary: 'Export styled Excel report of quiz analysis and submissions',
+  })
+  async exportAnalysis(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res() res: Response,
+  ) {
+    const result = await this.quizzesService.exportQuizAnalysis(id, user);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+    );
+    res.send(result.buffer);
+  }
 }

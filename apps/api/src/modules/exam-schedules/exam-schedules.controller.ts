@@ -45,13 +45,13 @@ const ALLOWED_UPLOAD_MIME_TYPES = new Set([
 export class ExamSchedulesController {
   constructor(private readonly schedulesService: ExamSchedulesService) {}
 
-  // ─── Student Endpoints ───────────────────────────────────────────
+  // ─── Student & Staff Timetable Endpoints ─────────────────────────
 
-  @Get('students/me/exam-assignment')
-  @Roles('student')
+  @Get(['students/me/exam-assignment', 'exam-schedules/published'])
+  @Roles('student', 'staff', 'admin')
   @ApiOperation({
     summary:
-      'Get current student exam committee, seat number, and schedules list',
+      'Get student exam committee, seat number, and published exam schedules',
   })
   async getMyAssignment(@CurrentUser('_id') studentId: string) {
     return this.schedulesService.getStudentExamAssignment(studentId);

@@ -21,6 +21,10 @@ import {
   StudentAcademicProfile,
   StudentAcademicProfileDocument,
 } from '../../registrations/schemas/student-academic-profile.schema';
+import {
+  Course,
+  type CourseDocument,
+} from '../../courses/schemas/course.schema';
 import { isRegistrationTermCurrentlyOpen } from '../../registrations/utils/registration-term.util';
 import { SearchStudentQuery } from '../dto/student.dto';
 import {
@@ -45,10 +49,52 @@ export class StudentQueryService {
     private readonly advisingCaseModel: Model<AdvisingCaseDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private readonly academicProfileModel: Model<StudentAcademicProfileDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
   ) {}
 
-  buildFilter(query: SearchStudentQuery): FilterQuery<StudentProfileDocument> {
+  private async getDoctorStudentUserIds(
+    doctorIdStr: string,
+  ): Promise<Types.ObjectId[]> {
+    if (!Types.ObjectId.isValid(doctorIdStr)) return [];
+    const doctorObjId = new Types.ObjectId(doctorIdStr);
+    const courses = (await this.courseModel
+      .find({ doctorId: doctorObjId, isActive: true })
+      .select('code _id')
+      .lean()) as unknown as Array<{ _id: Types.ObjectId; code: string }>;
+
+    if (!courses || courses.length === 0) return [];
+
+    const courseCodes = courses.map((c) => String(c.code).toUpperCase());
+    const courseIdStrs = courses.map((c) => c._id.toString());
+    const allMatches = [...courseCodes, ...courseIdStrs];
+
+    const registrations = await this.registrationModel
+      .find({
+        status: { $in: ['approved', 'pending'] },
+        courses: { $in: allMatches },
+      })
+      .select('studentId')
+      .lean();
+
+    const userIds = registrations
+      .map((r) => r.studentId)
+      .filter((id): id is Types.ObjectId => Boolean(id));
+
+    return Array.from(new Set(userIds.map((id) => id.toString()))).map(
+      (idStr) => new Types.ObjectId(idStr),
+    );
+  }
+
+  buildFilter(
+    query: SearchStudentQuery,
+    doctorStudentUserIds?: Types.ObjectId[],
+  ): FilterQuery<StudentProfileDocument> {
     const filter: FilterQuery<StudentProfileDocument> = {};
+
+    if (doctorStudentUserIds !== undefined) {
+      filter.userId = { $in: doctorStudentUserIds };
+    }
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
@@ -113,8 +159,12 @@ export class StudentQueryService {
     return filter;
   }
 
-  getExportCursor(query: SearchStudentQuery) {
-    const filter = this.buildFilter(query);
+  async getExportCursor(query: SearchStudentQuery, caller?: AuthenticatedUser) {
+    let doctorStudentUserIds: Types.ObjectId[] | undefined = undefined;
+    if (caller?.role === 'staff' && (caller as any)?.staffType === 'doctor') {
+      doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
+    }
+    const filter = this.buildFilter(query, doctorStudentUserIds);
     const sortField =
       query.sortBy === 'createdAt' ? 'createdAt' : 'studentCode';
     const sortDir: 1 | -1 = query.sortOrder === 'desc' ? -1 : 1;
@@ -138,7 +188,12 @@ export class StudentQueryService {
       caller?.permissions?.includes(PERMISSIONS.STUDENTS_VIEW_NATIONAL_ID),
     );
 
-    const filter = this.buildFilter(query);
+    let doctorStudentUserIds: Types.ObjectId[] | undefined = undefined;
+    if (caller?.role === 'staff' && (caller as any)?.staffType === 'doctor') {
+      doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
+    }
+
+    const filter = this.buildFilter(query, doctorStudentUserIds);
 
     const sortField =
       query.sortBy === 'studentCode' ? 'studentCode' : 'createdAt';

@@ -3,15 +3,35 @@
 import { useEffect } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles, User, Mail, Shield, Phone, KeyRound, AtSign } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { staffFormSchema, type StaffFormValues } from '../schema';
 import type { StaffMember } from '../types';
 
@@ -23,11 +43,25 @@ interface Props {
   onSubmit: (values: StaffFormValues) => Promise<void>;
 }
 
-export function StaffFormDialog({ open, staff, pending, onOpenChange, onSubmit }: Props) {
+export function StaffFormDialog({
+  open,
+  staff,
+  pending,
+  onOpenChange,
+  onSubmit,
+}: Props) {
   const t = useTranslations('staff');
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffFormSchema),
-    defaultValues: { name: '', email: '', username: '', phone: '', password: '', staffType: 'administrative', isCreate: true },
+    defaultValues: {
+      name: '',
+      email: '',
+      username: '',
+      phone: '',
+      password: '',
+      staffType: 'doctor',
+      isCreate: true,
+    },
   });
 
   useEffect(() => {
@@ -38,7 +72,7 @@ export function StaffFormDialog({ open, staff, pending, onOpenChange, onSubmit }
       username: staff?.username ?? '',
       phone: staff?.phone ?? '',
       password: '',
-      staffType: (staff?.staffType as StaffType) ?? 'administrative',
+      staffType: (staff?.staffType as StaffType) ?? 'doctor',
       isCreate: !staff,
     });
   }, [form, open, staff]);
@@ -46,59 +80,234 @@ export function StaffFormDialog({ open, staff, pending, onOpenChange, onSubmit }
   const errorText = (message?: string) =>
     message === 'passwordLength' ? t('validation.passwordLength') : message;
 
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
+    let pwd = 'BHI@';
+    for (let i = 0; i < 6; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    pwd += '2026';
+    form.setValue('password', pwd, { shouldValidate: true });
+    toast.info('تم إنشاء كلمة مرور قوية وتعبئتها تلقائياً');
+  };
+
+  const handleEmailBlur = (emailVal: string) => {
+    const currentUsername = form.getValues('username');
+    if (!currentUsername && emailVal.includes('@')) {
+      const suggested = emailVal
+        .split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]/g, '');
+      if (suggested.length >= 3) {
+        form.setValue('username', suggested, { shouldValidate: true });
+      }
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl border-border bg-card">
-        <DialogHeader><DialogTitle>{staff ? t('editTitle') : t('createTitle')}</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-2xl rounded-2xl border border-white/10 bg-card/95 p-6 shadow-2xl backdrop-blur-xl">
+        <DialogHeader className="border-b border-border/70 pb-3 text-start">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+            <User className="h-5 w-5 text-primary" />
+            <span>{staff ? t('editTitle') : t('createTitle')}</span>
+          </DialogTitle>
+        </DialogHeader>
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem><FormLabel>{t('fields.name')}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>{t('fields.email')}</FormLabel><FormControl><Input type="email" dir="ltr" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="staffType" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('fields.staffType')}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+              {/* Full Name */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                      <User className="h-3.5 w-3.5 text-primary" />
+                      {t('fields.name')}
+                    </FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('fields.selectStaffType')} />
-                      </SelectTrigger>
+                      <Input
+                        placeholder="د. أحمد محمد / أ. سارة علي"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        {...field}
+                      />
                     </FormControl>
-                    <SelectContent>
-                      {STAFF_TYPE_VALUES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {t(`types.${type}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="username" render={({ field }) => (
-                <FormItem><FormLabel>{t('fields.username')}</FormLabel><FormControl><Input dir="ltr" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem className="sm:col-span-2"><FormLabel>{t('fields.phone')}</FormLabel><FormControl><Input dir="ltr" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Staff Type / Role */}
+              <FormField
+                control={form.control}
+                name="staffType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                      <Shield className="h-3.5 w-3.5 text-primary" />
+                      {t('fields.staffType')}
+                    </FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
+                          <SelectValue placeholder={t('fields.selectStaffType')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {STAFF_TYPE_VALUES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {t(`types.${type}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Email Address */}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                      <Mail className="h-3.5 w-3.5 text-primary" />
+                      {t('fields.email')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        dir="ltr"
+                        placeholder="staff@bhiasc.org"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        {...field}
+                        onBlur={(e) => {
+                          field.onBlur();
+                          handleEmailBlur(e.target.value);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Username (Primary for login) */}
+              <FormField
+                control={form.control}
+                name="username"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center justify-between text-xs font-semibold">
+                      <span className="flex items-center gap-1.5">
+                        <AtSign className="h-3.5 w-3.5 text-primary" />
+                        {t('fields.username')}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        (تسجيل الدخول الرئيسي)
+                      </span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        dir="ltr"
+                        placeholder="manarshaheen"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-[11px] text-muted-foreground">
+                      يُستخدم كمعرّف أساسي لتسجيل الدخول إلى البوابة
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Phone */}
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                      <Phone className="h-3.5 w-3.5 text-primary" />
+                      {t('fields.phone')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        dir="ltr"
+                        placeholder="01012345678"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
+
+            {/* Password (for creation) */}
             {!staff && (
-              <FormField control={form.control} name="password" render={({ field, fieldState }) => (
-                <FormItem>
-                  <FormLabel>{t('fields.temporaryPassword')}</FormLabel>
-                  <FormControl><PasswordInput dir="ltr" autoComplete="new-password" {...field} /></FormControl>
-                  <FormMessage>{errorText(fieldState.error?.message)}</FormMessage>
-                </FormItem>
-              )} />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field, fieldState }) => (
+                  <FormItem className="rounded-xl border border-white/10 bg-secondary/30 p-3.5">
+                    <div className="flex items-center justify-between pb-1">
+                      <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                        <KeyRound className="h-3.5 w-3.5 text-primary" />
+                        {t('fields.temporaryPassword')}
+                      </FormLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={generateRandomPassword}
+                        className="h-7 text-xs text-primary hover:bg-primary/10 gap-1 rounded-squircle"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>توليد تلقائي</span>
+                      </Button>
+                    </div>
+                    <FormControl>
+                      <PasswordInput
+                        dir="ltr"
+                        autoComplete="new-password"
+                        placeholder="••••••••••••"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-[11px] text-muted-foreground pt-1">
+                      يجب ألا تقل عن 12 حرفاً، وسيُطلب من العضو تغييرها عند أول تسجيل دخول
+                    </p>
+                    <FormMessage>{errorText(fieldState.error?.message)}</FormMessage>
+                  </FormItem>
+                )}
+              />
             )}
-            <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={pending} className="gap-2">
-                {pending && <Loader2 className="h-4 w-4 animate-spin" />}{staff ? t('save') : t('create')}
+
+            <DialogFooter className="mt-6 gap-2 border-t border-border/70 pt-4 rtl:sm:justify-start">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="rounded-squircle"
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                type="submit"
+                disabled={pending}
+                className="rounded-squircle gap-2 bg-primary font-semibold text-white hover:bg-primary-hover"
+              >
+                {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {staff ? t('save') : t('create')}
               </Button>
             </DialogFooter>
           </form>

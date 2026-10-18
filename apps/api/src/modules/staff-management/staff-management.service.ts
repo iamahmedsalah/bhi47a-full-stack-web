@@ -96,6 +96,7 @@ export class StaffManagementService {
         { name: search },
         { email: search },
         { username: search },
+        { phone: search },
         { userCode: search },
       ];
     }

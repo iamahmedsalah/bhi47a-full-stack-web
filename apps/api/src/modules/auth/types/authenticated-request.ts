@@ -7,6 +7,8 @@ export interface AuthenticatedUser {
   name: string;
   email?: string;
   studentCode?: string;
+  staffType?: string;
+  username?: string;
   permissions: string[];
   mustChangePassword: boolean;
   tokenVersion: number;

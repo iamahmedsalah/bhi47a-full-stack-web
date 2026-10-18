@@ -13,6 +13,7 @@
     "metrics": "System Metrics & APM",
     "uploads": "Upload Data",
     "examSchedules": "Exam Schedules",
+    "lectureSchedules": "Lecture & Section Schedules",
     "settings": "Settings",
     "staff": "Staff",
     "logout": "Logout"
@@ -446,7 +447,7 @@
     "empty": "No staff accounts match these filters.",
     "loadFailed": "Could not load staff accounts.",
     "retry": "Try again",
-    "searchPlaceholder": "Search by name, email, username, or code...",
+    "searchPlaceholder": "Search by name, username, email, or phone...",
     "previous": "Previous",
     "next": "Next",
     "pagination": "Page {page} of {totalPages} · {total} accounts",

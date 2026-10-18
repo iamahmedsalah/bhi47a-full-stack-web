@@ -93,6 +93,7 @@ function StudentsPageContent() {
   const locale = params.locale as string;
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const isDoctor = user?.role === 'staff' && (user as any)?.staffType === 'doctor';
 
   const {
     page,
@@ -333,7 +334,17 @@ function StudentsPageContent() {
 
   return (
     <div className="animate-fade-in space-y-6 p-2 md:p-6">
-      <PageTitleBanner title={t('title')} icon={<Users className="h-5 w-5" />} subtitle="Manage student identities, academic placement, exam seats, imports, and exports.">
+      <PageTitleBanner
+        title={t('title')}
+        icon={<Users className="h-5 w-5" />}
+        subtitle={
+          isDoctor
+            ? (locale === 'ar'
+                ? 'قائمة الطلاب المقيدين والمسجلين في المقررات الدراسية المسندة إليك'
+                : 'Students registered in your assigned courses')
+            : 'Manage student identities, academic placement, exam seats, imports, and exports.'
+        }
+      >
         <Button
           variant="outline"
           size="sm"

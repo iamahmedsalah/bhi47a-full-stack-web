@@ -25,8 +25,23 @@ import {
   FileSpreadsheet,
   ShieldAlert,
   AlertTriangle,
+  BarChart3,
+  TrendingUp,
+  CheckCircle,
+  Percent,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { PERMISSIONS } from '@student-portal/shared';
@@ -69,6 +84,7 @@ import {
   updateQuiz,
   deleteQuiz,
   getQuizSubmissions,
+  exportQuizAnalysis,
   parseQuestionsExcel,
   downloadQuestionsTemplate,
   type QuizItem,
@@ -924,8 +940,15 @@ interface SubmissionsModalProps {
   isAr: boolean;
 }
 
-function SubmissionsModal({ quiz, open, onOpenChange, isAr }: SubmissionsModalProps) {
+function SubmissionsModal({
+  quiz,
+  open,
+  onOpenChange,
+  isAr,
+}: SubmissionsModalProps) {
+  const [activeTab, setActiveTab] = useState<'analytics' | 'roster'>('analytics');
   const [search, setSearch] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const submissionsQuery = useQuery({
     queryKey: ['quiz-submissions', quiz?._id],
@@ -933,95 +956,467 @@ function SubmissionsModal({ quiz, open, onOpenChange, isAr }: SubmissionsModalPr
     enabled: Boolean(quiz?._id && open),
   });
 
+  const submissions = submissionsQuery.data || [];
+
+  const total = submissions.length;
+  const passed = submissions.filter((s) => s.isPassed).length;
+  const failed = total - passed;
+  const passPercentage = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const failPercentage = total > 0 ? 100 - passPercentage : 0;
+  const scores = submissions.map((s) => s.score);
+  const avgScore =
+    total > 0
+      ? (scores.reduce((a, b) => a + b, 0) / total).toFixed(1)
+      : '0';
+  const maxScore = total > 0 ? Math.max(...scores) : 0;
+  const minScore = total > 0 ? Math.min(...scores) : 0;
+
+  const pieData = [
+    { name: isAr ? 'ناجح' : 'Passed', value: passed, color: '#10B981' },
+    { name: isAr ? 'راسب' : 'Failed', value: failed, color: '#F43F5E' },
+  ];
+
+  const barData = [
+    {
+      tier: isAr ? 'ممتاز (85%+)' : 'Excellent (85%+)',
+      count: submissions.filter((s) => s.percentage >= 85).length,
+      fill: '#10B981',
+    },
+    {
+      tier: isAr ? 'جيد جداً (75-84%)' : 'Very Good (75-84%)',
+      count: submissions.filter(
+        (s) => s.percentage >= 75 && s.percentage < 85,
+      ).length,
+      fill: '#14B8A6',
+    },
+    {
+      tier: isAr ? 'جيد (65-74%)' : 'Good (65-74%)',
+      count: submissions.filter(
+        (s) => s.percentage >= 65 && s.percentage < 75,
+      ).length,
+      fill: '#38BDF8',
+    },
+    {
+      tier: isAr ? 'مقبول (50-64%)' : 'Pass (50-64%)',
+      count: submissions.filter(
+        (s) => s.percentage >= 50 && s.percentage < 65,
+      ).length,
+      fill: '#F59E0B',
+    },
+    {
+      tier: isAr ? 'راسب (<50%)' : 'Fail (<50%)',
+      count: submissions.filter((s) => s.percentage < 50).length,
+      fill: '#F43F5E',
+    },
+  ];
+
+  const handleExport = async () => {
+    if (!quiz) return;
+    try {
+      setIsExporting(true);
+      await exportQuizAnalysis(quiz._id, quiz.title);
+      toast.success(
+        isAr
+          ? 'تم تحميل شيت التحليل بنجاح'
+          : 'Analysis spreadsheet downloaded successfully',
+      );
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل تحميل شيت التحليل' : 'Failed to export analysis sheet',
+        ),
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const filtered = useMemo(() => {
-    const list = submissionsQuery.data || [];
-    if (!search.trim()) return list;
+    if (!search.trim()) return submissions;
     const q = search.toLowerCase();
-    return list.filter(
+    return submissions.filter(
       (s) =>
         s.studentCode.toLowerCase().includes(q) ||
         s.studentName.toLowerCase().includes(q),
     );
-  }, [submissionsQuery.data, search]);
+  }, [submissions, search]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass max-h-[85vh] max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6">
-        <DialogHeader className="border-b border-border/80 pb-3 text-start">
-          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-            <Users className="h-5 w-5 text-primary" />
-            <span>
-              {isAr ? 'نتائج وتسليمات الطلاب:' : 'Student Submissions:'}{' '}
-              <span className="text-primary">{quiz?.title}</span>
-            </span>
-          </DialogTitle>
+      <DialogContent className="glass max-h-[90vh] max-w-4xl overflow-y-auto rounded-2xl border border-white/10 p-6 shadow-2xl">
+        <DialogHeader className="border-b border-border/70 pb-4 text-start">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                <span>
+                  {isAr
+                    ? 'تحليل نتائج وأداء الاختبار:'
+                    : 'Quiz Analytics & Submissions:'}{' '}
+                  <span className="text-primary">{quiz?.title}</span>
+                </span>
+              </DialogTitle>
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-mono font-semibold text-foreground/80">
+                  {quiz?.courseCode}
+                </span>
+                <span>·</span>
+                <span>{quiz?.courseName}</span>
+                <span>·</span>
+                <span>
+                  {quiz?.totalMarks} {isAr ? 'درجة' : 'marks'}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleExport}
+              disabled={
+                isExporting || submissionsQuery.isLoading || total === 0
+              }
+              size="sm"
+              className="rounded-squircle gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700 shadow-sm"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-4 w-4" />
+              )}
+              <span>
+                {isAr
+                  ? 'تصدير شيت التحليل (Excel)'
+                  : 'Export Analysis (.xlsx)'}
+              </span>
+            </Button>
+          </div>
+
+          {/* Tab buttons */}
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('analytics')}
+              className={`flex items-center gap-1.5 rounded-squircle px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === 'analytics'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>
+                {isAr
+                  ? 'الرسوم البيانية والإحصائيات'
+                  : 'Charts & Statistics'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('roster')}
+              className={`flex items-center gap-1.5 rounded-squircle px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === 'roster'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>
+                {isAr ? 'قائمة تسليمات الطلاب' : 'Student Submissions'}
+                {total > 0 && ` (${total})`}
+              </span>
+            </button>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-4 pt-3">
-          <Input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={isAr ? 'بحث بكود أو اسم الطالب...' : 'Search student code or name...'}
-            className="rounded-squircle text-xs"
-          />
+        {submissionsQuery.isLoading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : total === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-secondary/20 p-12 text-center text-muted-foreground text-sm">
+            <Users className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+            <p className="font-semibold">
+              {isAr
+                ? 'لم يقم أي طالب بتقديم هذا الاختبار حتى الآن'
+                : 'No student submissions yet'}
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              {isAr
+                ? 'ستظهر الإحصائيات والرسوم البيانية تلقائياً بمجرد تسليم الطلاب لإجاباتهم.'
+                : 'Statistics and charts will appear as soon as students submit their answers.'}
+            </p>
+          </div>
+        ) : activeTab === 'analytics' ? (
+          <div className="space-y-6 pt-3">
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-white/10 bg-secondary/30 p-3.5 shadow-sm">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? 'إجمالي المشاركين' : 'Total Students'}
+                </span>
+                <div className="mt-1 flex items-baseline gap-1 text-2xl font-bold font-mono text-foreground">
+                  {total}
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {isAr ? 'طالب خاضوا الاختبار' : 'participated'}
+                </span>
+              </div>
 
-          {submissionsQuery.isLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 shadow-sm">
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  {isAr ? 'نسبة النجاح العامة' : 'Pass Rate'}
+                </span>
+                <div className="mt-1 flex items-baseline gap-1 text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                  {passPercentage}%
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {passed} {isAr ? 'ناجح' : 'passed'} · {failed}{' '}
+                  {isAr ? 'راسب' : 'failed'}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-secondary/30 p-3.5 shadow-sm">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? 'متوسط الدرجات' : 'Average Score'}
+                </span>
+                <div className="mt-1 flex items-baseline gap-1 text-2xl font-bold font-mono text-primary">
+                  {avgScore}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    / {quiz?.totalMarks}
+                  </span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {quiz?.totalMarks
+                    ? Math.round((Number(avgScore) / quiz.totalMarks) * 100)
+                    : 0}
+                  % {isAr ? 'من الدرجة الكلية' : 'of total'}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-secondary/30 p-3.5 shadow-sm">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? 'أعلى وأدنى درجة' : 'Score Range'}
+                </span>
+                <div className="mt-1 flex items-baseline gap-1.5 text-2xl font-bold font-mono text-foreground">
+                  <span className="text-emerald-500">{maxScore}</span>
+                  <span className="text-xs text-muted-foreground">/</span>
+                  <span className="text-rose-500">{minScore}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {isAr ? 'أعلى درجة / أدنى درجة' : 'High / Low score'}
+                </span>
+              </div>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-xl border border-border/70 bg-secondary/20 p-8 text-center text-muted-foreground text-sm">
-              {isAr ? 'لا توجد تسليمات مسجلة بعد' : 'No submissions found yet'}
+
+            {/* Recharts Visualizations */}
+            <div className="grid gap-6 sm:grid-cols-2">
+              {/* Pie Chart: Pass vs Fail */}
+              <div className="rounded-xl border border-white/10 bg-card/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+                    {isAr
+                      ? 'نسبة النجاح مقابل الرسوب'
+                      : 'Pass vs. Fail Distribution'}
+                  </span>
+                  <span className="font-mono text-xs font-bold text-emerald-500">
+                    {passPercentage}% {isAr ? 'نجاح' : 'Pass'}
+                  </span>
+                </div>
+                <div className="h-56 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={75}
+                        paddingAngle={4}
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center justify-center gap-6 pt-1 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-emerald-500" />
+                    <span className="font-medium">
+                      {isAr ? 'ناجح' : 'Passed'}: {passed} ({passPercentage}%)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-rose-500" />
+                    <span className="font-medium">
+                      {isAr ? 'راسب' : 'Failed'}: {failed} ({failPercentage}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bar Chart: Score Tiers */}
+              <div className="rounded-xl border border-white/10 bg-card/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    {isAr
+                      ? 'توزيع درجات الطلاب بالتقديرات'
+                      : 'Grade Tiers Breakdown'}
+                  </span>
+                </div>
+                <div className="h-56 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={barData}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
+                    >
+                      <XAxis
+                        dataKey="tier"
+                        tick={{ fontSize: 9, fill: '#94A3B8' }}
+                        interval={0}
+                        angle={-15}
+                        textAnchor="end"
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fontSize: 10, fill: '#94A3B8' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          fontSize: '12px',
+                        }}
+                      />
+                      <Bar
+                        dataKey="count"
+                        name={isAr ? 'عدد الطلاب' : 'Students'}
+                        radius={[4, 4, 0, 0]}
+                      >
+                        {barData.map((entry, index) => (
+                          <Cell key={`bar-${index}`} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/80">
-              <table className="w-full text-xs text-start">
-                <thead className="bg-secondary/40 text-muted-foreground border-b border-border">
-                  <tr>
-                    <th className="p-3 text-start">{isAr ? 'كود الطالب' : 'Student Code'}</th>
-                    <th className="p-3 text-start">{isAr ? 'اسم الطالب' : 'Student Name'}</th>
-                    <th className="p-3 text-center">{isAr ? 'الدرجة' : 'Score'}</th>
-                    <th className="p-3 text-center">{isAr ? 'النسبة' : 'Percentage'}</th>
-                    <th className="p-3 text-end">{isAr ? 'وقت التسليم' : 'Submitted At'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {filtered.map((sub) => (
-                    <tr key={sub._id} className="hover:bg-secondary/20 transition-colors">
-                      <td className="p-3 font-mono font-bold text-foreground">
-                        {sub.studentCode}
-                      </td>
-                      <td className="p-3 font-medium text-foreground">
-                        {sub.studentName}
-                      </td>
-                      <td className="p-3 text-center font-bold">
-                        <span className="text-primary">{sub.score}</span> / {sub.totalMarks}
-                      </td>
-                      <td className="p-3 text-center">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                            sub.isPassed
-                              ? 'bg-emerald-500/15 text-emerald-400'
-                              : 'bg-rose-500/15 text-rose-400'
-                          }`}
-                        >
-                          {sub.percentage}%
-                        </span>
-                      </td>
-                      <td className="p-3 text-end text-muted-foreground font-mono text-[11px]">
-                        {new Date(sub.submittedAt).toLocaleTimeString('ar-EG', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
+          </div>
+        ) : (
+          /* Roster Tab */
+          <div className="space-y-4 pt-3">
+            <div className="relative">
+              <Input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={
+                  isAr
+                    ? 'بحث بكود أو اسم الطالب...'
+                    : 'Search student code or name...'
+                }
+                className="rounded-squircle text-xs border-white/15 bg-background/60"
+              />
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-secondary/20 p-8 text-center text-muted-foreground text-sm">
+                {isAr
+                  ? 'لا توجد نتائج مطابقة للبحث'
+                  : 'No matching submissions found'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-white/10">
+                <table className="w-full text-xs text-start">
+                  <thead className="bg-secondary/40 text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="p-3 text-start">
+                        {isAr ? 'كود الطالب' : 'Student Code'}
+                      </th>
+                      <th className="p-3 text-start">
+                        {isAr ? 'اسم الطالب' : 'Student Name'}
+                      </th>
+                      <th className="p-3 text-center">
+                        {isAr ? 'الدرجة' : 'Score'}
+                      </th>
+                      <th className="p-3 text-center">
+                        {isAr ? 'النسبة' : 'Percentage'}
+                      </th>
+                      <th className="p-3 text-center">
+                        {isAr ? 'النتيجة' : 'Result'}
+                      </th>
+                      <th className="p-3 text-end">
+                        {isAr ? 'وقت التسليم' : 'Submitted At'}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {filtered.map((sub) => (
+                      <tr
+                        key={sub._id}
+                        className="hover:bg-secondary/20 transition-colors"
+                      >
+                        <td className="p-3 font-mono font-bold text-foreground">
+                          {sub.studentCode}
+                        </td>
+                        <td className="p-3 font-medium text-foreground">
+                          {sub.studentName}
+                        </td>
+                        <td className="p-3 text-center font-bold">
+                          <span className="text-primary">{sub.score}</span> /{' '}
+                          {sub.totalMarks}
+                        </td>
+                        <td className="p-3 text-center font-mono font-semibold">
+                          {sub.percentage}%
+                        </td>
+                        <td className="p-3 text-center">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                              sub.isPassed
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            {sub.isPassed
+                              ? isAr
+                                ? 'ناجح'
+                                : 'Passed'
+                              : isAr
+                                ? 'راسب'
+                                : 'Failed'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-end text-muted-foreground font-mono text-[11px]">
+                          {new Date(sub.submittedAt).toLocaleTimeString(
+                            'ar-EG',
+                            {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            },
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1046,6 +1441,8 @@ function AdminQuizzesContent() {
   const urlCourseId = searchParams?.get('courseId') || 'ALL';
   const autoCreate = searchParams?.get('create') === 'true';
 
+  const isDoctor = user?.role === 'staff' && user?.staffType === 'doctor';
+
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState(urlCourseId);
@@ -1058,7 +1455,7 @@ function AdminQuizzesContent() {
 
   // Fetch quizzes
   const quizzesQuery = useQuery({
-    queryKey: ['admin-quizzes', page, search, courseFilter],
+    queryKey: ['admin-quizzes', page, search, courseFilter, user?._id, isDoctor],
     queryFn: () =>
       listQuizzes({
         page,
@@ -1070,11 +1467,11 @@ function AdminQuizzesContent() {
 
   // Fetch courses list for selectors
   const coursesQuery = useQuery({
-    queryKey: ['active-courses-list'],
+    queryKey: ['active-courses-list', user?._id, isDoctor],
     queryFn: async () => {
       try {
         const res = await api.get<unknown>('/admin/courses', {
-          params: { page: 1, limit: 200 },
+          params: { page: 1, limit: 200, doctorId: isDoctor ? user?._id : undefined },
         });
         const payload = (res as { data?: unknown })?.data ?? res;
         const items = Array.isArray((payload as { items?: unknown[] })?.items)
@@ -1089,7 +1486,7 @@ function AdminQuizzesContent() {
 
       try {
         const res2 = await api.get<unknown>('/courses', {
-          params: { page: 1, limit: 200 },
+          params: { page: 1, limit: 200, doctorId: isDoctor ? user?._id : undefined },
         });
         const payload2 = (res2 as { data?: unknown })?.data ?? res2;
         return Array.isArray((payload2 as { items?: unknown[] })?.items)
@@ -1273,13 +1670,29 @@ function AdminQuizzesContent() {
                 className="z-50 min-w-48 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95"
               >
                 {canViewSubmissions && (
-                  <DropdownMenu.Item
-                    onClick={() => setSubmissionsQuiz(quiz)}
-                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
-                  >
-                    <Eye className="h-3.5 w-3.5 text-primary" />
-                    <span>{isAr ? 'عرض نتائج وتسليمات الطلاب' : 'View Submissions'}</span>
-                  </DropdownMenu.Item>
+                  <>
+                    <DropdownMenu.Item
+                      onClick={() => setSubmissionsQuiz(quiz)}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5 text-primary" />
+                      <span>{isAr ? 'عرض التحليل وتسليمات الطلاب' : 'View Analytics & Submissions'}</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={async () => {
+                        try {
+                          await exportQuizAnalysis(quiz._id, quiz.title);
+                          toast.success(isAr ? 'تم تحميل شيت التحليل بنجاح' : 'Analysis sheet downloaded');
+                        } catch (err) {
+                          toast.error(getApiErrorMessage(err));
+                        }
+                      }}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>{isAr ? 'تحميل شيت التحليل (Excel)' : 'Download Analysis (.xlsx)'}</span>
+                    </DropdownMenu.Item>
+                  </>
                 )}
                 {canWrite && (
                   <>

@@ -245,6 +245,15 @@ export async function downloadQuestionsTemplate(
   downloadFileBlob(raw, filename, mimeType);
 }
 
+export async function exportQuizAnalysis(quizId: string, quizTitle: string) {
+  const raw = await api.get(`/admin/quizzes/${quizId}/export-analysis`, {
+    responseType: 'blob',
+  });
+  const safeTitle = quizTitle.replace(/[/\\?%*:|"<>]/g, '_');
+  const filename = `quiz-analysis-${safeTitle}.xlsx`;
+  downloadFileBlob(raw, filename, EXCEL_MIME_TYPE);
+}
+
 // ─── Student API Calls ───────────────────────────────────────────────
 
 export async function getStudentQuizzes() {

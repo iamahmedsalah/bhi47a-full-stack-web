@@ -409,4 +409,423 @@ export class QuizQuestionExcelService {
     }
     return rows;
   }
+
+  async generateQuizAnalysisExcel(
+    quiz: {
+      title: string;
+      courseCode: string;
+      courseName?: string;
+      totalMarks: number;
+      passingMarks: number;
+      durationMinutes?: number;
+      creatorName?: string;
+    },
+    submissions: Array<{
+      studentCode: string;
+      studentName: string;
+      score: number;
+      totalMarks: number;
+      percentage: number;
+      isPassed: boolean;
+      submittedAt: Date;
+    }>,
+  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BH47A Student Portal';
+    workbook.created = new Date();
+
+    const totalStudents = submissions.length;
+    const passedCount = submissions.filter((s) => s.isPassed).length;
+    const failedCount = totalStudents - passedCount;
+    const passRate =
+      totalStudents > 0 ? Math.round((passedCount / totalStudents) * 100) : 0;
+    const scores = submissions.map((s) => s.score);
+    const avgScore =
+      totalStudents > 0
+        ? (scores.reduce((a, b) => a + b, 0) / totalStudents).toFixed(1)
+        : '0';
+    const maxScore = totalStudents > 0 ? Math.max(...scores) : 0;
+
+    // Distribution
+    const excellentCount = submissions.filter((s) => s.percentage >= 85).length;
+    const veryGoodCount = submissions.filter(
+      (s) => s.percentage >= 75 && s.percentage < 85,
+    ).length;
+    const goodCount = submissions.filter(
+      (s) => s.percentage >= 65 && s.percentage < 75,
+    ).length;
+    const passCount = submissions.filter(
+      (s) => s.percentage >= 50 && s.percentage < 65,
+    ).length;
+    const failBracketCount = submissions.filter(
+      (s) => s.percentage < 50,
+    ).length;
+
+    // ── Sheet 1: Summary & Performance Analytics ──────────────────────
+    const summarySheet = workbook.addWorksheet('تحليل الأداء والإحصائيات', {
+      views: [{ rightToLeft: true }],
+    });
+
+    summarySheet.columns = [
+      { width: 28 },
+      { width: 32 },
+      { width: 22 },
+      { width: 22 },
+      { width: 20 },
+      { width: 20 },
+    ];
+
+    // Banner Title
+    summarySheet.mergeCells('A1:F1');
+    const titleCell = summarySheet.getCell('A1');
+    titleCell.value =
+      'المعهد العالي للعلوم الإدارية والتكنولوجيا - تقرير التحليل الشامل لأداء الاختبار';
+    titleCell.font = {
+      name: 'Calibri',
+      size: 14,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    summarySheet.getRow(1).height = 36;
+
+    // Info card block
+    const addInfoRow = (
+      rowNum: number,
+      label1: string,
+      val1: any,
+      label2: string,
+      val2: any,
+    ) => {
+      summarySheet.getCell(`A${rowNum}`).value = label1;
+      summarySheet.getCell(`A${rowNum}`).font = {
+        bold: true,
+        color: { argb: 'FF334155' },
+      };
+      summarySheet.getCell(`A${rowNum}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF1F5F9' },
+      };
+      summarySheet.getCell(`B${rowNum}`).value = val1;
+      summarySheet.getCell(`B${rowNum}`).font = { bold: true };
+
+      summarySheet.getCell(`D${rowNum}`).value = label2;
+      summarySheet.getCell(`D${rowNum}`).font = {
+        bold: true,
+        color: { argb: 'FF334155' },
+      };
+      summarySheet.getCell(`D${rowNum}`).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF1F5F9' },
+      };
+      summarySheet.getCell(`E${rowNum}`).value = val2;
+      summarySheet.getCell(`E${rowNum}`).font = { bold: true };
+      summarySheet.getRow(rowNum).height = 22;
+    };
+
+    addInfoRow(
+      3,
+      'عنوان الاختبار:',
+      quiz.title,
+      'المقرر الدراسي:',
+      `${quiz.courseCode} - ${quiz.courseName || ''}`,
+    );
+    addInfoRow(
+      4,
+      'الدرجة الكلية:',
+      quiz.totalMarks,
+      'درجة النجاح:',
+      `${quiz.passingMarks} (50%)`,
+    );
+    addInfoRow(
+      5,
+      'مدة الاختبار:',
+      `${quiz.durationMinutes || 15} دقيقة`,
+      'تاريخ إعداد التقرير:',
+      new Date().toLocaleDateString('ar-EG'),
+    );
+
+    // Section 1 Header: KPIs
+    summarySheet.mergeCells('A7:F7');
+    const kpiHeader = summarySheet.getCell('A7');
+    kpiHeader.value =
+      'مؤشرات الأداء العامة لنتائج الطلاب (Key Performance Indicators)';
+    kpiHeader.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    kpiHeader.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F766E' },
+    };
+    kpiHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+    summarySheet.getRow(7).height = 28;
+
+    // KPI Table Header
+    const kpiTableHeaders = [
+      'عدد الطلاب المشاركين',
+      'عدد الطلاب الناجحين',
+      'عدد الطلاب الراسبين',
+      'نسبة النجاح',
+      'متوسط الدرجات',
+      'أعلى درجة',
+    ];
+    const kpiRow = summarySheet.getRow(8);
+    kpiTableHeaders.forEach((th, i) => {
+      const cell = kpiRow.getCell(i + 1);
+      cell.value = th;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF14B8A6' },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+    kpiRow.height = 24;
+
+    // KPI Values Row
+    const kpiDataRow = summarySheet.getRow(9);
+    const kpiValues = [
+      totalStudents,
+      `${passedCount} طالب`,
+      `${failedCount} طالب`,
+      `${passRate}%`,
+      `${avgScore} / ${quiz.totalMarks}`,
+      `${maxScore} / ${quiz.totalMarks}`,
+    ];
+    kpiValues.forEach((val, i) => {
+      const cell = kpiDataRow.getCell(i + 1);
+      cell.value = val;
+      cell.font = { bold: true, size: 11 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+      if (i === 1) cell.font = { bold: true, color: { argb: 'FF16A34A' } };
+      if (i === 2 && failedCount > 0)
+        cell.font = { bold: true, color: { argb: 'FFDC2626' } };
+      if (i === 3)
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6FFFA' },
+        };
+    });
+    kpiDataRow.height = 26;
+
+    // Section 2 Header: Distribution
+    summarySheet.mergeCells('A11:D11');
+    const distHeader = summarySheet.getCell('A11');
+    distHeader.value =
+      'توزيع الدرجات والتقديرات الإحصائية (Score Distribution & Grade Tiers)';
+    distHeader.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    distHeader.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F766E' },
+    };
+    distHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+    summarySheet.getRow(11).height = 28;
+
+    // Dist table header
+    const distHeaders = [
+      'التقدير والمستوى',
+      'النطاق المئوي',
+      'عدد الطلاب',
+      'النسبة من الإجمالي',
+    ];
+    const distHeadRow = summarySheet.getRow(12);
+    distHeaders.forEach((th, i) => {
+      const cell = distHeadRow.getCell(i + 1);
+      cell.value = th;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF14B8A6' },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        bottom: { style: 'thin' },
+        left: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+    distHeadRow.height = 24;
+
+    const distRows = [
+      [
+        'ممتاز (Excellent)',
+        '85% فأكثر',
+        excellentCount,
+        totalStudents > 0
+          ? `${Math.round((excellentCount / totalStudents) * 100)}%`
+          : '0%',
+      ],
+      [
+        'جيد جداً (Very Good)',
+        '75% إلى 84%',
+        veryGoodCount,
+        totalStudents > 0
+          ? `${Math.round((veryGoodCount / totalStudents) * 100)}%`
+          : '0%',
+      ],
+      [
+        'جيد (Good)',
+        '65% إلى 74%',
+        goodCount,
+        totalStudents > 0
+          ? `${Math.round((goodCount / totalStudents) * 100)}%`
+          : '0%',
+      ],
+      [
+        'مقبول (Pass)',
+        '50% إلى 64%',
+        passCount,
+        totalStudents > 0
+          ? `${Math.round((passCount / totalStudents) * 100)}%`
+          : '0%',
+      ],
+      [
+        'راسب (Fail)',
+        'أقل من 50%',
+        failBracketCount,
+        totalStudents > 0
+          ? `${Math.round((failBracketCount / totalStudents) * 100)}%`
+          : '0%',
+      ],
+    ];
+
+    distRows.forEach((r, idx) => {
+      const row = summarySheet.getRow(13 + idx);
+      r.forEach((val, cIdx) => {
+        const cell = row.getCell(cIdx + 1);
+        cell.value = val;
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        cell.border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+        if (idx === 4 && failBracketCount > 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFEE2E2' },
+          };
+          cell.font = { color: { argb: 'FFDC2626' }, bold: true };
+        } else if (idx === 0 && excellentCount > 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFDCFCE7' },
+          };
+          cell.font = { color: { argb: 'FF15803D' }, bold: true };
+        }
+      });
+      row.height = 22;
+    });
+
+    // ── Sheet 2: Submissions Roster ──────────────────────────────────
+    const rosterSheet = workbook.addWorksheet('قائمة تسليمات الطلاب', {
+      views: [{ rightToLeft: true }],
+    });
+
+    rosterSheet.columns = [
+      { header: 'م', key: 'seq', width: 6 },
+      { header: 'كود الطالب', key: 'studentCode', width: 16 },
+      { header: 'اسم الطالب', key: 'studentName', width: 34 },
+      { header: 'الدرجة المحققة', key: 'score', width: 16 },
+      { header: 'الدرجة الكلية', key: 'totalMarks', width: 16 },
+      { header: 'النسبة المئوية', key: 'percentage', width: 16 },
+      { header: 'النتيجة', key: 'result', width: 14 },
+      { header: 'تاريخ ووقت التسليم', key: 'submittedAt', width: 24 },
+    ];
+
+    const rosterHeaderRow = rosterSheet.getRow(1);
+    rosterHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    rosterHeaderRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    rosterHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    rosterHeaderRow.height = 26;
+
+    submissions.forEach((sub, i) => {
+      const row = rosterSheet.addRow({
+        seq: i + 1,
+        studentCode: sub.studentCode,
+        studentName: sub.studentName,
+        score: sub.score,
+        totalMarks: sub.totalMarks,
+        percentage: `${sub.percentage}%`,
+        result: sub.isPassed ? 'ناجح' : 'راسب',
+        submittedAt: sub.submittedAt
+          ? new Date(sub.submittedAt).toLocaleString('ar-EG', {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            })
+          : '—',
+      });
+      row.height = 22;
+      row.alignment = { vertical: 'middle', horizontal: 'center' };
+      row.getCell('studentName').alignment = {
+        vertical: 'middle',
+        horizontal: 'right',
+      };
+
+      const resultCell = row.getCell('result');
+      if (sub.isPassed) {
+        resultCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+        resultCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFDCFCE7' },
+        };
+      } else {
+        resultCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+        resultCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFEE2E2' },
+        };
+      }
+
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+    });
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const safeTitle = quiz.title.replace(/[/\\?%*:|"<>]/g, '_');
+    return {
+      buffer,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: `quiz-analysis-${safeTitle}.xlsx`,
+    };
+  }
 }

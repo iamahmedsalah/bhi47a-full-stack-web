@@ -82,8 +82,8 @@ export class CoursesController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_READ)
   @ApiOperation({ summary: 'List all courses with filters (Admin/Staff)' })
-  async findAll(@Query() query: QueryCourseDto) {
-    return this.coursesService.findAll(query);
+  async findAll(@Query() query: QueryCourseDto, @CurrentUser() user: any) {
+    return this.coursesService.findAll(query, user);
   }
 
   @Post('admin/courses')

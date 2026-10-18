@@ -934,6 +934,7 @@ function CoursesPageContent() {
   } = useCourseStore();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isDoctor = user?.role === 'staff' && (user as any)?.staffType === 'doctor';
   const canWriteCourses = isAdmin || Boolean(user?.permissions?.includes('courses.write'));
   const canUploadCourses = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
   const canCreateQuiz = isAdmin || Boolean(user?.permissions?.includes('quizzes.write')) || Boolean(user?.permissions?.includes('quizzes.create'));
@@ -953,12 +954,13 @@ function CoursesPageContent() {
   const limit = 10;
 
   const coursesQuery = useQuery({
-    queryKey: ['courses', search, activeLevel, activeSemester, page, limit],
+    queryKey: ['courses', search, activeLevel, activeSemester, page, limit, user?._id],
     queryFn: async () => {
       const params: Record<string, string | number> = { page, limit };
       if (search) params.search = search;
       if (activeLevel !== 'all') params.level = activeLevel;
       if (activeSemester !== 'all') params.semester = activeSemester;
+      if (isDoctor && user?._id) params.doctorId = user._id;
       const res = await api.get<PaginatedResponse<Course>>('/admin/courses', { params });
       return res.data;
     },
@@ -1340,7 +1342,7 @@ function CoursesPageContent() {
                 align="end"
                 className="z-50 min-w-52 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
               >
-                {canWriteCourses && (
+                {(canWriteCourses || isDoctor) && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setSelectedCourse(course);
@@ -1349,11 +1351,11 @@ function CoursesPageContent() {
                     className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
                   >
                     <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span>{locale === 'ar' ? 'تعديل بيانات المادة' : 'Edit Course'}</span>
+                    <span>{locale === 'ar' ? 'تعديل غلاف وبيانات المقرر' : 'Edit Book Cover & Course'}</span>
                   </DropdownMenu.Item>
                 )}
 
-                {canWriteCourses && (
+                {(canWriteCourses || isDoctor) && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setSelectedCourseForPdf(course);
@@ -1390,7 +1392,7 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
-                {canWriteCourses && (
+                {canWriteCourses && !isDoctor && (
                   <>
                     <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
                     <DropdownMenu.Item
@@ -1419,9 +1421,13 @@ function CoursesPageContent() {
       <PageTitleBanner
         title={t('title')}
         icon={<BookOpen className="h-5 w-5" />}
-        subtitle={t('title')}
+        subtitle={
+          isDoctor
+            ? (locale === 'ar' ? 'المقررات الدراسية المسندة إليك لإدارة المناهج والكتب والكويزات' : 'Your assigned courses for syllabus, books, and quizzes')
+            : t('title')
+        }
       >
-        {canUploadCourses && (
+        {canUploadCourses && !isDoctor && (
           <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
             <UploadCloud className="h-4 w-4" />
             {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
@@ -1431,7 +1437,7 @@ function CoursesPageContent() {
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {locale === 'ar' ? 'تصدير' : 'Export'}
         </Button>
-        {canWriteCourses && (
+        {canWriteCourses && !isDoctor && (
           <Button
             onClick={() => setIsAddOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-primary font-semibold text-white shadow-lg hover:bg-primary-hover active:scale-[0.98]"

@@ -32,6 +32,8 @@ import {
 import { StudentQueryService } from './services/student-query.service';
 import { StudentsExportController } from './controllers/students-export.controller';
 
+import { Course, CourseSchema } from '../courses/schemas/course.schema';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -44,6 +46,7 @@ import { StudentsExportController } from './controllers/students-export.controll
         name: StudentAcademicProfile.name,
         schema: StudentAcademicProfileSchema,
       },
+      { name: Course.name, schema: CourseSchema },
     ]),
     UsersModule,
     EmailsModule,

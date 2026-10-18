@@ -94,50 +94,134 @@ export function StaffManagementPage() {
 
   const columns: ColumnDef<StaffMember>[] = [
     {
-      key: 'staff', header: t('table.staff'), render: (staff) => (
+      key: 'staff',
+      header: t('table.staff'),
+      render: (staff) => (
         <TableCell className="px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-foreground">{staff.name}</span>
-            <span className="inline-flex rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-medium text-teal-600 dark:text-teal-400">
+            <span className="inline-flex rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-[11px] font-medium text-teal-600 dark:text-teal-400">
               {t(`types.${staff.staffType ?? 'administrative'}`)}
             </span>
           </div>
-          <div className="font-mono text-xs text-muted-foreground">{staff.userCode ?? '—'} · {staff.email ?? '—'}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
+            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
+              @{staff.username || '—'}
+            </span>
+            <span>·</span>
+            <span>{staff.email ?? '—'}</span>
+            {staff.phone && (
+              <>
+                <span>·</span>
+                <span dir="ltr">{staff.phone}</span>
+              </>
+            )}
+          </div>
         </TableCell>
       ),
     },
     {
-      key: 'status', header: t('table.status'), render: (staff) => (
+      key: 'status',
+      header: t('table.status'),
+      render: (staff) => (
         <TableCell className="px-4 py-3">
-          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${staff.isActive ? 'border-success/30 bg-success/10 text-success' : 'border-danger/30 bg-danger/10 text-danger'}`}>
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+              staff.isActive
+                ? 'border-success/30 bg-success/10 text-success'
+                : 'border-danger/30 bg-danger/10 text-danger'
+            }`}
+          >
             {staff.isActive ? t('active') : t('inactive')}
           </span>
         </TableCell>
       ),
     },
     {
-      key: 'permissions', header: t('table.permissions'), render: (staff) => (
-        <TableCell className="px-4 py-3 font-mono text-xs">{staff.permissions.length} / {STAFF_ASSIGNABLE_PERMISSIONS.length}</TableCell>
-      ),
-    },
-    {
-      key: 'lastLogin', header: t('table.lastLogin'), render: (staff) => (
-        <TableCell className="px-4 py-3 text-xs text-muted-foreground">
-          {staff.lastLoginAt ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(staff.lastLoginAt)) : t('never')}
+      key: 'permissions',
+      header: t('table.permissions'),
+      render: (staff) => (
+        <TableCell className="px-4 py-3 font-mono text-xs">
+          {staff.permissions.length} / {STAFF_ASSIGNABLE_PERMISSIONS.length}
         </TableCell>
       ),
     },
     {
-      key: 'actions', header: t('table.actions'), render: (staff) => (
+      key: 'lastLogin',
+      header: t('table.lastLogin'),
+      render: (staff) => (
+        <TableCell className="px-4 py-3 text-xs text-muted-foreground">
+          {staff.lastLoginAt
+            ? new Intl.DateTimeFormat(undefined, {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              }).format(new Date(staff.lastLoginAt))
+            : t('never')}
+        </TableCell>
+      ),
+    },
+    {
+      key: 'actions',
+      header: t('table.actions'),
+      render: (staff) => (
         <TableCell className="px-4 py-3">
           <div className="flex flex-wrap gap-1.5">
-            <Button size="icon" variant="outline" title={t('actions.edit')} aria-label={t('actions.edit')} onClick={() => { setEditing(staff); setFormOpen(true); }}><Edit2 className="h-4 w-4" /></Button>
-            <Button size="icon" variant="outline" title={t('actions.permissions')} aria-label={t('actions.permissions')} onClick={() => setPermissionsTarget(staff)}><ShieldCheck className="h-4 w-4" /></Button>
-            <Button size="icon" variant="outline" title={t('actions.resetPassword')} aria-label={t('actions.resetPassword')} onClick={() => setPasswordTarget(staff)}><KeyRound className="h-4 w-4" /></Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="rounded-squircle"
+              title={t('actions.edit')}
+              aria-label={t('actions.edit')}
+              onClick={() => {
+                setEditing(staff);
+                setFormOpen(true);
+              }}
+            >
+              <Edit2 className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="rounded-squircle"
+              title={t('actions.permissions')}
+              aria-label={t('actions.permissions')}
+              onClick={() => setPermissionsTarget(staff)}
+            >
+              <ShieldCheck className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              className="rounded-squircle"
+              title={t('actions.resetPassword')}
+              aria-label={t('actions.resetPassword')}
+              onClick={() => setPasswordTarget(staff)}
+            >
+              <KeyRound className="h-4 w-4" />
+            </Button>
             {staff.isActive ? (
-              <Button size="icon" variant="outline" className="text-danger" title={t('actions.deactivate')} aria-label={t('actions.deactivate')} onClick={() => setDeactivateTarget(staff)}><UserX className="h-4 w-4" /></Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="rounded-squircle text-danger hover:bg-danger/10"
+                title={t('actions.deactivate')}
+                aria-label={t('actions.deactivate')}
+                onClick={() => setDeactivateTarget(staff)}
+              >
+                <UserX className="h-4 w-4" />
+              </Button>
             ) : (
-              <Button size="icon" variant="outline" className="text-success" title={t('actions.activate')} aria-label={t('actions.activate')} disabled={mutations.activate.isPending} onClick={() => activate(staff)}><UserCheck className="h-4 w-4" /></Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="rounded-squircle text-success hover:bg-success/10"
+                title={t('actions.activate')}
+                aria-label={t('actions.activate')}
+                disabled={mutations.activate.isPending}
+                onClick={() => activate(staff)}
+              >
+                <UserCheck className="h-4 w-4" />
+              </Button>
             )}
           </div>
         </TableCell>
@@ -148,19 +232,51 @@ export function StaffManagementPage() {
   const data = query.data;
   return (
     <div className="animate-fade-in space-y-6 p-2 md:p-6">
-      <PageTitleBanner title={t('pageTitle')} subtitle={t('pageDescription')} icon={<Users className="h-5 w-5" />} />
-      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/80 p-4 md:flex-row md:items-center md:justify-between">
+      <PageTitleBanner
+        title={t('pageTitle')}
+        subtitle={t('pageDescription')}
+        icon={<Users className="h-5 w-5" />}
+      />
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card/60 p-4 shadow-sm backdrop-blur-md md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-          <div className="relative max-w-lg flex-1">
-            <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder={t('searchPlaceholder')} className="ps-9" />
+          <div className="relative min-w-[260px] flex-1">
+            <Search className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder={t('searchPlaceholder')}
+              className="rounded-squircle ps-10 h-10 border-white/10 bg-background/60 text-sm focus-visible:ring-primary"
+            />
           </div>
-          <Select value={status} onValueChange={(value) => { setStatus(value as typeof status); setPage(1); }}>
-            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder={t('filters.all')} /></SelectTrigger>
-            <SelectContent><SelectItem value="all">{t('filters.all')}</SelectItem><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="inactive">{t('inactive')}</SelectItem></SelectContent>
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value as typeof status);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-full sm:w-40 rounded-squircle border-white/10 bg-background/60 text-xs">
+              <SelectValue placeholder={t('filters.all')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('filters.all')}</SelectItem>
+              <SelectItem value="active">{t('active')}</SelectItem>
+              <SelectItem value="inactive">{t('inactive')}</SelectItem>
+            </SelectContent>
           </Select>
-          <Select value={staffType} onValueChange={(value) => { setStaffType(value as typeof staffType); setPage(1); }}>
-            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder={t('filters.allTypes')} /></SelectTrigger>
+          <Select
+            value={staffType}
+            onValueChange={(value) => {
+              setStaffType(value as typeof staffType);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-full sm:w-48 rounded-squircle border-white/10 bg-background/60 text-xs">
+              <SelectValue placeholder={t('filters.allTypes')} />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
               {STAFF_TYPE_VALUES.map((type) => (
@@ -171,7 +287,16 @@ export function StaffManagementPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button onClick={() => { setEditing(null); setFormOpen(true); }} className="gap-2"><Plus className="h-4 w-4" />{t('addStaff')}</Button>
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+          className="h-10 rounded-squircle gap-2 bg-primary font-semibold text-white hover:bg-primary-hover shadow-sm"
+        >
+          <Plus className="h-4 w-4" />
+          {t('addStaff')}
+        </Button>
       </div>
 
       <DataTableShell columns={columns} data={data?.items ?? []} keyExtractor={(staff) => staff._id} isLoading={query.isLoading} isError={query.isError} error={query.error} loadingMessage={t('loading')} emptyMessage={t('empty')} errorMessage={t('loadFailed')} retryLabel={t('retry')} onRetry={() => query.refetch()} />

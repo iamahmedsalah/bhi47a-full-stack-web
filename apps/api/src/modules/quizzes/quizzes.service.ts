@@ -106,6 +106,11 @@ export class QuizzesService {
     if (user.role === 'staff') {
       const isCourseDoctor =
         course.doctorId && course.doctorId.toString() === user._id.toString();
+      if (user.staffType === 'doctor' && !isCourseDoctor) {
+        throw new ForbiddenException(
+          'يمكنك فقط إنشاء اختبارات للمقررات الدراسية المسندة إليك',
+        );
+      }
       const hasWritePerm = user.permissions?.includes(
         PERMISSIONS.QUIZZES_WRITE,
       );
@@ -178,10 +183,11 @@ export class QuizzesService {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: FilterQuery<QuizDocument> = {};
 
-    // If staff without full permissions, restrict to assigned courses or created quizzes
+    // If doctor or staff without full permissions, restrict to assigned courses or created quizzes
     if (
       user.role === 'staff' &&
-      !user.permissions?.includes(PERMISSIONS.QUIZZES_WRITE)
+      (user.staffType === 'doctor' ||
+        !user.permissions?.includes(PERMISSIONS.QUIZZES_WRITE))
     ) {
       const assignedCourses = await this.courseModel
         .find({ doctorId: new Types.ObjectId(user._id) })
@@ -265,10 +271,21 @@ export class QuizzesService {
     // Permission check
     if (user.role === 'staff') {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const course = await this.courseModel
+        .findById(quiz.courseId)
+        .select('doctorId')
+        .lean();
+      const isCourseDoctor =
+        course?.doctorId?.toString() === user._id.toString();
+      if (user.staffType === 'doctor' && !isCreator && !isCourseDoctor) {
+        throw new ForbiddenException(
+          'يمكنك فقط تعديل الاختبارات للمقررات المسندة إليك',
+        );
+      }
       const hasWritePerm = user.permissions?.includes(
         PERMISSIONS.QUIZZES_WRITE,
       );
-      if (!isCreator && !hasWritePerm) {
+      if (!isCreator && !isCourseDoctor && !hasWritePerm) {
         throw new ForbiddenException('غير مصرح لك بتعديل هذا الاختبار');
       }
     }
@@ -360,10 +377,21 @@ export class QuizzesService {
 
     if (user.role === 'staff') {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const course = await this.courseModel
+        .findById(quiz.courseId)
+        .select('doctorId')
+        .lean();
+      const isCourseDoctor =
+        course?.doctorId?.toString() === user._id.toString();
+      if (user.staffType === 'doctor' && !isCreator && !isCourseDoctor) {
+        throw new ForbiddenException(
+          'يمكنك فقط حذف الاختبارات للمقررات المسندة إليك',
+        );
+      }
       const hasWritePerm = user.permissions?.includes(
         PERMISSIONS.QUIZZES_WRITE,
       );
-      if (!isCreator && !hasWritePerm) {
+      if (!isCreator && !isCourseDoctor && !hasWritePerm) {
         throw new ForbiddenException('غير مصرح لك بحذف هذا الاختبار');
       }
     }
@@ -377,12 +405,51 @@ export class QuizzesService {
     return { message: 'تم حذف الاختبار وسجلاته بنجاح' };
   }
 
-  async getSubmissions(quizId: string, _user: AuthenticatedUser) {
-    await this.findOne(quizId);
+  async getSubmissions(quizId: string, user?: AuthenticatedUser) {
+    const quiz = await this.findOne(quizId);
+    if (user && user.role === 'staff' && user.staffType === 'doctor') {
+      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const course = await this.courseModel
+        .findById(quiz.courseId)
+        .select('doctorId')
+        .lean();
+      const isCourseDoctor =
+        course?.doctorId?.toString() === user._id.toString();
+      if (!isCreator && !isCourseDoctor) {
+        throw new ForbiddenException(
+          'غير مصرح لك بالاطلاع على تسليمات هذا الاختبار',
+        );
+      }
+    }
     return this.submissionModel
       .find({ quizId: new Types.ObjectId(quizId) })
       .sort({ submittedAt: -1 })
       .lean();
+  }
+
+  async exportQuizAnalysis(quizId: string, user: AuthenticatedUser) {
+    const quiz = await this.findOne(quizId);
+    if (user.role === 'staff' && user.staffType === 'doctor') {
+      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const course = await this.courseModel
+        .findById(quiz.courseId)
+        .select('doctorId')
+        .lean();
+      const isCourseDoctor =
+        course?.doctorId?.toString() === user._id.toString();
+      if (!isCreator && !isCourseDoctor) {
+        throw new ForbiddenException('غير مصرح لك بتصدير تحليل هذا الاختبار');
+      }
+    }
+    const submissions = await this.submissionModel
+      .find({ quizId: new Types.ObjectId(quizId) })
+      .sort({ submittedAt: -1 })
+      .lean();
+
+    return this.excelService.generateQuizAnalysisExcel(
+      quiz as any,
+      submissions as any,
+    );
   }
 
   // ─── Question Import & Template ───────────────────────────────────

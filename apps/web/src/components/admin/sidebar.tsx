@@ -26,6 +26,7 @@ import {
   LayoutDashboard,
   QrCode,
   HelpCircle,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
@@ -115,6 +116,12 @@ export default function AdminSidebar() {
             adminOnly: true,
           },
           {
+            key: "lectureSchedules",
+            href: `/${locale}/admin/schedules`,
+            icon: <CalendarDays className="h-5 w-5" />,
+            adminOnly: true,
+          },
+          {
             key: "chatAudit",
             href: `/${locale}/admin/chat-audit`,
             icon: <MessagesSquare className="h-5 w-5" />,
@@ -154,6 +161,21 @@ export default function AdminSidebar() {
   ].filter((item) => {
     if (user?.role === "admin") return true;
     if (item.adminOnly) return false;
+
+    // Doctor specific visibility rules:
+    // - Hide grades, academicEmails, and generic uploads
+    // - Keep students, courses, quizzes, attendance, complaints
+    // - Allow examSchedules (viewed in student mode)
+    const isDoctor = user?.role === "staff" && (user as any)?.staffType === "doctor";
+    if (isDoctor) {
+      if (item.key === "grades" || item.key === "academicEmails" || item.key === "uploads") {
+        return false;
+      }
+      if (item.key === "examSchedules") {
+        return true;
+      }
+    }
+
     if ('permissions' in item && Array.isArray((item as any).permissions)) {
       return (item as any).permissions.some((p: string) => user?.permissions?.includes(p));
     }

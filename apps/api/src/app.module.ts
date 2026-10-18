@@ -27,6 +27,7 @@ import { AcademicAdvisingModule } from './modules/academic-advising/academic-adv
 import { AiModule } from './modules/ai/ai.module';
 import { StaffManagementModule } from './modules/staff-management/staff-management.module';
 import { QuizzesModule } from './modules/quizzes/quizzes.module';
+import { CourseSchedulesModule } from './modules/course-schedules/course-schedules.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -59,6 +60,7 @@ import { HealthController } from './health.controller';
     AiModule,
     StaffManagementModule,
     QuizzesModule,
+    CourseSchedulesModule,
   ],
   controllers: [HealthController],
   providers: [

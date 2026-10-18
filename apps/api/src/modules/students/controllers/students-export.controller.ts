@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import * as ExcelJS from 'exceljs';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import { StudentQueryService } from '../services/student-query.service';
@@ -19,7 +20,11 @@ export class StudentsExportController {
   @ApiOperation({
     summary: 'Stream students list as Excel file with constant O(1) memory',
   })
-  async exportExcel(@Query() query: SearchStudentQuery, @Res() res: Response) {
+  async exportExcel(
+    @Query() query: SearchStudentQuery,
+    @Res() res: Response,
+    @CurrentUser() user: any,
+  ) {
     const dateStr = new Date().toISOString().slice(0, 10);
     const slugParts = ['students-registry'];
     if (query.level && query.level !== 'all') {
@@ -77,7 +82,10 @@ export class StudentsExportController {
     ];
 
     try {
-      const cursor = this.studentQueryService.getExportCursor(query);
+      const cursor = await this.studentQueryService.getExportCursor(
+        query,
+        user,
+      );
 
       for await (const student of cursor) {
         worksheet
