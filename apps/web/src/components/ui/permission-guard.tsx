@@ -20,12 +20,12 @@ export function PermissionGuard({
   anyOf = false,
   children,
 }: PermissionGuardProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, isLoggingOut } = useAuth();
   const params = useParams();
   const router = useRouter();
   const locale = (params?.locale as string) || 'ar';
 
-  if (loading) {
+  if (loading || isLoggingOut || !user) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />

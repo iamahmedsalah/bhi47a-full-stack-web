@@ -473,7 +473,29 @@ export class QuizzesService {
     return { message: 'تم حذف الاختبار وسجلاته بنجاح' };
   }
 
-  async getSubmissions(quizId: string, user?: AuthenticatedUser) {
+  async getSubmissions(
+    quizId: string,
+    user?: AuthenticatedUser,
+  ): Promise<
+    Array<{
+      _id: unknown;
+      quizId: unknown;
+      courseId: unknown;
+      studentId: unknown;
+      studentCode: string;
+      studentName: string;
+      studentNameAr?: string;
+      studentNameEn?: string;
+      score: number;
+      totalMarks: number;
+      percentage: number;
+      isPassed: boolean;
+      submittedAt: Date;
+      startedAt?: Date;
+      durationSeconds?: number;
+      answers?: unknown[];
+    }>
+  > {
     const quiz = await this.findOne(quizId);
     if (user && user.role === 'staff' && user.staffType === 'doctor') {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
@@ -489,10 +511,37 @@ export class QuizzesService {
         );
       }
     }
-    return this.submissionModel
+    const submissions = await this.submissionModel
       .find({ quizId: new Types.ObjectId(quizId) })
       .sort({ submittedAt: -1 })
       .lean();
+
+    if (submissions.length === 0) return [];
+
+    const studentCodes = Array.from(
+      new Set(submissions.map((s) => s.studentCode).filter(Boolean)),
+    );
+    const profiles = await this.studentProfileModel
+      .find({ studentCode: { $in: studentCodes } })
+      .select('studentCode fullName fullNameAr fullNameEn')
+      .lean();
+    const profileMap = new Map(profiles.map((p) => [p.studentCode, p]));
+
+    return submissions.map((sub) => {
+      const profile = profileMap.get(sub.studentCode);
+      const studentNameAr =
+        sub.studentNameAr ||
+        profile?.fullNameAr ||
+        profile?.fullName ||
+        sub.studentName;
+      const studentNameEn =
+        profile?.fullNameEn || profile?.fullName || sub.studentName;
+      return {
+        ...sub,
+        studentNameAr,
+        studentNameEn,
+      };
+    });
   }
 
   async exportQuizAnalysis(quizId: string, user: AuthenticatedUser) {
@@ -509,14 +558,11 @@ export class QuizzesService {
         throw new ForbiddenException('غير مصرح لك بتصدير تحليل هذا الاختبار');
       }
     }
-    const submissions = await this.submissionModel
-      .find({ quizId: new Types.ObjectId(quizId) })
-      .sort({ submittedAt: -1 })
-      .lean();
+    const submissions = await this.getSubmissions(quizId, user);
 
     return this.excelService.generateQuizAnalysisExcel(
       quiz as any,
-      submissions as any,
+      submissions,
     );
   }
 
@@ -1056,7 +1102,12 @@ export class QuizzesService {
 
     const studentCode = studentProfile?.studentCode || 'N/A';
     const studentName =
-      studentProfile?.fullName || studentProfile?.fullNameAr || 'طالب';
+      studentProfile?.fullName ||
+      studentProfile?.fullNameEn ||
+      studentProfile?.fullNameAr ||
+      'Student';
+    const studentNameAr =
+      studentProfile?.fullNameAr || studentProfile?.fullName || 'طالب';
 
     const submittedMap = new Map(
       (dto.answers || []).map((a) => [a.questionId, a.selectedOptionIndex]),
@@ -1097,6 +1148,7 @@ export class QuizzesService {
       studentId: studentUserObjectId,
       studentCode,
       studentName,
+      studentNameAr,
       answers: gradedAnswers,
       score: totalScore,
       totalMarks,
@@ -1191,7 +1243,12 @@ export class QuizzesService {
       .lean();
     const studentCode = studentProfile?.studentCode || 'N/A';
     const studentName =
-      studentProfile?.fullName || studentProfile?.fullNameAr || 'طالب';
+      studentProfile?.fullName ||
+      studentProfile?.fullNameEn ||
+      studentProfile?.fullNameAr ||
+      'Student';
+    const studentNameAr =
+      studentProfile?.fullNameAr || studentProfile?.fullName || 'طالب';
 
     const submittedMap = new Map(
       (attempt.draftAnswers || []).map((a) => [
@@ -1234,6 +1291,7 @@ export class QuizzesService {
       studentId: studentUserObjectId,
       studentCode,
       studentName,
+      studentNameAr,
       answers: gradedAnswers,
       score: totalScore,
       totalMarks,

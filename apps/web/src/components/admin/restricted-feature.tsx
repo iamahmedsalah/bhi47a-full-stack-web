@@ -25,9 +25,13 @@ export function RestrictedFeature({
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
   const isArabic = locale.startsWith('ar');
-  const { user } = useAuth();
+  const { user, isLoggingOut } = useAuth();
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  if (isLoggingOut || !user) {
+    return null;
+  }
 
   const handleRefreshPermissions = async () => {
     setIsRefreshing(true);

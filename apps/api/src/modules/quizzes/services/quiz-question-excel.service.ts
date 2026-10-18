@@ -413,8 +413,10 @@ export class QuizQuestionExcelService {
   async generateQuizAnalysisExcel(
     quiz: {
       title: string;
+      titleAr?: string;
       courseCode: string;
       courseName?: string;
+      courseNameAr?: string;
       totalMarks: number;
       passingMarks: number;
       durationMinutes?: number;
@@ -423,6 +425,8 @@ export class QuizQuestionExcelService {
     submissions: Array<{
       studentCode: string;
       studentName: string;
+      studentNameAr?: string;
+      studentNameEn?: string;
       score: number;
       totalMarks: number;
       percentage: number;
@@ -533,9 +537,9 @@ export class QuizQuestionExcelService {
     addInfoRow(
       3,
       'عنوان الاختبار:',
-      quiz.title,
+      quiz.titleAr || quiz.title,
       'المقرر الدراسي:',
-      `${quiz.courseCode} - ${quiz.courseName || ''}`,
+      `${quiz.courseCode} - ${quiz.courseNameAr || quiz.courseName || ''}`,
     );
     addInfoRow(
       4,
@@ -751,7 +755,8 @@ export class QuizQuestionExcelService {
     rosterSheet.columns = [
       { header: 'م', key: 'seq', width: 6 },
       { header: 'كود الطالب', key: 'studentCode', width: 16 },
-      { header: 'اسم الطالب', key: 'studentName', width: 34 },
+      { header: 'اسم الطالب (بالعربية)', key: 'studentNameAr', width: 34 },
+      { header: 'اسم الطالب (بالإنجليزية)', key: 'studentNameEn', width: 34 },
       { header: 'الدرجة المحققة', key: 'score', width: 16 },
       { header: 'الدرجة الكلية', key: 'totalMarks', width: 16 },
       { header: 'النسبة المئوية', key: 'percentage', width: 16 },
@@ -770,10 +775,13 @@ export class QuizQuestionExcelService {
     rosterHeaderRow.height = 26;
 
     submissions.forEach((sub, i) => {
+      const studentNameAr = sub.studentNameAr || sub.studentName || '—';
+      const studentNameEn = sub.studentNameEn || sub.studentName || '—';
       const row = rosterSheet.addRow({
         seq: i + 1,
         studentCode: sub.studentCode,
-        studentName: sub.studentName,
+        studentNameAr,
+        studentNameEn,
         score: sub.score,
         totalMarks: sub.totalMarks,
         percentage: `${sub.percentage}%`,
@@ -782,14 +790,19 @@ export class QuizQuestionExcelService {
           ? new Date(sub.submittedAt).toLocaleString('ar-EG', {
               dateStyle: 'short',
               timeStyle: 'short',
+              timeZone: 'Africa/Cairo',
             })
           : '—',
       });
       row.height = 22;
       row.alignment = { vertical: 'middle', horizontal: 'center' };
-      row.getCell('studentName').alignment = {
+      row.getCell('studentNameAr').alignment = {
         vertical: 'middle',
         horizontal: 'right',
+      };
+      row.getCell('studentNameEn').alignment = {
+        vertical: 'middle',
+        horizontal: 'left',
       };
 
       const resultCell = row.getCell('result');

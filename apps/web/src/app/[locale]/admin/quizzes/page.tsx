@@ -1094,7 +1094,9 @@ function SubmissionsModal({
     return submissions.filter(
       (s) =>
         s.studentCode.toLowerCase().includes(q) ||
-        s.studentName.toLowerCase().includes(q),
+        (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+        (s.studentNameAr && s.studentNameAr.toLowerCase().includes(q)) ||
+        (s.studentNameEn && s.studentNameEn.toLowerCase().includes(q)),
     );
   }, [submissions, search]);
 
@@ -1110,7 +1112,9 @@ function SubmissionsModal({
                   {isAr
                     ? 'تحليل نتائج وأداء الاختبار:'
                     : 'Quiz Analytics & Submissions:'}{' '}
-                  <span className="text-primary">{quiz?.title}</span>
+                  <span className="text-primary">
+                    {isAr ? quiz?.titleAr || quiz?.title : quiz?.title}
+                  </span>
                 </span>
               </DialogTitle>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1118,7 +1122,11 @@ function SubmissionsModal({
                   {quiz?.courseCode}
                 </span>
                 <span>·</span>
-                <span>{quiz?.courseName}</span>
+                <span>
+                  {isAr
+                    ? quiz?.courseNameAr || quiz?.courseName
+                    : quiz?.courseNameEn || quiz?.courseName || quiz?.courseNameAr}
+                </span>
                 <span>·</span>
                 <span>
                   {quiz?.totalMarks} {isAr ? 'درجة' : 'marks'}
@@ -1430,7 +1438,31 @@ function SubmissionsModal({
                           {sub.studentCode}
                         </td>
                         <td className="p-3 font-medium text-foreground">
-                          {sub.studentName}
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-foreground">
+                              {isAr
+                                ? sub.studentNameAr || sub.studentName
+                                : sub.studentNameEn || sub.studentName || sub.studentNameAr}
+                            </span>
+                            {isAr &&
+                              sub.studentName &&
+                              sub.studentName !== sub.studentNameAr && (
+                                <span
+                                  className="text-[10px] text-muted-foreground/70 font-sans"
+                                  dir="ltr"
+                                >
+                                  {sub.studentName}
+                                </span>
+                              )}
+                            {!isAr && sub.studentNameAr && (
+                              <span
+                                className="text-[10px] text-muted-foreground/70 font-sans"
+                                dir="rtl"
+                              >
+                                {sub.studentNameAr}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3 text-center font-bold">
                           <span className="text-primary">{sub.score}</span> /{' '}
@@ -1458,10 +1490,11 @@ function SubmissionsModal({
                         </td>
                         <td className="p-3 text-end text-muted-foreground font-mono text-[11px]">
                           {new Date(sub.submittedAt).toLocaleTimeString(
-                            'ar-EG',
+                            isAr ? 'ar-EG' : 'en-GB',
                             {
                               hour: '2-digit',
                               minute: '2-digit',
+                              timeZone: 'Africa/Cairo',
                             },
                           )}
                         </td>

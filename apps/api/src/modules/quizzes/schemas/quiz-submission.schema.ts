@@ -37,6 +37,9 @@ export class QuizSubmission {
   @Prop({ required: true, trim: true })
   studentName!: string;
 
+  @Prop({ required: false, trim: true })
+  studentNameAr?: string;
+
   @Prop({ type: [SubmittedAnswer], default: [] })
   answers!: SubmittedAnswer[];
 

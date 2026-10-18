@@ -254,7 +254,7 @@ export class QuizzesController {
   async getSubmissions(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
-  ) {
+  ): Promise<unknown[]> {
     return this.quizzesService.getSubmissions(id, user);
   }
 

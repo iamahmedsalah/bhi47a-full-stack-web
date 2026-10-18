@@ -54,6 +54,8 @@ export interface QuizSubmission {
   studentId: string;
   studentCode: string;
   studentName: string;
+  studentNameAr?: string;
+  studentNameEn?: string;
   answers?: Array<{
     questionId: string;
     selectedOptionIndex: number;

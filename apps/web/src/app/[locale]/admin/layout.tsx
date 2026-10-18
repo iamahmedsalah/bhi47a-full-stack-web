@@ -128,11 +128,11 @@ export default function AdminLayout({
   const locale = (params?.locale as string) || 'ar';
   const isArabic = locale.startsWith('ar');
   const { sidebarOpen } = useUIStore();
-  const { user, loading } = useAuth();
+  const { user, loading, isLoggingOut } = useAuth();
 
   // Route-level staff permission validation
   const restriction = useMemo(() => {
-    if (loading || !user || user.role === 'admin') {
+    if (loading || isLoggingOut || !user || user.role === 'admin') {
       return null;
     }
 
@@ -159,7 +159,7 @@ export default function AdminLayout({
     }
 
     return null;
-  }, [loading, user, pathname, isArabic]);
+  }, [loading, isLoggingOut, user, pathname, isArabic]);
 
   return (
     <div className="min-h-screen">

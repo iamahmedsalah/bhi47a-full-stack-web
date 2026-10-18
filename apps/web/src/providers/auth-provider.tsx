@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import api, { getApiErrorMessage } from '@/lib/api';
+import api from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
@@ -145,52 +145,44 @@ export function AuthProvider({
     if (isLoggingOut) return;
 
     setIsLoggingOut(true);
-    const toastId = toast.loading(
-      locale === 'ar'
-        ? 'جاري تسجيل الخروج...'
-        : 'Signing out...',
-    );
 
-    try {
-      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-        try {
-          window.google.accounts.id.disableAutoSelect();
-        } catch {
-          // ignore if GIS not loaded
-        }
+    const userRole = meQuery.data?.role;
+    const isAdminPath = pathname.startsWith(`/${locale}/admin`);
+    const targetLogin =
+      userRole === 'admin' || userRole === 'staff' || isAdminPath
+        ? `/${locale}/login/admin`
+        : `/${locale}/login/student`;
+
+    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+      } catch {
+        // ignore if GIS not loaded
       }
-      await api.post('/auth/logout');
-      toast.success(locale === 'ar' ? 'تم تسجيل الخروج' : 'Logged out', {
-        id: toastId,
-      });
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(
-          error,
-          locale === 'ar'
-            ? 'تعذر إكمال تسجيل الخروج من الخادم'
-            : 'Could not complete server logout',
-        ),
-        { id: toastId },
-      );
-    } finally {
-      const userRole = meQuery.data?.role;
-      const isAdminPath = pathname.startsWith(`/${locale}/admin`);
-      const targetLogin =
-        userRole === 'admin' || userRole === 'staff' || isAdminPath
-          ? `/${locale}/login/admin`
-          : `/${locale}/login/student`;
+    }
 
-      queryClient.setQueryData(queryKeys.auth.me, null);
-      setIsLoggingOut(false);
-      router.push(targetLogin);
+    // Fire-and-forget server logout to invalidate cookies
+    try {
+      void api.post('/auth/logout').catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    // Invalidate client queries
+    queryClient.clear();
+
+    // Instant zero-lag redirect without loading toasts or delay
+    if (typeof window !== 'undefined') {
+      window.location.replace(targetLogin);
+    } else {
+      router.replace(targetLogin);
     }
   }, [isLoggingOut, locale, meQuery.data?.role, pathname, queryClient, router]);
 
   const { setTheme, theme: currentTheme } = useTheme();
 
   useEffect(() => {
-    if (meQuery.isLoading) return;
+    if (meQuery.isLoading || isLoggingOut) return;
 
     const isPublicPath = isPublicRoute(pathname);
     const isAuthEntryPath = isAuthEntryRoute(pathname);
@@ -256,7 +248,7 @@ export function AuthProvider({
       router.push(`/${locale}/admin`);
       return;
     }
-  }, [meQuery.data, meQuery.isLoading, pathname, locale, router]);
+  }, [meQuery.data, meQuery.isLoading, isLoggingOut, pathname, locale, router]);
 
   useEffect(() => {
     if (meQuery.data?.theme && meQuery.data.theme !== currentTheme) {
