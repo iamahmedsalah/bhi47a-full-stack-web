@@ -249,7 +249,7 @@ export class QuizzesService {
       this.quizModel
         .find(filter)
         .select(
-          '_id title titleAr description courseId courseCode courseName creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume questions createdAt updatedAt',
+          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume questions createdAt updatedAt',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -259,16 +259,39 @@ export class QuizzesService {
     ]);
 
     const quizIds = items.map((q) => q._id);
-    const counts = await this.submissionModel.aggregate([
-      { $match: { quizId: { $in: quizIds } } },
-      { $group: { _id: '$quizId', count: { $sum: 1 } } },
+    const courseIds = Array.from(
+      new Set(items.map((q) => q.courseId?.toString()).filter(Boolean)),
+    );
+    const [counts, courses] = await Promise.all([
+      this.submissionModel.aggregate([
+        { $match: { quizId: { $in: quizIds } } },
+        { $group: { _id: '$quizId', count: { $sum: 1 } } },
+      ]),
+      courseIds.length > 0
+        ? this.courseModel
+            .find({ _id: { $in: courseIds } })
+            .select('_id name nameAr nameEn code')
+            .lean()
+        : Promise.resolve([]),
     ]);
     const countsMap = new Map(counts.map((c) => [c._id.toString(), c.count]));
+    const coursesMap = new Map(courses.map((c) => [c._id.toString(), c]));
 
-    const decorated = items.map((q) => ({
-      ...q,
-      submissionsCount: countsMap.get(q._id.toString()) || 0,
-    }));
+    const decorated = items.map((q) => {
+      const course = q.courseId
+        ? coursesMap.get(q.courseId.toString())
+        : undefined;
+      return {
+        ...q,
+        courseNameAr: q.courseNameAr || course?.nameAr || q.courseName,
+        courseNameEn:
+          q.courseNameEn ||
+          course?.name ||
+          (course as any)?.nameEn ||
+          q.courseName,
+        submissionsCount: countsMap.get(q._id.toString()) || 0,
+      };
+    });
 
     return createPaginatedResult(decorated, total, page, limit);
   }

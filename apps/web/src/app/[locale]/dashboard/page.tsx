@@ -25,6 +25,13 @@ import {
   CalendarClock,
   Layers,
   UserCheck,
+  ShieldAlert,
+  Clock,
+  Play,
+  ExternalLink,
+  Eye,
+  BookOpen,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";

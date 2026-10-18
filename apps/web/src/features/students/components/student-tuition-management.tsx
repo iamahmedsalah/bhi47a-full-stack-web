@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Download,
@@ -75,12 +76,40 @@ export function StudentTuitionManagement({
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
 
-  // Filters State
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState<string>('all');
-  const [selectedBlockStatus, setSelectedBlockStatus] = useState<string>('all');
-  const [selectedTuitionStatus, setSelectedTuitionStatus] = useState<string>('all');
+  const searchParams = useSearchParams();
+
+  // Filters State (persisted across refreshes)
+  const [page, setPage] = useState(() => Number(searchParams?.get('tuitionPage')) || 1);
+  const [search, setSearch] = useState(() => searchParams?.get('tuitionSearch') || '');
+  const [selectedLevel, setSelectedLevel] = useState<string>(() => searchParams?.get('tuitionLevel') || 'all');
+  const [selectedBlockStatus, setSelectedBlockStatus] = useState<string>(() => searchParams?.get('tuitionBlock') || 'all');
+  const [selectedTuitionStatus, setSelectedTuitionStatus] = useState<string>(() => searchParams?.get('tuitionStatus') || 'all');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('tab') === 'tuition') {
+          if (page > 1) url.searchParams.set('tuitionPage', String(page));
+          else url.searchParams.delete('tuitionPage');
+
+          if (search) url.searchParams.set('tuitionSearch', search);
+          else url.searchParams.delete('tuitionSearch');
+
+          if (selectedLevel !== 'all') url.searchParams.set('tuitionLevel', selectedLevel);
+          else url.searchParams.delete('tuitionLevel');
+
+          if (selectedBlockStatus !== 'all') url.searchParams.set('tuitionBlock', selectedBlockStatus);
+          else url.searchParams.delete('tuitionBlock');
+
+          if (selectedTuitionStatus !== 'all') url.searchParams.set('tuitionStatus', selectedTuitionStatus);
+          else url.searchParams.delete('tuitionStatus');
+
+          window.history.replaceState(null, '', url.toString());
+        }
+      } catch {}
+    }
+  }, [page, search, selectedLevel, selectedBlockStatus, selectedTuitionStatus]);
 
   // Selection for bulk actions
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

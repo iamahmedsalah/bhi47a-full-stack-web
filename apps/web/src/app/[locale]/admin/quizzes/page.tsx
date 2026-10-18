@@ -1586,6 +1586,14 @@ function AdminQuizzesContent() {
   });
 
   const coursesList = coursesQuery.data || [];
+  const coursesMap = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; nameAr?: string }>();
+    for (const c of coursesList) {
+      if (c._id) map.set(c._id, c);
+      if (c.code) map.set(c.code, c);
+    }
+    return map;
+  }, [coursesList]);
 
   const handleDelete = async () => {
     if (!quizToDelete) return;
@@ -1618,18 +1626,25 @@ function AdminQuizzesContent() {
     {
       key: 'course',
       header: isAr ? 'المقرر الدراسي' : 'Course',
-      render: (quiz) => (
-        <TableCell className="p-4">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-squircle">
-              {quiz.courseCode}
-            </span>
-            <span className="font-medium text-foreground text-xs">
-              {quiz.courseName}
-            </span>
-          </div>
-        </TableCell>
-      ),
+      render: (quiz) => {
+        const matchedCourse = coursesMap.get(quiz.courseId) || coursesMap.get(quiz.courseCode);
+        const displayName = isAr
+          ? (quiz.courseNameAr || matchedCourse?.nameAr || quiz.courseName)
+          : (quiz.courseNameEn || matchedCourse?.name || quiz.courseName);
+
+        return (
+          <TableCell className="p-4">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-squircle">
+                {quiz.courseCode}
+              </span>
+              <span className="font-medium text-foreground text-xs">
+                {displayName}
+              </span>
+            </div>
+          </TableCell>
+        );
+      },
     },
     {
       key: 'title',

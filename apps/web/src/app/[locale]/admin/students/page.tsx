@@ -3,7 +3,7 @@
 import React, { Suspense, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Download, Plus, UploadCloud, Users, Loader2, BookOpenCheck, KeyRound, ArrowLeftRight } from 'lucide-react';
 import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/shared';
 import { toast } from 'sonner';
@@ -46,6 +46,25 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CustomDropdown } from '@/components/ui/custom-dropdown';
+
+const initialForm = {
+  fullName: '',
+  studentCode: '',
+  nationalId: '',
+  academicEmail: '',
+  department: '',
+  level: '1',
+  group: '',
+  section: '',
+  academicYear: '2024-2025',
+  semester: 'first',
+  seatNumber: '',
+  examRoom: '',
+  examFloor: '',
+  examBuilding: '',
+  enrollmentStatus: 'active',
+  mustChangePassword: false,
+};
 
 
 const studentImportColumns = [
@@ -137,6 +156,9 @@ function StudentsPageContent() {
   const [transferStudent, setTransferStudent] = useState<Student | null>(null);
   const [profileStudent, setProfileStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [form, setForm] = useState(initialForm);
+  const [formLoading, setFormLoading] = useState(false);
+  const [isTogglingMustChange, setIsTogglingMustChange] = useState(false);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isAutoRegistering, setIsAutoRegistering] = useState(false);
@@ -145,8 +167,39 @@ function StudentsPageContent() {
   const [autoRegSemester, setAutoRegSemester] = useState<'first' | 'second'>('first');
   const [autoRegOverwrite, setAutoRegOverwrite] = useState(false);
   const [isBulkMustChangeOpen, setIsBulkMustChangeOpen] = useState(false);
-  const [isTogglingMustChange, setIsTogglingMustChange] = useState(false);
-  const [activeTab, setActiveTab] = useState<'students' | 'tuition'>('students');
+  const searchParams = useSearchParams();
+  const searchTab = searchParams?.get('tab');
+  const [activeTab, setActiveTabState] = useState<'students' | 'tuition'>(() => {
+    if (searchTab === 'tuition' || searchTab === 'students') return searchTab;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('admin_students_active_tab');
+        if (saved === 'tuition' || saved === 'students') return saved;
+      } catch {}
+    }
+    return 'students';
+  });
+
+  const setActiveTab = (tab: 'students' | 'tuition') => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('admin_students_active_tab', tab);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  };
+
+  React.useEffect(() => {
+    if (searchTab && (searchTab === 'students' || searchTab === 'tuition') && searchTab !== activeTab) {
+      setActiveTabState(searchTab);
+      try {
+        sessionStorage.setItem('admin_students_active_tab', searchTab);
+      } catch {}
+    }
+  }, [searchTab, activeTab]);
 
   const handleAutoRegisterFirstYear = async () => {
     setIsAutoRegistering(true);
