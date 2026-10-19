@@ -429,7 +429,7 @@ export class NotificationsService implements OnModuleInit {
         .limit(limit)
         .populate('sentBy', 'name email')
         .populate('targetStudentId', 'name studentCode')
-        .slice('readBy', -50)
+        .slice('readBy', -5)
         .populate('readBy.userId', 'name studentCode')
         .lean(),
       this.notificationModel.countDocuments(),

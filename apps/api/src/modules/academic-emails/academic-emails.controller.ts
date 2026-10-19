@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AcademicEmailsService } from './academic-emails.service';
 import {
@@ -31,6 +39,22 @@ export class AcademicEmailsController {
   })
   async findAll(@Query() query: QueryAcademicEmailDto) {
     return this.emailService.findAll(query);
+  }
+
+  @Post('admin/academic-emails/sync')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.ACADEMIC_EMAILS_WRITE)
+  @ApiOperation({
+    summary:
+      'Manually trigger academic emails sync from student profiles (Admin)',
+  })
+  async sync() {
+    const syncedCount = await this.emailService.syncFromStudentProfiles();
+    return {
+      success: true,
+      syncedCount,
+      message: `تمت مزامنة ${syncedCount} بريد أكاديمي بنجاح`,
+    };
   }
 
   @Patch('admin/academic-emails/:id')

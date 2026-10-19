@@ -281,7 +281,7 @@ export default function StudentDashboard() {
             <div className="space-y-1 flex-1">
               <h3 className="text-sm md:text-base font-bold text-rose-600 dark:text-rose-400">
                 {locale === 'ar'
-                  ? '⚠️ تنبيه هام: الحساب محجوب مؤقتاً لعدم سداد المصروفات الدراسية'
+                  ? 'تنبيه هام: الحساب محجوب مؤقتاً لعدم سداد المصروفات الدراسية'
                   : 'Important Notice: Account Withheld due to Outstanding Tuition Fees'}
               </h3>
               <p className="text-xs md:text-sm text-foreground/90 leading-relaxed">

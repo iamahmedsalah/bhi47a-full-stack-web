@@ -78,7 +78,7 @@ export function createMongooseMetricsPlugin(
       this._startTime = process.hrtime.bigint();
     });
 
-    schema.post(queryMethods as any, function (this: any) {
+    schema.post(queryMethods as any, function (this: any, result: any) {
       if (this._startTime) {
         const durationNs = Number(process.hrtime.bigint() - this._startTime);
         const durationSec = durationNs / 1e9;
@@ -88,6 +88,11 @@ export function createMongooseMetricsPlugin(
           this.mongooseCollection?.name ||
           'unknown';
         const op = this.op || 'query';
+        const docsReturned = Array.isArray(result)
+          ? result.length
+          : result !== null && result !== undefined
+            ? 1
+            : 0;
 
         if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
           const query = this as QueryLike;
@@ -97,7 +102,11 @@ export function createMongooseMetricsPlugin(
               : undefined,
             300,
           );
-          const options = describeQueryShape(query, op);
+          const baseOptions = describeQueryShape(query, op);
+          const options = baseOptions
+            ? `${baseOptions} docs=${docsReturned}`
+            : `docs=${docsReturned}`;
+
           metricsService?.recordDbQuery(collectionName, op, durationSec, {
             filter,
             options,
@@ -109,6 +118,7 @@ export function createMongooseMetricsPlugin(
               collection: collectionName,
               operation: op,
               durationMs,
+              docsReturned,
               filter,
               options,
               uptimeSeconds: Math.floor(process.uptime()),

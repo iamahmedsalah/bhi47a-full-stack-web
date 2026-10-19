@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -29,16 +30,49 @@ import {
   updateStudent,
 } from '@/features/students/api';
 
-import { StudentFormDialog } from '@/features/students/components/student-form-dialog';
-import { StudentDetailDialog } from '@/features/students/components/student-detail-dialog';
-import { ResetStudentPasswordDialog } from '@/features/students/components/reset-student-password-dialog';
-import { DepartmentTransferDialog } from '@/features/students/components/department-transfer-dialog';
+const StudentFormDialog = dynamic(
+  () =>
+    import('@/features/students/components/student-form-dialog').then(
+      (m) => m.StudentFormDialog,
+    ),
+  { ssr: false },
+);
+
+const StudentDetailDialog = dynamic(
+  () =>
+    import('@/features/students/components/student-detail-dialog').then(
+      (m) => m.StudentDetailDialog,
+    ),
+  { ssr: false },
+);
+
+const ResetStudentPasswordDialog = dynamic(
+  () =>
+    import(
+      '@/features/students/components/reset-student-password-dialog'
+    ).then((m) => m.ResetStudentPasswordDialog),
+  { ssr: false },
+);
+
+const DepartmentTransferDialog = dynamic(
+  () =>
+    import('@/features/students/components/department-transfer-dialog').then(
+      (m) => m.DepartmentTransferDialog,
+    ),
+  { ssr: false },
+);
+
+const DataUploadDialog = dynamic(
+  () =>
+    import('@/components/ui/data-upload-dialog').then((m) => m.DataUploadDialog),
+  { ssr: false },
+);
+
 import { StudentTable, type Student } from '@/features/students/components/student-table';
 import { StudentTuitionManagement } from '@/features/students/components/student-tuition-management';
 import { Button } from '@/components/ui/button';
 import { CreditCard } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FilterBar } from '@/components/ui/filter-bar';
 import { Input } from '@/components/ui/input';

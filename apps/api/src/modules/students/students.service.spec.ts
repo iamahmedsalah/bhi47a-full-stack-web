@@ -93,7 +93,7 @@ describe('StudentsService Unit Tests', () => {
         .mockResolvedValueOnce(8) // suspended
         .mockResolvedValueOnce(2); // graduated
 
-      mockStudentProfileModel.aggregate.mockResolvedValueOnce([
+      mockStudentProfileModel.aggregate.mockResolvedValue([
         { _id: '1', count: 40 },
         { _id: '2', count: 30 },
         { _id: '3', count: 20 },
@@ -171,6 +171,80 @@ describe('StudentsService Unit Tests', () => {
       );
       expect(excellent?.count).toBe(1);
       expect(probation?.count).toBe(1);
+
+      // Verify in-memory caching: second call within TTL should return cached result without hitting DB again
+      const cachedStats = await service.getStats();
+      expect(cachedStats).toBe(stats);
+      expect(mockStudentProfileModel.countDocuments).toHaveBeenCalledTimes(4);
+
+      // Invalidate cache and verify DB is queried again
+      service.invalidateStatsCache();
+      mockStudentProfileModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      });
+      mockAcademicProfileModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      });
+      await service.getStats();
+      expect(mockStudentProfileModel.countDocuments).toHaveBeenCalledTimes(8);
+    });
+  });
+
+  describe('getTuitionStats()', () => {
+    it('aggregates tuition and block stats in a single $facet query', async () => {
+      mockStudentProfileModel.aggregate.mockResolvedValueOnce([
+        {
+          total: [{ count: 120 }],
+          blocked: [{ count: 15 }],
+          paid: [{ count: 85 }],
+          unpaid: [{ count: 20 }],
+          exempt: [{ count: 15 }],
+        },
+      ]);
+
+      const stats = await service.getTuitionStats();
+
+      expect(mockStudentProfileModel.aggregate).toHaveBeenCalledWith([
+        expect.objectContaining({
+          $facet: expect.objectContaining({
+            total: [{ $count: 'count' }],
+            blocked: expect.any(Array),
+            paid: expect.any(Array),
+            unpaid: expect.any(Array),
+            exempt: expect.any(Array),
+          }),
+        }),
+      ]);
+
+      expect(stats).toEqual({
+        total: 120,
+        blocked: 15,
+        paid: 85,
+        unpaid: 20,
+        exempt: 15,
+      });
+    });
+
+    it('handles empty facet results gracefully with zero defaults', async () => {
+      mockStudentProfileModel.aggregate.mockResolvedValueOnce([
+        {
+          total: [],
+          blocked: [],
+          paid: [],
+          unpaid: [],
+          exempt: [],
+        },
+      ]);
+
+      const stats = await service.getTuitionStats();
+
+      expect(stats).toEqual({
+        total: 0,
+        blocked: 0,
+        paid: 0,
+        unpaid: 0,
+        exempt: 0,
+      });
     });
   });
 

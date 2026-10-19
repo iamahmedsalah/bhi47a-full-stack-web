@@ -69,6 +69,13 @@ export class StudentsService {
     private readonly studentQueryService: StudentQueryService,
   ) {}
 
+  private cachedStats: { data: any; expiresAt: number } | null = null;
+  private static readonly STATS_CACHE_TTL_MS = 20_000;
+
+  invalidateStatsCache() {
+    this.cachedStats = null;
+  }
+
   async create(dto: CreateStudentDto) {
     // Check if student code already exists
     const existing = await this.usersService.findByStudentCode(dto.studentCode);
@@ -152,6 +159,8 @@ export class StudentsService {
       },
       { upsert: true },
     );
+
+    this.invalidateStatsCache();
 
     return {
       user: {
@@ -312,6 +321,7 @@ export class StudentsService {
       );
     }
 
+    this.invalidateStatsCache();
     return profile;
   }
 
@@ -324,6 +334,7 @@ export class StudentsService {
     profile.enrollmentStatus = 'active';
     await profile.save();
     await this.usersService.activateUser(profile.userId.toString());
+    this.invalidateStatsCache();
 
     return { message: 'ØªÙ… ØªÙØ¹ÙŠÙ„ Ø­Ø³Ø§Ø¨ Ø§Ù„Ø·Ø§Ù„Ø¨' };
   }
@@ -338,6 +349,7 @@ export class StudentsService {
     await profile.save();
 
     await this.usersService.deactivateUser(profile.userId.toString());
+    this.invalidateStatsCache();
 
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
@@ -418,6 +430,11 @@ export class StudentsService {
   }
 
   async getStats() {
+    const now = Date.now();
+    if (this.cachedStats && this.cachedStats.expiresAt > now) {
+      return this.cachedStats.data;
+    }
+
     const [
       total,
       active,
@@ -593,14 +610,14 @@ export class StudentsService {
       },
     ];
 
-    return {
+    const result = {
       total,
       active,
       suspended,
       graduated,
       withdrawn: inactiveCount,
       liveOnline: Math.max(liveOnline ?? 0, 0),
-      byLevel: byLevel.map((item) => ({
+      byLevel: (byLevel || []).map((item) => ({
         level: item._id || 'unknown',
         count: item.count,
       })),
@@ -608,6 +625,13 @@ export class StudentsService {
       cohortRetention,
       gpaDistribution,
     };
+
+    this.cachedStats = {
+      data: result,
+      expiresAt: Date.now() + StudentsService.STATS_CACHE_TTL_MS,
+    };
+
+    return result;
   }
 
   async getDashboard(userId: string) {
@@ -697,6 +721,8 @@ export class StudentsService {
           ? 'المحاسبة والمراجعة'
           : targetDepartment;
 
+    this.invalidateStatsCache();
+
     return {
       updatedCount: result.modifiedCount,
       message: `تم تحويل ${result.modifiedCount} طالب إلى ${deptLabel} بنجاح`,
@@ -706,27 +732,44 @@ export class StudentsService {
   // ─── Tuition Fees & Block Status Management ──────────────────────
 
   async getTuitionStats() {
-    const [total, blocked, paid, unpaid, exempt] = await Promise.all([
-      this.studentProfileModel.countDocuments({}),
-      this.studentProfileModel.countDocuments({ isBlocked: true }),
-      this.studentProfileModel.countDocuments({
-        $or: [
-          { tuitionFeesStatus: 'paid' },
-          { tuitionFeesStatus: null, isBlocked: false },
-        ],
-      }),
-      this.studentProfileModel.countDocuments({
-        $or: [{ tuitionFeesStatus: 'unpaid' }, { isBlocked: true }],
-      }),
-      this.studentProfileModel.countDocuments({ tuitionFeesStatus: 'exempt' }),
+    const [stats] = await this.studentProfileModel.aggregate([
+      {
+        $facet: {
+          total: [{ $count: 'count' }],
+          blocked: [{ $match: { isBlocked: true } }, { $count: 'count' }],
+          paid: [
+            {
+              $match: {
+                $or: [
+                  { tuitionFeesStatus: 'paid' },
+                  { tuitionFeesStatus: null, isBlocked: false },
+                ],
+              },
+            },
+            { $count: 'count' },
+          ],
+          unpaid: [
+            {
+              $match: {
+                $or: [{ tuitionFeesStatus: 'unpaid' }, { isBlocked: true }],
+              },
+            },
+            { $count: 'count' },
+          ],
+          exempt: [
+            { $match: { tuitionFeesStatus: 'exempt' } },
+            { $count: 'count' },
+          ],
+        },
+      },
     ]);
 
     return {
-      total,
-      blocked,
-      paid,
-      unpaid,
-      exempt,
+      total: stats?.total?.[0]?.count ?? 0,
+      blocked: stats?.blocked?.[0]?.count ?? 0,
+      paid: stats?.paid?.[0]?.count ?? 0,
+      unpaid: stats?.unpaid?.[0]?.count ?? 0,
+      exempt: stats?.exempt?.[0]?.count ?? 0,
     };
   }
 
@@ -827,6 +870,8 @@ export class StudentsService {
 
     await profile.save();
 
+    this.invalidateStatsCache();
+
     return {
       message: dto.isBlocked
         ? `تم حجب حساب الطالب ${profile.studentCode} بنجاح`
@@ -880,6 +925,8 @@ export class StudentsService {
     const result = await this.studentProfileModel.updateMany(filter, {
       $set: updateDoc,
     });
+
+    this.invalidateStatsCache();
 
     return {
       updatedCount: result.modifiedCount,

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import {
@@ -41,7 +42,14 @@ import {
   AttendanceSessionDto,
   QrPayload,
 } from "@/features/attendance/api/attendance-api";
-import { ActiveSessionPresenter } from "@/features/attendance/components/active-session-presenter";
+
+const ActiveSessionPresenter = dynamic(
+  () =>
+    import("@/features/attendance/components/active-session-presenter").then(
+      (mod) => mod.ActiveSessionPresenter,
+    ),
+  { ssr: false },
+);
 import {
   INSTITUTE_VENUE_PRESETS,
   INSTITUTE_GEO_LOCATION,

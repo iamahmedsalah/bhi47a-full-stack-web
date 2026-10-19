@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { json, urlencoded, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -120,6 +121,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use(compression());
   app.use(securityHeadersMiddleware);
   app.use(cookieParser());
   app.use(json({ limit: '4mb' }));

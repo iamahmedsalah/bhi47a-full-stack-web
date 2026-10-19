@@ -31,6 +31,8 @@ import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
 export class AcademicEmailsService implements OnModuleInit {
   private readonly logger = new Logger(AcademicEmailsService.name);
 
+  private isSyncing = false;
+
   constructor(
     @InjectModel(AcademicEmail.name)
     private emailModel: Model<AcademicEmailDocument>,
@@ -46,10 +48,16 @@ export class AcademicEmailsService implements OnModuleInit {
       return;
     }
 
-    // Non-blocking auto-sync on server startup
-    void this.syncFromStudentProfiles().catch((err) => {
-      this.logger.warn(`Startup sync error: ${err.message}`);
-    });
+    // Only run startup sync if explicitly opted-in to avoid blocking cold starts
+    if (process.env.ACADEMIC_EMAIL_STARTUP_SYNC === 'true') {
+      void this.syncFromStudentProfiles().catch((err) => {
+        this.logger.warn(`Startup sync error: ${err.message}`);
+      });
+    } else {
+      this.logger.log(
+        '[AcademicEmails] Startup sync skipped (set ACADEMIC_EMAIL_STARTUP_SYNC=true to enable)',
+      );
+    }
   }
 
   /**
@@ -57,6 +65,14 @@ export class AcademicEmailsService implements OnModuleInit {
    * guaranteeing that every student in the database has a linked academic email record.
    */
   async syncFromStudentProfiles(): Promise<number> {
+    if (this.isSyncing) {
+      this.logger.log(
+        '[AcademicEmails] Sync already in progress, skipping concurrent run',
+      );
+      return 0;
+    }
+    this.isSyncing = true;
+
     try {
       const profiles = await this.profileModel
         .find({
@@ -131,22 +147,12 @@ export class AcademicEmailsService implements OnModuleInit {
     } catch (err: any) {
       this.logger.error(`[AcademicEmails] Sync failed: ${err.message}`);
       return 0;
+    } finally {
+      this.isSyncing = false;
     }
   }
 
   async findAll(query: QueryAcademicEmailDto) {
-    // If academic_emails has fewer records than student_profiles, run a fast sync
-    const [emailCount, profileCount] = await Promise.all([
-      this.emailModel.countDocuments(),
-      this.profileModel.countDocuments({
-        studentCode: { $exists: true, $ne: '' },
-      }),
-    ]);
-
-    if (emailCount < profileCount) {
-      await this.syncFromStudentProfiles();
-    }
-
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: any = {};
 
