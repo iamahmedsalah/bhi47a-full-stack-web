@@ -927,12 +927,13 @@ export class CoursesService {
     // 2. Preload ONLY the matching student profiles and users
     const [matchingProfiles, matchingStudentUsers] = await Promise.all([
       candidateArray.length > 0
-        ? await this.studentProfileModel
+        ? this.studentProfileModel
             .find({ studentCode: { $in: candidateArray } })
             .lean()
-        : [],
+            .exec()
+        : Promise.resolve([] as any[]),
       candidateArray.length > 0
-        ? await this.userModel
+        ? this.userModel
             .find({
               role: 'student',
               $or: [
@@ -941,7 +942,8 @@ export class CoursesService {
               ],
             })
             .lean()
-        : [],
+            .exec()
+        : Promise.resolve([] as any[]),
     ]);
 
     const profileByCode = new Map<string, any>();

@@ -62,7 +62,9 @@ export function createMongooseMetricsPlugin(
   customThresholdMs?: number,
 ) {
   const thresholdMs =
-    customThresholdMs && Number.isFinite(customThresholdMs) && customThresholdMs > 0
+    customThresholdMs &&
+    Number.isFinite(customThresholdMs) &&
+    customThresholdMs > 0
       ? customThresholdMs
       : Number(process.env.SLOW_QUERY_THRESHOLD_MS) > 0
         ? Number(process.env.SLOW_QUERY_THRESHOLD_MS)

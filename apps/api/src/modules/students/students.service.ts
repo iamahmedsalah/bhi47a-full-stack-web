@@ -609,10 +609,10 @@ export class StudentsService {
         graduated,
         withdrawn: inactiveCount,
         liveOnline: Math.max(liveOnline ?? 0, 0),
-        byLevel: (((byLevel as any[]) || []).map((item) => ({
+        byLevel: ((byLevel as any[]) || []).map((item) => ({
           level: item._id || 'unknown',
           count: item.count,
-        }))),
+        })),
         departments,
         cohortRetention,
         gpaDistribution,

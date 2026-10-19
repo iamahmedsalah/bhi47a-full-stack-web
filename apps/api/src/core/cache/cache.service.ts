@@ -1,6 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { CacheDriverType, CacheHealth, ICacheStore } from './cache.types';
+import type {
+  CacheDriverType,
+  CacheHealth,
+  ICacheStore,
+  RedisQuotaInfo,
+} from './cache.types';
 import { MemoryCacheStore } from './memory-cache.store';
 import { RedisCacheStore } from './redis-cache.store';
 
@@ -164,19 +169,19 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
     const redisCommands = this.l2Store?.getCommandCount?.() ?? 0;
     const dailyLimit = 10000;
 
-    const quota = isDev
+    const quota: RedisQuotaInfo = isDev
       ? {
-          mode: 'preserved' as const,
+          mode: 'preserved',
           dailyLimit,
           commandsToday: 0,
           quotaUsedPercent: 0,
-          policy: 'zero_quota_local_dev' as const,
+          policy: 'zero_quota_local_dev',
           statusText: '0 / 10,000 (Preserved)',
           details:
             'Local Memory Cache actively shielding Upstash quota in development/test',
         }
       : {
-          mode: (redisConnected ? 'active' : 'offline') as 'active' | 'offline',
+          mode: redisConnected ? 'active' : 'offline',
           dailyLimit,
           commandsToday: redisCommands,
           quotaUsedPercent: Math.min(
