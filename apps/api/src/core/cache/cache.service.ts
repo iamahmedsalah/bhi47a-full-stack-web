@@ -169,6 +169,8 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
     const redisCommands = this.l2Store?.getCommandCount?.() ?? 0;
     const dailyLimit = 10000;
 
+    const redisError = (this.l2Store as any)?.getLastError?.();
+
     const quota: RedisQuotaInfo = isDev
       ? {
           mode: 'preserved',
@@ -192,7 +194,9 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
           statusText: `${redisCommands} / ${dailyLimit} (${Math.round((redisCommands / dailyLimit) * 100)}%)`,
           details: redisConnected
             ? 'Production Redis L2 connected and active'
-            : 'Redis disconnected - falling back to memory',
+            : redisError
+              ? `Redis offline (${redisError}) - falling back to memory`
+              : 'Redis disconnected - falling back to memory',
         };
 
     return {

@@ -6,6 +6,7 @@ export class RedisCacheStore implements ICacheStore {
   private client: any = null;
   private isReady = false;
   private commandCount = 0;
+  private lastError: string | null = null;
 
   constructor(private readonly redisUrl: string) {
     void this.initClient();
@@ -15,40 +16,66 @@ export class RedisCacheStore implements ICacheStore {
     try {
       const { default: IORedis } = await import('ioredis');
 
-      const isTls = this.redisUrl.startsWith('rediss://');
+      let parsedUrl: URL | null = null;
+      try {
+        parsedUrl = new URL(this.redisUrl);
+      } catch {
+        // Ignored if custom URL schema
+      }
+
+      const isTls =
+        this.redisUrl.startsWith('rediss://') ||
+        parsedUrl?.protocol === 'rediss:';
 
       this.client = new (IORedis as any)(this.redisUrl, {
+        family: 4, // Force IPv4 to prevent AWS Lambda / Vercel IPv6 DNS timeouts
         connectTimeout: 5000,
+        commandTimeout: 2000,
+        keepAlive: 10000,
         maxRetriesPerRequest: 1,
         lazyConnect: false,
         enableOfflineQueue: false,
         retryStrategy: (times: number) => {
-          if (times > 3) {
-            this.logger.warn(
-              '[RedisCacheStore] Retries exhausted. Operating in degraded mode.',
-            );
-            return null; // Stop retrying
-          }
-          return Math.min(times * 500, 2000);
+          // On serverless containers (Vercel), Upstash closes idle sockets during freeze.
+          // Reconnect with capped backoff so the warm container can re-establish connection.
+          return Math.min(times * 200, 2000);
         },
-        tls: isTls ? { rejectUnauthorized: false } : undefined,
+        tls: isTls
+          ? {
+              rejectUnauthorized: false,
+              servername: parsedUrl?.hostname || undefined,
+            }
+          : undefined,
       });
 
       this.client.on('connect', () => {
+        this.logger.log('[RedisCacheStore] Connected to Redis TCP socket');
+      });
+
+      this.client.on('ready', () => {
         this.isReady = true;
-        this.logger.log('[RedisCacheStore] Connected to Redis successfully');
+        this.lastError = null;
+        this.logger.log(
+          '[RedisCacheStore] Connected to Redis successfully (ready)',
+        );
       });
 
       this.client.on('error', (err: any) => {
         this.isReady = false;
+        this.lastError = err?.message || 'Redis connection error';
         this.logger.warn(`[RedisCacheStore] Redis error: ${err.message}`);
       });
 
       this.client.on('close', () => {
         this.isReady = false;
       });
+
+      this.client.on('reconnecting', () => {
+        this.isReady = false;
+      });
     } catch (err: any) {
       this.isReady = false;
+      this.lastError = err?.message || 'Failed to initialize ioredis';
       this.logger.error(
         `[RedisCacheStore] Failed to initialize ioredis: ${err.message}`,
       );
@@ -56,7 +83,13 @@ export class RedisCacheStore implements ICacheStore {
   }
 
   isConnected(): boolean {
-    return this.isReady && Boolean(this.client);
+    return (
+      this.isReady && Boolean(this.client) && this.client.status === 'ready'
+    );
+  }
+
+  getLastError(): string | null {
+    return this.lastError;
   }
 
   getCommandCount(): number {

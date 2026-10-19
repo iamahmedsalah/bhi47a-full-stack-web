@@ -649,10 +649,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         availableMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       },
       infrastructure: {
-        redis:
-          process.env.REDIS_HOST || process.env.REDIS_URL
-            ? 'online'
-            : 'inline_fallback',
+        redis: this.cacheService?.getHealth().redisConnected
+          ? 'online'
+          : 'inline_fallback',
         firebase: process.env.FIREBASE_PROJECT_ID ? 'online' : 'disabled',
       },
       cache: this.cacheService

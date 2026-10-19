@@ -143,16 +143,29 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
         const defaultMinPool = serverless ? '1' : '5';
         const defaultMaxPool = serverless ? '10' : '50';
 
-        const minPoolSize = Number(
+        let minPoolSize = Number(
           configService.get<string>('MONGODB_MIN_POOL_SIZE', defaultMinPool),
         );
-        const maxPoolSize = Number(
+        let maxPoolSize = Number(
           configService.get<string>('MONGODB_MAX_POOL_SIZE', defaultMaxPool),
         );
 
+        if (serverless) {
+          // On serverless (Vercel / Lambda), cap minPoolSize to 1 and maxPoolSize to 10
+          // to eliminate 5x concurrent TLS handshakes during cold-start boots.
+          minPoolSize = Math.min(
+            Number.isFinite(minPoolSize) ? minPoolSize : 1,
+            1,
+          );
+          maxPoolSize = Math.min(
+            Number.isFinite(maxPoolSize) ? maxPoolSize : 10,
+            10,
+          );
+        }
+
         return {
           uri,
-          serverSelectionTimeoutMS: 15000,
+          serverSelectionTimeoutMS: serverless ? 8000 : 15000,
           socketTimeoutMS: 45000,
           // Keep warm connections in persistent servers to avoid TLS handshakes per query burst.
           // In serverless (Vercel), default to min=1 / max=10 to avoid connection exhaustion across lambda instances.

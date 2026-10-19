@@ -11,6 +11,7 @@ import {
   Database,
   Server,
   ShieldAlert,
+  ShieldCheck,
   Zap,
   Clock,
   RefreshCw,
@@ -819,17 +820,30 @@ export default function AdminMetricsPage() {
                         </span>
                         <Badge
                           variant="outline"
-                          className={`rounded-squircle text-[10px] ${
+                          className={`inline-flex items-center gap-1 rounded-squircle text-[10px] ${
                             data.cache?.quota?.mode === 'preserved'
                               ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/30'
                               : data.cache?.quota?.mode === 'active'
                               ? 'border-teal-500/40 text-teal-400 bg-teal-950/30'
-                              : 'border-muted-foreground/30 text-muted-foreground'
+                              : 'border-amber-500/40 text-amber-400 bg-amber-950/30'
                           }`}
                         >
-                          {data.cache?.quota?.mode === 'preserved'
-                            ? isAr ? '🛡️ وضع الحفاظ على الحصة (0 مكالمات)' : '🛡️ Quota Preserved (0 Calls)'
-                            : isAr ? '⚡ متصل بالإنتاج' : '⚡ Active Production'}
+                          {data.cache?.quota?.mode === 'preserved' ? (
+                            <>
+                              <ShieldCheck className="h-3 w-3 shrink-0" />
+                              <span>{isAr ? 'وضع الحفاظ على الحصة (0 مكالمات)' : 'Quota Preserved (0 Calls)'}</span>
+                            </>
+                          ) : data.cache?.quota?.mode === 'active' ? (
+                            <>
+                              <Zap className="h-3 w-3 shrink-0" />
+                              <span>{isAr ? 'متصل بالإنتاج' : 'Active Production'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              <span>{isAr ? 'منفصل - ذاكرة بديلة' : 'Offline - Memory Fallback'}</span>
+                            </>
+                          )}
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">

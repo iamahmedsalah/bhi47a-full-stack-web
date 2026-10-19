@@ -262,12 +262,17 @@ async function bootstrap() {
   // Pre-warm database connection pool to eliminate initial request cold-start latency
   try {
     const conn = ConnectionHolder.connection || mongoose.connection;
-    if (conn?.db) {
-      await conn.db.admin().ping();
-      logger.log(
-        'Database connection pool pre-warmed successfully',
-        'Bootstrap',
-      );
+    if (conn) {
+      if (conn.readyState !== mongoose.ConnectionStates.connected) {
+        await conn.asPromise();
+      }
+      if (conn.db) {
+        await conn.db.admin().ping();
+        logger.log(
+          'Database connection pool pre-warmed successfully',
+          'Bootstrap',
+        );
+      }
     }
   } catch (err) {
     logger.warn(
