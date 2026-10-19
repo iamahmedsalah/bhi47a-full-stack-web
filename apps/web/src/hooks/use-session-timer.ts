@@ -76,23 +76,20 @@ export function useSessionTimer({ role }: UseSessionTimerOptions) {
             isLoggingOutRef.current = true;
             toast.dismiss('session-warn-toast');
 
-            // Fire-and-forget server logout
-            try {
-              void api.post('/auth/logout').catch(() => { });
-            } catch {
-              // ignore
-            }
-
-            // Invalidate cached user queries
-            queryClient.clear();
-
-            // Immediate redirect with zero delay
             const targetLogin =
               role === 'student'
                 ? `/${locale}/login/student?reason=session_expired`
                 : `/${locale}/login/admin?reason=session_expired`;
 
-            window.location.href = targetLogin;
+            void api
+              .post('/auth/logout', {}, { timeout: 2000 })
+              .catch(() => {})
+              .finally(() => {
+                queryClient.setQueryData(['auth', 'me'], null);
+                queryClient.removeQueries({ queryKey: ['auth'] });
+                queryClient.clear();
+                window.location.href = targetLogin;
+              });
           }
           return 0;
         }

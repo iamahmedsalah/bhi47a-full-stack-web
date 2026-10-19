@@ -392,5 +392,31 @@ export class QueryCourseDto {
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @IsNumber()
   limit?: number;
+}
+
+export class EnrollStudentsBatchDto {
+  @ApiPropertyOptional({ example: '2026-2027' })
+  @IsOptional()
+  @IsString()
+  academicYear?: string;
+
+  @ApiPropertyOptional({ enum: ['first', 'second', 'summer'] })
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  skipBlocked?: boolean;
+
+  @ApiProperty({
+    description: 'Array of student row objects to enroll',
+    type: 'array',
+    items: { type: 'object' },
+  })
+  @IsArray()
+  rows!: Record<string, any>[];
 }

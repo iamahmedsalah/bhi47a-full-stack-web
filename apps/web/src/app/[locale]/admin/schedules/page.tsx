@@ -29,6 +29,7 @@ import api, { getApiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TimePicker } from '@/components/ui/time-picker';
 import {
   Select,
   SelectContent,
@@ -395,13 +396,6 @@ function SchedulesManagementContent() {
   const startMins = parseTimeToMinutes(formStartTime);
   const endMins = parseTimeToMinutes(formEndTime);
 
-  const start24h = useMemo(() => {
-    return startMins !== null ? minutesTo24h(startMins) : '';
-  }, [startMins]);
-
-  const end24h = useMemo(() => {
-    return endMins !== null ? minutesTo24h(endMins) : '';
-  }, [endMins]);
 
   const timeValidationError = useMemo(() => {
     if (!formStartTime.trim() || !formEndTime.trim()) {
@@ -1396,58 +1390,26 @@ function SchedulesManagementContent() {
                   <label className="text-[11px] font-medium text-muted-foreground">
                     {isAr ? 'وقت البدء *' : 'Start Time *'}
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="time"
-                      value={start24h}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          const mins = parseTimeToMinutes(val);
-                          if (mins !== null) setFormStartTime(minutesTo12h(mins));
-                        }
-                      }}
-                      className="h-9 w-12 shrink-0 rounded-squircle border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                      title={isAr ? 'اختر وقت البدء' : 'Pick start time'}
-                    />
-                    <Input
-                      value={formStartTime}
-                      onChange={(e) => setFormStartTime(e.target.value)}
-                      placeholder="09:00 AM"
-                      dir="ltr"
-                      className="rounded-squircle text-xs font-mono text-left"
-                      required
-                    />
-                  </div>
+                  <TimePicker
+                    value={formStartTime}
+                    onChange={setFormStartTime}
+                    placeholder="09:00 AM"
+                    locale={locale}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-muted-foreground">
                     {isAr ? 'وقت الانتهاء *' : 'End Time *'}
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="time"
-                      value={end24h}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          const mins = parseTimeToMinutes(val);
-                          if (mins !== null) setFormEndTime(minutesTo12h(mins));
-                        }
-                      }}
-                      className="h-9 w-12 shrink-0 rounded-squircle border border-border bg-background px-1 text-center text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                      title={isAr ? 'اختر وقت الانتهاء' : 'Pick end time'}
-                    />
-                    <Input
-                      value={formEndTime}
-                      onChange={(e) => setFormEndTime(e.target.value)}
-                      placeholder="11:00 AM"
-                      dir="ltr"
-                      className="rounded-squircle text-xs font-mono text-left"
-                      required
-                    />
-                  </div>
+                  <TimePicker
+                    value={formEndTime}
+                    onChange={setFormEndTime}
+                    placeholder="11:00 AM"
+                    locale={locale}
+                    required
+                  />
                 </div>
               </div>
 

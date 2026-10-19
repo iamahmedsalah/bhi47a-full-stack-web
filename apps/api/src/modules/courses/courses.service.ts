@@ -805,11 +805,6 @@ export class CoursesService {
     errors: string[];
   }> {
     const course = await this.findOne(courseId);
-    const academicYear = options.academicYear || '2026-2027';
-    const semester =
-      (options.semester as 'first' | 'second' | 'summer') || 'first';
-    const skipBlocked = options.skipBlocked === true;
-
     const rawRows = await this.parseEnrollmentWorkbookRows(
       buffer,
       originalname,
@@ -819,22 +814,115 @@ export class CoursesService {
         'الملف فارغ أو لا يحتوي على صفوف بيانات صالحة',
       );
     }
+    return this.processEnrollmentRows(course, rawRows, options);
+  }
 
-    // Preload student profiles and users
-    const [allProfiles, allStudentUsers] = await Promise.all([
-      this.studentProfileModel.find({}).lean(),
-      this.userModel.find({ role: 'student' }).lean(),
+  /**
+   * Bulk enroll students into a course from pre-parsed JSON row batches.
+   */
+  async enrollStudentsBatch(
+    courseId: string,
+    rawRows: Record<string, any>[],
+    options: {
+      academicYear?: string;
+      semester?: string;
+      skipBlocked?: boolean;
+    } = {},
+  ): Promise<{
+    courseId: string;
+    courseCode: string;
+    courseName: string;
+    totalRows: number;
+    enrolledCount: number;
+    alreadyEnrolledCount: number;
+    skippedBlockedCount: number;
+    errorCount: number;
+    errors: string[];
+  }> {
+    const course = await this.findOne(courseId);
+    if (!rawRows || rawRows.length === 0) {
+      throw new BadRequestException('الدفعة فارغة أو لا تحتوي على صفوف صالحة');
+    }
+    return this.processEnrollmentRows(course, rawRows, options);
+  }
+
+  /**
+   * High-performance batch enrollment engine using indexed lookups and bulkWrite.
+   */
+  async processEnrollmentRows(
+    course: CourseDocument,
+    rawRows: Record<string, any>[],
+    options: {
+      academicYear?: string;
+      semester?: string;
+      skipBlocked?: boolean;
+    } = {},
+  ): Promise<{
+    courseId: string;
+    courseCode: string;
+    courseName: string;
+    totalRows: number;
+    enrolledCount: number;
+    alreadyEnrolledCount: number;
+    skippedBlockedCount: number;
+    errorCount: number;
+    errors: string[];
+  }> {
+    const academicYear = options.academicYear || '2026-2027';
+    const semester =
+      (options.semester as 'first' | 'second' | 'summer') || 'first';
+    const skipBlocked = options.skipBlocked === true;
+
+    // 1. Collect all candidate student codes from rows
+    const codeCandidates = new Set<string>();
+    for (const row of rawRows) {
+      const code = this.extractFieldValue(row, [
+        'كود الطالب',
+        'كود_الطالب',
+        'كود',
+        'student_code',
+        'studentcode',
+        'code',
+      ]);
+      if (code && code.trim()) {
+        const clean = code.trim();
+        codeCandidates.add(clean);
+        codeCandidates.add(clean.toLowerCase());
+        codeCandidates.add(clean.toUpperCase());
+      }
+    }
+
+    const candidateArray = Array.from(codeCandidates);
+
+    // 2. Preload ONLY the matching student profiles and users
+    const [matchingProfiles, matchingStudentUsers] = await Promise.all([
+      candidateArray.length > 0
+        ? this.studentProfileModel
+            .find({ studentCode: { $in: candidateArray } })
+            .lean()
+        : [],
+      candidateArray.length > 0
+        ? this.userModel
+            .find({
+              role: 'student',
+              $or: [
+                { code: { $in: candidateArray } },
+                { username: { $in: candidateArray } },
+              ],
+            })
+            .lean()
+        : [],
     ]);
 
     const profileByCode = new Map<string, any>();
-    allProfiles.forEach((p) => {
+    matchingProfiles.forEach((p) => {
       if (p.studentCode) {
         profileByCode.set(String(p.studentCode).trim().toLowerCase(), p);
       }
     });
 
     const userByCode = new Map<string, any>();
-    allStudentUsers.forEach((u) => {
+    matchingStudentUsers.forEach((u) => {
       if ((u as any).code) {
         userByCode.set(
           String((u as any).code)
@@ -848,6 +936,44 @@ export class CoursesService {
       }
     });
 
+    // 3. Collect target student user IDs for batch registration query
+    const targetStudentUserIds: Types.ObjectId[] = [];
+    for (const row of rawRows) {
+      const rawCode = this.extractFieldValue(row, [
+        'كود الطالب',
+        'كود_الطالب',
+        'كود',
+        'student_code',
+        'studentcode',
+        'code',
+      ]);
+      if (!rawCode) continue;
+      const cleanCode = rawCode.trim().toLowerCase();
+      const profile = profileByCode.get(cleanCode);
+      const studentUser = userByCode.get(cleanCode);
+      const studentUserId = profile?.userId || studentUser?._id;
+      if (studentUserId) {
+        targetStudentUserIds.push(new Types.ObjectId(studentUserId));
+      }
+    }
+
+    // 4. Single batch query for existing registrations
+    const existingRegistrations =
+      targetStudentUserIds.length > 0
+        ? await this.courseRegistrationModel
+            .find({
+              studentId: { $in: targetStudentUserIds },
+              academicYear,
+              semester,
+            })
+            .lean()
+        : [];
+
+    const regByStudentId = new Map<string, any>();
+    existingRegistrations.forEach((reg) => {
+      regByStudentId.set(reg.studentId.toString(), reg);
+    });
+
     let enrolledCount = 0;
     let alreadyEnrolledCount = 0;
     let skippedBlockedCount = 0;
@@ -855,6 +981,10 @@ export class CoursesService {
 
     const courseCodeUpper = course.code.toUpperCase();
     const courseCreditHours = course.creditHours || 3;
+
+    const profileBulkOps: any[] = [];
+    const registrationBulkOps: any[] = [];
+    const processedStudentIds = new Set<string>();
 
     for (let index = 0; index < rawRows.length; index++) {
       const row = rawRows[index];
@@ -912,6 +1042,12 @@ export class CoursesService {
         );
         continue;
       }
+
+      const studentUserIdStr = studentUserId.toString();
+      if (processedStudentIds.has(studentUserIdStr)) {
+        continue;
+      }
+      processedStudentIds.add(studentUserIdStr);
 
       // Sync level & block/tuition status if profile exists
       let isStudentBlocked = profile?.isBlocked || false;
@@ -977,10 +1113,12 @@ export class CoursesService {
       }
 
       if (profile?._id && Object.keys(profileUpdates).length > 0) {
-        await this.studentProfileModel.updateOne(
-          { _id: profile._id },
-          { $set: profileUpdates },
-        );
+        profileBulkOps.push({
+          updateOne: {
+            filter: { _id: profile._id },
+            update: { $set: profileUpdates },
+          },
+        });
       }
 
       // Check blocked status if skipBlocked enabled
@@ -990,43 +1128,65 @@ export class CoursesService {
       }
 
       const studentUserObjId = new Types.ObjectId(studentUserId);
-
-      // Check existing registration for this academicYear and semester
-      const existingReg = await this.courseRegistrationModel.findOne({
-        studentId: studentUserObjId,
-        academicYear,
-        semester,
-      });
+      const existingReg = regByStudentId.get(studentUserIdStr);
 
       if (existingReg) {
-        const existingCourses = (existingReg.courses || []).map((c) =>
+        const existingCourses = (existingReg.courses || []).map((c: string) =>
           c.toUpperCase(),
         );
 
         if (existingCourses.includes(courseCodeUpper)) {
           alreadyEnrolledCount++;
         } else {
-          existingReg.courses.push(courseCodeUpper);
-          existingReg.status = 'approved';
-          existingReg.approvedAt = new Date();
-          existingReg.totalCreditHours =
-            (existingReg.totalCreditHours || 0) + courseCreditHours;
-          await existingReg.save();
+          registrationBulkOps.push({
+            updateOne: {
+              filter: { _id: existingReg._id },
+              update: {
+                $addToSet: { courses: courseCodeUpper },
+                $set: { status: 'approved', approvedAt: new Date() },
+                $inc: { totalCreditHours: courseCreditHours },
+              },
+            },
+          });
           enrolledCount++;
         }
       } else {
-        await this.courseRegistrationModel.create({
-          studentId: studentUserObjId,
-          courses: [courseCodeUpper],
-          academicYear,
-          semester,
-          totalCreditHours: courseCreditHours,
-          source: 'system',
-          status: 'approved',
-          approvedAt: new Date(),
+        registrationBulkOps.push({
+          insertOne: {
+            document: {
+              studentId: studentUserObjId,
+              courses: [courseCodeUpper],
+              academicYear,
+              semester,
+              totalCreditHours: courseCreditHours,
+              source: 'system',
+              status: 'approved',
+              approvedAt: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          },
         });
         enrolledCount++;
       }
+    }
+
+    // 5. Execute bulk writes in parallel
+    const dbPromises: Promise<any>[] = [];
+    if (profileBulkOps.length > 0) {
+      dbPromises.push(
+        this.studentProfileModel.bulkWrite(profileBulkOps, { ordered: false }),
+      );
+    }
+    if (registrationBulkOps.length > 0) {
+      dbPromises.push(
+        this.courseRegistrationModel.bulkWrite(registrationBulkOps, {
+          ordered: false,
+        }),
+      );
+    }
+    if (dbPromises.length > 0) {
+      await Promise.all(dbPromises);
     }
 
     return {

@@ -24,6 +24,7 @@ import {
   CreateCourseDto,
   UpdateCourseDto,
   QueryCourseDto,
+  EnrollStudentsBatchDto,
 } from './dto/course.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -156,6 +157,28 @@ export class CoursesController {
         skipBlocked: skipBlocked === 'true' || skipBlocked === '1',
       },
     );
+  }
+
+  @Post('admin/courses/:id/enroll-students-batch')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @ApiOperation({
+    summary: 'Bulk enroll students in this course from JSON batch rows',
+  })
+  async enrollStudentsBatch(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: EnrollStudentsBatchDto,
+  ) {
+    if (!dto.rows || !Array.isArray(dto.rows) || dto.rows.length === 0) {
+      throw new BadRequestException(
+        'rows array is required and must not be empty',
+      );
+    }
+    return this.coursesService.enrollStudentsBatch(id, dto.rows, {
+      academicYear: dto.academicYear,
+      semester: dto.semester,
+      skipBlocked: dto.skipBlocked,
+    });
   }
 
   @Post('admin/courses')

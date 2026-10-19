@@ -715,7 +715,6 @@ function StudentsPageContent() {
                   value={String(limit)}
                   onValueChange={(val) => {
                     setLimit(Number(val));
-                    setFilter('page', 1);
                   }}
                   options={[
                     { value: '10', label: '10' },

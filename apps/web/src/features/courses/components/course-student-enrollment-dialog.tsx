@@ -30,6 +30,7 @@ import {
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 import { toast } from 'sonner';
+import { readSheet as readXlsxFile } from 'read-excel-file/browser';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
@@ -209,7 +210,9 @@ export function CourseStudentEnrollmentDialog({
       return;
     }
     if (!selectedFile) {
-      toast.error(isAr ? 'يرجى اختيار ملف Excel للرفع' : 'Please select an Excel file');
+      toast.error(
+        isAr ? 'يرجى اختيار ملف Excel للرفع' : 'Please select an Excel file',
+      );
       return;
     }
 
@@ -218,10 +221,192 @@ export function CourseStudentEnrollmentDialog({
       setResult(null);
 
       const startTime = Date.now();
+      let timer: NodeJS.Timeout | null = null;
+
+      // Start live real-time elapsed counter
+      timer = setInterval(() => {
+        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        setProgressState((prev) => {
+          if (!prev.isUploading) return prev;
+          const speed =
+            prev.processedRows > 0
+              ? Math.round((prev.processedRows / elapsed) * 10) / 10
+              : 0;
+          const remainingRows = Math.max(0, prev.totalRows - prev.processedRows);
+          const eta =
+            speed > 0 && remainingRows > 0
+              ? Math.ceil(remainingRows / speed)
+              : null;
+          return {
+            ...prev,
+            elapsedSeconds: elapsed,
+            rowsPerSecond: speed,
+            estimatedSecondsLeft: eta,
+          };
+        });
+      }, 1000);
+
+      // Attempt client-side parse for accurate batching and real row counts
+      let parsedRows: Record<string, any>[] = [];
+      const isExcel = /\.(xlsx|xls|ods)$/i.test(selectedFile.name);
+
+      if (isExcel) {
+        setProgressState({
+          isUploading: true,
+          phase: 'inspecting',
+          percentage: 5,
+          currentBatch: 1,
+          totalBatches: 1,
+          processedRows: 0,
+          totalRows: 0,
+          elapsedSeconds: 0,
+          estimatedSecondsLeft: null,
+          rowsPerSecond: 0,
+          isNetworkInterrupted: false,
+          retrySecondsLeft: 0,
+        });
+
+        try {
+          const rawSheet = await readXlsxFile(selectedFile);
+          if (rawSheet && rawSheet.length > 1) {
+            const headers = rawSheet[0].map((h) => String(h ?? '').trim());
+            for (let i = 1; i < rawSheet.length; i++) {
+              const row = rawSheet[i];
+              if (
+                row &&
+                row.some(
+                  (cell) =>
+                    cell !== null &&
+                    cell !== undefined &&
+                    String(cell).trim() !== '',
+                )
+              ) {
+                const rowObj: Record<string, any> = {};
+                headers.forEach((h, colIdx) => {
+                  if (h) rowObj[h] = row[colIdx] ?? '';
+                });
+                parsedRows.push(rowObj);
+              }
+            }
+          }
+        } catch {
+          // If readXlsxFile fails on unusual binary, fallback will be used
+          parsedRows = [];
+        }
+      }
+
+      // If client parsed rows successfully, process in batches of 150 rows
+      if (parsedRows.length > 0) {
+        const BATCH_SIZE = 150;
+        const totalRowsCount = parsedRows.length;
+        const batches: Record<string, any>[][] = [];
+        for (let i = 0; i < parsedRows.length; i += BATCH_SIZE) {
+          batches.push(parsedRows.slice(i, i + BATCH_SIZE));
+        }
+
+        const totalBatches = batches.length;
+        let cumulativeEnrolled = 0;
+        let cumulativeAlready = 0;
+        let cumulativeSkipped = 0;
+        let cumulativeErrors: string[] = [];
+        let finalCourseCode = '';
+        let finalCourseName = '';
+
+        for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
+          const currentBatchRows = batches[bIdx];
+          const processedSoFar = bIdx * BATCH_SIZE;
+          const currentProcessed = Math.min(
+            processedSoFar + currentBatchRows.length,
+            totalRowsCount,
+          );
+          const percent = Math.min(
+            99,
+            Math.max(5, Math.round((currentProcessed / totalRowsCount) * 100)),
+          );
+
+          setProgressState((prev) => ({
+            ...prev,
+            isUploading: true,
+            phase: 'uploading',
+            percentage: percent,
+            currentBatch: bIdx + 1,
+            totalBatches,
+            processedRows: currentProcessed,
+            totalRows: totalRowsCount,
+          }));
+
+          const batchRes = await api.post<EnrollmentResult>(
+            `/admin/courses/${courseId}/enroll-students-batch`,
+            {
+              academicYear,
+              semester,
+              rows: currentBatchRows,
+            },
+          );
+
+          const data =
+            batchRes.data ?? (batchRes as unknown as EnrollmentResult);
+          finalCourseCode = data.courseCode || finalCourseCode;
+          finalCourseName = data.courseName || finalCourseName;
+          cumulativeEnrolled += data.enrolledCount || 0;
+          cumulativeAlready += data.alreadyEnrolledCount || 0;
+          cumulativeSkipped += data.skippedBlockedCount || 0;
+          if (data.errors && data.errors.length > 0) {
+            cumulativeErrors = [...cumulativeErrors, ...data.errors];
+          }
+        }
+
+        if (timer) clearInterval(timer);
+        const finalElapsed = Math.max(
+          1,
+          Math.floor((Date.now() - startTime) / 1000),
+        );
+        const finalSpeed =
+          Math.round((totalRowsCount / finalElapsed) * 10) / 10;
+
+        setProgressState({
+          isUploading: false,
+          phase: 'completed',
+          percentage: 100,
+          currentBatch: totalBatches,
+          totalBatches,
+          processedRows: totalRowsCount,
+          totalRows: totalRowsCount,
+          elapsedSeconds: finalElapsed,
+          estimatedSecondsLeft: 0,
+          rowsPerSecond: finalSpeed,
+          isNetworkInterrupted: false,
+          retrySecondsLeft: 0,
+        });
+
+        const combinedResult: EnrollmentResult = {
+          courseId,
+          courseCode: finalCourseCode,
+          courseName: finalCourseName,
+          totalRows: totalRowsCount,
+          enrolledCount: cumulativeEnrolled,
+          alreadyEnrolledCount: cumulativeAlready,
+          skippedBlockedCount: cumulativeSkipped,
+          errorCount: cumulativeErrors.length,
+          errors: cumulativeErrors.slice(0, 20),
+        };
+
+        setResult(combinedResult);
+        toast.success(
+          isAr
+            ? `تم تسجيل ${cumulativeEnrolled} طالب بنجاح في مقرر ${finalCourseCode || ''}`
+            : `Successfully enrolled ${cumulativeEnrolled} students in ${finalCourseCode || ''}`,
+        );
+
+        if (onSuccess) onSuccess();
+        return;
+      }
+
+      // Fallback: multipart Excel upload to fast server endpoint
       setProgressState({
         isUploading: true,
         phase: 'uploading',
-        percentage: 10,
+        percentage: 30,
         currentBatch: 1,
         totalBatches: 1,
         processedRows: 0,
@@ -233,61 +418,40 @@ export function CourseStudentEnrollmentDialog({
         retrySecondsLeft: 0,
       });
 
-      const timer = setInterval(() => {
-        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
-        setProgressState((prev) => ({
-          ...prev,
-          elapsedSeconds: elapsed,
-          percentage:
-            prev.phase === 'uploading'
-              ? Math.min(75, prev.percentage + 10)
-              : prev.phase === 'processing'
-                ? Math.min(95, prev.percentage + 5)
-                : prev.percentage,
-        }));
-      }, 400);
-
       const formData = new FormData();
       formData.append('file', selectedFile);
-
-      setTimeout(() => {
-        setProgressState((prev) => ({
-          ...prev,
-          phase: 'processing',
-          percentage: Math.max(prev.percentage, 80),
-        }));
-      }, 700);
 
       const res = await api.post<EnrollmentResult>(
         `/admin/courses/${courseId}/enroll-students-excel`,
         formData,
         {
-          params: {
-            academicYear,
-            semester,
-          },
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+          params: { academicYear, semester },
+          headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const bytePercent = Math.min(
-                75,
-                Math.max(10, Math.round((progressEvent.loaded * 75) / progressEvent.total)),
+                85,
+                Math.max(
+                  15,
+                  Math.round(
+                    (progressEvent.loaded * 85) / progressEvent.total,
+                  ),
+                ),
               );
               setProgressState((prev) => ({
                 ...prev,
                 percentage: bytePercent,
-                phase: bytePercent >= 70 ? 'processing' : 'uploading',
+                phase: bytePercent >= 80 ? 'processing' : 'uploading',
               }));
             }
           },
         },
       );
 
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
       const data = res.data ?? (res as unknown as EnrollmentResult);
-      const total = data.totalRows || (data.enrolledCount + data.alreadyEnrolledCount);
+      const total =
+        data.totalRows || data.enrolledCount + data.alreadyEnrolledCount;
       const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
       const speed = Math.round((total / elapsed) * 10) / 10;
 
@@ -307,16 +471,13 @@ export function CourseStudentEnrollmentDialog({
       });
 
       setResult(data);
-
       toast.success(
         isAr
           ? `تم تسجيل ${data.enrolledCount} طالب بنجاح في مقرر ${data.courseCode}`
           : `Successfully enrolled ${data.enrolledCount} students in ${data.courseCode}`,
       );
 
-      if (onSuccess) {
-        onSuccess();
-      }
+      if (onSuccess) onSuccess();
     } catch (err) {
       setProgressState((prev) => ({
         ...prev,
@@ -327,7 +488,9 @@ export function CourseStudentEnrollmentDialog({
       toast.error(
         getApiErrorMessage(
           err,
-          isAr ? 'حدث خطأ أثناء تسجيل الطلاب بالمقرر' : 'Failed to enroll students',
+          isAr
+            ? 'حدث خطأ أثناء تسجيل الطلاب بالمقرر'
+            : 'Failed to enroll students',
         ),
       );
     } finally {

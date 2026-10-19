@@ -161,22 +161,32 @@ export function AuthProvider({
       }
     }
 
-    // Fire-and-forget server logout to invalidate cookies
+    // Await server logout so backend Set-Cookie clear header arrives and clears access_token
     try {
-      void api.post('/auth/logout').catch(() => {});
+      await api.post('/auth/logout', {}, { timeout: 2500 });
     } catch {
-      // ignore
+      // Proceed even if server request times out or fails
     }
 
-    // Invalidate client queries
+    // Explicitly nullify query cache so no component considers user authenticated
+    queryClient.setQueryData(['auth', 'me'], null);
+    queryClient.removeQueries({ queryKey: ['auth'] });
     queryClient.clear();
 
-    // Instant zero-lag redirect without loading toasts or delay
     if (typeof window !== 'undefined') {
-      window.location.replace(targetLogin);
-    } else {
-      router.replace(targetLogin);
+      try {
+        localStorage.removeItem('student_portal_csrf_token');
+        sessionStorage.clear();
+      } catch {}
     }
+
+    // Show logout confirmation notification
+    toast.success(
+      locale === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully',
+    );
+
+    router.replace(targetLogin);
+    setIsLoggingOut(false);
   }, [isLoggingOut, locale, meQuery.data?.role, pathname, queryClient, router]);
 
   const { setTheme, theme: currentTheme } = useTheme();
