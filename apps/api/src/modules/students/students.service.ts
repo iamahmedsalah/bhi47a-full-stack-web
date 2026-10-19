@@ -70,7 +70,7 @@ export class StudentsService {
   ) {}
 
   private cachedStats: { data: any; expiresAt: number } | null = null;
-  private static readonly STATS_CACHE_TTL_MS = 20_000;
+  private static readonly STATS_CACHE_TTL_MS = 300_000; // 5 minutes cache
 
   invalidateStatsCache() {
     this.cachedStats = null;
@@ -435,47 +435,236 @@ export class StudentsService {
       return this.cachedStats.data;
     }
 
-    const [
-      total,
-      active,
-      suspended,
-      graduated,
-      byLevel,
-      allProfiles,
-      academicProfiles,
-      liveOnline,
-    ] = await Promise.all([
-      this.studentProfileModel.countDocuments(),
-      this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
-      this.studentProfileModel.countDocuments({
-        enrollmentStatus: 'suspended',
-      }),
-      this.studentProfileModel.countDocuments({
-        enrollmentStatus: 'graduated',
-      }),
-      this.studentProfileModel.aggregate([
-        { $group: { _id: '$level', count: { $sum: 1 } } },
-        { $sort: { _id: 1 } },
+    if (typeof this.academicProfileModel?.aggregate !== 'function') {
+      const [
+        total,
+        active,
+        suspended,
+        graduated,
+        byLevel,
+        allProfiles,
+        academicProfiles,
+        liveOnline,
+      ] = await Promise.all([
+        this.studentProfileModel.countDocuments(),
+        this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
+        this.studentProfileModel.countDocuments({
+          enrollmentStatus: 'suspended',
+        }),
+        this.studentProfileModel.countDocuments({
+          enrollmentStatus: 'graduated',
+        }),
+        this.studentProfileModel.aggregate
+          ? this.studentProfileModel.aggregate([
+              { $group: { _id: '$level', count: { $sum: 1 } } },
+              { $sort: { _id: 1 } },
+            ])
+          : [],
+        this.studentProfileModel
+          .find({}, 'userId level department enrollmentStatus academicWarnings')
+          .lean(),
+        this.academicProfileModel
+          .find({}, 'studentId gpa academicWarnings')
+          .lean(),
+        this.usersService.countActiveOnlineStudents(60),
+      ]);
+
+      const gpaMap = new Map<string, number>(
+        (academicProfiles as any[]).map((ap: any) => [
+          ap.studentId?.toString() ?? '',
+          ap.gpa,
+        ]),
+      );
+
+      let generalEnrolled = 0;
+      let bisEnrolled = 0;
+      let accEnrolled = 0;
+
+      const cohortMap: Record<
+        string,
+        { total: number; active: number; probation: number; attrition: number }
+      > = {
+        '1': { total: 0, active: 0, probation: 0, attrition: 0 },
+        '2': { total: 0, active: 0, probation: 0, attrition: 0 },
+        '3': { total: 0, active: 0, probation: 0, attrition: 0 },
+        '4': { total: 0, active: 0, probation: 0, attrition: 0 },
+      };
+
+      let probationCount = 0;
+      let satisfactoryCount = 0;
+      let goodCount = 0;
+      let veryGoodCount = 0;
+      let excellentCount = 0;
+      let inactiveCount = 0;
+
+      for (const p of allProfiles as any[]) {
+        const lvl = String(p.level || '1');
+        const status = String(p.enrollmentStatus || 'active');
+        const userIdStr = p.userId?.toString() ?? '';
+        const gpa = gpaMap.get(userIdStr) ?? 0;
+        const warnings = p.academicWarnings || 0;
+        const isProbation = gpa > 0 ? gpa < 2.0 : warnings > 0;
+        const isAttrition = status === 'suspended' || status === 'inactive';
+
+        if (status === 'inactive') inactiveCount += 1;
+        if (!cohortMap[lvl]) {
+          cohortMap[lvl] = { total: 0, active: 0, probation: 0, attrition: 0 };
+        }
+        cohortMap[lvl].total += 1;
+        if (status === 'active') cohortMap[lvl].active += 1;
+        if (isProbation) cohortMap[lvl].probation += 1;
+        if (isAttrition) cohortMap[lvl].attrition += 1;
+
+        const rawDept = (p.department || '').toUpperCase();
+        if (lvl === '1' || lvl === '2') {
+          generalEnrolled += 1;
+        } else {
+          if (rawDept.includes('ACC') || rawDept.includes('محاسب')) {
+            accEnrolled += 1;
+          } else {
+            bisEnrolled += 1;
+          }
+        }
+
+        if (gpa > 0) {
+          if (gpa < 2.0) probationCount += 1;
+          else if (gpa < 2.5) satisfactoryCount += 1;
+          else if (gpa < 3.0) goodCount += 1;
+          else if (gpa < 3.5) veryGoodCount += 1;
+          else excellentCount += 1;
+        }
+      }
+
+      const departments = [
+        {
+          department: 'General',
+          nameAr: 'الشعبة العامة',
+          nameEn: 'General Track (Years 1 & 2)',
+          levels: ['1', '2'],
+          enrolled: generalEnrolled,
+        },
+        {
+          department: 'BIS',
+          nameAr: 'نظم معلومات الأعمال (BIS)',
+          nameEn: 'Business Information Systems',
+          levels: ['3', '4'],
+          enrolled: bisEnrolled,
+        },
+        {
+          department: 'ACCOUNTING',
+          nameAr: 'المحاسبة والمراجعة',
+          nameEn: 'Accounting & Auditing',
+          levels: ['3', '4'],
+          enrolled: accEnrolled,
+        },
+      ];
+
+      const cohortRetention = Object.entries(cohortMap).map(([lvl, data]) => ({
+        level: lvl,
+        total: data.total,
+        active: data.active,
+        probation: data.probation,
+        attrition: data.attrition,
+        retentionRate:
+          data.total > 0 ? Math.round((data.active / data.total) * 100) : 100,
+      }));
+
+      const gpaDistribution = [
+        {
+          label: 'Probation (< 2.0)',
+          labelAr: 'إنذار أكاديمي (< 2.0)',
+          range: '< 2.0',
+          count: probationCount,
+        },
+        {
+          label: 'Satisfactory (2.0 - 2.49)',
+          labelAr: 'مقبول (2.0 - 2.49)',
+          range: '2.0 - 2.49',
+          count: satisfactoryCount,
+        },
+        {
+          label: 'Good (2.5 - 2.99)',
+          labelAr: 'جيد (2.5 - 2.99)',
+          range: '2.5 - 2.99',
+          count: goodCount,
+        },
+        {
+          label: 'Very Good (3.0 - 3.49)',
+          labelAr: 'جيد جداً (3.0 - 3.49)',
+          range: '3.0 - 3.49',
+          count: veryGoodCount,
+        },
+        {
+          label: 'Excellent (3.5 - 4.0)',
+          labelAr: 'ممتاز (3.5 - 4.0)',
+          range: '3.5 - 4.0',
+          count: excellentCount,
+        },
+      ];
+
+      const result = {
+        total,
+        active,
+        suspended,
+        graduated,
+        withdrawn: inactiveCount,
+        liveOnline: Math.max(liveOnline ?? 0, 0),
+        byLevel: (((byLevel as any[]) || []).map((item) => ({
+          level: item._id || 'unknown',
+          count: item.count,
+        }))),
+        departments,
+        cohortRetention,
+        gpaDistribution,
+      };
+
+      this.cachedStats = {
+        data: result,
+        expiresAt: Date.now() + StudentsService.STATS_CACHE_TTL_MS,
+      };
+
+      return result;
+    }
+
+    const [profileGroups, gpaBuckets, liveOnline] = await Promise.all([
+      this.studentProfileModel.aggregate<any>([
+        {
+          $group: {
+            _id: {
+              level: { $ifNull: ['$level', '1'] },
+              status: { $ifNull: ['$enrollmentStatus', 'active'] },
+              department: '$department',
+            },
+            count: { $sum: 1 },
+            warningsCount: {
+              $sum: { $cond: [{ $gt: ['$academicWarnings', 0] }, 1, 0] },
+            },
+          },
+        },
       ]),
-      this.studentProfileModel
-        .find({}, 'userId level department enrollmentStatus academicWarnings')
-        .lean(),
-      this.academicProfileModel
-        .find({}, 'studentId gpa academicWarnings')
-        .lean(),
+      this.academicProfileModel.aggregate<any>([
+        { $match: { gpa: { $gt: 0 } } },
+        {
+          $bucket: {
+            groupBy: '$gpa',
+            boundaries: [0.001, 2.0, 2.5, 3.0, 3.5, 4.01],
+            default: 'other',
+            output: { count: { $sum: 1 } },
+          },
+        },
+      ]),
       this.usersService.countActiveOnlineStudents(60),
     ]);
 
-    const gpaMap = new Map<string, number>(
-      academicProfiles.map((ap) => [ap.studentId?.toString() ?? '', ap.gpa]),
-    );
-
-    // 1. Department Breakdown (Institute structure: General for Years 1 & 2, BIS & Accounting for Years 3 & 4)
+    let total = 0;
+    let active = 0;
+    let suspended = 0;
+    let graduated = 0;
+    let inactiveCount = 0;
     let generalEnrolled = 0;
     let bisEnrolled = 0;
     let accEnrolled = 0;
 
-    // 2. Cohort Retention by Level ('1', '2', '3', '4')
     const cohortMap: Record<
       string,
       { total: number; active: number; probation: number; attrition: number }
@@ -486,61 +675,60 @@ export class StudentsService {
       '4': { total: 0, active: 0, probation: 0, attrition: 0 },
     };
 
-    // 3. GPA Distribution
-    let probationCount = 0; // < 2.0
-    let satisfactoryCount = 0; // 2.0 - 2.49
-    let goodCount = 0; // 2.5 - 2.99
-    let veryGoodCount = 0; // 3.0 - 3.49
-    let excellentCount = 0; // >= 3.5
-    let inactiveCount = 0;
+    const levelMap = new Map<string, number>();
 
-    for (const p of allProfiles) {
-      const lvl = String(p.level || '1');
-      const status = String(p.enrollmentStatus || 'active');
-      const userIdStr = p.userId?.toString() ?? '';
-      const gpa = gpaMap.get(userIdStr) ?? 0;
-      const warnings = p.academicWarnings || 0;
-      const isProbation = gpa > 0 ? gpa < 2.0 : warnings > 0;
+    for (const g of profileGroups) {
+      const lvl = String(g._id?.level || '1');
+      const status = String(g._id?.status || 'active');
+      const dept = String(g._id?.department || '').toUpperCase();
+      const cnt = Number(g.count || 0);
+      const warnings = Number(g.warningsCount || 0);
       const isAttrition = status === 'suspended' || status === 'inactive';
 
-      if (status === 'inactive') {
-        inactiveCount += 1;
-      }
+      total += cnt;
+      if (status === 'active') active += cnt;
+      if (status === 'suspended') suspended += cnt;
+      if (status === 'graduated') graduated += cnt;
+      if (status === 'inactive') inactiveCount += cnt;
+
+      levelMap.set(lvl, (levelMap.get(lvl) ?? 0) + cnt);
 
       if (!cohortMap[lvl]) {
         cohortMap[lvl] = { total: 0, active: 0, probation: 0, attrition: 0 };
       }
-      cohortMap[lvl].total += 1;
+      cohortMap[lvl].total += cnt;
       if (status === 'active') {
-        cohortMap[lvl].active += 1;
+        cohortMap[lvl].active += cnt;
       }
-      if (isProbation) {
-        cohortMap[lvl].probation += 1;
-      }
+      cohortMap[lvl].probation += warnings;
       if (isAttrition) {
-        cohortMap[lvl].attrition += 1;
+        cohortMap[lvl].attrition += cnt;
       }
 
-      // Department Categorization: Years 1 & 2 are General; Years 3 & 4 are BIS or Accounting
-      const rawDept = (p.department || '').toUpperCase();
       if (lvl === '1' || lvl === '2') {
-        generalEnrolled += 1;
+        generalEnrolled += cnt;
       } else {
-        if (rawDept.includes('ACC') || rawDept.includes('محاسب')) {
-          accEnrolled += 1;
+        if (dept.includes('ACC') || dept.includes('محاسب')) {
+          accEnrolled += cnt;
         } else {
-          bisEnrolled += 1;
+          bisEnrolled += cnt;
         }
       }
+    }
 
-      // GPA Distribution
-      if (gpa > 0) {
-        if (gpa < 2.0) probationCount += 1;
-        else if (gpa < 2.5) satisfactoryCount += 1;
-        else if (gpa < 3.0) goodCount += 1;
-        else if (gpa < 3.5) veryGoodCount += 1;
-        else excellentCount += 1;
-      }
+    let probationCount = 0;
+    let satisfactoryCount = 0;
+    let goodCount = 0;
+    let veryGoodCount = 0;
+    let excellentCount = 0;
+
+    for (const b of gpaBuckets) {
+      const val = Number(b._id);
+      if (val < 2.0) probationCount += b.count;
+      else if (val < 2.5) satisfactoryCount += b.count;
+      else if (val < 3.0) goodCount += b.count;
+      else if (val < 3.5) veryGoodCount += b.count;
+      else excellentCount += b.count;
     }
 
     const departments = [
@@ -610,6 +798,13 @@ export class StudentsService {
       },
     ];
 
+    const byLevel = Array.from(levelMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([level, count]) => ({
+        level,
+        count,
+      }));
+
     const result = {
       total,
       active,
@@ -617,10 +812,7 @@ export class StudentsService {
       graduated,
       withdrawn: inactiveCount,
       liveOnline: Math.max(liveOnline ?? 0, 0),
-      byLevel: (byLevel || []).map((item) => ({
-        level: item._id || 'unknown',
-        count: item.count,
-      })),
+      byLevel,
       departments,
       cohortRetention,
       gpaDistribution,

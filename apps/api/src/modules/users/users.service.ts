@@ -37,6 +37,15 @@ export class UsersService {
     return user;
   }
 
+  async findByIdForAuth(id: string) {
+    return this.userModel
+      .findById(id)
+      .select(
+        '_id role staffType name email studentCode permissions mustChangePassword tokenVersion isActive',
+      )
+      .lean();
+  }
+
   async findByIdWithNationalId(id: string): Promise<UserDocument> {
     const user = await this.userModel
       .findById(id)

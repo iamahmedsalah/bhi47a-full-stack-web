@@ -139,3 +139,6 @@ AttendanceSessionSchema.index({ courseCode: 1, status: 1 });
 AttendanceSessionSchema.index({ createdBy: 1, createdAt: -1 });
 AttendanceSessionSchema.index({ status: 1, expiresAt: 1 });
 AttendanceSessionSchema.index({ academicYear: 1, semester: 1, level: 1 });
+AttendanceSessionSchema.index({ startsAt: -1, _id: -1 });
+AttendanceSessionSchema.index({ courseCode: 1, startsAt: -1 });
+AttendanceSessionSchema.index({ doctorId: 1, startsAt: -1 });

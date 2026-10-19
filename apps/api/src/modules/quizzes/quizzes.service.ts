@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
   Optional,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, FilterQuery } from 'mongoose';
@@ -68,9 +69,11 @@ export interface QuizListItem extends Record<string, unknown> {
 }
 
 import { MetricsService } from '../../core/metrics/metrics.service';
+import { CacheService } from '../../core/cache/cache.service';
+import { QueueService } from '../../core/queues/queue.service';
 
 @Injectable()
-export class QuizzesService {
+export class QuizzesService implements OnModuleInit {
   constructor(
     @InjectModel(Quiz.name) private quizModel: Model<QuizDocument>,
     @InjectModel(QuizSubmission.name)
@@ -85,7 +88,47 @@ export class QuizzesService {
     private readonly notificationsService: NotificationsService,
     private readonly excelService: QuizQuestionExcelService,
     @Optional() private readonly metricsService?: MetricsService,
+    @Optional() private readonly cacheService?: CacheService,
+    @Optional() private readonly queueService?: QueueService,
   ) {}
+
+  onModuleInit(): void {
+    if (this.queueService) {
+      this.queueService.registerWorker<{
+        attemptId: string;
+        quizId: string;
+        studentId: string;
+      }>('quiz-queue', async (job) => {
+        const { attemptId, quizId, studentId } = job.data;
+        await this.handleAutoSubmitJob(attemptId, quizId, studentId);
+      });
+    }
+  }
+
+  async handleAutoSubmitJob(
+    attemptId: string,
+    quizId: string,
+    studentId: string,
+  ) {
+    if (!Types.ObjectId.isValid(attemptId)) return;
+
+    const attempt = await this.attemptModel.findById(attemptId);
+    if (!attempt || attempt.status !== 'in_progress') {
+      return;
+    }
+
+    const quiz = await this.quizModel.findById(quizId);
+    if (!quiz) return;
+
+    try {
+      await this.autoSubmitAttempt(quiz, attempt, studentId, 'timed_out');
+    } catch (err) {
+      console.error(
+        `Failed to auto-submit timed out quiz attempt ${attemptId}:`,
+        err,
+      );
+    }
+  }
 
   // ─── Staff / Admin Management ─────────────────────────────────────
 
@@ -419,6 +462,10 @@ export class QuizzesService {
       throw new NotFoundException('الاختبار غير موجود');
     }
 
+    if (this.cacheService) {
+      await this.cacheService.del(`quiz:manifest:${id}`);
+    }
+
     if (!quiz.isPublished && updated.isPublished) {
       this.courseModel
         .findById(updated.courseId)
@@ -469,6 +516,10 @@ export class QuizzesService {
       this.submissionModel.deleteMany({ quizId: new Types.ObjectId(id) }),
       this.attemptModel.deleteMany({ quizId: new Types.ObjectId(id) }),
     ]);
+
+    if (this.cacheService) {
+      await this.cacheService.del(`quiz:manifest:${id}`);
+    }
 
     return { message: 'تم حذف الاختبار وسجلاته بنجاح' };
   }
@@ -764,6 +815,15 @@ export class QuizzesService {
       throw new ConflictException('لقد قمت بتقديم هذا الاختبار بالفعل');
     }
 
+    const quizDurationSeconds = Math.max(60, (quiz.durationMinutes || 30) * 60);
+    if (this.cacheService) {
+      return this.cacheService.wrap(
+        `quiz:manifest:${quizId}`,
+        () => Promise.resolve(this.sanitizeQuiz(quiz)),
+        quizDurationSeconds,
+      );
+    }
+
     return this.sanitizeQuiz(quiz);
   }
 
@@ -884,6 +944,31 @@ export class QuizzesService {
             a.selectedOptionIndex >= 0,
         );
 
+        const resumeDelayMs = Math.max(10, remSec + 15) * 1000;
+        if (this.queueService) {
+          this.queueService
+            .add(
+              'quiz-queue',
+              'auto-submit',
+              {
+                attemptId: attempt._id.toString(),
+                quizId: quiz._id.toString(),
+                studentId: studentUserId,
+              },
+              undefined,
+              {
+                delay: resumeDelayMs,
+                jobId: `quiz-autosubmit:${attempt._id.toString()}`,
+              },
+            )
+            .catch((err) =>
+              console.error(
+                'Failed to schedule quiz auto-submit delayed job on resume:',
+                err,
+              ),
+            );
+        }
+
         return {
           quiz: this.sanitizeQuiz(quiz),
           attemptId: attempt._id,
@@ -924,6 +1009,31 @@ export class QuizzesService {
 
     await attempt.save();
     this.metricsService?.updateActiveQuizAttempts(1);
+
+    const initialDelayMs = Math.max(10, remainingSeconds + 15) * 1000;
+    if (this.queueService) {
+      this.queueService
+        .add(
+          'quiz-queue',
+          'auto-submit',
+          {
+            attemptId: attempt._id.toString(),
+            quizId: quiz._id.toString(),
+            studentId: studentUserId,
+          },
+          undefined,
+          {
+            delay: initialDelayMs,
+            jobId: `quiz-autosubmit:${attempt._id.toString()}`,
+          },
+        )
+        .catch((err) =>
+          console.error(
+            'Failed to schedule quiz auto-submit delayed job on create:',
+            err,
+          ),
+        );
+    }
 
     return {
       quiz: this.sanitizeQuiz(quiz),

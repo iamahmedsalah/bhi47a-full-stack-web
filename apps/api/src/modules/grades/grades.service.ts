@@ -806,21 +806,37 @@ export class GradesService implements OnModuleInit {
   }
 
   async auditAcademicWarnings(options?: { dryRun?: boolean }) {
+    // High-performance filter: only fetch academic profiles that have recorded grades,
+    // warnings, or completed/failed courses (skipping fresh or empty profiles that have no history)
     const academicProfiles = await this.studentAcademicProfileModel
-      .find({})
+      .find({
+        $or: [
+          { gpa: { $gt: 0 } },
+          { academicWarnings: { $gt: 0 } },
+          { 'completedCourses.0': { $exists: true } },
+          { 'failedCourses.0': { $exists: true } },
+        ],
+      })
+      .select('studentId gpa academicWarnings completedCourses failedCourses')
       .lean();
 
     const studentIds = academicProfiles
       .map((p) => p.studentId)
       .filter((id): id is Types.ObjectId => Boolean(id));
 
-    const [studentProfiles, users] = await Promise.all([
-      this.studentProfileModel.find({ userId: { $in: studentIds } }).lean(),
-      this.userModel
-        .find({ _id: { $in: studentIds } })
-        .select('name studentCode')
-        .lean(),
-    ]);
+    const [studentProfiles, users] =
+      studentIds.length > 0
+        ? await Promise.all([
+            this.studentProfileModel
+              .find({ userId: { $in: studentIds } })
+              .select('userId studentCode fullName fullNameAr academicWarnings')
+              .lean(),
+            this.userModel
+              .find({ _id: { $in: studentIds } })
+              .select('name studentCode')
+              .lean(),
+          ])
+        : [[], []];
 
     const studentMap = new Map(
       studentProfiles.map((sp) => [sp.userId.toString(), sp]),

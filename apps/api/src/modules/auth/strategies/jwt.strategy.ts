@@ -30,7 +30,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       cachedAt: number;
     }
   >();
-  private readonly CACHE_TTL_MS = 30_000; // 30 seconds
+  private readonly inFlightValidations = new Map<string, Promise<any>>();
+  private readonly CACHE_TTL_MS = 300_000; // 5 minutes cache for authenticated user context
 
   constructor(
     private configService: ConfigService,
@@ -49,9 +50,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   invalidate(userId?: string) {
     if (!userId) {
       this.userCache.clear();
+      this.inFlightValidations.clear();
       return;
     }
     this.userCache.delete(userId);
+    this.inFlightValidations.delete(userId);
   }
 
   async validate(payload: JwtPayload) {
@@ -69,35 +72,51 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return cached.user;
     }
 
-    const user = await this.usersService.findById(payload.sub);
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException('User not found or inactive');
-    }
-    if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
-      throw new UnauthorizedException('Session has expired');
+    // Singleflight deduplication: coalesce parallel requests for the same user
+    let inFlight = this.inFlightValidations.get(payload.sub);
+    if (!inFlight) {
+      inFlight = (async () => {
+        try {
+          const user = await this.usersService.findByIdForAuth(payload.sub);
+          if (!user || !user.isActive) {
+            throw new UnauthorizedException('User not found or inactive');
+          }
+          if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+            throw new UnauthorizedException('Session has expired');
+          }
+
+          const authUser = {
+            _id: user._id.toString(),
+            role: user.role,
+            staffType: user.staffType,
+            name: user.name,
+            email: user.email,
+            studentCode: user.studentCode,
+            permissions: user.permissions,
+            mustChangePassword: user.mustChangePassword,
+            tokenVersion: user.tokenVersion ?? 0,
+            isActive: user.isActive,
+          };
+
+          if (this.userCache.size > 2000) {
+            const threshold = Date.now() - this.CACHE_TTL_MS;
+            for (const [k, v] of this.userCache.entries()) {
+              if (v.cachedAt < threshold) this.userCache.delete(k);
+            }
+          }
+          this.userCache.set(payload.sub, {
+            user: authUser,
+            cachedAt: Date.now(),
+          });
+
+          return authUser;
+        } finally {
+          this.inFlightValidations.delete(payload.sub);
+        }
+      })();
+      this.inFlightValidations.set(payload.sub, inFlight);
     }
 
-    const authUser = {
-      _id: user._id.toString(),
-      role: user.role,
-      staffType: user.staffType,
-      name: user.name,
-      email: user.email,
-      studentCode: user.studentCode,
-      permissions: user.permissions,
-      mustChangePassword: user.mustChangePassword,
-      tokenVersion: user.tokenVersion ?? 0,
-      isActive: user.isActive,
-    };
-
-    if (this.userCache.size > 2000) {
-      const threshold = now - this.CACHE_TTL_MS;
-      for (const [k, v] of this.userCache.entries()) {
-        if (v.cachedAt < threshold) this.userCache.delete(k);
-      }
-    }
-    this.userCache.set(payload.sub, { user: authUser, cachedAt: now });
-
-    return authUser;
+    return await inFlight;
   }
 }

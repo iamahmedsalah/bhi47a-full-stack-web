@@ -37,3 +37,10 @@ export const ExamScheduleSchema = SchemaFactory.createForClass(ExamSchedule);
 
 ExamScheduleSchema.index({ examType: 1 });
 ExamScheduleSchema.index({ isPublished: 1 });
+ExamScheduleSchema.index({
+  isPublished: 1,
+  academicYear: 1,
+  semester: 1,
+  createdAt: -1,
+});
+ExamScheduleSchema.index({ createdAt: -1 });

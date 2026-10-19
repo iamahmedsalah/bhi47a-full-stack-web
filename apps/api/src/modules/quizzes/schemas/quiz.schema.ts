@@ -42,7 +42,7 @@ export class Quiz {
   @Prop({ trim: true })
   description?: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Course', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Course', required: true })
   courseId!: Types.ObjectId;
 
   @Prop({ trim: true, required: true })
@@ -57,7 +57,7 @@ export class Quiz {
   @Prop({ trim: true })
   courseNameEn?: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   creatorId!: Types.ObjectId;
 
   @Prop({ trim: true })

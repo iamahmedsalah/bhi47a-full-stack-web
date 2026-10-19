@@ -167,9 +167,17 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
           connectionFactory: (connection: mongoose.Connection) => {
             ConnectionHolder.connection = connection;
 
-            // Register Mongoose metrics & slow query tracker plugin
+            const slowThreshold = Number(
+              configService.get<string>('SLOW_QUERY_THRESHOLD_MS'),
+            );
             connection.plugin(
-              createMongooseMetricsPlugin(metricsService, logger),
+              createMongooseMetricsPlugin(
+                metricsService,
+                logger,
+                Number.isFinite(slowThreshold) && slowThreshold > 0
+                  ? slowThreshold
+                  : undefined,
+              ),
             );
 
             connection.on('connected', () => {

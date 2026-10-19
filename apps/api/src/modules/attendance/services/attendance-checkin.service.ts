@@ -1,9 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { CacheService } from '../../../core/cache/cache.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -57,6 +60,7 @@ export class AttendanceCheckInService {
     private studentProfileModel: Model<StudentProfileDocument>,
     private tokenService: AttendanceTokenService,
     private realtimeService: AttendanceRealtimeService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {}
 
   /**
@@ -140,27 +144,39 @@ export class AttendanceCheckInService {
       }
 
       const sessionIdStr = parts[0];
-      const nowMs = Date.now();
-      const cached = this.sessionCache.get(sessionIdStr);
-
-      if (cached && nowMs - cached.cachedAt < this.SESSION_CACHE_TTL_MS) {
-        session = cached.session;
+      if (this.cacheService) {
+        session = await this.cacheService.wrap(
+          `attendance:session:${sessionIdStr}`,
+          () =>
+            this.sessionModel
+              .findById(sessionIdStr)
+              .select('+sessionSecret')
+              .exec(),
+          15,
+        );
       } else {
-        session = await this.sessionModel
-          .findById(sessionIdStr)
-          .select('+sessionSecret')
-          .exec();
-        if (session) {
-          this.sessionCache.set(sessionIdStr, { session, cachedAt: nowMs });
-        }
-      }
+        const nowMs = Date.now();
+        const cached = this.sessionCache.get(sessionIdStr);
 
-      // Memory safeguard: evict stale sessions if cache grows
-      if (this.sessionCache.size > 100) {
-        const purgeThreshold = nowMs - 30_000;
-        for (const [key, val] of this.sessionCache.entries()) {
-          if (val.cachedAt < purgeThreshold) {
-            this.sessionCache.delete(key);
+        if (cached && nowMs - cached.cachedAt < this.SESSION_CACHE_TTL_MS) {
+          session = cached.session;
+        } else {
+          session = await this.sessionModel
+            .findById(sessionIdStr)
+            .select('+sessionSecret')
+            .exec();
+          if (session) {
+            this.sessionCache.set(sessionIdStr, { session, cachedAt: nowMs });
+          }
+        }
+
+        // Memory safeguard: evict stale sessions if cache grows
+        if (this.sessionCache.size > 100) {
+          const purgeThreshold = nowMs - 30_000;
+          for (const [key, val] of this.sessionCache.entries()) {
+            if (val.cachedAt < purgeThreshold) {
+              this.sessionCache.delete(key);
+            }
           }
         }
       }
@@ -170,16 +186,38 @@ export class AttendanceCheckInService {
       throw new NotFoundException('جلسة الحضور غير موجودة أو تم حذفها');
     }
 
+    // 2.5 Deduplication scan lock to reject rapid double-scans in 0ms
+    const scanLockKey = `attendance:lock:${session._id.toString()}:${studentUser._id}`;
+    if (this.cacheService) {
+      const isLocked = await this.cacheService.get(scanLockKey);
+      if (isLocked) {
+        throw new ConflictException(
+          'يتم معالجة تسجيل حضورك حالياً، يرجى الانتظار بضع ثوانٍ',
+        );
+      }
+      await this.cacheService.set(scanLockKey, true, 10);
+    }
+
     // 3. Verify session lifecycle state
     const now = new Date();
 
     if (session.status === 'CLOSED') {
       this.sessionCache.delete(session._id.toString());
+      if (this.cacheService) {
+        await this.cacheService.del(
+          `attendance:session:${session._id.toString()}`,
+        );
+      }
       throw new BadRequestException('عذراً، جلسة الحضور أغلقت من قبل المحاضر');
     }
 
     if (session.status === 'EXPIRED' || now > session.expiresAt) {
       this.sessionCache.delete(session._id.toString());
+      if (this.cacheService) {
+        await this.cacheService.del(
+          `attendance:session:${session._id.toString()}`,
+        );
+      }
       if (session.status === 'OPEN') {
         session.status = 'EXPIRED';
         await session.save();

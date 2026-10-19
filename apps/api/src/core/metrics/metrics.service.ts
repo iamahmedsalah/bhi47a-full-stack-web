@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
 import * as os from 'os';
 import { monitorEventLoopDelay } from 'perf_hooks';
 import {
@@ -10,6 +15,7 @@ import {
 } from 'prom-client';
 import mongoose from 'mongoose';
 import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
+import { CacheService } from '../cache/cache.service';
 
 /** Queries captured within this many seconds of boot are flagged as cold-start. */
 const COLD_START_WINDOW_SECONDS = 90;
@@ -202,7 +208,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   // Event loop delay histogram: high lag inflates every measured query time
   private eventLoopHistogram?: ReturnType<typeof monitorEventLoopDelay>;
 
-  constructor() {
+  constructor(@Optional() private readonly cacheService?: CacheService) {
     this.registry = new Registry();
 
     // Default System Metrics (CPU, Memory Heap/RSS, Event Loop Lag, GC)
@@ -649,6 +655,15 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
             : 'inline_fallback',
         firebase: process.env.FIREBASE_PROJECT_ID ? 'online' : 'disabled',
       },
+      cache: this.cacheService
+        ? this.cacheService.getHealth()
+        : {
+            status: 'disabled',
+            driver: 'memory',
+            effectiveDriver: 'memory',
+            redisConnected: false,
+            itemCount: 0,
+          },
       database: {
         status: isDbConnected ? 'connected' : 'disconnected',
         pingLatencyMs,

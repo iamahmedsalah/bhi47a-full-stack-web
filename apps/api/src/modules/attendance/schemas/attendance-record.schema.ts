@@ -159,4 +159,6 @@ AttendanceRecordSchema.index({ sessionId: 1, deviceFingerprint: 1 });
 AttendanceRecordSchema.index({ studentId: 1, courseCode: 1, createdAt: -1 });
 AttendanceRecordSchema.index({ studentCode: 1, courseCode: 1 });
 AttendanceRecordSchema.index({ sessionId: 1, status: 1 });
+AttendanceRecordSchema.index({ sessionId: 1, checkedInAt: 1 });
+AttendanceRecordSchema.index({ studentId: 1, checkedInAt: -1 });
 AttendanceRecordSchema.index({ courseCode: 1, createdAt: -1 });

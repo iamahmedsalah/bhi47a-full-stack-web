@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -21,6 +22,7 @@ import {
   QueryExamScheduleDto,
 } from './dto/exam-schedule.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CacheService } from '../../core/cache/cache.service';
 
 export interface ExamScheduleUploadFile {
   buffer: Buffer;
@@ -44,6 +46,7 @@ export class ExamSchedulesService {
     @InjectModel(StudentProfile.name)
     private studentModel: Model<StudentProfileDocument>,
     private notificationsService: NotificationsService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {}
 
   private getCloudinaryConfig() {
@@ -151,6 +154,11 @@ export class ExamSchedulesService {
     const created = new this.examScheduleModel(dto);
     const saved = await created.save();
 
+    if (this.cacheService) {
+      await this.cacheService.del('exams:schedules:published');
+      await this.cacheService.delPattern('exams:schedules:*');
+    }
+
     if (saved.isPublished) {
       try {
         await this.notificationsService.sendNotification(
@@ -174,7 +182,15 @@ export class ExamSchedulesService {
     if (query.examType) filter.examType = query.examType;
     if (query.isPublished !== undefined) filter.isPublished = query.isPublished;
 
-    return this.examScheduleModel.find(filter).sort({ createdAt: -1 }).lean();
+    const cacheKey = `exams:schedules:${query.examType || 'all'}:${query.isPublished ?? 'all'}`;
+    const queryFn = () =>
+      this.examScheduleModel.find(filter).sort({ createdAt: -1 }).lean();
+
+    if (this.cacheService) {
+      return this.cacheService.wrap(cacheKey, queryFn, 900);
+    }
+
+    return queryFn();
   }
 
   async findOne(id: string): Promise<ExamScheduleDocument> {
@@ -196,6 +212,11 @@ export class ExamSchedulesService {
     );
     if (!updated) {
       throw new NotFoundException('جدول الامتحانات غير موجود');
+    }
+
+    if (this.cacheService) {
+      await this.cacheService.del('exams:schedules:published');
+      await this.cacheService.delPattern('exams:schedules:*');
     }
 
     if (updated.isPublished) {
@@ -221,6 +242,12 @@ export class ExamSchedulesService {
     if (!deleted) {
       throw new NotFoundException('جدول الامتحانات غير موجود');
     }
+
+    if (this.cacheService) {
+      await this.cacheService.del('exams:schedules:published');
+      await this.cacheService.delPattern('exams:schedules:*');
+    }
+
     return { message: 'تم حذف جدول الامتحانات بنجاح' }; // Schedule deleted successfully
   }
 
@@ -243,10 +270,19 @@ export class ExamSchedulesService {
       }
     }
 
-    const publishedSchedules = await this.examScheduleModel
-      .find({ isPublished: true })
-      .sort({ createdAt: -1 })
-      .lean();
+    const fetchSchedules = () =>
+      this.examScheduleModel
+        .find({ isPublished: true })
+        .sort({ createdAt: -1 })
+        .lean();
+
+    const publishedSchedules = this.cacheService
+      ? await this.cacheService.wrap(
+          'exams:schedules:published',
+          fetchSchedules,
+          900,
+        )
+      : await fetchSchedules();
 
     return {
       seatNumber: profile?.seatNumber || null,

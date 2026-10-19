@@ -2,7 +2,8 @@ import type { Schema } from 'mongoose';
 import type { MetricsService } from '../core/metrics/metrics.service';
 import type { AppLoggerService } from '../core/logger/logger.service';
 
-const SLOW_QUERY_THRESHOLD_MS = 100;
+const DEFAULT_SLOW_QUERY_THRESHOLD_MS =
+  process.env.NODE_ENV === 'production' ? 100 : 350;
 
 interface QueryLike {
   getFilter?: () => unknown;
@@ -58,7 +59,15 @@ function describeQueryShape(query: QueryLike, op: string): string | undefined {
 export function createMongooseMetricsPlugin(
   metricsService?: MetricsService,
   logger?: AppLoggerService,
+  customThresholdMs?: number,
 ) {
+  const thresholdMs =
+    customThresholdMs && Number.isFinite(customThresholdMs) && customThresholdMs > 0
+      ? customThresholdMs
+      : Number(process.env.SLOW_QUERY_THRESHOLD_MS) > 0
+        ? Number(process.env.SLOW_QUERY_THRESHOLD_MS)
+        : DEFAULT_SLOW_QUERY_THRESHOLD_MS;
+
   return function mongooseMetricsPlugin(schema: Schema) {
     const queryMethods = [
       'find',
@@ -94,7 +103,7 @@ export function createMongooseMetricsPlugin(
             ? 1
             : 0;
 
-        if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+        if (durationMs >= thresholdMs) {
           const query = this as QueryLike;
           const filter = safeStringify(
             typeof query.getFilter === 'function'
@@ -112,7 +121,7 @@ export function createMongooseMetricsPlugin(
             options,
           });
           logger?.warn(
-            `[SLOW QUERY] ${collectionName}.${op} took ${durationMs}ms (threshold: ${SLOW_QUERY_THRESHOLD_MS}ms)`,
+            `[SLOW QUERY] ${collectionName}.${op} took ${durationMs}ms (threshold: ${thresholdMs}ms)`,
             {
               context: 'MongooseMetrics',
               collection: collectionName,
@@ -144,9 +153,9 @@ export function createMongooseMetricsPlugin(
 
         metricsService?.recordDbQuery(collectionName, 'aggregate', durationSec);
 
-        if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+        if (durationMs >= thresholdMs) {
           logger?.warn(
-            `[SLOW QUERY] ${collectionName}.aggregate took ${durationMs}ms`,
+            `[SLOW QUERY] ${collectionName}.aggregate took ${durationMs}ms (threshold: ${thresholdMs}ms)`,
             {
               context: 'MongooseMetrics',
               collection: collectionName,
@@ -174,9 +183,9 @@ export function createMongooseMetricsPlugin(
 
         metricsService?.recordDbQuery(collectionName, 'save', durationSec);
 
-        if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+        if (durationMs >= thresholdMs) {
           logger?.warn(
-            `[SLOW QUERY] ${collectionName}.save took ${durationMs}ms`,
+            `[SLOW QUERY] ${collectionName}.save took ${durationMs}ms (threshold: ${thresholdMs}ms)`,
             {
               context: 'MongooseMetrics',
               collection: collectionName,

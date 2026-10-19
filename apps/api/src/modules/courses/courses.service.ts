@@ -4,7 +4,9 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
+import { CacheService } from '../../core/cache/cache.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -61,6 +63,7 @@ export class CoursesService {
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
     private configService: ConfigService,
+    @Optional() private cacheService?: CacheService,
   ) {}
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
@@ -96,7 +99,9 @@ export class CoursesService {
       doctorName,
       doctorNameAr,
     });
-    return course.save();
+    const saved = await course.save();
+    void this.cacheService?.delPattern('courses:*');
+    return saved;
   }
 
   async findAll(query: QueryCourseDto, caller?: any) {
@@ -139,6 +144,29 @@ export class CoursesService {
 
     if (query.isActive !== undefined) {
       filter.isActive = query.isActive;
+    }
+
+    const cacheKey = !query.search
+      ? `courses:list:${query.doctorId || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
+      : null;
+
+    if (cacheKey && this.cacheService) {
+      return this.cacheService.wrap(
+        cacheKey,
+        async () => {
+          const [items, total] = await Promise.all([
+            this.courseModel
+              .find(filter)
+              .sort({ code: 1 })
+              .skip(skip)
+              .limit(limit)
+              .lean(),
+            this.courseModel.countDocuments(filter),
+          ]);
+          return createPaginatedResult(items, total, page, limit);
+        },
+        120,
+      );
     }
 
     const [items, total] = await Promise.all([
@@ -221,6 +249,7 @@ export class CoursesService {
     if (!updated) {
       throw new NotFoundException('المادة غير موجودة');
     }
+    void this.cacheService?.delPattern('courses:*');
     return updated;
   }
 
@@ -276,6 +305,7 @@ export class CoursesService {
   async remove(id: string): Promise<{ message: string }> {
     await this.findOne(id);
     await this.courseModel.findByIdAndDelete(id);
+    void this.cacheService?.delPattern('courses:*');
     return { message: 'تم حذف المادة بنجاح' }; // Course deleted successfully
   }
 
@@ -897,12 +927,12 @@ export class CoursesService {
     // 2. Preload ONLY the matching student profiles and users
     const [matchingProfiles, matchingStudentUsers] = await Promise.all([
       candidateArray.length > 0
-        ? this.studentProfileModel
+        ? await this.studentProfileModel
             .find({ studentCode: { $in: candidateArray } })
             .lean()
         : [],
       candidateArray.length > 0
-        ? this.userModel
+        ? await this.userModel
             .find({
               role: 'student',
               $or: [
@@ -915,21 +945,16 @@ export class CoursesService {
     ]);
 
     const profileByCode = new Map<string, any>();
-    matchingProfiles.forEach((p) => {
+    matchingProfiles.forEach((p: any) => {
       if (p.studentCode) {
         profileByCode.set(String(p.studentCode).trim().toLowerCase(), p);
       }
     });
 
     const userByCode = new Map<string, any>();
-    matchingStudentUsers.forEach((u) => {
-      if ((u as any).code) {
-        userByCode.set(
-          String((u as any).code)
-            .trim()
-            .toLowerCase(),
-          u,
-        );
+    matchingStudentUsers.forEach((u: any) => {
+      if (u.code) {
+        userByCode.set(String(u.code).trim().toLowerCase(), u);
       }
       if (u.username) {
         userByCode.set(String(u.username).trim().toLowerCase(), u);

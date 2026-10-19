@@ -111,6 +111,7 @@ StudentProfileSchema.index({ department: 1, level: 1, createdAt: -1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, level: 1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, department: 1, level: 1 });
 StudentProfileSchema.index({ level: 1, studentCode: 1 });
+StudentProfileSchema.index({ level: 1, userId: 1 });
 StudentProfileSchema.index({ fullName: 1, studentCode: 1 });
 StudentProfileSchema.index({ isBlocked: 1, tuitionFeesStatus: 1, level: 1 });
 StudentProfileSchema.index({ isBlocked: 1, studentCode: 1 });

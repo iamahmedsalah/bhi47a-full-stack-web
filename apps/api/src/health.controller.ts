@@ -1,10 +1,12 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Optional } from '@nestjs/common';
 import mongoose from 'mongoose';
 import { Public } from './modules/auth/decorators/public.decorator';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
+import { CacheService } from './core/cache/cache.service';
 
 @Controller()
 export class HealthController {
+  constructor(@Optional() private readonly cacheService?: CacheService) {}
   @Public()
   @Get()
   root() {
@@ -59,6 +61,9 @@ export class HealthController {
         pingLatencyMs,
         readyState,
       },
+      cache: this.cacheService
+        ? this.cacheService.getHealth()
+        : { status: 'disabled' },
       timestamp: new Date().toISOString(),
     };
   }

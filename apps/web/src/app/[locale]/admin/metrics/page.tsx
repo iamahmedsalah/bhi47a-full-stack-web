@@ -741,6 +741,40 @@ export default function AdminMetricsPage() {
                   </div>
                 </div>
                 <div className={TILE_CLASS}>
+                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'منظومة التخزين المؤقت (Cache)' : 'Cache Engine'}</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        data.cache?.status === 'healthy'
+                          ? 'bg-emerald-400'
+                          : data.cache?.status === 'degraded'
+                          ? 'bg-amber-400'
+                          : 'bg-muted-foreground'
+                      }`}
+                    />
+                    <span className="font-mono text-xs font-bold text-foreground">
+                      {data.cache
+                        ? data.cache.effectiveDriver === 'hybrid'
+                          ? 'Hybrid L1+L2'
+                          : data.cache.effectiveDriver === 'redis'
+                          ? 'Redis L2'
+                          : isAr ? 'ذاكرة محلية (0 Quota)' : 'In-Memory (0 Quota)'
+                        : isAr ? 'محلي' : 'Memory'}
+                    </span>
+                  </div>
+                </div>
+                <div className={TILE_CLASS}>
+                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'عناصر الذاكرة المؤقتة (L1 Items)' : 'L1 Cached Objects'}</span>
+                  <div className="flex items-center gap-1.5" dir="ltr">
+                    <span className="font-mono text-xs font-bold text-teal-400">
+                      {data.cache?.itemCount ?? 0}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {data.cache?.redisConnected ? '(Redis Connected)' : '(Quota Safe)'}
+                    </span>
+                  </div>
+                </div>
+                <div className={TILE_CLASS}>
                   <span className="text-muted-foreground block text-[11px]">{isAr ? 'إشعارات Firebase (FCM)' : 'Firebase Admin SDK'}</span>
                   <div className="flex items-center gap-2">
                     <span className={`inline-block h-2 w-2 rounded-full ${data.infrastructure?.firebase === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
@@ -769,6 +803,77 @@ export default function AdminMetricsPage() {
                   label={isAr ? 'حد الاستعلام البطيء' : 'Slow Query Threshold'}
                   value={<span className="text-xs">{`${data.database.slowQueryThresholdMs ?? 100} ms`}</span>}
                 />
+              </div>
+
+              {/* Redis Quota & Preservation Dedication Card */}
+              <div className="mt-4 rounded-xl border border-teal-500/20 bg-teal-950/20 p-3.5 backdrop-blur-sm">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle bg-teal-500/10 border border-teal-500/30 text-teal-400">
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-foreground">
+                          {isAr ? 'حصة واستهلاك خادم Redis (Upstash Quota)' : 'Redis Cloud Quota (Upstash Tier)'}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`rounded-squircle text-[10px] ${
+                            data.cache?.quota?.mode === 'preserved'
+                              ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/30'
+                              : data.cache?.quota?.mode === 'active'
+                              ? 'border-teal-500/40 text-teal-400 bg-teal-950/30'
+                              : 'border-muted-foreground/30 text-muted-foreground'
+                          }`}
+                        >
+                          {data.cache?.quota?.mode === 'preserved'
+                            ? isAr ? '🛡️ وضع الحفاظ على الحصة (0 مكالمات)' : '🛡️ Quota Preserved (0 Calls)'
+                            : isAr ? '⚡ متصل بالإنتاج' : '⚡ Active Production'}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {data.cache?.quota?.details ?? (isAr ? 'يتم تشغيل الذاكرة محلياً لحماية رصيد Upstash المجاني' : 'Memory cache shielding Upstash free tier')}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-end">
+                    <span className="font-mono text-xs font-bold text-teal-400">
+                      {data.cache?.quota?.statusText ?? '0 / 10,000 (0%)'}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {isAr ? 'الحد اليومي المجاني' : 'Free Daily Quota Limit'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="mt-3">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-background/60 border border-white/5">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        (data.cache?.quota?.quotaUsedPercent ?? 0) > 80
+                          ? 'bg-rose-500'
+                          : (data.cache?.quota?.quotaUsedPercent ?? 0) > 50
+                          ? 'bg-amber-400'
+                          : 'bg-teal-400'
+                      }`}
+                      style={{ width: `${Math.max(2, data.cache?.quota?.quotaUsedPercent ?? 0)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>
+                      {isAr ? 'استهلاك اليوم: ' : 'Today: '}
+                      <strong className="text-foreground">{data.cache?.quota?.commandsToday ?? 0} ops</strong>
+                    </span>
+                    <span>
+                      {isAr ? 'الحصة المتبقية: ' : 'Remaining: '}
+                      <strong className="text-emerald-400">
+                        {Math.max(0, (data.cache?.quota?.dailyLimit ?? 10000) - (data.cache?.quota?.commandsToday ?? 0))} ops
+                      </strong>
+                    </span>
+                  </div>
+                </div>
               </div>
             </Card>
           </div>

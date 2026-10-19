@@ -132,6 +132,22 @@ export interface MetricsSummaryResponse {
     redis: 'online' | 'inline_fallback';
     firebase: 'online' | 'disabled';
   };
+  cache?: {
+    status: 'healthy' | 'degraded' | 'disabled' | 'offline';
+    driver: string;
+    effectiveDriver: string;
+    redisConnected: boolean;
+    itemCount: number;
+    quota?: {
+      mode: 'preserved' | 'active' | 'offline';
+      dailyLimit: number;
+      commandsToday: number;
+      quotaUsedPercent: number;
+      policy: string;
+      statusText: string;
+      details: string;
+    };
+  };
   database: {
     status: 'connected' | 'disconnected';
     pingLatencyMs: number;

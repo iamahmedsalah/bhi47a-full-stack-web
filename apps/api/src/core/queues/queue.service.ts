@@ -27,7 +27,13 @@ export class QueueService implements OnModuleDestroy {
 
   async checkConnection(): Promise<{ ready: boolean; message: string }> {
     if (!this.connection) {
-      return { ready: false, message: 'Disabled (Jobs run inline fallback)' };
+      const isDev = process.env.NODE_ENV !== 'production';
+      return {
+        ready: false,
+        message: isDev
+          ? 'Inline fallback (Development: Redis quota preserved)'
+          : 'Disabled (Jobs run inline fallback)',
+      };
     }
 
     try {
@@ -38,6 +44,7 @@ export class QueueService implements OnModuleDestroy {
         lazyConnect: true,
         retryStrategy: () => null,
       });
+      client.on('error', () => {}); // silence unhandled error events during connection probe
 
       await client.connect();
       const pong = await client.ping();
@@ -95,6 +102,13 @@ export class QueueService implements OnModuleDestroy {
       concurrency: 5,
     });
 
+    worker.on('error', (error) => {
+      console.warn(
+        `[QueueService] Worker error for queue ${queueName}:`,
+        error.message || error,
+      );
+    });
+
     worker.on('failed', (job, error) => {
       console.error(
         `Queue job failed: ${queueName}/${job?.name || 'unknown'} (${job?.id || 'no-id'})`,
@@ -122,11 +136,28 @@ export class QueueService implements OnModuleDestroy {
     }
 
     const queue = new Queue(queueName, { connection: this.connection });
+    queue.on('error', (error) => {
+      console.warn(
+        `[QueueService] Queue error for ${queueName}:`,
+        error.message || error,
+      );
+    });
     this.queues.set(queueName, queue);
     return queue;
   }
 
   private buildRedisConnection(): QueueConnection | undefined {
+    // In test and local development, run inline fallback to preserve Redis quota
+    // and prevent cloud network/DNS errors from degrading local development.
+    const nodeEnv = process.env.NODE_ENV;
+    const forceQueue =
+      process.env.QUEUE_WORKERS_ENABLED === 'true' ||
+      process.env.QUEUE_REQUIRED === 'true';
+
+    if (nodeEnv !== 'production' && !forceQueue) {
+      return undefined;
+    }
+
     // A Vercel Function is not an always-on worker process. Without this guard,
     // every warm function instance can register another BullMQ consumer and jobs
     // may stop when that instance is suspended. Run the fallback in-request on

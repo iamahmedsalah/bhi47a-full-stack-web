@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { CacheService } from '../../../core/cache/cache.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { Role, Semester } from '@student-portal/shared';
@@ -39,6 +41,7 @@ export class AdvisingPlanService {
     private readonly registrations: Model<CourseRegistration>,
     private readonly validation: PlanValidationService,
     private readonly audit: AdvisingAuditService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {}
 
   async createPlan(
@@ -349,19 +352,31 @@ export class AdvisingPlanService {
       );
     }
 
-    let graph = await this.graphs.findOne({ planId: plan._id }).lean();
-    if (!graph) {
-      const initial = await this.buildInitialGraph(
-        plan.selectedCourses.map((id) => id.toString()),
+    const fetchGraph = async () => {
+      let graph = await this.graphs.findOne({ planId: plan._id }).lean();
+      if (!graph) {
+        const initial = await this.buildInitialGraph(
+          plan.selectedCourses.map((id) => id.toString()),
+        );
+        const created = await this.graphs.create({
+          planId: plan._id,
+          nodes: initial.nodes,
+          edges: initial.edges,
+        });
+        graph = created.toObject();
+      }
+      return graph;
+    };
+
+    if (this.cacheService) {
+      return this.cacheService.wrap(
+        `advising:graph:${planId}`,
+        fetchGraph,
+        1800,
       );
-      const created = await this.graphs.create({
-        planId: plan._id,
-        nodes: initial.nodes,
-        edges: initial.edges,
-      });
-      graph = created.toObject();
     }
-    return graph;
+
+    return fetchGraph();
   }
 
   async saveGraph(
@@ -394,6 +409,10 @@ export class AdvisingPlanService {
       },
       { new: true, upsert: true },
     );
+
+    if (this.cacheService) {
+      await this.cacheService.del(`advising:graph:${planId}`);
+    }
 
     await this.audit.record(
       plan.advisingCaseId,

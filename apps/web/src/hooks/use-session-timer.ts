@@ -21,7 +21,6 @@ export function useSessionTimer({ role }: UseSessionTimerOptions) {
   const isAr = locale === 'ar';
 
   const [remainingSeconds, setRemainingSeconds] = useState(SESSION_MAX_SECONDS);
-  const [prevPathname, setPrevPathname] = useState(pathname);
   const hasWarnedRef = useRef(false);
   const isLoggingOutRef = useRef(false);
 

@@ -361,6 +361,14 @@ export class NotificationsService implements OnModuleInit {
       );
     }
 
+    const tokens = await this.collectTargetTokens(dto, targetStudentId);
+    const hasTokens = tokens.length > 0;
+    const deliveryStatus = !hasTokens
+      ? 'skipped'
+      : this.queueService.enabled
+        ? 'queued'
+        : 'pending';
+
     const notification = new this.notificationModel({
       title: dto.title,
       body: dto.body,
@@ -370,6 +378,11 @@ export class NotificationsService implements OnModuleInit {
       sentBy: Types.ObjectId.isValid(String(senderId))
         ? new Types.ObjectId(String(senderId))
         : new Types.ObjectId(),
+      deliveryStatus,
+      pushSuccessCount: !hasTokens ? 0 : undefined,
+      pushFailureCount: !hasTokens ? 0 : undefined,
+      sentAt: !hasTokens ? new Date() : undefined,
+      queuedAt: hasTokens ? new Date() : undefined,
       meta: {
         ...((dto as any).meta || {}),
         sendWhatsApp: Boolean(dto.sendWhatsApp),
@@ -384,38 +397,21 @@ export class NotificationsService implements OnModuleInit {
 
     await notification.save();
 
-    const tokens = await this.collectTargetTokens(dto, targetStudentId);
-
-    if (tokens.length === 0) {
-      notification.deliveryStatus = 'skipped';
-      notification.pushSuccessCount = 0;
-      notification.pushFailureCount = 0;
-      notification.sentAt = new Date();
-      await notification.save();
-      return notification;
+    if (hasTokens) {
+      await this.queueService.add<PushNotificationJob>(
+        'notifications',
+        'send-fcm',
+        {
+          notificationId: notification._id.toString(),
+          title: dto.title,
+          body: dto.body,
+          tokens,
+        },
+        (data) => this.deliverPush(data),
+      );
     }
 
-    notification.deliveryStatus = this.queueService.enabled
-      ? 'queued'
-      : 'pending';
-    notification.queuedAt = new Date();
-    await notification.save();
-
-    await this.queueService.add<PushNotificationJob>(
-      'notifications',
-      'send-fcm',
-      {
-        notificationId: notification._id.toString(),
-        title: dto.title,
-        body: dto.body,
-        tokens,
-      },
-      (data) => this.deliverPush(data),
-    );
-
-    return (
-      (await this.notificationModel.findById(notification._id)) || notification
-    );
+    return notification;
   }
 
   async listSentHistory(query: QueryNotificationDto) {
@@ -597,22 +593,36 @@ export class NotificationsService implements OnModuleInit {
         collectTokens([student]);
       }
     } else if (dto.targetType === 'level') {
-      const profiles = await this.studentProfileModel
-        .find({ level: dto.targetLevel })
-        .select('userId')
-        .lean();
-      const userIds = profiles.map((profile) => profile.userId);
-
-      const studentsInLevel = await this.userModel
+      // High-performance optimization: Query token-holding active students first
+      // instead of fetching 2,000+ student profiles and sending a massive $in array.
+      const candidateUsers = await this.userModel
         .find({
-          _id: { $in: userIds },
           role: 'student',
           isActive: true,
           'fcmTokens.0': { $exists: true },
         })
-        .select('fcmTokens.token')
+        .select('_id fcmTokens.token')
         .lean();
-      collectTokens(studentsInLevel);
+
+      if (candidateUsers.length > 0) {
+        const candidateUserIds = candidateUsers.map((u) => u._id);
+        const matchingProfiles = await this.studentProfileModel
+          .find({
+            userId: { $in: candidateUserIds },
+            level: dto.targetLevel,
+          })
+          .select('userId')
+          .lean();
+
+        const matchingUserIdSet = new Set(
+          matchingProfiles.map((p) => p.userId?.toString()),
+        );
+
+        const filteredUsers = candidateUsers.filter((u) =>
+          matchingUserIdSet.has(u._id.toString()),
+        );
+        collectTokens(filteredUsers);
+      }
     }
 
     return [...new Set(tokens)];

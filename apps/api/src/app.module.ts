@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
+import { CacheModule } from './core/cache/cache.module';
 import { QueueModule } from './core/queues/queue.module';
 import { MetricsModule } from './core/metrics/metrics.module';
 import { HttpMetricsInterceptor } from './core/metrics/http-metrics.interceptor';
@@ -38,6 +39,7 @@ import { HealthController } from './health.controller';
       validate: validateEnv,
     }),
     MetricsModule,
+    CacheModule,
     QueueModule,
     AppLoggerModule,
     DatabaseModule,
@@ -72,6 +74,6 @@ import { HealthController } from './health.controller';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+    consumer.apply(CorrelationIdMiddleware).forRoutes('{*path}');
   }
 }

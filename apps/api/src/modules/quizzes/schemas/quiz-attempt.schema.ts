@@ -19,13 +19,13 @@ export class DraftAnswer {
   timestamps: true,
 })
 export class QuizAttempt {
-  @Prop({ type: Types.ObjectId, ref: 'Quiz', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Quiz', required: true })
   quizId!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   studentId!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Course', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Course', required: true })
   courseId!: Types.ObjectId;
 
   @Prop({ type: Date, required: true })

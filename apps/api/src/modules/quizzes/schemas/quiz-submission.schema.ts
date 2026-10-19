@@ -22,13 +22,13 @@ export class SubmittedAnswer {
   timestamps: true,
 })
 export class QuizSubmission {
-  @Prop({ type: Types.ObjectId, ref: 'Quiz', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Quiz', required: true })
   quizId!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Course', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Course', required: true })
   courseId!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   studentId!: Types.ObjectId;
 
   @Prop({ required: true, trim: true, index: true })

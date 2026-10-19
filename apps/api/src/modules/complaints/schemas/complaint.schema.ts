@@ -69,7 +69,7 @@ export class Complaint {
   @Prop({ required: true, unique: true })
   ticketNumber!: string; // e.g. TKT-YYYYMMDD-XXXX
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   studentId!: Types.ObjectId;
 
   @Prop({ required: true })
