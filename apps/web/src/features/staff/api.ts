@@ -2,10 +2,12 @@ import api from '@/lib/api';
 import type { Permission } from '@student-portal/shared';
 import type {
   CreateStaffInput,
+  StaffAssignedCourse,
   StaffListParams,
   StaffListResponse,
   StaffMember,
   StaffProfileInput,
+  StaffScheduleSlot,
 } from './types';
 
 export async function listStaff(params: StaffListParams): Promise<StaffListResponse> {
@@ -48,4 +50,26 @@ export async function deactivateStaff(id: string, reason?: string): Promise<Staf
 export async function activateStaff(id: string): Promise<StaffMember> {
   const response = await api.post<StaffMember>(`/admin/staff/${id}/activate`);
   return response.data;
+}
+
+export async function getStaffCourses(doctorId: string): Promise<StaffAssignedCourse[]> {
+  try {
+    const response = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', {
+      params: { doctorId, limit: 100 },
+    });
+    return response.data?.items ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getStaffSchedules(staffId: string): Promise<StaffScheduleSlot[]> {
+  try {
+    const response = await api.get<StaffScheduleSlot[]>('/admin/course-schedules', {
+      params: { staffId },
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  } catch {
+    return [];
+  }
 }

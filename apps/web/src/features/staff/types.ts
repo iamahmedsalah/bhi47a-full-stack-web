@@ -47,3 +47,35 @@ export interface CreateStaffInput extends StaffProfileInput {
   permissions?: Permission[];
 }
 
+export interface StaffAssignedCourse {
+  _id: string;
+  name: string;
+  nameAr?: string;
+  nameEn?: string;
+  code: string;
+  level?: string;
+  academicLevel?: string;
+  semester?: string;
+  creditHours?: number;
+  department?: string;
+}
+
+export interface StaffScheduleSlot {
+  _id: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  courseNameAr?: string;
+  staffId: string;
+  staffName?: string;
+  staffType?: string;
+  type: 'lecture' | 'section' | 'lab';
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  room?: string;
+  building?: string;
+  level?: string;
+  semester?: string;
+}
+

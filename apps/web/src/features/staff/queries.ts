@@ -3,6 +3,8 @@ import {
   activateStaff,
   createStaff,
   deactivateStaff,
+  getStaffCourses,
+  getStaffSchedules,
   listStaff,
   resetStaffPassword,
   updateStaff,
@@ -15,6 +17,8 @@ export const staffKeys = {
   all: ['admin-staff'] as const,
   lists: () => [...staffKeys.all, 'list'] as const,
   list: (params: StaffListParams) => [...staffKeys.lists(), params] as const,
+  courses: (doctorId: string) => [...staffKeys.all, 'courses', doctorId] as const,
+  schedules: (staffId: string) => [...staffKeys.all, 'schedules', staffId] as const,
 };
 
 export function useStaffList(params: StaffListParams) {
@@ -22,6 +26,24 @@ export function useStaffList(params: StaffListParams) {
     queryKey: staffKeys.list(params),
     queryFn: () => listStaff(params),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useStaffCourses(doctorId: string | null | undefined) {
+  return useQuery({
+    queryKey: staffKeys.courses(doctorId ?? ''),
+    queryFn: () => (doctorId ? getStaffCourses(doctorId) : Promise.resolve([])),
+    enabled: Boolean(doctorId),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useStaffSchedules(staffId: string | null | undefined) {
+  return useQuery({
+    queryKey: staffKeys.schedules(staffId ?? ''),
+    queryFn: () => (staffId ? getStaffSchedules(staffId) : Promise.resolve([])),
+    enabled: Boolean(staffId),
+    staleTime: 60 * 1000,
   });
 }
 

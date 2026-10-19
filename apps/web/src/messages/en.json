@@ -460,6 +460,10 @@
       "all": "All statuses",
       "allTypes": "All staff roles"
     },
+    "viewModes": {
+      "table": "Table view",
+      "grid": "Grid view"
+    },
     "fields": {
       "name": "Full name",
       "email": "Email",
@@ -467,7 +471,17 @@
       "selectStaffType": "Select staff role",
       "username": "Username (optional)",
       "phone": "Phone (optional)",
-      "temporaryPassword": "Temporary password"
+      "temporaryPassword": "Temporary password",
+      "primaryLoginHint": "(Primary login identifier)",
+      "usernameHelp": "Used as the primary username identifier to sign in to the portal",
+      "generatePassword": "Auto generate",
+      "passwordHelp": "Must be at least 12 characters. The staff member will be required to change it upon first login."
+    },
+    "placeholders": {
+      "name": "e.g. Dr. Jane Doe / Alex Smith",
+      "email": "e.g. staff@institute.edu",
+      "username": "e.g. j.doe",
+      "phone": "e.g. 01012345678"
     },
     "table": {
       "staff": "Staff member",
@@ -477,11 +491,63 @@
       "actions": "Actions"
     },
     "actions": {
+      "viewDetails": "View details",
       "edit": "Edit profile",
       "permissions": "Edit permissions",
       "resetPassword": "Reset password",
       "deactivate": "Deactivate account",
       "activate": "Activate account"
+    },
+    "details": {
+      "title": "Staff Member Profile",
+      "subtitle": "Detailed account profile, assigned academic courses, and system permissions",
+      "overview": "Overview",
+      "courses": "Assigned Courses",
+      "schedules": "Teaching Schedules",
+      "permissions": "Permissions",
+      "contact": "Contact Information",
+      "userCode": "Staff Code",
+      "username": "Username",
+      "email": "Email",
+      "phone": "Phone",
+      "role": "Staff Role",
+      "status": "Account Status",
+      "lastLogin": "Last Login",
+      "createdAt": "Joined Date",
+      "notProvided": "Not provided",
+      "copy": "Copy",
+      "copied": "Copied to clipboard",
+      "assignedCoursesTitle": "Courses & Academic Responsibilities",
+      "assignedCoursesDescription": "Courses where this staff member is assigned as doctor / lecturer.",
+      "noCourses": "No courses are currently assigned to this staff member.",
+      "level": "Level {level}",
+      "semester": "Semester {semester}",
+      "creditHours": "{hours} hrs",
+      "courseCode": "Course Code",
+      "teachingSchedule": "Teaching Schedules",
+      "noSchedules": "No lecture or section schedules assigned.",
+      "activePermissions": "{count} of {total} permissions enabled",
+      "accountDeactivated": "This staff account is currently deactivated.",
+      "actions": "Actions",
+      "editStaff": "Edit Profile",
+      "managePermissions": "Permissions",
+      "resetPassword": "Reset Password",
+      "close": "Close",
+      "viewInCourses": "Open Course Management",
+      "lecture": "Lecture",
+      "section": "Section",
+      "lab": "Lab",
+      "room": "Room",
+      "building": "Building"
+    },
+    "days": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
     },
     "validation": {
       "passwordLength": "Password must contain at least 12 characters.",
@@ -507,6 +573,7 @@
       "passwordReset": "Password reset and existing sessions revoked.",
       "deactivated": "Staff account deactivated.",
       "activated": "Staff account activated.",
+      "passwordGenerated": "A strong temporary password has been generated and filled.",
       "failed": "Could not complete the staff management action."
     },
     "permissions": {

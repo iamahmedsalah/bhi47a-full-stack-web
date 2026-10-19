@@ -88,7 +88,7 @@ export function StaffFormDialog({
     }
     pwd += '2026';
     form.setValue('password', pwd, { shouldValidate: true });
-    toast.info('تم إنشاء كلمة مرور قوية وتعبئتها تلقائياً');
+    toast.info(t('toasts.passwordGenerated'));
   };
 
   const handleEmailBlur = (emailVal: string) => {
@@ -129,7 +129,7 @@ export function StaffFormDialog({
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="د. أحمد محمد / أ. سارة علي"
+                        placeholder={t('placeholders.name')}
                         className="rounded-squircle border-white/15 bg-background/60 text-sm"
                         {...field}
                       />
@@ -182,8 +182,8 @@ export function StaffFormDialog({
                       <Input
                         type="email"
                         dir="ltr"
-                        placeholder="staff@bhiasc.org"
-                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        placeholder={t('placeholders.email')}
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm text-left"
                         {...field}
                         onBlur={(e) => {
                           field.onBlur();
@@ -208,19 +208,19 @@ export function StaffFormDialog({
                         {t('fields.username')}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-normal">
-                        (تسجيل الدخول الرئيسي)
+                        {t('fields.primaryLoginHint')}
                       </span>
                     </FormLabel>
                     <FormControl>
                       <Input
                         dir="ltr"
-                        placeholder="manarshaheen"
-                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono"
+                        placeholder={t('placeholders.username')}
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono text-left"
                         {...field}
                       />
                     </FormControl>
                     <p className="text-[11px] text-muted-foreground">
-                      يُستخدم كمعرّف أساسي لتسجيل الدخول إلى البوابة
+                      {t('fields.usernameHelp')}
                     </p>
                     <FormMessage />
                   </FormItem>
@@ -240,8 +240,8 @@ export function StaffFormDialog({
                     <FormControl>
                       <Input
                         dir="ltr"
-                        placeholder="01012345678"
-                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        placeholder={t('placeholders.phone')}
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm text-left"
                         {...field}
                       />
                     </FormControl>
@@ -271,7 +271,7 @@ export function StaffFormDialog({
                         className="h-7 text-xs text-primary hover:bg-primary/10 gap-1 rounded-squircle"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
-                        <span>توليد تلقائي</span>
+                        <span>{t('fields.generatePassword')}</span>
                       </Button>
                     </div>
                     <FormControl>
@@ -279,12 +279,12 @@ export function StaffFormDialog({
                         dir="ltr"
                         autoComplete="new-password"
                         placeholder="••••••••••••"
-                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono"
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm font-mono text-left"
                         {...field}
                       />
                     </FormControl>
                     <p className="text-[11px] text-muted-foreground pt-1">
-                      يجب ألا تقل عن 12 حرفاً، وسيُطلب من العضو تغييرها عند أول تسجيل دخول
+                      {t('fields.passwordHelp')}
                     </p>
                     <FormMessage>{errorText(fieldState.error?.message)}</FormMessage>
                   </FormItem>
