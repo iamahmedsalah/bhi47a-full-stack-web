@@ -24,6 +24,7 @@ describe('QuizzesService Unit Tests', () => {
   const mockExcelService: any = {
     parseQuestionsFile: jest.fn(),
     generateQuestionsTemplate: jest.fn(),
+    generateQuizAnalysisExcel: jest.fn(),
   };
 
   const adminUser: AuthenticatedUser = {
@@ -600,6 +601,96 @@ describe('QuizzesService Unit Tests', () => {
           }),
         }),
         { new: true },
+      );
+    });
+  });
+
+  describe('exportQuizAnalysis()', () => {
+    it('successfully exports analysis report when submissions exist (including Arabic title)', async () => {
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'كويز - 1',
+        titleAr: 'كويز - 1',
+        courseId: new Types.ObjectId(courseId),
+        creatorId: new Types.ObjectId(adminUser._id),
+        totalMarks: 5,
+        passingMarks: 3,
+      });
+
+      mockSubmissionModel.find = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              studentCode: '272055',
+              studentName: 'ياسمين احمد عبدالجواد',
+              score: 0,
+              totalMarks: 5,
+              percentage: 0,
+              isPassed: false,
+              submittedAt: new Date(),
+            },
+          ]),
+        }),
+      });
+
+      mockStudentProfileModel.find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              studentCode: '272055',
+              fullName: 'Yasmin Ahmed',
+              fullNameAr: 'ياسمين احمد عبدالجواد',
+            },
+          ]),
+        }),
+      });
+
+      const mockExportResult = {
+        buffer: Buffer.from('mock-excel-data'),
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename: 'quiz-analysis-كويز - 1.xlsx',
+      };
+      mockExcelService.generateQuizAnalysisExcel.mockResolvedValue(
+        mockExportResult,
+      );
+
+      const result = await service.exportQuizAnalysis(quizId, adminUser);
+      expect(result).toBe(mockExportResult);
+      expect(mockExcelService.generateQuizAnalysisExcel).toHaveBeenCalled();
+    });
+
+    it('successfully exports analysis report when no submissions exist (empty sheet)', async () => {
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'Empty Quiz',
+        courseId: new Types.ObjectId(courseId),
+        creatorId: new Types.ObjectId(adminUser._id),
+        totalMarks: 10,
+        passingMarks: 5,
+      });
+
+      mockSubmissionModel.find = jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const mockExportResult = {
+        buffer: Buffer.from('empty-excel-data'),
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename: 'quiz-analysis-Empty Quiz.xlsx',
+      };
+      mockExcelService.generateQuizAnalysisExcel.mockResolvedValue(
+        mockExportResult,
+      );
+
+      const result = await service.exportQuizAnalysis(quizId, adminUser);
+      expect(result).toBe(mockExportResult);
+      expect(mockExcelService.generateQuizAnalysisExcel).toHaveBeenCalledWith(
+        expect.anything(),
+        [],
       );
     });
   });

@@ -246,7 +246,12 @@ export class StudentsService {
   }
 
   async update(id: string, dto: UpdateStudentDto) {
-    const { nationalId, mustChangePassword, ...profileUpdates } = dto;
+    const {
+      nationalId,
+      mustChangePassword,
+      studentCode: _studentCode,
+      ...profileUpdates
+    } = dto;
     const effectiveFullName = dto.fullName || dto.fullNameAr || dto.fullNameEn;
     if (effectiveFullName) {
       profileUpdates.fullName = effectiveFullName;

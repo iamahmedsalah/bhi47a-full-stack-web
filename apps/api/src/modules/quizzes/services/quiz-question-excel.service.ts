@@ -438,31 +438,33 @@ export class QuizQuestionExcelService {
     workbook.creator = 'BH47A Student Portal';
     workbook.created = new Date();
 
-    const totalStudents = submissions.length;
-    const passedCount = submissions.filter((s) => s.isPassed).length;
+    const list = Array.isArray(submissions) ? submissions : [];
+    const totalStudents = list.length;
+    const passedCount = list.filter((s) => Boolean(s.isPassed)).length;
     const failedCount = totalStudents - passedCount;
     const passRate =
       totalStudents > 0 ? Math.round((passedCount / totalStudents) * 100) : 0;
-    const scores = submissions.map((s) => s.score);
+    const scores = list.map((s) => (typeof s.score === 'number' ? s.score : 0));
     const avgScore =
       totalStudents > 0
         ? (scores.reduce((a, b) => a + b, 0) / totalStudents).toFixed(1)
         : '0';
-    const maxScore = totalStudents > 0 ? Math.max(...scores) : 0;
+    const maxScore =
+      totalStudents > 0 && scores.length > 0 ? Math.max(...scores) : 0;
 
     // Distribution
-    const excellentCount = submissions.filter((s) => s.percentage >= 85).length;
-    const veryGoodCount = submissions.filter(
-      (s) => s.percentage >= 75 && s.percentage < 85,
+    const excellentCount = list.filter((s) => (s.percentage ?? 0) >= 85).length;
+    const veryGoodCount = list.filter(
+      (s) => (s.percentage ?? 0) >= 75 && (s.percentage ?? 0) < 85,
     ).length;
-    const goodCount = submissions.filter(
-      (s) => s.percentage >= 65 && s.percentage < 75,
+    const goodCount = list.filter(
+      (s) => (s.percentage ?? 0) >= 65 && (s.percentage ?? 0) < 75,
     ).length;
-    const passCount = submissions.filter(
-      (s) => s.percentage >= 50 && s.percentage < 65,
+    const passCount = list.filter(
+      (s) => (s.percentage ?? 0) >= 50 && (s.percentage ?? 0) < 65,
     ).length;
-    const failBracketCount = submissions.filter(
-      (s) => s.percentage < 50,
+    const failBracketCount = list.filter(
+      (s) => (s.percentage ?? 0) < 50,
     ).length;
 
     // ── Sheet 1: Summary & Performance Analytics ──────────────────────
@@ -774,7 +776,7 @@ export class QuizQuestionExcelService {
     rosterHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
     rosterHeaderRow.height = 26;
 
-    submissions.forEach((sub, i) => {
+    list.forEach((sub, i) => {
       const studentNameAr = sub.studentNameAr || sub.studentName || '—';
       const studentNameEn = sub.studentNameEn || sub.studentName || '—';
       const row = rosterSheet.addRow({
@@ -833,7 +835,7 @@ export class QuizQuestionExcelService {
     });
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-    const safeTitle = quiz.title.replace(/[/\\?%*:|"<>]/g, '_');
+    const safeTitle = (quiz.title || 'quiz').replace(/[/\\?%*:|"<>]/g, '_');
     return {
       buffer,
       contentType:

@@ -390,41 +390,47 @@ export function StaffManagementPage() {
               className="rounded-squircle ps-10 h-10 border-white/10 bg-background/60 text-sm focus-visible:ring-primary"
             />
           </div>
-          <Select
-            value={status}
-            onValueChange={(value) => {
-              setStatus(value as typeof status);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full sm:w-36 rounded-squircle border-white/10 bg-background/60 text-xs">
-              <SelectValue placeholder={t('filters.all')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('filters.all')}</SelectItem>
-              <SelectItem value="active">{t('active')}</SelectItem>
-              <SelectItem value="inactive">{t('inactive')}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={staffType}
-            onValueChange={(value) => {
-              setStaffType(value as typeof staffType);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full sm:w-44 rounded-squircle border-white/10 bg-background/60 text-xs">
-              <SelectValue placeholder={t('filters.allTypes')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
-              {STAFF_TYPE_VALUES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {t(`types.${type}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-32 sm:w-36">
+              <Select
+                value={status}
+                onValueChange={(value) => {
+                  setStatus(value as typeof status);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-10 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
+                  <SelectValue placeholder={t('filters.all')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('filters.all')}</SelectItem>
+                  <SelectItem value="active">{t('active')}</SelectItem>
+                  <SelectItem value="inactive">{t('inactive')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-40 sm:w-44">
+              <Select
+                value={staffType}
+                onValueChange={(value) => {
+                  setStaffType(value as typeof staffType);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-10 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
+                  <SelectValue placeholder={t('filters.allTypes')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
+                  {STAFF_TYPE_VALUES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {t(`types.${type}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">

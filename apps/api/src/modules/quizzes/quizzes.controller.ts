@@ -271,9 +271,10 @@ export class QuizzesController {
   ) {
     const result = await this.quizzesService.exportQuizAnalysis(id, user);
     res.setHeader('Content-Type', result.contentType);
+    const asciiFallback = `quiz-analysis-${id}.xlsx`;
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${result.filename}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+      `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
     );
     res.send(result.buffer);
   }

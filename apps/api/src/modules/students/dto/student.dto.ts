@@ -178,22 +178,30 @@ export class CreateStudentDto {
 
 export class UpdateStudentDto {
   @ApiPropertyOptional({
+    description: 'كود الطالب (حقل ثابت لا يتم تعديله)',
+  })
+  @IsOptional()
+  @IsString({ message: 'كود الطالب يجب أن يكون نصاً' })
+  studentCode?: string;
+
+  @ApiPropertyOptional({
     enum: ENROLLMENT_STATUS_VALUES,
   })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsOptional()
-  @IsString()
-  @IsIn(ENROLLMENT_STATUS_VALUES)
+  @IsString({ message: 'حالة القيد يجب أن تكون نصاً' })
+  @IsIn(ENROLLMENT_STATUS_VALUES, { message: 'حالة القيد المحددة غير صالحة' })
   enrollmentStatus?: EnrollmentStatus;
+
   @ApiPropertyOptional({ example: 'أحمد محمد علي' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
+  @IsString({ message: 'الاسم بالعربية يجب أن يكون نصاً' })
+  @MaxLength(120, { message: 'الاسم بالعربية يجب ألا يتجاوز 120 حرفاً' })
   fullNameAr?: string;
 
   @ApiPropertyOptional({ example: 'Ahmed Mohamed Ali' })
@@ -201,8 +209,8 @@ export class UpdateStudentDto {
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
+  @IsString({ message: 'الاسم بالإنجليزية يجب أن يكون نصاً' })
+  @MaxLength(120, { message: 'الاسم بالإنجليزية يجب ألا يتجاوز 120 حرفاً' })
   fullNameEn?: string;
 
   @ApiPropertyOptional()
@@ -210,8 +218,8 @@ export class UpdateStudentDto {
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
-  @IsString()
-  @MaxLength(120)
+  @IsString({ message: 'الاسم بالكامل يجب أن يكون نصاً' })
+  @MaxLength(120, { message: 'الاسم بالكامل يجب ألا يتجاوز 120 حرفاً' })
   fullName?: string;
 
   @ApiPropertyOptional({
@@ -219,18 +227,22 @@ export class UpdateStudentDto {
     description:
       'New national ID. Existing value is stored hashed and cannot be read back.',
   })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'الرقم القومي يجب أن يكون نصاً' })
   @Matches(/^(2|3)\d{13}$|^\d{14}$/, {
     message: 'الرقم القومي يجب أن يتكون من 14 رقماً',
   })
   nationalId?: string;
 
   @ApiPropertyOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'رقم الهاتف يجب أن يكون نصاً' })
   @Matches(/^(010|011|012|015)\d{8}$|^\+?\d{10,15}$/, {
     message: 'رقم الهاتف يجب أن يكون مصرياً صالحاً أو بتنسيق دولي',
   })
@@ -241,33 +253,35 @@ export class UpdateStudentDto {
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
   )
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @IsString({ message: 'اسم القسم يجب أن يكون نصاً' })
+  @MaxLength(100, { message: 'اسم القسم يجب ألا يتجاوز 100 حرف' })
   department?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
-  @IsIn(['1', '2', '3', '4'])
+  @IsString({ message: 'المستوى الدراسي يجب أن يكون نصاً' })
+  @IsIn(['1', '2', '3', '4'], {
+    message: 'المستوى الدراسي يجب أن يكون بين 1 و 4',
+  })
   level?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'المجموعة يجب أن تكون نصاً' })
   group?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'الشعبة/السكشن يجب أن تكون نصاً' })
   section?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'العام الأكاديمي يجب أن يكون نصاً' })
   @Matches(/^\d{4}-\d{4}$/, {
     message: 'العام الأكاديمي يجب أن يكون بالصيغة YYYY-YYYY',
   })
@@ -278,14 +292,16 @@ export class UpdateStudentDto {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsOptional()
-  @IsString()
-  @IsIn(['first', 'second', 'summer'])
+  @IsString({ message: 'الفصل الدراسي يجب أن يكون نصاً' })
+  @IsIn(['first', 'second', 'summer'], {
+    message: 'الفصل الدراسي يجب أن يكون first أو second أو summer',
+  })
   semester?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'رقم الجلوس يجب أن يكون نصاً' })
   seatNumber?: string;
 
   @ApiPropertyOptional()
@@ -293,31 +309,31 @@ export class UpdateStudentDto {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @IsOptional()
-  @IsString()
-  @IsEmail()
+  @IsString({ message: 'البريد الأكاديمي يجب أن يكون نصاً' })
+  @IsEmail({}, { message: 'صيغة البريد الإلكتروني الأكاديمي غير صحيحة' })
   academicEmail?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'قاعة الامتحان يجب أن تكون نصاً' })
   examRoom?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'طابق الامتحان يجب أن يكون نصاً' })
   examFloor?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'مبنى الامتحان يجب أن يكون نصاً' })
   examBuilding?: string;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @IsBoolean({ message: 'حقل إلزام تغيير كلمة المرور يجب أن يكون قيمة منطقية' })
   mustChangePassword?: boolean;
 }
 

@@ -30,6 +30,7 @@ describe('StudentsService Unit Tests', () => {
     MockProfileConstructor.create = jest.fn();
     MockProfileConstructor.updateMany = jest.fn();
     MockProfileConstructor.updateOne = jest.fn();
+    MockProfileConstructor.findByIdAndUpdate = jest.fn();
 
     mockStudentProfileModel = MockProfileConstructor;
 
@@ -364,6 +365,42 @@ describe('StudentsService Unit Tests', () => {
         }),
       );
       expect(mockStudentProfileModel).toHaveBeenCalled();
+    });
+  });
+
+  describe('update()', () => {
+    it('updates student profile and ignores studentCode to keep it immutable', async () => {
+      const studentId = new Types.ObjectId().toString();
+      const fakeUserId = new Types.ObjectId();
+      const mockProfile = {
+        _id: new Types.ObjectId(studentId),
+        userId: fakeUserId,
+        studentCode: '272055',
+        fullName: 'أحمد علي',
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      mockStudentProfileModel.findByIdAndUpdate.mockResolvedValue(mockProfile);
+      mockUsersService.findById = jest.fn().mockResolvedValue({
+        name: 'أحمد علي',
+        save: jest.fn().mockResolvedValue(true),
+      });
+
+      const result = await service.update(studentId, {
+        studentCode: '999999',
+        fullName: 'أحمد علي معدل',
+      });
+
+      expect(result).toBeDefined();
+      expect(mockStudentProfileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        studentId,
+        {
+          $set: expect.not.objectContaining({
+            studentCode: '999999',
+          }),
+        },
+        { new: true },
+      );
     });
   });
 });

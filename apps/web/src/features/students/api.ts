@@ -170,7 +170,14 @@ export function createStudent(payload: StudentWritePayload) {
 }
 
 export function updateStudent(id: string, payload: StudentWritePayload) {
-  return apiPatch<Student, StudentWritePayload>(`/admin/students/${id}`, payload);
+  const { studentCode: _studentCode, ...rest } = payload;
+  const cleanPayload: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(rest)) {
+    if (val !== undefined && val !== '') {
+      cleanPayload[key] = val;
+    }
+  }
+  return apiPatch<Student, typeof cleanPayload>(`/admin/students/${id}`, cleanPayload);
 }
 
 export function resetStudentPassword(id: string, newPassword?: string, mustChangePassword = true) {

@@ -392,7 +392,9 @@ export class QuizzesService implements OnModuleInit {
 
     // Permission check
     if (user.role === 'staff') {
-      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const isCreator = quiz.creatorId
+        ? quiz.creatorId.toString() === user._id.toString()
+        : false;
       const course = await this.courseModel
         .findById(quiz.courseId)
         .select('doctorId doctorIds teachingAssistantIds')
@@ -534,7 +536,9 @@ export class QuizzesService implements OnModuleInit {
     const quiz = await this.findOne(id);
 
     if (user.role === 'staff') {
-      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const isCreator = quiz.creatorId
+        ? quiz.creatorId.toString() === user._id.toString()
+        : false;
       const course = await this.courseModel
         .findById(quiz.courseId)
         .select('doctorId doctorIds teachingAssistantIds')
@@ -606,7 +610,9 @@ export class QuizzesService implements OnModuleInit {
       user.role === 'staff' &&
       (user.staffType === 'doctor' || user.staffType === 'teaching_assistant')
     ) {
-      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const isCreator = quiz.creatorId
+        ? quiz.creatorId.toString() === user._id.toString()
+        : false;
       const course = await this.courseModel
         .findById(quiz.courseId)
         .select('doctorId doctorIds teachingAssistantIds')
@@ -663,7 +669,9 @@ export class QuizzesService implements OnModuleInit {
       user.role === 'staff' &&
       (user.staffType === 'doctor' || user.staffType === 'teaching_assistant')
     ) {
-      const isCreator = quiz.creatorId.toString() === user._id.toString();
+      const isCreator = quiz.creatorId
+        ? quiz.creatorId.toString() === user._id.toString()
+        : false;
       const course = await this.courseModel
         .findById(quiz.courseId)
         .select('doctorId doctorIds teachingAssistantIds')

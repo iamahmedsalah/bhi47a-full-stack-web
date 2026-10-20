@@ -385,7 +385,12 @@ function StudentsPageContent() {
       toast.success(locale === 'ar' ? 'تمت إضافة الطالب بنجاح' : 'Student added successfully');
       invalidateStudents();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create student');
+      toast.error(
+        getApiErrorMessage(
+          err,
+          locale === 'ar' ? 'فشل إنشاء حساب الطالب' : 'Failed to create student',
+        ),
+      );
     } finally {
       setFormLoading(false);
     }
@@ -400,7 +405,12 @@ function StudentsPageContent() {
       toast.success(locale === 'ar' ? 'تم تحديث بيانات الطالب بنجاح' : 'Student updated successfully');
       invalidateStudents();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update student');
+      toast.error(
+        getApiErrorMessage(
+          err,
+          locale === 'ar' ? 'فشل تحديث بيانات الطالب' : 'Failed to update student',
+        ),
+      );
     } finally {
       setFormLoading(false);
     }
