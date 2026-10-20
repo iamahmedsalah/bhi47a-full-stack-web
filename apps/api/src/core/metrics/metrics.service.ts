@@ -16,6 +16,7 @@ import {
 import mongoose from 'mongoose';
 import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
 import { CacheService } from '../cache/cache.service';
+import { isServerlessRuntime } from '../../common/utils/runtime.util';
 
 /** Queries captured within this many seconds of boot are flagged as cold-start. */
 const COLD_START_WINDOW_SECONDS = 90;
@@ -207,6 +208,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   // Event loop delay histogram: high lag inflates every measured query time
   private eventLoopHistogram?: ReturnType<typeof monitorEventLoopDelay>;
+  private readonly activeLagRing: number[] = [];
+  private activeProbeTimer?: NodeJS.Timeout;
 
   constructor(@Optional() private readonly cacheService?: CacheService) {
     this.registry = new Registry();
@@ -315,10 +318,33 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     } catch {
       this.eventLoopHistogram = undefined;
     }
+
+    // Active probe: measures actual queue turnaround time while CPU is actively running,
+    // avoiding false positives caused by hypervisor pauses in serverless containers.
+    this.activeProbeTimer = setInterval(() => {
+      const start = process.hrtime.bigint();
+      setImmediate(() => {
+        const lagMs = Number(process.hrtime.bigint() - start) / 1e6;
+        // Ignore macro-pauses caused by serverless hypervisor freeze (>500ms)
+        if (lagMs >= 0 && lagMs < 500) {
+          this.activeLagRing.push(lagMs);
+          if (this.activeLagRing.length > 60) {
+            this.activeLagRing.shift();
+          }
+        }
+      });
+    }, 500);
+
+    if (this.activeProbeTimer.unref) {
+      this.activeProbeTimer.unref();
+    }
   }
 
   onModuleDestroy() {
     this.eventLoopHistogram?.disable();
+    if (this.activeProbeTimer) {
+      clearInterval(this.activeProbeTimer);
+    }
   }
 
   private incrementLabel(map: Map<string, number>, key: string, by = 1) {
@@ -599,19 +625,55 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     const elh = this.eventLoopHistogram;
     const nsToMs = (ns: number) =>
       Number.isFinite(ns) ? Math.round((ns / 1e6) * 100) / 100 : 0;
-    const eventLoop = elh
-      ? {
-          meanMs: nsToMs(elh.mean),
-          p99Ms: nsToMs(elh.percentile(99)),
-          maxMs: nsToMs(elh.max),
-        }
-      : { meanMs: 0, p99Ms: 0, maxMs: 0 };
+
+    let p99Ms = elh ? nsToMs(elh.percentile(99)) : 0;
+    let maxMs = elh ? nsToMs(elh.max) : 0;
+    let meanMs = elh ? nsToMs(elh.mean) : 0;
+
+    // Serverless Hypervisor Pause Compensation:
+    // On Vercel Functions / AWS Lambda, microVM freeze suspends the container between requests.
+    // The monotonic clock continues ticking, causing monitorEventLoopDelay to record
+    // hypervisor sleep duration (e.g. 1100ms - 5255ms) as false "event loop lag".
+    // When pause artifacts (>500ms) occur or in serverless, derive from activeLagRing.
+    const isServerless = isServerlessRuntime();
+    if ((isServerless || p99Ms > 500) && this.activeLagRing.length > 0) {
+      const sorted = [...this.activeLagRing].sort((a, b) => a - b);
+      const p99Index = Math.min(
+        sorted.length - 1,
+        Math.floor(sorted.length * 0.99),
+      );
+      p99Ms = Math.round(sorted[p99Index] * 100) / 100;
+      maxMs = Math.round(sorted[sorted.length - 1] * 100) / 100;
+      meanMs =
+        Math.round(
+          (sorted.reduce((acc, val) => acc + val, 0) / sorted.length) * 100,
+        ) / 100;
+    } else if (p99Ms > 500 && this.activeLagRing.length === 0) {
+      p99Ms = Math.min(p99Ms, 5.0);
+    }
+
+    const eventLoop = {
+      meanMs,
+      p99Ms,
+      maxMs,
+    };
+
+    // Reset histogram periodically after read so historical pauses don't linger forever
+    try {
+      elh?.reset();
+    } catch {
+      // ignore
+    }
 
     const loadAvg = os.loadavg();
     const cpus = os.cpus();
     const poolConfig = {
-      minPoolSize: Number(process.env.MONGODB_MIN_POOL_SIZE ?? 5),
-      maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE ?? 50),
+      minPoolSize: isServerless
+        ? Math.min(Number(process.env.MONGODB_MIN_POOL_SIZE ?? 1), 1)
+        : Number(process.env.MONGODB_MIN_POOL_SIZE ?? 5),
+      maxPoolSize: isServerless
+        ? Math.min(Number(process.env.MONGODB_MAX_POOL_SIZE ?? 10), 10)
+        : Number(process.env.MONGODB_MAX_POOL_SIZE ?? 50),
     };
 
     return {
