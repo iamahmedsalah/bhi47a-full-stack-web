@@ -209,7 +209,10 @@ export class QueueService implements OnModuleDestroy {
       username: parsed.username || undefined,
       password: parsed.password || undefined,
       db: Number.isNaN(db) ? undefined : db,
-      tls: parsed.protocol === 'rediss:' ? {} : undefined,
+      tls:
+        parsed.protocol === 'rediss:' || parsed.hostname.includes('upstash.io')
+          ? {}
+          : undefined,
     };
   }
 }

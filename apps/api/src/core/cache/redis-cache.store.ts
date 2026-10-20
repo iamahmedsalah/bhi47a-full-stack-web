@@ -23,11 +23,22 @@ export class RedisCacheStore implements ICacheStore {
         // Ignored if custom URL schema
       }
 
-      const isTls =
-        this.redisUrl.startsWith('rediss://') ||
-        parsedUrl?.protocol === 'rediss:';
+      let effectiveUrl = this.redisUrl;
+      const isUpstash = parsedUrl?.hostname?.includes('upstash.io') ?? false;
 
-      this.client = new (IORedis as any)(this.redisUrl, {
+      if (isUpstash && effectiveUrl.startsWith('redis://')) {
+        effectiveUrl = effectiveUrl.replace(/^redis:\/\//, 'rediss://');
+        this.logger.log(
+          '[RedisCacheStore] Upstash endpoint detected: automatically upgraded protocol to rediss:// (TLS)',
+        );
+      }
+
+      const isTls =
+        effectiveUrl.startsWith('rediss://') ||
+        parsedUrl?.protocol === 'rediss:' ||
+        isUpstash;
+
+      this.client = new (IORedis as any)(effectiveUrl, {
         family: 4, // Force IPv4 to prevent AWS Lambda / Vercel IPv6 DNS timeouts
         connectTimeout: 5000,
         commandTimeout: 2000,
