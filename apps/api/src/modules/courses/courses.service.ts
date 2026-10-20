@@ -88,6 +88,33 @@ export class CoursesService {
       }
     }
 
+    const teachingAssistants: Array<{
+      _id: Types.ObjectId;
+      name: string;
+      nameAr?: string;
+    }> = [];
+    const validTaObjectIds: Types.ObjectId[] = [];
+    if (dto.teachingAssistantIds && Array.isArray(dto.teachingAssistantIds)) {
+      for (const taId of dto.teachingAssistantIds) {
+        if (Types.ObjectId.isValid(taId)) {
+          validTaObjectIds.push(new Types.ObjectId(taId));
+        }
+      }
+      if (validTaObjectIds.length > 0) {
+        const taUsers = await this.userModel
+          .find({ _id: { $in: validTaObjectIds } })
+          .select('_id name nameAr')
+          .lean();
+        for (const user of taUsers) {
+          teachingAssistants.push({
+            _id: user._id,
+            name: user.name,
+            nameAr: (user as any).nameAr || user.name,
+          });
+        }
+      }
+    }
+
     const course = new this.courseModel({
       ...dto,
       code: dto.code.toUpperCase(),
@@ -98,6 +125,8 @@ export class CoursesService {
       doctorId: doctorObjectId,
       doctorName,
       doctorNameAr,
+      teachingAssistantIds: validTaObjectIds,
+      teachingAssistants,
     });
     const saved = await course.save();
     void this.cacheService?.delPattern('courses:*');
@@ -108,16 +137,27 @@ export class CoursesService {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: any = {};
 
-    if (
-      caller?.role === 'staff' &&
-      caller?.staffType === 'doctor' &&
-      caller?._id
-    ) {
+    if (caller?.role === 'staff' && caller?._id) {
       if (Types.ObjectId.isValid(caller._id)) {
-        filter.doctorId = new Types.ObjectId(caller._id);
+        const callerObjId = new Types.ObjectId(caller._id);
+        if (caller?.staffType === 'doctor') {
+          filter.doctorId = callerObjId;
+        } else if (caller?.staffType === 'teaching_assistant') {
+          filter.teachingAssistantIds = callerObjId;
+        }
       }
-    } else if (query.doctorId && Types.ObjectId.isValid(query.doctorId)) {
-      filter.doctorId = new Types.ObjectId(query.doctorId);
+    } else {
+      if (query.doctorId && Types.ObjectId.isValid(query.doctorId)) {
+        filter.doctorId = new Types.ObjectId(query.doctorId);
+      }
+      if (
+        query.teachingAssistantId &&
+        Types.ObjectId.isValid(query.teachingAssistantId)
+      ) {
+        filter.teachingAssistantIds = new Types.ObjectId(
+          query.teachingAssistantId,
+        );
+      }
     }
 
     if (query.search) {
@@ -241,6 +281,33 @@ export class CoursesService {
       }
     }
 
+    if (dto.teachingAssistantIds !== undefined) {
+      if (
+        Array.isArray(dto.teachingAssistantIds) &&
+        dto.teachingAssistantIds.length > 0
+      ) {
+        const validTaObjectIds: Types.ObjectId[] = [];
+        for (const taId of dto.teachingAssistantIds) {
+          if (Types.ObjectId.isValid(taId)) {
+            validTaObjectIds.push(new Types.ObjectId(taId));
+          }
+        }
+        const taUsers = await this.userModel
+          .find({ _id: { $in: validTaObjectIds } })
+          .select('_id name nameAr')
+          .lean();
+        updatePayload.teachingAssistantIds = validTaObjectIds;
+        updatePayload.teachingAssistants = taUsers.map((u) => ({
+          _id: u._id,
+          name: u.name,
+          nameAr: (u as any).nameAr || u.name,
+        }));
+      } else {
+        updatePayload.teachingAssistantIds = [];
+        updatePayload.teachingAssistants = [];
+      }
+    }
+
     const updated = await this.courseModel.findByIdAndUpdate(
       id,
       { $set: updatePayload },
@@ -254,13 +321,20 @@ export class CoursesService {
   }
 
   async findDoctorCourses(
-    doctorId: string,
+    staffId: string,
   ): Promise<
     Array<Record<string, unknown> & { enrolledStudentsCount: number }>
   > {
-    if (!Types.ObjectId.isValid(doctorId)) return [];
+    if (!Types.ObjectId.isValid(staffId)) return [];
+    const staffObjectId = new Types.ObjectId(staffId);
     const courses = (await this.courseModel
-      .find({ doctorId: new Types.ObjectId(doctorId), isActive: true })
+      .find({
+        $or: [
+          { doctorId: staffObjectId },
+          { teachingAssistantIds: staffObjectId },
+        ],
+        isActive: true,
+      })
       .lean()) as unknown as Array<
       Record<string, unknown> & { _id: Types.ObjectId; code: string }
     >;

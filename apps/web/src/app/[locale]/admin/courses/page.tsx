@@ -19,6 +19,8 @@ import {
   MoreVertical,
   HelpCircle,
   ListChecks,
+  X,
+  Users,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
@@ -83,6 +85,8 @@ interface Course {
   doctorId?: string | null;
   doctorName?: string;
   doctorNameAr?: string;
+  teachingAssistantIds?: string[];
+  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string }>;
   coverImageUrl?: string;
   isActive: boolean;
 }
@@ -157,6 +161,9 @@ function CourseFormDialog({
   const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
   const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
   const [doctorId, setDoctorId] = useState(initialValues.doctorId || '');
+  const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(
+    initialValues.teachingAssistantIds || [],
+  );
   const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -168,6 +175,20 @@ function CourseFormDialog({
     queryFn: () => listStaff({ page: 1, limit: 100, status: 'active' }),
     staleTime: 5 * 60 * 1000,
   });
+
+  const staffMembers = staffQuery.data?.items || [];
+
+  const doctorsList = React.useMemo(() => {
+    const docs = staffMembers.filter((s: any) => s.staffType === 'doctor');
+    return docs.length > 0 ? docs : staffMembers;
+  }, [staffMembers]);
+
+  const teachingAssistantsList = React.useMemo(() => {
+    const tas = staffMembers.filter(
+      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant',
+    );
+    return tas.length > 0 ? tas : staffMembers;
+  }, [staffMembers]);
 
   const [prevOpen, setPrevOpen] = useState(open);
   const [prevName, setPrevName] = useState(initialValues.name);
@@ -182,6 +203,9 @@ function CourseFormDialog({
   const [prevIsActive, setPrevIsActive] = useState(initialValues.isActive);
   const [prevSyllabusUrl, setPrevSyllabusUrl] = useState(initialValues.syllabusPdfUrl);
   const [prevDoctorId, setPrevDoctorId] = useState(initialValues.doctorId);
+  const [prevTeachingAssistantIds, setPrevTeachingAssistantIds] = useState(
+    initialValues.teachingAssistantIds?.join(','),
+  );
   const [prevCoverImageUrl, setPrevCoverImageUrl] = useState(initialValues.coverImageUrl);
 
   if (
@@ -198,6 +222,7 @@ function CourseFormDialog({
     initialValues.isActive !== prevIsActive ||
     initialValues.syllabusPdfUrl !== prevSyllabusUrl ||
     initialValues.doctorId !== prevDoctorId ||
+    initialValues.teachingAssistantIds?.join(',') !== prevTeachingAssistantIds ||
     initialValues.coverImageUrl !== prevCoverImageUrl
   ) {
     setPrevOpen(open);
@@ -213,6 +238,7 @@ function CourseFormDialog({
     setPrevIsActive(initialValues.isActive);
     setPrevSyllabusUrl(initialValues.syllabusPdfUrl);
     setPrevDoctorId(initialValues.doctorId);
+    setPrevTeachingAssistantIds(initialValues.teachingAssistantIds?.join(','));
     setPrevCoverImageUrl(initialValues.coverImageUrl);
 
     if (open) {
@@ -229,6 +255,7 @@ function CourseFormDialog({
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
       setDoctorId(initialValues.doctorId || '');
+      setTeachingAssistantIds(initialValues.teachingAssistantIds || []);
       setCoverImageUrl(initialValues.coverImageUrl || '');
       setSyllabusFile(null);
       setCoverImageFile(null);
@@ -289,6 +316,7 @@ function CourseFormDialog({
         syllabusFile: removeSyllabus ? null : syllabusFile,
         coverImageFile: removeCover ? null : coverImageFile,
         doctorId: doctorId ? doctorId : null,
+        teachingAssistantIds,
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
         removeCover,
@@ -388,14 +416,72 @@ function CourseFormDialog({
                   <SelectItem value="none">
                     {locale === 'ar' ? '-- غير محدد --' : '-- Unassigned --'}
                   </SelectItem>
-                  {(staffQuery.data?.items || []).map((staff) => (
+                  {doctorsList.map((staff) => (
                     <SelectItem key={staff._id} value={staff._id}>
-                      {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}{' '}
-                      {staff.userCode ? `(${staff.userCode})` : ''}
+                      {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Teaching Assistants Section */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-semibold text-muted">
+                {locale === 'ar' ? 'الهيئة المعاونة / المعيدون (Teaching Assistants)' : 'Teaching Assistants'}
+              </label>
+              <div className="flex flex-col gap-2">
+                <Select
+                  value=""
+                  onValueChange={(val) => {
+                    if (val && !teachingAssistantIds.includes(val)) {
+                      setTeachingAssistantIds((prev) => [...prev, val]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="bg-secondary/50 border-border">
+                    <SelectValue placeholder={locale === 'ar' ? 'اختر معيداً لإضافته للمقرر...' : 'Select teaching assistant to add...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teachingAssistantsList
+                      .filter((ta) => !teachingAssistantIds.includes(ta._id))
+                      .map((ta) => (
+                        <SelectItem key={ta._id} value={ta._id}>
+                          {locale === 'ar' ? (ta as any).nameAr || ta.name : ta.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {teachingAssistantIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {teachingAssistantIds.map((id) => {
+                      const staff = staffMembers.find((s) => s._id === id);
+                      const displayName = staff
+                        ? (locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name)
+                        : (initialValues.teachingAssistants?.find((t) => t._id === id)?.name || id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground"
+                        >
+                          <span>{displayName}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTeachingAssistantIds((prev) => prev.filter((item) => item !== id))
+                            }
+                            className="rounded p-0.5 text-muted-foreground hover:bg-danger/20 hover:text-danger cursor-pointer transition-colors"
+                            title={locale === 'ar' ? 'إزالة' : 'Remove'}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1290,23 +1376,39 @@ function CoursesPageContent() {
     },
     {
       key: 'doctor',
-      header: locale === 'ar' ? 'أستاذ المقرر' : 'Course Doctor',
+      header: locale === 'ar' ? 'طاقم التدريس' : 'Teaching Staff',
       render: (course) => (
         <TableCell className="p-4">
-          {course.doctorName || course.doctorNameAr ? (
-            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground">
-              <UserCheck className="h-3.5 w-3.5 text-primary" />
-              <span>
-                {locale === 'ar'
-                  ? course.doctorNameAr || course.doctorName
-                  : course.doctorName || course.doctorNameAr}
+          <div className="flex flex-col gap-1.5">
+            {course.doctorName || course.doctorNameAr ? (
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-squircle border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground">
+                <UserCheck className="h-3.5 w-3.5 text-primary" />
+                <span>
+                  {locale === 'ar'
+                    ? course.doctorNameAr || course.doctorName
+                    : course.doctorName || course.doctorNameAr}
+                </span>
               </span>
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground/60 italic">
-              {locale === 'ar' ? 'غير محدد' : 'Unassigned'}
-            </span>
-          )}
+            ) : (
+              <span className="text-xs text-muted-foreground/60 italic">
+                {locale === 'ar' ? 'أستاذ: غير محدد' : 'Doctor: Unassigned'}
+              </span>
+            )}
+            {course.teachingAssistants && course.teachingAssistants.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {course.teachingAssistants.map((ta) => (
+                  <span
+                    key={ta._id}
+                    className="inline-flex items-center gap-1 rounded-squircle border border-border/70 bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground"
+                    title={locale === 'ar' ? 'معيد' : 'Teaching Assistant'}
+                  >
+                    <Users className="h-3 w-3 text-muted-foreground" />
+                    <span>{locale === 'ar' ? ta.nameAr || ta.name : ta.name}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </TableCell>
       ),
     },

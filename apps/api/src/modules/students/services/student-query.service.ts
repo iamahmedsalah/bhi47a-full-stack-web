@@ -59,7 +59,10 @@ export class StudentQueryService {
     if (!Types.ObjectId.isValid(doctorIdStr)) return [];
     const doctorObjId = new Types.ObjectId(doctorIdStr);
     const courses = (await this.courseModel
-      .find({ doctorId: doctorObjId, isActive: true })
+      .find({
+        $or: [{ doctorId: doctorObjId }, { teachingAssistantIds: doctorObjId }],
+        isActive: true,
+      })
       .select('code _id')
       .lean()) as unknown as Array<{ _id: Types.ObjectId; code: string }>;
 
@@ -177,7 +180,11 @@ export class StudentQueryService {
 
   async getExportCursor(query: SearchStudentQuery, caller?: AuthenticatedUser) {
     let doctorStudentUserIds: Types.ObjectId[] | undefined = undefined;
-    if (caller?.role === 'staff' && (caller as any)?.staffType === 'doctor') {
+    if (
+      caller?.role === 'staff' &&
+      ((caller as any)?.staffType === 'doctor' ||
+        (caller as any)?.staffType === 'teaching_assistant')
+    ) {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }
     const filter = this.buildFilter(query, doctorStudentUserIds);
@@ -205,7 +212,11 @@ export class StudentQueryService {
     );
 
     let doctorStudentUserIds: Types.ObjectId[] | undefined = undefined;
-    if (caller?.role === 'staff' && (caller as any)?.staffType === 'doctor') {
+    if (
+      caller?.role === 'staff' &&
+      ((caller as any)?.staffType === 'doctor' ||
+        (caller as any)?.staffType === 'teaching_assistant')
+    ) {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }
 

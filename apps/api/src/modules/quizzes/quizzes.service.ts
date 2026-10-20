@@ -145,11 +145,21 @@ export class QuizzesService implements OnModuleInit {
       throw new NotFoundException('المقرر الدراسي غير موجود');
     }
 
-    // Permission check: admin OR course doctor OR has QUIZZES_WRITE
+    // Permission check: admin OR course doctor OR course teaching assistant OR has QUIZZES_WRITE
     if (user.role === 'staff') {
       const isCourseDoctor =
         course.doctorId && course.doctorId.toString() === user._id.toString();
-      if (user.staffType === 'doctor' && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any).teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === user._id.toString(),
+        );
+      const isAssigned = isCourseDoctor || isCourseTA;
+      if (
+        (user.staffType === 'doctor' ||
+          user.staffType === 'teaching_assistant') &&
+        !isAssigned
+      ) {
         throw new ForbiddenException(
           'يمكنك فقط إنشاء اختبارات للمقررات الدراسية المسندة إليك',
         );
@@ -157,9 +167,9 @@ export class QuizzesService implements OnModuleInit {
       const hasWritePerm = user.permissions?.includes(
         PERMISSIONS.QUIZZES_WRITE,
       );
-      if (!isCourseDoctor && !hasWritePerm) {
+      if (!isAssigned && !hasWritePerm) {
         throw new ForbiddenException(
-          'غير مصرح لك بإنشاء اختبار لهذا المقرر (يجب أن تكون أستاذ المقرر أو تمتلك صلاحية)',
+          'غير مصرح لك بإنشاء اختبار لهذا المقرر (يجب أن تكون أستاذ المقرر أو معيده أو تمتلك صلاحية)',
         );
       }
     }
@@ -249,14 +259,20 @@ export class QuizzesService implements OnModuleInit {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: FilterQuery<QuizDocument> = {};
 
-    // If doctor or staff without full permissions, restrict to assigned courses or created quizzes
+    // If doctor, teaching assistant or staff without full permissions, restrict to assigned courses or created quizzes
     if (
       user.role === 'staff' &&
       (user.staffType === 'doctor' ||
+        user.staffType === 'teaching_assistant' ||
         !user.permissions?.includes(PERMISSIONS.QUIZZES_WRITE))
     ) {
       const assignedCourses = await this.courseModel
-        .find({ doctorId: new Types.ObjectId(user._id) })
+        .find({
+          $or: [
+            { doctorId: new Types.ObjectId(user._id) },
+            { teachingAssistantIds: new Types.ObjectId(user._id) },
+          ],
+        })
         .select('_id')
         .lean();
       const courseIds = assignedCourses.map((c) => c._id);
@@ -362,11 +378,22 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId')
+        .select('doctorId teachingAssistantIds')
         .lean();
       const isCourseDoctor =
         course?.doctorId?.toString() === user._id.toString();
-      if (user.staffType === 'doctor' && !isCreator && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any)?.teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === user._id.toString(),
+        );
+      const isAssigned = isCourseDoctor || isCourseTA;
+      if (
+        (user.staffType === 'doctor' ||
+          user.staffType === 'teaching_assistant') &&
+        !isCreator &&
+        !isAssigned
+      ) {
         throw new ForbiddenException(
           'يمكنك فقط تعديل الاختبارات للمقررات المسندة إليك',
         );
@@ -494,11 +521,22 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId')
+        .select('doctorId teachingAssistantIds')
         .lean();
       const isCourseDoctor =
         course?.doctorId?.toString() === user._id.toString();
-      if (user.staffType === 'doctor' && !isCreator && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any)?.teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === user._id.toString(),
+        );
+      const isAssigned = isCourseDoctor || isCourseTA;
+      if (
+        (user.staffType === 'doctor' ||
+          user.staffType === 'teaching_assistant') &&
+        !isCreator &&
+        !isAssigned
+      ) {
         throw new ForbiddenException(
           'يمكنك فقط حذف الاختبارات للمقررات المسندة إليك',
         );
@@ -548,15 +586,25 @@ export class QuizzesService implements OnModuleInit {
     }>
   > {
     const quiz = await this.findOne(quizId);
-    if (user && user.role === 'staff' && user.staffType === 'doctor') {
+    if (
+      user &&
+      user.role === 'staff' &&
+      (user.staffType === 'doctor' || user.staffType === 'teaching_assistant')
+    ) {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId')
+        .select('doctorId teachingAssistantIds')
         .lean();
       const isCourseDoctor =
         course?.doctorId?.toString() === user._id.toString();
-      if (!isCreator && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any)?.teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === user._id.toString(),
+        );
+      const isAssigned = isCourseDoctor || isCourseTA;
+      if (!isCreator && !isAssigned) {
         throw new ForbiddenException(
           'غير مصرح لك بالاطلاع على تسليمات هذا الاختبار',
         );
@@ -597,15 +645,24 @@ export class QuizzesService implements OnModuleInit {
 
   async exportQuizAnalysis(quizId: string, user: AuthenticatedUser) {
     const quiz = await this.findOne(quizId);
-    if (user.role === 'staff' && user.staffType === 'doctor') {
+    if (
+      user.role === 'staff' &&
+      (user.staffType === 'doctor' || user.staffType === 'teaching_assistant')
+    ) {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId')
+        .select('doctorId teachingAssistantIds')
         .lean();
       const isCourseDoctor =
         course?.doctorId?.toString() === user._id.toString();
-      if (!isCreator && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any)?.teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === user._id.toString(),
+        );
+      const isAssigned = isCourseDoctor || isCourseTA;
+      if (!isCreator && !isAssigned) {
         throw new ForbiddenException('غير مصرح لك بتصدير تحليل هذا الاختبار');
       }
     }

@@ -188,6 +188,16 @@ export class CreateCourseDto {
   doctorId?: string;
 
   @ApiPropertyOptional({
+    description: 'User IDs of assigned teaching assistants',
+    type: [String],
+    example: ['507f1f77bcf86cd799439011'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  teachingAssistantIds?: string[];
+
+  @ApiPropertyOptional({
     description: 'URL of the course cover book thumbnail image',
   })
   @IsOptional()
@@ -346,6 +356,18 @@ export class UpdateCourseDto {
   doctorId?: string | null;
 
   @ApiPropertyOptional({
+    description: 'User IDs of assigned teaching assistants',
+    type: [String],
+    example: ['507f1f77bcf86cd799439011'],
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, val) => val !== null)
+  @IsArray()
+  @IsString({ each: true })
+  teachingAssistantIds?: string[] | null;
+
+  @ApiPropertyOptional({
     description: 'URL of the course cover book thumbnail image',
     nullable: true,
   })
@@ -365,6 +387,11 @@ export class QueryCourseDto {
   @IsOptional()
   @IsString()
   doctorId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  teachingAssistantId?: string;
 
   @ApiPropertyOptional({ enum: COURSE_LEVEL_VALUES })
   @IsOptional()

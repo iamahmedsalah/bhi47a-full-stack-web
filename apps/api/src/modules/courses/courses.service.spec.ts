@@ -131,7 +131,10 @@ describe('CoursesService Unit Tests', () => {
         { ...assignedCourses[1], enrolledStudentsCount: 0 },
       ]);
       expect(mockCourseModel.find).toHaveBeenCalledWith({
-        doctorId: doctorObjectId,
+        $or: [
+          { doctorId: doctorObjectId },
+          { teachingAssistantIds: doctorObjectId },
+        ],
         isActive: true,
       });
     });

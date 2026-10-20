@@ -136,12 +136,20 @@ export class AttendanceSessionService {
         course.doctorId &&
         course.doctorId.toString() === currentUser._id.toString();
 
-      if (!assignment && !isCourseDoctor) {
+      const isCourseTA =
+        Array.isArray((course as any).teachingAssistantIds) &&
+        (course as any).teachingAssistantIds.some(
+          (taId: any) => taId.toString() === currentUser._id.toString(),
+        );
+
+      if (!assignment && !isCourseDoctor && !isCourseTA) {
         throw new ForbiddenException(
           `غير مصرح لك ببدء حضور للمقرر [${courseCode}]؛ لست مدرجاً في طاقم التدريس الخاص به.`,
         );
       } else if (assignment) {
         academicPosition = assignment.academicPosition;
+      } else if (isCourseTA) {
+        academicPosition = 'instructor';
       } else {
         academicPosition = 'doctor';
       }
@@ -447,10 +455,13 @@ export class AttendanceSessionService {
       .sort({ courseCode: 1 })
       .lean();
 
-    // 2. Courses where staff member is assigned as doctorId
-    const doctorCourses = await this.courseModel
+    // 2. Courses where staff member is assigned as doctorId OR teaching assistant
+    const teachingCourses = await this.courseModel
       .find({
-        doctorId: userObjectId,
+        $or: [
+          { doctorId: userObjectId },
+          { teachingAssistantIds: userObjectId },
+        ],
         isActive: true,
       })
       .sort({ level: 1, code: 1 })
@@ -466,15 +477,19 @@ export class AttendanceSessionService {
       }
     }
 
-    for (const c of doctorCourses) {
+    for (const c of teachingCourses) {
       if (!seenCodes.has(c.code)) {
         seenCodes.add(c.code);
+        const isDoc =
+          c.doctorId && c.doctorId.toString() === userObjectId.toString();
         result.push({
           courseCode: c.code,
           courseName: c.nameAr || c.name,
           level: c.level,
           semester: c.semester,
-          academicPosition: 'doctor' as const,
+          academicPosition: isDoc
+            ? ('doctor' as const)
+            : ('instructor' as const),
           groups: ['1', '2'],
           sections: ['1', '2', '3', '4'],
         });
