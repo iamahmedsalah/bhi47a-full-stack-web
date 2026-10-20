@@ -135,6 +135,7 @@ export class StudentsService {
       section: dto.section,
       academicYear: dto.academicYear,
       semester: dto.semester,
+      enrollmentStatus: dto.enrollmentStatus || 'active',
       seatNumber: dto.seatNumber,
       academicEmail: dto.academicEmail,
       examRoom: dto.examRoom,
@@ -1388,7 +1389,17 @@ export class StudentsService {
     }
 
     const errors: string[] = [];
-    let updatedCount = 0;
+    const extractedRows: Array<{
+      rowNum: number;
+      cleanCode: string;
+      rawCode: string;
+      rawLevel: string;
+      rawTuition: string;
+      rawBlock: string;
+      rawReason: string;
+    }> = [];
+
+    const codesToLookup: string[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -1408,45 +1419,60 @@ export class StudentsService {
         continue;
       }
 
-      const rawLevel = this.extractFieldValue(row, [
-        'الفرقة',
-        'فرقة',
-        'level',
-        'السنة',
-        'الصف',
-      ]);
-
-      const rawTuition = this.extractFieldValue(row, [
-        'حالة المصروفات',
-        'المصروفات',
-        'tuition',
-        'tuition_status',
-      ]);
-
-      const rawBlock = this.extractFieldValue(row, [
-        'الحجب',
-        'حجب',
-        'الحالة',
-        'status',
-        'block',
-        'block_status',
-      ]);
-
-      const rawReason = this.extractFieldValue(row, [
-        'سبب الحجب',
-        'السبب',
-        'reason',
-        'block_reason',
-      ]);
-
       const cleanCode = rawCode.trim();
-      const profile = await this.studentProfileModel.findOne({
-        studentCode: cleanCode,
-      });
+      codesToLookup.push(cleanCode);
 
-      if (!profile) {
+      extractedRows.push({
+        rowNum,
+        cleanCode,
+        rawCode,
+        rawLevel: this.extractFieldValue(row, [
+          'الفرقة',
+          'فرقة',
+          'level',
+          'السنة',
+          'الصف',
+        ]),
+        rawTuition: this.extractFieldValue(row, [
+          'حالة المصروفات',
+          'المصروفات',
+          'tuition',
+          'tuition_status',
+        ]),
+        rawBlock: this.extractFieldValue(row, [
+          'الحجب',
+          'حجب',
+          'الحالة',
+          'status',
+          'block',
+          'block_status',
+        ]),
+        rawReason: this.extractFieldValue(row, [
+          'سبب الحجب',
+          'السبب',
+          'reason',
+          'block_reason',
+        ]),
+      });
+    }
+
+    // Single query bulk lookup
+    const existingProfiles = await this.studentProfileModel
+      .find({ studentCode: { $in: codesToLookup } })
+      .select('_id studentCode')
+      .lean();
+
+    const profileMap = new Map(
+      existingProfiles.map((p) => [p.studentCode, p._id]),
+    );
+
+    const bulkOps: any[] = [];
+
+    for (const item of extractedRows) {
+      const profileId = profileMap.get(item.cleanCode);
+      if (!profileId) {
         errors.push(
-          `السطر ${rowNum}: كود الطالب "${rawCode}" غير مسجل بالمنظومة`,
+          `السطر ${item.rowNum}: كود الطالب "${item.rawCode}" غير مسجل بالمنظومة`,
         );
         continue;
       }
@@ -1454,24 +1480,26 @@ export class StudentsService {
       const updateFields: Record<string, any> = {};
 
       const isMarkedBlocked =
-        rawBlock.includes('محجوب') ||
-        rawBlock.toLowerCase() === 'blocked' ||
-        rawTuition.includes('غير مسدد') ||
-        rawTuition.toLowerCase() === 'unpaid';
+        item.rawBlock.includes('محجوب') ||
+        item.rawBlock.toLowerCase() === 'blocked' ||
+        item.rawTuition.includes('غير مسدد') ||
+        item.rawTuition.toLowerCase() === 'unpaid';
 
       const isMarkedActive =
-        rawBlock.includes('مفعل') ||
-        rawBlock.toLowerCase() === 'active' ||
-        rawTuition.includes('مسدد') ||
-        rawTuition.toLowerCase() === 'paid';
+        item.rawBlock.includes('مفعل') ||
+        item.rawBlock.toLowerCase() === 'active' ||
+        item.rawTuition.includes('مسدد') ||
+        item.rawTuition.toLowerCase() === 'paid';
 
       const isMarkedExempt =
-        rawTuition.includes('معفي') || rawTuition.toLowerCase() === 'exempt';
+        item.rawTuition.includes('معفي') ||
+        item.rawTuition.toLowerCase() === 'exempt';
 
       if (isMarkedBlocked) {
         updateFields.isBlocked = true;
         updateFields.tuitionFeesStatus = 'unpaid';
-        updateFields.blockReason = rawReason || 'عدم سداد المصروفات الدراسية';
+        updateFields.blockReason =
+          item.rawReason || 'عدم سداد المصروفات الدراسية';
         updateFields.blockedAt = new Date();
       } else if (isMarkedExempt) {
         updateFields.isBlocked = false;
@@ -1483,34 +1511,31 @@ export class StudentsService {
         updateFields.unblockedAt = new Date();
       }
 
-      if (rawLevel) {
+      if (item.rawLevel) {
+        const rawL = item.rawLevel;
         let normalizedLevel: string | undefined;
-        if (
-          rawLevel.includes('أولى') ||
-          rawLevel.includes('اولى') ||
-          rawLevel === '1'
-        ) {
+        if (rawL.includes('أولى') || rawL.includes('اولى') || rawL === '1') {
           normalizedLevel = '1';
         } else if (
-          rawLevel.includes('ثاني') ||
-          rawLevel.includes('ثانيه') ||
-          rawLevel === '2'
+          rawL.includes('ثاني') ||
+          rawL.includes('ثانيه') ||
+          rawL === '2'
         ) {
           normalizedLevel = '2';
         } else if (
-          rawLevel.includes('ثالث') ||
-          rawLevel.includes('ثالثه') ||
-          rawLevel === '3'
+          rawL.includes('ثالث') ||
+          rawL.includes('ثالثه') ||
+          rawL === '3'
         ) {
           normalizedLevel = '3';
         } else if (
-          rawLevel.includes('رابع') ||
-          rawLevel.includes('رابعه') ||
-          rawLevel === '4'
+          rawL.includes('رابع') ||
+          rawL.includes('رابعه') ||
+          rawL === '4'
         ) {
           normalizedLevel = '4';
-        } else if (['1', '2', '3', '4'].includes(rawLevel.trim())) {
-          normalizedLevel = rawLevel.trim();
+        } else if (['1', '2', '3', '4'].includes(rawL.trim())) {
+          normalizedLevel = rawL.trim();
         }
 
         if (normalizedLevel) {
@@ -1519,12 +1544,22 @@ export class StudentsService {
       }
 
       if (Object.keys(updateFields).length > 0) {
-        await this.studentProfileModel.updateOne(
-          { _id: profile._id },
-          { $set: updateFields },
-        );
-        updatedCount++;
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: profileId },
+            update: { $set: updateFields },
+          },
+        });
       }
+    }
+
+    let updatedCount = 0;
+    if (bulkOps.length > 0) {
+      const bulkResult = await this.studentProfileModel.bulkWrite(bulkOps, {
+        ordered: false,
+      });
+      updatedCount = bulkResult.modifiedCount ?? bulkOps.length;
+      this.invalidateStatsCache();
     }
 
     return {
@@ -1532,6 +1567,124 @@ export class StudentsService {
       updatedCount,
       errorCount: errors.length,
       errors: errors.slice(0, 30),
+    };
+  }
+
+  async exportTuitionToExcel(query: QueryTuitionStatusDto) {
+    const filter: Record<string, any> = {};
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      filter.$or = [
+        { studentCode: { $regex: s, $options: 'i' } },
+        { fullName: { $regex: s, $options: 'i' } },
+        { fullNameAr: { $regex: s, $options: 'i' } },
+      ];
+    }
+    if (query.level && query.level !== 'all') {
+      filter.level = query.level;
+    }
+    if (
+      query.isBlocked !== undefined &&
+      query.isBlocked !== 'all' &&
+      query.isBlocked !== ''
+    ) {
+      filter.isBlocked = String(query.isBlocked) === 'true';
+    }
+    if (query.tuitionFeesStatus && query.tuitionFeesStatus !== 'all') {
+      filter.tuitionFeesStatus = query.tuitionFeesStatus;
+    }
+
+    const students = await this.studentProfileModel
+      .find(filter)
+      .select(
+        'studentCode fullName fullNameAr fullNameEn level department isBlocked tuitionFeesStatus blockReason',
+      )
+      .sort({ level: 1, studentCode: 1 })
+      .lean();
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BH47A Student Portal';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('المصروفات والحجب', {
+      views: [{ rightToLeft: true }],
+    });
+
+    sheet.columns = [
+      { header: 'م', key: 'index', width: 8 },
+      { header: 'كود الطالب', key: 'studentCode', width: 18 },
+      { header: 'اسم الطالب', key: 'studentName', width: 35 },
+      { header: 'الفرقة', key: 'level', width: 18 },
+      { header: 'القسم', key: 'department', width: 16 },
+      { header: 'حالة المصروفات', key: 'tuitionStatus', width: 18 },
+      { header: 'حالة الحجب', key: 'blockStatus', width: 16 },
+      { header: 'سبب الحجب', key: 'blockReason', width: 30 },
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    const LEVEL_MAP: Record<string, string> = {
+      '1': 'الفرقة الأولى',
+      '2': 'الفرقة الثانية',
+      '3': 'الفرقة الثالثة',
+      '4': 'الفرقة الرابعة',
+    };
+
+    const TUITION_MAP: Record<string, string> = {
+      paid: 'مسدد',
+      unpaid: 'غير مسدد',
+      exempt: 'معفي',
+    };
+
+    students.forEach((s, idx) => {
+      const addedRow = sheet.addRow({
+        index: idx + 1,
+        studentCode: s.studentCode,
+        studentName: s.fullNameAr || s.fullName,
+        level: LEVEL_MAP[s.level] || `الفرقة ${s.level}`,
+        department: s.department || 'GENERAL',
+        tuitionStatus:
+          TUITION_MAP[s.tuitionFeesStatus || ''] ||
+          s.tuitionFeesStatus ||
+          'غير محدد',
+        blockStatus: s.isBlocked ? 'محجوب' : 'مفعل',
+        blockReason: s.blockReason || '',
+      });
+      addedRow.height = 22;
+      addedRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      addedRow.font = { name: 'Segoe UI', size: 10 };
+      if (s.isBlocked) {
+        addedRow.getCell('blockStatus').font = {
+          bold: true,
+          color: { argb: 'FFE11D48' },
+        };
+      } else {
+        addedRow.getCell('blockStatus').font = {
+          bold: true,
+          color: { argb: 'FF10B981' },
+        };
+      }
+    });
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return {
+      buffer: Buffer.from(uint8Array),
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: `tuition-and-block-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
     };
   }
 

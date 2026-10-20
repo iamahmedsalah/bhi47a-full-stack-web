@@ -103,7 +103,11 @@ export function AuthProvider({
       const res = await api.get<User>('/auth/me');
       return res.data;
     },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     retry: false,
+    refetchOnWindowFocus: false,
+    enabled: !isLoggingOut,
   });
 
   const login = useCallback(async (
@@ -131,9 +135,9 @@ export function AuthProvider({
 
       if (res.data.user.role === 'student') {
         const returnPath = getSafeStudentReturnPath(options?.returnUrl, locale);
-        router.push(returnPath ?? `/${locale}/dashboard`);
+        router.replace(returnPath ?? `/${locale}/dashboard`);
       } else {
-        router.push(`/${locale}/admin`);
+        router.replace(`/${locale}/admin`);
       }
     } catch (error) {
       toast.dismiss(toastId);
@@ -161,15 +165,9 @@ export function AuthProvider({
       }
     }
 
-    // Await server logout so backend Set-Cookie clear header arrives and clears access_token
-    try {
-      await api.post('/auth/logout', {}, { timeout: 2500 });
-    } catch {
-      // Proceed even if server request times out or fails
-    }
-
-    // Explicitly nullify query cache so no component considers user authenticated
-    queryClient.setQueryData(['auth', 'me'], null);
+    // Immediately cancel and reset queries so no background query refetches
+    queryClient.cancelQueries({ queryKey: queryKeys.auth.me });
+    queryClient.setQueryData(queryKeys.auth.me, null);
     queryClient.removeQueries({ queryKey: ['auth'] });
     queryClient.clear();
 
@@ -180,13 +178,29 @@ export function AuthProvider({
       } catch {}
     }
 
+    if (typeof document !== 'undefined') {
+      document.cookie = 'csrf_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      document.cookie = 'csrf_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure';
+    }
+
+    // Await server logout with short timeout so backend Set-Cookie clear header arrives
+    try {
+      await api.post('/auth/logout', {}, { timeout: 1500 });
+    } catch {
+      // Proceed even if server request times out or fails
+    }
+
     // Show logout confirmation notification
     toast.success(
       locale === 'ar' ? 'تم تسجيل الخروج بنجاح' : 'Logged out successfully',
     );
 
-    router.replace(targetLogin);
-    setIsLoggingOut(false);
+    // Hard navigation to target login page completely clears in-memory state and router cache
+    if (typeof window !== 'undefined') {
+      window.location.replace(targetLogin);
+    } else {
+      router.replace(targetLogin);
+    }
   }, [isLoggingOut, locale, meQuery.data?.role, pathname, queryClient, router]);
 
   const { setTheme, theme: currentTheme } = useTheme();

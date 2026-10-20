@@ -60,7 +60,11 @@ export class StudentQueryService {
     const doctorObjId = new Types.ObjectId(doctorIdStr);
     const courses = (await this.courseModel
       .find({
-        $or: [{ doctorId: doctorObjId }, { teachingAssistantIds: doctorObjId }],
+        $or: [
+          { doctorId: doctorObjId },
+          { doctorIds: doctorObjId },
+          { teachingAssistantIds: doctorObjId },
+        ],
         isActive: true,
       })
       .select('code _id')

@@ -24,7 +24,7 @@ import {
   VerifyGoogleOtpDto,
   VerifyGoogleOAuthDto,
 } from './dto/forgot-password.dto';
-import { Public } from './decorators/public.decorator';
+import { Public, OptionalAuth } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 
 @ApiTags('Auth')
@@ -71,15 +71,20 @@ export class AuthController {
     return { csrfToken };
   }
 
+  @OptionalAuth()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout and clear cookie' })
   async logout(
-    @CurrentUser('_id') userId: string,
+    @CurrentUser('_id') userId: string | undefined,
     @Res({ passthrough: true }) res: express.Response,
   ) {
     if (userId) {
-      await this.authService.recordLogout(userId);
+      try {
+        await this.authService.recordLogout(userId);
+      } catch {
+        // Non-blocking: proceed with clearing cookies even if DB activity update fails
+      }
     }
     this.authService.clearCookieToken(res);
     return { message: 'تم تسجيل الخروج بنجاح' }; // Logged out successfully

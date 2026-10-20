@@ -2,7 +2,6 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsEnum,
   IsEmail,
   Matches,
   IsIn,
@@ -18,9 +17,22 @@ import {
   STUDENT_PASSWORD_MAX_LENGTH,
   STUDENT_PASSWORD_MIN_LENGTH,
   STUDENT_PASSWORD_PATTERN,
+  ENROLLMENT_STATUS_VALUES,
+  type EnrollmentStatus,
 } from '@student-portal/shared';
 
 export class CreateStudentDto {
+  @ApiPropertyOptional({
+    enum: ENROLLMENT_STATUS_VALUES,
+    default: 'active',
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @IsIn(ENROLLMENT_STATUS_VALUES)
+  enrollmentStatus?: EnrollmentStatus;
   @ApiProperty({ example: '20231001' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -165,6 +177,16 @@ export class CreateStudentDto {
 }
 
 export class UpdateStudentDto {
+  @ApiPropertyOptional({
+    enum: ENROLLMENT_STATUS_VALUES,
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @IsIn(ENROLLMENT_STATUS_VALUES)
+  enrollmentStatus?: EnrollmentStatus;
   @ApiPropertyOptional({ example: 'أحمد محمد علي' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().replace(/<[^>]*>/g, '') : value,
@@ -259,13 +281,6 @@ export class UpdateStudentDto {
   @IsString()
   @IsIn(['first', 'second', 'summer'])
   semester?: string;
-
-  @ApiPropertyOptional({
-    enum: ['active', 'inactive', 'graduated', 'suspended'],
-  })
-  @IsOptional()
-  @IsEnum(['active', 'inactive', 'graduated', 'suspended'])
-  enrollmentStatus?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

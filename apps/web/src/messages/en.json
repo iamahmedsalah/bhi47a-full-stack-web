@@ -109,6 +109,8 @@
   },
   "students": {
     "title": "Students Management",
+    "subtitle": "Manage student identities, academic placement, exam seats, imports, and exports.",
+    "doctorSubtitle": "Students registered in your assigned courses.",
     "addStudent": "Add Student",
     "editStudent": "Edit Student",
     "studentCode": "Student Code",
@@ -236,7 +238,9 @@
     "studentName": "Student Name",
     "copyEmail": "Copy",
     "updateSuccess": "Academic email updated successfully",
-    "updateError": "An error occurred while updating the email"
+    "updateError": "An error occurred while updating the email",
+    "uploadEmails": "Upload Emails",
+    "exportEmails": "Export Excel"
   },
   "studentPortal": {
     "dashboard": "Home",
@@ -333,6 +337,7 @@
   },
   "notifications": {
     "title": "FCM Push Notifications",
+    "subtitle": "Broadcast urgent announcements, academic notices, and push notifications to students.",
     "addNotification": "Send Alert Notification",
     "notificationTitle": "Notification Title",
     "notificationBody": "Notification Body Text",
@@ -558,6 +563,8 @@
       "description": "Existing sessions will be revoked and the staff member must change this password after signing in.",
       "newPassword": "New temporary password",
       "confirmPassword": "Confirm temporary password",
+      "autoGenerate": "Auto-Generate Password",
+      "copied": "Password copied to clipboard",
       "action": "Reset password"
     },
     "deactivate": {

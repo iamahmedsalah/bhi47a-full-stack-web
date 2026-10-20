@@ -12,6 +12,7 @@ import {
   IsInt,
   ValidateNested,
   ValidateIf,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -188,6 +189,17 @@ export class CreateCourseDto {
   doctorId?: string;
 
   @ApiPropertyOptional({
+    description: 'User IDs of assigned doctors (max 2 doctors)',
+    type: [String],
+    example: ['507f1f77bcf86cd799439011'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(2, { message: 'لا يمكن تعيين أكثر من دكتورين للمقرر الدراسي' })
+  @IsString({ each: true })
+  doctorIds?: string[];
+
+  @ApiPropertyOptional({
     description: 'User IDs of assigned teaching assistants',
     type: [String],
     example: ['507f1f77bcf86cd799439011'],
@@ -354,6 +366,19 @@ export class UpdateCourseDto {
   @ValidateIf((_, val) => val !== null && val !== '')
   @IsString()
   doctorId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'User IDs of assigned doctors (max 2 doctors)',
+    type: [String],
+    example: ['507f1f77bcf86cd799439011'],
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, val) => val !== null)
+  @IsArray()
+  @ArrayMaxSize(2, { message: 'لا يمكن تعيين أكثر من دكتورين للمقرر الدراسي' })
+  @IsString({ each: true })
+  doctorIds?: string[] | null;
 
   @ApiPropertyOptional({
     description: 'User IDs of assigned teaching assistants',

@@ -375,7 +375,7 @@ function NotificationsPageContent() {
       <PageTitleBanner
         title={t('title')}
         icon={<Bell className="h-5 w-5 text-primary" />}
-        subtitle={t('title')}
+        subtitle={t('subtitle')}
       >
         <Button onClick={openSendModal} className="flex items-center gap-2">
           <Plus className="h-5 w-5" />

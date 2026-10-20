@@ -132,6 +132,23 @@ export class QuizzesService implements OnModuleInit {
 
   // ─── Staff / Admin Management ─────────────────────────────────────
 
+  private checkCourseDoctor(
+    course: any,
+    userId: string | Types.ObjectId,
+  ): boolean {
+    if (!course || !userId) return false;
+    const userIdStr = userId.toString();
+    if (course.doctorId && course.doctorId.toString() === userIdStr) {
+      return true;
+    }
+    if (Array.isArray(course.doctorIds)) {
+      return course.doctorIds.some(
+        (id: any) => id && id.toString() === userIdStr,
+      );
+    }
+    return false;
+  }
+
   async create(
     user: AuthenticatedUser,
     dto: CreateQuizDto,
@@ -147,8 +164,7 @@ export class QuizzesService implements OnModuleInit {
 
     // Permission check: admin OR course doctor OR course teaching assistant OR has QUIZZES_WRITE
     if (user.role === 'staff') {
-      const isCourseDoctor =
-        course.doctorId && course.doctorId.toString() === user._id.toString();
+      const isCourseDoctor = this.checkCourseDoctor(course, user._id);
       const isCourseTA =
         Array.isArray((course as any).teachingAssistantIds) &&
         (course as any).teachingAssistantIds.some(
@@ -270,6 +286,7 @@ export class QuizzesService implements OnModuleInit {
         .find({
           $or: [
             { doctorId: new Types.ObjectId(user._id) },
+            { doctorIds: new Types.ObjectId(user._id) },
             { teachingAssistantIds: new Types.ObjectId(user._id) },
           ],
         })
@@ -378,10 +395,9 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId teachingAssistantIds')
+        .select('doctorId doctorIds teachingAssistantIds')
         .lean();
-      const isCourseDoctor =
-        course?.doctorId?.toString() === user._id.toString();
+      const isCourseDoctor = this.checkCourseDoctor(course, user._id);
       const isCourseTA =
         Array.isArray((course as any)?.teachingAssistantIds) &&
         (course as any).teachingAssistantIds.some(
@@ -521,10 +537,9 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId teachingAssistantIds')
+        .select('doctorId doctorIds teachingAssistantIds')
         .lean();
-      const isCourseDoctor =
-        course?.doctorId?.toString() === user._id.toString();
+      const isCourseDoctor = this.checkCourseDoctor(course, user._id);
       const isCourseTA =
         Array.isArray((course as any)?.teachingAssistantIds) &&
         (course as any).teachingAssistantIds.some(
@@ -594,10 +609,9 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId teachingAssistantIds')
+        .select('doctorId doctorIds teachingAssistantIds')
         .lean();
-      const isCourseDoctor =
-        course?.doctorId?.toString() === user._id.toString();
+      const isCourseDoctor = this.checkCourseDoctor(course, user._id);
       const isCourseTA =
         Array.isArray((course as any)?.teachingAssistantIds) &&
         (course as any).teachingAssistantIds.some(
@@ -652,10 +666,9 @@ export class QuizzesService implements OnModuleInit {
       const isCreator = quiz.creatorId.toString() === user._id.toString();
       const course = await this.courseModel
         .findById(quiz.courseId)
-        .select('doctorId teachingAssistantIds')
+        .select('doctorId doctorIds teachingAssistantIds')
         .lean();
-      const isCourseDoctor =
-        course?.doctorId?.toString() === user._id.toString();
+      const isCourseDoctor = this.checkCourseDoctor(course, user._id);
       const isCourseTA =
         Array.isArray((course as any)?.teachingAssistantIds) &&
         (course as any).teachingAssistantIds.some(

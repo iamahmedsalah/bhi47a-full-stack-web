@@ -55,7 +55,7 @@ function parseXmlSpreadsheet(xmlText: string): { headers: string[]; rows: string
 /**
  * Parses raw file buffer/content into rows
  */
-async function extractRawSheetRows(
+export async function extractRawSheetRows(
   file: File,
 ): Promise<{ headers: string[]; rawRows: (string | number | boolean | null)[][] }> {
   const isExcel = /\.(xlsx|xls|xlsb|ods)$/i.test(file.name);

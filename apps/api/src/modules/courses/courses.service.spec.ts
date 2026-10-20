@@ -32,6 +32,11 @@ describe('CoursesService Unit Tests', () => {
     });
     mockStudentProfileModel.findOne = jest.fn();
     mockUserModel.findById = jest.fn();
+    mockUserModel.find = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      }),
+    });
 
     service = new CoursesService(
       mockCourseModel,
@@ -62,11 +67,15 @@ describe('CoursesService Unit Tests', () => {
 
     it('creates course and assigns doctor metadata if doctorId is provided', async () => {
       mockCourseModel.findOne.mockResolvedValue(null);
-      mockUserModel.findById.mockReturnValue({
-        lean: jest.fn().mockResolvedValue({
-          _id: new Types.ObjectId(doctorId),
-          name: 'Dr. Youssef',
-          nameAr: 'د. يوسف',
+      mockUserModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: new Types.ObjectId(doctorId),
+              name: 'Dr. Youssef',
+              nameAr: 'د. يوسف',
+            },
+          ]),
         }),
       });
 
@@ -133,6 +142,7 @@ describe('CoursesService Unit Tests', () => {
       expect(mockCourseModel.find).toHaveBeenCalledWith({
         $or: [
           { doctorId: doctorObjectId },
+          { doctorIds: doctorObjectId },
           { teachingAssistantIds: doctorObjectId },
         ],
         isActive: true,

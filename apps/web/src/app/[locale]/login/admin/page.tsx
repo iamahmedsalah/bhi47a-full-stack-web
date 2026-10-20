@@ -179,9 +179,10 @@ function AdminLoginContent() {
 
   const maxAttempts = 5;
 
-  // Check for session expired and auto-focus
+  // Check for session expired, prefetch admin dashboard, and auto-focus
   useEffect(() => {
     adminCodeInputRef.current?.focus();
+    router.prefetch(`/${locale}/admin`);
 
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);

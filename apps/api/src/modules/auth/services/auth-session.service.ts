@@ -50,8 +50,16 @@ export class AuthSessionService {
   }
 
   clearCookieToken(res: Response) {
-    res.clearCookie('access_token', this.getCookieOptions(true));
-    res.clearCookie('csrf_token', this.getCookieOptions(false));
+    const httpOnlyOpts = this.getCookieOptions(true);
+    const nonHttpOnlyOpts = this.getCookieOptions(false);
+
+    res.clearCookie('access_token', httpOnlyOpts);
+    res.clearCookie('csrf_token', nonHttpOnlyOpts);
+
+    if (httpOnlyOpts.domain) {
+      res.clearCookie('access_token', { ...httpOnlyOpts, domain: undefined });
+      res.clearCookie('csrf_token', { ...nonHttpOnlyOpts, domain: undefined });
+    }
   }
 
   refreshCsrfToken(res: Response) {

@@ -214,10 +214,11 @@ function StudentLoginContent() {
     prompt();
   }, [isInitialized, prompt, scriptLoaded]);
 
-  // Auto-focus on student code input when component mounts
+  // Auto-focus on student code input and prefetch dashboard when component mounts
   useEffect(() => {
     studentCodeInputRef.current?.focus();
-  }, []);
+    router.prefetch(`/${locale}/dashboard`);
+  }, [router, locale]);
 
   // Initialize remainingAttempts & lockouts from session
   useEffect(() => {

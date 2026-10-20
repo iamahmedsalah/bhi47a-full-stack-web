@@ -74,19 +74,47 @@ export class CoursesService {
       throw new ConflictException('كود المادة موجود بالفعل'); // Course code already exists
     }
 
-    let doctorName: string | undefined;
-    let doctorNameAr: string | undefined;
-    let doctorObjectId: Types.ObjectId | undefined;
-    if (dto.doctorId) {
-      if (Types.ObjectId.isValid(dto.doctorId)) {
-        doctorObjectId = new Types.ObjectId(dto.doctorId);
-        const doctorUser = await this.userModel.findById(doctorObjectId).lean();
-        if (doctorUser) {
-          doctorName = doctorUser.name;
-          doctorNameAr = (doctorUser as any).nameAr || doctorUser.name;
+    const doctors: Array<{
+      _id: Types.ObjectId;
+      name: string;
+      nameAr?: string;
+    }> = [];
+    const validDoctorObjectIds: Types.ObjectId[] = [];
+
+    const incomingDoctorIds: string[] =
+      Array.isArray(dto.doctorIds) && dto.doctorIds.length > 0
+        ? dto.doctorIds.slice(0, 2)
+        : dto.doctorId
+          ? [dto.doctorId]
+          : [];
+
+    for (const dId of incomingDoctorIds) {
+      if (Types.ObjectId.isValid(dId)) {
+        validDoctorObjectIds.push(new Types.ObjectId(dId));
+      }
+    }
+
+    if (validDoctorObjectIds.length > 0) {
+      const docUsers = await this.userModel
+        .find({ _id: { $in: validDoctorObjectIds } })
+        .select('_id name nameAr')
+        .lean();
+      for (const dId of validDoctorObjectIds) {
+        const u = docUsers.find((doc) => doc._id.toString() === dId.toString());
+        if (u) {
+          doctors.push({
+            _id: u._id,
+            name: u.name,
+            nameAr: (u as any).nameAr || u.name,
+          });
         }
       }
     }
+
+    const doctorObjectId = validDoctorObjectIds[0] ?? undefined;
+    const doctorName = doctors.map((d) => d.name).join(' / ') || undefined;
+    const doctorNameAr =
+      doctors.map((d) => d.nameAr || d.name).join(' / ') || undefined;
 
     const teachingAssistants: Array<{
       _id: Types.ObjectId;
@@ -125,6 +153,8 @@ export class CoursesService {
       doctorId: doctorObjectId,
       doctorName,
       doctorNameAr,
+      doctorIds: validDoctorObjectIds,
+      doctors,
       teachingAssistantIds: validTaObjectIds,
       teachingAssistants,
     });
@@ -137,18 +167,25 @@ export class CoursesService {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: any = {};
 
+    const andConditions: any[] = [];
+
     if (caller?.role === 'staff' && caller?._id) {
       if (Types.ObjectId.isValid(caller._id)) {
         const callerObjId = new Types.ObjectId(caller._id);
         if (caller?.staffType === 'doctor') {
-          filter.doctorId = callerObjId;
+          andConditions.push({
+            $or: [{ doctorId: callerObjId }, { doctorIds: callerObjId }],
+          });
         } else if (caller?.staffType === 'teaching_assistant') {
           filter.teachingAssistantIds = callerObjId;
         }
       }
     } else {
       if (query.doctorId && Types.ObjectId.isValid(query.doctorId)) {
-        filter.doctorId = new Types.ObjectId(query.doctorId);
+        const docObjId = new Types.ObjectId(query.doctorId);
+        andConditions.push({
+          $or: [{ doctorId: docObjId }, { doctorIds: docObjId }],
+        });
       }
       if (
         query.teachingAssistantId &&
@@ -162,12 +199,18 @@ export class CoursesService {
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { nameAr: { $regex: search, $options: 'i' } },
-        { nameEn: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
-      ];
+      andConditions.push({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { nameAr: { $regex: search, $options: 'i' } },
+          { nameEn: { $regex: search, $options: 'i' } },
+          { code: { $regex: search, $options: 'i' } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
     }
 
     if (query.level) {
@@ -264,20 +307,57 @@ export class CoursesService {
       updatePayload.coverImageUrl = null;
     }
 
-    if (dto.doctorId !== undefined) {
-      if (dto.doctorId && Types.ObjectId.isValid(dto.doctorId)) {
-        const doctorObjectId = new Types.ObjectId(dto.doctorId);
-        const doctorUser = await this.userModel.findById(doctorObjectId).lean();
-        if (doctorUser) {
-          updatePayload.doctorId = doctorObjectId;
-          updatePayload.doctorName = doctorUser.name;
-          updatePayload.doctorNameAr =
-            (doctorUser as any).nameAr || doctorUser.name;
+    if (dto.doctorIds !== undefined || dto.doctorId !== undefined) {
+      const incomingDoctorIds: string[] = Array.isArray(dto.doctorIds)
+        ? dto.doctorIds.filter(Boolean).slice(0, 2)
+        : dto.doctorId
+          ? [dto.doctorId]
+          : [];
+
+      if (incomingDoctorIds.length > 0) {
+        const validDoctorObjectIds: Types.ObjectId[] = [];
+        for (const dId of incomingDoctorIds) {
+          if (Types.ObjectId.isValid(dId)) {
+            validDoctorObjectIds.push(new Types.ObjectId(dId));
+          }
         }
+
+        const docUsers = await this.userModel
+          .find({ _id: { $in: validDoctorObjectIds } })
+          .select('_id name nameAr')
+          .lean();
+
+        const doctors: Array<{
+          _id: Types.ObjectId;
+          name: string;
+          nameAr?: string;
+        }> = [];
+        for (const dId of validDoctorObjectIds) {
+          const u = docUsers.find(
+            (doc) => doc._id.toString() === dId.toString(),
+          );
+          if (u) {
+            doctors.push({
+              _id: u._id,
+              name: u.name,
+              nameAr: (u as any).nameAr || u.name,
+            });
+          }
+        }
+
+        updatePayload.doctorId = validDoctorObjectIds[0] || null;
+        updatePayload.doctorName =
+          doctors.map((d) => d.name).join(' / ') || null;
+        updatePayload.doctorNameAr =
+          doctors.map((d) => d.nameAr || d.name).join(' / ') || null;
+        updatePayload.doctorIds = validDoctorObjectIds;
+        updatePayload.doctors = doctors;
       } else {
         updatePayload.doctorId = null;
         updatePayload.doctorName = null;
         updatePayload.doctorNameAr = null;
+        updatePayload.doctorIds = [];
+        updatePayload.doctors = [];
       }
     }
 
@@ -331,6 +411,7 @@ export class CoursesService {
       .find({
         $or: [
           { doctorId: staffObjectId },
+          { doctorIds: staffObjectId },
           { teachingAssistantIds: staffObjectId },
         ],
         isActive: true,

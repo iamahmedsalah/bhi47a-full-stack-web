@@ -39,6 +39,7 @@ import { DataUploadProgress } from '@/components/ui/data-upload-progress';
 import { StatCard, StatCardRow } from '@/components/ui/stat-card';
 import { FilterBar } from '@/components/ui/filter-bar';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
+import { extractRawSheetRows } from '@/features/uploads/pre-flight-inspector';
 
 interface TuitionStudent {
   _id: string;
@@ -117,6 +118,7 @@ export function StudentTuitionManagement({
   // Dialog States
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [progressState, setProgressState] = useState<BatchUploadProgressState>({
@@ -276,7 +278,44 @@ export function StudentTuitionManagement({
     }
   };
 
-  // Upload Excel File with Batching/Progress
+  // Export Filtered Tuition to Excel
+  const handleExportTuition = async () => {
+    try {
+      setIsExporting(true);
+      const params: Record<string, string> = {};
+      if (search.trim()) params.search = search.trim();
+      if (selectedLevel !== 'all') params.level = selectedLevel;
+      if (selectedBlockStatus !== 'all') params.isBlocked = selectedBlockStatus;
+      if (selectedTuitionStatus !== 'all') params.tuitionFeesStatus = selectedTuitionStatus;
+
+      const res = await api.get('/admin/students/tuition/export', {
+        params,
+        responseType: 'blob',
+      });
+      const timestamp = new Date().toISOString().slice(0, 10);
+      await downloadFileBlob(
+        res,
+        `tuition-and-block-report-${timestamp}.xlsx`,
+        EXCEL_MIME_TYPE,
+      );
+      toast.success(
+        isAr
+          ? 'تم تصدير كشف المصروفات والحجب بنجاح'
+          : 'Tuition and block report exported successfully',
+      );
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل تصدير كشف المصروفات' : 'Failed to export tuition report',
+        ),
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Upload Excel File with Real Client Batching & Progress
   const handleUploadExcel = async () => {
     if (!uploadFile) {
       toast.error(isAr ? 'يرجى اختيار ملف Excel أو CSV أولاً' : 'Please select a file first');
@@ -286,13 +325,13 @@ export function StudentTuitionManagement({
     try {
       setIsUploading(true);
       setUploadResult(null);
-
       const startTime = Date.now();
+
       setProgressState({
         isUploading: true,
         phase: 'uploading',
-        percentage: 10,
-        currentBatch: 1,
+        percentage: 5,
+        currentBatch: 0,
         totalBatches: 1,
         processedRows: 0,
         totalRows: 0,
@@ -303,30 +342,140 @@ export function StudentTuitionManagement({
         retrySecondsLeft: 0,
       });
 
-      const timer = setInterval(() => {
-        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
-        setProgressState((prev) => ({
-          ...prev,
-          elapsedSeconds: elapsed,
-          percentage:
-            prev.phase === 'uploading'
-              ? Math.min(75, prev.percentage + 10)
-              : prev.phase === 'processing'
-                ? Math.min(95, prev.percentage + 5)
-                : prev.percentage,
-        }));
-      }, 400);
+      // 1. Try client-side parsing into row batches for real batch progress
+      let parsedHeaders: string[] = [];
+      let parsedRawRows: (string | number | boolean | null)[][] = [];
+      try {
+        const sheetResult = await extractRawSheetRows(uploadFile);
+        parsedHeaders = sheetResult.headers;
+        parsedRawRows = sheetResult.rawRows;
+      } catch {
+        // Fallback to server-side multipart processing if client parsing encounters unsupported format
+      }
 
+      if (parsedHeaders.length > 0 && parsedRawRows.length > 0) {
+        // Map raw cells into row objects keyed by header names
+        const objectRows: Record<string, any>[] = parsedRawRows
+          .map((row) => {
+            const obj: Record<string, any> = {};
+            parsedHeaders.forEach((h, idx) => {
+              if (h) obj[h] = row[idx];
+            });
+            return obj;
+          })
+          .filter((obj) =>
+            Object.values(obj).some(
+              (v) => v !== null && v !== undefined && String(v).trim() !== '',
+            ),
+          );
+
+        if (objectRows.length > 0) {
+          const BATCH_SIZE = 150;
+          const chunks: Record<string, any>[][] = [];
+          for (let i = 0; i < objectRows.length; i += BATCH_SIZE) {
+            chunks.push(objectRows.slice(i, i + BATCH_SIZE));
+          }
+
+          let accumulatedUpdated = 0;
+          let accumulatedErrors = 0;
+          const collectedErrors: string[] = [];
+
+          for (let b = 0; b < chunks.length; b++) {
+            const currentChunk = chunks[b];
+            const batchNum = b + 1;
+
+            const res = await api.post<{
+              totalRows: number;
+              updatedCount: number;
+              errorCount: number;
+              errors: string[];
+            }>('/admin/students/tuition/batch', {
+              rows: currentChunk,
+              batchIndex: b,
+              totalBatches: chunks.length,
+            });
+
+            const data = res.data ?? (res as unknown as {
+              totalRows: number;
+              updatedCount: number;
+              errorCount: number;
+              errors: string[];
+            });
+
+            accumulatedUpdated += data.updatedCount ?? 0;
+            accumulatedErrors += data.errorCount ?? 0;
+            if (data.errors && Array.isArray(data.errors)) {
+              collectedErrors.push(...data.errors);
+            }
+
+            const processedCount = Math.min(objectRows.length, batchNum * BATCH_SIZE);
+            const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+            const pct = Math.round((batchNum / chunks.length) * 100);
+            const speed = Math.round((processedCount / elapsed) * 10) / 10;
+            const remainingBatches = chunks.length - batchNum;
+            const estSeconds =
+              remainingBatches > 0
+                ? Math.max(0, Math.round((remainingBatches * elapsed) / batchNum))
+                : 0;
+
+            setProgressState({
+              isUploading: true,
+              phase: 'processing',
+              percentage: pct,
+              currentBatch: batchNum,
+              totalBatches: chunks.length,
+              processedRows: processedCount,
+              totalRows: objectRows.length,
+              elapsedSeconds: elapsed,
+              estimatedSecondsLeft: estSeconds,
+              rowsPerSecond: speed,
+              isNetworkInterrupted: false,
+              retrySecondsLeft: 0,
+            });
+          }
+
+          const finalElapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+          setProgressState({
+            isUploading: false,
+            phase: 'completed',
+            percentage: 100,
+            currentBatch: chunks.length,
+            totalBatches: chunks.length,
+            processedRows: objectRows.length,
+            totalRows: objectRows.length,
+            elapsedSeconds: finalElapsed,
+            estimatedSecondsLeft: 0,
+            rowsPerSecond: Math.round((objectRows.length / finalElapsed) * 10) / 10,
+            isNetworkInterrupted: false,
+            retrySecondsLeft: 0,
+          });
+
+          setUploadResult({
+            totalRows: objectRows.length,
+            updatedCount: accumulatedUpdated,
+            errorCount: accumulatedErrors,
+            errors: collectedErrors,
+          });
+
+          if (accumulatedUpdated > 0) {
+            toast.success(
+              isAr
+                ? `تم تحديث حالة المصروفات والحجب لـ ${accumulatedUpdated} طالب بنجاح!`
+                : `Updated tuition & block status for ${accumulatedUpdated} students successfully!`,
+            );
+            void queryClient.invalidateQueries({ queryKey: ['admin-tuition-list'] });
+            void queryClient.invalidateQueries({ queryKey: ['admin-tuition-stats'] });
+            void queryClient.invalidateQueries({ queryKey: ['students'] });
+          } else if (accumulatedErrors > 0) {
+            toast.error(isAr ? 'حدثت أخطاء أثناء التحديث' : 'Errors occurred during import');
+          }
+          return;
+        }
+      }
+
+      // 2. Fallback to single multipart upload if client parsing not viable
       const formData = new FormData();
       formData.append('file', uploadFile);
-
-      setTimeout(() => {
-        setProgressState((prev) => ({
-          ...prev,
-          phase: 'processing',
-          percentage: Math.max(prev.percentage, 80),
-        }));
-      }, 700);
 
       const res = await api.post<{
         totalRows: number;
@@ -335,28 +484,15 @@ export function StudentTuitionManagement({
         errors: string[];
       }>('/admin/students/tuition/upload-excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const bytePercent = Math.min(
-              75,
-              Math.max(10, Math.round((progressEvent.loaded * 75) / progressEvent.total)),
-            );
-            setProgressState((prev) => ({
-              ...prev,
-              percentage: bytePercent,
-              phase: bytePercent >= 70 ? 'processing' : 'uploading',
-            }));
-          }
-        },
       });
 
-      clearInterval(timer);
       const data = res.data ?? (res as unknown as {
         totalRows: number;
         updatedCount: number;
         errorCount: number;
         errors: string[];
       });
+
       const total = data.totalRows || data.updatedCount;
       const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
       const speed = Math.round((total / elapsed) * 10) / 10;
@@ -459,6 +595,23 @@ export function StudentTuitionManagement({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Export Filtered Tuition */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleExportTuition}
+            disabled={isExporting}
+            className="h-9 rounded-squircle border-border text-xs font-semibold gap-1.5 cursor-pointer bg-card/60 hover:bg-secondary/70"
+          >
+            {isExporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5 text-primary" />
+            )}
+            <span>{isAr ? 'تصدير الكشف (.xlsx)' : 'Export List (.xlsx)'}</span>
+          </Button>
+
           {/* Download Template */}
           <Button
             type="button"
@@ -471,7 +624,7 @@ export function StudentTuitionManagement({
             {isDownloadingTemplate ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="h-3.5 w-3.5 text-primary" />
+              <Download className="h-3.5 w-3.5 text-teal-500" />
             )}
             <span>{isAr ? 'تحميل شيت النموذج (.xlsx)' : 'Download Template'}</span>
           </Button>

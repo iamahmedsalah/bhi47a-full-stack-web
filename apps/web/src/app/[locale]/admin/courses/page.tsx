@@ -83,8 +83,10 @@ interface Course {
   syllabusPdfName?: string;
   syllabusUpdatedAt?: string;
   doctorId?: string | null;
+  doctorIds?: string[];
   doctorName?: string;
   doctorNameAr?: string;
+  doctors?: Array<{ _id: string; name: string; nameAr?: string }>;
   teachingAssistantIds?: string[];
   teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string }>;
   coverImageUrl?: string;
@@ -160,7 +162,12 @@ function CourseFormDialog({
   const [removeCover, setRemoveCover] = useState(false);
   const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
   const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
-  const [doctorId, setDoctorId] = useState(initialValues.doctorId || '');
+  const [doctorIds, setDoctorIds] = useState<string[]>(() => {
+    if (initialValues.doctorIds && Array.isArray(initialValues.doctorIds)) {
+      return initialValues.doctorIds.slice(0, 2);
+    }
+    return initialValues.doctorId ? [initialValues.doctorId] : [];
+  });
   const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(
     initialValues.teachingAssistantIds || [],
   );
@@ -202,7 +209,9 @@ function CourseFormDialog({
   const [prevCourseType, setPrevCourseType] = useState(initialValues.type);
   const [prevIsActive, setPrevIsActive] = useState(initialValues.isActive);
   const [prevSyllabusUrl, setPrevSyllabusUrl] = useState(initialValues.syllabusPdfUrl);
-  const [prevDoctorId, setPrevDoctorId] = useState(initialValues.doctorId);
+  const [prevDoctorIds, setPrevDoctorIds] = useState<string>(
+    (initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(','),
+  );
   const [prevTeachingAssistantIds, setPrevTeachingAssistantIds] = useState(
     initialValues.teachingAssistantIds?.join(','),
   );
@@ -221,7 +230,7 @@ function CourseFormDialog({
     initialValues.type !== prevCourseType ||
     initialValues.isActive !== prevIsActive ||
     initialValues.syllabusPdfUrl !== prevSyllabusUrl ||
-    initialValues.doctorId !== prevDoctorId ||
+    (initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(',') !== prevDoctorIds ||
     initialValues.teachingAssistantIds?.join(',') !== prevTeachingAssistantIds ||
     initialValues.coverImageUrl !== prevCoverImageUrl
   ) {
@@ -237,7 +246,7 @@ function CourseFormDialog({
     setPrevCourseType(initialValues.type);
     setPrevIsActive(initialValues.isActive);
     setPrevSyllabusUrl(initialValues.syllabusPdfUrl);
-    setPrevDoctorId(initialValues.doctorId);
+    setPrevDoctorIds((initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(','));
     setPrevTeachingAssistantIds(initialValues.teachingAssistantIds?.join(','));
     setPrevCoverImageUrl(initialValues.coverImageUrl);
 
@@ -254,7 +263,10 @@ function CourseFormDialog({
       setPrerequisites((initialValues.prerequisites || []).join(', '));
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
-      setDoctorId(initialValues.doctorId || '');
+      const initialDocs = (initialValues.doctorIds && Array.isArray(initialValues.doctorIds))
+        ? initialValues.doctorIds.slice(0, 2)
+        : (initialValues.doctorId ? [initialValues.doctorId] : []);
+      setDoctorIds(initialDocs);
       setTeachingAssistantIds(initialValues.teachingAssistantIds || []);
       setCoverImageUrl(initialValues.coverImageUrl || '');
       setSyllabusFile(null);
@@ -315,7 +327,8 @@ function CourseFormDialog({
         isActive,
         syllabusFile: removeSyllabus ? null : syllabusFile,
         coverImageFile: removeCover ? null : coverImageFile,
-        doctorId: doctorId ? doctorId : null,
+        doctorId: doctorIds[0] || null,
+        doctorIds: doctorIds.slice(0, 2),
         teachingAssistantIds,
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
@@ -401,28 +414,78 @@ function CourseFormDialog({
               <label className="text-xs font-semibold text-muted">{t('department')}</label>
               <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'عام أو نظم معلومات أو محاسبة' : 'General, BIS, Accounting'} />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-muted">
-                {locale === 'ar' ? 'أستاذ / منسق المقرر (Course Doctor)' : 'Course Doctor / Coordinator'}
-              </label>
-              <Select
-                value={doctorId || 'none'}
-                onValueChange={(val) => setDoctorId(val === 'none' ? '' : val)}
-              >
-                <SelectTrigger className="bg-secondary/50 border-border">
-                  <SelectValue placeholder={locale === 'ar' ? 'اختر أستاذ المقرر...' : 'Select course doctor...'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">
-                    {locale === 'ar' ? '-- غير محدد --' : '-- Unassigned --'}
-                  </SelectItem>
-                  {doctorsList.map((staff) => (
-                    <SelectItem key={staff._id} value={staff._id}>
-                      {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Course Doctors Section (Up to 2 doctors) */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-muted">
+                  {locale === 'ar' ? 'أساتذة المقرر (بحد أقصى دكتورين)' : 'Course Doctors (Max 2)'}
+                </label>
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {doctorIds.length}/2
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Select
+                  value=""
+                  disabled={doctorIds.length >= 2}
+                  onValueChange={(val) => {
+                    if (val && !doctorIds.includes(val) && doctorIds.length < 2) {
+                      setDoctorIds((prev) => [...prev, val]);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="bg-secondary/50 border-border" disabled={doctorIds.length >= 2}>
+                    <SelectValue
+                      placeholder={
+                        doctorIds.length >= 2
+                          ? (locale === 'ar' ? 'تم اختيار دكتورين كحد أقصى للمقرر' : 'Maximum 2 doctors reached')
+                          : (locale === 'ar' ? 'اختر أستاذاً لإضافته للمقرر...' : 'Select doctor to assign...')
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doctorsList
+                      .filter((doc) => !doctorIds.includes(doc._id))
+                      .map((staff) => (
+                        <SelectItem key={staff._id} value={staff._id}>
+                          {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {doctorIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {doctorIds.map((id) => {
+                      const staff = staffMembers.find((s) => s._id === id);
+                      const displayName = staff
+                        ? (locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name)
+                        : (initialValues.doctors?.find((d) => d._id === id)?.name || id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/40 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-foreground"
+                        >
+                          <span className="font-semibold text-teal-600 dark:text-teal-400">
+                            {locale === 'ar' ? 'د.' : 'Dr.'}
+                          </span>
+                          <span>{displayName}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDoctorIds((prev) => prev.filter((item) => item !== id))
+                            }
+                            className="rounded p-0.5 text-muted-foreground hover:bg-danger/20 hover:text-danger cursor-pointer transition-colors"
+                            title={locale === 'ar' ? 'إزالة' : 'Remove'}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Teaching Assistants Section */}
@@ -1380,7 +1443,21 @@ function CoursesPageContent() {
       render: (course) => (
         <TableCell className="p-4">
           <div className="flex flex-col gap-1.5">
-            {course.doctorName || course.doctorNameAr ? (
+            {course.doctors && course.doctors.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {course.doctors.map((doc) => (
+                  <span
+                    key={doc._id}
+                    className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-foreground"
+                  >
+                    <UserCheck className="h-3.5 w-3.5 text-teal-500" />
+                    <span>
+                      {locale === 'ar' ? doc.nameAr || doc.name : doc.name}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            ) : course.doctorName || course.doctorNameAr ? (
               <span className="inline-flex w-fit items-center gap-1.5 rounded-squircle border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground">
                 <UserCheck className="h-3.5 w-3.5 text-primary" />
                 <span>
@@ -1542,7 +1619,7 @@ function CoursesPageContent() {
         subtitle={
           isDoctor
             ? (locale === 'ar' ? 'المقررات الدراسية المسندة إليك لإدارة المناهج والكتب والكويزات' : 'Your assigned courses for syllabus, books, and quizzes')
-            : t('title')
+            : (locale === 'ar' ? 'إدارة وتوزيع المقررات الدراسية، الساعات المعتمدة، وتعيين أساتذة المادة' : 'Manage course curricula, credit hours, and assign course doctors')
         }
       >
         {canUploadCourses && !isDoctor && (

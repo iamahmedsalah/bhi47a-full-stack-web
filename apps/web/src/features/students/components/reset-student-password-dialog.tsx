@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { KeyRound, ShieldAlert } from "lucide-react";
+import { KeyRound, ShieldAlert, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { resetStudentPassword, type Student } from "../api";
 import {
@@ -233,11 +233,34 @@ export function ResetStudentPasswordDialog({
 
             {isUsingCustomPassword && (
               <div className="space-y-1.5 rounded-xl border border-border/70 bg-surface/30 p-3">
-                <label className="text-xs font-medium text-muted-foreground">
-                  {isAr
-                    ? "كلمة المرور المؤقتة: 8 أحرف على الأقل، مع حرف إنجليزي ورقم، وبدون مسافات"
-                    : "Temporary password: 8+ characters with a letter and number, without spaces"}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {isAr
+                      ? "كلمة المرور المؤقتة: 8 أحرف على الأقل، مع حرف إنجليزي ورقم"
+                      : "Temporary password: 8+ characters with a letter and number"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+                      const digits = '23456789';
+                      let pwd = 'Std' + digits[Math.floor(Math.random() * digits.length)];
+                      for (let i = 0; i < 6; i++) {
+                        pwd += (i % 2 === 0 ? letters : digits)[Math.floor(Math.random() * (i % 2 === 0 ? letters.length : digits.length))];
+                      }
+                      setCustomPassword(pwd);
+                      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                        navigator.clipboard.writeText(pwd).then(() => {
+                          toast.success(isAr ? 'تم توليد كلمة المرور ونسخها' : 'Password generated and copied');
+                        });
+                      }
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary/80 cursor-pointer"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    <span>{isAr ? 'توليد تلقائي' : 'Auto-Generate'}</span>
+                  </button>
+                </div>
                 <PasswordInput
                   value={customPassword}
                   onChange={(e) => setCustomPassword(e.target.value)}

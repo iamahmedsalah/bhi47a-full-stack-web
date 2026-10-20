@@ -413,10 +413,8 @@ function StudentsPageContent() {
         icon={<Users className="h-5 w-5" />}
         subtitle={
           isDoctor
-            ? (locale === 'ar'
-                ? 'قائمة الطلاب المقيدين والمسجلين في المقررات الدراسية المسندة إليك'
-                : 'Students registered in your assigned courses')
-            : 'Manage student identities, academic placement, exam seats, imports, and exports.'
+            ? t('doctorSubtitle')
+            : t('subtitle')
         }
       >
         <Button
@@ -837,7 +835,7 @@ function StudentsPageContent() {
         }
       />
 
-      <DataUploadDialog open={isUploadOpen} onOpenChange={setIsUploadOpen} title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'} description="Upload XLSX, XLS or CSV to import students." uploadType="students" expectedColumns={studentImportColumns} onSuccess={() => invalidateStudents()} />
+      <DataUploadDialog open={isUploadOpen} onOpenChange={setIsUploadOpen} title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'} description={locale === 'ar' ? 'قم برفع ملف بصيغة XLSX أو XLS أو CSV لاستيراد بيانات الطلاب.' : 'Upload XLSX, XLS or CSV to import students.'} uploadType="students" expectedColumns={studentImportColumns} onSuccess={() => invalidateStudents()} />
       <StudentDetailDialog open={Boolean(profileStudent)} onOpenChange={(open) => !open && setProfileStudent(null)} student={profileQuery.data ?? profileStudent} grades={profileGradesQuery.data ?? []} complaints={profileComplaintsQuery.data ?? []} academicEmail={profileEmailQuery.data} isLoading={profileQuery.isLoading} gradesLoading={profileGradesQuery.isLoading} complaintsLoading={profileComplaintsQuery.isLoading} locale={locale} canViewSensitiveStudentData={canViewSensitiveStudentData} />
       <ResetStudentPasswordDialog
         open={isResetOpen}

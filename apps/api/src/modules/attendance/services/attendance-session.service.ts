@@ -133,8 +133,12 @@ export class AttendanceSessionService {
         .lean();
 
       const isCourseDoctor =
-        course.doctorId &&
-        course.doctorId.toString() === currentUser._id.toString();
+        (course.doctorId &&
+          course.doctorId.toString() === currentUser._id.toString()) ||
+        (Array.isArray((course as any).doctorIds) &&
+          (course as any).doctorIds.some(
+            (docId: any) => docId.toString() === currentUser._id.toString(),
+          ));
 
       const isCourseTA =
         Array.isArray((course as any).teachingAssistantIds) &&
@@ -460,6 +464,7 @@ export class AttendanceSessionService {
       .find({
         $or: [
           { doctorId: userObjectId },
+          { doctorIds: userObjectId },
           { teachingAssistantIds: userObjectId },
         ],
         isActive: true,
@@ -481,7 +486,11 @@ export class AttendanceSessionService {
       if (!seenCodes.has(c.code)) {
         seenCodes.add(c.code);
         const isDoc =
-          c.doctorId && c.doctorId.toString() === userObjectId.toString();
+          (c.doctorId && c.doctorId.toString() === userObjectId.toString()) ||
+          (Array.isArray((c as any).doctorIds) &&
+            (c as any).doctorIds.some(
+              (d: any) => d.toString() === userObjectId.toString(),
+            ));
         result.push({
           courseCode: c.code,
           courseName: c.nameAr || c.name,

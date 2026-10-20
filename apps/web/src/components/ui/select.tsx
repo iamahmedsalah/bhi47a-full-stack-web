@@ -20,6 +20,7 @@ type SelectProps = {
   value?: string;
   onValueChange?: (value: string) => void;
   defaultValue?: string;
+  disabled?: boolean;
 };
 
 type SelectTriggerMarkerProps = React.ComponentPropsWithoutRef<'button'>;
@@ -113,6 +114,7 @@ const Select = ({
   value,
   onValueChange,
   defaultValue,
+  disabled,
 }: SelectProps) => {
   const [selectedValue, setSelectedValue] = React.useState(
     value ?? defaultValue ?? '',
@@ -162,7 +164,7 @@ const Select = ({
             ? placeholder
             : selectedText || undefined
         }
-        disabled={trigger?.props.disabled}
+        disabled={disabled ?? trigger?.props.disabled}
         className={cn(
           'w-full',
           triggerClassName?.replace(/bg-secondary(\/50)?/g, ''),

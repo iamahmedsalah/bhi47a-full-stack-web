@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import {
   IS_PUBLIC_KEY,
   IS_PUBLIC_IN_DEV_KEY,
+  IS_OPTIONAL_AUTH_KEY,
 } from '../decorators/public.decorator';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
 
@@ -23,6 +24,12 @@ export class CsrfGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) return true;
+
+    const isOptionalAuth = this.reflector.getAllAndOverride<boolean>(
+      IS_OPTIONAL_AUTH_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isOptionalAuth) return true;
 
     const isPublicInDev = this.reflector.getAllAndOverride<boolean>(
       IS_PUBLIC_IN_DEV_KEY,

@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { Users, Download, Loader2, UserCheck, ShieldAlert } from 'lucide-react';
+import { Users, Download, Loader2, ShieldAlert } from 'lucide-react';
 import { exportElementToPng } from '@/lib/export-utils';
 import { cn } from '@/lib/utils';
 
@@ -48,7 +48,7 @@ export function EnrollmentStatusChart({
   totalStudents: propTotal,
   liveOnline,
   liveOnlineStaff,
-  isAdmin = false,
+  isAdmin: _isAdmin = false,
   onLiveOnlineClick,
 }: EnrollmentStatusChartProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -77,15 +77,6 @@ export function EnrollmentStatusChart({
 
   const totalCalculated = useMemo(() => formattedData.reduce((acc, d) => acc + d.value, 0), [formattedData]);
   const effectiveTotal = propTotal ?? totalCalculated;
-
-  const activeCount = useMemo(() => {
-    const found = formattedData.find((d) => d.key === 'active');
-    return found ? found.value : 0;
-  }, [formattedData]);
-
-  const activeRate = useMemo(() => {
-    return effectiveTotal > 0 ? Math.round((activeCount / effectiveTotal) * 100) : 0;
-  }, [effectiveTotal, activeCount]);
 
   const handleExportPng = async () => {
     setIsExporting(true);
@@ -278,62 +269,7 @@ export function EnrollmentStatusChart({
       </div>
 
       {/* Legend & Meta Breakdown */}
-      <div className="mt-3 pt-3 border-t border-border/50 space-y-2.5">
-        {liveOnline !== undefined && (
-          <div
-            onClick={onLiveOnlineClick}
-            role={onLiveOnlineClick ? 'button' : undefined}
-            tabIndex={onLiveOnlineClick ? 0 : undefined}
-            onKeyDown={(e) => {
-              if (onLiveOnlineClick && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                onLiveOnlineClick();
-              }
-            }}
-            className={cn(
-              "flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs transition-all",
-              onLiveOnlineClick
-                ? "hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:shadow-md cursor-pointer active:scale-[0.99] select-none"
-                : "cursor-default"
-            )}
-            title={
-              onLiveOnlineClick
-                ? (isAr ? 'انقر لعرض قائمة الطلاب المتصلين والأنشطة المنفذة' : 'Click to view live logged-in users and current activities')
-                : undefined
-            }
-          >
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-              </span>
-              <span className="font-semibold text-foreground text-xs">
-                {isAr ? 'الطلاب المتواجدون بالبوابة الآن (Active Session)' : 'Live Active Students (Current Portal Session)'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold text-emerald-400">
-                {liveOnline.toLocaleString()} {isAr ? 'طالب نشط' : 'students online'}
-              </span>
-              {liveOnlineStaff !== undefined && liveOnlineStaff > 0 && (
-                <span className="font-mono text-xs font-semibold text-cyan-400">
-                  (+{liveOnlineStaff.toLocaleString()} {isAr ? 'كادر' : 'staff'})
-                </span>
-              )}
-              {activeCount > 0 && (
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ({((liveOnline / activeCount) * 100).toFixed(1)}% {isAr ? 'من الطلاب المنتظمين' : 'of active'})
-                </span>
-              )}
-              {onLiveOnlineClick && (
-                <span className="hidden sm:inline-block rounded-squircle bg-emerald-500/25 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold">
-                  {isAr ? 'عرض التفاصيل ←' : 'View Details →'}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
+      <div className="mt-3 pt-3 border-t border-border/50">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           {formattedData.map((item) => {
             const pct = effectiveTotal > 0 ? ((item.value / effectiveTotal) * 100).toFixed(0) : '0';

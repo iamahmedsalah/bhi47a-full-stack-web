@@ -46,7 +46,10 @@ export class AuthLoginService {
     const cleanStudentCode = normalizeArabicNumerals(dto.studentCode);
     const cleanPassword = normalizeArabicNumerals(dto.password);
 
-    const user = await this.usersService.findByIdentifier(cleanStudentCode);
+    let user = await this.usersService.findByStudentCode(cleanStudentCode);
+    if (!user) {
+      user = await this.usersService.findByIdentifier(cleanStudentCode);
+    }
     if (!user) {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
@@ -141,7 +144,11 @@ export class AuthLoginService {
   }
 
   async adminLogin(dto: AdminLoginDto) {
-    const user = await this.usersService.findByIdentifier(dto.email);
+    const cleanEmail = dto.email.trim().toLowerCase();
+    let user = await this.usersService.findByEmail(cleanEmail);
+    if (!user) {
+      user = await this.usersService.findByIdentifier(dto.email);
+    }
     if (!user) {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');

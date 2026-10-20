@@ -131,9 +131,29 @@ export class StudentsTuitionController {
     );
   }
 
+  @Get('export')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.TUITION_READ)
+  @ApiOperation({
+    summary:
+      'Export filtered student tuition and block status records to styled Excel (.xlsx)',
+  })
+  async exportTuition(
+    @Query() query: QueryTuitionStatusDto,
+    @Res() res: Response,
+  ) {
+    const result = await this.studentsService.exportTuitionToExcel(query);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${result.filename}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+    );
+    res.send(result.buffer);
+  }
+
   @Post('batch')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  @RequirePermissions(PERMISSIONS.TUITION_WRITE)
   @ApiOperation({
     summary:
       'Process a batch of parsed tuition/block rows with real-time feedback',

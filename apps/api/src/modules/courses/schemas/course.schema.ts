@@ -138,6 +138,25 @@ export class Course {
   doctorNameAr?: string;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  doctorIds!: Types.ObjectId[];
+
+  @Prop({
+    type: [
+      {
+        _id: { type: Types.ObjectId, ref: 'User' },
+        name: { type: String, trim: true },
+        nameAr: { type: String, trim: true },
+      },
+    ],
+    default: [],
+  })
+  doctors!: Array<{
+    _id: Types.ObjectId;
+    name: string;
+    nameAr?: string;
+  }>;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   teachingAssistantIds!: Types.ObjectId[];
 
   @Prop({
@@ -178,4 +197,5 @@ CourseSchema.index({ code: 1, isActive: 1 });
 CourseSchema.index({ isActive: 1, level: 1 });
 CourseSchema.index({ isActive: 1, level: 1, code: 1 });
 CourseSchema.index({ doctorId: 1 });
+CourseSchema.index({ doctorIds: 1 });
 CourseSchema.index({ teachingAssistantIds: 1 });

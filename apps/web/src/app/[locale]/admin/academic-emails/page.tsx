@@ -282,12 +282,12 @@ function AcademicEmailsPageContent() {
         {canUploadEmails && (
           <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
             <UploadCloud className="h-4 w-4" />
-            Upload Emails
+            <span>{t('uploadEmails')}</span>
           </Button>
         )}
         <Button variant="outline" onClick={exportAcademicEmails} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Export
+          <span>{tCommon('export')}</span>
         </Button>
       </PageTitleBanner>
 
