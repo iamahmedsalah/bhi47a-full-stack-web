@@ -60,6 +60,7 @@ describe('StudentsService Unit Tests', () => {
     mockUsersService = {
       findByStudentCode: jest.fn(),
       countActiveOnlineStudents: jest.fn(),
+      countActiveOnlineStaff: jest.fn().mockResolvedValue(5),
       createUser: jest.fn(),
     };
 
@@ -144,6 +145,7 @@ describe('StudentsService Unit Tests', () => {
       expect(stats.suspended).toBe(8);
       expect(stats.graduated).toBe(2);
       expect(stats.liveOnline).toBe(15);
+      expect(stats.liveOnlineStaff).toBe(5);
       expect(mockUsersService.countActiveOnlineStudents).toHaveBeenCalledWith(
         60,
       );

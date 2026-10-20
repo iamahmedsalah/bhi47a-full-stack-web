@@ -52,6 +52,14 @@ export class StudentsController {
     return this.studentsService.getStats();
   }
 
+  @Get('admin/students/active-sessions')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @ApiOperation({ summary: 'Get active online student sessions (admin only)' })
+  async getActiveSessions(@Query('windowMinutes') windowMinutes?: number) {
+    return this.studentsService.getActiveSessions(Number(windowMinutes) || 60);
+  }
+
   @Get('admin/students/:id')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)

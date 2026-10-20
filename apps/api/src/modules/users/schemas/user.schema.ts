@@ -137,6 +137,24 @@ export class User {
   lastLoginAt?: Date;
 
   @Prop()
+  lastActiveAt?: Date;
+
+  @Prop()
+  lastLogoutAt?: Date;
+
+  @Prop({ trim: true })
+  lastAction?: string;
+
+  @Prop({ trim: true })
+  lastActionAr?: string;
+
+  @Prop({ trim: true })
+  lastActionRoute?: string;
+
+  @Prop({ trim: true })
+  sessionDevice?: string;
+
+  @Prop()
   passwordChangedAt?: Date;
 
   @Prop({ select: false })
@@ -163,6 +181,8 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ role: 1, isActive: 1, 'fcmTokens.0': 1 });
+UserSchema.index({ role: 1, isActive: 1, lastActiveAt: -1 });
+UserSchema.index({ role: 1, isActive: 1, lastLoginAt: -1 });
 UserSchema.index({ role: 1, userCode: -1 });
 UserSchema.index({ role: 1, studentCode: -1 });
 UserSchema.index({ lockUntil: 1 });

@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { Users, Download, Loader2, UserCheck, ShieldAlert } from 'lucide-react';
 import { exportElementToPng } from '@/lib/export-utils';
+import { cn } from '@/lib/utils';
 
 export interface EnrollmentStatusItem {
   name: string;
@@ -26,6 +27,9 @@ export interface EnrollmentStatusChartProps {
   isLoading?: boolean;
   totalStudents?: number;
   liveOnline?: number;
+  liveOnlineStaff?: number;
+  isAdmin?: boolean;
+  onLiveOnlineClick?: () => void;
 }
 
 const STATUS_MAP: Record<string, { labelAr: string; labelEn: string; color: string }> = {
@@ -43,6 +47,9 @@ export function EnrollmentStatusChart({
   isLoading = false,
   totalStudents: propTotal,
   liveOnline,
+  liveOnlineStaff,
+  isAdmin = false,
+  onLiveOnlineClick,
 }: EnrollmentStatusChartProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -111,18 +118,38 @@ export function EnrollmentStatusChart({
 
         <div className="flex items-center gap-2" data-no-export="true">
           {liveOnline !== undefined && (
-            <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
+            <button
+              type="button"
+              onClick={onLiveOnlineClick}
+              disabled={!onLiveOnlineClick}
+              className={cn(
+                "hidden sm:flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 transition-all",
+                onLiveOnlineClick
+                  ? "hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:scale-105 cursor-pointer shadow-sm active:scale-95"
+                  : "cursor-default"
+              )}
+              title={
+                onLiveOnlineClick
+                  ? (isAr ? 'انقر لعرض تفاصيل المتواجدين بالبوابة (طلاب وكادر)' : 'Click to view live active students & staff')
+                  : undefined
+              }
+            >
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
               </span>
               <span className="text-[11px] font-medium">
-                {isAr ? 'نشط الآن:' : 'Live Online:'}
+                {isAr ? 'متصل الآن:' : 'Live Online:'}
               </span>
               <span className="font-mono font-bold text-xs">
-                {liveOnline.toLocaleString()}
+                {liveOnline.toLocaleString()} {isAr ? 'طالب' : 'students'}
               </span>
-            </div>
+              {liveOnlineStaff !== undefined && liveOnlineStaff > 0 && (
+                <span className="font-mono text-[11px] text-cyan-300 border-s border-emerald-500/30 ps-1.5 ms-0.5">
+                  +{liveOnlineStaff} {isAr ? 'كادر' : 'staff'}
+                </span>
+              )}
+            </button>
           )}
           <button
             type="button"
@@ -199,14 +226,52 @@ export function EnrollmentStatusChart({
               </PieChart>
             </ResponsiveContainer>
 
-            {/* Donut Center Label */}
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-mono text-2xl font-bold text-foreground">
+            {/* Donut Center Label & Interactive Number Trigger */}
+            <div
+              onClick={onLiveOnlineClick}
+              role={onLiveOnlineClick ? 'button' : undefined}
+              tabIndex={onLiveOnlineClick ? 0 : undefined}
+              onKeyDown={(e) => {
+                if (onLiveOnlineClick && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onLiveOnlineClick();
+                }
+              }}
+              className={cn(
+                "absolute inset-0 flex flex-col items-center justify-center transition-all",
+                onLiveOnlineClick
+                  ? "cursor-pointer group select-none focus:outline-none"
+                  : "pointer-events-none"
+              )}
+              title={
+                onLiveOnlineClick
+                  ? (isAr ? 'انقر على الرقم لعرض الطلاب المتصلين والأنشطة' : 'Click number to view active logged-in users & activity')
+                  : undefined
+              }
+            >
+              <span
+                className={cn(
+                  "font-mono text-2xl font-bold text-foreground transition-all",
+                  onLiveOnlineClick && "group-hover:text-emerald-400 group-hover:scale-110"
+                )}
+              >
                 {effectiveTotal.toLocaleString()}
               </span>
               <span className="text-[11px] font-medium text-muted-foreground mt-0.5">
                 {isAr ? 'طالب مسجل' : 'Total Students'}
               </span>
+              {onLiveOnlineClick && liveOnline !== undefined && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 transition-all group-hover:bg-emerald-500/20 group-hover:scale-105">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  </span>
+                  <span>
+                    {liveOnline} {isAr ? 'طالب متصل' : 'students online'}
+                    {liveOnlineStaff !== undefined && liveOnlineStaff > 0 ? ` • +${liveOnlineStaff}` : ''}
+                  </span>
+                </span>
+              )}
             </div>
           </>
         )}
@@ -215,7 +280,28 @@ export function EnrollmentStatusChart({
       {/* Legend & Meta Breakdown */}
       <div className="mt-3 pt-3 border-t border-border/50 space-y-2.5">
         {liveOnline !== undefined && (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs">
+          <div
+            onClick={onLiveOnlineClick}
+            role={onLiveOnlineClick ? 'button' : undefined}
+            tabIndex={onLiveOnlineClick ? 0 : undefined}
+            onKeyDown={(e) => {
+              if (onLiveOnlineClick && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                onLiveOnlineClick();
+              }
+            }}
+            className={cn(
+              "flex items-center justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs transition-all",
+              onLiveOnlineClick
+                ? "hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:shadow-md cursor-pointer active:scale-[0.99] select-none"
+                : "cursor-default"
+            )}
+            title={
+              onLiveOnlineClick
+                ? (isAr ? 'انقر لعرض قائمة الطلاب المتصلين والأنشطة المنفذة' : 'Click to view live logged-in users and current activities')
+                : undefined
+            }
+          >
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
@@ -227,11 +313,21 @@ export function EnrollmentStatusChart({
             </div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-emerald-400">
-                {liveOnline.toLocaleString()}
+                {liveOnline.toLocaleString()} {isAr ? 'طالب نشط' : 'students online'}
               </span>
+              {liveOnlineStaff !== undefined && liveOnlineStaff > 0 && (
+                <span className="font-mono text-xs font-semibold text-cyan-400">
+                  (+{liveOnlineStaff.toLocaleString()} {isAr ? 'كادر' : 'staff'})
+                </span>
+              )}
               {activeCount > 0 && (
                 <span className="text-[10px] text-muted-foreground font-mono">
                   ({((liveOnline / activeCount) * 100).toFixed(1)}% {isAr ? 'من الطلاب المنتظمين' : 'of active'})
+                </span>
+              )}
+              {onLiveOnlineClick && (
+                <span className="hidden sm:inline-block rounded-squircle bg-emerald-500/25 text-emerald-300 px-2 py-0.5 text-[10px] font-semibold">
+                  {isAr ? 'عرض التفاصيل ←' : 'View Details →'}
                 </span>
               )}
             </div>

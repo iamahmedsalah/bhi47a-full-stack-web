@@ -70,12 +70,33 @@ export class UsersService {
       .lean()) as unknown as UserDocument | null;
   }
 
-  async countActiveOnlineStudents(windowMinutes = 30): Promise<number> {
+  async countActiveOnlineStudents(windowMinutes = 60): Promise<number> {
     const threshold = new Date(Date.now() - windowMinutes * 60 * 1000);
     return this.userModel.countDocuments({
       role: 'student',
       isActive: true,
-      lastLoginAt: { $gte: threshold },
+      lastActiveAt: { $gte: threshold },
+      $expr: {
+        $or: [
+          { $eq: [{ $ifNull: ['$lastLogoutAt', null] }, null] },
+          { $gt: ['$lastActiveAt', '$lastLogoutAt'] },
+        ],
+      },
+    });
+  }
+
+  async countActiveOnlineStaff(windowMinutes = 60): Promise<number> {
+    const threshold = new Date(Date.now() - windowMinutes * 60 * 1000);
+    return this.userModel.countDocuments({
+      role: { $in: ['staff', 'admin'] },
+      isActive: true,
+      lastActiveAt: { $gte: threshold },
+      $expr: {
+        $or: [
+          { $eq: [{ $ifNull: ['$lastLogoutAt', null] }, null] },
+          { $gt: ['$lastActiveAt', '$lastLogoutAt'] },
+        ],
+      },
     });
   }
 
@@ -293,9 +314,50 @@ export class UsersService {
     };
   }
 
-  async updateLastLogin(userId: string): Promise<void> {
+  async updateLastLogin(
+    userId: string,
+    meta?: {
+      device?: string;
+      route?: string;
+      action?: string;
+      actionAr?: string;
+    },
+  ): Promise<void> {
+    const now = new Date();
     await this.userModel.findByIdAndUpdate(userId, {
-      lastLoginAt: new Date(),
+      $set: {
+        lastLoginAt: now,
+        lastActiveAt: now,
+        ...(meta?.device ? { sessionDevice: meta.device } : {}),
+        lastAction: meta?.action || 'Logged into Portal',
+        lastActionAr: meta?.actionAr || 'تسجيل الدخول إلى البوابة',
+        lastActionRoute: meta?.route || '/dashboard',
+      },
+      $unset: { lastLogoutAt: 1 },
+    });
+  }
+
+  async recordUserActivity(
+    userId: string,
+    data: {
+      route?: string;
+      action?: string;
+      actionAr?: string;
+      device?: string;
+    },
+  ): Promise<void> {
+    const now = new Date();
+    const update: Record<string, any> = {
+      lastActiveAt: now,
+    };
+    if (data.route) update.lastActionRoute = data.route;
+    if (data.action) update.lastAction = data.action;
+    if (data.actionAr) update.lastActionAr = data.actionAr;
+    if (data.device) update.sessionDevice = data.device;
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: update,
+      $unset: { lastLogoutAt: 1 },
     });
   }
 
@@ -464,13 +526,31 @@ export class UsersService {
 
   /** Reset login attempts, clear lock, and update last login time in a single write operation */
   async resetAttemptsAndUpdateLastLogin(userId: string): Promise<void> {
+    const now = new Date();
     await this.userModel.findByIdAndUpdate(userId, {
       $set: {
         failedLoginAttempts: 0,
         loginAttempts: 0,
-        lastLoginAt: new Date(),
+        lastLoginAt: now,
+        lastActiveAt: now,
+        lastAction: 'Logged into Portal',
+        lastActionAr: 'تسجيل الدخول إلى البوابة',
       },
-      $unset: { lockUntil: 1, lockedUntil: 1 },
+      $unset: { lockUntil: 1, lockedUntil: 1, lastLogoutAt: 1 },
+    });
+  }
+
+  /** Record user logout to immediately clear active status */
+  async recordLogout(userId: string): Promise<void> {
+    const now = new Date();
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: {
+        lastActiveAt: new Date(0),
+        lastLoginAt: new Date(0),
+        lastLogoutAt: now,
+        lastAction: 'Logged out',
+        lastActionAr: 'تم تسجيل الخروج',
+      },
     });
   }
 
@@ -507,5 +587,25 @@ export class UsersService {
         { googleEmail: data.googleEmail.trim().toLowerCase() },
       ],
     });
+  }
+
+  async getActiveUsersForSessions(threshold: Date) {
+    return this.userModel
+      .find({
+        isActive: true,
+        lastActiveAt: { $gte: threshold },
+        $expr: {
+          $or: [
+            { $eq: [{ $ifNull: ['$lastLogoutAt', null] }, null] },
+            { $gt: ['$lastActiveAt', '$lastLogoutAt'] },
+          ],
+        },
+      })
+      .select(
+        '_id name role staffType userCode studentCode email lastLoginAt lastActiveAt lastLogoutAt lastAction lastActionAr lastActionRoute sessionDevice avatarUrl',
+      )
+      .sort({ lastActiveAt: -1 })
+      .limit(200)
+      .lean();
   }
 }

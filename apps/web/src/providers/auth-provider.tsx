@@ -266,6 +266,40 @@ export function AuthProvider({
     }
   }, [meQuery.data?.theme, currentTheme, setTheme]);
 
+  // Periodic and route-change heartbeat to track live active sessions
+  useEffect(() => {
+    if (!meQuery.data?._id || isLoggingOut) return;
+
+    let isMounted = true;
+    const sendHeartbeat = () => {
+      if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      api.post('/auth/heartbeat', { route: pathname }).catch(() => {
+        // Silent failure for heartbeat
+      });
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60_000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        sendHeartbeat();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [meQuery.data?._id, pathname, isLoggingOut]);
+
   const contextValue = React.useMemo<AuthContextType>(
     () => ({
       user: meQuery.data || null,

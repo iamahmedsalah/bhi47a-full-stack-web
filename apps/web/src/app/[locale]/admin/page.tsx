@@ -52,6 +52,7 @@ import { DepartmentCapacityChart, defaultDepartmentData } from '@/components/das
 import { ComplaintsWeeklyTrendChart } from '@/components/dashboard/ComplaintsWeeklyTrendChart';
 import { ComplaintsStatusChart } from '@/components/dashboard/ComplaintsStatusChart';
 import { EnrollmentStatusChart } from '@/components/dashboard/EnrollmentStatusChart';
+import { ActiveSessionsDialog } from '@/components/dashboard/ActiveSessionsDialog';
 import { CoursesByLevelChart } from '@/components/dashboard/CoursesByLevelChart';
 import { exportMultiSheetExcel, type ExcelSheet } from '@/lib/export-utils';
 import { StatCard, StatCardRow } from '@/components/ui/stat-card';
@@ -363,6 +364,7 @@ export default function AdminDashboard() {
   const [isAddCourseOpen, setIsAddCourseOpen] = useState(false);
   const [isComplaintLookupOpen, setIsComplaintLookupOpen] = useState(false);
   const [isAddScheduleOpen, setIsAddScheduleOpen] = useState(false);
+  const [isActiveSessionsOpen, setIsActiveSessionsOpen] = useState(false);
   const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
   const [isSubmittingGrade, setIsSubmittingGrade] = useState(false);
   const [isSubmittingCourse, setIsSubmittingCourse] = useState(false);
@@ -402,6 +404,7 @@ export default function AdminDashboard() {
         graduated: number;
         withdrawn: number;
         liveOnline?: number;
+        liveOnlineStaff?: number;
         byLevel: { level: string; count: number }[];
         departments?: {
           department: string;
@@ -427,6 +430,7 @@ export default function AdminDashboard() {
       }>('/admin/students-stats');
       return res.data;
     },
+    refetchInterval: 15_000,
   });
 
   const coursesCountQuery = useQuery({
@@ -1623,6 +1627,7 @@ export default function AdminDashboard() {
                   isLoading={isAnalyticsLoading}
                   totalStudents={totalStudentsCountNum}
                   liveOnline={studentsStatsQuery.data?.liveOnline}
+                  liveOnlineStaff={studentsStatsQuery.data?.liveOnlineStaff}
                 />
               )}
               {hasPerm('courses.read') && (
@@ -1720,6 +1725,9 @@ export default function AdminDashboard() {
               isLoading={isAnalyticsLoading}
               totalStudents={totalStudentsCountNum}
               liveOnline={studentsStatsQuery.data?.liveOnline}
+              liveOnlineStaff={studentsStatsQuery.data?.liveOnlineStaff}
+              isAdmin={isAdmin}
+              onLiveOnlineClick={() => setIsActiveSessionsOpen(true)}
             />
             <CoursesByLevelChart
               data={courseLevelData}
@@ -2053,6 +2061,14 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {isAdmin && (
+        <ActiveSessionsDialog
+          open={isActiveSessionsOpen}
+          onOpenChange={setIsActiveSessionsOpen}
+          isAr={isAr}
+        />
+      )}
     </div>
   );
 }

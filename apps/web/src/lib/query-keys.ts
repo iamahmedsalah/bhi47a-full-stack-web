@@ -9,6 +9,8 @@ export const queryKeys = {
       [...queryKeys.students.lists(), params ?? {}] as const,
     detail: (id: string) => [...queryKeys.students.all, 'detail', id] as const,
     profile: (id: string) => [...queryKeys.students.all, 'profile', id] as const,
+    activeSessions: (params?: Record<string, unknown>) =>
+      [...queryKeys.students.all, 'active-sessions', params ?? {}] as const,
   },
   courses: {
     all: ['courses'] as const,

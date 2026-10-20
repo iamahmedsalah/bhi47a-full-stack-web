@@ -432,6 +432,12 @@ export class StudentsService {
   async getStats() {
     const now = Date.now();
     if (this.cachedStats && this.cachedStats.expiresAt > now) {
+      const [liveOnline, liveOnlineStaff] = await Promise.all([
+        this.usersService.countActiveOnlineStudents(60),
+        this.usersService.countActiveOnlineStaff(60),
+      ]);
+      this.cachedStats.data.liveOnline = Math.max(liveOnline ?? 0, 0);
+      this.cachedStats.data.liveOnlineStaff = Math.max(liveOnlineStaff ?? 0, 0);
       return this.cachedStats.data;
     }
 
@@ -445,6 +451,7 @@ export class StudentsService {
         allProfiles,
         academicProfiles,
         liveOnline,
+        liveOnlineStaff,
       ] = await Promise.all([
         this.studentProfileModel.countDocuments(),
         this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
@@ -467,6 +474,7 @@ export class StudentsService {
           .find({}, 'studentId gpa academicWarnings')
           .lean(),
         this.usersService.countActiveOnlineStudents(60),
+        this.usersService.countActiveOnlineStaff(60),
       ]);
 
       const gpaMap = new Map<string, number>(
@@ -609,6 +617,7 @@ export class StudentsService {
         graduated,
         withdrawn: inactiveCount,
         liveOnline: Math.max(liveOnline ?? 0, 0),
+        liveOnlineStaff: Math.max(liveOnlineStaff ?? 0, 0),
         byLevel: ((byLevel as any[]) || []).map((item) => ({
           level: item._id || 'unknown',
           count: item.count,
@@ -626,35 +635,37 @@ export class StudentsService {
       return result;
     }
 
-    const [profileGroups, gpaBuckets, liveOnline] = await Promise.all([
-      this.studentProfileModel.aggregate<any>([
-        {
-          $group: {
-            _id: {
-              level: { $ifNull: ['$level', '1'] },
-              status: { $ifNull: ['$enrollmentStatus', 'active'] },
-              department: '$department',
-            },
-            count: { $sum: 1 },
-            warningsCount: {
-              $sum: { $cond: [{ $gt: ['$academicWarnings', 0] }, 1, 0] },
+    const [profileGroups, gpaBuckets, liveOnline, liveOnlineStaff] =
+      await Promise.all([
+        this.studentProfileModel.aggregate<any>([
+          {
+            $group: {
+              _id: {
+                level: { $ifNull: ['$level', '1'] },
+                status: { $ifNull: ['$enrollmentStatus', 'active'] },
+                department: '$department',
+              },
+              count: { $sum: 1 },
+              warningsCount: {
+                $sum: { $cond: [{ $gt: ['$academicWarnings', 0] }, 1, 0] },
+              },
             },
           },
-        },
-      ]),
-      this.academicProfileModel.aggregate<any>([
-        { $match: { gpa: { $gt: 0 } } },
-        {
-          $bucket: {
-            groupBy: '$gpa',
-            boundaries: [0.001, 2.0, 2.5, 3.0, 3.5, 4.01],
-            default: 'other',
-            output: { count: { $sum: 1 } },
+        ]),
+        this.academicProfileModel.aggregate<any>([
+          { $match: { gpa: { $gt: 0 } } },
+          {
+            $bucket: {
+              groupBy: '$gpa',
+              boundaries: [0.001, 2.0, 2.5, 3.0, 3.5, 4.01],
+              default: 'other',
+              output: { count: { $sum: 1 } },
+            },
           },
-        },
-      ]),
-      this.usersService.countActiveOnlineStudents(60),
-    ]);
+        ]),
+        this.usersService.countActiveOnlineStudents(60),
+        this.usersService.countActiveOnlineStaff(60),
+      ]);
 
     let total = 0;
     let active = 0;
@@ -812,6 +823,7 @@ export class StudentsService {
       graduated,
       withdrawn: inactiveCount,
       liveOnline: Math.max(liveOnline ?? 0, 0),
+      liveOnlineStaff: Math.max(liveOnlineStaff ?? 0, 0),
       byLevel,
       departments,
       cohortRetention,
@@ -824,6 +836,125 @@ export class StudentsService {
     };
 
     return result;
+  }
+
+  async getActiveSessions(windowMinutes = 60) {
+    const threshold = new Date(Date.now() - windowMinutes * 60 * 1000);
+    const onlineThreshold = new Date(Date.now() - 15 * 60 * 1000);
+
+    const activeUsers = (await this.usersService.getActiveUsersForSessions(
+      threshold,
+    )) as unknown as Array<{
+      _id: Types.ObjectId;
+      name: string;
+      role: string;
+      staffType?: string;
+      userCode?: string;
+      studentCode?: string;
+      email?: string;
+      lastLoginAt?: Date;
+      lastActiveAt?: Date;
+      lastAction?: string;
+      lastActionAr?: string;
+      lastActionRoute?: string;
+      sessionDevice?: string;
+      avatarUrl?: string;
+    }>;
+
+    const studentCodes = activeUsers
+      .map((u) => u.studentCode)
+      .filter((code): code is string => Boolean(code));
+
+    const profiles = (await this.studentProfileModel
+      .find({ studentCode: { $in: studentCodes } })
+      .select(
+        'studentCode fullName fullNameAr fullNameEn level department academicEmail seatNumber',
+      )
+      .lean()) as unknown as Array<{
+      studentCode: string;
+      fullName: string;
+      fullNameAr?: string;
+      fullNameEn?: string;
+      level?: string;
+      department?: string;
+      academicEmail?: string;
+      seatNumber?: string;
+    }>;
+
+    const profileMap = new Map<string, (typeof profiles)[0]>();
+    for (const p of profiles) {
+      if (p.studentCode) {
+        profileMap.set(p.studentCode, p);
+      }
+    }
+
+    const items = activeUsers.map((u) => {
+      const p = u.studentCode ? profileMap.get(u.studentCode) : null;
+      const lastActive = u.lastActiveAt || u.lastLoginAt || new Date();
+      const loginTime = u.lastLoginAt || u.lastActiveAt || new Date();
+      const isOnline =
+        new Date(lastActive).getTime() >= onlineThreshold.getTime();
+      const sessionDurationMinutes = Math.max(
+        1,
+        Math.round((Date.now() - new Date(loginTime).getTime()) / (60 * 1000)),
+      );
+
+      const isStudent = u.role === 'student';
+      let roleLabelAr = 'طالب';
+      let roleLabelEn = 'Student';
+      if (u.role === 'admin') {
+        roleLabelAr = 'مدير النظام';
+        roleLabelEn = 'System Admin';
+      } else if (u.role === 'staff') {
+        if (u.staffType === 'doctor') {
+          roleLabelAr = 'عضو هيئة تدريس / دكتور';
+          roleLabelEn = 'Doctor (Faculty)';
+        } else if (u.staffType === 'teaching_assistant') {
+          roleLabelAr = 'معيد';
+          roleLabelEn = 'Teaching Assistant';
+        } else {
+          roleLabelAr = 'كادر إداري';
+          roleLabelEn = 'Administrative Staff';
+        }
+      }
+
+      return {
+        _id: u._id.toString(),
+        name: p?.fullName || u.name,
+        nameAr: p?.fullNameAr || p?.fullName || u.name,
+        role: u.role,
+        staffType: u.staffType,
+        studentCode: isStudent ? u.studentCode || '' : '',
+        roleLabelAr,
+        roleLabelEn,
+        level: p?.level || '',
+        department: p?.department || '',
+        academicEmail: p?.academicEmail || u.email || '',
+        seatNumber: p?.seatNumber || '',
+        loginTime: loginTime.toISOString(),
+        lastActiveTime: lastActive.toISOString(),
+        sessionDurationMinutes,
+        isOnline,
+        lastAction: u.lastAction || 'Active in Portal',
+        lastActionAr: u.lastActionAr || 'متواجد بالبوابة',
+        lastActionRoute: u.lastActionRoute || '/dashboard',
+        sessionDevice: u.sessionDevice || 'Web Browser',
+      };
+    });
+
+    const students = items.filter((i) => i.role === 'student');
+    const staffMembers = items.filter((i) => i.role !== 'student');
+
+    return {
+      windowMinutes,
+      totalActive: items.length,
+      onlineNow: items.filter((i) => i.isOnline).length,
+      onlineStudents: students.filter((i) => i.isOnline).length,
+      totalStudents: students.length,
+      onlineStaff: staffMembers.filter((i) => i.isOnline).length,
+      totalStaff: staffMembers.length,
+      items,
+    };
   }
 
   async getDashboard(userId: string) {

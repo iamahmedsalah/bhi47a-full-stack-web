@@ -74,7 +74,13 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout and clear cookie' })
-  logout(@Res({ passthrough: true }) res: express.Response) {
+  async logout(
+    @CurrentUser('_id') userId: string,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    if (userId) {
+      await this.authService.recordLogout(userId);
+    }
     this.authService.clearCookieToken(res);
     return { message: 'تم تسجيل الخروج بنجاح' }; // Logged out successfully
   }
@@ -186,5 +192,20 @@ export class AuthController {
     const result = await this.authService.googleLogin(dto.credential);
     const csrfToken = this.authService.setCookieToken(res, result.token);
     return { user: result.user, csrfToken };
+  }
+
+  @Post('heartbeat')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Record user activity heartbeat and current action',
+  })
+  async heartbeat(
+    @CurrentUser('_id') userId: string,
+    @Body() body: { route?: string; action?: string; actionAr?: string },
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    if (!userId) return { ok: true };
+    await this.authService.recordHeartbeat(userId, body, userAgent);
+    return { ok: true };
   }
 }
