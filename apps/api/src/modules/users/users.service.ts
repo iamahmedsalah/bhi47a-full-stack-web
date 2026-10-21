@@ -355,10 +355,16 @@ export class UsersService {
     if (data.actionAr) update.lastActionAr = data.actionAr;
     if (data.device) update.sessionDevice = data.device;
 
-    await this.userModel.findByIdAndUpdate(userId, {
-      $set: update,
-      $unset: { lastLogoutAt: 1 },
-    });
+    // Login (updateLastLogin / resetAttemptsAndUpdateLastLogin) is the only
+    // thing allowed to clear lastLogoutAt. A late heartbeat from a session that
+    // was just logged out must not mark the user online again.
+    await this.userModel.updateOne(
+      {
+        _id: userId,
+        $or: [{ lastLogoutAt: { $exists: false } }, { lastLogoutAt: null }],
+      },
+      { $set: update },
+    );
   }
 
   async updateStudentContact(

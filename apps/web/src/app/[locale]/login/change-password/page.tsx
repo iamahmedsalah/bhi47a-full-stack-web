@@ -172,8 +172,24 @@ export default function ChangePasswordPage() {
         err,
         isArabic ? "تعذر حفظ كلمة المرور" : "Error updating password",
       );
+      // api.ts rejects with the response body, so status lives in `statusCode`.
+      const statusCode = (err as { statusCode?: number })?.statusCode;
+      const isSessionLost =
+        statusCode === 401 &&
+        (msg === "Unauthorized" || msg === "Session has expired" || msg === "User not found or inactive");
+
+      if (isSessionLost) {
+        const sessionMsg = isArabic
+          ? "انتهت جلسة الدخول أو لم يتم حفظها في هذا المتصفح. يرجى تسجيل الدخول مرة أخرى."
+          : "Your session expired or was not kept by this browser. Please sign in again.";
+        toast.error(sessionMsg);
+        queryClient.clear();
+        router.replace(`/${locale}/login/${user?.role === 'student' ? 'student' : 'admin'}`);
+        return;
+      }
+
       const isCurrentPasswordIssue =
-        (err as { response?: { status?: number } })?.response?.status === 401 ||
+        statusCode === 401 ||
         msg.includes('الحالية') ||
         msg.toLowerCase().includes('current password');
 

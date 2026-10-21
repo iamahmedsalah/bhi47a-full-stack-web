@@ -127,13 +127,32 @@ export function AuthProvider({
 
     try {
       const res = await api.post<LoginResponse>(endpoint, data);
-      queryClient.setQueryData(queryKeys.auth.me, res.data.user);
+
+      // Confirm the browser really stored the session cookie. Browsers that block
+      // third-party cookies accept the login response but drop Set-Cookie, which
+      // later surfaces as a confusing "Unauthorized" on the first protected request.
+      let sessionUser: User = res.data.user;
+      try {
+        const me = await api.get<User>('/auth/me');
+        sessionUser = { ...res.data.user, ...me.data };
+      } catch {
+        throw {
+          statusCode: 401,
+          code: 'SESSION_COOKIE_NOT_STORED',
+          message:
+            locale === 'ar'
+              ? 'تعذر حفظ جلسة الدخول في هذا المتصفح. فعّل ملفات تعريف الارتباط (Cookies) للمواقع الخارجية أو افتح الموقع من متصفح آخر.'
+              : 'Your browser did not keep the login session. Allow third-party cookies for this site or try another browser.',
+        };
+      }
+
+      queryClient.setQueryData(queryKeys.auth.me, sessionUser);
       toast.success(
         locale === 'ar' ? 'تم تسجيل الدخول بنجاح' : 'Logged in successfully',
         { id: toastId },
       );
 
-      if (res.data.user.role === 'student') {
+      if (sessionUser.role === 'student') {
         const returnPath = getSafeStudentReturnPath(options?.returnUrl, locale);
         router.replace(returnPath ?? `/${locale}/dashboard`);
       } else {
@@ -183,11 +202,16 @@ export function AuthProvider({
       document.cookie = 'csrf_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure';
     }
 
-    // Await server logout with short timeout so backend Set-Cookie clear header arrives
-    try {
-      await api.post('/auth/logout', {}, { timeout: 1500 });
-    } catch {
-      // Proceed even if server request times out or fails
+    // The httpOnly cookie can only be cleared by the API response. Wait long enough
+    // for serverless cold starts and retry once, otherwise the next page load still
+    // sees a valid session and redirects the user straight back in.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await api.post('/auth/logout', {}, { timeout: 8000 });
+        break;
+      } catch {
+        // retry once, then proceed to the login page anyway
+      }
     }
 
     // Show logout confirmation notification

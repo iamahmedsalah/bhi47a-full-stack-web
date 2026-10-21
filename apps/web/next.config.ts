@@ -67,6 +67,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Same-origin API proxy (recommended for Vercel when web and API are on separate hosts).
+  // Set API_PROXY_TARGET=https://<api-host> (no trailing /api) on the web project and
+  // NEXT_PUBLIC_API_URL=/api. Cookies then become first-party, so mobile browsers and
+  // in-app browsers that block third-party cookies keep the session.
+  async rewrites() {
+    const target = process.env.API_PROXY_TARGET?.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+    if (!target) return [];
+    return [{ source: "/api/:path*", destination: `${target}/api/:path*` }];
+  },
   async headers() {
     return [
       {
