@@ -80,6 +80,30 @@ export class AttendanceCheckInService {
     payload: string | CheckInAttendanceDto,
     clientIp?: string,
   ) {
+    const lockHolder: { key?: string } = {};
+    try {
+      return await this.performCheckIn(
+        studentUser,
+        payload,
+        clientIp,
+        lockHolder,
+      );
+    } catch (err) {
+      // Only release the lock this request acquired; a failed attempt must be
+      // retryable immediately (e.g. after enabling GPS or scanning a fresh QR).
+      if (lockHolder.key && this.cacheService) {
+        await this.cacheService.del(lockHolder.key).catch(() => undefined);
+      }
+      throw err;
+    }
+  }
+
+  private async performCheckIn(
+    studentUser: { _id: string; name: string; studentCode?: string },
+    payload: string | CheckInAttendanceDto,
+    clientIp: string | undefined,
+    lockHolder: { key?: string },
+  ) {
     const rawToken = typeof payload === 'string' ? payload : payload?.token;
     const deviceId =
       typeof payload === 'object' && payload?.deviceId
@@ -186,6 +210,10 @@ export class AttendanceCheckInService {
       throw new NotFoundException('جلسة الحضور غير موجودة أو تم حذفها');
     }
 
+    // Sessions served from Redis are JSON-parsed: Date fields come back as strings.
+    session.startsAt = new Date(session.startsAt);
+    session.expiresAt = new Date(session.expiresAt);
+
     // 2.5 Deduplication scan lock to reject rapid double-scans in 0ms
     const scanLockKey = `attendance:lock:${session._id.toString()}:${studentUser._id}`;
     if (this.cacheService) {
@@ -196,6 +224,7 @@ export class AttendanceCheckInService {
         );
       }
       await this.cacheService.set(scanLockKey, true, 10);
+      lockHolder.key = scanLockKey;
     }
 
     // 3. Verify session lifecycle state
@@ -219,8 +248,15 @@ export class AttendanceCheckInService {
         );
       }
       if (session.status === 'OPEN') {
-        session.status = 'EXPIRED';
-        await session.save();
+        if (typeof session.save === 'function') {
+          session.status = 'EXPIRED';
+          await session.save();
+        } else {
+          await this.sessionModel.updateOne(
+            { _id: session._id, status: 'OPEN' },
+            { $set: { status: 'EXPIRED' } },
+          );
+        }
       }
       throw new BadRequestException(
         'انتهت الفترة الزمنية المسموح بها لتسجيل الحضور لهذه الجلسة',

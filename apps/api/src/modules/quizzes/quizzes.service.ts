@@ -1323,7 +1323,12 @@ export class QuizzesService implements OnModuleInit {
     const isPassed =
       totalScore >= (quiz.passingMarks || Math.round(totalMarks * 0.5));
 
-    const startedAt = dto.startedAt ? new Date(dto.startedAt) : new Date();
+    // The client-supplied startedAt is untrusted; prefer the server-recorded attempt start.
+    const startedAt = lockedAttempt.startedAt
+      ? new Date(lockedAttempt.startedAt)
+      : dto.startedAt
+        ? new Date(dto.startedAt)
+        : new Date();
     const submittedAt = new Date();
     const durationSeconds = Math.max(
       0,
@@ -1365,6 +1370,14 @@ export class QuizzesService implements OnModuleInit {
       if (err?.code === 11000) {
         throw new ConflictException('لقد قمت بتسليم هذا الاختبار مسبقاً');
       }
+      // Submission was not persisted: unlock the attempt so the student can retry
+      // instead of being stuck with a 'submitted' attempt that has no result.
+      await this.attemptModel
+        .updateOne(
+          { _id: lockedAttempt._id, status: 'submitted' },
+          { $set: { status: 'in_progress' }, $unset: { submittedAt: 1 } },
+        )
+        .catch(() => undefined);
       throw err;
     }
 

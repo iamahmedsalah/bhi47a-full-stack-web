@@ -73,19 +73,28 @@ function readStoredCsrfToken(): string | undefined {
   if (csrfTokenMemory) return csrfTokenMemory;
   if (typeof window === 'undefined') return undefined;
 
-  const token = window.localStorage.getItem(CSRF_STORAGE_KEY) ?? undefined;
-  csrfTokenMemory = token;
-  return token;
+  try {
+    const token = window.localStorage.getItem(CSRF_STORAGE_KEY) ?? undefined;
+    csrfTokenMemory = token;
+    return token;
+  } catch {
+    // Storage blocked (private mode / in-app browser): fall back to memory only.
+    return undefined;
+  }
 }
 
 function writeStoredCsrfToken(token: string | undefined) {
   csrfTokenMemory = token;
   if (typeof window === 'undefined') return;
 
-  if (token) {
-    window.localStorage.setItem(CSRF_STORAGE_KEY, token);
-  } else {
-    window.localStorage.removeItem(CSRF_STORAGE_KEY);
+  try {
+    if (token) {
+      window.localStorage.setItem(CSRF_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(CSRF_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures; the in-memory token is still used.
   }
 }
 
@@ -176,11 +185,16 @@ api.interceptors.response.use(
       isInvalidCsrfError(error)
     ) {
       originalConfig._csrfRetry = true;
-      const csrfToken = await refreshCsrfToken();
-      const headers = AxiosHeaders.from(originalConfig.headers);
-      headers.set('x-csrf-token', csrfToken);
-      originalConfig.headers = headers;
-      return api.request(originalConfig);
+      try {
+        const csrfToken = await refreshCsrfToken();
+        const headers = AxiosHeaders.from(originalConfig.headers);
+        headers.set('x-csrf-token', csrfToken);
+        originalConfig.headers = headers;
+        return api.request(originalConfig);
+      } catch {
+        // CSRF refresh failed: surface the original 403 rather than a masking error.
+        return Promise.reject(error.response?.data || error);
+      }
     }
 
     if (error.response?.status === 401) {

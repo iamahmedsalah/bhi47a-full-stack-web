@@ -429,16 +429,26 @@ export class RegistrationsService {
       { summerCourseLimit: policy.maxCourses },
     );
 
-    const registration = await new this.registrationModel({
-      studentId: profile.studentId,
-      courses: validation.courseCodes,
-      totalCreditHours: validation.totalCreditHours,
-      source: 'student',
-      status: 'approved',
-      academicYear,
-      semester: profile.semester,
-      editCount: 0,
-    }).save();
+    let registration: CourseRegistrationDocument;
+    try {
+      registration = await new this.registrationModel({
+        studentId: profile.studentId,
+        courses: validation.courseCodes,
+        totalCreditHours: validation.totalCreditHours,
+        source: 'student',
+        status: 'approved',
+        academicYear,
+        semester: profile.semester,
+        editCount: 0,
+      }).save();
+    } catch (err) {
+      if ((err as { code?: number })?.code === 11000) {
+        throw new ConflictException(
+          'Registration has already been submitted for this academic term and cannot be edited',
+        );
+      }
+      throw err;
+    }
 
     registration.printableFormUrl = `/api/registrations/${registration._id.toString()}/print`;
     return registration.save();

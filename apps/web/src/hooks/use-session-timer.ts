@@ -21,13 +21,20 @@ export function useSessionTimer({ role }: UseSessionTimerOptions) {
   const isAr = locale === 'ar';
 
   const [remainingSeconds, setRemainingSeconds] = useState(SESSION_MAX_SECONDS);
+  // Source of truth for the countdown; state mirrors it for rendering only.
+  const remainingRef = useRef(SESSION_MAX_SECONDS);
   const hasWarnedRef = useRef(false);
   const isLoggingOutRef = useRef(false);
 
-  // Extend session handler (resets to full 20 minutes)
-  const extendSession = useCallback(() => {
+  const resetCountdown = useCallback(() => {
+    remainingRef.current = SESSION_MAX_SECONDS;
     setRemainingSeconds(SESSION_MAX_SECONDS);
     hasWarnedRef.current = false;
+  }, []);
+
+  // Extend session handler (resets to full 20 minutes)
+  const extendSession = useCallback(() => {
+    resetCountdown();
     toast.dismiss('session-warn-toast');
     toast.success(
       isAr
@@ -35,66 +42,74 @@ export function useSessionTimer({ role }: UseSessionTimerOptions) {
         : 'Session extended successfully (+20 mins)',
       { id: 'session-extended-toast', duration: 3000 },
     );
-  }, [isAr]);
+  }, [isAr, resetCountdown]);
 
   // Reset timer on route navigation (user activity)
   useEffect(() => {
-    setRemainingSeconds(SESSION_MAX_SECONDS);
-    hasWarnedRef.current = false;
+    resetCountdown();
     toast.dismiss('session-warn-toast');
-  }, [pathname]);
+  }, [pathname, resetCountdown]);
 
   // Countdown timer effect
   useEffect(() => {
     const interval = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        // Warning threshold: 2 minutes remaining (120s)
-        if (prev <= SESSION_WARN_SECONDS && prev > 1 && !hasWarnedRef.current) {
-          hasWarnedRef.current = true;
-          toast.warning(
-            isAr
-              ? 'تنبيه أمني: ستنتهي صلاحية جلستك خلال دقيقتين (مدة الجلسة 20 دقيقة). انقر لتمديد الجلسة.'
-              : 'Security Warning: Your session will expire in 2 minutes (20 min session). Click to extend.',
-            {
-              id: 'session-warn-toast',
-              duration: 20000,
-              action: {
-                label: isAr ? 'تمديد الجلسة' : 'Extend Session',
-                onClick: () => {
-                  extendSession();
-                },
+      const prev = remainingRef.current;
+
+      // Warning threshold: 2 minutes remaining (120s)
+      if (prev <= SESSION_WARN_SECONDS && prev > 1 && !hasWarnedRef.current) {
+        hasWarnedRef.current = true;
+        toast.warning(
+          isAr
+            ? 'تنبيه أمني: ستنتهي صلاحية جلستك خلال دقيقتين (مدة الجلسة 20 دقيقة). انقر لتمديد الجلسة.'
+            : 'Security Warning: Your session will expire in 2 minutes (20 min session). Click to extend.',
+          {
+            id: 'session-warn-toast',
+            duration: 20000,
+            action: {
+              label: isAr ? 'تمديد الجلسة' : 'Extend Session',
+              onClick: () => {
+                extendSession();
               },
             },
-          );
+          },
+        );
+      }
+
+      // Expiry reached: 0 or 1s remaining -> Immediate logout
+      if (prev <= 1) {
+        clearInterval(interval);
+        remainingRef.current = 0;
+        setRemainingSeconds(0);
+        if (!isLoggingOutRef.current) {
+          isLoggingOutRef.current = true;
+          toast.dismiss('session-warn-toast');
+
+          const targetLogin =
+            role === 'student'
+              ? `/${locale}/login/student?reason=session_expired`
+              : `/${locale}/login/admin?reason=session_expired`;
+
+          void (async () => {
+            // Cookie is httpOnly: only the API response can clear it. Retry once.
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              try {
+                await api.post('/auth/logout', {}, { timeout: 8000 });
+                break;
+              } catch {
+                // retry, then redirect anyway
+              }
+            }
+            queryClient.setQueryData(['auth', 'me'], null);
+            queryClient.removeQueries({ queryKey: ['auth'] });
+            queryClient.clear();
+            window.location.href = targetLogin;
+          })();
         }
+        return;
+      }
 
-        // Expiry reached: 0 or 1s remaining -> Immediate logout
-        if (prev <= 1) {
-          clearInterval(interval);
-          if (!isLoggingOutRef.current) {
-            isLoggingOutRef.current = true;
-            toast.dismiss('session-warn-toast');
-
-            const targetLogin =
-              role === 'student'
-                ? `/${locale}/login/student?reason=session_expired`
-                : `/${locale}/login/admin?reason=session_expired`;
-
-            void api
-              .post('/auth/logout', {}, { timeout: 2000 })
-              .catch(() => {})
-              .finally(() => {
-                queryClient.setQueryData(['auth', 'me'], null);
-                queryClient.removeQueries({ queryKey: ['auth'] });
-                queryClient.clear();
-                window.location.href = targetLogin;
-              });
-          }
-          return 0;
-        }
-
-        return prev - 1;
-      });
+      remainingRef.current = prev - 1;
+      setRemainingSeconds(prev - 1);
     }, 1000);
 
     return () => clearInterval(interval);

@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'node:crypto';
 import { UsersService } from '../../users/users.service';
 import { EmailsService } from '../../emails/emails.service';
 import {
@@ -148,7 +149,7 @@ export class AuthPasswordService {
       );
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = randomInt(100000, 1000000).toString();
     user.resetPasswordToken = await bcrypt.hash(otp, 12);
     user.resetPasswordExpireAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();

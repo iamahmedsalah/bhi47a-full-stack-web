@@ -503,23 +503,24 @@ export class UsersService {
     const maxAttempts = readPositiveInt('AUTH_MAX_FAILED_ATTEMPTS', 5);
     const lockDurationMs = readPositiveInt('AUTH_LOCK_MINUTES', 30) * 60 * 1000;
 
-    const user = await this.userModel.findById(userId);
-    if (!user) return;
+    const updated = await this.userModel
+      .findByIdAndUpdate(
+        userId,
+        { $inc: { failedLoginAttempts: 1, loginAttempts: 1 } },
+        { new: true },
+      )
+      .select('failedLoginAttempts loginAttempts')
+      .lean();
+    if (!updated) return;
 
-    const currentAttempts = user.failedLoginAttempts ?? user.loginAttempts ?? 0;
-    const newCount = currentAttempts + 1;
-    const update: Record<string, unknown> = {
-      failedLoginAttempts: newCount,
-      loginAttempts: newCount,
-    };
-
+    const newCount = updated.failedLoginAttempts ?? updated.loginAttempts ?? 0;
     if (newCount >= maxAttempts) {
       const lockUntil = new Date(Date.now() + lockDurationMs);
-      update.lockUntil = lockUntil;
-      update.lockedUntil = lockUntil;
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $set: { lockUntil, lockedUntil: lockUntil } },
+      );
     }
-
-    await this.userModel.findByIdAndUpdate(userId, { $set: update });
   }
 
   /** Reset login attempts and clear lock after successful login */
