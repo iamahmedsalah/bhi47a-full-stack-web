@@ -24,6 +24,9 @@ export interface RegistrationTermItem {
   academicYear: string;
   semester: string;
   isOpen: boolean;
+  isCurrent?: boolean;
+  opensAt?: string;
+  closesAt?: string;
   startDate?: string;
   endDate?: string;
 }
@@ -157,6 +160,21 @@ export async function toggleRegistrationTerm(
   const response = await api.patch<RegistrationTermItem>(
     `/admin/registration-terms/${id}`,
     { isOpen },
+  );
+  return response.data;
+}
+
+export async function updateRegistrationTermWindow(
+  id: string,
+  payload: {
+    isOpen?: boolean;
+    opensAt?: string | null;
+    closesAt?: string | null;
+  },
+): Promise<RegistrationTermItem> {
+  const response = await api.patch<RegistrationTermItem>(
+    `/admin/registration-terms/${id}`,
+    payload,
   );
   return response.data;
 }

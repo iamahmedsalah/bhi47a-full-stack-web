@@ -17,7 +17,7 @@ import {
   openResultCertificate,
   type ResultCertificateData,
 } from '@/lib/result-certificate';
-import { calculateGradeScale } from '@student-portal/shared';
+import { calculateGradeScale, getGpaScale } from '@student-portal/shared';
 import { getStudentResultsStatus } from '@/features/grades/api';
 
 interface Grade {
@@ -50,6 +50,9 @@ interface CourseGradesGroup {
 
 interface StudentAcademicSummary {
   level: string;
+  gpa?: number;
+  completedCreditHours?: number;
+  completedCoursesCount?: number;
 }
 
 function calculateGroupStats(groups: CourseGradesGroup[]) {
@@ -132,12 +135,12 @@ export default function StudentResultsPage() {
   React.useEffect(() => {
     if (selectedLevel && availableLevels.includes(selectedLevel as Grade['academicLevel'])) return;
     const current = profileQuery.data?.level;
-    setSelectedLevel(
-      (current && availableLevels.includes(current as Grade['academicLevel'])
+    const targetLevel =
+      (resultLevels.length > 0 && current && resultLevels.includes(current as Grade['academicLevel']))
         ? current
-        : availableLevels.at(-1)) ?? '',
-    );
-  }, [availableLevels, profileQuery.data?.level, selectedLevel]);
+        : (resultLevels.at(-1) || current || availableLevels.at(-1) || '1');
+    setSelectedLevel(targetLevel);
+  }, [availableLevels, profileQuery.data?.level, resultLevels, selectedLevel]);
 
   if (resultsQuery.isLoading || statusQuery.isLoading) {
     return <LoadingState title={tCommon('loading')} />;
@@ -234,7 +237,16 @@ export default function StudentResultsPage() {
   const passedCourses = cumulativeStats.passed;
   const cumulativePercentage = cumulativeStats.percentage;
   const calculatedGpa = cumulativeStats.gpa;
-  const cumulativeScale = calculateGradeScale(cumulativePercentage);
+  const officialGpa =
+    typeof profileQuery.data?.gpa === 'number' && profileQuery.data.gpa > 0
+      ? profileQuery.data.gpa
+      : calculatedGpa;
+  const officialGpaScale = getGpaScale(officialGpa);
+  const officialCompletedCredits =
+    typeof profileQuery.data?.completedCreditHours === 'number' &&
+    profileQuery.data.completedCreditHours > 0
+      ? profileQuery.data.completedCreditHours
+      : (passedCourses * 3);
   const selectedLevelGroups = groupedList.filter(
     (group) => group.academicLevel === selectedLevel,
   );
@@ -291,9 +303,9 @@ export default function StudentResultsPage() {
     totalAcquired,
     totalMax,
     percentage: cumulativePercentage,
-    gpa: calculatedGpa,
-    overallGradeLetter: cumulativeScale.letter,
-    overallGradeName: isEnglish ? cumulativeScale.nameEn : cumulativeScale.nameAr,
+    gpa: officialGpa,
+    overallGradeLetter: officialGpaScale.letter,
+    overallGradeName: isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr,
     passedCourses,
     issuedAt: new Intl.DateTimeFormat(locale === 'ar' ? 'ar-EG' : 'en-GB', {
       dateStyle: 'long',
@@ -401,8 +413,7 @@ export default function StudentResultsPage() {
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5 print:grid-cols-6">
         {/* Total Cumulative Letter Grade Card */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/40 transition-all duration-300">
@@ -414,10 +425,10 @@ export default function StudentResultsPage() {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-black font-mono text-primary">
-                {cumulativeScale.letter}
+                {officialGpaScale.letter}
               </span>
               <span className="text-xs font-bold text-muted-foreground">
-                ({isEnglish ? cumulativeScale.nameEn : cumulativeScale.nameAr})
+                ({isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr})
               </span>
             </div>
           </Card>
@@ -432,12 +443,32 @@ export default function StudentResultsPage() {
               </span>
               <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
             </div>
-            <span className="text-2xl font-black font-mono text-foreground">{calculatedGpa.toFixed(2)} / 4.00</span>
+            <span className="text-2xl font-black font-mono text-foreground">{officialGpa.toFixed(2)} / 4.00</span>
+          </Card>
+        </motion.div>
+
+        {/* Completed Credit Hours */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">
+                {isEnglish ? 'Completed Credits' : 'الساعات المكتملة'}
+              </span>
+              <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-black font-mono text-foreground">
+                {officialCompletedCredits}
+              </span>
+              <span className="text-xs font-bold text-muted-foreground">
+                {isEnglish ? 'credits' : 'ساعة'}
+              </span>
+            </div>
           </Card>
         </motion.div>
 
         {/* Selected Level GPA */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.06 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.07 }}>
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
@@ -466,13 +497,13 @@ export default function StudentResultsPage() {
         </motion.div>
 
         {/* Passed courses */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.12 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.11 }}>
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
                 {isEnglish ? 'Passed Courses' : 'المواد الناجح بها'}
               </span>
-              <CheckSquare className="h-4.5 w-4.5 text-primary" />
+              <Award className="h-4.5 w-4.5 text-primary" />
             </div>
             <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.passed} / {selectedLevelGroups.length}</span>
           </Card>

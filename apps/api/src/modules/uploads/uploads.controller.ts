@@ -109,13 +109,19 @@ export class UploadsController {
   })
   wipeData(
     @Body('target')
-    target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
+    target:
+      'students' | 'grades' | 'quizzes' | 'attendance' | 'complaints' | 'all',
     @CurrentUser('_id') adminId: string,
   ) {
     if (
-      !['students', 'grades', 'attendance', 'complaints', 'all'].includes(
-        target,
-      )
+      ![
+        'students',
+        'grades',
+        'quizzes',
+        'attendance',
+        'complaints',
+        'all',
+      ].includes(target)
     ) {
       throw new BadRequestException('Invalid wipe target');
     }

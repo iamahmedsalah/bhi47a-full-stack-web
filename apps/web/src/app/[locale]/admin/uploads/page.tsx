@@ -164,10 +164,9 @@ function UploadsPageContent() {
   };
 
   // Data Wipe / Reset State
+  type WipeTarget = 'grades' | 'quizzes' | 'attendance' | 'students' | 'complaints' | 'all';
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
-  const [selectedWipeTarget, setSelectedWipeTarget] = useState<
-    'students' | 'grades' | 'attendance' | 'complaints' | 'all'
-  >('grades');
+  const [selectedWipeTarget, setSelectedWipeTarget] = useState<WipeTarget>('grades');
   const [wipeConfirmText, setWipeConfirmText] = useState('');
 
   const activeCatalog = useMemo(() => UPLOAD_CATALOGS[uploadType], [uploadType]);
@@ -182,23 +181,31 @@ function UploadsPageContent() {
         registrationsCount: number;
         advisingCasesCount: number;
         quizzesCount: number;
+        complaintsCount?: number;
       }>('/admin/uploads/wipe-summary');
       return res.data;
     },
   });
 
   const wipeMutation = useMutation({
-    mutationFn: async (
-      target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
-    ) => {
+    mutationFn: async (target: WipeTarget) => {
       const res = await api.post('/admin/uploads/wipe', { target });
       return res.data;
     },
     onSuccess: (_, target) => {
+      const targetLabels: Record<string, { ar: string; en: string }> = {
+        grades: { ar: 'الدرجات', en: 'grades' },
+        quizzes: { ar: 'الكويزات', en: 'quizzes' },
+        attendance: { ar: 'سجلات الحضور', en: 'attendance' },
+        students: { ar: 'بيانات الطلاب', en: 'students' },
+        complaints: { ar: 'شكاوى وتذاكر الطلاب', en: 'complaints' },
+        all: { ar: 'كافة السجلات الأكاديمية', en: 'all academic records' },
+      };
+      const label = targetLabels[target];
       toast.success(
         isAr
-          ? 'تم مسح البيانات المحددة بنجاح ويمكن الآن بدء رفع البيانات النظيفة'
-          : `Data wiped successfully for ${target}. Ready for fresh upload.`,
+          ? `تم مسح ${label?.ar || 'البيانات'} بنجاح ويمكن الآن بدء رفع البيانات النظيفة`
+          : `Data wiped successfully for ${label?.en || target}. Ready for fresh upload.`,
       );
       void wipeSummaryQuery.refetch();
       setWipeDialogOpen(false);
@@ -826,24 +833,59 @@ function UploadsPageContent() {
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { id: 'grades', labelAr: 'الدرجات والكويزات', labelEn: 'Grades & Quizzes' },
-                { id: 'attendance', labelAr: 'سجلات الحضور', labelEn: 'Attendance' },
-                { id: 'students', labelAr: 'الطلاب وحساباتهم', labelEn: 'Students' },
-                { id: 'complaints', labelAr: 'شكاوى وتذاكر الطلاب', labelEn: 'Complaints & Tickets' },
-                { id: 'all', labelAr: 'كافة البيانات الأكاديمية', labelEn: 'All Records' },
+                {
+                  id: 'grades',
+                  labelAr: 'الدرجات فقط',
+                  labelEn: 'Grades Only',
+                  count: wipeSummaryQuery.data?.gradesCount,
+                },
+                {
+                  id: 'quizzes',
+                  labelAr: 'الكويزات فقط',
+                  labelEn: 'Quizzes Only',
+                  count: wipeSummaryQuery.data?.quizzesCount,
+                },
+                {
+                  id: 'attendance',
+                  labelAr: 'سجلات الحضور',
+                  labelEn: 'Attendance',
+                  count: wipeSummaryQuery.data?.attendanceCount,
+                },
+                {
+                  id: 'students',
+                  labelAr: 'الطلاب وحساباتهم',
+                  labelEn: 'Students',
+                  count: wipeSummaryQuery.data?.studentsCount,
+                },
+                {
+                  id: 'complaints',
+                  labelAr: 'شكاوى وتذاكر الطلاب',
+                  labelEn: 'Complaints & Tickets',
+                  count: wipeSummaryQuery.data?.complaintsCount,
+                },
+                {
+                  id: 'all',
+                  labelAr: 'كافة البيانات الأكاديمية',
+                  labelEn: 'All Records',
+                },
               ].map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setSelectedWipeTarget(opt.id as any)}
+                  onClick={() => setSelectedWipeTarget(opt.id as WipeTarget)}
                   className={cn(
-                    'p-2.5 rounded-xl border text-start transition-all cursor-pointer font-medium',
+                    'p-2.5 rounded-xl border text-start transition-all cursor-pointer font-medium flex flex-col justify-between gap-1',
                     selectedWipeTarget === opt.id
                       ? 'border-rose-500 bg-rose-500/10 text-rose-700 dark:text-rose-300 font-bold'
                       : 'border-border/70 bg-muted/30 text-muted-foreground hover:bg-muted',
                   )}
                 >
-                  {isAr ? opt.labelAr : opt.labelEn}
+                  <span className="text-xs">{isAr ? opt.labelAr : opt.labelEn}</span>
+                  {typeof opt.count === 'number' && (
+                    <span className="text-[10px] opacity-75 font-normal">
+                      {opt.count} {isAr ? 'سجل' : 'records'}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

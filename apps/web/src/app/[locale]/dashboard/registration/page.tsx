@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
-import { BookOpenCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { BookOpenCheck, Calendar, CheckCircle2, Clock, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/ui/feedback';
@@ -254,7 +254,72 @@ export default function CourseRegistrationPage() {
         </div>
       </div>
 
-      {eligibility?.requiresAdvisor ? (
+      {/* Active Scheduled Window Notice */}
+      {eligibility?.registrationTerm?.isCurrentlyOpen && eligibility.registrationTerm.closesAt && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-2.5 text-xs text-teal-300 shadow-sm">
+          <Clock className="h-4 w-4 shrink-0 text-teal-400 animate-pulse" />
+          <span className="font-semibold leading-relaxed">
+            {isEnglish
+              ? `Course registration is officially active until: ${new Date(eligibility.registrationTerm.closesAt).toLocaleString('en-US', { timeZone: 'Africa/Cairo', dateStyle: 'long', timeStyle: 'short' })}`
+              : `فترة تسجيل المقررات مفتوحة حالياً ومتاحة حتى: ${new Date(eligibility.registrationTerm.closesAt).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', dateStyle: 'long', timeStyle: 'short' })}`}
+          </span>
+        </div>
+      )}
+
+      {/* When student already registered but registration window closed, show info notice */}
+      {isAlreadyRegistered && !eligibility?.registrationTerm?.isCurrentlyOpen && (
+        <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/30 px-4 py-2.5 text-xs text-muted-foreground">
+          <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span>
+            {isEnglish
+              ? 'Course registration for this semester has concluded. You can review and print your confirmed registration slip below.'
+              : 'انتهت فترة التسجيل لهذا الفصل. يمكنك استعراض وطباعة استمارة تسجيل المقررات المعتمدة الخاصة بك أدناه.'}
+          </span>
+        </div>
+      )}
+
+      {/* Registration Content or Scheduled Window Status Card */}
+      {!isAlreadyRegistered && !eligibility?.registrationTerm?.isCurrentlyOpen ? (
+        <div className="rounded-2xl border border-border/80 bg-card/50 backdrop-blur-sm p-8 text-center space-y-4 shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+            {eligibility?.registrationTerm?.opensAt && new Date() < new Date(eligibility.registrationTerm.opensAt) ? (
+              <Clock className="h-7 w-7 text-amber-400" />
+            ) : eligibility?.registrationTerm?.closesAt && new Date() > new Date(eligibility.registrationTerm.closesAt) ? (
+              <Calendar className="h-7 w-7 text-rose-400" />
+            ) : (
+              <ShieldAlert className="h-7 w-7 text-amber-400" />
+            )}
+          </div>
+          <div className="space-y-1.5 max-w-lg mx-auto">
+            <h3 className="text-base font-bold text-foreground">
+              {eligibility?.registrationTerm?.opensAt && new Date() < new Date(eligibility.registrationTerm.opensAt)
+                ? isEnglish
+                  ? 'Course Registration: Opening Soon'
+                  : 'موعد فتح باب التسجيل: سيبدأ قريباً'
+                : eligibility?.registrationTerm?.closesAt && new Date() > new Date(eligibility.registrationTerm.closesAt)
+                  ? isEnglish
+                    ? 'Registration Window Concluded'
+                    : 'انتهت الفترة المحددة لتسجيل المقررات'
+                  : isEnglish
+                    ? 'Registration Portal Closed'
+                    : 'نظام تسجيل المقررات مغلق حالياً'}
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {eligibility?.registrationTerm?.opensAt && new Date() < new Date(eligibility.registrationTerm.opensAt)
+                ? isEnglish
+                  ? `Course registration for this semester is scheduled to open on: ${new Date(eligibility.registrationTerm.opensAt).toLocaleString('en-US', { timeZone: 'Africa/Cairo', dateStyle: 'full', timeStyle: 'short' })}.`
+                  : `من المقرر فتح باب تسجيل المواد للفصل الدراسي في: ${new Date(eligibility.registrationTerm.opensAt).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', dateStyle: 'full', timeStyle: 'short' })}.`
+                : eligibility?.registrationTerm?.closesAt && new Date() > new Date(eligibility.registrationTerm.closesAt)
+                  ? isEnglish
+                    ? `The official enrollment period concluded on: ${new Date(eligibility.registrationTerm.closesAt).toLocaleString('en-US', { timeZone: 'Africa/Cairo', dateStyle: 'full', timeStyle: 'short' })}. Course additions or adjustments are currently locked.`
+                    : `انتهت الفترة الرسمية المحددة لتسجيل وتعديل المواد في: ${new Date(eligibility.registrationTerm.closesAt).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', dateStyle: 'full', timeStyle: 'short' })}. تم تجميد كشوف التسجيل لحين إشعار آخر.`
+                  : isEnglish
+                    ? 'Course registration is temporarily closed by the academic affairs administration.'
+                    : 'تم إيقاف استقبال طلبات تسجيل المقررات مؤقتاً بقرار من الشؤون الأكاديمية.'}
+            </p>
+          </div>
+        </div>
+      ) : eligibility?.requiresAdvisor ? (
         <AdvisingRequiredCard
           localizedPolicyWarnings={localizedPolicyWarnings}
           advising={advisingQuery.data?.request ?? eligibility?.advisingRequest}

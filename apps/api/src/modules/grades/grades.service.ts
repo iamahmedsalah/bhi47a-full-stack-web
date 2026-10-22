@@ -193,14 +193,29 @@ export class GradesService implements OnModuleInit {
           course.type !== 'elective',
       );
 
-      const completedCredits = progress.courseResults
+      const previousCredits = academic?.completedCreditHours ?? 0;
+      const completedCreditsFromGrades = progress.courseResults
         .filter((r) => r.passed)
         .reduce((acc, curr) => acc + curr.creditHours, 0);
+      const completedCreditsFromList = progress.completedCourses.reduce(
+        (acc, code) => acc + (courseCredits[code.toUpperCase()] ?? 3),
+        0,
+      );
+      const completedCredits = Math.max(
+        previousCredits,
+        completedCreditsFromGrades,
+        completedCreditsFromList,
+      );
 
       const isDryRun = Boolean(options?.dryRun);
 
       if (!isDryRun) {
-        const finalGpa = progress.calculatedGpa ?? academic?.gpa;
+        const hasFullHistoricalGrades =
+          completedCreditsFromGrades >= completedCredits &&
+          completedCreditsFromGrades > 0;
+        const finalGpa = hasFullHistoricalGrades
+          ? (progress.calculatedGpa ?? academic?.gpa)
+          : (academic?.gpa ?? progress.calculatedGpa);
         let warningCount: number | undefined;
         if (typeof finalGpa === 'number' && finalGpa > 0) {
           if (finalGpa < 2.0) {
@@ -220,8 +235,9 @@ export class GradesService implements OnModuleInit {
           academic.failedCourses = progress.failedCourses;
           academic.lowGradeCourses = progress.lowGradeCourses;
           academic.completedCreditHours = completedCredits;
-          if (progress.calculatedGpa !== null)
-            academic.gpa = progress.calculatedGpa;
+          if (finalGpa !== undefined && finalGpa !== null) {
+            academic.gpa = finalGpa;
+          }
           academic.academicLevel = promotedLevel;
           if (wasPromoted) academic.semester = 'first';
           if (warningCount !== undefined) {

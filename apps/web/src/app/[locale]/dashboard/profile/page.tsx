@@ -43,6 +43,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 import {
   calculateGradeScale,
+  getGpaScale,
   isValidStudentPassword,
   STUDENT_PASSWORD_MAX_LENGTH,
   STUDENT_PASSWORD_MIN_LENGTH,
@@ -723,7 +724,7 @@ export default function StudentProfilePage() {
                     </span>
                     {typeof profile.gpa === 'number' && profile.gpa > 0 && (
                       <span className="text-xs font-bold text-teal-400">
-                        ({calculateGradeScale(Math.min(100, profile.gpa * 25)).letter})
+                        ({getGpaScale(profile.gpa).letter} - {isEnglish ? getGpaScale(profile.gpa).nameEn : getGpaScale(profile.gpa).nameAr})
                       </span>
                     )}
                   </div>

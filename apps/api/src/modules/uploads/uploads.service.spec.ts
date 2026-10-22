@@ -71,4 +71,92 @@ describe('UploadsService student data wipe', () => {
       ],
     });
   });
+
+  it('wipes grades alone without deleting quizzes', async () => {
+    const collections = new Map<string, Record<string, jest.Mock>>();
+    const getCollection = (name: string) => {
+      let collection = collections.get(name);
+      if (!collection) {
+        collection = {
+          deleteMany: jest.fn().mockResolvedValue({ deletedCount: 5 }),
+        };
+        collections.set(name, collection);
+      }
+      return collection;
+    };
+
+    const connection = {
+      db: { collection: jest.fn((name: string) => getCollection(name)) },
+    };
+    const logger = { log: jest.fn(), warn: jest.fn() };
+    const importer = (type: string) => ({
+      type,
+      validate: jest.fn(),
+      commit: jest.fn(),
+    });
+    const service = new UploadsService(
+      logger as never,
+      connection as never,
+      importer('students') as never,
+      importer('courses') as never,
+      importer('grades') as never,
+      importer('quizzes') as never,
+      importer('attendance') as never,
+      importer('academic-emails') as never,
+      importer('academic-warnings') as never,
+    );
+
+    const res = await service.wipeData('grades', 'admin-id');
+    expect(res).toEqual({
+      success: true,
+      target: 'grades',
+      deletedCounts: { grades: 5 },
+    });
+    expect(getCollection('grades').deleteMany).toHaveBeenCalledWith({});
+    expect(collections.has('course_quizzes')).toBe(false);
+  });
+
+  it('wipes quizzes alone without deleting grades', async () => {
+    const collections = new Map<string, Record<string, jest.Mock>>();
+    const getCollection = (name: string) => {
+      let collection = collections.get(name);
+      if (!collection) {
+        collection = {
+          deleteMany: jest.fn().mockResolvedValue({ deletedCount: 3 }),
+        };
+        collections.set(name, collection);
+      }
+      return collection;
+    };
+
+    const connection = {
+      db: { collection: jest.fn((name: string) => getCollection(name)) },
+    };
+    const logger = { log: jest.fn(), warn: jest.fn() };
+    const importer = (type: string) => ({
+      type,
+      validate: jest.fn(),
+      commit: jest.fn(),
+    });
+    const service = new UploadsService(
+      logger as never,
+      connection as never,
+      importer('students') as never,
+      importer('courses') as never,
+      importer('grades') as never,
+      importer('quizzes') as never,
+      importer('attendance') as never,
+      importer('academic-emails') as never,
+      importer('academic-warnings') as never,
+    );
+
+    const res = await service.wipeData('quizzes', 'admin-id');
+    expect(res).toEqual({
+      success: true,
+      target: 'quizzes',
+      deletedCounts: { quizzes: 3 },
+    });
+    expect(getCollection('course_quizzes').deleteMany).toHaveBeenCalledWith({});
+    expect(collections.has('grades')).toBe(false);
+  });
 });

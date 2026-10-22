@@ -32,7 +32,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
-import { calculateGradeScale, GRADE_SCALE, type GradeScaleItem } from '@student-portal/shared';
+import { calculateGradeScale, getGpaScale } from '@student-portal/shared';
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -155,14 +155,6 @@ function formatDate(value?: string, locale?: string) {
   });
 }
 
-function getGpaScale(gpa: number): GradeScaleItem {
-  for (const item of GRADE_SCALE) {
-    if (gpa >= item.points) {
-      return item;
-    }
-  }
-  return GRADE_SCALE[GRADE_SCALE.length - 1];
-}
 
 function InfoItem({ label, value }: { label: string; value?: React.ReactNode }) {
   return (

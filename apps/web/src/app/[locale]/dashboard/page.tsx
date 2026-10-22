@@ -65,6 +65,8 @@ interface StudentProfile {
   examFloor?: string;
   examBuilding?: string;
   academicWarnings?: number;
+  completedCreditHours?: number;
+  gpa?: number;
   isBlocked?: boolean;
   tuitionFeesStatus?: 'paid' | 'unpaid' | 'exempt';
   blockReason?: string;
@@ -667,6 +669,14 @@ export default function StudentDashboard() {
                     : locale === "ar"
                       ? "المستوى 1"
                       : "Level 1"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
+                <span className="text-muted-foreground">
+                  {locale === "ar" ? "الساعات المكتملة" : "Completed Credits"}
+                </span>
+                <span className="font-semibold text-foreground font-mono">
+                  {profile?.completedCreditHours ?? 0} {locale === "ar" ? "ساعة" : "credits"}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">

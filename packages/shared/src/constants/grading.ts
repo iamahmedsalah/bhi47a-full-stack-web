@@ -20,6 +20,16 @@ export const GRADE_SCALE: GradeScaleItem[] = [
   { letter: 'F',  minPercentage: 0,  maxPercentage: 49.99, points: 0.0, nameAr: 'راسب', nameEn: 'Fail' },
 ];
 
+export function getGpaScale(gpa: number): GradeScaleItem {
+  const numGpa = Math.max(0, Math.min(4.0, Number(gpa) || 0));
+  for (const item of GRADE_SCALE) {
+    if (numGpa >= item.points) {
+      return item;
+    }
+  }
+  return GRADE_SCALE[GRADE_SCALE.length - 1];
+}
+
 export function calculateGradeScale(
   percentage: number,
   status?: string,

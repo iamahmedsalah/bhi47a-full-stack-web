@@ -408,9 +408,20 @@ export class UpsertRegistrationTermDto {
 }
 
 export class ToggleRegistrationTermDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
-  isOpen!: boolean;
+  isOpen?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  opensAt?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  closesAt?: string | null;
 }
 
 export class CreateAcademicYearDto {

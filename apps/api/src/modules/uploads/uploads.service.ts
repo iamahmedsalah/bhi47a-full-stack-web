@@ -148,6 +148,7 @@ export class UploadsService {
       registrationsCount,
       advisingCasesCount,
       quizzesCount,
+      complaintsCount,
     ] = await Promise.all([
       db.collection('users').countDocuments({ role: 'student' }),
       db.collection('grades').countDocuments({}),
@@ -155,6 +156,7 @@ export class UploadsService {
       db.collection('course_registrations').countDocuments({}),
       db.collection('advising_cases').countDocuments({}),
       db.collection('course_quizzes').countDocuments({}),
+      db.collection('complaints').countDocuments({}),
     ]);
 
     return {
@@ -164,11 +166,13 @@ export class UploadsService {
       registrationsCount,
       advisingCasesCount,
       quizzesCount,
+      complaintsCount,
     };
   }
 
   async wipeData(
-    target: 'students' | 'grades' | 'attendance' | 'complaints' | 'all',
+    target:
+      'students' | 'grades' | 'quizzes' | 'attendance' | 'complaints' | 'all',
     adminId: string,
   ) {
     const db = this.connection.db;
@@ -191,11 +195,15 @@ export class UploadsService {
     }
 
     if (target === 'grades') {
-      const [deletedGrades, deletedQuizzes] = await Promise.all([
-        db.collection('grades').deleteMany({}),
-        db.collection('course_quizzes').deleteMany({}),
-      ]);
+      const deletedGrades = await db.collection('grades').deleteMany({});
       result.grades = deletedGrades.deletedCount;
+      return { success: true, target, deletedCounts: result };
+    }
+
+    if (target === 'quizzes') {
+      const deletedQuizzes = await db
+        .collection('course_quizzes')
+        .deleteMany({});
       result.quizzes = deletedQuizzes.deletedCount;
       return { success: true, target, deletedCounts: result };
     }

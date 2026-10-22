@@ -287,9 +287,10 @@ export async function saveQuizDraft(
 }
 
 export interface ExitQuizAttemptResult {
-  status: 'in_progress' | 'terminated_by_exit';
+  status: 'in_progress' | 'terminated_by_exit' | 'warning';
   message?: string;
   exitCount?: number;
+  maxAllowedExits?: number;
   allowResume?: boolean;
   submission?: SubmitQuizResult;
 }

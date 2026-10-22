@@ -21,9 +21,13 @@ describe('registration term window', () => {
     ).toBe(false);
     expect(
       isRegistrationTermCurrentlyOpen(
-        { isOpen: true, closesAt: new Date('2026-07-12T23:59:59.000Z') },
+        {
+          isOpen: true,
+          opensAt: new Date('2026-07-10T00:00:00.000Z'),
+          closesAt: new Date('2026-07-20T00:00:00.000Z'),
+        },
         now,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

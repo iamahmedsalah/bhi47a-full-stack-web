@@ -966,8 +966,8 @@ export class QuizzesService implements OnModuleInit {
       }
 
       if (attempt.status === 'in_progress') {
-        if (quiz.allowResume === false) {
-          // Strict anti-cheat: Disconnect or exit lock
+        if (quiz.allowResume === false && (attempt.exitCount || 0) >= 2) {
+          // Strict anti-cheat: terminated only when max allowed violations (>= 2) exceeded
           attempt.status = 'terminated_by_exit';
           await attempt.save();
           await this.autoSubmitAttempt(
@@ -977,11 +977,11 @@ export class QuizzesService implements OnModuleInit {
             'terminated_by_exit',
           );
           throw new ForbiddenException(
-            'تم إنهاء محاولة هذا الاختبار بسبب مغادرة الصفحة ولا يمكن استئنافه (وضع الاختبار المشدد)',
+            'تم إنهاء محاولة هذا الاختبار بسبب تكرار مغادرة الصفحة ولا يمكن استئنافه (وضع الاختبار المشدد)',
           );
         }
 
-        // Resume mode: calculate server-side remaining time
+        // Calculate server-side remaining time
         const attemptStartMs = attempt.startedAt.getTime();
         const totalDurationSec = (quiz.durationMinutes || 15) * 60;
         const elapsedSec = Math.max(
@@ -1053,7 +1053,7 @@ export class QuizzesService implements OnModuleInit {
           startedAt: attempt.startedAt,
           expiresAt: attempt.expiresAt,
           remainingSeconds: remSec,
-          allowResume: true,
+          allowResume: quiz.allowResume !== false,
           draftAnswers: cleanDraftAnswers,
           isResumed: true,
         };
@@ -1198,20 +1198,42 @@ export class QuizzesService implements OnModuleInit {
     }
 
     if (quiz.allowResume === false) {
-      this.metricsService?.recordAntiCheatViolation(dto.reason || 'exit');
-      this.metricsService?.updateActiveQuizAttempts(-1);
-      const submission = await this.autoSubmitAttempt(
-        quiz,
-        attempt,
-        studentUserId,
-        'terminated_by_exit',
-      );
+      const exitCount = (attempt.exitCount || 0) + 1;
+      attempt.exitCount = exitCount;
+      if (cleanAnswers.length > 0) {
+        attempt.draftAnswers = cleanAnswers;
+      }
+      attempt.lastActiveAt = new Date();
+      await attempt.save();
 
+      // Only terminate and auto-submit if threshold reached (>= 2 exits) or explicitly requested
+      if (exitCount >= 2 || dto.reason === 'force_terminate') {
+        this.metricsService?.recordAntiCheatViolation(dto.reason || 'exit');
+        this.metricsService?.updateActiveQuizAttempts(-1);
+        const submission = await this.autoSubmitAttempt(
+          quiz,
+          attempt,
+          studentUserId,
+          'terminated_by_exit',
+        );
+
+        return {
+          status: 'terminated_by_exit',
+          exitCount,
+          maxAllowedExits: 1,
+          message:
+            'تم إنهاء الاختبار وتسليمه تلقائياً بسبب تكرار مغادرة الصفحة أو تبديل التبويب (الوضع المشدد)',
+          submission,
+        };
+      }
+
+      this.metricsService?.recordAntiCheatViolation('warning_exit_1');
       return {
-        status: 'terminated_by_exit',
+        status: 'warning',
+        exitCount,
+        maxAllowedExits: 1,
         message:
-          'تم إنهاء الاختبار وتسليمه بسبب مغادرة الصفحة أو تبديل التبويب',
-        submission,
+          'تحذير: تم رصد مغادرة شاشة الاختبار للمرة الأولى. تكرار المغادرة سيؤدي لإنهاء الاختبار وتسليمه فوراً.',
       };
     }
 

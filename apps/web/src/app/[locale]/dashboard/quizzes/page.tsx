@@ -338,9 +338,10 @@ function TakeQuizModal({
     queryFn: () => startQuizAttempt(quizId!),
     enabled: Boolean(quizId && open && !submissionResult),
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
     retry: false,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 
   const attemptData = attemptQuery.data;
@@ -479,11 +480,14 @@ function TakeQuizModal({
     handleAutoSubmitRef.current = handleAutoSubmit;
   });
 
+  const hiddenGraceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const warningStrikeCountRef = React.useRef<number>(0);
+
   // Anti-Cheat: Visibility change, pagehide, and beforeunload
   useEffect(() => {
     if (!open || submissionResult || terminatedByExit || !quizId) return;
 
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         const currentAnswers = selectedAnswersRef.current;
         const answersPayload = Object.entries(currentAnswers)
@@ -494,29 +498,54 @@ function TakeQuizModal({
           }));
 
         if (!allowResume) {
-          // Strict Anti-Cheat Mode: immediately submit payload & terminate
-          setTerminatedByExit(true);
-          try {
-            const res = await recordQuizExit(quizId, answersPayload, 'visibilitychange');
-            if (res.submission) {
-              setSubmissionResult(res.submission as any);
-            }
-          } catch {
-            // Handled
+          // Grace period: allow 2.5s for accidental notification dismissal / virtual keyboard / touch gesture
+          if (hiddenGraceTimerRef.current) {
+            clearTimeout(hiddenGraceTimerRef.current);
           }
-          toast.error(
-            isAr
-              ? 'تم إنهاء الاختبار وتسليمه تلقائياً بسبب مغادرة التبويب (الوضع المشدد ضد الغش)'
-              : 'Quiz auto-submitted and terminated due to leaving the tab (Strict Anti-Cheat)',
-          );
+          hiddenGraceTimerRef.current = setTimeout(async () => {
+            if (document.visibilityState !== 'hidden') return;
+            try {
+              const res = await recordQuizExit(quizId, answersPayload, 'visibilitychange');
+              if (res.status === 'terminated_by_exit') {
+                setTerminatedByExit(true);
+                if (res.submission) {
+                  setSubmissionResult(res.submission as any);
+                }
+                toast.error(
+                  isAr
+                    ? 'تم إنهاء الاختبار وتسليمه تلقائياً لتكرار مغادرة شاشة الاختبار (الوضع المشدد)'
+                    : 'Quiz auto-submitted and terminated due to repeated window departures (Strict Anti-Cheat)',
+                );
+              } else {
+                warningStrikeCountRef.current += 1;
+                toast.warning(
+                  isAr
+                    ? '⚠️ تحذير مكافحة الغش: تم رصد مغادرة شاشة الاختبار! يرجى البقاء داخل نافذة الاختبار، حيث سيتم إنهاء الاختبار وتسليمه فوراً عند تكرار المغادرة.'
+                    : '⚠️ Anti-Cheat Warning: Window departure detected! Please remain in the quiz window. Leaving again will auto-submit and terminate your exam.',
+                  { duration: 8000 },
+                );
+              }
+            } catch {
+              // Handled
+            }
+          }, 2500);
         } else {
           // Flexible Resume Mode: Silently persist draft answers without warning or termination
           void recordQuizExit(quizId, answersPayload, 'visibilitychange');
+        }
+      } else if (document.visibilityState === 'visible') {
+        // User returned within grace period -> cancel any pending termination
+        if (hiddenGraceTimerRef.current) {
+          clearTimeout(hiddenGraceTimerRef.current);
+          hiddenGraceTimerRef.current = null;
         }
       }
     };
 
     const handlePageHide = () => {
+      if (hiddenGraceTimerRef.current) {
+        clearTimeout(hiddenGraceTimerRef.current);
+      }
       const currentAnswers = selectedAnswersRef.current;
       const answersPayload = Object.entries(currentAnswers)
         .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
@@ -525,19 +554,23 @@ function TakeQuizModal({
           selectedOptionIndex: idx,
         }));
 
-      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        try {
-          const blob = new Blob(
-            [JSON.stringify({ answers: answersPayload, eventType: 'pagehide' })],
-            { type: 'application/json' },
-          );
-          navigator.sendBeacon(`/api/quizzes/${quizId}/exit`, blob);
-          return;
-        } catch {
-          // Fallback to recordQuizExit
+      if (!allowResume && warningStrikeCountRef.current >= 1) {
+        if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          try {
+            const blob = new Blob(
+              [JSON.stringify({ answers: answersPayload, reason: 'force_terminate' })],
+              { type: 'application/json' },
+            );
+            navigator.sendBeacon(`/api/quizzes/${quizId}/exit`, blob);
+            return;
+          } catch {
+            // Fallback
+          }
         }
+        void recordQuizExit(quizId, answersPayload, 'force_terminate');
+      } else {
+        void recordQuizExit(quizId, answersPayload, 'pagehide');
       }
-      void recordQuizExit(quizId, answersPayload, 'pagehide');
     };
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -551,6 +584,10 @@ function TakeQuizModal({
     window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
+      if (hiddenGraceTimerRef.current) {
+        clearTimeout(hiddenGraceTimerRef.current);
+        hiddenGraceTimerRef.current = null;
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -851,11 +888,13 @@ function TakeQuizModal({
                   )}
                 </div>
 
-                <QuizTimerBadge
-                  initialSeconds={attemptData?.remainingSeconds || 0}
-                  onTimeUp={handleAutoSubmit}
-                  isAr={isAr}
-                />
+                {attemptData && typeof attemptData.remainingSeconds === 'number' && attemptData.remainingSeconds > 0 && (
+                  <QuizTimerBadge
+                    initialSeconds={attemptData.remainingSeconds}
+                    onTimeUp={handleAutoSubmit}
+                    isAr={isAr}
+                  />
+                )}
               </div>
 
               {/* Progress info */}

@@ -355,16 +355,15 @@ export class RegistrationsController {
   @Patch('admin/registration-terms/:id')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
-  @ApiOperation({ summary: 'Toggle registration semester open/close' })
+  @ApiOperation({
+    summary:
+      'Toggle registration semester open/close or update schedule window',
+  })
   toggleRegistrationTerm(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: ToggleRegistrationTermDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.registrationsService.toggleRegistrationTerm(
-      id,
-      dto.isOpen,
-      user._id,
-    );
+    return this.registrationsService.toggleRegistrationTerm(id, dto, user._id);
   }
 }

@@ -18,6 +18,7 @@ import {
 import { AdvisingCase } from '../../academic-advising/schemas/advising-case.schema';
 import {
   CreateAcademicYearDto,
+  ToggleRegistrationTermDto,
   UpsertRegistrationTermDto,
 } from '../dto/registration.dto';
 import { isRegistrationTermCurrentlyOpen } from '../utils/registration-term.util';
@@ -203,15 +204,60 @@ export class RegistrationTermService {
     );
   }
 
-  async toggleRegistrationTerm(id: string, isOpen: boolean, adminId?: string) {
+  async toggleRegistrationTerm(
+    id: string,
+    dtoOrIsOpen: ToggleRegistrationTermDto | boolean,
+    adminId?: string,
+  ) {
+    const isBool = typeof dtoOrIsOpen === 'boolean';
+    const isOpen = isBool ? dtoOrIsOpen : dtoOrIsOpen.isOpen;
+    const opensAtRaw = !isBool ? dtoOrIsOpen.opensAt : undefined;
+    const closesAtRaw = !isBool ? dtoOrIsOpen.closesAt : undefined;
+
+    const opensAt =
+      opensAtRaw === null
+        ? null
+        : opensAtRaw
+          ? new Date(opensAtRaw)
+          : undefined;
+    const closesAt =
+      closesAtRaw === null
+        ? null
+        : closesAtRaw
+          ? new Date(closesAtRaw)
+          : undefined;
+
+    if (opensAt && closesAt && closesAt <= opensAt) {
+      throw new BadRequestException(
+        'Registration close date must be after the open date',
+      );
+    }
+
+    const updateFields: Record<string, any> = {
+      ...(isOpen !== undefined ? { isOpen: Boolean(isOpen) } : {}),
+      ...(adminId ? { updatedBy: new Types.ObjectId(adminId) } : {}),
+    };
+    const unsetFields: Record<string, any> = {};
+
+    if (opensAt === null) {
+      unsetFields.opensAt = 1;
+    } else if (opensAt instanceof Date) {
+      updateFields.opensAt = opensAt;
+    }
+
+    if (closesAt === null) {
+      unsetFields.closesAt = 1;
+    } else if (closesAt instanceof Date) {
+      updateFields.closesAt = closesAt;
+    }
+
+    const updateDoc: Record<string, any> = {};
+    if (Object.keys(updateFields).length > 0) updateDoc.$set = updateFields;
+    if (Object.keys(unsetFields).length > 0) updateDoc.$unset = unsetFields;
+
     const term = await this.registrationTermModel.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          isOpen: Boolean(isOpen),
-          ...(adminId ? { updatedBy: new Types.ObjectId(adminId) } : {}),
-        },
-      },
+      updateDoc,
       { new: true },
     );
     if (!term) throw new NotFoundException('Registration term not found');
@@ -241,6 +287,17 @@ export class RegistrationTermService {
   async assertRegistrationTermOpen(academicYear: string, semester: string) {
     const status = await this.getRegistrationTermStatus(academicYear, semester);
     if (!status.isCurrentlyOpen) {
+      const now = new Date();
+      if (status.opensAt && now < new Date(status.opensAt)) {
+        throw new ForbiddenException(
+          `فترة التسجيل لم تبدأ بعد. موعد الفتح: ${new Date(status.opensAt).toISOString()}`,
+        );
+      }
+      if (status.closesAt && now > new Date(status.closesAt)) {
+        throw new ForbiddenException(
+          `انتهت فترة التسجيل الرسمية في: ${new Date(status.closesAt).toISOString()}`,
+        );
+      }
       throw new ForbiddenException(
         `Registration is closed for ${academicYear} ${semester} semester`,
       );

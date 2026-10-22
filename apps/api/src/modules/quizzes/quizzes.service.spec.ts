@@ -79,6 +79,7 @@ describe('QuizzesService Unit Tests', () => {
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue(null),
       }),
+      lean: jest.fn().mockResolvedValue(null),
     });
 
     service = new QuizzesService(
@@ -602,6 +603,142 @@ describe('QuizzesService Unit Tests', () => {
         }),
         { new: true },
       );
+    });
+
+    it('issues warning without auto-submitting on first anti-cheat violation in strict mode', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        title: 'Strict Quiz',
+        allowResume: false,
+        questions: [
+          {
+            id: 'q1',
+            text: 'Q1',
+            options: ['A', 'B'],
+            points: 5,
+            correctOptionIndex: 0,
+          },
+        ],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+
+      const existingAttempt = {
+        _id: new Types.ObjectId(),
+        quizId: new Types.ObjectId(quizId),
+        studentId: new Types.ObjectId(studentUserId),
+        status: 'in_progress',
+        exitCount: 0,
+        draftAnswers: [],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockAttemptModel.findOne.mockResolvedValue(existingAttempt);
+
+      const res = await service.recordExit(quizId, studentUserId, {
+        answers: [{ questionId: 'q1', selectedOptionIndex: 1 }],
+        reason: 'visibilitychange',
+      });
+
+      expect(res.status).toBe('warning');
+      expect((res as any).exitCount).toBe(1);
+      expect(existingAttempt.save).toHaveBeenCalled();
+      expect(mockSubmissionModel.create).not.toHaveBeenCalled();
+    });
+
+    it('auto-submits and terminates attempt on second anti-cheat violation in strict mode', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        title: 'Strict Quiz',
+        courseId: new Types.ObjectId(courseId),
+        courseCode: 'CS101',
+        totalMarks: 5,
+        passingMarks: 3,
+        allowResume: false,
+        questions: [
+          {
+            id: 'q1',
+            text: 'Q1',
+            options: ['A', 'B'],
+            points: 5,
+            correctOptionIndex: 0,
+          },
+        ],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+
+      const existingAttempt = {
+        _id: new Types.ObjectId(),
+        quizId: new Types.ObjectId(quizId),
+        courseId: new Types.ObjectId(courseId),
+        studentId: new Types.ObjectId(studentUserId),
+        status: 'in_progress',
+        exitCount: 1, // Already had 1 violation
+        draftAnswers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockAttemptModel.findOne.mockResolvedValue(existingAttempt);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+      mockSubmissionModel.create = jest.fn().mockResolvedValue([
+        {
+          _id: new Types.ObjectId(),
+          quizId: new Types.ObjectId(quizId),
+          studentId: new Types.ObjectId(studentUserId),
+          score: 5,
+          totalMarks: 5,
+          percentage: 100,
+          isPassed: true,
+          status: 'terminated_by_exit',
+          submittedAt: new Date(),
+        },
+      ]);
+
+      const res = await service.recordExit(quizId, studentUserId, {
+        answers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+        reason: 'visibilitychange',
+      });
+
+      expect(res.status).toBe('terminated_by_exit');
+      expect((res as any).exitCount).toBe(2);
+      expect(existingAttempt.status).toBe('terminated_by_exit');
+      expect(existingAttempt.save).toHaveBeenCalled();
+    });
+
+    it('allows in-progress attempt to be resumed in strict mode if exitCount is below threshold', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        title: 'Strict Quiz',
+        courseId: new Types.ObjectId(courseId),
+        courseCode: 'CS101',
+        courseName: 'Intro to CS',
+        durationMinutes: 15,
+        totalMarks: 5,
+        passingMarks: 3,
+        isPublished: true,
+        allowResume: false,
+        questions: [{ id: 'q1', text: 'Q1', options: ['A', 'B'], points: 5 }],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+
+      const startedAt = new Date(Date.now() - 60 * 1000);
+      const existingAttempt = {
+        _id: new Types.ObjectId(),
+        quizId: new Types.ObjectId(quizId),
+        studentId: new Types.ObjectId(studentUserId),
+        status: 'in_progress',
+        startedAt,
+        expiresAt: new Date(startedAt.getTime() + 15 * 60 * 1000),
+        allowResume: false,
+        exitCount: 1, // Only 1 exit, below threshold of 2
+        draftAnswers: [{ questionId: 'q1', selectedOptionIndex: 1 }],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockAttemptModel.findOne.mockResolvedValue(existingAttempt);
+
+      const result = await service.startQuizAttempt(quizId, studentUserId);
+      expect(result.isResumed).toBe(true);
+      expect(result.allowResume).toBe(false);
+      expect(result.remainingSeconds).toBeGreaterThan(13 * 60);
+      expect(existingAttempt.status).toBe('in_progress');
     });
   });
 

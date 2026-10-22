@@ -50,7 +50,75 @@ import {
   createAcademicYear,
   deleteAcademicYear,
   toggleRegistrationTerm,
+  updateRegistrationTermWindow,
+  type RegistrationTermItem,
 } from '../api';
+
+function getScheduleWindowInfo(term: RegistrationTermItem, isAr: boolean) {
+  if (!term.opensAt && !term.closesAt) {
+    return {
+      status: term.isOpen ? 'open_unlimited' : 'closed',
+      label: term.isOpen
+        ? isAr ? 'مفتوح دائماً' : 'Always Open'
+        : isAr ? 'مغلق' : 'Closed',
+      variant: term.isOpen ? ('success' as const) : ('neutral' as const),
+      detail: null,
+    };
+  }
+
+  const now = new Date();
+  const openDate = term.opensAt ? new Date(term.opensAt) : null;
+  const closeDate = term.closesAt ? new Date(term.closesAt) : null;
+
+  if (openDate && now < openDate) {
+    const formatted = openDate.toLocaleString(isAr ? 'ar-EG' : 'en-US', {
+      timeZone: 'Africa/Cairo',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return {
+      status: 'scheduled',
+      label: isAr ? 'مجدول للبدء' : 'Scheduled',
+      variant: 'warning' as const,
+      detail: isAr ? `يبدأ في: ${formatted}` : `Opens: ${formatted}`,
+    };
+  }
+
+  if (closeDate && now > closeDate) {
+    const formatted = closeDate.toLocaleString(isAr ? 'ar-EG' : 'en-US', {
+      timeZone: 'Africa/Cairo',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return {
+      status: 'ended',
+      label: isAr ? 'انتهت الفترة' : 'Ended',
+      variant: 'danger' as const,
+      detail: isAr ? `انتهى في: ${formatted}` : `Ended: ${formatted}`,
+    };
+  }
+
+  const formattedClose = closeDate
+    ? closeDate.toLocaleString(isAr ? 'ar-EG' : 'en-US', {
+        timeZone: 'Africa/Cairo',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
+  return {
+    status: 'active',
+    label: isAr ? 'الفترة جارية' : 'Active Window',
+    variant: 'success' as const,
+    detail: formattedClose ? (isAr ? `ينتهي في: ${formattedClose}` : `Ends: ${formattedClose}`) : null,
+  };
+}
 
 export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const isAr = locale === 'ar';
@@ -67,6 +135,13 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const [pendingTermId, setPendingTermId] = useState<string | null>(null);
   const [yearToDelete, setYearToDelete] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+
+  // Registration Window Schedule Dialog State
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [selectedTermForSchedule, setSelectedTermForSchedule] = useState<RegistrationTermItem | null>(null);
+  const [scheduleOpenAt, setScheduleOpenAt] = useState('');
+  const [scheduleCloseAt, setScheduleCloseAt] = useState('');
+  const [scheduleIsOpen, setScheduleIsOpen] = useState(true);
 
   // Queries
   const academicYearsQuery = useQuery({
@@ -116,6 +191,31 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       setPendingTermId(null);
     },
   });
+
+  const updateWindowMutation = useMutation({
+    mutationFn: async (payload: { isOpen?: boolean; opensAt?: string | null; closesAt?: string | null }) => {
+      if (!selectedTermForSchedule) return;
+      return updateRegistrationTermWindow(selectedTermForSchedule._id, payload);
+    },
+    onSuccess: () => {
+      toast.success(isAr ? 'تم حفظ مواعيد فترة التسجيل بنجاح' : 'Registration schedule window updated');
+      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      setScheduleDialogOpen(false);
+      setSelectedTermForSchedule(null);
+    },
+    onError: (err: unknown) => {
+      toast.error(getApiErrorMessage(err, isAr ? 'فشل حفظ مواعيد فترة التسجيل' : 'Failed to update schedule window'));
+    },
+  });
+
+  const handleOpenSchedule = (term: RegistrationTermItem) => {
+    setSelectedTermForSchedule(term);
+    setScheduleIsOpen(term.isOpen);
+    setScheduleOpenAt(term.opensAt ? term.opensAt.slice(0, 16) : '');
+    setScheduleCloseAt(term.closesAt ? term.closesAt.slice(0, 16) : '');
+    setScheduleDialogOpen(true);
+  };
 
   const setCurrentYearMutation = useMutation({
     mutationFn: async (academicYear: string) => {
@@ -226,29 +326,61 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       ),
     },
     {
+      key: 'window',
+      header: isAr ? 'فترة التسجيل المحددة' : 'Scheduled Window',
+      render: (item) => {
+        const info = getScheduleWindowInfo(item, isAr);
+        return (
+          <TableCell>
+            <div className="flex flex-col gap-1 items-start">
+              <StatusBadge label={info.label} variant={info.variant} />
+              {info.detail && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {info.detail}
+                </span>
+              )}
+            </div>
+          </TableCell>
+        );
+      },
+    },
+    {
       key: 'actions',
       header: isAr ? 'الإجراءات' : 'Actions',
       render: (item) => {
         const isThisPending = pendingTermId === item._id;
         return (
           <TableCell className="text-center">
-            <Button
-              size="sm"
-              variant={item.isOpen ? 'destructive' : 'default'}
-              disabled={!canManage || toggleTermMutation.isPending}
-              onClick={() => toggleTermMutation.mutate({ id: item._id, isOpen: !item.isOpen })}
-              className="gap-1.5 text-xs"
-              title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write permission') : undefined}
-            >
-              {isThisPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : item.isOpen ? (
-                <Lock className="h-3.5 w-3.5" />
-              ) : (
-                <Unlock className="h-3.5 w-3.5" />
-              )}
-              {item.isOpen ? (isAr ? 'إغلاق التسجيل' : 'Close Term') : (isAr ? 'فتح التسجيل' : 'Open Term')}
-            </Button>
+            <div className="flex items-center justify-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canManage}
+                onClick={() => handleOpenSchedule(item)}
+                className="gap-1 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                title={isAr ? 'تحديد مواعيد فترة فتح وإغلاق التسجيل' : 'Schedule opening and closing dates'}
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span>{isAr ? 'جدولة الفترة' : 'Schedule'}</span>
+              </Button>
+              <Button
+                size="sm"
+                variant={item.isOpen ? 'destructive' : 'default'}
+                disabled={!canManage || toggleTermMutation.isPending}
+                onClick={() => toggleTermMutation.mutate({ id: item._id, isOpen: !item.isOpen })}
+                className="gap-1.5 text-xs"
+                title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write permission') : undefined}
+              >
+                {isThisPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : item.isOpen ? (
+                  <Lock className="h-3.5 w-3.5" />
+                ) : (
+                  <Unlock className="h-3.5 w-3.5" />
+                )}
+                {item.isOpen ? (isAr ? 'إغلاق' : 'Close') : (isAr ? 'فتح' : 'Open')}
+              </Button>
+            </div>
           </TableCell>
         );
       },
@@ -565,11 +697,17 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                         />
                       </div>
 
-                      <div className="flex items-center justify-between border-t border-border/40 pt-2.5">
-                        <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
+                      <div className="flex items-center justify-between border-t border-border/40 pt-2.5 gap-1.5 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!canManage}
+                          onClick={() => handleOpenSchedule(term)}
+                          className="h-7 px-2 text-[11px] gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                        >
                           <Clock className="h-3 w-3" />
-                          {term.semester.toUpperCase()}
-                        </span>
+                          <span>{isAr ? 'جدولة الفترة' : 'Schedule'}</span>
+                        </Button>
                         <Button
                           size="sm"
                           variant={term.isOpen ? 'destructive' : 'default'}
@@ -729,6 +867,166 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
           }
         }}
       />
+      {/* Registration Period Schedule Dialog */}
+      <Dialog
+        open={scheduleDialogOpen}
+        onOpenChange={(op) => {
+          if (!op) {
+            setScheduleDialogOpen(false);
+            setSelectedTermForSchedule(null);
+          }
+        }}
+      >
+        <DialogContent className="glass max-w-lg rounded-2xl border border-white/10 p-6 space-y-4" dir={isAr ? 'rtl' : 'ltr'}>
+          <DialogHeader className="text-start space-y-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs">
+              <Clock className="h-4 w-4" />
+              <span>{isAr ? 'جدولة وتحديد فترة فتح وإغلاق التسجيل' : 'Schedule Registration Window'}</span>
+            </div>
+            <DialogTitle className="text-base font-bold text-foreground">
+              {selectedTermForSchedule?.academicYear} - {selectedTermForSchedule ? getSemesterLabel(selectedTermForSchedule.semester) : ''}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {isAr
+                ? 'حدد موعد فتح وإغلاق فترة التسجيل الأكاديمي. النظام سيسمح للطلاب بالتسجيل خلال هذه الفترة المحددة فقط.'
+                : 'Configure registration open and close dates. Students will only be eligible to enroll within this timeframe.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Master Toggle */}
+            <div className="flex items-center justify-between rounded-xl border border-border/80 bg-secondary/30 p-3.5">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-bold text-foreground">
+                  {isAr ? 'استقبال التسجيل للفصل (مفتاح رئيسي)' : 'Master Registration Switch'}
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  {scheduleIsOpen
+                    ? isAr
+                      ? 'التسجيل متاح (طبقاً للمواعيد المحددة أدناه)'
+                      : 'Registration is permitted (subject to scheduled dates)'
+                    : isAr
+                      ? 'التسجيل معطل تماماً لهذا الفصل'
+                      : 'Registration is globally disabled for this term'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScheduleIsOpen((prev) => !prev)}
+                className={cn(
+                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                  scheduleIsOpen ? 'bg-primary' : 'bg-secondary',
+                )}
+              >
+                <span
+                  className={cn(
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    scheduleIsOpen ? (isAr ? '-translate-x-5' : 'translate-x-5') : 'translate-x-0',
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Dates Pickers */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="schedule-open-at" className="text-xs font-medium text-foreground">
+                  {isAr ? 'موعد فتح باب التسجيل' : 'Registration Opens At'}
+                </Label>
+                <Input
+                  id="schedule-open-at"
+                  type="datetime-local"
+                  dir="ltr"
+                  value={scheduleOpenAt}
+                  onChange={(e) => setScheduleOpenAt(e.target.value)}
+                  className="rounded-squircle text-xs"
+                />
+                <span className="text-[10px] text-muted-foreground block">
+                  {isAr ? 'اتركه فارغاً لفتح التسجيل فوراً' : 'Leave empty to open immediately'}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="schedule-close-at" className="text-xs font-medium text-foreground">
+                  {isAr ? 'موعد إغلاق باب التسجيل' : 'Registration Closes At'}
+                </Label>
+                <Input
+                  id="schedule-close-at"
+                  type="datetime-local"
+                  dir="ltr"
+                  value={scheduleCloseAt}
+                  onChange={(e) => setScheduleCloseAt(e.target.value)}
+                  className="rounded-squircle text-xs"
+                />
+                <span className="text-[10px] text-muted-foreground block">
+                  {isAr ? 'اتركه فارغاً لإبقاء التسجيل مفتوحاً دائماً' : 'Leave empty for no closing deadline'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2.5 text-[11px] text-muted-foreground">
+              <Clock className="h-4 w-4 text-primary shrink-0" />
+              <span>{isAr ? 'جميع المواعيد المحددة أعلاه يتم حسابها بتوقيت القاهرة الرسمي (Africa/Cairo).' : 'All scheduled times follow Africa/Cairo local timezone.'}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-border/80 pt-3 flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={updateWindowMutation.isPending || (!scheduleOpenAt && !scheduleCloseAt)}
+              onClick={() => {
+                setScheduleOpenAt('');
+                setScheduleCloseAt('');
+                updateWindowMutation.mutate({
+                  isOpen: scheduleIsOpen,
+                  opensAt: null,
+                  closesAt: null,
+                });
+              }}
+              className="text-xs rounded-squircle"
+            >
+              {isAr ? 'إلغاء الجدولة المحددة' : 'Clear Window'}
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setScheduleDialogOpen(false);
+                  setSelectedTermForSchedule(null);
+                }}
+                className="text-xs rounded-squircle"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={updateWindowMutation.isPending}
+                onClick={() => {
+                  if (scheduleOpenAt && scheduleCloseAt && new Date(scheduleCloseAt) <= new Date(scheduleOpenAt)) {
+                    toast.error(isAr ? 'تاريخ إغلاق التسجيل يجب أن يكون بعد تاريخ الفتح' : 'Close date must be after open date');
+                    return;
+                  }
+                  updateWindowMutation.mutate({
+                    isOpen: scheduleIsOpen,
+                    opensAt: scheduleOpenAt ? new Date(scheduleOpenAt).toISOString() : null,
+                    closesAt: scheduleCloseAt ? new Date(scheduleCloseAt).toISOString() : null,
+                  });
+                }}
+                className="text-xs rounded-squircle bg-primary text-primary-foreground font-semibold"
+              >
+                {updateWindowMutation.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+                <span>{isAr ? 'حفظ فترة التسجيل' : 'Save Window'}</span>
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
