@@ -1,8 +1,5 @@
 'use client';
 
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
-
 /**
  * Capture an HTMLElement as PNG and trigger download
  */
@@ -14,6 +11,8 @@ export async function exportElementToPng(
   if (!element) {
     throw new Error('Target element not found for PNG export');
   }
+
+  const { toPng } = await import('html-to-image');
 
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const resolvedBg = backgroundColor ?? (isDark ? '#0d1117' : '#ffffff');
@@ -50,6 +49,11 @@ export async function exportDashboardToPdf(
   if (!element) {
     throw new Error('Target element not found for PDF export');
   }
+
+  const [{ toPng }, { jsPDF }] = await Promise.all([
+    import('html-to-image'),
+    import('jspdf'),
+  ]);
 
   // Render high-res PNG image first
   const imgData = await toPng(element, {

@@ -40,14 +40,18 @@ export default function StudentAttendancePage() {
   const liveSessionsQuery = useQuery({
     queryKey: ["student-live-attendance-sessions"],
     queryFn: () => attendanceApi.getStudentLiveSessions(),
-    refetchInterval: 12000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
-  // Fetch real-time attendance history & summaries
+  // Fetch student attendance history & summaries (cached, no aggressive polling)
   const historyQuery = useQuery({
     queryKey: ["my-student-attendance-history"],
     queryFn: () => attendanceApi.getMyAttendanceHistory(),
-    refetchInterval: 15000,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = historyQuery.isLoading;

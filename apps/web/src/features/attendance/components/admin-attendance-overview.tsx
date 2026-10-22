@@ -137,7 +137,9 @@ export function AdminAttendanceOverview({
     queryKey: ["attendance-sessions", params],
     queryFn: () => attendanceApi.getSessions(params),
     placeholderData: keepPreviousData,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const records = useQuery({
     queryKey: ["attendance-session-records", selectedSession?._id, recordsPage],
@@ -147,7 +149,9 @@ export function AdminAttendanceOverview({
         page: recordsPage,
         limit: 50,
       }),
-    refetchInterval: selectedSession?.status === "OPEN" ? 10000 : false,
+    refetchInterval: selectedSession?.status === "OPEN" ? 20000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   const currentSession =
     overview.data?.sessions.find(

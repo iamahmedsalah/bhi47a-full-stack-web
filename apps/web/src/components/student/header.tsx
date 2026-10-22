@@ -42,7 +42,7 @@ export default function StudentHeader() {
     staleTime: 60 * 1000,
     refetchInterval: 120 * 1000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const readMutation = useMutation({

@@ -190,7 +190,10 @@ export default function StudentDashboard() {
         return [];
       }
     },
-    refetchInterval: 30000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const profile = profileQuery.data ?? null;

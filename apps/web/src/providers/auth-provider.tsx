@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -96,6 +96,7 @@ export function AuthProvider({
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const lastHeartbeatTimeRef = useRef<number>(0);
 
   const meQuery = useQuery({
     queryKey: queryKeys.auth.me,
@@ -309,16 +310,19 @@ export function AuthProvider({
     if (!meQuery.data?._id || isLoggingOut) return;
 
     let isMounted = true;
-    const sendHeartbeat = () => {
+    const sendHeartbeat = (force = false) => {
       if (!isMounted) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (!force && now - lastHeartbeatTimeRef.current < 30_000) return;
+      lastHeartbeatTimeRef.current = now;
       api.post('/auth/heartbeat', { route: pathname }).catch(() => {
         // Silent failure for heartbeat
       });
     };
 
     sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 60_000);
+    const interval = setInterval(() => sendHeartbeat(true), 60_000);
 
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {

@@ -430,7 +430,10 @@ export default function AdminDashboard() {
       }>('/admin/students-stats');
       return res.data;
     },
-    refetchInterval: 15_000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const coursesCountQuery = useQuery({

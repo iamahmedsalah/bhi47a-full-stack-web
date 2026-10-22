@@ -31,12 +31,11 @@ export function HeroSection({ locale }: HeroSectionProps) {
       {/* Background Campus Image with Deep Academic Gradient Overlay */}
       <div className="absolute inset-0 z-0">
         <Image
-          src="/images/institutional/campus-hero.jpg"
+          src="/images/institutional/campus-hero.webp"
           alt="Institute Campus Grounds"
           fill
           priority
-          loading="eager"
-          sizes="100vw"
+          sizes="(max-width: 1280px) 100vw, 1280px"
           className="object-cover object-center opacity-30 mix-blend-luminosity filter"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-teal-950/80" />

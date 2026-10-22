@@ -51,7 +51,10 @@ export default function StudentSidebar() {
     queryKey: queryKeys.notifications.studentList,
     queryFn: listStudentNotifications,
     enabled: !!user && user.role === 'student',
-    refetchInterval: 30 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 120 * 1000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const unreadCount = useMemo(() => {

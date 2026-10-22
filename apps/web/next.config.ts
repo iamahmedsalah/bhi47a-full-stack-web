@@ -60,6 +60,10 @@ const nextConfig: NextConfig = {
     root: workspaceRoot,
   },
   images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 31536000,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
     remotePatterns: [
       {
         protocol: "https",
@@ -88,6 +92,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/images/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
         source: "/favicon_io/:path*",
         headers: [
           {
@@ -110,16 +123,16 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable, stale-while-revalidate=86400",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },
       {
-        source: "/logo.webp",
+        source: "/(logo.webp|logo.png|favicon.ico|icon.png|apple-icon.png)",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=31536000, immutable, stale-while-revalidate=86400",
+            value: "public, max-age=31536000, immutable",
           },
         ],
       },

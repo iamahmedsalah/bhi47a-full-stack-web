@@ -33,7 +33,7 @@ export function AboutSection({ locale }: AboutSectionProps) {
           <div className="relative">
             <div className="relative h-[360px] sm:h-[420px] w-full overflow-hidden rounded-2xl border border-border/60 shadow-lg">
               <Image
-                src="/images/institutional/campus-hero.jpg"
+                src="/images/institutional/campus-hero.webp"
                 alt="Institute Campus"
                 fill
                 sizes="(max-width: 1024px) 100vw, 50vw"

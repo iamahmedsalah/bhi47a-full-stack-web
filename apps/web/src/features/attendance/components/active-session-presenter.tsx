@@ -310,7 +310,7 @@ export function ActiveSessionPresenter({
     void refreshAttendees();
     const interval = window.setInterval(() => {
       if (!isSessionEnded) void refreshAttendees();
-    }, 5_000);
+    }, 20_000);
 
     return () => {
       isCancelled = true;
