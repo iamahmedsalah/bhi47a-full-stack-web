@@ -42,11 +42,7 @@ export const studentFormSchema = z
   })
   .refine(
     (data) =>
-      Boolean(
-        data.fullName?.trim() ||
-          data.fullNameAr?.trim() ||
-          data.fullNameEn?.trim(),
-      ),
+      Boolean(data.fullNameAr?.trim() || data.fullNameEn?.trim()),
     {
       message: 'يجب إدخال اسم الطالب بالعربية أو بالإنجليزية على الأقل',
       path: ['fullNameAr'],

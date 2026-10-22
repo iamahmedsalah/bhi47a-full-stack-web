@@ -41,6 +41,7 @@ import { cn } from "@/lib/cn";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/providers/auth-provider";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
+import { getStudentDisplayNames } from "@/features/students/student-name";
 
 const StudentQrScannerDialog = dynamic(
   () =>
@@ -53,6 +54,8 @@ const StudentQrScannerDialog = dynamic(
 interface StudentProfile {
   _id: string;
   fullName: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
   studentCode: string;
   level: string;
   department?: string;
@@ -218,7 +221,8 @@ export default function StudentDashboard() {
   const activeQuiz = openQuizzes[0] || null;
   const publishedSchedules = examAssignmentQuery.data?.schedules || [];
   const activeSchedule = publishedSchedules[0] || null;
-  const displayName = profile?.fullName || user?.name || "";
+  const { primary: displayName, secondary: secondaryDisplayName } =
+    getStudentDisplayNames(locale, profile, user);
 
   // Parse seat number to get a mock position in the seating grid for dashboard preview
   const seatNumberStr = profile?.seatNumber || "";
@@ -317,10 +321,14 @@ export default function StudentDashboard() {
           </div>
           <div className="space-y-1">
             <h1 className="text-balance text-2xl font-bold leading-tight text-foreground drop-shadow md:text-3xl">
-              {locale === "ar"
-                ? `مرحباً بك، ${displayName || "..."}`
-                : `Welcome, ${displayName || "..."}`}
+              {locale === "ar" ? "مرحباً بك، " : "Welcome, "}
+              <bdi>{displayName || "..."}</bdi>
             </h1>
+            {secondaryDisplayName && (
+              <p className="text-sm text-muted-foreground">
+                <bdi>{secondaryDisplayName}</bdi>
+              </p>
+            )}
             <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
               {locale === "ar"
                 ? "مرحباً بك في لوحة التحكم الخاصة بك. يمكنك متابعة أدائك الأكاديمي، جدول امتحاناتك، والتقديم على طلبات الإرشاد والتسجيل."

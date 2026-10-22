@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { studentFormSchema, type StudentFormValues } from '../schema';
+import { getStudentFullName } from '../student-name';
 
 interface StudentFormDialogProps {
   open: boolean;
@@ -150,11 +151,7 @@ export function StudentFormDialog({
   }, [open, defaultValues, form]);
 
   const handleSubmit = form.handleSubmit(async (values) => {
-    const finalFullName =
-      values.fullName?.trim() ||
-      values.fullNameAr?.trim() ||
-      values.fullNameEn?.trim() ||
-      'Student';
+    const finalFullName = getStudentFullName(values);
 
     await onSubmit({
       ...values,

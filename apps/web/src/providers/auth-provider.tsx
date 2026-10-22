@@ -12,6 +12,8 @@ import { isAuthEntryRoute, isPublicRoute } from '@/lib/public-routes';
 interface User {
   _id: string;
   name: string;
+  nameAr?: string;
+  nameEn?: string;
   role: 'admin' | 'staff' | 'student';
   staffType?: string;
   email?: string;
