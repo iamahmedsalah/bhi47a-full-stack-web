@@ -861,7 +861,7 @@ export class StudentsService {
 
   async getActiveSessions(windowMinutes = 60) {
     const threshold = new Date(Date.now() - windowMinutes * 60 * 1000);
-    const onlineThreshold = new Date(Date.now() - 15 * 60 * 1000);
+    const onlineThreshold = new Date(Date.now() - 7 * 60 * 1000);
 
     const activeUsers = (await this.usersService.getActiveUsersForSessions(
       threshold,
@@ -874,6 +874,7 @@ export class StudentsService {
       studentCode?: string;
       email?: string;
       lastLoginAt?: Date;
+      sessionStartedAt?: Date;
       lastActiveAt?: Date;
       lastAction?: string;
       lastActionAr?: string;
@@ -912,12 +913,17 @@ export class StudentsService {
     const items = activeUsers.map((u) => {
       const p = u.studentCode ? profileMap.get(u.studentCode) : null;
       const lastActive = u.lastActiveAt || u.lastLoginAt || new Date();
-      const loginTime = u.lastLoginAt || u.lastActiveAt || new Date();
+      const sessionStart = u.sessionStartedAt || u.lastLoginAt || lastActive;
+      const loginTime = u.lastLoginAt || sessionStart;
       const isOnline =
         new Date(lastActive).getTime() >= onlineThreshold.getTime();
-      const sessionDurationMinutes = Math.max(
-        1,
-        Math.round((Date.now() - new Date(loginTime).getTime()) / (60 * 1000)),
+      const rawDurationMinutes = Math.round(
+        (new Date(lastActive).getTime() - new Date(sessionStart).getTime()) /
+          (60 * 1000),
+      );
+      const sessionDurationMinutes = Math.min(
+        240,
+        Math.max(1, rawDurationMinutes),
       );
 
       const isStudent = u.role === 'student';

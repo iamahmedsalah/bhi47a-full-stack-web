@@ -124,6 +124,16 @@ function QuizFormDialog({
   onSuccess,
 }: QuizFormDialogProps) {
   const locale = isAr ? 'ar' : 'en';
+  const { user } = useAuth();
+  const draftStorageKey = useMemo(
+    () => `portal_quiz_creator_draft_${user?._id || 'general'}`,
+    [user?._id],
+  );
+
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftSavedNotice, setDraftSavedNotice] = useState<string | null>(null);
+
   const [courseId, setCourseId] = useState(initialValues.courseId || '');
   const [title, setTitle] = useState(initialValues.title || '');
   const [description, setDescription] = useState(initialValues.description || '');
@@ -206,6 +216,129 @@ function QuizFormDialog({
       ]);
     }
   }, [open, initialValues, isAr]);
+
+  // Check if saved draft exists when opening in 'add' mode
+  React.useEffect(() => {
+    if (!open || mode !== 'add') {
+      setHasDraft(false);
+      setDraftSavedNotice(null);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const hasContent =
+          Boolean(parsed.title?.trim()) ||
+          Boolean(parsed.courseId) ||
+          (Array.isArray(parsed.questions) &&
+            parsed.questions.some((q: any) => q.text?.trim()));
+        if (hasContent) {
+          setHasDraft(true);
+          setDraftSavedAt(parsed.savedAt || null);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, [open, mode, draftStorageKey]);
+
+  // Debounced auto-save effect for 'add' mode
+  React.useEffect(() => {
+    if (!open || mode !== 'add') return;
+
+    const hasContent =
+      Boolean(courseId) ||
+      Boolean(title.trim()) ||
+      Boolean(description.trim()) ||
+      questions.some(
+        (q) =>
+          q.text.trim() || (q.options && q.options.some((o) => o.trim())),
+      );
+
+    if (!hasContent) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const draft = {
+          courseId,
+          title,
+          description,
+          durationMinutes,
+          startsAt,
+          endsAt,
+          isPublished,
+          allowReview,
+          allowResume,
+          questions,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+        const timeStr = new Date().toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        setDraftSavedNotice(
+          isAr ? `مسودة محفوظة (${timeStr})` : `Draft saved (${timeStr})`,
+        );
+      } catch {
+        // LocalStorage quota or access error - ignore gracefully
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [
+    open,
+    mode,
+    courseId,
+    title,
+    description,
+    durationMinutes,
+    startsAt,
+    endsAt,
+    isPublished,
+    allowReview,
+    allowResume,
+    questions,
+    draftStorageKey,
+    isAr,
+  ]);
+
+  const handleRestoreDraft = () => {
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed.courseId) setCourseId(parsed.courseId);
+      if (parsed.title) setTitle(parsed.title);
+      if (parsed.description) setDescription(parsed.description);
+      if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
+      if (parsed.startsAt) setStartsAt(parsed.startsAt);
+      if (parsed.endsAt) setEndsAt(parsed.endsAt);
+      if (typeof parsed.isPublished === 'boolean') setIsPublished(parsed.isPublished);
+      if (typeof parsed.allowReview === 'boolean') setAllowReview(parsed.allowReview);
+      if (typeof parsed.allowResume === 'boolean') setAllowResume(parsed.allowResume);
+      if (Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+        setQuestions(parsed.questions);
+      }
+      setHasDraft(false);
+      toast.success(isAr ? 'تمت استعادة مسودة الاختبار بنجاح' : 'Quiz draft restored successfully');
+    } catch {
+      toast.error(isAr ? 'فشل استعادة المسودة' : 'Failed to restore draft');
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem(draftStorageKey);
+      setHasDraft(false);
+      setDraftSavedNotice(null);
+      toast.info(isAr ? 'تم حذف المسودة المحفوظة' : 'Draft discarded');
+    } catch {
+      // Ignore
+    }
+  };
 
   const handleDownloadTemplate = async (format: 'xlsx' | 'csv' = 'xlsx') => {
     try {
@@ -372,6 +505,13 @@ function QuizFormDialog({
       let savedResult: QuizItem | undefined = undefined;
       if (mode === 'add') {
         savedResult = await createQuiz(payload);
+        try {
+          localStorage.removeItem(draftStorageKey);
+          setDraftSavedNotice(null);
+          setHasDraft(false);
+        } catch {
+          // Ignore
+        }
         toast.success(isAr ? 'تم إنشاء الاختبار بنجاح' : 'Quiz created successfully');
       } else if (initialValues._id) {
         savedResult = await updateQuiz(initialValues._id, payload);
@@ -476,11 +616,52 @@ function QuizFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass max-h-[92vh] max-w-3xl overflow-y-auto rounded-2xl border border-white/10 p-6">
         <DialogHeader className="border-b border-border/80 pb-4 text-start">
-          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
-            <HelpCircle className="h-5 w-5 text-primary" />
-            <span>{mode === 'add' ? (isAr ? 'إنشاء اختبار جديد' : 'Create New Quiz') : (isAr ? 'تعديل الاختبار' : 'Edit Quiz')}</span>
-          </DialogTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+              <HelpCircle className="h-5 w-5 text-primary" />
+              <span>{mode === 'add' ? (isAr ? 'إنشاء اختبار جديد' : 'Create New Quiz') : (isAr ? 'تعديل الاختبار' : 'Edit Quiz')}</span>
+            </DialogTitle>
+            {mode === 'add' && draftSavedNotice && (
+              <span className="flex items-center gap-1.5 rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-teal-400">
+                <CheckCircle2 className="h-3.5 w-3.5 text-teal-400" />
+                <span>{draftSavedNotice}</span>
+              </span>
+            )}
+          </div>
         </DialogHeader>
+
+        {hasDraft && mode === 'add' && (
+          <div className="rounded-xl border border-primary/30 bg-primary/10 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-foreground font-medium">
+              <Clock className="h-4 w-4 text-primary shrink-0" />
+              <span>
+                {isAr
+                  ? `توجد مسودة اختبار غير مكتملة محفوظة تلقائياً ${draftSavedAt ? `(${new Date(draftSavedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })})` : ''}. هل تود استعادتها؟`
+                  : `An auto-saved quiz draft is available ${draftSavedAt ? `(${new Date(draftSavedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})` : ''}. Restore it?`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/20 rounded-squircle"
+                onClick={handleRestoreDraft}
+              >
+                {isAr ? 'استعادة المسودة' : 'Restore Draft'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-muted-foreground hover:text-danger rounded-squircle"
+                onClick={handleDiscardDraft}
+              >
+                {isAr ? 'حذف' : 'Discard'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-squircle border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">

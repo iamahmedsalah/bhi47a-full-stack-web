@@ -327,6 +327,7 @@ export class UsersService {
     await this.userModel.findByIdAndUpdate(userId, {
       $set: {
         lastLoginAt: now,
+        sessionStartedAt: now,
         lastActiveAt: now,
         ...(meta?.device ? { sessionDevice: meta.device } : {}),
         lastAction: meta?.action || 'Logged into Portal',
@@ -358,6 +359,26 @@ export class UsersService {
     // Login (updateLastLogin / resetAttemptsAndUpdateLastLogin) is the only
     // thing allowed to clear lastLogoutAt. A late heartbeat from a session that
     // was just logged out must not mark the user online again.
+    const existing = await this.userModel
+      .findById(userId)
+      .select('lastActiveAt sessionStartedAt lastLogoutAt')
+      .lean();
+
+    if (!existing || existing.lastLogoutAt) {
+      return;
+    }
+
+    const lastActiveTime = existing.lastActiveAt
+      ? new Date(existing.lastActiveAt).getTime()
+      : 0;
+    const sessionInactivityLapseMs = 25 * 60 * 1000;
+    if (
+      !existing.sessionStartedAt ||
+      now.getTime() - lastActiveTime > sessionInactivityLapseMs
+    ) {
+      update.sessionStartedAt = now;
+    }
+
     await this.userModel.updateOne(
       {
         _id: userId,
@@ -539,6 +560,7 @@ export class UsersService {
         failedLoginAttempts: 0,
         loginAttempts: 0,
         lastLoginAt: now,
+        sessionStartedAt: now,
         lastActiveAt: now,
         lastAction: 'Logged into Portal',
         lastActionAr: 'تسجيل الدخول إلى البوابة',
@@ -554,6 +576,7 @@ export class UsersService {
       $set: {
         lastActiveAt: new Date(0),
         lastLoginAt: new Date(0),
+        sessionStartedAt: new Date(0),
         lastLogoutAt: now,
         lastAction: 'Logged out',
         lastActionAr: 'تم تسجيل الخروج',
@@ -609,7 +632,7 @@ export class UsersService {
         },
       })
       .select(
-        '_id name role staffType userCode studentCode email lastLoginAt lastActiveAt lastLogoutAt lastAction lastActionAr lastActionRoute sessionDevice avatarUrl',
+        '_id name role staffType userCode studentCode email lastLoginAt sessionStartedAt lastActiveAt lastLogoutAt lastAction lastActionAr lastActionRoute sessionDevice avatarUrl',
       )
       .sort({ lastActiveAt: -1 })
       .limit(200)

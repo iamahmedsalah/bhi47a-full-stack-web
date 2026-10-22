@@ -137,6 +137,9 @@ export class User {
   lastLoginAt?: Date;
 
   @Prop()
+  sessionStartedAt?: Date;
+
+  @Prop()
   lastActiveAt?: Date;
 
   @Prop()

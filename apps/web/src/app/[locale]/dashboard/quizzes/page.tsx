@@ -482,12 +482,24 @@ function TakeQuizModal({
 
   const hiddenGraceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const warningStrikeCountRef = React.useRef<number>(0);
+  const mountCooldownRef = React.useRef<number>(0);
+
+  // Reset strike counts and cooldown when quiz opens
+  useEffect(() => {
+    if (open) {
+      mountCooldownRef.current = Date.now();
+      warningStrikeCountRef.current = 0;
+    }
+  }, [open]);
 
   // Anti-Cheat: Visibility change, pagehide, and beforeunload
   useEffect(() => {
     if (!open || submissionResult || terminatedByExit || !quizId) return;
 
     const handleVisibilityChange = () => {
+      // Ignore during initial 8s cooldown window to allow mobile browser UI, virtual keyboard, and viewport to settle
+      if (mountCooldownRef.current > 0 && Date.now() - mountCooldownRef.current < 8000) return;
+
       if (document.visibilityState === 'hidden') {
         const currentAnswers = selectedAnswersRef.current;
         const answersPayload = Object.entries(currentAnswers)
@@ -498,7 +510,7 @@ function TakeQuizModal({
           }));
 
         if (!allowResume) {
-          // Grace period: allow 2.5s for accidental notification dismissal / virtual keyboard / touch gesture
+          // Grace period: allow 6.0s for accidental notification dismissal / virtual keyboard / touch gesture
           if (hiddenGraceTimerRef.current) {
             clearTimeout(hiddenGraceTimerRef.current);
           }
@@ -528,7 +540,7 @@ function TakeQuizModal({
             } catch {
               // Handled
             }
-          }, 2500);
+          }, 6000);
         } else {
           // Flexible Resume Mode: Silently persist draft answers without warning or termination
           void recordQuizExit(quizId, answersPayload, 'visibilitychange');
@@ -543,6 +555,7 @@ function TakeQuizModal({
     };
 
     const handlePageHide = () => {
+      if (mountCooldownRef.current > 0 && Date.now() - mountCooldownRef.current < 8000) return;
       if (hiddenGraceTimerRef.current) {
         clearTimeout(hiddenGraceTimerRef.current);
       }
@@ -554,7 +567,7 @@ function TakeQuizModal({
           selectedOptionIndex: idx,
         }));
 
-      if (!allowResume && warningStrikeCountRef.current >= 1) {
+      if (!allowResume && warningStrikeCountRef.current >= 2) {
         if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
           try {
             const blob = new Blob(
