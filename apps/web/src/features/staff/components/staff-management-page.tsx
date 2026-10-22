@@ -15,6 +15,7 @@ import {
   Search,
   Shield,
   ShieldCheck,
+  Trash2,
   UserCheck,
   UserX,
   Users,
@@ -29,6 +30,7 @@ import {
   type StaffType,
 } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { Input } from '@/components/ui/input';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
@@ -68,6 +70,7 @@ export function StaffManagementPage() {
   const [permissionsTarget, setPermissionsTarget] = useState<StaffMember | null>(null);
   const [passwordTarget, setPasswordTarget] = useState<StaffMember | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
 
   const query = useStaffList({
     page,
@@ -144,6 +147,17 @@ export function StaffManagementPage() {
     try {
       await mutations.activate.mutateAsync(staff._id);
       toast.success(t('toasts.activated'));
+    } catch (error) {
+      fail(error);
+    }
+  };
+
+  const deleteStaff = async () => {
+    if (!deleteTarget) return;
+    try {
+      await mutations.delete.mutateAsync(deleteTarget._id);
+      toast.success(t('toasts.deleted'));
+      setDeleteTarget(null);
     } catch (error) {
       fail(error);
     }
@@ -242,6 +256,16 @@ export function StaffManagementPage() {
               <span>{t('actions.activate')}</span>
             </DropdownMenu.Item>
           )}
+
+          <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+
+          <DropdownMenu.Item
+            onClick={() => setDeleteTarget(staff)}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-danger" />
+            <span>{t('actions.delete')}</span>
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -724,6 +748,33 @@ export function StaffManagementPage() {
           onConfirm={deactivate}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={deleteTarget ? t('delete.title', { name: deleteTarget.name }) : ''}
+        description={
+          deleteTarget ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">{t('delete.description')}</p>
+              <div className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger font-medium space-y-1">
+                <div className="font-bold">{deleteTarget.name}</div>
+                <div className="font-mono text-[11px] text-danger/80">
+                  {deleteTarget.userCode ? `${deleteTarget.userCode} · ` : ''}
+                  {deleteTarget.email || deleteTarget.username}
+                </div>
+              </div>
+            </div>
+          ) : null
+        }
+        confirmLabel={t('delete.confirm')}
+        cancelLabel={t('delete.cancel')}
+        destructive
+        disabled={mutations.delete.isPending}
+        onConfirm={deleteStaff}
+      />
     </div>
   );
 }

@@ -278,7 +278,7 @@ export class AdminAdvisingController {
   }
 
   @Patch('rules')
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.ADVISING_WRITE)
   updateRules(
     @Body() dto: UpdateAdvisingRulesDto,

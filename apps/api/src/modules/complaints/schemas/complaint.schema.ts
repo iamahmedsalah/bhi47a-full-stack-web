@@ -88,6 +88,9 @@ export class Complaint {
   contactEmail?: string;
 
   @Prop()
+  nationalId?: string;
+
+  @Prop()
   nationalIdMasked?: string;
 
   @Prop()
@@ -170,6 +173,9 @@ export class Complaint {
 
   @Prop({ type: [StatusHistoryEntrySchema], default: [] })
   statusHistory!: StatusHistoryEntry[];
+
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);

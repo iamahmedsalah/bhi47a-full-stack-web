@@ -45,6 +45,12 @@ export interface Complaint {
   assignedGroup?: string;
   assignedStaffId?: string;
   assignedStaffName?: string;
+  requesterName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  nationalId?: string;
+  nationalIdMasked?: string;
+  department?: string;
   replies: Reply[];
   internalNotes?: InternalNote[];
   statusHistory?: StatusHistory[];

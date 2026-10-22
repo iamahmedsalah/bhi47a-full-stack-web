@@ -501,7 +501,8 @@
       "permissions": "Edit permissions",
       "resetPassword": "Reset password",
       "deactivate": "Deactivate account",
-      "activate": "Activate account"
+      "activate": "Activate account",
+      "delete": "Delete account permanently"
     },
     "details": {
       "title": "Staff Member Profile",
@@ -573,6 +574,12 @@
       "reason": "Reason (optional)",
       "action": "Deactivate account"
     },
+    "delete": {
+      "title": "Delete Staff Member {name}",
+      "description": "Are you sure you want to permanently delete this staff account? Their login access and assigned permissions will be completely purged from the system. This action cannot be undone.",
+      "confirm": "Yes, Delete Staff Account",
+      "cancel": "Cancel"
+    },
     "toasts": {
       "created": "Staff account created.",
       "updated": "Staff profile updated.",
@@ -580,6 +587,7 @@
       "passwordReset": "Password reset and existing sessions revoked.",
       "deactivated": "Staff account deactivated.",
       "activated": "Staff account activated.",
+      "deleted": "Staff account deleted successfully.",
       "passwordGenerated": "A strong temporary password has been generated and filled.",
       "failed": "Could not complete the staff management action."
     },

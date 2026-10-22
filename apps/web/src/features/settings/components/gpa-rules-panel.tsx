@@ -13,8 +13,12 @@ import {
   LayoutGrid,
   Table as TableIcon,
   AlertTriangle,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,9 +41,14 @@ import {
 export function GpaRulesPanel({ locale }: { locale: string }) {
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canManage =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('study_plan.manage'));
 
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // New Rule Form State
   const [minGpa, setMinGpa] = useState('2.00');
@@ -179,10 +188,10 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
         <TableCell>
           <button
             type="button"
-            disabled={toggleActiveMutation.isPending}
+            disabled={!canManage || toggleActiveMutation.isPending}
             onClick={() => toggleActiveMutation.mutate({ id: rule._id, currentActive: rule.isActive })}
-            className="cursor-pointer"
-            title={isAr ? 'اضغط لتبديل الحالة' : 'Click to toggle status'}
+            className={cn('cursor-pointer', !canManage && 'opacity-60 cursor-not-allowed')}
+            title={!canManage ? (isAr ? 'يتطلب صلاحية إدارة الخطط' : 'Requires study_plan.manage') : (isAr ? 'اضغط لتبديل الحالة' : 'Click to toggle status')}
           >
             <StatusBadge
               label={rule.isActive ? (isAr ? 'مفعل' : 'Active') : (isAr ? 'معطل' : 'Disabled')}
@@ -197,22 +206,26 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
       header: isAr ? 'الإجراءات' : 'Actions',
       render: (rule) => (
         <TableCell className="text-center">
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            }
-            title={isAr ? 'حذف قاعدة GPA' : 'Delete GPA Rule'}
-            description={
-              isAr
-                ? `هل أنت متأكد من حذف قاعدة المعدل (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})؟`
-                : `Are you sure you want to delete GPA rule (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})?`
-            }
-            confirmLabel={isAr ? 'حذف' : 'Delete'}
-            cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
-            onConfirm={() => deleteMutation.mutate(rule._id)}
-          />
+          {canManage ? (
+            <ConfirmDialog
+              trigger={
+                <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              }
+              title={isAr ? 'حذف قاعدة GPA' : 'Delete GPA Rule'}
+              description={
+                isAr
+                  ? `هل أنت متأكد من حذف قاعدة المعدل (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})؟`
+                  : `Are you sure you want to delete GPA rule (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})?`
+              }
+              confirmLabel={isAr ? 'حذف' : 'Delete'}
+              cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+              onConfirm={() => deleteMutation.mutate(rule._id)}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground/50">-</span>
+          )}
         </TableCell>
       ),
     },
@@ -220,6 +233,18 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Read-Only Notice if user cannot manage */}
+      {!canManage && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            {isAr
+              ? 'وضع العرض فقط: حسابك لا يملك صلاحية إدارة الخطط والقواعد الدراسية (study_plan.manage). يمكنك استعراض شرائح الساعات والمعدل فقط دون إمكانية الإضافة أو التعديل أو الحذف.'
+              : 'Read-only mode: Your account lacks study plan permissions (study_plan.manage). You can review GPA tiers in view-only mode without mutations.'}
+          </span>
+        </div>
+      )}
+
       {/* 1. EDUCATIONAL / EXPLANATORY GUIDANCE BANNER */}
       <div className="rounded-2xl border border-sky-500/30 bg-gradient-to-br from-sky-950/40 via-card/80 to-transparent p-5 shadow-sm">
         <div className="flex items-start gap-3">
@@ -229,48 +254,101 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
           <div className="space-y-2 flex-1">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                {isAr ? 'آلية وضوابط قواعد المعدل التراكمي (GPA) والتسجيل المباشر' : 'GPA Registration Rules & Direct Advising Policy'}
+                {isAr ? 'آلية وضوابط قواعد المعدل التراكمي (GPA) وسقف الساعات' : 'GPA Registration Rules & Credit Hour Limits'}
               </h3>
-              <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-sky-300">
-                {isAr ? 'لائحة الساعات المعتمدة' : 'Credit Hours Bylaws'}
-              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setGuideOpen((prev) => !prev)}
+                  className="h-7 gap-1 text-[11px] border-sky-500/30 text-sky-300 hover:bg-sky-500/10"
+                >
+                  <HelpCircle className="h-3 w-3" />
+                  <span>{isAr ? 'تفاصيل الشرائح الأكاديمية' : 'Tier Details'}</span>
+                  {guideOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </Button>
+                <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                  {isAr ? 'لائحة الساعات المعتمدة' : 'Credit Hours Bylaws'}
+                </span>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {isAr
-                ? 'تتحكم هذه القواعد بالحدود الدنيا والقصوى للساعات المسموح للطالب بتسجيلها في كل فصل، كما تحدد ما إذا كان الطالب يستطيع التسجيل الذاتي المباشر فوراً أو يُلزم بمراجعة المرشد الأكاديمي.'
-                : 'These rules govern the minimum and maximum credit hours a student may register per term, and control whether direct registration is permitted or mandatory advising is enforced.'}
+                ? 'تتحكم هذه القواعد بالحدود الدنيا والقصوى للساعات المسموح للطالب بتسجيلها في كل فصل دراسي وفقاً لمعدله التراكمي، كما تحدد ما إذا كان الطالب يُتاح له التسجيل المباشر ذاتياً أو يُلزم بموافقة المرشد الأكاديمي.'
+                : 'These rules govern the minimum and maximum credit hours a student may register per term based on their cumulative GPA, enforcing either direct registration or mandatory advising approval.'}
             </p>
 
             {/* Explanatory Cards Grid */}
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-                <div className="text-xs">
-                  <strong className="block font-semibold text-emerald-300">
-                    {isAr ? 'عند ضبط (Requires Advisor = No):' : 'When Requires Advisor = No:'}
-                  </strong>
-                  <span className="text-muted-foreground leading-normal mt-0.5 block">
-                    {isAr
-                      ? 'يُتاح للطالب (مثل أصحاب المعدلات 2.00 فأكثر) التسجيل المباشر ذاتياً لمقرراته المطروحة فور فتح باب التسجيل دون الحاجة لانتظار جلسة أو اعتماد مرشد.'
-                      : 'Students in this tier (e.g. GPA 2.00+) can register directly from their dashboard without waiting for advisor review.'}
-                  </span>
-                </div>
-              </div>
-
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
               <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                 <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
                 <div className="text-xs">
                   <strong className="block font-semibold text-amber-300">
-                    {isAr ? 'عند ضبط (Requires Advisor = Yes):' : 'When Requires Advisor = Yes:'}
+                    {isAr ? 'الإنذار الأكاديمي (GPA < 2.00):' : 'Probation Tier (GPA < 2.00):'}
                   </strong>
                   <span className="text-muted-foreground leading-normal mt-0.5 block">
                     {isAr
-                      ? 'يُحجب التسجيل المباشر تماماً ويتم توجيه الطالب لمساحة الإرشاد الأكاديمي (للطلاب المتعثرين أو الإنذارات) لإعداد خطة علاجية معتمدة من المرشد.'
-                      : 'Direct registration is blocked and the student is routed to Academic Advising to prepare and approve an academic remediation plan.'}
+                      ? 'سقف أقصى 12 ساعة معتمدة (4 مقررات). التسجيل المباشر محجوب وإلزامي مراجعة المرشد (Requires Advisor = Yes) لرفع العثرة.'
+                      : 'Capped at 12 credits (4 courses). Direct registration is blocked; advisor approval is mandatory to lift probation.'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+                <div className="text-xs">
+                  <strong className="block font-semibold text-emerald-300">
+                    {isAr ? 'الوضع الاعتيادي (2.00 - 2.99):' : 'Regular Tier (2.00 - 2.99):'}
+                  </strong>
+                  <span className="text-muted-foreground leading-normal mt-0.5 block">
+                    {isAr
+                      ? 'العبء الطبيعي حتى 18 ساعة معتمدة (6 مقررات). التسجيل مباشر ذاتي متاح للطالب من البوابة فور فتح الفصل.'
+                      : 'Normal load up to 18 credits (6 courses). Direct self-registration is enabled without waiting for advisor sign-off.'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-sky-400 mt-0.5" />
+                <div className="text-xs">
+                  <strong className="block font-semibold text-sky-300">
+                    {isAr ? 'التفوق والتخرج (3.00 فأكثر):' : 'Excellence Tier (3.00+):'}
+                  </strong>
+                  <span className="text-muted-foreground leading-normal mt-0.5 block">
+                    {isAr
+                      ? 'إتاحة حتى 21 ساعة معتمدة (7 مقررات) للتسجيل الإضافي (Overload) لدعم التميز والتخرج المبكر.'
+                      : 'Allows up to 21 credits (7 courses) for academic overload, enabling early graduation and fast-tracking.'}
                   </span>
                 </div>
               </div>
             </div>
+
+            {/* Extended Guidance breakdown on expand */}
+            {guideOpen && (
+              <div className="mt-4 border-t border-sky-500/20 pt-3 text-xs text-muted-foreground space-y-2 animate-in fade-in-0">
+                <div className="font-semibold text-foreground">
+                  {isAr ? '💡 إرشادات الإدارة وضمان الجودة:' : '💡 Quality Assurance & Policy Guidelines:'}
+                </div>
+                <ul className="list-disc list-inside space-y-1 leading-relaxed">
+                  <li>
+                    {isAr
+                      ? 'الفصل الصيفي: يخضع لسقف موحد (حد أقصى 9 ساعات للوضع العادي و 6 ساعات للمنذرين) يدار من نافذة قواعد الإرشاد.'
+                      : 'Summer term: Subject to standard ceilings (max 9 credits regular, 6 credits probation) configured in Advising Rules.'}
+                  </li>
+                  <li>
+                    {isAr
+                      ? 'تفعيل وتعطيل القواعد: يمكنك إيقاف شريحة مؤقتاً دون حذفها للحفاظ على السجلات السابقة.'
+                      : 'Toggling active status: You can disable a rule temporarily without deleting historical records.'}
+                  </li>
+                  <li>
+                    {isAr
+                      ? 'تسلسل الشرائح: يفضل تغطية كامل المدى من 0.00 إلى 4.00 دون فجوات لضمان شمول جميع مستويات الطلاب.'
+                      : 'Continuous ranges: Ensure GPA ranges cover 0.00 to 4.00 seamlessly without gaps.'}
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -320,7 +398,12 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
           </div>
 
           {/* Add Rule Button */}
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-1.5 h-9 text-xs">
+          <Button
+            disabled={!canManage}
+            onClick={() => setIsCreateOpen(true)}
+            className="gap-1.5 h-9 text-xs disabled:opacity-50"
+            title={!canManage ? (isAr ? 'يتطلب صلاحية إدارة الخطط الدراسية' : 'Requires study_plan.manage') : undefined}
+          >
             <Plus className="h-4 w-4" />
             {isAr ? 'إضافة قاعدة GPA' : 'Add GPA Rule'}
           </Button>
@@ -364,10 +447,10 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
                   </div>
                   <button
                     type="button"
-                    disabled={toggleActiveMutation.isPending}
+                    disabled={!canManage || toggleActiveMutation.isPending}
                     onClick={() => toggleActiveMutation.mutate({ id: rule._id, currentActive: rule.isActive })}
-                    className="cursor-pointer"
-                    title={isAr ? 'تبديل الحالة' : 'Toggle status'}
+                    className={cn('cursor-pointer', !canManage && 'opacity-60 cursor-not-allowed')}
+                    title={!canManage ? (isAr ? 'يتطلب صلاحية إدارة الخطط' : 'Requires study_plan.manage') : (isAr ? 'تبديل الحالة' : 'Toggle status')}
                   >
                     <StatusBadge
                       label={rule.isActive ? (isAr ? 'مفعل' : 'Active') : (isAr ? 'معطل' : 'Disabled')}
@@ -416,23 +499,27 @@ export function GpaRulesPanel({ locale }: { locale: string }) {
                     : isAr ? 'تسجيل فوري من البوابة' : 'Direct from portal'}
                 </span>
 
-                <ConfirmDialog
-                  trigger={
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-danger hover:bg-danger/10 text-xs">
-                      <Trash2 className="h-3.5 w-3.5 me-1" />
-                      {isAr ? 'حذف' : 'Delete'}
-                    </Button>
-                  }
-                  title={isAr ? 'حذف قاعدة GPA' : 'Delete GPA Rule'}
-                  description={
-                    isAr
-                      ? `هل أنت متأكد من حذف قاعدة المعدل (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})؟`
-                      : `Are you sure you want to delete GPA rule (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})?`
-                  }
-                  confirmLabel={isAr ? 'حذف' : 'Delete'}
-                  cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
-                  onConfirm={() => deleteMutation.mutate(rule._id)}
-                />
+                {canManage ? (
+                  <ConfirmDialog
+                    trigger={
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-danger hover:bg-danger/10 text-xs">
+                        <Trash2 className="h-3.5 w-3.5 me-1" />
+                        {isAr ? 'حذف' : 'Delete'}
+                      </Button>
+                    }
+                    title={isAr ? 'حذف قاعدة GPA' : 'Delete GPA Rule'}
+                    description={
+                      isAr
+                        ? `هل أنت متأكد من حذف قاعدة المعدل (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})؟`
+                        : `Are you sure you want to delete GPA rule (${rule.minGpa.toFixed(2)} - ${rule.maxGpa.toFixed(2)})?`
+                    }
+                    confirmLabel={isAr ? 'حذف' : 'Delete'}
+                    cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+                    onConfirm={() => deleteMutation.mutate(rule._id)}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground/50">-</span>
+                )}
               </div>
             </div>
           ))}

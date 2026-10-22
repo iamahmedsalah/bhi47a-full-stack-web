@@ -14,13 +14,17 @@ import {
   Table as TableIcon,
   ShieldCheck,
   Plus,
-  Info,
   Layers,
-  BookOpen,
   Loader2,
   Trash2,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { useAuth } from '@/providers/auth-provider';
 
 import { Button } from '@/components/ui/button';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
@@ -46,13 +50,15 @@ import {
   createAcademicYear,
   deleteAcademicYear,
   toggleRegistrationTerm,
-  type AcademicYearGroup,
-  type RegistrationTermItem,
 } from '../api';
 
 export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canManage =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('registration.write'));
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -60,6 +66,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const [makeNewCurrent, setMakeNewCurrent] = useState(false);
   const [pendingTermId, setPendingTermId] = useState<string | null>(null);
   const [yearToDelete, setYearToDelete] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Queries
   const academicYearsQuery = useQuery({
@@ -228,9 +235,10 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
             <Button
               size="sm"
               variant={item.isOpen ? 'destructive' : 'default'}
-              disabled={toggleTermMutation.isPending}
+              disabled={!canManage || toggleTermMutation.isPending}
               onClick={() => toggleTermMutation.mutate({ id: item._id, isOpen: !item.isOpen })}
               className="gap-1.5 text-xs"
+              title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write permission') : undefined}
             >
               {isThisPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -249,7 +257,19 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
 
   return (
     <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
-      {/* Educational Guidance Card */}
+      {/* Read-Only Notice if user cannot manage */}
+      {!canManage && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            {isAr
+              ? 'وضع العرض فقط: حسابك لا يملك صلاحية تعديل التسجيل (registration.write). يمكنك استعراض الفصول وسنوات التسجيل فقط دون تعديل.'
+              : 'Read-only mode: Your account lacks registration edit permissions (registration.write). You can review terms and years in view-only mode.'}
+          </span>
+        </div>
+      )}
+
+      {/* Educational Guidance Banner & Actions */}
       <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-teal-950/40 via-teal-900/15 to-transparent p-5 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1.5">
@@ -267,8 +287,21 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap shrink-0 items-center gap-2">
             <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setGuideOpen((prev) => !prev)}
+              className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span>{isAr ? 'دليل قفل وإدارة الفصول' : 'Term Locking Guide'}</span>
+              {guideOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
+
+            <Button
+              disabled={!canManage}
               onClick={() => {
                 const latestYear = academicYears[0]?.academicYear;
                 if (latestYear && /^\d{4}-\d{4}$/.test(latestYear)) {
@@ -279,13 +312,57 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                 }
                 setCreateDialogOpen(true);
               }}
-              className="gap-2 bg-primary font-semibold text-xs text-primary-foreground shadow-sm hover:bg-primary/90"
+              className="gap-2 bg-primary font-semibold text-xs text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+              title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write') : undefined}
             >
               <CalendarPlus className="h-4 w-4" />
               {isAr ? 'إضافة سنة أكاديمية' : 'Add Academic Year'}
             </Button>
           </div>
         </div>
+
+        {/* Collapsible Rich Educational Guide */}
+        {guideOpen && (
+          <div className="mt-5 border-t border-white/10 pt-4 animate-in fade-in-0 duration-300">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-background/50 p-3.5 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-success">
+                  <Unlock className="h-4 w-4 shrink-0 text-success" />
+                  <span>{isAr ? 'الفصل المفتوح (Open)' : 'Open Term Status'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {isAr
+                    ? 'يُتاح لجميع الطلاب الدخول لبوابة التسجيل واختيار المقررات بحرية، كما يمكن للمرشد الأكاديمي اعتماد المقررات أو تعديلها نيابة عن الطلاب (Proxy).'
+                    : 'Students can enroll and modify course selections. Academic advisors can approve study plans or register on behalf of students.'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-background/50 p-3.5 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-danger">
+                  <Lock className="h-4 w-4 shrink-0 text-danger" />
+                  <span>{isAr ? 'الفصل المغلق (Locked)' : 'Locked / Closed Status'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {isAr
+                    ? 'قفل فوري وتجميد تام لكافة عمليات التسجيل للطلاب. يمنع إضافة أو حذف أي مقرر لحماية كشوف قاعات المحاضرات والامتحانات من التعديل.'
+                    : 'Immediate lock freezing student registrations. Prevents course adds/drops to secure official seating rosters and exam sheets.'}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-background/50 p-3.5 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                  <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
+                  <span>{isAr ? 'السنة المعتمدة (Current Year)' : 'Authoritative Year'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {isAr
+                    ? 'السنة الأكاديمية الرسمية التي يرتبط بها نظام رصد الدرجات وحساب المعدل والجداول الدراسية. تعيين سنة جديدة يوجّه البوابة تلقائياً نحوها.'
+                    : 'The single active academic year used across the portal for schedules, grade processing, transcripts, and active advising sessions.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top Metrics Row */}
@@ -425,9 +502,10 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={setCurrentYearMutation.isPending}
+                      disabled={!canManage || setCurrentYearMutation.isPending}
                       onClick={() => setCurrentYearMutation.mutate(group.academicYear)}
-                      className="gap-1.5 border-border hover:border-amber-500/40 hover:text-amber-300 text-xs"
+                      className="gap-1.5 border-border hover:border-amber-500/40 hover:text-amber-300 text-xs disabled:opacity-50"
+                      title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write') : undefined}
                     >
                       {setCurrentYearMutation.isPending && setCurrentYearMutation.variables === group.academicYear ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -437,7 +515,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                       {isAr ? 'تعيين كسنة أكاديمية حالية' : 'Set as Current Year'}
                     </Button>
                   )}
-                  {!group.isCurrent && group.registrationCount === 0 && group.advisingCaseCount === 0 && (
+                  {user?.role === 'admin' && canManage && !group.isCurrent && group.registrationCount === 0 && group.advisingCaseCount === 0 && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -495,12 +573,13 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                         <Button
                           size="sm"
                           variant={term.isOpen ? 'destructive' : 'default'}
-                          disabled={toggleTermMutation.isPending}
+                          disabled={!canManage || toggleTermMutation.isPending}
                           onClick={() =>
                             toggleTermMutation.mutate({ id: term._id, isOpen: !term.isOpen })
                           }
+                          title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write') : undefined}
                           className={cn(
-                            'h-7 px-2.5 text-xs font-medium gap-1',
+                            'h-7 px-2.5 text-xs font-medium gap-1 disabled:opacity-50',
                             term.isOpen
                               ? 'bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive hover:text-white'
                               : 'bg-primary text-primary-foreground hover:bg-primary/90',

@@ -212,6 +212,16 @@ export class StudentsService {
         ? (profile as any).toObject()
         : profile;
 
+    const academicProfile = await this.academicProfileModel
+      .findOne({ studentId: new Types.ObjectId(userId) })
+      .lean();
+
+    const completedCreditHours =
+      academicProfile?.completedCreditHours ??
+      (academicProfile?.completedCourses?.length
+        ? academicProfile.completedCourses.length * 3
+        : 0);
+
     return {
       ...profileObj,
       email: user.email ?? '',
@@ -219,6 +229,11 @@ export class StudentsService {
       googleEmail: user.googleEmail ?? '',
       googleLinkedAt: user.googleLinkedAt,
       googleLinkPending: user.googleLinkPending ?? false,
+      gpa: academicProfile?.gpa ?? profileObj.gpa ?? 0,
+      academicWarnings:
+        academicProfile?.academicWarnings ?? profileObj.academicWarnings ?? 0,
+      completedCreditHours,
+      completedCoursesCount: academicProfile?.completedCourses?.length ?? 0,
     };
   }
 

@@ -13,10 +13,10 @@ export const GRADE_SCALE: GradeScaleItem[] = [
   { letter: 'A',  minPercentage: 85, maxPercentage: 89.99, points: 3.7, nameAr: 'امتياز', nameEn: 'Excellent' },
   { letter: 'B+', minPercentage: 80, maxPercentage: 84.99, points: 3.3, nameAr: 'جيد جداً مرتفع', nameEn: 'Very Good Plus' },
   { letter: 'B',  minPercentage: 75, maxPercentage: 79.99, points: 3.0, nameAr: 'جيد جداً', nameEn: 'Very Good' },
-  { letter: 'C+', minPercentage: 70, maxPercentage: 74.99, points: 2.6, nameAr: 'جيد مرتفع', nameEn: 'Good Plus' },
-  { letter: 'C',  minPercentage: 65, maxPercentage: 69.99, points: 2.2, nameAr: 'جيد', nameEn: 'Good' },
-  { letter: 'D+', minPercentage: 60, maxPercentage: 64.99, points: 1.7, nameAr: 'مقبول مرتفع', nameEn: 'Pass Plus' },
-  { letter: 'D',  minPercentage: 50, maxPercentage: 59.99, points: 1.0, nameAr: 'مقبول', nameEn: 'Pass' },
+  { letter: 'C+', minPercentage: 70, maxPercentage: 74.99, points: 2.7, nameAr: 'جيد مرتفع', nameEn: 'Good Plus' },
+  { letter: 'C',  minPercentage: 65, maxPercentage: 69.99, points: 2.4, nameAr: 'جيد', nameEn: 'Good' },
+  { letter: 'D+', minPercentage: 60, maxPercentage: 64.99, points: 2.3, nameAr: 'مقبول مرتفع', nameEn: 'Pass Plus' },
+  { letter: 'D',  minPercentage: 50, maxPercentage: 59.99, points: 2.0, nameAr: 'مقبول', nameEn: 'Pass' },
   { letter: 'F',  minPercentage: 0,  maxPercentage: 49.99, points: 0.0, nameAr: 'راسب', nameEn: 'Fail' },
 ];
 

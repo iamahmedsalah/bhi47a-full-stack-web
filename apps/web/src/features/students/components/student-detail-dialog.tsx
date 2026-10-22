@@ -80,9 +80,11 @@ export interface Student {
   };
   gpa?: number;
   academicWarnings?: number;
+  completedCreditHours?: number;
   academicProfile?: {
     gpa?: number;
     academicWarnings?: number;
+    completedCreditHours?: number;
     completedCourses?: string[];
     failedCourses?: string[];
   };
@@ -102,6 +104,7 @@ export interface CourseGradeRow {
   totalScore: number;
   totalMaxGrade: number;
   percentage: number;
+  creditHours?: number;
   letterGrade?: string;
   status: 'passed' | 'failed' | 'in_progress';
 }
@@ -257,7 +260,7 @@ export function StudentDetailDialog({
     queryKey: ['courses-lookup-dialog'],
     queryFn: async () => {
       try {
-        const res = await api.get<{ items: Array<{ code: string; name: string; nameAr?: string; nameEn?: string }> }>(
+        const res = await api.get<{ items: Array<{ code: string; name: string; nameAr?: string; nameEn?: string; creditHours?: number }> }>(
           '/courses',
           { params: { limit: 200 } }
         );
@@ -270,7 +273,7 @@ export function StudentDetailDialog({
   });
 
   const coursesMap = useMemo(() => {
-    const map = new Map<string, { code: string; name: string; nameAr?: string; nameEn?: string }>();
+    const map = new Map<string, { code: string; name: string; nameAr?: string; nameEn?: string; creditHours?: number }>();
     for (const c of coursesQuery.data ?? []) {
       if (c.code) {
         map.set(c.code.toUpperCase(), c);
@@ -332,6 +335,8 @@ export function StudentDetailDialog({
 
       const scale = calculateGradeScale(percentage, row.final?.status);
       row.letterGrade = row.final?.letterGrade || scale.letter;
+      const courseMeta = coursesMap.get(row.courseCode.toUpperCase());
+      row.creditHours = courseMeta?.creditHours ?? 3;
 
       if (row.final) {
         const finalStatus = (row.final.status || '').toLowerCase();
@@ -388,12 +393,27 @@ export function StudentDetailDialog({
       (c) => c.status !== 'resolved' && c.status !== 'closed'
     ).length;
 
+    const passedCoursesList = groupedCourses.filter((c) => c.status === 'passed');
+    const creditsFromGrades = passedCoursesList.reduce(
+      (sum, c) => sum + (c.creditHours || 3),
+      0
+    );
+    const creditsFromProfile =
+      student?.completedCreditHours ?? student?.academicProfile?.completedCreditHours;
+    const completedCredits =
+      typeof creditsFromProfile === 'number' && creditsFromProfile > 0
+        ? creditsFromProfile
+        : creditsFromGrades > 0
+          ? creditsFromGrades
+          : (student?.academicProfile?.completedCourses?.length ?? 0) * 3;
+
     return {
       gpa: gpaDisplay,
       rawGpa: typeof rawGpa === 'number' ? rawGpa : null,
       warnings,
       failedCourses,
       totalCourses,
+      completedCredits,
       openComplaintsCount,
     };
   }, [student, groupedCourses, complaints]);
@@ -464,11 +484,11 @@ export function StudentDetailDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {/* Quick Metrics Bar (Strictly 4 Cards: GPA, Warnings, Failed Courses, Total Courses) */}
+          {/* Quick Metrics Bar (Strictly 5 Cards: GPA, Completed Credits, Total Courses, Failed Courses, Warnings) */}
           {student && (
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-border/40">
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-3 border-t border-border/40">
               {/* Card 1: GPA with Final Grade */}
-              <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
+              <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start col-span-2 sm:col-span-1">
                 <span className="text-xs text-muted-foreground block">
                   {isAr ? 'المعدل التراكمي (GPA)' : 'Cumulative GPA'}
                 </span>
@@ -508,22 +528,30 @@ export function StudentDetailDialog({
                 </div>
               </div>
 
-              {/* Card 2: Academic Warnings */}
+              {/* Card 2: Completed Credit Hours */}
               <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
                 <span className="text-xs text-muted-foreground block">
-                  {isAr ? 'الإنذارات الأكاديمية' : 'Academic Warnings'}
+                  {isAr ? 'الساعات المكتملة' : 'Completed Credits'}
                 </span>
-                <span
-                  className={cn(
-                    'text-lg font-bold font-mono',
-                    stats.warnings > 0 ? 'text-danger' : 'text-success'
-                  )}
-                >
-                  {stats.warnings}
+                <span className="text-lg font-bold font-mono text-teal-400">
+                  {stats.completedCredits}
+                  <span className="text-xs text-muted-foreground font-normal font-sans ms-1">
+                    {isAr ? 'ساعة' : 'hrs'}
+                  </span>
                 </span>
               </div>
 
-              {/* Card 3: Failed Courses */}
+              {/* Card 3: Total Courses Taken */}
+              <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
+                <span className="text-xs text-muted-foreground block">
+                  {isAr ? 'المقررات المسجلة' : 'Registered Courses'}
+                </span>
+                <span className="text-lg font-bold font-mono text-primary">
+                  {stats.totalCourses}
+                </span>
+              </div>
+
+              {/* Card 4: Failed Courses */}
               <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
                 <span className="text-xs text-muted-foreground block">
                   {isAr ? 'المقررات الراسبة' : 'Failed Courses'}
@@ -538,13 +566,18 @@ export function StudentDetailDialog({
                 </span>
               </div>
 
-              {/* Card 4: Total Courses Taken */}
+              {/* Card 5: Academic Warnings */}
               <div className="rounded-lg bg-surface/40 p-2.5 border border-border/50 text-center sm:text-start">
                 <span className="text-xs text-muted-foreground block">
-                  {isAr ? 'إجمالي المقررات المسجلة' : 'Total Courses Taken'}
+                  {isAr ? 'الإنذارات الأكاديمية' : 'Academic Warnings'}
                 </span>
-                <span className="text-lg font-bold font-mono text-primary">
-                  {stats.totalCourses}
+                <span
+                  className={cn(
+                    'text-lg font-bold font-mono',
+                    stats.warnings > 0 ? 'text-danger' : 'text-success'
+                  )}
+                >
+                  {stats.warnings}
                 </span>
               </div>
             </div>
@@ -637,6 +670,7 @@ export function StudentDetailDialog({
                         <tr>
                           <th className="p-3 text-start">{isAr ? 'كود المقرر' : 'Code'}</th>
                           <th className="p-3 text-start">{isAr ? 'اسم المقرر' : 'Course Name'}</th>
+                          <th className="p-3 text-center">{isAr ? 'الساعات' : 'Credits'}</th>
                           <th className="p-3 text-start">{isAr ? 'السنة / الفصل' : 'Year / Term'}</th>
                           <th className="p-3 text-center">{isAr ? 'الميدتيرم' : 'Midterm'}</th>
                           <th className="p-3 text-center">{isAr ? 'الامتحان النهائي' : 'Final Exam'}</th>
@@ -659,6 +693,9 @@ export function StudentDetailDialog({
                               </td>
                               <td className="p-3 text-foreground font-semibold">
                                 {courseDisplayName}
+                              </td>
+                              <td className="p-3 text-center font-mono text-xs font-bold text-teal-400">
+                                {row.creditHours ?? 3}
                               </td>
                               <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                                 {row.academicYear} · {semesterMap[row.semester] ?? row.semester}

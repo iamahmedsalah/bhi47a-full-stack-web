@@ -52,6 +52,11 @@ export async function activateStaff(id: string): Promise<StaffMember> {
   return response.data;
 }
 
+export async function deleteStaff(id: string): Promise<{ success: boolean; message: string }> {
+  const response = await api.delete<{ success: boolean; message: string }>(`/admin/staff/${id}`);
+  return response.data;
+}
+
 export async function getStaffCourses(doctorId: string): Promise<StaffAssignedCourse[]> {
   try {
     const response = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', {

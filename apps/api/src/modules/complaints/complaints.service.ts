@@ -75,6 +75,12 @@ export class ComplaintsService {
     if (dto.complaintCloseAt !== undefined) {
       settings.complaintCloseAt = new Date(dto.complaintCloseAt);
     }
+    if (dto.complaintDailyLimit !== undefined) {
+      settings.complaintDailyLimit = dto.complaintDailyLimit;
+    }
+    if (dto.departmentStaffAssignments !== undefined) {
+      settings.departmentStaffAssignments = dto.departmentStaffAssignments;
+    }
     if (
       settings.complaintOpenAt &&
       settings.complaintCloseAt &&
@@ -147,6 +153,7 @@ export class ComplaintsService {
       requesterName: dto.requesterName,
       contactPhone: dto.contactPhone,
       contactEmail: dto.contactEmail,
+      nationalId: dto.nationalId,
       nationalIdMasked: this.maskNationalId(dto.nationalId),
     });
   }
@@ -158,24 +165,11 @@ export class ComplaintsService {
       requesterName?: string;
       contactPhone?: string;
       contactEmail?: string;
+      nationalId?: string;
       nationalIdMasked?: string;
     },
   ): Promise<ComplaintDocument> {
-    // 1. Daily complaint limit (3 per student per day)
-    const todayCount = await this.countTodayTickets(student._id.toString());
-    if (todayCount >= 3) {
-      this.logger.warn('Daily complaint limit reached', {
-        context: ComplaintsService.name,
-        studentId: String(student._id),
-        studentCode: student.studentCode,
-        todayCount,
-      });
-      throw new BadRequestException(
-        'لقد وصلت للحد الأقصى من البلاغات اليومية (3 بلاغات). حاول مرة أخرى غداً',
-      );
-    }
-
-    // 2. Validate system settings status
+    // 1. Validate system settings status
     const settings = await this.getSettings();
     if (!settings.complaintsSystemOpen) {
       throw new BadRequestException(
@@ -191,6 +185,53 @@ export class ComplaintsService {
       throw new BadRequestException('انتهى وقت استقبال الشكاوى');
     }
 
+    // 2. Rolling 24-hour complaint limit (defaults to 3, or configurable 2-3 in settings)
+    const maxDaily = settings.complaintDailyLimit ?? 3;
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentTickets = await this.complaintModel
+      .find({
+        studentId: student._id,
+        createdAt: { $gte: twentyFourHoursAgo },
+      })
+      .sort({ createdAt: 1 })
+      .select('createdAt')
+      .lean();
+
+    if (recentTickets.length >= maxDaily) {
+      const oldestTicket = recentTickets[0];
+      const oldestTime = oldestTicket?.createdAt
+        ? new Date(oldestTicket.createdAt).getTime()
+        : Date.now();
+      const expiryTime = new Date(oldestTime + 24 * 60 * 60 * 1000);
+      const remainingMs = Math.max(0, expiryTime.getTime() - Date.now());
+      const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+      const remainingMinutes = Math.ceil(
+        (remainingMs % (1000 * 60 * 60)) / (1000 * 60),
+      );
+
+      const timeRemainingStr =
+        remainingHours > 0
+          ? `${remainingHours} ساعة و ${remainingMinutes} دقيقة`
+          : `${remainingMinutes} دقيقة`;
+
+      const timeRemainingStrEn =
+        remainingHours > 0
+          ? `${remainingHours}h ${remainingMinutes}m`
+          : `${remainingMinutes}m`;
+
+      this.logger.warn('24-hour complaint limit reached', {
+        context: ComplaintsService.name,
+        studentId: String(student._id),
+        studentCode: student.studentCode,
+        todayCount: recentTickets.length,
+        maxDaily,
+      });
+
+      throw new BadRequestException(
+        `لقد وصلت للحد الأقصى من البلاغات (${maxDaily} بلاغات خلال 24 ساعة). يمكنك تقديم بلاغ جديد بعد ${timeRemainingStr} / You reached the limit of ${maxDaily} complaints per 24h. Try again in ${timeRemainingStrEn}.`,
+      );
+    }
+
     // 3. Validate student blacklist status
     if (settings.blacklistedStudentCodes.includes(student.studentCode || '')) {
       throw new BadRequestException(
@@ -200,28 +241,58 @@ export class ComplaintsService {
 
     const ticketNumber = await this.generateUniqueTicketNumber();
 
+    const targetDept = dto.department ?? this.getDefaultDepartment(dto.type);
+    const departmentMapping: Record<string, string> = {
+      student_affairs: 'شؤون الطلاب',
+      technical_support: 'الدعم الفني',
+      finance: 'المالية',
+      control: 'الكنترول',
+      academic_advising: 'الإرشاد الأكاديمي',
+    };
+    const assignedGroup = departmentMapping[targetDept];
+
+    let autoAssignedStaffId: Types.ObjectId | undefined;
+    let autoAssignedStaffName: string | undefined;
+
+    const deptAssignment = settings.departmentStaffAssignments?.[targetDept];
+    if (deptAssignment?.staffId) {
+      try {
+        const staffUser = await this.userModel.findOne({
+          _id: new Types.ObjectId(deptAssignment.staffId),
+          role: { $in: ['admin', 'staff'] },
+          isActive: true,
+        });
+        if (staffUser) {
+          autoAssignedStaffId = new Types.ObjectId(String(staffUser._id));
+          autoAssignedStaffName = staffUser.name;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Could not auto-assign staff for dept ${targetDept}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     const newTicket = new this.complaintModel({
       ticketNumber,
       studentId: student._id,
       studentCode: student.studentCode,
       studentName: student.name,
-      requesterName: publicContact?.requesterName,
+      requesterName: publicContact?.requesterName ?? student.name,
       contactPhone: publicContact?.contactPhone ?? student.phone,
       contactEmail: publicContact?.contactEmail ?? student.email,
-      nationalIdMasked: publicContact?.nationalIdMasked,
+      nationalId: publicContact?.nationalId ?? student.nationalId,
+      nationalIdMasked:
+        publicContact?.nationalIdMasked ??
+        student.nationalIdMasked ??
+        (student.nationalId
+          ? this.maskNationalId(student.nationalId)
+          : undefined),
       type: dto.type,
-      department: dto.department ?? this.getDefaultDepartment(dto.type),
-      assignedGroup: (() => {
-        const dept = dto.department ?? this.getDefaultDepartment(dto.type);
-        const mapping: Record<string, string> = {
-          student_affairs: 'شؤون الطلاب',
-          technical_support: 'الدعم الفني',
-          finance: 'المالية',
-          control: 'الكنترول',
-          academic_advising: 'الإرشاد الأكاديمي',
-        };
-        return mapping[dept];
-      })(),
+      department: targetDept,
+      assignedGroup,
+      assignedStaffId: autoAssignedStaffId,
+      assignedStaffName: autoAssignedStaffName,
       title: dto.title,
       description: dto.description,
       priority: dto.priority || 'medium',
@@ -355,6 +426,27 @@ export class ComplaintsService {
       this.complaintModel.countDocuments(filter),
     ]);
 
+    const missingNationalIds = items
+      .filter((i) => !i.nationalId && i.studentId)
+      .map((i) => i.studentId);
+    if (missingNationalIds.length > 0) {
+      const students = await this.userModel
+        .find({ _id: { $in: missingNationalIds } })
+        .select('+nationalId')
+        .lean();
+      const studentMap = new Map(
+        students.map((s) => [s._id.toString(), s.nationalId]),
+      );
+      items.forEach((item) => {
+        if (!item.nationalId && item.studentId) {
+          const nid = studentMap.get(item.studentId.toString());
+          if (nid) {
+            item.nationalId = nid;
+          }
+        }
+      });
+    }
+
     return createPaginatedResult(items, total, page, limit);
   }
 
@@ -387,6 +479,15 @@ export class ComplaintsService {
     const ticket = await this.complaintModel.findById(id);
     if (!ticket) {
       throw new NotFoundException('الشكوى غير موجودة'); // Ticket not found
+    }
+    if (!ticket.nationalId && ticket.studentId) {
+      const student = await this.userModel
+        .findById(ticket.studentId)
+        .select('+nationalId')
+        .lean();
+      if (student?.nationalId) {
+        ticket.nationalId = student.nationalId;
+      }
     }
     return ticket;
   }

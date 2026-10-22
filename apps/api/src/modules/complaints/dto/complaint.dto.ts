@@ -12,6 +12,10 @@ import {
   MaxLength,
   IsMongoId,
   IsEmail,
+  IsInt,
+  Min,
+  Max,
+  IsObject,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -227,6 +231,27 @@ export class UpdateSystemSettingsDto {
   @IsDateString()
   @IsOptional()
   complaintCloseAt?: string;
+
+  @ApiPropertyOptional({
+    example: 3,
+    description: 'Daily complaint limit per student in rolling 24 hours',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  complaintDailyLimit?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Map of department to designated staff member { [deptKey]: { staffId, staffName } }',
+  })
+  @IsOptional()
+  @IsObject()
+  departmentStaffAssignments?: Record<
+    string,
+    { staffId: string; staffName: string }
+  >;
 }
 
 export class QueryComplaintDto {

@@ -11,7 +11,10 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
@@ -190,21 +193,28 @@ export class RegistrationsController {
   }
 
   @Get('admin/gpa-rules')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequireAnyPermissions(
+    PERMISSIONS.STUDY_PLAN_MANAGE,
+    PERMISSIONS.ADVISING_READ,
+    PERMISSIONS.REGISTRATION_READ,
+  )
   @ApiOperation({ summary: 'List GPA registration rules' })
   listGpaRules() {
     return this.registrationsService.listGpaRules();
   }
 
   @Post('admin/gpa-rules')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDY_PLAN_MANAGE)
   @ApiOperation({ summary: 'Create GPA registration rule' })
   createGpaRule(@Body() dto: CreateGpaRegistrationRuleDto) {
     return this.registrationsService.createGpaRule(dto);
   }
 
   @Patch('admin/gpa-rules/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDY_PLAN_MANAGE)
   @ApiOperation({ summary: 'Update GPA registration rule' })
   updateGpaRule(
     @Param('id', ParseObjectIdPipe) id: string,
@@ -214,7 +224,8 @@ export class RegistrationsController {
   }
 
   @Delete('admin/gpa-rules/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDY_PLAN_MANAGE)
   @ApiOperation({ summary: 'Delete GPA registration rule' })
   deleteGpaRule(@Param('id', ParseObjectIdPipe) id: string) {
     return this.registrationsService.deleteGpaRule(id);
@@ -305,7 +316,8 @@ export class RegistrationsController {
   }
 
   @Post('admin/academic-years')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
   @ApiOperation({ summary: 'Create an academic year with all three semesters' })
   createAcademicYear(
     @CurrentUser() user: AuthenticatedUser,
@@ -315,7 +327,8 @@ export class RegistrationsController {
   }
 
   @Patch('admin/academic-years/:academicYear/current')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
   @ApiOperation({ summary: 'Make an academic year authoritative/current' })
   setCurrentAcademicYear(@Param('academicYear') academicYear: string) {
     return this.registrationsService.setCurrentAcademicYear(academicYear);
@@ -329,7 +342,8 @@ export class RegistrationsController {
   }
 
   @Post('admin/registration-terms')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
   @ApiOperation({ summary: 'Open, close, or schedule a registration semester' })
   upsertRegistrationTerm(
     @CurrentUser() user: AuthenticatedUser,
@@ -339,7 +353,8 @@ export class RegistrationsController {
   }
 
   @Patch('admin/registration-terms/:id')
-  @Roles('admin')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.REGISTRATION_WRITE)
   @ApiOperation({ summary: 'Toggle registration semester open/close' })
   toggleRegistrationTerm(
     @Param('id', ParseObjectIdPipe) id: string,

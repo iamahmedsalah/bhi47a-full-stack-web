@@ -10,11 +10,17 @@ import {
   CheckCircle2,
   Sliders,
   Layers,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/api';
 import {
   getAdvisingRules,
@@ -26,6 +32,12 @@ import {
 export function AdvisingRulesPanel({ locale }: { locale: string }) {
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canManage =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('advising.write'));
+
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const rulesQuery = useQuery({
     queryKey: settingsKeys.advisingRules,
@@ -95,6 +107,18 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Read-Only Notice if user cannot manage */}
+      {!canManage && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            {isAr
+              ? 'وضع العرض فقط: حسابك لا يملك صلاحية تعديل قواعد الإرشاد الأكاديمي (advising.write). يمكنك استعراض الضوابط والسقوف الدراسية دون إمكانية الحفظ.'
+              : 'Read-only mode: Your account lacks advising edit permissions (advising.write). You can review rules in view-only mode.'}
+          </span>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
         <div>
@@ -112,19 +136,90 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
               : 'Configure recommendation limits, strict level bounds, department specialization, and credit caps.'}
           </p>
         </div>
-        <Button
-          onClick={() => updateMutation.mutate()}
-          disabled={updateMutation.isPending}
-          className="h-9 gap-2 px-5 text-xs font-semibold shadow-md"
-        >
-          {updateMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CheckCircle2 className="h-4 w-4" />
-          )}
-          <span>{isAr ? 'حفظ التغييرات' : 'Save Rules'}</span>
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setGuideOpen((prev) => !prev)}
+            className="h-9 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span>{isAr ? 'شرح المحرك الأكاديمي' : 'Engine Guide'}</span>
+            {guideOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </Button>
+
+          <Button
+            onClick={() => updateMutation.mutate()}
+            disabled={!canManage || updateMutation.isPending}
+            className="h-9 gap-2 px-5 text-xs font-semibold shadow-md disabled:opacity-50"
+            title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل الإرشاد الأكاديمي' : 'Requires advising.write') : undefined}
+          >
+            {updateMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            <span>{isAr ? 'حفظ التغييرات' : 'Save Rules'}</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Collapsible Rich Educational Guide */}
+      {guideOpen && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 animate-in fade-in-0 duration-300 space-y-3">
+          <div className="font-bold text-xs text-foreground flex items-center gap-2">
+            <Info className="h-4 w-4 text-primary" />
+            <span>{isAr ? 'دليل عمل محرك الإرشاد والتوصية الذكي (Advising Engine Blueprint)' : 'Advising Engine Logic & Policy Guide'}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+            <div className="rounded-xl border border-white/10 bg-background/50 p-3 space-y-1">
+              <strong className="block text-foreground text-xs font-semibold">
+                {isAr ? '1. سقف المقررات في الفصل:' : '1. Course Ceilings:'}
+              </strong>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {isAr
+                  ? 'يحدد الحد الأقصى للمقررات (افتراضياً 6 مقررات) التي يرشحها المحرك للطالب في الفصل الواحد لمنع الإجهاد.'
+                  : 'Caps recommended course count (default 6) per term to prevent academic overload.'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-background/50 p-3 space-y-1">
+              <strong className="block text-foreground text-xs font-semibold">
+                {isAr ? '2. قفل المستويات المتقدمة:' : '2. Level Progression:'}
+              </strong>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {isAr
+                  ? 'يمنع ترشيح مقررات من مستوى أعلى من مستوى الطالب الحالي قبل استيفاء مقررات مستواه والمتطلبات الراسبة.'
+                  : 'Disallows courses from higher academic levels until standing level courses are cleared.'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-background/50 p-3 space-y-1">
+              <strong className="block text-foreground text-xs font-semibold">
+                {isAr ? '3. العزل التخصصي (BIS / محاسبة):' : '3. Track Separation:'}
+              </strong>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {isAr
+                  ? 'في المستويين 3 و 4 يتم ترشيح مواد كل شعبة لطلابها فقط، مع الاحتفاظ بـ 5 مقررات مشتركة متاحة للشعبتين.'
+                  : 'Isolates Level 3 & 4 courses by department while allowing 5 designated common shared subjects.'}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-background/50 p-3 space-y-1">
+              <strong className="block text-foreground text-xs font-semibold">
+                {isAr ? '4. فرص تحسين المعدل:' : '4. D/D+ Improvement:'}
+              </strong>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {isAr
+                  ? 'عند تعطل الجدول بسبب رسوب متطلب سابق، يُعرض مقرر ذو تقدير ضعيف (D/D+) اختيارياً لرفع المعدل التراكمي.'
+                  : 'Suggests optional retakes for D/D+ grades when progression is stalled by prerequisite failures.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Card 1: Course Allocation & Level Boundary */}
@@ -156,9 +251,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={1}
                   max={10}
+                  disabled={!canManage}
                   value={maxCoursesLimit}
                   onChange={(e) => setMaxCoursesLimit(Number(e.target.value))}
-                  className="h-9 w-28 text-center font-mono font-bold text-sm"
+                  className="h-9 w-28 text-center font-mono font-bold text-sm disabled:opacity-60"
                 />
                 <span className="text-xs text-muted-foreground">
                   {isAr ? 'مقررات دراسية في الفصل الواحد' : 'courses per term'}
@@ -176,14 +272,15 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
               <input
                 id="preventHigherLevel"
                 type="checkbox"
+                disabled={!canManage}
                 checked={preventHigherLevelCourses}
                 onChange={(e) => setPreventHigherLevelCourses(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="space-y-0.5">
                 <Label
                   htmlFor="preventHigherLevel"
-                  className="text-xs font-semibold text-foreground cursor-pointer"
+                  className={cn("text-xs font-semibold text-foreground cursor-pointer", !canManage && "cursor-not-allowed opacity-70")}
                 >
                   {isAr
                     ? 'منع التوصية بمقررات من مستوى أعلى من مستوى الطالب الحالي'
@@ -202,14 +299,15 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
               <input
                 id="allowLowGradeFallback"
                 type="checkbox"
+                disabled={!canManage}
                 checked={allowLowGradeImprovementFallback}
                 onChange={(e) => setAllowLowGradeImprovementFallback(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="space-y-0.5">
                 <Label
                   htmlFor="allowLowGradeFallback"
-                  className="text-xs font-semibold text-foreground cursor-pointer"
+                  className={cn("text-xs font-semibold text-foreground cursor-pointer", !canManage && "cursor-not-allowed opacity-70")}
                 >
                   {isAr
                     ? 'إتاحة مقررات التحسين (تقدير D/D+) كخيار بديل اختياري عند تعطل المقررات'
@@ -247,14 +345,15 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
               <input
                 id="enforceDept"
                 type="checkbox"
+                disabled={!canManage}
                 checked={enforceDepartmentLevel3And4}
                 onChange={(e) => setEnforceDepartmentLevel3And4(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               />
               <div className="space-y-0.5">
                 <Label
                   htmlFor="enforceDept"
-                  className="text-xs font-semibold text-foreground cursor-pointer"
+                  className={cn("text-xs font-semibold text-foreground cursor-pointer", !canManage && "cursor-not-allowed opacity-70")}
                 >
                   {isAr
                     ? 'إلزام الطلاب بمقررات قسمهم وتخصصهم تلقائياً'
@@ -310,9 +409,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={6}
                   max={24}
+                  disabled={!canManage}
                   value={regularMaxCredits}
                   onChange={(e) => setRegularMaxCredits(Number(e.target.value))}
-                  className="h-8 w-20 text-center font-mono font-bold text-xs"
+                  className="h-8 w-20 text-center font-mono font-bold text-xs disabled:opacity-60"
                 />
                 <span className="text-xs font-semibold text-foreground">
                   {isAr ? 'ساعة' : 'cr'}
@@ -330,9 +430,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={3}
                   max={24}
+                  disabled={!canManage}
                   value={probationMaxCredits}
                   onChange={(e) => setProbationMaxCredits(Number(e.target.value))}
-                  className="h-8 w-20 text-center font-mono font-bold text-xs"
+                  className="h-8 w-20 text-center font-mono font-bold text-xs disabled:opacity-60"
                 />
                 <span className="text-xs font-semibold text-amber-200">
                   {isAr ? 'ساعة' : 'cr'}
@@ -350,9 +451,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={6}
                   max={28}
+                  disabled={!canManage}
                   value={graduatingMaxCredits}
                   onChange={(e) => setGraduatingMaxCredits(Number(e.target.value))}
-                  className="h-8 w-20 text-center font-mono font-bold text-xs"
+                  className="h-8 w-20 text-center font-mono font-bold text-xs disabled:opacity-60"
                 />
                 <span className="text-xs font-semibold text-sky-200">
                   {isAr ? 'ساعة' : 'cr'}
@@ -370,9 +472,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={3}
                   max={15}
+                  disabled={!canManage}
                   value={summerMaxCredits}
                   onChange={(e) => setSummerMaxCredits(Number(e.target.value))}
-                  className="h-8 w-20 text-center font-mono font-bold text-xs"
+                  className="h-8 w-20 text-center font-mono font-bold text-xs disabled:opacity-60"
                 />
                 <span className="text-xs font-semibold text-foreground">
                   {isAr ? 'ساعة' : 'cr'}
@@ -390,9 +493,10 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
                   type="number"
                   min={3}
                   max={12}
+                  disabled={!canManage}
                   value={summerProbationMaxCredits}
                   onChange={(e) => setSummerProbationMaxCredits(Number(e.target.value))}
-                  className="h-8 w-20 text-center font-mono font-bold text-xs"
+                  className="h-8 w-20 text-center font-mono font-bold text-xs disabled:opacity-60"
                 />
                 <span className="text-xs font-semibold text-amber-200">
                   {isAr ? 'ساعة' : 'cr'}

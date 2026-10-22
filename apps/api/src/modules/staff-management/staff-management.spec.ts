@@ -71,4 +71,45 @@ describe('Staff management security contracts', () => {
       expect.objectContaining({ action: 'password_reset' }),
     );
   });
+
+  it('permanently deletes staff and records audit log', async () => {
+    const mockStaff = {
+      _id: '507f1f77bcf86cd799439011',
+      userCode: 'STF-0010',
+      name: 'Dr. Test',
+      email: 'test@example.com',
+      username: 'drtest',
+      role: 'staff',
+    };
+    const users = {
+      findOne: jest.fn().mockResolvedValue(mockStaff),
+      deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    };
+    const auditLogs = { create: jest.fn().mockResolvedValue({}) };
+    const service = new StaffManagementService(
+      users as never,
+      auditLogs as never,
+    );
+
+    const result = await service.delete(
+      '507f1f77bcf86cd799439011',
+      '507f1f77bcf86cd799439099',
+    );
+
+    expect(users.findOne).toHaveBeenCalledWith({
+      _id: '507f1f77bcf86cd799439011',
+      role: 'staff',
+    });
+    expect(auditLogs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'deleted',
+        targetStaffId: expect.anything(),
+        actorId: expect.anything(),
+      }),
+    );
+    expect(users.deleteOne).toHaveBeenCalledWith({
+      _id: mockStaff._id,
+    });
+    expect(result.success).toBe(true);
+  });
 });

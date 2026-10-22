@@ -20,7 +20,10 @@ import {
   BulkDeleteComplaintsDto,
 } from './dto/complaint.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import {
+  RequirePermissions,
+  RequireAnyPermissions,
+} from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
@@ -51,6 +54,7 @@ export class ComplaintsController {
       complaintsSystemOpen: settings.complaintsSystemOpen,
       complaintOpenAt: settings.complaintOpenAt,
       complaintCloseAt: settings.complaintCloseAt,
+      complaintDailyLimit: settings.complaintDailyLimit ?? 3,
     };
   }
 
@@ -98,7 +102,10 @@ export class ComplaintsController {
 
   @Get('admin/complaints/assignees')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.COMPLAINTS_READ)
+  @RequireAnyPermissions(
+    PERMISSIONS.COMPLAINTS_READ,
+    PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS,
+  )
   @ApiOperation({ summary: 'List active staff/admin users for assignment' })
   async assignees() {
     return this.complaintsService.findAssignableStaff();
@@ -106,7 +113,10 @@ export class ComplaintsController {
 
   @Get('admin/complaints/settings')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS)
+  @RequireAnyPermissions(
+    PERMISSIONS.COMPLAINTS_MANAGE_SETTINGS,
+    PERMISSIONS.COMPLAINTS_READ,
+  )
   @ApiOperation({
     summary: 'Get complaints system settings and blacklist (Admin/Staff)',
   })

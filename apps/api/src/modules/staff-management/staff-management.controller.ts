@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -96,6 +97,15 @@ export class StaffManagementController {
     @CurrentUser('_id') actorId: string,
   ) {
     return this.staff.activate(id, actorId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a staff account permanently' })
+  delete(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.staff.delete(id, actorId);
   }
 
   @Get(':id/audit')

@@ -20,6 +20,18 @@ export class SystemSettings {
   @Prop()
   complaintCloseAt?: Date;
 
+  @Prop({ type: Number, default: 3 })
+  complaintDailyLimit?: number;
+
+  @Prop({
+    type: Object,
+    default: {},
+  })
+  departmentStaffAssignments?: Record<
+    string,
+    { staffId: string; staffName: string }
+  >;
+
   @Prop({ default: true })
   gradesSystemOpen?: boolean;
 

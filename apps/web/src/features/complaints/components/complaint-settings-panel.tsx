@@ -1,7 +1,15 @@
 'use client';
 
 import React from 'react';
-import { CalendarClock, CheckCircle2, Play, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
+import {
+  CalendarClock,
+  CheckCircle2,
+  Play,
+  ShieldAlert,
+  Settings,
+  ArrowLeft,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,12 +17,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { cn } from '@/lib/cn';
+import type { DepartmentStaffAssignment } from '../api';
 
 export interface ComplaintSettingsData {
   complaintsSystemOpen: boolean;
   complaintOpenAt?: string;
   complaintCloseAt?: string;
+  complaintDailyLimit?: number;
   blacklistedStudentCodes: string[];
+  departmentStaffAssignments?: Record<string, DepartmentStaffAssignment>;
   updatedAt?: string;
 }
 
@@ -24,7 +35,13 @@ export interface ComplaintSettingsPanelProps {
   setWindowOpenAt: (val: string) => void;
   windowCloseAt: string;
   setWindowCloseAt: (val: string) => void;
-  handleUpdateSettings: (patch: { complaintsSystemOpen?: boolean; complaintOpenAt?: string; complaintCloseAt?: string }) => void;
+  handleUpdateSettings: (patch: {
+    complaintsSystemOpen?: boolean;
+    complaintOpenAt?: string;
+    complaintCloseAt?: string;
+    complaintDailyLimit?: number;
+    departmentStaffAssignments?: Record<string, DepartmentStaffAssignment>;
+  }) => void;
   targetStudentCode: string;
   setTargetStudentCode: (code: string) => void;
   handleStudentCodeStatus: (disable: boolean) => void;
@@ -114,6 +131,25 @@ export function ComplaintSettingsPanel({
               locale={locale}
             />
           </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:col-span-2 pt-3 border-t border-border/40">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground font-medium">
+                {isAr ? 'سقف الشكاوى (Rate Limit):' : 'Complaint Rate Limit:'}
+              </span>
+              <span className="text-xs font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-squircle">
+                {settings?.complaintDailyLimit ?? 3} {isAr ? 'شكاوى / 24 ساعة' : 'tickets / 24h'}
+              </span>
+            </div>
+            <Link
+              href={`/${locale}/admin/settings?tab=complaints`}
+              className="inline-flex items-center gap-1.5 text-xs text-teal-400 hover:text-teal-300 font-semibold transition-colors"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              <span>{isAr ? 'تعديل السقف وتوزيع الأقسام في الإعدادات' : 'Configure Limit & Routing in Settings'}</span>
+              <ArrowLeft className="h-3 w-3 rtl:rotate-0 rotate-180" />
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -122,7 +158,7 @@ export function ComplaintSettingsPanel({
             variant="secondary"
             className="gap-2 cursor-pointer"
           >
-            {isAr ? 'حفظ المواعيد' : 'Save Dates'}
+            {isAr ? 'حفظ مواعيد الاستقبال' : 'Save Opening Dates'}
             <CheckCircle2 className="h-4 w-4" />
           </Button>
           <Button

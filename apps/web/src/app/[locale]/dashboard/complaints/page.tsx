@@ -17,10 +17,12 @@ import {
   LifeBuoy,
   Inbox,
   UserCheck,
+  ZoomIn,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 
 interface Reply {
   senderId: string;
@@ -40,6 +42,7 @@ interface Complaint {
   status: 'open' | 'in_review' | 'in_progress' | 'resolved' | 'closed';
   assignedStaffName?: string;
   assignedGroup?: string;
+  screenshotUrl?: string;
   replies: Reply[];
   createdAt: string;
 }
@@ -63,6 +66,7 @@ export default function StudentComplaintsPage() {
   const [isReplyOpen, setIsReplyOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Complaint | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Form states
   const [type, setType] = useState<Complaint['type']>('complaint');
@@ -570,6 +574,43 @@ export default function StudentComplaintsPage() {
                   <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mt-1">
                     {selectedTicket.description}
                   </p>
+                  {selectedTicket.screenshotUrl && (
+                    <div className="mt-3 pt-3 border-t border-border/60">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          {isEnglish ? 'Attached Screenshot' : 'الصورة المرفقة'}
+                        </span>
+                        <span className="text-[10px] text-primary flex items-center gap-1 font-medium">
+                          <ZoomIn className="h-3 w-3" />
+                          {isEnglish ? 'Click to zoom' : 'انقر للتكبير'}
+                        </span>
+                      </div>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setPreviewImageUrl(selectedTicket.screenshotUrl ?? null)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setPreviewImageUrl(selectedTicket.screenshotUrl ?? null);
+                          }
+                        }}
+                        className="group relative cursor-pointer overflow-hidden rounded-lg border border-border/60 bg-black/20 p-1.5 transition-all hover:border-primary/50 hover:bg-black/30"
+                      >
+                        <img
+                          src={selectedTicket.screenshotUrl}
+                          alt="Complaint Screenshot"
+                          className="max-h-56 w-full object-contain rounded transition-transform duration-200 group-hover:scale-[1.01]"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-[2px] rounded-lg">
+                          <div className="flex items-center gap-1.5 rounded-squircle bg-black/80 px-2.5 py-1 text-[11px] font-bold text-white shadow-xl border border-white/15">
+                            <ZoomIn className="h-3.5 w-3.5 text-teal-400" />
+                            <span>{isEnglish ? 'Open & Zoom' : 'عرض وتكبير'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Replies */}
@@ -654,6 +695,14 @@ export default function StudentComplaintsPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Lightbox for full-size screenshot preview with zoom and pan */}
+      <ImageLightbox
+        src={previewImageUrl}
+        isOpen={Boolean(previewImageUrl)}
+        onClose={() => setPreviewImageUrl(null)}
+        title={selectedTicket ? `#${selectedTicket.ticketNumber} - ${selectedTicket.title}` : undefined}
+      />
     </div>
   );
 }

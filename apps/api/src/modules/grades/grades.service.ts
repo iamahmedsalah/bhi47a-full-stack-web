@@ -193,6 +193,10 @@ export class GradesService implements OnModuleInit {
           course.type !== 'elective',
       );
 
+      const completedCredits = progress.courseResults
+        .filter((r) => r.passed)
+        .reduce((acc, curr) => acc + curr.creditHours, 0);
+
       const isDryRun = Boolean(options?.dryRun);
 
       if (!isDryRun) {
@@ -215,6 +219,7 @@ export class GradesService implements OnModuleInit {
           academic.completedCourses = progress.completedCourses;
           academic.failedCourses = progress.failedCourses;
           academic.lowGradeCourses = progress.lowGradeCourses;
+          academic.completedCreditHours = completedCredits;
           if (progress.calculatedGpa !== null)
             academic.gpa = progress.calculatedGpa;
           academic.academicLevel = promotedLevel;
@@ -246,10 +251,6 @@ export class GradesService implements OnModuleInit {
           }
         }
       }
-
-      const completedCredits = progress.courseResults
-        .filter((r) => r.passed)
-        .reduce((acc, curr) => acc + curr.creditHours, 0);
 
       return {
         studentId: studentId.toString(),

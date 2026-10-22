@@ -303,6 +303,19 @@ export class StaffManagementService {
     return this.getById(id);
   }
 
+  async delete(id: string, actorId: string) {
+    const staff = await this.findStaffDocument(id);
+    await this.recordAudit(actorId, id, 'deleted', {
+      userCode: staff.userCode,
+      name: staff.name,
+      email: staff.email,
+      username: staff.username,
+      staffType: staff.staffType,
+    });
+    await this.users.deleteOne({ _id: staff._id });
+    return { success: true, message: 'Staff member deleted successfully' };
+  }
+
   async listAudit(id: string) {
     await this.findStaffDocument(id);
     return this.auditLogs

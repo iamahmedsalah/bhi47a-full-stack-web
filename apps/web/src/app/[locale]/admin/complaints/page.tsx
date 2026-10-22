@@ -17,6 +17,13 @@ import {
   Search,
   Send,
   Trash2,
+  ZoomIn,
+  Phone,
+  Mail,
+  CreditCard,
+  Building,
+  User,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,6 +31,7 @@ import { getApiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { cn } from '@/lib/cn';
 import {
   complaintKeys,
@@ -102,6 +110,12 @@ interface Complaint {
   assignedGroup?: string;
   assignedStaffId?: string;
   assignedStaffName?: string;
+  requesterName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  nationalId?: string;
+  nationalIdMasked?: string;
+  department?: string;
   replies: Reply[];
   internalNotes?: InternalNote[];
   statusHistory?: StatusHistory[];
@@ -115,10 +129,13 @@ interface SystemSettings {
   blacklistedStudentCodes: string[];
   complaintOpenAt?: string;
   complaintCloseAt?: string;
+  complaintDailyLimit?: number;
+  departmentStaffAssignments?: Record<string, { staffId: string; staffName: string }>;
   updatedAt?: string;
 }
 
-const statusLabels: Record<ComplaintStatus, string> = {
+const statusLabels: Record<string, string> = {
+  new: 'جديد',
   open: 'قيد الانتظار',
   in_review: 'قيد المراجعة',
   in_progress: 'جاري العمل',
@@ -126,13 +143,23 @@ const statusLabels: Record<ComplaintStatus, string> = {
   closed: 'مغلق',
 };
 
-const statusLabelsEn: Record<ComplaintStatus, string> = {
+const statusLabelsEn: Record<string, string> = {
+  new: 'New',
   open: 'Pending',
   in_review: 'In Review',
-  in_progress: 'Working',
+  in_progress: 'In Progress',
   resolved: 'Resolved',
   closed: 'Closed',
 };
+
+function formatStatus(rawStatus?: string, locale?: string): string {
+  if (!rawStatus) return '';
+  const isAr = locale === 'ar';
+  if (isAr) {
+    return statusLabels[rawStatus] || rawStatus;
+  }
+  return statusLabelsEn[rawStatus] || rawStatus.replace('_', ' ');
+}
 
 const priorityLabels: Record<ComplaintPriority, string> = {
   low: 'منخفضة',
@@ -171,7 +198,64 @@ const groupTranslations: Record<string, string> = {
   'المالية': 'Financial Department',
   'الكنترول': 'Control Room',
   'الإرشاد الأكاديمي': 'Academic Advising',
+  student_affairs: 'Student Affairs',
+  technical_support: 'Technical Support',
+  finance: 'Financial Department',
+  control: 'Control Room',
+  academic_advising: 'Academic Advising',
 };
+
+const departmentLabelsAr: Record<string, string> = {
+  student_affairs: 'شؤون الطلاب',
+  technical_support: 'الدعم الفني',
+  finance: 'المالية',
+  control: 'الكنترول',
+  academic_advising: 'الإرشاد الأكاديمي',
+  'شؤون الطلاب': 'شؤون الطلاب',
+  'الدعم الفني': 'الدعم الفني',
+  'المالية': 'المالية',
+  'الكنترول': 'الكنترول',
+  'الإرشاد الأكاديمي': 'الإرشاد الأكاديمي',
+};
+
+const departmentLabelsEn: Record<string, string> = {
+  student_affairs: 'Student Affairs',
+  technical_support: 'Technical Support',
+  finance: 'Financial Department',
+  control: 'Control Room',
+  academic_advising: 'Academic Advising',
+  'شؤون الطلاب': 'Student Affairs',
+  'الدعم الفني': 'Technical Support',
+  'المالية': 'Financial Department',
+  'الكنترول': 'Control Room',
+  'الإرشاد الأكاديمي': 'Academic Advising',
+};
+
+function formatDepartment(dept?: string, locale?: string): string {
+  if (!dept) return '';
+  const isAr = locale === 'ar';
+  if (isAr) {
+    return departmentLabelsAr[dept] || dept;
+  }
+  return departmentLabelsEn[dept] || dept.replace(/_/g, ' ');
+}
+
+function formatStudentDisplayName(
+  ticket?: { requesterName?: string; studentName?: string; studentNameAr?: string },
+  locale?: string,
+): string {
+  if (!ticket) return '';
+  const isAr = locale === 'ar';
+  const hasArabic = (str?: string) => Boolean(str && /[\u0600-\u06FF]/.test(str));
+  const names = [ticket.studentNameAr, ticket.requesterName, ticket.studentName].filter(Boolean) as string[];
+
+  if (isAr) {
+    const arabicName = names.find((n) => hasArabic(n));
+    return arabicName || ticket.studentName || ticket.requesterName || '';
+  }
+  const englishName = names.find((n) => !hasArabic(n));
+  return englishName || ticket.studentName || ticket.requesterName || '';
+}
 
 const statusWorkflow: ComplaintStatus[] = ['open', 'in_review', 'in_progress', 'resolved', 'closed'];
 
@@ -274,6 +358,7 @@ function AdminComplaintsContent() {
   const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false);
   const [clearAllConfirmText, setClearAllConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const complaintListParams = {
     limit: 100,
@@ -384,6 +469,8 @@ function AdminComplaintsContent() {
       const payload = {
         complaintsSystemOpen: updates.complaintsSystemOpen ?? settings.complaintsSystemOpen,
         blacklistedStudentCodes: updates.blacklistedStudentCodes ?? settings.blacklistedStudentCodes,
+        complaintDailyLimit: updates.complaintDailyLimit ?? settings.complaintDailyLimit,
+        departmentStaffAssignments: updates.departmentStaffAssignments ?? settings.departmentStaffAssignments,
         complaintOpenAt:
           'complaintOpenAt' in updates
             ? updates.complaintOpenAt
@@ -854,7 +941,9 @@ function AdminComplaintsContent() {
                       {ticket.ticketNumber}
                     </td>
                     <td className="px-4 py-4"><Badge variant="outline" className="rounded-squircle">{isAr ? typeLabels[ticket.type] : ticket.type.replace('_', ' ')}</Badge></td>
-                    <td className="px-4 py-4 text-foreground">{ticket.studentName ? ticket.studentName.trim().split(/\s+/).slice(0, 2).join(' ') : ''}</td>
+                    <td className="px-4 py-4 text-foreground font-medium">
+                      {formatStudentDisplayName(ticket, locale)}
+                    </td>
                     <td className="px-4 py-4 font-mono text-muted-foreground">{ticket.studentCode}</td>
                     <td className="px-4 py-4"><PriorityPill priority={ticket.priority} locale={locale} /></td>
                     <td className="px-4 py-4"><StatusPill status={ticket.status} locale={locale} /></td>
@@ -964,15 +1053,146 @@ function AdminComplaintsContent() {
               </SheetHeader>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <Card className="border-border bg-card/70 p-4">
-                  <p className="text-xs text-muted-foreground">{isAr ? 'بيانات الطالب' : 'Student Info'}</p>
-                  <h3 className="mt-2 font-bold text-foreground">{selectedTicket.studentName}</h3>
-                  <p className="font-mono text-sm text-primary">{selectedTicket.studentCode}</p>
-                </Card>
-                <Card className="border-border bg-card/70 p-4">
-                  <p className="text-xs text-muted-foreground">{isAr ? 'الموظف المسؤول' : 'Assigned Staff'}</p>
-                  <h3 className="mt-2 font-bold text-foreground">{selectedTicket.assignedStaffName || (isAr ? 'غير معين' : 'Unassigned')}</h3>
-                  <p className="text-sm text-muted-foreground">{(selectedTicket.assignedGroup ? (isAr ? selectedTicket.assignedGroup : (groupTranslations[selectedTicket.assignedGroup] || selectedTicket.assignedGroup)) : '') || (isAr ? 'لا يوجد قسم محدد' : 'No target department')}</p>
+                <Card className="border-border bg-card/70 p-4 space-y-3 sm:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-squircle bg-primary/10 border border-primary/20 text-primary">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                          {isAr ? 'بيانات الطالب ومقدم البلاغ' : 'Student & Applicant Details'}
+                        </p>
+                        <h3 className="mt-0.5 text-base font-bold text-foreground">
+                          {formatStudentDisplayName(selectedTicket, locale)}
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-3 py-1 text-primary shadow-xs">
+                        <span className="text-[10px] font-medium text-primary/80">{isAr ? 'كود الطالب' : 'Code'}:</span>
+                        <span className="font-mono text-xs font-bold" dir="ltr">{selectedTicket.studentCode}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                    {/* Box 1: National ID (Full 14 Digits) */}
+                    <div className="flex flex-col justify-between rounded-xl border border-white/5 bg-secondary/30 p-3 hover:border-amber-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                          {isAr ? 'الرقم القومي' : 'National ID'}
+                        </span>
+                        {(selectedTicket.nationalId || selectedTicket.nationalIdMasked) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const idVal = selectedTicket.nationalId || selectedTicket.nationalIdMasked || '';
+                              navigator.clipboard.writeText(idVal);
+                              toast.success(isAr ? 'تم نسخ الرقم القومي' : 'National ID copied');
+                            }}
+                            title={isAr ? 'نسخ الرقم القومي' : 'Copy National ID'}
+                            className="text-muted-foreground hover:text-amber-400 p-0.5 rounded transition-colors cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <span dir="ltr" className="font-mono text-sm font-bold text-foreground tracking-wider select-all">
+                        {selectedTicket.nationalId || selectedTicket.nationalIdMasked || (isAr ? 'غير متاح' : 'N/A')}
+                      </span>
+                    </div>
+
+                    {/* Box 2: Contact Phone */}
+                    <div className="flex flex-col justify-between rounded-xl border border-white/5 bg-secondary/30 p-3 hover:border-teal-500/30 transition-colors">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+                          {isAr ? 'رقم الهاتف' : 'Contact Phone'}
+                        </span>
+                        {selectedTicket.contactPhone && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedTicket.contactPhone || '');
+                              toast.success(isAr ? 'تم نسخ رقم الهاتف' : 'Phone copied');
+                            }}
+                            title={isAr ? 'نسخ رقم الهاتف' : 'Copy phone'}
+                            className="text-muted-foreground hover:text-teal-400 p-0.5 rounded transition-colors cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      {selectedTicket.contactPhone ? (
+                        <a
+                          href={`tel:${selectedTicket.contactPhone}`}
+                          dir="ltr"
+                          className="font-mono text-sm font-bold text-teal-300 hover:underline truncate"
+                        >
+                          {selectedTicket.contactPhone}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground font-mono">{isAr ? 'غير متاح' : 'N/A'}</span>
+                      )}
+                    </div>
+
+                    {/* Box 3: Target Department (Translated) */}
+                    <div className="flex flex-col justify-between rounded-xl border border-white/5 bg-secondary/30 p-3 hover:border-purple-500/30 transition-colors">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Building className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          {isAr ? 'القسم المطلوب' : 'Target Dept'}
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-purple-300 truncate">
+                        {formatDepartment(selectedTicket.department || selectedTicket.assignedGroup, locale) || (isAr ? 'عام' : 'General')}
+                      </span>
+                    </div>
+
+                    {/* Box 4: Assigned Staff */}
+                    <div className="flex flex-col justify-between rounded-xl border border-white/5 bg-secondary/30 p-3 hover:border-indigo-500/30 transition-colors">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <User className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          {isAr ? 'الموظف المسؤول' : 'Assigned Staff'}
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-foreground truncate flex items-center gap-1.5">
+                        <span className={cn('h-2 w-2 rounded-full shrink-0', selectedTicket.assignedStaffName ? 'bg-emerald-400' : 'bg-muted-foreground/40')} />
+                        <span className="truncate">{selectedTicket.assignedStaffName || (isAr ? 'غير معين' : 'Unassigned')}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Optional Row: Contact Email */}
+                  {selectedTicket.contactEmail && (
+                    <div className="flex items-center justify-between rounded-lg border border-white/5 bg-secondary/20 px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Mail className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+                        <span className="text-[11px] text-muted-foreground">{isAr ? 'البريد الإلكتروني' : 'Email'}:</span>
+                        <a
+                          href={`mailto:${selectedTicket.contactEmail}`}
+                          dir="ltr"
+                          className="font-mono text-sky-300 hover:underline truncate"
+                        >
+                          {selectedTicket.contactEmail}
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedTicket.contactEmail || '');
+                          toast.success(isAr ? 'تم نسخ البريد الإلكتروني' : 'Email copied');
+                        }}
+                        className="text-muted-foreground hover:text-sky-300 text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>{isAr ? 'نسخ' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  )}
                 </Card>
               </div>
 
@@ -983,15 +1203,38 @@ function AdminComplaintsContent() {
 
               {selectedTicket.screenshotUrl && (
                 <Card className="border-border bg-card/70 p-4">
-                  <p className="mb-2 text-xs font-semibold text-muted-foreground">
-                    {isAr ? 'الصورة المرفقة' : 'Attached Screenshot'}
-                  </p>
-                  <div className="relative overflow-hidden rounded-xl border border-border/60 bg-black/20 p-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {isAr ? 'الصورة المرفقة' : 'Attached Screenshot'}
+                    </p>
+                    <span className="text-[11px] text-primary flex items-center gap-1 font-medium">
+                      <ZoomIn className="h-3.5 w-3.5" />
+                      {isAr ? 'انقر للتكبير والتصغير' : 'Click to zoom'}
+                    </span>
+                  </div>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setPreviewImageUrl(selectedTicket.screenshotUrl ?? null)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setPreviewImageUrl(selectedTicket.screenshotUrl ?? null);
+                      }
+                    }}
+                    className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-black/20 p-2 transition-all hover:border-primary/50 hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
                     <img
                       src={selectedTicket.screenshotUrl}
                       alt="Complaint Screenshot"
-                      className="max-h-80 w-full object-contain rounded-lg"
+                      className="max-h-80 w-full object-contain rounded-lg transition-transform duration-200 group-hover:scale-[1.01]"
                     />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-[2px] rounded-xl">
+                      <div className="flex items-center gap-2 rounded-squircle bg-black/80 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl border border-white/15">
+                        <ZoomIn className="h-4 w-4 text-teal-400" />
+                        <span>{isAr ? 'عرض وتكبير الصورة' : 'Open & Zoom'}</span>
+                      </div>
+                    </div>
                   </div>
                 </Card>
               )}
@@ -1050,7 +1293,7 @@ function AdminComplaintsContent() {
                   <MessageSquareReply className="h-4 w-4 text-primary" />
                   <h3 className="font-bold text-foreground">{isAr ? 'المحادثة والردود' : 'Chat & Replies'}</h3>
                 </div>
-                <div className="max-h-64 space-y-3 overflow-y-auto rounded-squircle border border-border/70 bg-background/40 p-3">
+                <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl border border-border/70 bg-background/40 p-3">
                   {selectedTicket.replies.length === 0 ? (
                     <p className="py-8 text-center text-xs text-muted-foreground">
                       {isAr ? 'لا توجد ردود بعد.' : 'No replies yet.'}
@@ -1087,7 +1330,7 @@ function AdminComplaintsContent() {
                     </p>
                   ) : (
                     selectedTicket.internalNotes?.map((note, index) => (
-                      <div key={`${note.createdAt}-${index}`} className="rounded-squircle border border-border bg-surface/60 p-3">
+                      <div key={`${note.createdAt}-${index}`} className="rounded-xl border border-border bg-surface/60 p-3">
                         <p className="text-sm">{note.message}</p>
                         <p className="mt-1 text-[11px] text-muted-foreground">{note.authorName} • {formatDate(note.createdAt)}</p>
                       </div>
@@ -1105,18 +1348,20 @@ function AdminComplaintsContent() {
                 <div className="mt-3 space-y-2">
                   {(selectedTicket.statusHistory ?? []).map((item, index) => (
                     <div key={`${item.changedAt}-${index}`} className="flex items-center justify-between rounded-squircle border border-border bg-surface/60 p-3 text-xs">
-                      <span>{item.fromStatus} → {item.toStatus}</span>
-                      <span className="text-muted-foreground">{item.changedByName || 'system'} • {formatDate(item.changedAt)}</span>
+                      <div className="flex items-center gap-1.5 font-semibold">
+                        <span className="text-muted-foreground">{formatStatus(item.fromStatus, locale)}</span>
+                        <span className="text-primary font-mono text-xs">→</span>
+                        <span className="text-foreground font-bold">{formatStatus(item.toStatus, locale)}</span>
+                      </div>
+                      <span className="text-muted-foreground">
+                        {(item.changedByName === 'system' || !item.changedByName) ? (isAr ? 'النظام' : 'System') : item.changedByName} • {formatDate(item.changedAt, locale)}
+                      </span>
                     </div>
                   ))}
                 </div>
               </Card>
 
               <div className="flex flex-col gap-2 sm:flex-row no-print">
-                <Button variant="outline" onClick={() => printElement('printable-ticket-detail', isAr ? `تفاصيل التذكرة - ${selectedTicket.ticketNumber}` : `Ticket Details - ${selectedTicket.ticketNumber}`)} className="gap-2 cursor-pointer">
-                  {isAr ? 'طباعة التذكرة' : 'Print Ticket'}
-                  <Printer className="h-4 w-4" />
-                </Button>
                 <Button variant="destructive" onClick={() => patchTicket(selectedTicket._id, { status: 'closed' })} className="gap-2 cursor-pointer">
                   {isAr ? 'إغلاق التذكرة' : 'Close Ticket'}
                   <Lock className="h-4 w-4" />
@@ -1219,6 +1464,13 @@ function AdminComplaintsContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Lightbox for full-size screenshot preview with zoom and pan */}
+      <ImageLightbox
+        src={previewImageUrl}
+        isOpen={Boolean(previewImageUrl)}
+        onClose={() => setPreviewImageUrl(null)}
+        title={selectedTicket ? `#${selectedTicket.ticketNumber} - ${selectedTicket.title}` : undefined}
+      />
     </div>
   );
 }

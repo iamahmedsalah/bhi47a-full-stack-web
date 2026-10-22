@@ -85,6 +85,7 @@ function PublicComplaintsContent() {
     complaintsSystemOpen: boolean;
     complaintOpenAt?: string;
     complaintCloseAt?: string;
+    complaintDailyLimit?: number;
   } | null>(null);
 
   useEffect(() => {
@@ -614,6 +615,11 @@ function PublicComplaintsContent() {
                 <ul className="list-inside list-disc">
                   <li>{isAr ? 'جميع الحقول المعلمة (*) إلزامية' : 'All fields marked (*) are required.'}</li>
                   <li>{isAr ? 'يجب أن يكون كود الطالب موجوداً في قاعدة بيانات المعهد' : 'Student code must exist in the institute database.'}</li>
+                  <li>
+                    {isAr
+                      ? `الحد الأقصى المسموح به هو ${settings?.complaintDailyLimit ?? 3} شكاوى لكل طالب خلال أي 24 ساعة متعاقبة`
+                      : `The submission limit is up to ${settings?.complaintDailyLimit ?? 3} complaints per student within any rolling 24 hours.`}
+                  </li>
                   <li>{isAr ? 'سيتم إرسال رسالة تأكيد عند تسجيل البلاغ بنجاح' : 'You will receive confirmation when the ticket is created.'}</li>
                 </ul>
               </div>

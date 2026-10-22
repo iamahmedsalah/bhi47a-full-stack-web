@@ -36,10 +36,13 @@ import {
   BadgeCheck,
   AlertTriangle,
   ExternalLink,
+  Award,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/cn';
 import {
+  calculateGradeScale,
   isValidStudentPassword,
   STUDENT_PASSWORD_MAX_LENGTH,
   STUDENT_PASSWORD_MIN_LENGTH,
@@ -70,6 +73,8 @@ interface StudentProfile {
   googleLinkPending: boolean;
   academicWarnings?: number;
   gpa?: number;
+  completedCreditHours?: number;
+  completedCoursesCount?: number;
 }
 
 interface GoogleLinkStartResponse {
@@ -688,6 +693,84 @@ export default function StudentProfilePage() {
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
+            {/* Grid 0: Cumulative Academic Standing & Credit Hours */}
+            <Card className="rounded-2xl border border-primary/30 bg-gradient-to-br from-card/80 via-card/50 to-primary/5 p-6 backdrop-blur-md shadow-md space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Award className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">
+                      {isEnglish ? 'Cumulative Standing & Credit Hours' : 'المعدل التراكمي والساعات المعتمدة'}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      {isEnglish ? 'Official completed credits and academic standing' : 'الساعات المكتملة وحالة المعدل التراكمي المعتمد'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                {/* GPA Tile */}
+                <div className="rounded-xl border border-border/70 bg-secondary/30 p-4 transition-all hover:bg-secondary/50">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    {isEnglish ? 'Cumulative GPA' : 'المعدل التراكمي (GPA)'}
+                  </span>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span dir="ltr" className="font-mono text-xl font-black text-foreground">
+                      {typeof profile.gpa === 'number' && !isNaN(profile.gpa) ? profile.gpa.toFixed(2) : '—'}
+                    </span>
+                    {typeof profile.gpa === 'number' && profile.gpa > 0 && (
+                      <span className="text-xs font-bold text-teal-400">
+                        ({calculateGradeScale(Math.min(100, profile.gpa * 25)).letter})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Completed Credit Hours */}
+                <div className="rounded-xl border border-teal-500/30 bg-teal-500/5 p-4 transition-all hover:bg-teal-500/10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400 block">
+                    {isEnglish ? 'Completed Credits' : 'الساعات المكتملة'}
+                  </span>
+                  <div className="mt-1 flex items-baseline gap-1">
+                    <span className="font-mono text-xl font-black text-teal-400">
+                      {profile.completedCreditHours ?? 0}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      {isEnglish ? 'credit hours' : 'ساعة معتمدة'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Completed Courses */}
+                <div className="rounded-xl border border-border/70 bg-secondary/30 p-4 transition-all hover:bg-secondary/50">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    {isEnglish ? 'Passed Courses' : 'المقررات المجتازة'}
+                  </span>
+                  <span className="mt-1 font-mono text-xl font-black text-foreground block">
+                    {profile.completedCoursesCount ?? 0}
+                  </span>
+                </div>
+
+                {/* Academic Warnings */}
+                <div className="rounded-xl border border-border/70 bg-secondary/30 p-4 transition-all hover:bg-secondary/50">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    {isEnglish ? 'Academic Warnings' : 'الإنذارات الأكاديمية'}
+                  </span>
+                  <span
+                    className={cn(
+                      'mt-1 font-mono text-xl font-black block',
+                      (profile.academicWarnings ?? 0) > 0 ? 'text-amber-400' : 'text-emerald-400'
+                    )}
+                  >
+                    {profile.academicWarnings ?? 0}
+                  </span>
+                </div>
+              </div>
+            </Card>
+
             {/* Grid 1: Academic Placement */}
             <Card className="rounded-2xl border border-border/80 bg-card/60 p-6 backdrop-blur-md shadow-md space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">

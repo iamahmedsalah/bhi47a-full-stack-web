@@ -255,7 +255,7 @@
       "academicLevel": "1",
       "semester": "first",
       "department": "GENERAL",
-      "creditHours": 2,
+      "creditHours": 3,
       "prerequisites": [],
       "type": "required",
       "isActive": true
@@ -297,7 +297,7 @@
       "academicLevel": "1",
       "semester": "second",
       "department": "GENERAL",
-      "creditHours": 2,
+      "creditHours": 3,
       "prerequisites": [],
       "type": "required",
       "isActive": true
@@ -311,7 +311,7 @@
       "academicLevel": "1",
       "semester": "second",
       "department": "GENERAL",
-      "creditHours": 2,
+      "creditHours": 3,
       "prerequisites": [],
       "type": "required",
       "isActive": true

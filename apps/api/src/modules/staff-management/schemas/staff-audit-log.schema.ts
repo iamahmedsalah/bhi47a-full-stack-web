@@ -10,6 +10,7 @@ export const STAFF_AUDIT_ACTIONS = [
   'password_reset',
   'deactivated',
   'activated',
+  'deleted',
 ] as const;
 
 export type StaffAuditAction = (typeof STAFF_AUDIT_ACTIONS)[number];

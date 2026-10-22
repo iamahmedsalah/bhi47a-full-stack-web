@@ -382,7 +382,9 @@ export class StudentQueryService {
         : Promise.resolve([]),
       this.academicProfileModel
         .find({ studentId: { $in: userIds } })
-        .select('studentId gpa academicWarnings completedCourses failedCourses')
+        .select(
+          'studentId gpa academicWarnings completedCourses failedCourses completedCreditHours',
+        )
         .lean(),
     ]);
 
@@ -438,6 +440,12 @@ export class StudentQueryService {
         }
       }
 
+      const completedCreditHours =
+        academicProfile?.completedCreditHours ??
+        (academicProfile?.completedCourses?.length
+          ? academicProfile.completedCourses.length * 3
+          : 0);
+
       return {
         ...restProfile,
         ...(canViewNationalId && nationalIdValue
@@ -450,8 +458,10 @@ export class StudentQueryService {
               academicWarnings: academicProfile.academicWarnings,
               completedCourses: academicProfile.completedCourses,
               failedCourses: academicProfile.failedCourses,
+              completedCreditHours,
             }
           : undefined,
+        completedCreditHours,
         gpa: academicProfile?.gpa ?? profile.gpa,
         academicWarnings:
           academicProfile?.academicWarnings ?? profile.academicWarnings,

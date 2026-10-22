@@ -53,6 +53,12 @@ export interface Complaint {
   assignedGroup?: string;
   assignedStaffId?: string;
   assignedStaffName?: string;
+  requesterName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  nationalId?: string;
+  nationalIdMasked?: string;
+  department?: string;
   replies: ComplaintReply[];
   internalNotes?: ComplaintInternalNote[];
   statusHistory?: ComplaintStatusHistory[];
@@ -61,11 +67,18 @@ export interface Complaint {
   screenshotUrl?: string;
 }
 
+export interface DepartmentStaffAssignment {
+  staffId: string;
+  staffName: string;
+}
+
 export interface ComplaintSettings {
   complaintsSystemOpen: boolean;
   blacklistedStudentCodes: string[];
   complaintOpenAt?: string;
   complaintCloseAt?: string;
+  complaintDailyLimit?: number;
+  departmentStaffAssignments?: Record<string, DepartmentStaffAssignment>;
   updatedAt?: string;
 }
 

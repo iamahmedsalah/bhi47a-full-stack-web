@@ -38,6 +38,9 @@ export class StudentAcademicProfile {
   @Prop({ type: Number, default: 0, min: 0 })
   academicWarnings!: number;
 
+  @Prop({ type: Number, default: 0, min: 0 })
+  completedCreditHours?: number;
+
   @Prop({ type: Boolean, default: false })
   isGraduatingThisYear!: boolean;
 

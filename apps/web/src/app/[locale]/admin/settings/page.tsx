@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Bot, Calendar, Settings, ShieldCheck } from 'lucide-react';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
@@ -11,7 +11,8 @@ import { GpaRulesPanel } from '@/features/settings/components/gpa-rules-panel';
 import { RegistrationTermsPanel } from '@/features/settings/components/registration-terms-panel';
 import { AiSettingsPanel } from '@/features/settings/components/ai-settings-panel';
 import { AdvisingRulesPanel } from '@/features/settings/components/advising-rules-panel';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, GitPullRequest } from 'lucide-react';
+import { ComplaintRoutingPanel } from '@/features/settings/components/complaint-routing-panel';
 import { useAuth } from '@/providers/auth-provider';
 import { cn } from '@/lib/cn';
 
@@ -31,6 +32,12 @@ function AdminSettingsContent() {
     user?.role === 'admin' ||
     Boolean(user?.permissions?.includes('registration.write')) ||
     Boolean(user?.permissions?.includes('complaints.manage_settings'));
+
+  const canAccessComplaintsRouting =
+    user?.role === 'admin' ||
+    Boolean(user?.permissions?.includes('complaints.manage_settings')) ||
+    Boolean(user?.permissions?.includes('complaints.read')) ||
+    Boolean(user?.permissions?.includes('complaints.write'));
 
   const canAccessAi = user?.role === 'admin';
 
@@ -57,6 +64,18 @@ function AdminSettingsContent() {
           },
         ]
       : []),
+    ...(canAccessComplaintsRouting
+      ? [
+          {
+            id: 'complaints' as const,
+            label: isAr ? 'توزيع الشكاوى والبلاغات' : 'Complaint Routing',
+            icon: GitPullRequest,
+            description: isAr
+              ? 'التوزيع التلقائي للبلاغات حسب الأقسام وتعيين الموظف المسؤول'
+              : 'Automated ticket routing by department & designated staff',
+          },
+        ]
+      : []),
     ...(canAccessAi
       ? [
           {
@@ -69,9 +88,16 @@ function AdminSettingsContent() {
       : []),
   ];
 
-  const defaultTab = tabs[0]?.id ?? 'rules';
-  const [activeTabState, setActiveTabState] = useState<'rules' | 'terms' | 'ai'>(defaultTab);
-  const activeTab = tabs.some((t) => t.id === activeTabState) ? activeTabState : defaultTab;
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab') as 'rules' | 'terms' | 'ai' | 'complaints' | null;
+  const [selectedTab, setSelectedTab] = useState<'rules' | 'terms' | 'ai' | 'complaints' | null>(null);
+
+  const activeTab = selectedTab && tabs.some((t) => t.id === selectedTab)
+    ? selectedTab
+    : (requestedTab && tabs.some((t) => t.id === requestedTab)
+        ? requestedTab
+        : (tabs[0]?.id ?? 'rules'));
+
   const [rulesSubTab, setRulesSubTab] = useState<'advising' | 'gpa'>('advising');
 
   return (
@@ -80,7 +106,25 @@ function AdminSettingsContent() {
         title={t('pageTitle')}
         icon={<Settings className="h-5 w-5" />}
         subtitle={t('pageDescription')}
-      />
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {user?.role === 'admin' ? (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary shadow-xs">
+              <ShieldCheck className="h-4 w-4" />
+              <span>{isAr ? 'مدير النظام (كامل الصلاحيات)' : 'System Administrator (Full Access)'}</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 shadow-xs">
+              <ShieldCheck className="h-4 w-4 text-amber-400" />
+              <span>
+                {isAr
+                  ? `موظف إداري (${user?.permissions?.length ?? 0} صلاحيات مفعلة)`
+                  : `Staff Member (${user?.permissions?.length ?? 0} permissions)`}
+              </span>
+            </div>
+          )}
+        </div>
+      </PageTitleBanner>
 
       {/* Modern Tabs Navigation Bar */}
       <div className="flex flex-wrap gap-2.5 rounded-2xl border border-white/10 bg-card/60 p-1.5 backdrop-blur-sm shadow-sm">
@@ -91,7 +135,7 @@ function AdminSettingsContent() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTabState(tab.id)}
+              onClick={() => setSelectedTab(tab.id)}
               className={cn(
                 'flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
                 isActive
@@ -149,6 +193,8 @@ function AdminSettingsContent() {
           </div>
         ) : activeTab === 'terms' ? (
           <RegistrationTermsPanel locale={locale} />
+        ) : activeTab === 'complaints' ? (
+          <ComplaintRoutingPanel locale={locale} />
         ) : (
           <AiSettingsPanel locale={locale} />
         )}
@@ -159,6 +205,8 @@ function AdminSettingsContent() {
 
 const SETTINGS_PERMISSIONS = [
   'complaints.manage_settings',
+  'complaints.read',
+  'complaints.write',
   'advising.write',
   'registration.write',
   'study_plan.manage',

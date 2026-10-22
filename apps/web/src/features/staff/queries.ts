@@ -3,6 +3,7 @@ import {
   activateStaff,
   createStaff,
   deactivateStaff,
+  deleteStaff,
   getStaffCourses,
   getStaffSchedules,
   listStaff,
@@ -71,5 +72,6 @@ export function useStaffMutations() {
       onSuccess: refresh,
     }),
     activate: useMutation({ mutationFn: (id: string) => activateStaff(id), onSuccess: refresh }),
+    delete: useMutation({ mutationFn: (id: string) => deleteStaff(id), onSuccess: refresh }),
   };
 }
