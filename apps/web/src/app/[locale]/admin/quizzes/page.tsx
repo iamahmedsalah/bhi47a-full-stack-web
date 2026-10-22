@@ -25,6 +25,11 @@ import {
   BarChart3,
   TrendingUp,
   CheckCircle,
+  ImageIcon,
+  Check,
+  X,
+  Award,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -43,6 +48,7 @@ import { PermissionGuard } from '@/components/ui/permission-guard';
 import { PERMISSIONS } from '@student-portal/shared';
 import { getApiErrorMessage } from '@/lib/api';
 import api from '@/lib/api';
+import { exportElementToPng } from '@/lib/export-utils';
 
 // UI Primitives
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
@@ -85,6 +91,7 @@ import {
   downloadQuestionsTemplate,
   type QuizItem,
   type QuizQuestion,
+  type QuizSubmission,
 } from '@/features/quizzes/api';
 import { QuizPreviewModal } from '@/features/quizzes/components/quiz-preview-modal';
 
@@ -1169,6 +1176,377 @@ function QuizFormDialog({
   );
 }
 
+/* ─── Student Submission Detail Dialog Component ─────────── */
+interface StudentSubmissionDetailDialogProps {
+  submission: QuizSubmission | null;
+  quiz: QuizItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isAr: boolean;
+}
+
+function StudentSubmissionDetailDialog({
+  submission,
+  quiz,
+  open,
+  onOpenChange,
+  isAr,
+}: StudentSubmissionDetailDialogProps) {
+  const [isExportingImage, setIsExportingImage] = useState(false);
+  const printSheetRef = React.useRef<HTMLDivElement>(null);
+
+  if (!submission || !quiz) return null;
+
+  const questions = quiz.questions || [];
+  const answersMap = new Map(
+    (submission.answers || []).map((a) => [a.questionId, a]),
+  );
+
+  const handleDownloadImage = async () => {
+    if (!printSheetRef.current) return;
+    try {
+      setIsExportingImage(true);
+      const studentIdentifier = submission.studentCode || 'student';
+      const cleanTitle = (quiz.title || 'quiz').replace(/[/\\?%*:|"<>]/g, '_');
+      const filename = `quiz-submission-${studentIdentifier}-${cleanTitle}.png`;
+      await exportElementToPng(printSheetRef.current, filename, '#0d1117');
+      toast.success(
+        isAr
+          ? 'تم تحميل ورقة إجابة الطالب كصورة بنجاح'
+          : 'Student submission sheet downloaded as image successfully',
+      );
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr ? 'فشل تحميل الصورة' : 'Failed to download image',
+        ),
+      );
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
+  const studentDisplayName = isAr
+    ? submission.studentNameAr || submission.studentName
+    : submission.studentNameEn || submission.studentName || submission.studentNameAr;
+
+  const correctAnswersCount = (submission.answers || []).filter((a) => a.isCorrect).length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="glass max-h-[92vh] max-w-4xl overflow-y-auto rounded-2xl border border-white/10 p-6 shadow-2xl">
+        <DialogHeader className="border-b border-border/80 pb-4 text-start">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+                <Award className="h-5 w-5 text-primary" />
+                <span>
+                  {isAr ? 'تفاصيل إجابات الطالب:' : 'Student Submission Details:'}{' '}
+                  <span className="text-primary">{studentDisplayName}</span>
+                </span>
+              </DialogTitle>
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                <span>{submission.studentCode}</span>
+                <span>·</span>
+                <span className="font-sans">
+                  {isAr
+                    ? quiz.courseNameAr || quiz.courseName
+                    : quiz.courseNameEn || quiz.courseName || quiz.courseNameAr}
+                </span>
+                <span>·</span>
+                <span className="font-sans">
+                  {quiz.title}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleDownloadImage}
+              disabled={isExportingImage}
+              size="sm"
+              className="rounded-squircle gap-2 bg-primary font-semibold text-white hover:bg-primary/90 shadow-sm"
+              data-no-export="true"
+            >
+              {isExportingImage ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4" />
+              )}
+              <span>
+                {isAr ? 'تحميل ورقة الإجابة كصورة' : 'Download as Image'}
+              </span>
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Printable / Capturable Container */}
+        <div
+          ref={printSheetRef}
+          className="space-y-6 pt-3 bg-card/60 p-5 rounded-2xl border border-white/10"
+        >
+          {/* Header Card for exported image / sheet */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-white/10 bg-secondary/30">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-foreground">
+                  {studentDisplayName}
+                </span>
+                <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  {submission.studentCode}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {quiz.courseCode} · {isAr ? quiz.courseNameAr || quiz.courseName : quiz.courseName}
+              </p>
+              <p className="text-xs text-primary font-medium">
+                {quiz.title}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap sm:flex-col sm:items-end gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>
+                  {new Date(submission.submittedAt).toLocaleDateString(
+                    isAr ? 'ar-EG' : 'en-GB',
+                    {
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'Africa/Cairo',
+                    },
+                  )}
+                </span>
+              </div>
+              {submission.durationSeconds > 0 && (
+                <div className="flex items-center gap-1.5 font-mono">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>
+                    {Math.floor(submission.durationSeconds / 60)} {isAr ? 'دقيقة' : 'min'}{' '}
+                    {submission.durationSeconds % 60} {isAr ? 'ثانية' : 'sec'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* KPI Score Cards */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-white/10 bg-secondary/40 p-3 text-center">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {isAr ? 'الدرجة المحصلة' : 'Score'}
+              </span>
+              <div className="mt-1 text-xl font-bold font-mono text-primary">
+                {submission.score} <span className="text-xs text-muted-foreground">/ {submission.totalMarks}</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-secondary/40 p-3 text-center">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {isAr ? 'النسبة المئوية' : 'Percentage'}
+              </span>
+              <div className="mt-1 text-xl font-bold font-mono text-foreground">
+                {submission.percentage}%
+              </div>
+            </div>
+
+            <div
+              className={`rounded-xl border p-3 text-center ${
+                submission.isPassed
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                  : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+              }`}
+            >
+              <span className="text-[11px] font-medium">
+                {isAr ? 'النتيجة النهائية' : 'Result'}
+              </span>
+              <div className="mt-1 text-lg font-bold">
+                {submission.isPassed
+                  ? isAr ? 'ناجح' : 'Passed'
+                  : isAr ? 'راسب' : 'Failed'}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-secondary/40 p-3 text-center">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                {isAr ? 'الأسئلة الصحيحة' : 'Correct Answers'}
+              </span>
+              <div className="mt-1 text-xl font-bold font-mono text-emerald-500">
+                {correctAnswersCount}{' '}
+                <span className="text-xs text-muted-foreground">/ {questions.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Questions & Student Answers */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-foreground border-b border-border/60 pb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <ListChecks className="h-4 w-4 text-primary" />
+                <span>{isAr ? 'مراجعة إجابات الطالب سؤالاً بسؤال' : 'Question-by-Question Response Review'}</span>
+              </span>
+              <span className="text-muted-foreground text-[11px]">
+                {questions.length} {isAr ? 'سؤال' : 'questions'}
+              </span>
+            </h4>
+
+            {questions.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                {isAr
+                  ? 'لم يتم العثور على نصوص الأسئلة لهذا الاختبار'
+                  : 'Question details not available'}
+              </p>
+            ) : (
+              questions.map((q, idx) => {
+                const answer =
+                  answersMap.get(q.id) ||
+                  answersMap.get((q as any)._id?.toString()) ||
+                  submission.answers?.[idx];
+                const isAnswered =
+                  answer &&
+                  typeof answer.selectedOptionIndex === 'number' &&
+                  answer.selectedOptionIndex >= 0;
+                const isCorrect = answer?.isCorrect ?? false;
+                const pointsAwarded =
+                  answer?.pointsAwarded ?? (isCorrect ? q.points : 0);
+
+                return (
+                  <div
+                    key={q.id || idx}
+                    className={`rounded-xl border p-4 space-y-3 transition-colors ${
+                      !isAnswered
+                        ? 'border-amber-500/20 bg-amber-500/5'
+                        : isCorrect
+                        ? 'border-emerald-500/20 bg-emerald-500/5'
+                        : 'border-rose-500/20 bg-rose-500/5'
+                    }`}
+                  >
+                    {/* Question Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/80 text-xs font-bold font-mono text-foreground">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-bold text-foreground">
+                          {q.text}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            !isAnswered
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : isCorrect
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-rose-500/20 text-rose-400'
+                          }`}
+                        >
+                          {!isAnswered ? (
+                            <>
+                              <AlertCircle className="h-3 w-3" />
+                              <span>{isAr ? 'لم يُجب' : 'Unanswered'}</span>
+                            </>
+                          ) : isCorrect ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>{isAr ? 'إجابة صحيحة' : 'Correct'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3" />
+                              <span>{isAr ? 'إجابة خاطئة' : 'Incorrect'}</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="text-[11px] font-mono font-semibold text-muted-foreground">
+                          ({pointsAwarded}/{q.points} {isAr ? 'درجة' : 'pts'})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Question Choices */}
+                    <div className="space-y-1.5 pt-1">
+                      {q.options.map((opt, optIdx) => {
+                        const isSelected =
+                          answer?.selectedOptionIndex === optIdx;
+                        const isCorrectOption =
+                          q.correctOptionIndex === optIdx;
+
+                        let optStyles =
+                          'border-white/5 bg-secondary/20 text-muted-foreground';
+                        let badge = null;
+
+                        if (isSelected && isCorrectOption) {
+                          optStyles =
+                            'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 font-semibold';
+                          badge = (
+                            <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full">
+                              <Check className="h-3 w-3" />
+                              {isAr ? 'إجابة الطالب (صحيحة)' : 'Student Answer (Correct)'}
+                            </span>
+                          );
+                        } else if (isSelected && !isCorrectOption) {
+                          optStyles =
+                            'border-rose-500/50 bg-rose-500/15 text-rose-300 font-semibold';
+                          badge = (
+                            <span className="flex items-center gap-1 text-[10px] text-rose-400 font-bold bg-rose-500/20 px-2 py-0.5 rounded-full">
+                              <X className="h-3 w-3" />
+                              {isAr ? 'إجابة الطالب (خاطئة)' : 'Student Answer (Incorrect)'}
+                            </span>
+                          );
+                        } else if (!isSelected && isCorrectOption) {
+                          optStyles =
+                            'border-emerald-500/30 bg-emerald-500/5 text-emerald-400';
+                          badge = (
+                            <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                              <Check className="h-3 w-3" />
+                              {isAr ? 'الإجابة النموذجية' : 'Correct Answer'}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={optIdx}
+                            className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition-colors ${optStyles}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[11px] text-muted-foreground/80 font-bold">
+                                {String.fromCharCode(65 + optIdx)}.
+                              </span>
+                              <span>{opt}</span>
+                            </div>
+                            {badge}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Explanation if available */}
+                    {q.explanation && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-[11px] text-muted-foreground">
+                        <span className="font-bold text-primary">
+                          {isAr ? 'التوضيح / الشرح:' : 'Explanation:'}{' '}
+                        </span>
+                        <span>{q.explanation}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Submissions Modal Component ──────────────────────── */
 interface SubmissionsModalProps {
   quiz: QuizItem | null;
@@ -1185,6 +1563,8 @@ function SubmissionsModal({
 }: SubmissionsModalProps) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'roster'>('analytics');
   const [search, setSearch] = useState('');
+  const [filterResult, setFilterResult] = useState<'all' | 'passed' | 'failed'>('all');
+  const [selectedSubmission, setSelectedSubmission] = useState<QuizSubmission | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const submissionsQuery = useQuery({
@@ -1192,6 +1572,15 @@ function SubmissionsModal({
     queryFn: () => getQuizSubmissions(quiz!._id),
     enabled: Boolean(quiz?._id && open),
   });
+
+  // Fetch full quiz details including questions if compact list didn't include them
+  const fullQuizQuery = useQuery({
+    queryKey: ['quiz-full-details', quiz?._id],
+    queryFn: () => getQuiz(quiz!._id),
+    enabled: Boolean(quiz?._id && open && (!quiz.questions || quiz.questions.length === 0)),
+  });
+
+  const activeQuiz = fullQuizQuery.data || quiz;
 
   const submissions = submissionsQuery.data || [];
 
@@ -1270,16 +1659,19 @@ function SubmissionsModal({
   };
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return submissions;
-    const q = search.toLowerCase();
-    return submissions.filter(
-      (s) =>
+    return submissions.filter((s) => {
+      if (filterResult === 'passed' && !s.isPassed) return false;
+      if (filterResult === 'failed' && s.isPassed) return false;
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (
         s.studentCode.toLowerCase().includes(q) ||
         (s.studentName && s.studentName.toLowerCase().includes(q)) ||
         (s.studentNameAr && s.studentNameAr.toLowerCase().includes(q)) ||
-        (s.studentNameEn && s.studentNameEn.toLowerCase().includes(q)),
-    );
-  }, [submissions, search]);
+        (s.studentNameEn && s.studentNameEn.toLowerCase().includes(q))
+      );
+    });
+  }, [submissions, search, filterResult]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1564,25 +1956,64 @@ function SubmissionsModal({
         ) : (
           /* Roster Tab */
           <div className="space-y-4 pt-3">
-            <div className="relative">
-              <Input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={
-                  isAr
-                    ? 'بحث بكود أو اسم الطالب...'
-                    : 'Search student code or name...'
-                }
-                className="rounded-squircle text-xs border-white/15 bg-background/60"
-              />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={
+                    isAr
+                      ? 'بحث بكود أو اسم الطالب...'
+                      : 'Search student code or name...'
+                  }
+                  className="rounded-squircle text-xs border-white/15 bg-background/60"
+                />
+              </div>
+
+              {/* Pass / Fail / All Filter Pills */}
+              <div className="flex items-center gap-1.5 shrink-0 bg-secondary/40 p-1 rounded-squircle border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setFilterResult('all')}
+                  className={`rounded-squircle px-3 py-1 text-xs font-semibold transition-all ${
+                    filterResult === 'all'
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {isAr ? 'الكل' : 'All'} ({total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterResult('passed')}
+                  className={`rounded-squircle px-3 py-1 text-xs font-semibold transition-all ${
+                    filterResult === 'passed'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-emerald-500/80 hover:text-emerald-400'
+                  }`}
+                >
+                  {isAr ? 'ناجح' : 'Passed'} ({passed})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterResult('failed')}
+                  className={`rounded-squircle px-3 py-1 text-xs font-semibold transition-all ${
+                    filterResult === 'failed'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-rose-500/80 hover:text-rose-400'
+                  }`}
+                >
+                  {isAr ? 'راسب' : 'Failed'} ({failed})
+                </button>
+              </div>
             </div>
 
             {filtered.length === 0 ? (
               <div className="rounded-xl border border-white/10 bg-secondary/20 p-8 text-center text-muted-foreground text-sm">
                 {isAr
-                  ? 'لا توجد نتائج مطابقة للبحث'
-                  : 'No matching submissions found'}
+                  ? 'لا توجد نتائج مطابقة للبحث أو التصفية'
+                  : 'No matching submissions found for this filter'}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-white/10">
@@ -1604,8 +2035,11 @@ function SubmissionsModal({
                       <th className="p-3 text-center">
                         {isAr ? 'النتيجة' : 'Result'}
                       </th>
-                      <th className="p-3 text-end">
+                      <th className="p-3 text-center">
                         {isAr ? 'وقت التسليم' : 'Submitted At'}
+                      </th>
+                      <th className="p-3 text-end">
+                        {isAr ? 'ورقة الإجابة' : 'Answers'}
                       </th>
                     </tr>
                   </thead>
@@ -1613,7 +2047,8 @@ function SubmissionsModal({
                     {filtered.map((sub) => (
                       <tr
                         key={sub._id}
-                        className="hover:bg-secondary/20 transition-colors"
+                        onClick={() => setSelectedSubmission(sub)}
+                        className="hover:bg-secondary/20 cursor-pointer transition-colors"
                       >
                         <td className="p-3 font-mono font-bold text-foreground">
                           {sub.studentCode}
@@ -1669,7 +2104,7 @@ function SubmissionsModal({
                                 : 'Failed'}
                           </span>
                         </td>
-                        <td className="p-3 text-end text-muted-foreground font-mono text-[11px]">
+                        <td className="p-3 text-center text-muted-foreground font-mono text-[11px]">
                           {new Date(sub.submittedAt).toLocaleTimeString(
                             isAr ? 'ar-EG' : 'en-GB',
                             {
@@ -1679,6 +2114,18 @@ function SubmissionsModal({
                             },
                           )}
                         </td>
+                        <td className="p-3 text-end" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedSubmission(sub)}
+                            className="h-7 px-2.5 rounded-squircle text-xs border-primary/40 text-primary hover:bg-primary/15 gap-1.5 font-medium transition-all"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>{isAr ? 'عرض الإجابات' : 'View Answers'}</span>
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1687,6 +2134,17 @@ function SubmissionsModal({
             )}
           </div>
         )}
+
+        {/* Student Submission Detail Dialog */}
+        <StudentSubmissionDetailDialog
+          submission={selectedSubmission}
+          quiz={activeQuiz}
+          open={Boolean(selectedSubmission)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedSubmission(null);
+          }}
+          isAr={isAr}
+        />
       </DialogContent>
     </Dialog>
   );
