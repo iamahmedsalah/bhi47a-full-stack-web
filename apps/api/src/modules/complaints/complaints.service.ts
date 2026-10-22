@@ -20,6 +20,8 @@ import {
   UpdateComplaintStatusDto,
   UpdateSystemSettingsDto,
   QueryComplaintDto,
+  PublicQueryComplaintDto,
+  PublicReplyComplaintDto,
 } from './dto/complaint.dto';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
@@ -745,5 +747,159 @@ export class ComplaintsService {
       'ComplaintsService',
     );
     return { success: true, deletedCount: result.deletedCount };
+  }
+
+  async queryPublicTicket(dto: PublicQueryComplaintDto) {
+    const student = await this.userModel
+      .findOne({
+        role: 'student',
+        studentCode: dto.studentCode.trim(),
+        isActive: true,
+      })
+      .select('+nationalIdHash +nationalId');
+
+    const nationalIdMatches = student
+      ? student.nationalIdHash
+        ? await bcrypt.compare(dto.nationalId.trim(), student.nationalIdHash)
+        : student.nationalId === dto.nationalId.trim()
+      : false;
+
+    if (!student || !nationalIdMatches) {
+      throw new BadRequestException(
+        'بيانات التحقق غير صحيحة، يرجى التأكد من كود الطالب والرقم القومي / Verification failed',
+      );
+    }
+
+    const filter: FilterQuery<ComplaintDocument> = {
+      studentCode: student.studentCode,
+    };
+
+    if (dto.ticketNumber?.trim()) {
+      filter.ticketNumber = dto.ticketNumber.trim().toUpperCase();
+    }
+
+    const tickets = await this.complaintModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!tickets || tickets.length === 0) {
+      if (dto.ticketNumber?.trim()) {
+        throw new NotFoundException(
+          'لم يتم العثور على تذكرة بهذا الرقم تخص بيانات هذا الطالب / Ticket not found',
+        );
+      }
+      throw new NotFoundException(
+        'لا توجد أي شكاوى أو بلاغات مسجلة لهذا الطالب / No tickets found',
+      );
+    }
+
+    const mapDetail = (ticket: (typeof tickets)[0]) => ({
+      _id: ticket._id,
+      ticketNumber: ticket.ticketNumber,
+      title: ticket.title,
+      description: ticket.description,
+      type: ticket.type,
+      department: ticket.department,
+      status: ticket.status,
+      priority: ticket.priority,
+      studentCode: ticket.studentCode,
+      studentName: ticket.requesterName || ticket.studentName,
+      assignedGroup: ticket.assignedGroup,
+      assignedStaffName: ticket.assignedStaffName,
+      screenshotUrl: ticket.screenshotUrl,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      replies: (ticket.replies || []).map((r) => ({
+        senderName: r.senderName,
+        senderRole: r.senderRole,
+        message: r.message,
+        createdAt: r.createdAt,
+      })),
+    });
+
+    return {
+      selectedTicket: mapDetail(tickets[0]),
+      allTickets: tickets.map((t) => ({
+        _id: t._id,
+        ticketNumber: t.ticketNumber,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        department: t.department,
+        createdAt: t.createdAt,
+      })),
+    };
+  }
+
+  async publicReply(dto: PublicReplyComplaintDto) {
+    const formattedTicketNumber = dto.ticketNumber.trim().toUpperCase();
+    const ticket = await this.complaintModel.findOne({
+      ticketNumber: formattedTicketNumber,
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(
+        'لم يتم العثور على تذكرة بهذا الرقم / Ticket not found',
+      );
+    }
+
+    if (ticket.studentCode !== dto.studentCode.trim()) {
+      throw new BadRequestException(
+        'كود الطالب غير مطابق لبيانات التذكرة / Student code verification failed',
+      );
+    }
+
+    if (ticket.status === 'closed') {
+      throw new BadRequestException(
+        'لا يمكن إضافة رد على تذكرة مغلقة / Ticket is closed',
+      );
+    }
+
+    const sanitizedMessage = dto.message.trim();
+    if (sanitizedMessage.length < 2 || sanitizedMessage.length > 500) {
+      throw new BadRequestException(
+        'نص الرد يجب أن يكون بين حرفين و 500 حرف كحد أقصى / Message must be between 2 and 500 characters',
+      );
+    }
+
+    if (/<[^>]*>|javascript:|data:/i.test(sanitizedMessage)) {
+      throw new BadRequestException(
+        'نص الرد يحتوي على وسوم أو روابط غير مسموح بها / Invalid message content',
+      );
+    }
+
+    const todayReplyCount = ticket.replies.filter(
+      (r) =>
+        r.senderRole === 'student' &&
+        new Date(r.createdAt).toDateString() === new Date().toDateString(),
+    ).length;
+
+    if (todayReplyCount >= 5) {
+      throw new BadRequestException(
+        'لقد تجاوزت الحد الأقصى للردود اليومية (5 ردود) / Daily reply limit reached',
+      );
+    }
+
+    const reply = {
+      senderId: ticket.studentId,
+      senderName: ticket.requesterName || ticket.studentName || 'الطالب',
+      senderRole: 'student' as const,
+      message: sanitizedMessage,
+      createdAt: new Date(),
+    };
+
+    ticket.replies.push(reply);
+    await ticket.save();
+
+    return {
+      success: true,
+      replies: ticket.replies.map((r) => ({
+        senderName: r.senderName,
+        senderRole: r.senderRole,
+        message: r.message,
+        createdAt: r.createdAt,
+      })),
+    };
   }
 }

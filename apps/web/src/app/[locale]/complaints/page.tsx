@@ -7,7 +7,7 @@ import React, {
   Suspense,
   useSyncExternalStore,
 } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   Copy,
   Loader2,
+  PlusCircle,
+  Search,
   Send,
   Ticket,
   Upload,
@@ -34,6 +36,7 @@ import { getPublicComplaintSchema } from '@/lib/validations';
 import { cn } from '@/lib/cn';
 import { useComplaintStore } from '@/store/complaint-store';
 import { useAuth } from '@/providers/auth-provider';
+import { PublicTicketInquiry } from '@/features/complaints/components/public-ticket-inquiry';
 
 type ComplaintType = 'complaint' | 'technical_issue' | 'academic' | 'financial' | 'facility' | 'other';
 type ComplaintDepartment = 'student_affairs' | 'technical_support' | 'finance' | 'control' | 'academic_advising';
@@ -64,6 +67,22 @@ function PublicComplaintsContent() {
   const isAr = locale === 'ar';
   const { user } = useAuth();
   const isAuthenticatedStudent = user?.role === 'student';
+  const searchParams = useSearchParams();
+  const initialTab =
+    searchParams.get('tab') === 'query' || searchParams.get('ticket')
+      ? 'query'
+      : 'new';
+  const [activeTab, setActiveTab] = useState<'new' | 'query'>(initialTab);
+  const [queryTicketNumber, setQueryTicketNumber] = useState<string>(
+    searchParams.get('ticket') || '',
+  );
+  const [queryStudentCode, setQueryStudentCode] = useState<string>(
+    searchParams.get('code') || '',
+  );
+  const [queryNationalId, setQueryNationalId] = useState<string>(
+    searchParams.get('nid') || '',
+  );
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ticketNumber, setTicketNumber] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState('');
@@ -256,7 +275,18 @@ function PublicComplaintsContent() {
           };
       const res = await api.post<PublicComplaintResponse>(endpoint, payload);
 
-      setTicketNumber(res.data.ticketNumber);
+      const submittedStudentCode = isAuthenticatedStudent
+        ? user?.studentCode || ''
+        : form.studentCode.trim();
+      const submittedNationalId = isAuthenticatedStudent
+        ? ''
+        : form.nationalId.trim();
+      const createdTicket = res.data.ticketNumber;
+
+      setTicketNumber(createdTicket);
+      setQueryTicketNumber(createdTicket);
+      setQueryStudentCode(submittedStudentCode);
+      setQueryNationalId(submittedNationalId);
       resetDraft();
       setScreenshotName('');
       setScreenshotBase64(undefined);
@@ -319,9 +349,39 @@ function PublicComplaintsContent() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {isAr
-                  ? 'يمكنك تقديم شكوى أو الإبلاغ عن عطل، والاستعلام متاح بعد تسجيل الدخول.'
-                  : 'Submit a complaint or technical issue. Tracking is available after sign-in.'}
+                  ? 'يمكنك تقديم شكوى أو عطل جديد، أو الاستعلام عن تذكرة سابقة ومتابعة ردود إدارة المعهد مباشرة.'
+                  : 'Submit a new issue or track an existing ticket to review administration replies.'}
               </p>
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="grid grid-cols-2 rounded-squircle bg-surface/80 p-1 border border-border/60">
+              <button
+                type="button"
+                onClick={() => setActiveTab('new')}
+                className={cn(
+                  'flex items-center justify-center gap-2 py-2 px-3 text-xs sm:text-sm font-semibold rounded-squircle transition-all cursor-pointer',
+                  activeTab === 'new'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+                )}
+              >
+                <PlusCircle className="h-4 w-4" />
+                <span>{isAr ? 'تقديم شكوى جديدة' : 'New Complaint'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('query')}
+                className={cn(
+                  'flex items-center justify-center gap-2 py-2 px-3 text-xs sm:text-sm font-semibold rounded-squircle transition-all cursor-pointer',
+                  activeTab === 'query'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5',
+                )}
+              >
+                <Search className="h-4 w-4" />
+                <span>{isAr ? 'الاستعلام ومتابعة التذكرة' : 'Track & Review Ticket'}</span>
+              </button>
             </div>
 
             {ticketNumber && (
@@ -331,299 +391,310 @@ function PublicComplaintsContent() {
                   {isAr ? 'احتفظ برقم التذكرة التالي' : 'Keep this ticket number'}
                 </p>
                 <p className="mt-2 font-mono text-2xl font-bold text-green-400">{ticketNumber}</p>
-                <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" onClick={copyTicket} className="gap-2">
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Button type="button" variant="outline" onClick={copyTicket} className="gap-2 rounded-squircle cursor-pointer">
                     <Copy className="h-4 w-4" />
                     {isAr ? 'نسخ الرقم' : 'Copy'}
                   </Button>
-                  <Button asChild variant="secondary">
-                    <Link
-                      href={
-                        isAuthenticatedStudent
-                          ? `/${locale}/dashboard/complaints`
-                          : `/${locale}/login/student`
-                      }
-                    >
-                      {isAuthenticatedStudent
-                        ? isAr
-                          ? 'عرض التذاكر'
-                          : 'View tickets'
-                        : isAr
-                          ? 'تسجيل الدخول للمتابعة'
-                          : 'Sign in to track'}
-                    </Link>
+                  <Button
+                    type="button"
+                    onClick={() => setActiveTab('query')}
+                    className="gap-2 rounded-squircle cursor-pointer"
+                  >
+                    <Search className="h-4 w-4" />
+                    {isAr ? 'متابعة واستعراض التذكرة الآن' : 'Track Ticket Now'}
                   </Button>
+                  {isAuthenticatedStudent && (
+                    <Button asChild variant="secondary" className="rounded-squircle">
+                      <Link href={`/${locale}/dashboard/complaints`}>
+                        {isAr ? 'عرض كل التذاكر' : 'View all tickets'}
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
 
-            {systemStatusMessage ? (
-              <div className={cn(
-                'rounded-squircle border p-3.5 text-sm font-semibold transition-all animate-in fade-in',
-                systemStatusMessage.type === 'closed' || systemStatusMessage.type === 'pending'
-                  ? 'border-red-500/30 bg-red-500/10 text-red-200'
-                  : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-              )}>
-                <div className="flex gap-2">
-                  <AlertCircle className={cn(
-                    'mt-0.5 h-4 w-4 shrink-0',
-                    systemStatusMessage.type === 'closed' || systemStatusMessage.type === 'pending' ? 'text-red-400' : 'text-emerald-400'
-                  )} />
-                  <p>{systemStatusMessage.text}</p>
-                </div>
-              </div>
+            {activeTab === 'query' ? (
+              <PublicTicketInquiry
+                locale={locale}
+                isAr={isAr}
+                initialTicketNumber={queryTicketNumber}
+                initialStudentCode={queryStudentCode}
+                initialNationalId={queryNationalId}
+                onSwitchToNew={() => setActiveTab('new')}
+              />
             ) : (
-              <div className="rounded-squircle border border-primary/30 bg-primary/10 p-3 text-sm text-muted-foreground animate-in fade-in">
-                <div className="flex gap-2">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <p>
-                    {isAr
-                      ? 'نظام الشكاوى والأعطال مغلق حالياً عن الزوار إذا لم يتم تحديد وقت فتحه.'
-                      : 'For privacy, ticket status lookup is available inside the student dashboard only.'}
-                  </p>
-                </div>
-              </div>
-            )}
+              <>
+                {systemStatusMessage ? (
+                  <div className={cn(
+                    'rounded-squircle border p-3.5 text-sm font-semibold transition-all animate-in fade-in',
+                    systemStatusMessage.type === 'closed' || systemStatusMessage.type === 'pending'
+                      ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                  )}>
+                    <div className="flex gap-2">
+                      <AlertCircle className={cn(
+                        'mt-0.5 h-4 w-4 shrink-0',
+                        systemStatusMessage.type === 'closed' || systemStatusMessage.type === 'pending' ? 'text-red-400' : 'text-emerald-400'
+                      )} />
+                      <p>{systemStatusMessage.text}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-squircle border border-primary/30 bg-primary/10 p-3 text-sm text-muted-foreground animate-in fade-in">
+                    <div className="flex gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <p>
+                        {isAr
+                          ? 'نظام الشكاوى والأعطال متاح للجميع، ويمكنك الاستعلام عن تذكرتك برقم التذكرة وكود الطالب.'
+                          : 'You can submit issues or query your ticket using ticket number and student code.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>{isAr ? 'نوع البلاغ *' : 'Type of Issue *'}</Label>
-                  <Select value={form.type} onValueChange={(value) => updateField('type', value as ComplaintType)}>
-                    <SelectTrigger className="border-border bg-surface/70 h-10 rounded-squircle">
-                      <SelectValue placeholder={isAr ? 'اختر نوع البلاغ' : 'Select type'} />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-card">
-                      {typeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {isAr ? option.ar : option.en}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>{isAr ? 'نوع البلاغ *' : 'Type of Issue *'}</Label>
+                      <Select value={form.type} onValueChange={(value) => updateField('type', value as ComplaintType)}>
+                        <SelectTrigger className="border-border bg-surface/70 h-10 rounded-squircle">
+                          <SelectValue placeholder={isAr ? 'اختر نوع البلاغ' : 'Select type'} />
+                        </SelectTrigger>
+                        <SelectContent className="border-border bg-card">
+                          {typeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {isAr ? option.ar : option.en}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label>{isAr ? 'القسم المختص *' : 'Target Department *'}</Label>
-                  <Select value={form.department} onValueChange={(value) => updateField('department', value as ComplaintDepartment)}>
-                    <SelectTrigger className="border-border bg-surface/70 h-10 rounded-squircle">
-                      <SelectValue placeholder={isAr ? 'اختر القسم المختص' : 'Select department'} />
-                    </SelectTrigger>
-                    <SelectContent className="border-border bg-card">
-                      {departmentOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {isAr ? option.ar : option.en}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {isAuthenticatedStudent ? (
-                <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
-                  <p className="text-sm font-semibold text-foreground">
-                    {isAr ? `يتم الإرسال باسم ${user.name}` : `Submitting as ${user.name}`}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {isAr
-                      ? 'ستظهر هذه التذكرة في لوحة الطالب ويمكنك متابعة الردود هناك.'
-                      : 'This ticket will appear in your student dashboard, where you can track replies.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-border bg-surface/35 p-4">
-                  <h2 className="mb-4 text-sm font-bold text-foreground">
-                  {isAr ? 'معلومات التواصل' : 'Contact Information'}
-                  </h2>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="requesterName">{isAr ? 'الاسم *' : 'Name *'}</Label>
-                    <Input
-                      id="requesterName"
-                      value={form.requesterName}
-                      onChange={(event) =>
-                        updateField('requesterName', event.target.value.slice(0, 120))
-                      }
-                      placeholder={isAr ? 'الاسم' : 'Full name'}
-                      required
-                    />
+                    <div className="space-y-2">
+                      <Label>{isAr ? 'القسم المختص *' : 'Target Department *'}</Label>
+                      <Select value={form.department} onValueChange={(value) => updateField('department', value as ComplaintDepartment)}>
+                        <SelectTrigger className="border-border bg-surface/70 h-10 rounded-squircle">
+                          <SelectValue placeholder={isAr ? 'اختر القسم المختص' : 'Select department'} />
+                        </SelectTrigger>
+                        <SelectContent className="border-border bg-card">
+                          {departmentOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {isAr ? option.ar : option.en}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="studentCode">{isAr ? 'كود الطالب *' : 'Student Code *'}</Label>
-                    <Input
-                      id="studentCode"
-                      inputMode="numeric"
-                      value={form.studentCode}
-                      onChange={(event) =>
-                        updateField('studentCode', event.target.value.replace(/\D/g, '').slice(0, 12))
-                      }
-                      placeholder={isAr ? 'كود الطالب' : 'Student code'}
-                      dir="ltr"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="contactPhone">{isAr ? 'رقم الهاتف *' : 'Phone Number *'}</Label>
-                    <Input
-                      id="contactPhone"
-                      type="tel"
-                      inputMode="tel"
-                      value={form.contactPhone}
-                      onChange={(event) =>
-                        updateField('contactPhone', event.target.value.replace(/[^\d+]/g, '').slice(0, 15))
-                      }
-                      placeholder={isAr ? 'رقم الهاتف' : 'Phone number'}
-                      dir="ltr"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="nationalId">{isAr ? 'الرقم القومي *' : 'National ID *'}</Label>
-                    <Input
-                      id="nationalId"
-                      inputMode="numeric"
-                      value={form.nationalId}
-                      onChange={(event) =>
-                        updateField('nationalId', event.target.value.replace(/\D/g, '').slice(0, 14))
-                      }
-                      placeholder={isAr ? 'الرقم القومي (14 رقم)' : '14 digit national ID'}
-                      dir="ltr"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="contactEmail">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (optional)'}</Label>
-                    <Input
-                      id="contactEmail"
-                      type="email"
-                      value={form.contactEmail}
-                      onChange={(event) =>
-                        updateField('contactEmail', event.target.value.slice(0, 120))
-                      }
-                      placeholder={isAr ? 'البريد الإلكتروني' : 'Email address'}
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="screenshot">{isAr ? 'إرفاق صورة' : 'Attach Screenshot'}</Label>
-                    <label
-                      htmlFor="screenshot"
-                      className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-squircle border border-dashed border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-                    >
-                      <Upload className="h-4 w-4" />
-                      <span className="truncate">
-                        {screenshotName || (isAr ? 'اختر صورة' : 'Choose image')}
-                      </span>
-                    </label>
-                    <input
-                      id="screenshot"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="sr-only cursor-pointer"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          if (file.size > 3 * 1024 * 1024) {
-                            toast.error(isAr ? 'حجم الصورة يجب أن لا يتجاوز 3 ميجابايت' : 'Image size must not exceed 3MB');
-                            event.target.value = '';
-                            setScreenshotName('');
-                            setScreenshotBase64(undefined);
-                            return;
+                  {isAuthenticatedStudent ? (
+                    <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+                      <p className="text-sm font-semibold text-foreground">
+                        {isAr ? `يتم الإرسال باسم ${user.name}` : `Submitting as ${user.name}`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {isAr
+                          ? 'ستظهر هذه التذكرة في لوحة الطالب ويمكنك متابعة الردود هناك.'
+                          : 'This ticket will appear in your student dashboard, where you can track replies.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border bg-surface/35 p-4">
+                      <h2 className="mb-4 text-sm font-bold text-foreground">
+                      {isAr ? 'معلومات التواصل' : 'Contact Information'}
+                      </h2>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="requesterName">{isAr ? 'الاسم *' : 'Name *'}</Label>
+                        <Input
+                          id="requesterName"
+                          value={form.requesterName}
+                          onChange={(event) =>
+                            updateField('requesterName', event.target.value.slice(0, 120))
                           }
-                          setScreenshotName(file.name);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setScreenshotBase64(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        } else {
-                          setScreenshotName('');
-                          setScreenshotBase64(undefined);
-                        }
-                      }}
+                          placeholder={isAr ? 'الاسم' : 'Full name'}
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="studentCode">{isAr ? 'كود الطالب *' : 'Student Code *'}</Label>
+                        <Input
+                          id="studentCode"
+                          inputMode="numeric"
+                          value={form.studentCode}
+                          onChange={(event) =>
+                            updateField('studentCode', event.target.value.replace(/\D/g, '').slice(0, 12))
+                          }
+                          placeholder={isAr ? 'كود الطالب' : 'Student code'}
+                          dir="ltr"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="contactPhone">{isAr ? 'رقم الهاتف *' : 'Phone Number *'}</Label>
+                        <Input
+                          id="contactPhone"
+                          type="tel"
+                          inputMode="tel"
+                          value={form.contactPhone}
+                          onChange={(event) =>
+                            updateField('contactPhone', event.target.value.replace(/[^\d+]/g, '').slice(0, 15))
+                          }
+                          placeholder={isAr ? 'رقم الهاتف' : 'Phone number'}
+                          dir="ltr"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="nationalId">{isAr ? 'الرقم القومي *' : 'National ID *'}</Label>
+                        <Input
+                          id="nationalId"
+                          inputMode="numeric"
+                          value={form.nationalId}
+                          onChange={(event) =>
+                            updateField('nationalId', event.target.value.replace(/\D/g, '').slice(0, 14))
+                          }
+                          placeholder={isAr ? 'الرقم القومي (14 رقم)' : '14 digit national ID'}
+                          dir="ltr"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="contactEmail">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (optional)'}</Label>
+                        <Input
+                          id="contactEmail"
+                          type="email"
+                          value={form.contactEmail}
+                          onChange={(event) =>
+                            updateField('contactEmail', event.target.value.slice(0, 120))
+                          }
+                          placeholder={isAr ? 'البريد الإلكتروني' : 'Email address'}
+                          dir="ltr"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="screenshot">{isAr ? 'إرفاق صورة' : 'Attach Screenshot'}</Label>
+                        <label
+                          htmlFor="screenshot"
+                          className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-squircle border border-dashed border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                        >
+                          <Upload className="h-4 w-4" />
+                          <span className="truncate">
+                            {screenshotName || (isAr ? 'اختر صورة' : 'Choose image')}
+                          </span>
+                        </label>
+                        <input
+                          id="screenshot"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only cursor-pointer"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              if (file.size > 3 * 1024 * 1024) {
+                                toast.error(isAr ? 'حجم الصورة يجب أن لا يتجاوز 3 ميجابايت' : 'Image size must not exceed 3MB');
+                                event.target.value = '';
+                                setScreenshotName('');
+                                setScreenshotBase64(undefined);
+                                return;
+                              }
+                              setScreenshotName(file.name);
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setScreenshotBase64(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            } else {
+                              setScreenshotName('');
+                              setScreenshotBase64(undefined);
+                            }
+                          }}
+                        />
+                        <p className="text-center text-[11px] text-muted-foreground">
+                          {isAr ? 'PNG, JPG, WebP حتى 3MB' : 'PNG, JPG, WebP up to 3MB'}
+                        </p>
+                      </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="title">{isAr ? 'الموضوع *' : 'Subject *'}</Label>
+                    <Input
+                      id="title"
+                      value={form.title}
+                      onChange={(event) => updateField('title', event.target.value.slice(0, 120))}
+                      placeholder={isAr ? 'عنوان الشكوى أو العطل' : 'Complaint or issue subject'}
+                      required
                     />
-                    <p className="text-center text-[11px] text-muted-foreground">
-                      {isAr ? 'PNG, JPG, WebP حتى 3MB' : 'PNG, JPG, WebP up to 3MB'}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">{isAr ? 'التفاصيل *' : 'Details *'}</Label>
+                    <Textarea
+                      id="description"
+                      value={form.description}
+                      onChange={(event) => updateField('description', event.target.value.slice(0, 1000))}
+                      placeholder={isAr ? '    اكتب التفاصيل بشكل واضح وباللغة العربية فقط...' : '  Write the details clearly...'}
+                      rows={7}
+                      className=""
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground" dir="ltr">
+                      {form.description.length}/1000
                     </p>
                   </div>
+
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || isWindowClosed}
+                    className="h-11 w-full gap-2 cursor-pointer disabled:opacity-60"
+                  >
+                    <span>
+                      {isSubmitting
+                        ? isAr
+                          ? 'جاري إرسال البلاغ...'
+                          : 'Submitting...'
+                        : isWindowClosed
+                          ? isAr
+                            ? 'استقبال الشكاوى مغلق حالياً'
+                            : 'Complaints Portal Closed'
+                          : isAr
+                            ? 'إرسال البلاغ'
+                            : 'Submit Issue'}
+                    </span>
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+
+                  <div className="rounded-squircle border border-primary/25 bg-primary/10 p-4 text-xs leading-6 text-muted-foreground">
+                    <p className="mb-1 font-bold text-foreground">
+                      {isAr ? 'ملاحظة مهمة:' : 'Important note:'}
+                    </p>
+                    <ul className="list-inside list-disc">
+                      <li>{isAr ? 'جميع الحقول المعلمة (*) إلزامية' : 'All fields marked (*) are required.'}</li>
+                      <li>{isAr ? 'يجب أن يكون كود الطالب موجوداً في قاعدة بيانات المعهد' : 'Student code must exist in the institute database.'}</li>
+                      <li>
+                        {isAr
+                          ? `الحد الأقصى المسموح به هو ${settings?.complaintDailyLimit ?? 3} شكاوى لكل طالب خلال أي 24 ساعة متعاقبة`
+                          : `The submission limit is up to ${settings?.complaintDailyLimit ?? 3} complaints per student within any rolling 24 hours.`}
+                      </li>
+                      <li>{isAr ? 'سيتم إرسال رسالة تأكيد عند تسجيل البلاغ بنجاح' : 'You will receive confirmation when the ticket is created.'}</li>
+                    </ul>
                   </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="title">{isAr ? 'الموضوع *' : 'Subject *'}</Label>
-                <Input
-                  id="title"
-                  value={form.title}
-                  onChange={(event) => updateField('title', event.target.value.slice(0, 120))}
-                  placeholder={isAr ? 'عنوان الشكوى أو العطل' : 'Complaint or issue subject'}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">{isAr ? 'التفاصيل *' : 'Details *'}</Label>
-                <Textarea
-                  id="description"
-                  value={form.description}
-                  onChange={(event) => updateField('description', event.target.value.slice(0, 1000))}
-                  placeholder={isAr ? '    اكتب التفاصيل بشكل واضح وباللغة العربية فقط...' : '  Write the details clearly...'}
-                  rows={7}
-                  className=""
-                  required
-                />
-                <p className="text-xs text-muted-foreground" dir="ltr">
-                  {form.description.length}/1000
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isSubmitting || isWindowClosed}
-                className="h-11 w-full gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <span>
-                  {isSubmitting
-                    ? isAr
-                      ? 'جاري إرسال البلاغ...'
-                      : 'Submitting...'
-                    : isWindowClosed
-                      ? isAr
-                        ? 'استقبال الشكاوى مغلق حالياً'
-                        : 'Complaints Portal Closed'
-                      : isAr
-                        ? 'إرسال البلاغ'
-                        : 'Submit Issue'}
-                </span>
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-
-              <div className="rounded-squircle border border-primary/25 bg-primary/10 p-4 text-xs leading-6 text-muted-foreground">
-                <p className="mb-1 font-bold text-foreground">
-                  {isAr ? 'ملاحظة مهمة:' : 'Important note:'}
-                </p>
-                <ul className="list-inside list-disc">
-                  <li>{isAr ? 'جميع الحقول المعلمة (*) إلزامية' : 'All fields marked (*) are required.'}</li>
-                  <li>{isAr ? 'يجب أن يكون كود الطالب موجوداً في قاعدة بيانات المعهد' : 'Student code must exist in the institute database.'}</li>
-                  <li>
-                    {isAr
-                      ? `الحد الأقصى المسموح به هو ${settings?.complaintDailyLimit ?? 3} شكاوى لكل طالب خلال أي 24 ساعة متعاقبة`
-                      : `The submission limit is up to ${settings?.complaintDailyLimit ?? 3} complaints per student within any rolling 24 hours.`}
-                  </li>
-                  <li>{isAr ? 'سيتم إرسال رسالة تأكيد عند تسجيل البلاغ بنجاح' : 'You will receive confirmation when the ticket is created.'}</li>
-                </ul>
-              </div>
-            </form>
+                </form>
+              </>
+            )}
           </div>
         </Card>
 

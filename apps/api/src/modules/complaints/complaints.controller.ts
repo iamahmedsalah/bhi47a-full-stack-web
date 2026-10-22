@@ -18,6 +18,8 @@ import {
   UpdateSystemSettingsDto,
   QueryComplaintDto,
   BulkDeleteComplaintsDto,
+  PublicQueryComplaintDto,
+  PublicReplyComplaintDto,
 } from './dto/complaint.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import {
@@ -56,6 +58,24 @@ export class ComplaintsController {
       complaintCloseAt: settings.complaintCloseAt,
       complaintDailyLimit: settings.complaintDailyLimit ?? 3,
     };
+  }
+
+  @Public()
+  @Post('public/complaints/query')
+  @ApiOperation({
+    summary: 'Query and review public complaint ticket status',
+  })
+  async queryPublic(@Body() dto: PublicQueryComplaintDto) {
+    return this.complaintsService.queryPublicTicket(dto);
+  }
+
+  @Public()
+  @Post('public/complaints/reply')
+  @ApiOperation({
+    summary: 'Add reply message on public complaint ticket',
+  })
+  async replyPublic(@Body() dto: PublicReplyComplaintDto) {
+    return this.complaintsService.publicReply(dto);
   }
 
   // ─── Student Endpoints ───────────────────────────────────────────

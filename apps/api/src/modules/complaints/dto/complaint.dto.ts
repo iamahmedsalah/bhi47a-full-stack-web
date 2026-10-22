@@ -316,3 +316,60 @@ export class BulkDeleteComplaintsDto {
   @IsString({ each: true })
   ids!: string[];
 }
+
+export class PublicQueryComplaintDto {
+  @ApiProperty({ example: '261354' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'كود الطالب مطلوب / Student code is required' })
+  @Matches(/^\d{4,12}$/, { message: 'صيغة كود الطالب غير صحيحة' })
+  studentCode!: string;
+
+  @ApiProperty({ example: '29100000000000' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'الرقم القومي مطلوب / National ID is required' })
+  @Matches(/^\d{14}$/, {
+    message: 'الرقم القومي يجب أن يتكون من 14 رقماً',
+  })
+  nationalId!: string;
+
+  @ApiPropertyOptional({ example: 'TKT-20261022-1234' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsOptional()
+  ticketNumber?: string;
+}
+
+export class PublicReplyComplaintDto {
+  @ApiProperty({ example: 'TKT-20261022-1234' })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @IsNotEmpty({ message: 'رقم التذكرة مطلوب' })
+  ticketNumber!: string;
+
+  @ApiProperty({ example: '261354' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'كود الطالب مطلوب' })
+  studentCode!: string;
+
+  @ApiPropertyOptional({ example: '29100000000000' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsOptional()
+  nationalId?: string;
+
+  @ApiProperty({ example: 'أرجو التكرم بالرد ومتابعة المشكلة' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: 'نص الرد مطلوب' })
+  @Length(2, 500, {
+    message: 'الرد يجب أن يكون بين حرفين و 500 حرف كحد أقصى',
+  })
+  message!: string;
+}
