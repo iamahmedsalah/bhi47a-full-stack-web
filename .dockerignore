@@ -16,6 +16,8 @@ coverage
 
 .env
 .env.*
+.deploy
+backups
 *.log
 
 .git

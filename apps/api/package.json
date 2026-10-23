@@ -24,8 +24,7 @@
     "clean": "rimraf dist coverage",
     "seed": "ts-node src/database/seed.ts",
     "seed:reset": "ts-node src/database/seed.ts --reset",
-    "seed:prod": "node dist/database/seed.js",
-    "seed:prod:reset": "node dist/database/seed.js --reset",
+    "seed:prod": "node -e \"throw new Error('Production seeding is disabled; use the existing Atlas database')\"",
     "db:reset-students": "ts-node src/database/reset-student-data.ts"
   },
   "dependencies": {

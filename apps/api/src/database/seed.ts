@@ -8,6 +8,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as dns from 'node:dns';
+import { validateSeedMode } from './seed-policy';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
@@ -271,8 +272,9 @@ async function upsertUser(
   return result.insertedId;
 }
 
-async function createMongoConnection() {
+async function createMongoConnection(explicitUri?: string) {
   const mongoUri =
+    explicitUri ||
     process.env.DB_URI ||
     process.env.MONGODB_URI ||
     'mongodb://localhost:27017/student-portal';
@@ -314,6 +316,47 @@ function applyDnsOverrides() {
 }
 
 async function seed() {
+  const adminOnly = validateSeedMode(
+    process.env.NODE_ENV,
+    process.argv.slice(2),
+  );
+  if (adminOnly) {
+    const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+    const password = process.env.ADMIN_PASSWORD?.trim();
+    const name = process.env.ADMIN_NAME?.trim() || 'Portal Administrator';
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error('ADMIN_EMAIL must be a valid email address');
+    }
+    if (!password || password.length < 16 || /[<>]/.test(password)) {
+      throw new Error('ADMIN_PASSWORD must be at least 16 characters');
+    }
+    if (!process.env.MONGODB_URI) {
+      throw new Error('MONGODB_URI is required for admin bootstrap');
+    }
+    applyDnsOverrides();
+    const connection = await createMongoConnection(process.env.MONGODB_URI);
+    try {
+      const users = connection.db!.collection('users');
+      // Bootstrap never changes an existing account or grants it administrator access.
+      if (await users.findOne({ $or: [{ email }, { role: 'admin' }] })) {
+        console.log('Administrator or email already exists; no changes made.');
+        return;
+      }
+      await upsertUser(users, {
+        role: 'admin',
+        name,
+        email,
+        password,
+        mustChangePassword: true,
+      });
+      console.log(
+        'Initial administrator created. Change the password on first login.',
+      );
+    } finally {
+      await connection.close();
+    }
+    return;
+  }
   applyDnsOverrides();
 
   const seedData = loadSeedData();
@@ -848,7 +891,7 @@ async function seed() {
 
     console.log('Seed complete');
     console.log(`Admin: ${adminEmail}`);
-    console.log(`Staff accounts: ${seedData.staff.length} / ${staffPassword}`);
+    console.log(`Staff accounts: ${seedData.staff.length}`);
     console.log(
       `Student accounts: ${seedData.students.length} (password is each national ID)`,
     );

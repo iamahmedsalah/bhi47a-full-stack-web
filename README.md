@@ -53,6 +53,14 @@ The workspace graph and caching policy are documented in
 `docs/02-monorepo-architecture.md`. Deployment, required Vercel project settings,
 and GitHub secrets are documented in `docs/11-deployment-devops.md`.
 
+For a single VPS with Docker, Nginx, HTTPS, releases/rollback, and backups, follow
+the [VPS deployment guide](docs/vps-deployment-guide.md). Production uses
+`docker-compose.prod.yml` and `.env.prod`; `docker-compose.yml` is for local testing.
+Both Vercel and VPS deploy reviewed commits from `main`. The VPS reuses the
+existing MongoDB Atlas database and administrator accounts. Production deployment
+does not run seeds or resets; seed/reset utilities are excluded from its API image.
+The VPS guide includes a temporary HTTPS hostname for use before buying a domain.
+
 ## Environment ownership
 
 - `apps/api/.env.example`: server-only configuration and secrets. Put
@@ -61,5 +69,5 @@ and GitHub secrets are documented in `docs/11-deployment-devops.md`.
 - `.env.example`: combined, secret-free reference for root and Docker workflows.
 
 Never commit populated `.env` files. The web and API are deployed as separate
-Vercel projects; both need access to `packages/shared` from outside their Root
+Vercel projects in the existing automatic deployment workflow; both need access to `packages/shared` from outside their Root
 Directory.

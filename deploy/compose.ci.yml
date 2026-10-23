@@ -1,0 +1,14 @@
+# CI-only overlay. Never use this MongoDB service on the production host.
+services:
+  mongodb:
+    image: mongo:6.0
+    networks: [internal]
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    depends_on:
+      mongodb:
+        condition: service_healthy

@@ -19,8 +19,8 @@
     "test:e2e": "turbo run test:e2e",
     "test:stress": "node scripts/stress-test.mjs",
     "test:db-speed": "node scripts/db-query-benchmark.mjs",
-    "docker:prod": "docker compose up --build -d",
-    "docker:prod:down": "docker compose down",
+    "docker:prod": "docker compose --env-file .env.prod -f docker-compose.prod.yml up --build -d --wait",
+    "docker:prod:down": "docker compose --env-file .env.prod -f docker-compose.prod.yml down",
     "clean": "turbo run clean && rimraf .turbo"
   },
   "devDependencies": {

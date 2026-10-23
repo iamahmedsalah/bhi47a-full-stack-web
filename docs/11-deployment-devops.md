@@ -1,5 +1,9 @@
 # 11 - Deployment and DevOps Guide
 
+For VPS deployment use the [canonical VPS runbook](vps-deployment-guide.md).
+The workflow also validates Docker images and offers a manual `vps` deployment
+target; the Vercel instructions below describe the existing automatic target.
+
 This pnpm monorepo deploys both applications to separate Vercel projects:
 
 - `apps/web`: Next.js frontend;

@@ -104,6 +104,7 @@ async function bootstrap() {
   );
 
   app.useLogger(logger);
+  app.enableShutdownHooks();
   app.setGlobalPrefix('api');
 
   app.enableCors({

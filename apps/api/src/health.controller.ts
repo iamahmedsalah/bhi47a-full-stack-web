@@ -1,4 +1,10 @@
-import { Controller, Get, Optional, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Optional,
+  ServiceUnavailableException,
+  UseInterceptors,
+} from '@nestjs/common';
 import mongoose from 'mongoose';
 import { Public } from './modules/auth/decorators/public.decorator';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
@@ -38,23 +44,27 @@ export class HealthController {
     const conn = ConnectionHolder.connection || mongoose.connection;
     const readyState = conn?.readyState ?? 0;
     const isConnected = Number(readyState) === 1;
-    let dbStatus = isConnected ? 'connected' : 'disconnected';
+    let dbStatus = 'disconnected';
     let pingLatencyMs = -1;
 
     if (isConnected && conn?.db) {
       try {
         const start = process.hrtime.bigint();
-        await conn.db.admin().ping();
+        await conn.db.admin().ping({ timeoutMS: 3000 });
         const diffNs = Number(process.hrtime.bigint() - start);
         pingLatencyMs = Math.round((diffNs / 1e6) * 100) / 100;
         dbStatus = 'connected';
-      } catch (err: any) {
-        dbStatus = `ping_failed: ${err?.message || 'unknown'}`;
+      } catch {
+        dbStatus = 'ping_failed';
       }
     }
 
+    if (dbStatus !== 'connected') {
+      throw new ServiceUnavailableException('Database is unavailable');
+    }
+
     return {
-      status: dbStatus === 'connected' ? 'ok' : 'degraded',
+      status: 'ok',
       environment: process.env.NODE_ENV || 'development',
       version: process.env.APP_VERSION || '1.0.0',
       uptime: process.uptime(),

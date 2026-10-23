@@ -1,4 +1,4 @@
-name: CI/CD - Vercel
+name: CI/CD - Vercel and VPS
 
 on:
   push:
@@ -13,6 +13,15 @@ on:
       - main
       - staging
   workflow_dispatch:
+    inputs:
+      deployment_target:
+        description: Deployment target (VPS requires configured production-vps secrets)
+        type: choice
+        default: validate
+        options:
+          - validate
+          - vps
+          - vercel
 
 permissions:
   contents: read
@@ -114,7 +123,7 @@ jobs:
     needs: validate
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vercel')
     runs-on: ubuntu-latest
     environment:
       name: production-api
@@ -190,7 +199,7 @@ jobs:
       - deploy-api
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vercel')
     runs-on: ubuntu-latest
     environment:
       name: production-web
@@ -278,3 +287,122 @@ jobs:
             "${{ steps.deploy.outputs.url }}" > /dev/null
           curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
             "${{ steps.deploy.outputs.url }}/ar/login" > /dev/null
+
+  docker-validate:
+    name: Build and smoke-test VPS containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ci
+      REDIS_PASSWORD: ci-redis-password
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment scripts
+        run: |
+          bash -n deploy/deploy.sh deploy/backup.sh
+          shellcheck deploy/deploy.sh deploy/backup.sh
+          bash deploy/tests/operations.test.sh
+      - name: Build API image
+        run: docker build -f Dockerfile.api -t student-portal-api:ci .
+      - name: Build standalone web image
+        run: docker build -f Dockerfile.web -t student-portal-web:ci .
+      - name: Create isolated CI environment
+        shell: bash
+        run: |
+          umask 077
+          cat > .env.prod <<'ENV'
+          NODE_ENV=production
+          PORT=4000
+          API_PORT=4000
+          MONGODB_URI=mongodb://mongodb:27017/student-portal-ci
+          JWT_SECRET=ci-only-secret-at-least-thirty-two-bytes
+          CLIENT_URL=https://portal.example.com
+          WEB_BASE_URL=https://portal.example.com
+          COOKIE_SAME_SITE=none
+          RESEND_API_KEY=re_ci_dummy_key
+          REDIS_PASSWORD=ci-redis-password
+          REDIS_URL=redis://:ci-redis-password@redis:6379
+          QUEUE_REQUIRED=true
+          QUEUE_WORKERS_ENABLED=true
+          RUN_STARTUP_TASKS=false
+          ENV
+      - name: Prepare existing data in isolated CI MongoDB
+        shell: bash
+        run: |
+          docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml up -d --wait mongodb
+          docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml exec -T mongodb mongosh --quiet student-portal-ci --eval '
+            db.users.insertOne({_id:"existing-admin",role:"admin",email:"existing@example.com",passwordHash:"unchanged-hash",tokenVersion:7});
+            db.grades.insertOne({_id:"existing-grade",studentCode:"existing-student",total:83});'
+      - name: Start production topology with isolated MongoDB
+        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml up -d --no-build --wait --wait-timeout 240
+      - name: Verify HTTP and preserve existing data across restart
+        shell: bash
+        run: |
+          curl --fail --silent http://127.0.0.1:4000/api/health > /dev/null
+          curl --fail --silent http://127.0.0.1:3000/ar/login > /dev/null
+          docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api sh -c 'test ! -f dist/database/seed.js && test ! -f dist/database/reset-student-data.js'
+          docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml restart api
+          docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml up -d --no-build --wait --wait-timeout 240
+          docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml exec -T mongodb mongosh --quiet student-portal-ci --eval '
+            if (db.users.countDocuments({}) !== 1 ||
+                db.users.countDocuments({_id:"existing-admin",role:"admin",email:"existing@example.com",passwordHash:"unchanged-hash",tokenVersion:7}) !== 1 ||
+                db.grades.countDocuments({}) !== 1 ||
+                db.grades.countDocuments({_id:"existing-grade",studentCode:"existing-student",total:83}) !== 1)
+              throw new Error("Deployment changed existing data");'
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml logs --tail 100
+      - name: Clean up isolated containers
+        if: always()
+        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml down -v
+
+  deploy-vps:
+    name: Deploy reviewed commit to VPS
+    needs: [validate, docker-validate]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vps'
+    runs-on: ubuntu-latest
+    environment: production-vps
+    concurrency:
+      group: production-vps
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH with pinned server host key
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Configure VPS_HOST}"
+          : "${VPS_USER:?Configure VPS_USER}"
+          : "${VPS_SSH_KEY:?Configure VPS_SSH_KEY}"
+          : "${VPS_KNOWN_HOSTS:?Configure VPS_KNOWN_HOSTS}"
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/vps_key' EXIT
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/vps_key \
+            "$VPS_USER@$VPS_HOST" bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          release="$1"
+          [[ "$release" =~ ^[0-9a-f]{40}$ ]]
+          cd "$HOME/app"
+          mkdir -p .deploy
+          # Lock the checkout as well as the container deployment.
+          exec 8>.deploy/checkout.lock
+          flock -n 8
+          git diff --quiet
+          git diff --cached --quiet
+          git fetch origin main
+          git merge-base --is-ancestor "$release" origin/main
+          git checkout --detach "$release"
+          DEPLOY_CHECKOUT_LOCKED=1 bash deploy/deploy.sh
+          REMOTE
+
+
+          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGCHgxGHaZSf3HDLDdzP5whxCMozgLemnNGfhGEv/Bqm bhi47a-vps-github
