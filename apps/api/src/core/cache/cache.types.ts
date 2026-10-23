@@ -11,14 +11,11 @@ export interface ICacheStore {
   getCommandCount?(): number;
 }
 
-export interface RedisQuotaInfo {
-  mode: 'preserved' | 'active' | 'offline';
-  dailyLimit: number;
-  commandsToday: number;
-  quotaUsedPercent: number;
-  policy: 'zero_quota_local_dev' | 'full_production_redis';
-  statusText: string;
-  details: string;
+export interface RedisTelemetry {
+  provider: 'self-hosted' | 'upstash' | 'external' | 'none' | 'unknown';
+  cacheCommandAttemptsSinceStart: number;
+  // This process cannot observe a provider's account-wide usage or plan limits.
+  quotaAvailable: false;
 }
 
 export interface CacheHealth {
@@ -27,5 +24,5 @@ export interface CacheHealth {
   effectiveDriver: 'memory' | 'redis' | 'hybrid';
   redisConnected: boolean;
   itemCount?: number;
-  quota?: RedisQuotaInfo;
+  redis: RedisTelemetry;
 }

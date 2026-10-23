@@ -1,6 +1,7 @@
 import type { Schema } from 'mongoose';
 import type { MetricsService } from '../core/metrics/metrics.service';
 import type { AppLoggerService } from '../core/logger/logger.service';
+import { METRICS_SLOW_QUERY_THRESHOLD_MS } from '../core/metrics/metrics.constants';
 
 const DEFAULT_SLOW_QUERY_THRESHOLD_MS =
   process.env.NODE_ENV === 'production' ? 100 : 350;
@@ -19,6 +20,19 @@ function safeStringify(value: unknown, max = 200): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Preserve query structure without copying student IDs, tokens or search text. */
+function filterShape(value: unknown): unknown {
+  if (Array.isArray(value)) return value.slice(0, 5).map(filterShape);
+  if (value && typeof value === 'object') {
+    if (value instanceof Date) return '[date]';
+    if ('toHexString' in value) return '[id]';
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, filterShape(nested)]),
+    );
+  }
+  return '?';
 }
 
 /**
@@ -105,23 +119,32 @@ export function createMongooseMetricsPlugin(
             ? 1
             : 0;
 
-        if (durationMs >= thresholdMs) {
+        const captureDetails = durationMs >= METRICS_SLOW_QUERY_THRESHOLD_MS;
+        let filter: string | undefined;
+        let options: string | undefined;
+        if (captureDetails) {
           const query = this as QueryLike;
-          const filter = safeStringify(
-            typeof query.getFilter === 'function'
-              ? query.getFilter()
-              : undefined,
+          filter = safeStringify(
+            filterShape(
+              typeof query.getFilter === 'function'
+                ? query.getFilter()
+                : undefined,
+            ),
             300,
           );
           const baseOptions = describeQueryShape(query, op);
-          const options = baseOptions
+          options = baseOptions
             ? `${baseOptions} docs=${docsReturned}`
             : `docs=${docsReturned}`;
+        }
+        metricsService?.recordDbQuery(
+          collectionName,
+          op,
+          durationSec,
+          captureDetails ? { filter, options } : undefined,
+        );
 
-          metricsService?.recordDbQuery(collectionName, op, durationSec, {
-            filter,
-            options,
-          });
+        if (durationMs >= thresholdMs) {
           logger?.warn(
             `[SLOW QUERY] ${collectionName}.${op} took ${durationMs}ms (threshold: ${thresholdMs}ms)`,
             {
@@ -135,8 +158,6 @@ export function createMongooseMetricsPlugin(
               uptimeSeconds: Math.floor(process.uptime()),
             },
           );
-        } else {
-          metricsService?.recordDbQuery(collectionName, op, durationSec);
         }
       }
     });

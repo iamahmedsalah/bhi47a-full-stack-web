@@ -17,7 +17,7 @@ import {
   Max,
   IsObject,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export const COMPLAINT_TYPE_VALUES = [
@@ -258,6 +258,7 @@ export class QueryComplaintDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   search?: string;
 
   @ApiPropertyOptional({ enum: COMPLAINT_STATUS_VALUES })
@@ -287,7 +288,7 @@ export class QueryComplaintDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsMongoId()
   assignedStaffId?: string;
 
   @ApiPropertyOptional()
@@ -302,10 +303,18 @@ export class QueryComplaintDto {
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
   page?: number;
 
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 }
 

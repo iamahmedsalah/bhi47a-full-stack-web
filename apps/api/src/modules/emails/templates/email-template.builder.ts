@@ -16,6 +16,7 @@ function renderBaseEmailLayout({
   contentHtml,
   footerHtml,
   lang = 'ar',
+  logoUrl,
 }: {
   preheader: string;
   headerTitle: string;
@@ -23,6 +24,7 @@ function renderBaseEmailLayout({
   contentHtml: string;
   footerHtml?: string;
   lang?: 'ar' | 'en';
+  logoUrl?: string;
 }) {
   const isAr = lang === 'ar';
   const safePreheader = escapeHtml(preheader);
@@ -54,6 +56,7 @@ function renderBaseEmailLayout({
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
   <title>${safeHeaderTitle}</title>
+  <style>@media screen and (max-width:480px){.email-body{padding:24px 18px!important}.email-header{padding:24px 18px!important}}</style>
 </head>
 <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#0f172a;">
   <!-- Preheader text hidden in client inbox list -->
@@ -61,13 +64,13 @@ function renderBaseEmailLayout({
     ${safePreheader}
   </div>
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:32px 12px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="table-layout:fixed;background-color:#f1f5f9;padding:32px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,118,110,0.08);border:1px solid #e2e8f0;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="table-layout:fixed;max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,118,110,0.08);border:1px solid #e2e8f0;">
           <!-- Institute Header Banner -->
           <tr>
-            <td style="background:linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #14b8a6 100%);padding:30px 24px;text-align:center;color:#ffffff;">
+            <td class="email-header" style="background-color:#0f766e;background-image:linear-gradient(135deg,#115e59,#0d9488);padding:26px 24px;text-align:center;color:#ffffff;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
@@ -75,7 +78,7 @@ function renderBaseEmailLayout({
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 12px;">
                       <tr>
                         <td align="center">
-                          <img src="https://bhi47a-support.vercel.app/logo.png" alt="BHI" width="68" height="68" style="display:block;width:68px;height:68px;border-radius:50%;border:2px solid #ffffff;box-shadow:0 4px 14px rgba(0,0,0,0.2);margin:0 auto;background-color:#0f766e;" />
+                          <img src="${escapeHtml(logoUrl || 'https://bhi47a-support.vercel.app/logo.png')}" alt="BHI47A" width="60" height="60" style="display:block;width:60px;height:60px;border-radius:50%;border:2px solid #ffffff;margin:0 auto;background-color:#0f766e;" />
                         </td>
                       </tr>
                     </table>
@@ -100,7 +103,7 @@ function renderBaseEmailLayout({
 
           <!-- Email Content Body -->
           <tr>
-            <td style="padding:32px 30px;background-color:#ffffff;color:#0f172a;line-height:1.7;">
+            <td class="email-body" style="padding:32px 30px;background-color:#ffffff;color:#0f172a;line-height:1.7;">
               ${contentHtml}
             </td>
           </tr>
@@ -131,6 +134,8 @@ export interface OtpTemplateInput {
   otp: string;
   footerNote?: string;
   lang?: 'ar' | 'en';
+  copyCodeUrl?: string;
+  logoUrl?: string;
 }
 
 export function renderOtpEmailTemplate({
@@ -143,6 +148,8 @@ export function renderOtpEmailTemplate({
   otp,
   footerNote,
   lang = 'ar',
+  copyCodeUrl,
+  logoUrl,
 }: OtpTemplateInput): string {
   const isAr = lang === 'ar';
   const safeName = escapeHtml(greetingName);
@@ -174,8 +181,8 @@ export function renderOtpEmailTemplate({
     ? '⏱️ صالح للاستخدام لمدة 15 دقيقة فقط'
     : '⏱️ Valid for 15 minutes only';
   const copyHint = isAr
-    ? 'انقر لتحديد ونسخ الرمز مباشرة'
-    : 'Select or double-click code to copy';
+    ? 'اضغط مطولاً على الرمز أو حدده ثم اختر «نسخ».'
+    : 'Press and hold, or select the code, then choose Copy.';
 
   const securityNotice = isAr
     ? '🛡️ <strong>تنبيه أمني هام:</strong> لا تشارك هذا الرمز السري مع أي شخص مطلقاً. إدارة المعهد لن تطلب منك هذا الرمز تحت أي ظرف. إذا لم تكن أنت صاحب هذا الطلب، يرجى تجاهل هذه الرسالة وتأمين حسابك فوراً.'
@@ -195,13 +202,11 @@ export function renderOtpEmailTemplate({
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:26px 0;">
       <tr>
         <td align="center">
-          <div style="background-color:#f0fdfa;border:2px solid #0d9488;border-radius:14px;padding:22px 24px;text-align:center;max-width:340px;box-shadow:0 4px 16px rgba(13,148,136,0.1);">
+          <div style="background-color:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:22px 12px;text-align:center;max-width:360px;">
             <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:10px;">
               ${otpHeader}
             </div>
-            <div style="font-family:Consolas, 'Courier New', Monaco, monospace;font-size:36px;font-weight:900;letter-spacing:10px;color:#0f766e;margin:6px 0;padding:12px 20px;background:#ffffff;border:2px dashed #0d9488;border-radius:12px;display:inline-block;user-select:all;-webkit-user-select:all;-moz-user-select:all;" dir="ltr">
-              ${cleanOtp}
-            </div>
+            <div style="font-family:Consolas,'Courier New',monospace;font-size:32px;font-weight:700;letter-spacing:6px;color:#115e59;margin:8px 0;padding:16px 10px;background-color:#ffffff;border:1px solid #99f6e4;border-radius:10px;display:inline-block;user-select:all;-webkit-user-select:all;" dir="ltr">${cleanOtp}</div>
             <div style="font-size:10px;color:#64748b;margin-top:6px;">
               ${copyHint}
             </div>
@@ -212,6 +217,15 @@ export function renderOtpEmailTemplate({
         </td>
       </tr>
     </table>
+
+    ${
+      copyCodeUrl
+        ? `<div style="text-align:center;margin:0 0 24px;">
+      <a href="${escapeHtml(copyCodeUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background-color:#0f766e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:13px 24px;border-radius:8px;">${isAr ? 'فتح صفحة نسخ الرمز' : 'Open code copier'}</a>
+      <p style="font-size:12px;color:#64748b;margin:10px 0 0;">${isAr ? 'يفتح صفحة آمنة في المتصفح بها زر نسخ.' : 'Opens a secure browser page with a Copy button.'}</p>
+    </div>`
+        : ''
+    }
 
     <!-- Security Warning -->
     <div style="margin-top:22px;padding:14px 18px;background-color:#f0fdfa;border-radius:10px;border-${isAr ? 'right' : 'left'}:4px solid #0d9488;text-align:${isAr ? 'right' : 'left'};">
@@ -230,6 +244,7 @@ export function renderOtpEmailTemplate({
     contentHtml,
     footerHtml: footerNote ? `<div>${escapeHtml(footerNote)}</div>` : undefined,
     lang,
+    logoUrl,
   });
 }
 

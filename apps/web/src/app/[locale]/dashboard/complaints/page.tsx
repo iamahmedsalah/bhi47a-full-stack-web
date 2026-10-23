@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import Image from 'next/image';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import api, { getApiErrorMessage } from '@/lib/api';
+import api, { getApiErrorMessage, type PaginatedResponse } from '@/lib/api';
+import { useTableState } from '@/hooks/use-table-state';
+import { ComplaintPagination } from '@/features/complaints/components/complaint-pagination';
+import { ComplaintSearchInput } from '@/features/complaints/components/complaint-search-input';
 import {
   MessageCircle,
   Plus,
@@ -47,7 +51,6 @@ interface Complaint {
   createdAt: string;
 }
 
-type ComplaintType = 'complaint' | 'technical_issue' | 'academic' | 'financial' | 'facility' | 'other';
 type ComplaintDepartment = 'student_affairs' | 'technical_support' | 'finance' | 'control' | 'academic_advising';
 
 const TITLE_MIN_LENGTH = 3;
@@ -58,6 +61,7 @@ const REPLY_MIN_LENGTH = 2;
 const REPLY_MAX_LENGTH = 1000;
 
 export default function StudentComplaintsPage() {
+  const queryClient = useQueryClient();
   const t = useTranslations('complaints');
   const tCommon = useTranslations('common');
 
@@ -65,7 +69,7 @@ export default function StudentComplaintsPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isReplyOpen, setIsReplyOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Complaint | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { search: searchQuery, setSearch: setSearchQuery, page, limit, setPage, setLimit } = useTableState({ defaultFilters: {}, defaultLimit: 20 });
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Form states
@@ -91,27 +95,17 @@ export default function StudentComplaintsPage() {
     !formLoading;
 
   const ticketsQuery = useQuery({
-    queryKey: ['student-complaints'],
+    queryKey: ['student-complaints', { page, limit, search: searchQuery }],
     queryFn: async () => {
-      const res = await api.get<Complaint[]>('/students/complaints');
+      const res = await api.get<PaginatedResponse<Complaint>>('/students/complaints', { params: { page, limit, search: searchQuery || undefined } });
       return res.data;
     },
   });
 
-  const tickets = useMemo(() => ticketsQuery.data || [], [ticketsQuery.data]);
-  const filteredTickets = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return tickets;
-
-    return tickets.filter((ticket) =>
-      [
-        ticket.ticketNumber,
-        ticket.title,
-        ticket.status,
-        ticket.type,
-      ].some((val) => val?.toLowerCase().includes(query))
-    );
-  }, [tickets, searchQuery]);
+  const filteredTickets = useMemo(() => ticketsQuery.data?.items || [], [ticketsQuery.data]);
+  React.useEffect(() => {
+    if (ticketsQuery.data && page > Math.max(1, ticketsQuery.data.totalPages)) setPage(Math.max(1, ticketsQuery.data.totalPages));
+  }, [ticketsQuery.data, page, setPage]);
 
   const openAddModal = () => {
     setType('complaint');
@@ -140,7 +134,8 @@ export default function StudentComplaintsPage() {
       });
       toast.success(isEnglish ? 'Complaint submitted successfully' : 'تم تقديم الشكوى بنجاح');
       setIsAddOpen(false);
-      void ticketsQuery.refetch();
+      setSearchQuery('');
+      void queryClient.invalidateQueries({ queryKey: ['student-complaints'] });
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, isEnglish ? 'Could not submit complaint' : 'تعذر تقديم الشكوى'));
     } finally {
@@ -202,15 +197,15 @@ export default function StudentComplaintsPage() {
       </div>
 
       {/* Search Widget */}
-      <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+      <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
         <label className="mb-2 block text-xs font-bold text-foreground">
           {isEnglish ? 'Search your tickets' : 'الاستعلام عن تذكرة'}
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
+          <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <ComplaintSearchInput
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onValueChange={setSearchQuery}
             placeholder={
               isEnglish
                 ? 'Search by ticket number, subject, status, or type'
@@ -222,7 +217,7 @@ export default function StudentComplaintsPage() {
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute end-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
+              className="absolute inset-e-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
@@ -236,15 +231,17 @@ export default function StudentComplaintsPage() {
           <Loader2 className="w-10 h-10 text-primary animate-spin" />
           <p className="text-muted-foreground text-sm">{tCommon('loading')}</p>
         </div>
-      ) : tickets.length === 0 ? (
-        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+      ) : ticketsQuery.isError ? (
+        <Card role="alert" className="p-6"><p>{getApiErrorMessage(ticketsQuery.error, isEnglish ? 'Could not load tickets' : 'تعذر تحميل التذاكر')}</p><button type="button" className="mt-3 text-primary" onClick={() => void ticketsQuery.refetch()}>{isEnglish ? 'Retry' : 'إعادة المحاولة'}</button></Card>
+      ) : filteredTickets.length === 0 && !searchQuery ? (
+        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <Inbox className="w-12 h-12 text-muted mx-auto mb-3" />
           <span className="text-muted-foreground text-sm">
             {isEnglish ? 'No complaints registered yet.' : 'لم تقم بتقديم أي شكاوى بعد.'}
           </span>
         </Card>
       ) : filteredTickets.length === 0 ? (
-        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="text-center p-16 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <Search className="w-12 h-12 text-muted mx-auto mb-3" />
           <span className="text-muted-foreground text-sm">
             {isEnglish ? 'No tickets match your search.' : 'لا توجد تذاكر مطابقة لبحثك.'}
@@ -259,7 +256,7 @@ export default function StudentComplaintsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, delay: idx * 0.04 }}
             >
-              <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <Card className="p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-2 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-bold text-primary font-mono">{tkt.ticketNumber}</span>
@@ -314,6 +311,8 @@ export default function StudentComplaintsPage() {
           ))}
         </div>
       )}
+
+      <ComplaintPagination page={page} limit={limit} total={ticketsQuery.data?.total ?? 0} totalPages={ticketsQuery.data?.totalPages ?? 0} busy={ticketsQuery.isFetching} isAr={!isEnglish} onPage={setPage} onLimit={setLimit} />
 
       {/* Add Complaint Modal */}
       <AnimatePresence>
@@ -467,10 +466,13 @@ export default function StudentComplaintsPage() {
                   />
                   {screenshotBase64 && (
                     <div className="relative mt-2 overflow-hidden rounded-squircle border border-border/80 bg-secondary p-2">
-                      <img
+                      <Image
                         src={screenshotBase64}
                         alt="Screenshot preview"
-                        className="max-h-40 w-full object-contain rounded-lg"
+                        width={1200}
+                        height={800}
+                        unoptimized
+                        className="h-auto max-h-40 w-full object-contain rounded-lg"
                       />
                       <button
                         type="button"
@@ -478,7 +480,7 @@ export default function StudentComplaintsPage() {
                           setScreenshotName('');
                           setScreenshotBase64(undefined);
                         }}
-                        className="absolute top-3 end-3 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-500 transition-colors cursor-pointer"
+                        className="absolute top-3 inset-e-3 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-red-500 transition-colors cursor-pointer"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -564,7 +566,7 @@ export default function StudentComplaintsPage() {
               </div>
 
               {/* Chat list */}
-              <div className="flex-1 overflow-y-auto space-y-4 p-3.5 bg-secondary/30 rounded-xl border border-border/70 min-h-[220px]">
+              <div className="flex-1 overflow-y-auto space-y-4 p-3.5 bg-secondary/30 rounded-xl border border-border/70 min-h-55">
                 {/* Main Ticket Desc */}
                 <div className="p-4 border border-border/70 bg-card rounded-xl space-y-1.5 shadow-xs">
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold">
@@ -597,10 +599,13 @@ export default function StudentComplaintsPage() {
                         }}
                         className="group relative cursor-pointer overflow-hidden rounded-lg border border-border/60 bg-black/20 p-1.5 transition-all hover:border-primary/50 hover:bg-black/30"
                       >
-                        <img
+                        <Image
                           src={selectedTicket.screenshotUrl}
                           alt="Complaint Screenshot"
-                          className="max-h-56 w-full object-contain rounded transition-transform duration-200 group-hover:scale-[1.01]"
+                          width={1200}
+                          height={800}
+                          unoptimized
+                          className="h-auto max-h-56 w-full object-contain rounded transition-transform duration-200 group-hover:scale-[1.01]"
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-[2px] rounded-lg">
                           <div className="flex items-center gap-1.5 rounded-squircle bg-black/80 px-2.5 py-1 text-[11px] font-bold text-white shadow-xl border border-white/15">

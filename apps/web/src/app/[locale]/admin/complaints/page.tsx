@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -57,7 +58,9 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import { useComplaintStore } from '@/store/complaint-store';
+import { useTableState } from '@/hooks/use-table-state';
+import { ComplaintSearchInput } from '@/features/complaints/components/complaint-search-input';
+import { ComplaintPagination } from '@/features/complaints/components/complaint-pagination';
 import { DatePicker } from '@/components/ui/date-picker';
 import { printElement, downloadExcel } from '@/lib/utils';
 import { ComplaintKpiCards } from '@/features/complaints/components/complaint-kpi-cards';
@@ -313,6 +316,11 @@ function PriorityPill({ priority, locale }: { priority: ComplaintPriority; local
   );
 }
 
+const complaintFilterDefaults = {
+  status: 'all', type: 'all', priority: 'all', assignedGroup: 'all',
+  assignedStaffId: 'all', dateFrom: '', dateTo: '',
+};
+
 function AdminComplaintsContent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -322,8 +330,7 @@ function AdminComplaintsContent() {
 
 
   const {
-    adminFilters: {
-      search,
+    filters: {
       status,
       type,
       priority,
@@ -332,11 +339,15 @@ function AdminComplaintsContent() {
       dateFrom,
       dateTo,
     },
-    selectedTicketIds,
-    setAdminFilter,
-    setSelectedTicketIds,
-    resetAdminFilters,
-  } = useComplaintStore();
+    search, page, limit, setPage, setLimit, setSearch, setFilter,
+    selectedKeys: selectedTicketIds,
+    setSelectedKeys: setSelectedTicketIds,
+    resetAll: resetAdminFilters,
+  } = useTableState({ defaultFilters: complaintFilterDefaults, defaultLimit: 20 });
+  const setAdminFilter = (key: string, value: string) => {
+    if (key === 'search') setSearch(value);
+    else setFilter(key as keyof typeof complaintFilterDefaults, value);
+  };
 
   const [targetStudentCode, setTargetStudentCode] = useState('');
   const [windowOpenAt, setWindowOpenAt] = useState('');
@@ -344,12 +355,6 @@ function AdminComplaintsContent() {
 
   const searchParams = useSearchParams();
   const ticketParam = searchParams ? searchParams.get('ticket') : null;
-
-  React.useEffect(() => {
-    if (ticketParam) {
-      setAdminFilter('search', ticketParam);
-    }
-  }, [ticketParam, setAdminFilter]);
 
   const [selectedTicketOverride, setSelectedTicketOverride] = useState<Complaint | null | 'CLOSED'>('CLOSED');
   const [replyMessage, setReplyMessage] = useState('');
@@ -361,15 +366,16 @@ function AdminComplaintsContent() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const complaintListParams = {
-    limit: 100,
-    search: search.trim() || undefined,
+    page,
+    limit,
+    search: search.trim() || ticketParam || undefined,
     status: status !== 'all' ? status : undefined,
     type: type !== 'all' ? type : undefined,
     priority: priority !== 'all' ? priority : undefined,
     assignedGroup: assignedGroup !== 'all' ? assignedGroup : undefined,
     assignedStaffId: assignedStaffId !== 'all' ? assignedStaffId : undefined,
-    dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
-    dateTo: dateTo ? new Date(dateTo).toISOString() : undefined,
+    dateFrom: dateFrom && Number.isFinite(Date.parse(dateFrom)) ? new Date(dateFrom).toISOString() : undefined,
+    dateTo: dateTo && Number.isFinite(Date.parse(dateTo)) ? new Date(dateTo).toISOString() : undefined,
   };
 
   const complaintsQuery = useQuery({
@@ -400,8 +406,13 @@ function AdminComplaintsContent() {
     queryFn: listAssignableStaff,
   });
 
-  const complaints = complaintsQuery.data?.items ?? [];
+  const complaints = useMemo(() => complaintsQuery.data?.items ?? [], [complaintsQuery.data?.items]);
   const total = complaintsQuery.data?.total ?? 0;
+  React.useEffect(() => {
+    if (complaintsQuery.data && page > Math.max(1, complaintsQuery.data.totalPages)) {
+      setPage(Math.max(1, complaintsQuery.data.totalPages));
+    }
+  }, [complaintsQuery.data, page, setPage]);
   const settings = settingsQuery.data ?? null;
   const assignees = assigneesQuery.data ?? [];
 
@@ -431,27 +442,20 @@ function AdminComplaintsContent() {
   };
 
   const stats = useMemo(() => {
-    const allTickets = statsQuery.data ?? [];
-    const resolvedTickets = allTickets.filter((ticket) => ['resolved', 'closed'].includes(ticket.status));
-    const avgMs = resolvedTickets.length
-      ? resolvedTickets.reduce((sum, ticket) => {
-          const created = new Date(ticket.createdAt).getTime();
-          const updated = new Date(ticket.updatedAt).getTime();
-          return sum + Math.max(0, updated - created);
-        }, 0) / resolvedTickets.length
-      : 0;
+    const summary = statsQuery.data;
+    const avgMs = summary?.avgResolutionMs ?? 0;
 
     const avgHours = avgMs ? Math.max(1, Math.round(avgMs / 3_600_000)) : 0;
 
     return {
-      total: allTickets.length,
-      open: allTickets.filter((ticket) => ticket.status === 'open').length,
-      review: allTickets.filter((ticket) => ticket.status === 'in_review').length,
-      working: allTickets.filter((ticket) => ticket.status === 'in_progress').length,
-      resolved: allTickets.filter((ticket) => ticket.status === 'resolved').length,
-      technical: allTickets.filter((ticket) => ticket.type === 'technical_issue' || ticket.type === 'facility').length,
-      complaints: allTickets.filter((ticket) => ticket.type === 'complaint').length,
-      high: allTickets.filter((ticket) => ticket.priority === 'high' || ticket.priority === 'urgent').length,
+      total: summary?.total ?? 0,
+      open: summary?.open ?? 0,
+      review: summary?.review ?? 0,
+      working: summary?.working ?? 0,
+      resolved: summary?.resolved ?? 0,
+      technical: summary?.technical ?? 0,
+      complaints: summary?.complaints ?? 0,
+      high: summary?.high ?? 0,
       avgResolution: avgHours ? (locale === 'ar' ? `${avgHours} ساعة` : `${avgHours} hours`) : (locale === 'ar' ? 'غير متاح' : 'N/A'),
     };
   }, [statsQuery.data, locale]);
@@ -654,7 +658,7 @@ function AdminComplaintsContent() {
   
   return (
     <div className="space-y-6 p-2 md:p-6 animate-fade-in" dir={isAr ? "rtl" : "ltr"}>
-      <section className="overflow-hidden rounded-xl border border-border/70 bg-card/90 p-5 shadow-[var(--shadow-glow)] backdrop-blur md:p-6">
+      <section className="overflow-hidden rounded-xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
@@ -738,13 +742,13 @@ function AdminComplaintsContent() {
         />
       )}
 
-      <ComplaintKpiCards stats={stats} total={total} isAr={isAr} />
+      <ComplaintKpiCards stats={stats} total={complaints.length} isAr={isAr} />
 
-      <Card className="border-border/70 bg-card/90 p-4 shadow-[var(--shadow-glow)]">
+      <Card className="border-border/70 bg-card/90 p-4 shadow-(--shadow-glow)">
         <div className="grid gap-3 lg:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))_auto]">
           <div className="relative">
-            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(event) => setAdminFilter('search', event.target.value)} placeholder={isAr ? 'بحث برقم التذكرة أو الطالب أو الموضوع' : 'Search by ticket, student, or subject'} className="ps-10" />
+            <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <ComplaintSearchInput value={search || ticketParam || ''} onValueChange={setSearch} placeholder={isAr ? 'بحث برقم التذكرة أو الطالب أو الموضوع' : 'Search by ticket, student, or subject'} className="ps-10" />
           </div>
           <Select value={type} onValueChange={(value) => setAdminFilter('type', value)}>
             <SelectTrigger><SelectValue placeholder={isAr ? 'النوع' : 'Type'} /></SelectTrigger>
@@ -796,7 +800,7 @@ function AdminComplaintsContent() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden border-border/70 bg-card/90 shadow-[var(--shadow-glow)]">
+      <Card className="overflow-hidden border-border/70 bg-card/90 shadow-(--shadow-glow)">
         {canManageSettings && selectedTicketIds.length > 0 && (
           <div className="flex flex-col gap-2 border-b border-border/80 bg-primary/10 px-6 py-3 transition-all animate-in fade-in slide-in-from-top-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs font-semibold text-foreground">
@@ -877,7 +881,7 @@ function AdminComplaintsContent() {
         )}
 
         <div id="printable-complaints-list" className="hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-275 text-sm">
             <thead className="border-b border-border bg-surface/70 text-xs text-muted-foreground">
               <tr>
                 {canManageSettings && (
@@ -1039,6 +1043,9 @@ function AdminComplaintsContent() {
           ))}
         </div>
       </Card>
+
+      {complaintsQuery.isError && <div role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm"><p>{getApiErrorMessage(complaintsQuery.error, isAr ? 'تعذر تحميل الشكاوى' : 'Could not load complaints')}</p><Button variant="outline" onClick={() => void complaintsQuery.refetch()}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button></div>}
+      <ComplaintPagination page={page} limit={limit} total={total} totalPages={complaintsQuery.data?.totalPages ?? 0} busy={complaintsQuery.isFetching} isAr={isAr} onPage={setPage} onLimit={setLimit} />
 
       <Sheet open={Boolean(selectedTicket)} onOpenChange={(open) => !open && setSelectedTicket(null)}>
         <SheetContent side={isAr ? "left" : "right"} className="w-full overflow-y-auto border-border bg-[#0d1821] p-0 text-foreground sm:max-w-2xl">
@@ -1224,10 +1231,13 @@ function AdminComplaintsContent() {
                     }}
                     className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-black/20 p-2 transition-all hover:border-primary/50 hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-primary/50"
                   >
-                    <img
+                    <Image
                       src={selectedTicket.screenshotUrl}
                       alt="Complaint Screenshot"
-                      className="max-h-80 w-full object-contain rounded-lg transition-transform duration-200 group-hover:scale-[1.01]"
+                      width={1200}
+                      height={800}
+                      unoptimized
+                      className="h-auto max-h-80 w-full object-contain rounded-lg transition-transform duration-200 group-hover:scale-[1.01]"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-[2px] rounded-xl">
                       <div className="flex items-center gap-2 rounded-squircle bg-black/80 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl border border-white/15">

@@ -421,7 +421,7 @@ export class ComplaintsService {
     const [items, total] = await Promise.all([
       this.complaintModel
         .find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -434,7 +434,7 @@ export class ComplaintsService {
     if (missingNationalIds.length > 0) {
       const students = await this.userModel
         .find({ _id: { $in: missingNationalIds } })
-        .select('+nationalId')
+        .select({ _id: 1, nationalId: 1 })
         .lean();
       const studentMap = new Map(
         students.map((s) => [s._id.toString(), s.nationalId]),
@@ -452,7 +452,66 @@ export class ComplaintsService {
     return createPaginatedResult(items, total, page, limit);
   }
 
-  async findByStudent(studentId: string): Promise<Complaint[]> {
+  async getStats() {
+    const countWhen = (condition: Record<string, unknown>) => ({
+      $sum: { $cond: [condition, 1, 0] },
+    });
+    const [summary] = await this.complaintModel
+      .aggregate<{
+        total: number;
+        open: number;
+        review: number;
+        working: number;
+        resolved: number;
+        technical: number;
+        complaints: number;
+        high: number;
+        avgResolutionMs: number | null;
+      }>([
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            open: countWhen({ $eq: ['$status', 'open'] }),
+            review: countWhen({ $eq: ['$status', 'in_review'] }),
+            working: countWhen({ $eq: ['$status', 'in_progress'] }),
+            resolved: countWhen({ $eq: ['$status', 'resolved'] }),
+            technical: countWhen({
+              $in: ['$type', ['technical_issue', 'facility']],
+            }),
+            complaints: countWhen({ $eq: ['$type', 'complaint'] }),
+            high: countWhen({ $in: ['$priority', ['high', 'urgent']] }),
+            avgResolutionMs: {
+              $avg: {
+                $cond: [
+                  { $in: ['$status', ['resolved', 'closed']] },
+                  { $max: [0, { $subtract: ['$updatedAt', '$createdAt'] }] },
+                  null,
+                ],
+              },
+            },
+          },
+        },
+        { $project: { _id: 0 } },
+      ])
+      .option({ maxTimeMS: 5000 });
+    return (
+      summary ?? {
+        total: 0,
+        open: 0,
+        review: 0,
+        working: 0,
+        resolved: 0,
+        technical: 0,
+        complaints: 0,
+        high: 0,
+        avgResolutionMs: null,
+      }
+    );
+  }
+
+  async findByStudent(studentId: string, query: QueryComplaintDto = {}) {
+    const { page, limit, skip } = buildPaginationOptions(query);
     const student = await this.userModel.findById(studentId);
     const filter: any = {
       $or: [
@@ -463,7 +522,26 @@ export class ComplaintsService {
     if (student?.studentCode) {
       filter.$or.push({ studentCode: student.studentCode });
     }
-    return this.complaintModel.find(filter).sort({ createdAt: -1 }).lean();
+    if (query.search?.trim()) {
+      const term = query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$and = [
+        {
+          $or: ['ticketNumber', 'title', 'status', 'type'].map((field) => ({
+            [field]: { $regex: term, $options: 'i' },
+          })),
+        },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.complaintModel
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.complaintModel.countDocuments(filter),
+    ]);
+    return createPaginatedResult(items, total, page, limit);
   }
 
   async findAssignableStaff() {

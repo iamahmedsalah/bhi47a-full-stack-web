@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
@@ -114,8 +115,9 @@ export class StudentsController {
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: ResetPasswordDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers('accept-language') acceptLanguage?: string,
   ) {
-    return this.studentsService.resetPassword(id, dto, user);
+    return this.studentsService.resetPassword(id, dto, user, acceptLanguage);
   }
 
   @Get('admin/students-must-change-password-summary')

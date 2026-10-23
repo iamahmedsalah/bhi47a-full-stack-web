@@ -17,6 +17,7 @@ import mongoose from 'mongoose';
 import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
 import { CacheService } from '../cache/cache.service';
 import { isServerlessRuntime } from '../../common/utils/runtime.util';
+import { METRICS_SLOW_QUERY_THRESHOLD_MS } from './metrics.constants';
 
 /** Queries captured within this many seconds of boot are flagged as cold-start. */
 const COLD_START_WINDOW_SECONDS = 90;
@@ -48,6 +49,9 @@ export interface RouteLatencyStat {
   avgLatencyMs: number;
   maxLatencyMs: number;
   errorCount: number;
+  clientErrorCount: number;
+  serverErrorCount: number;
+  statusCounts: Record<string, number>;
 }
 
 export interface SlowQueryAggregate {
@@ -148,6 +152,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private totalHttpRequests = 0;
   private totalHttpDurationMs = 0;
   private status2xxCount = 0;
+  private status3xxCount = 0;
   private status4xxCount = 0;
   private status5xxCount = 0;
   private totalDbQueries = 0;
@@ -196,6 +201,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       totalMs: number;
       maxMs: number;
       errorCount: number;
+      clientErrorCount: number;
+      serverErrorCount: number;
+      statusCounts: Record<string, number>;
     }
   >();
 
@@ -376,8 +384,27 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     statusCode: number,
     durationSeconds: number,
   ) {
+    const requestedMethod = method.toUpperCase();
+    const upperMethod = [
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'OPTIONS',
+      'HEAD',
+    ].includes(requestedMethod)
+      ? requestedMethod
+      : 'OTHER';
+    // Bound Prometheus labels as well as the dashboard map, including scanner traffic.
+    if (
+      this.routeStats.size >= 100 &&
+      !this.routeStats.has(`${upperMethod} ${route}`)
+    ) {
+      route = '/other';
+    }
     const labels = {
-      method: method.toUpperCase(),
+      method: upperMethod,
       route,
       status_code: String(statusCode),
     };
@@ -386,12 +413,12 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
     this.totalHttpRequests++;
     this.totalHttpDurationMs += durationSeconds * 1000;
-    if (statusCode >= 200 && statusCode < 400) this.status2xxCount++;
+    if (statusCode >= 200 && statusCode < 300) this.status2xxCount++;
+    else if (statusCode >= 300 && statusCode < 400) this.status3xxCount++;
     else if (statusCode >= 400 && statusCode < 500) this.status4xxCount++;
     else if (statusCode >= 500) this.status5xxCount++;
 
     // Track route latency (capped to 100 unique routes to prevent memory leaks)
-    const upperMethod = method.toUpperCase();
     const routeKey = `${upperMethod} ${route}`;
     if (this.routeStats.size < 100 || this.routeStats.has(routeKey)) {
       const durationMs = durationSeconds * 1000;
@@ -402,11 +429,18 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         totalMs: 0,
         maxMs: 0,
         errorCount: 0,
+        clientErrorCount: 0,
+        serverErrorCount: 0,
+        statusCounts: {},
       };
       existing.count++;
       existing.totalMs += durationMs;
       existing.maxMs = Math.max(existing.maxMs, durationMs);
       if (statusCode >= 400) existing.errorCount++;
+      if (statusCode >= 400 && statusCode < 500) existing.clientErrorCount++;
+      if (statusCode >= 500) existing.serverErrorCount++;
+      existing.statusCounts[statusCode] =
+        (existing.statusCounts[statusCode] ?? 0) + 1;
       this.routeStats.set(routeKey, existing);
     }
   }
@@ -422,7 +456,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     this.totalDbQueries++;
 
     const durationMs = Math.round(durationSeconds * 1000);
-    if (durationSeconds >= 0.1) {
+    if (durationMs >= METRICS_SLOW_QUERY_THRESHOLD_MS) {
       this.dbSlowQueriesTotal.inc(labels);
       this.totalDbSlowQueries++;
 
@@ -570,6 +604,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         avgLatencyMs: 0,
         maxLatencyMs: 0,
         errorCount: 0,
+        clientErrorCount: 0,
+        serverErrorCount: 0,
+        statusCounts: {},
       });
     }
 
@@ -583,6 +620,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         avgLatencyMs: Math.round(stat.totalMs / stat.count),
         maxLatencyMs: Math.round(stat.maxMs),
         errorCount: stat.errorCount,
+        clientErrorCount: stat.clientErrorCount,
+        serverErrorCount: stat.serverErrorCount,
+        statusCounts: { ...stat.statusCounts },
       });
     }
 
@@ -702,6 +742,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         totalRequests: this.totalHttpRequests,
         requestsPerSecond: rps,
         status2xx: this.status2xxCount,
+        status3xx: this.status3xxCount,
         status4xx: this.status4xxCount,
         status5xx: this.status5xxCount,
         errorRatePercent,
@@ -732,7 +773,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         pool: poolConfig,
         totalQueries: this.totalDbQueries,
         slowQueriesCount: this.totalDbSlowQueries,
-        slowQueryThresholdMs: 100,
+        slowQueryThresholdMs: METRICS_SLOW_QUERY_THRESHOLD_MS,
         coldStartWindowSeconds: COLD_START_WINDOW_SECONDS,
         recentSlowQueries: this.recentSlowQueries,
         slowQueriesByCollection,

@@ -180,6 +180,8 @@ export class Complaint {
 
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);
 
+// Supports the default paginated admin list without a blocking in-memory sort.
+ComplaintSchema.index({ createdAt: -1, _id: -1 });
 ComplaintSchema.index({ status: 1 });
 ComplaintSchema.index({ status: 1, createdAt: -1 });
 ComplaintSchema.index({ priority: 1 });

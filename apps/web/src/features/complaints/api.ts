@@ -126,9 +126,13 @@ export function listAdminComplaints(params: ComplaintListParams) {
   return apiGet<PaginatedResponse<Complaint>>('/admin/complaints', { params });
 }
 
-export async function listAdminComplaintStats() {
-  const response = await listAdminComplaints({ limit: 1000 });
-  return response.items;
+export interface ComplaintSummary {
+  total: number; open: number; review: number; working: number; resolved: number;
+  technical: number; complaints: number; high: number; avgResolutionMs: number | null;
+}
+
+export function listAdminComplaintStats() {
+  return apiGet<ComplaintSummary>('/admin/complaints/stats');
 }
 
 export function getComplaintSettings() {

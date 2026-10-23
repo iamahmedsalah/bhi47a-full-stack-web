@@ -13,6 +13,10 @@ import {
 import { UsersService } from '../users/users.service';
 import { EmailsService } from '../emails/emails.service';
 import { renderPasswordResetEmailTemplate } from '../emails/templates/email-template.builder';
+import {
+  getEmailPortalOrigin,
+  resolveEmailLanguage,
+} from '../emails/templates/email-content';
 import * as ExcelJS from 'exceljs';
 import {
   CreateStudentDto,
@@ -375,7 +379,14 @@ export class StudentsService {
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
 
-  async resetPassword(id: string, dto: ResetPasswordDto, _actor?: any) {
+  async resetPassword(
+    id: string,
+    dto: ResetPasswordDto,
+    _actor?: any,
+    acceptLanguage?: string,
+  ) {
+    const lang = resolveEmailLanguage(acceptLanguage);
+    const isEn = lang === 'en';
     const profile = await this.studentProfileModel
       .findById(id)
       .select('+nationalId');
@@ -418,22 +429,27 @@ export class StudentsService {
       const isNationalIdDefault = !dto.newPassword?.trim();
       const displayPasswordHint =
         isNationalIdDefault || !dto.newPassword
-          ? 'الرقم القومي الخاص بك (14 رقم)'
+          ? isEn
+            ? 'Your 14-digit National ID'
+            : 'الرقم القومي الخاص بك (14 رقم)'
           : dto.newPassword;
 
       const emailHtml = renderPasswordResetEmailTemplate({
         greetingName: profile.fullName,
         studentCode: profile.studentCode,
         temporaryPassword: displayPasswordHint,
-        loginUrl: `${process.env.APP_URL || 'https://bhi47a-support.vercel.app'}/ar/login`,
-        lang: 'ar',
+        loginUrl: `${getEmailPortalOrigin(process.env.CLIENT_URL || process.env.APP_URL) || 'https://bhi47a-support.vercel.app'}/${lang}/login/student`,
+        lang,
       });
 
       try {
         await this.emailsService.send({
           to: [emailTo],
-          subject: 'بيانات الدخول الأكاديمية وكلمة المرور | بوابة الطالب',
+          subject: isEn
+            ? 'Your password has been reset | BHI47A Student Portal'
+            : 'تمت إعادة تعيين كلمة مرورك | بوابة الطالب BHI47A',
           html: emailHtml,
+          event: 'admin_password_reset',
         });
       } catch (emailErr) {
         console.warn(

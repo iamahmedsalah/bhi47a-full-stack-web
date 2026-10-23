@@ -25,7 +25,10 @@ import {
   ForgotPasswordDto,
   ResetPasswordOtpDto,
 } from '../dto/forgot-password.dto';
-import { renderOtpEmailTemplate } from '../../emails/templates/email-template.builder';
+import {
+  buildOtpEmail,
+  resolveEmailLanguage,
+} from '../../emails/templates/email-content';
 import { AuthSessionService } from './auth-session.service';
 
 function maskEmail(email: string): string {
@@ -127,7 +130,8 @@ export class AuthPasswordService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto, acceptLanguage?: string) {
-    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
+    const lang = resolveEmailLanguage(acceptLanguage);
+    const isEn = lang === 'en';
     const userLean = await this.usersService.findByIdentifier(dto.identifier);
     if (!userLean) {
       throw new NotFoundException(
@@ -151,30 +155,20 @@ export class AuthPasswordService {
     user.resetPasswordExpireAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    const lang: 'ar' | 'en' = isEn ? 'en' : 'ar';
-    const emailHtml = renderOtpEmailTemplate({
-      title: isEn
-        ? 'Password Recovery Verification'
-        : 'رمز استعادة كلمة المرور',
-      preheader: isEn
-        ? 'Use this verification code to reset your Student Portal password'
-        : 'استخدم رمز التحقق التالي لإعادة تعيين كلمة مرور بوابة الطالب الخاصة بك',
+    const emailContent = buildOtpEmail({
+      purpose: 'password-reset',
       greetingName: user.name,
-      arabicMessage:
-        'لقد طلبت استعادة كلمة المرور الخاصة بحسابك في بوابة الطالب. استخدم رمز التحقق التالي لإكمال إعادة التعيين:',
-      englishMessage:
-        'You requested to recover your password on the Student Portal. Use the verification code below to complete the reset:',
       otp,
       lang,
+      portalUrl:
+        this.configService.get<string>('CLIENT_URL') ||
+        this.configService.get<string>('APP_URL'),
     });
 
     try {
       await this.emailsService.send({
         to: [emailTo],
-        subject: isEn
-          ? 'Password Recovery Verification Code | Student Portal'
-          : 'رمز استعادة كلمة المرور | بوابة الطالب',
-        html: emailHtml,
+        ...emailContent,
         event: 'password_reset_otp',
       });
     } catch (err) {

@@ -322,6 +322,42 @@ describe('StudentsService Unit Tests', () => {
     });
   });
 
+  describe('reset-password email language', () => {
+    it.each(['ar', 'en'] as const)(
+      'uses the admin request language %s',
+      async (lang) => {
+        const userId = new Types.ObjectId();
+        mockStudentProfileModel.findById = jest.fn().mockReturnValue({
+          select: jest.fn().mockResolvedValue({
+            userId,
+            fullName: 'Test Student',
+            studentCode: '2026001',
+            academicEmail: 'student@example.edu',
+          }),
+        });
+        mockUsersService.findByIdWithNationalId = jest
+          .fn()
+          .mockResolvedValue({ email: 'student@example.edu' });
+        mockUsersService.updatePassword = jest.fn().mockResolvedValue({});
+        await service.resetPassword(
+          new Types.ObjectId().toString(),
+          { newPassword: 'Temporary-pass-123', mustChangePassword: true },
+          undefined,
+          lang,
+        );
+        expect(mockEmailsService.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            subject: expect.stringContaining(
+              lang === 'ar' ? 'بوابة الطالب' : 'Student Portal',
+            ),
+            html: expect.stringContaining(`lang="${lang}"`),
+            event: 'admin_password_reset',
+          }),
+        );
+      },
+    );
+  });
+
   describe('create()', () => {
     it('throws ConflictException if studentCode already exists', async () => {
       mockUsersService.findByStudentCode.mockResolvedValue({

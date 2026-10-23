@@ -1,8 +1,21 @@
 import { ConfigService } from '@nestjs/config';
-import { CacheService } from './cache.service';
+import { CacheService, classifyRedisEndpoint } from './cache.service';
 import { MemoryCacheStore } from './memory-cache.store';
 
 describe('Cache Layer Unit Tests', () => {
+  it.each([
+    ['redis://:password@redis:6379', 'self-hosted'],
+    ['redis://127.0.0.1:6379', 'self-hosted'],
+    ['rediss://default:password@example.upstash.io:6379', 'upstash'],
+    ['redis://upstash.io.example.com:6379', 'external'],
+    ['redis://cache.example.com:6379', 'external'],
+    ['', 'unknown'],
+  ])(
+    'identifies the Redis endpoint without assuming a quota: %s',
+    (url, provider) => {
+      expect(classifyRedisEndpoint(url)).toBe(provider);
+    },
+  );
   describe('MemoryCacheStore', () => {
     let store: MemoryCacheStore;
 
@@ -66,6 +79,12 @@ describe('Cache Layer Unit Tests', () => {
       const health = cacheService.getHealth();
       expect(health.effectiveDriver).toBe('memory');
       expect(health.status).toBe('healthy');
+      expect(health.redis).toEqual({
+        provider: 'none',
+        cacheCommandAttemptsSinceStart: 0,
+        quotaAvailable: false,
+      });
+      expect(health).not.toHaveProperty('quota');
     });
 
     it('defaults to memory store in local development to preserve Redis quota', () => {

@@ -11,6 +11,7 @@ import {
 } from '../../common/utils/pagination.util';
 import { SendEmailDto, QueryEmailLogDto } from './dto/email.dto';
 import { EmailLog, EmailLogDocument } from './schemas/email-log.schema';
+import { brandedEmailSender } from './templates/email-content';
 
 interface EmailJob {
   emailLogId: string;
@@ -25,11 +26,13 @@ type SmtpCode = 220 | 221 | 235 | 250 | 334 | 354;
 @Injectable()
 export class EmailsService implements OnModuleInit {
   private readonly resend?: Resend;
-  private readonly fromEmail =
+  private readonly fromEmail = brandedEmailSender(
     process.env.SMTP_FROM_EMAIL ||
-    process.env.EMAIL_FROM ||
-    process.env.RESEND_FROM_EMAIL ||
-    'Student Portal <noreply@student-portal.local>';
+      process.env.EMAIL_FROM ||
+      process.env.RESEND_FROM_EMAIL ||
+      'Student Portal <noreply@student-portal.local>',
+    process.env.EMAIL_FROM_NAME,
+  );
   private readonly smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   private readonly smtpPort = Number(process.env.SMTP_PORT || 465);
   private readonly smtpUser = process.env.SMTP_USER;

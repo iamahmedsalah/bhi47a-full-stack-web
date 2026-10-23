@@ -22,6 +22,7 @@ import {
 import { NotificationsService } from './modules/notifications/notifications.service';
 import { QueueService } from './core/queues/queue.service';
 import { MetricsService } from './core/metrics/metrics.service';
+import { createHttpMetricsMiddleware } from './core/metrics/http-metrics.middleware';
 import mongoose from 'mongoose';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
 
@@ -106,6 +107,7 @@ async function bootstrap() {
   app.useLogger(logger);
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
+  app.use(createHttpMetricsMiddleware(app.get(MetricsService)));
 
   app.enableCors({
     origin(

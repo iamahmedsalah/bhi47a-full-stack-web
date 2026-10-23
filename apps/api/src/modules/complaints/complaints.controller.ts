@@ -93,8 +93,11 @@ export class ComplaintsController {
   @Get('students/complaints')
   @Roles('student')
   @ApiOperation({ summary: 'Get current student own complaint tickets list' })
-  async getMyTickets(@CurrentUser('_id') studentId: string) {
-    return this.complaintsService.findByStudent(studentId);
+  async getMyTickets(
+    @CurrentUser('_id') studentId: string,
+    @Query() query: QueryComplaintDto,
+  ) {
+    return this.complaintsService.findByStudent(studentId, query);
   }
 
   @Post('students/complaints/:id/reply')
@@ -129,6 +132,16 @@ export class ComplaintsController {
   @ApiOperation({ summary: 'List active staff/admin users for assignment' })
   async assignees() {
     return this.complaintsService.findAssignableStaff();
+  }
+
+  @Get('admin/complaints/stats')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_READ)
+  @ApiOperation({
+    summary: 'Complaint summary counts without fetching ticket documents',
+  })
+  async stats() {
+    return this.complaintsService.getStats();
   }
 
   @Get('admin/complaints/settings')

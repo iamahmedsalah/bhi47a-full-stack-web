@@ -12,6 +12,9 @@ export interface RouteLatencyStat {
   avgLatencyMs: number;
   maxLatencyMs?: number;
   errorCount?: number;
+  clientErrorCount?: number;
+  serverErrorCount?: number;
+  statusCounts?: Record<string, number>;
 }
 
 export interface RecentSlowQuery {
@@ -138,14 +141,10 @@ export interface MetricsSummaryResponse {
     effectiveDriver: string;
     redisConnected: boolean;
     itemCount: number;
-    quota?: {
-      mode: 'preserved' | 'active' | 'offline';
-      dailyLimit: number;
-      commandsToday: number;
-      quotaUsedPercent: number;
-      policy: string;
-      statusText: string;
-      details: string;
+    redis?: {
+      provider: 'self-hosted' | 'upstash' | 'external' | 'none' | 'unknown';
+      cacheCommandAttemptsSinceStart: number;
+      quotaAvailable: false;
     };
   };
   database: {

@@ -4,10 +4,24 @@ import type {
   CacheDriverType,
   CacheHealth,
   ICacheStore,
-  RedisQuotaInfo,
+  RedisTelemetry,
 } from './cache.types';
 import { MemoryCacheStore } from './memory-cache.store';
 import { RedisCacheStore } from './redis-cache.store';
+
+export function classifyRedisEndpoint(
+  redisUrl?: string,
+): RedisTelemetry['provider'] {
+  try {
+    const host = new URL(redisUrl ?? '').hostname.toLowerCase();
+    if (host === 'upstash.io' || host.endsWith('.upstash.io')) return 'upstash';
+    if (['redis', 'localhost', '127.0.0.1', '[::1]'].includes(host))
+      return 'self-hosted';
+    return 'external';
+  } catch {
+    return 'unknown';
+  }
+}
 
 @Injectable()
 export class CacheService implements ICacheStore, OnModuleDestroy {
@@ -16,6 +30,7 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
   private readonly l2Store?: RedisCacheStore;
   private readonly configuredDriver: CacheDriverType;
   private readonly effectiveDriver: 'memory' | 'redis' | 'hybrid';
+  private readonly redisUrl?: string;
 
   constructor(private readonly configService: ConfigService) {
     this.l1Store = new MemoryCacheStore();
@@ -27,6 +42,7 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
     const redisUrl =
       this.configService.get<string>('REDIS_URL') ||
       this.configService.get<string>('UPSTASH_REDIS_URL');
+    this.redisUrl = redisUrl;
 
     this.configuredDriver = driverSetting;
 
@@ -165,48 +181,24 @@ export class CacheService implements ICacheStore, OnModuleDestroy {
           ? 'healthy'
           : 'degraded';
 
-    const isDev = process.env.NODE_ENV !== 'production';
-    const redisCommands = this.l2Store?.getCommandCount?.() ?? 0;
-    const dailyLimit = 10000;
-
-    const redisError = (this.l2Store as any)?.getLastError?.();
-
-    const quota: RedisQuotaInfo = isDev
-      ? {
-          mode: 'preserved',
-          dailyLimit,
-          commandsToday: 0,
-          quotaUsedPercent: 0,
-          policy: 'zero_quota_local_dev',
-          statusText: '0 / 10,000 (Preserved)',
-          details:
-            'Local Memory Cache actively shielding Upstash quota in development/test',
-        }
-      : {
-          mode: redisConnected ? 'active' : 'offline',
-          dailyLimit,
-          commandsToday: redisCommands,
-          quotaUsedPercent: Math.min(
-            100,
-            Math.round((redisCommands / dailyLimit) * 100),
-          ),
-          policy: 'full_production_redis' as const,
-          statusText: `${redisCommands} / ${dailyLimit} (${Math.round((redisCommands / dailyLimit) * 100)}%)`,
-          details: redisConnected
-            ? 'Production Redis L2 connected and active'
-            : redisError
-              ? `Redis offline (${redisError}) - falling back to memory`
-              : 'Redis disconnected - falling back to memory',
-        };
-
+    const redis: RedisTelemetry = {
+      provider: this.getRedisProvider(),
+      cacheCommandAttemptsSinceStart: this.l2Store?.getCommandCount() ?? 0,
+      quotaAvailable: false,
+    };
     return {
       status,
       driver: this.configuredDriver,
       effectiveDriver: this.effectiveDriver,
       redisConnected,
       itemCount: this.l1Store.size(),
-      quota,
+      redis,
     };
+  }
+
+  private getRedisProvider(): RedisTelemetry['provider'] {
+    if (!this.l2Store || this.effectiveDriver === 'memory') return 'none';
+    return classifyRedisEndpoint(this.redisUrl);
   }
 
   async onModuleDestroy(): Promise<void> {

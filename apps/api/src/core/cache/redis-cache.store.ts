@@ -156,11 +156,11 @@ export class RedisCacheStore implements ICacheStore {
 
   async delPattern(pattern: string): Promise<void> {
     if (!this.isConnected()) return;
-    this.commandCount++;
 
     try {
       let cursor = '0';
       do {
+        this.commandCount++;
         const [nextCursor, keys] = await this.client.scan(
           cursor,
           'MATCH',

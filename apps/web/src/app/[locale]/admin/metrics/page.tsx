@@ -11,7 +11,6 @@ import {
   Database,
   Server,
   ShieldAlert,
-  ShieldCheck,
   Zap,
   Clock,
   RefreshCw,
@@ -530,7 +529,7 @@ export default function AdminMetricsPage() {
                           : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                       }`}
                     >
-                      <bdi>{data.http.errorRatePercent}%</bdi> {isAr ? 'أخطاء' : 'Errors'}
+                      <bdi>{data.http.errorRatePercent}%</bdi> {isAr ? 'استجابات 4xx/5xx' : '4xx/5xx responses'}
                     </span>
                   )}
                 </div>
@@ -646,7 +645,7 @@ export default function AdminMetricsPage() {
                 <StatTile label={isAr ? 'صفوف Excel المستوردة' : 'Excel Rows Imported'} value={data.academic.excelRowsImported} tone="text-cyan-400" />
                 <StatTile label={isAr ? 'استجابات 2xx الناجحة' : 'Successful 2xx'} value={data.http.status2xx} tone="text-emerald-400" />
                 <StatTile
-                  label={isAr ? 'أخطاء العميل (4xx)' : 'Client Errors (4xx)'}
+                  label={isAr ? 'طلبات مرفوضة (4xx)' : 'Rejected Requests (4xx)'}
                   value={data.http.status4xx}
                   tone={data.http.status4xx > 0 ? 'text-amber-400' : 'text-muted-foreground'}
                 />
@@ -656,6 +655,11 @@ export default function AdminMetricsPage() {
                   tone={data.http.status5xx > 0 ? 'text-rose-400' : 'text-muted-foreground'}
                 />
               </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                {isAr
+                  ? 'تشمل استجابات 4xx بيانات دخول غير صحيحة أو تحققاً من المدخلات أو قيود صلاحيات ومعدل الطلبات؛ ولا تعني وحدها وجود عطل برمجي. تشير 5xx إلى فشل في الخادم.'
+                  : '4xx responses include rejected credentials, validation, permission and rate-limit checks; they do not by themselves prove a code defect. 5xx responses indicate server failures.'}
+              </p>
               <LabelBreakdown
                 title={isAr ? 'الاستيراد حسب النوع' : 'Imports by Type'}
                 items={data.academic.excelImportsByType}
@@ -806,88 +810,33 @@ export default function AdminMetricsPage() {
                 />
               </div>
 
-              {/* Redis Quota & Preservation Dedication Card */}
-              <div className="mt-4 rounded-xl border border-teal-500/20 bg-teal-950/20 p-3.5 backdrop-blur-sm">
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle bg-teal-500/10 border border-teal-500/30 text-teal-400">
-                      <Zap className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground">
-                          {isAr ? 'حصة واستهلاك خادم Redis (Upstash Quota)' : 'Redis Cloud Quota (Upstash Tier)'}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`inline-flex items-center gap-1 rounded-squircle text-[10px] ${
-                            data.cache?.quota?.mode === 'preserved'
-                              ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/30'
-                              : data.cache?.quota?.mode === 'active'
-                              ? 'border-teal-500/40 text-teal-400 bg-teal-950/30'
-                              : 'border-amber-500/40 text-amber-400 bg-amber-950/30'
-                          }`}
-                        >
-                          {data.cache?.quota?.mode === 'preserved' ? (
-                            <>
-                              <ShieldCheck className="h-3 w-3 shrink-0" />
-                              <span>{isAr ? 'وضع الحفاظ على الحصة (0 مكالمات)' : 'Quota Preserved (0 Calls)'}</span>
-                            </>
-                          ) : data.cache?.quota?.mode === 'active' ? (
-                            <>
-                              <Zap className="h-3 w-3 shrink-0" />
-                              <span>{isAr ? 'متصل بالإنتاج' : 'Active Production'}</span>
-                            </>
-                          ) : (
-                            <>
-                              <AlertTriangle className="h-3 w-3 shrink-0" />
-                              <span>{isAr ? 'منفصل - ذاكرة بديلة' : 'Offline - Memory Fallback'}</span>
-                            </>
-                          )}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {data.cache?.quota?.details ?? (isAr ? 'يتم تشغيل الذاكرة محلياً لحماية رصيد Upstash المجاني' : 'Memory cache shielding Upstash free tier')}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-end">
-                    <span className="font-mono text-xs font-bold text-teal-400">
-                      {data.cache?.quota?.statusText ?? '0 / 10,000 (0%)'}
-                    </span>
-                    <span className="block text-[10px] text-muted-foreground">
-                      {isAr ? 'الحد اليومي المجاني' : 'Free Daily Quota Limit'}
-                    </span>
-                  </div>
+              {/* Redis provider and process-local cache activity */}
+              <div className="mt-4 rounded-xl border border-teal-500/20 bg-teal-950/20 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold">
+                    {({
+                      'self-hosted': isAr ? 'Redis محلي على الخادم' : 'Self-hosted Redis (VPS)',
+                      upstash: 'Upstash Redis',
+                      external: isAr ? 'Redis خارجي' : 'External Redis',
+                      none: isAr ? 'التخزين في ذاكرة التطبيق' : 'Application memory cache',
+                      unknown: isAr ? 'مزود Redis غير معروف' : 'Redis provider unavailable',
+                    })[data.cache?.redis?.provider ?? 'unknown']}
+                  </span>
+                  <Badge variant="outline" className="rounded-squircle">
+                    {data.cache?.redisConnected
+                      ? (isAr ? 'متصل' : 'Connected')
+                      : (isAr ? 'ذاكرة التطبيق' : 'Memory fallback')}
+                  </Badge>
                 </div>
-
-                {/* Progress bar */}
-                <div className="mt-3">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-background/60 border border-white/5">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        (data.cache?.quota?.quotaUsedPercent ?? 0) > 80
-                          ? 'bg-rose-500'
-                          : (data.cache?.quota?.quotaUsedPercent ?? 0) > 50
-                          ? 'bg-amber-400'
-                          : 'bg-teal-400'
-                      }`}
-                      style={{ width: `${Math.max(2, data.cache?.quota?.quotaUsedPercent ?? 0)}%` }}
-                    />
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>
-                      {isAr ? 'استهلاك اليوم: ' : 'Today: '}
-                      <strong className="text-foreground">{data.cache?.quota?.commandsToday ?? 0} ops</strong>
-                    </span>
-                    <span>
-                      {isAr ? 'الحصة المتبقية: ' : 'Remaining: '}
-                      <strong className="text-emerald-400">
-                        {Math.max(0, (data.cache?.quota?.dailyLimit ?? 10000) - (data.cache?.quota?.commandsToday ?? 0))} ops
-                      </strong>
-                    </span>
-                  </div>
-                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {isAr ? 'محاولات أوامر الكاش منذ تشغيل API: ' : 'Cache command attempts since API startup: '}
+                  <bdi className="font-mono text-foreground">{data.cache?.redis?.cacheCommandAttemptsSinceStart ?? 0}</bdi>
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {isAr
+                    ? 'العداد خاص بكاش هذه العملية ولا يشمل الطوابير أو استهلاك الحساب. حصة المزود غير مقاسة هنا.'
+                    : 'This process’s cache activity only; excludes queues and account-wide usage. Provider quotas are not measured here.'}
+                </p>
               </div>
             </Card>
           </div>
@@ -971,7 +920,9 @@ export default function AdminMetricsPage() {
                       <th className="py-2 px-3 text-start">{isAr ? 'عدد الطلبات' : 'Calls'}</th>
                       <th className="py-2 px-3 text-start">{isAr ? 'متوسط التأخير' : 'Avg'}</th>
                       <th className="py-2 px-3 text-start">{isAr ? 'أقصى تأخير' : 'Max'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'الأخطاء' : 'Errors'}</th>
+                      <th className="py-2 px-3 text-start">{isAr ? 'رفض العميل 4xx' : 'Client 4xx'}</th>
+                      <th className="py-2 px-3 text-start">{isAr ? 'أخطاء الخادم 5xx' : 'Server 5xx'}</th>
+                      <th className="py-2 px-3 text-start">{isAr ? 'رموز الرفض' : 'Rejection statuses'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40 font-mono">
@@ -992,9 +943,7 @@ export default function AdminMetricsPage() {
                               )}
                             </div>
                           </td>
-                          <td className={`py-2.5 px-3 ${isUncalled ? 'text-muted-foreground/50' : 'text-foreground'}`}>
-                            {r.count}
-                          </td>
+                          <td className="py-2.5 px-3 text-foreground">{r.count}</td>
                           <td className="py-2.5 px-3">
                             {isUncalled ? (
                               <span className="text-muted-foreground/50">—</span>
@@ -1013,8 +962,11 @@ export default function AdminMetricsPage() {
                               '-'
                             )}
                           </td>
-                          <td className={`py-2.5 px-3 ${isUncalled ? 'text-muted-foreground/50' : (r.errorCount ?? 0) > 0 ? 'text-rose-400 font-bold' : 'text-muted-foreground'}`}>
-                            {r.errorCount ?? 0}
+                          <td className="py-2.5 px-3 text-amber-400">{r.clientErrorCount ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-rose-400">{r.serverErrorCount ?? '—'}</td>
+                          <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">
+                            {Object.entries(r.statusCounts ?? {}).filter(([status]) => Number(status) >= 400)
+                              .map(([status, count]) => `${status} × ${count}`).join(', ') || '—'}
                           </td>
                         </tr>
                       );

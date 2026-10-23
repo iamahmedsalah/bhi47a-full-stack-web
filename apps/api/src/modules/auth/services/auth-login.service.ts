@@ -12,7 +12,10 @@ import { EmailsService } from '../../emails/emails.service';
 import { StudentLoginDto } from '../dto/student-login.dto';
 import { AdminLoginDto } from '../dto/admin-login.dto';
 import { AuthSessionService } from './auth-session.service';
-import { renderOtpEmailTemplate } from '../../emails/templates/email-template.builder';
+import {
+  buildOtpEmail,
+  resolveEmailLanguage,
+} from '../../emails/templates/email-content';
 
 interface VerifiedGoogleAccount {
   googleId: string;
@@ -334,8 +337,8 @@ export class AuthLoginService {
     email: string,
     acceptLanguage?: string,
   ) {
-    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
-    const lang: 'ar' | 'en' = isEn ? 'en' : 'ar';
+    const lang = resolveEmailLanguage(acceptLanguage);
+    const isEn = lang === 'en';
 
     const user = await this.usersService.findById(userId);
     if (user.role !== 'student') {
@@ -357,20 +360,14 @@ export class AuthLoginService {
     const { user: updatedUser, otp } =
       await this.usersService.prepareGoogleLink(userId, email);
 
-    const emailHtml = renderOtpEmailTemplate({
-      title: isEn
-        ? 'Google Account Link Verification'
-        : 'تأكيد ربط حساب Google',
-      preheader: isEn
-        ? 'Verify your Google account link for Student Portal'
-        : 'استخدم رمز التحقق لإكمال ربط حساب Google ببوابة الطالب',
+    const emailContent = buildOtpEmail({
+      purpose: 'google-link',
       greetingName: user.name,
-      arabicMessage:
-        'لقد طلبت ربط حساب Google الخاص بك ببوابة الطالب. استخدم رمز التحقق التالي لإكمال عملية الربط:',
-      englishMessage:
-        'You requested to link your Google account to the student portal. Use the verification code below to complete the link:',
       otp,
       lang,
+      portalUrl:
+        this.configService.get<string>('CLIENT_URL') ||
+        this.configService.get<string>('APP_URL'),
     });
 
     let emailDeliveryStatus: 'sent' | 'failed' = 'sent';
@@ -379,10 +376,7 @@ export class AuthLoginService {
     try {
       await this.emailsService.send({
         to: [email],
-        subject: isEn
-          ? 'Google Account Verification Code | Student Portal'
-          : 'رمز تأكيد ربط حساب Google | بوابة الطالب',
-        html: emailHtml,
+        ...emailContent,
         event: 'google_linking_otp',
       });
     } catch (err) {

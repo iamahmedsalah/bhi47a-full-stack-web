@@ -1,12 +1,11 @@
 import { Module, Global } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 import { MetricsController } from './metrics.controller';
-import { HttpMetricsInterceptor } from './http-metrics.interceptor';
 
 @Global()
 @Module({
   controllers: [MetricsController],
-  providers: [MetricsService, HttpMetricsInterceptor],
-  exports: [MetricsService, HttpMetricsInterceptor],
+  providers: [MetricsService],
+  exports: [MetricsService],
 })
 export class MetricsModule {}
