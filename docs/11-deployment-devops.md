@@ -14,6 +14,19 @@ Production deployments are controlled by GitHub Actions after validation. The
 Vercel Git integration is disabled in each app's `vercel.json` to prevent a
 second, ungated deployment for the same commit.
 
+The web project's `vercel.json` redirects all request paths to
+`https://portal.169-58-108-189.sslip.io`, preserving paths and query strings with
+a temporary 307 redirect. This takes effect on new Vercel frontend deployments
+(including previews); existing immutable deployment URLs retain their old rules.
+The API project and Docker-hosted web app do not use this redirect. Update the
+destination when a permanent VPS domain is available. Remove the redirect and
+redeploy the web project to serve the frontend on Vercel again.
+
+Before directing users to the VPS, test existing student/admin logins and add
+the exact VPS HTTPS origin to the existing Google OAuth client's Authorized
+JavaScript origins. A redirect does not authorize a new Google sign-in origin
+or transfer existing browser session cookies between domains.
+
 ## 1. Deployment structure
 
 ### Local testing

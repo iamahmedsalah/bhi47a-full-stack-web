@@ -4,6 +4,13 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": null,
   "outputDirectory": null,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://portal.169-58-108-189.sslip.io/:path*",
+      "permanent": false
+    }
+  ],
   "git": {
     "deploymentEnabled": false
   }
