@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Strategy } from 'passport-jwt';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { UsersService } from '../../users/users.service';
 
 export interface JwtPayload {
@@ -13,110 +13,53 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  private readonly userCache = new Map<
-    string,
-    {
-      user: {
-        _id: string;
-        role: string;
-        name: string;
-        email?: string;
-        studentCode?: string;
-        permissions?: string[];
-        mustChangePassword?: boolean;
-        tokenVersion: number;
-        isActive: boolean;
-      };
-      cachedAt: number;
-    }
-  >();
-  private readonly inFlightValidations = new Map<string, Promise<any>>();
-  private readonly CACHE_TTL_MS = 300_000; // 5 minutes cache for authenticated user context
-
   constructor(
-    private configService: ConfigService,
-    private usersService: UsersService,
+    configService: ConfigService,
+    private readonly usersService: UsersService,
   ) {
     super({
       jwtFromRequest: (req: Request) => {
-        if (!req || !req.cookies) return null;
-        return req.cookies['access_token'] || null;
+        const token: unknown = req?.cookies?.access_token;
+        return typeof token === 'string' ? token : null;
       },
       ignoreExpiration: false,
+      algorithms: ['HS256'],
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
-  invalidate(userId?: string) {
-    if (!userId) {
-      this.userCache.clear();
-      this.inFlightValidations.clear();
-      return;
-    }
-    this.userCache.delete(userId);
-    this.inFlightValidations.delete(userId);
-  }
-
   async validate(payload: JwtPayload) {
-    const now = Date.now();
-    const cached = this.userCache.get(payload.sub);
-
     if (
-      cached &&
-      now - cached.cachedAt < this.CACHE_TTL_MS &&
-      (payload.tokenVersion ?? 0) === cached.user.tokenVersion
+      typeof payload.sub !== 'string' ||
+      !/^[a-f\d]{24}$/i.test(payload.sub) ||
+      (payload.tokenVersion !== undefined &&
+        (!Number.isSafeInteger(payload.tokenVersion) ||
+          payload.tokenVersion < 0))
     ) {
-      if (!cached.user.isActive) {
-        throw new UnauthorizedException('User not found or inactive');
-      }
-      return cached.user;
+      throw new UnauthorizedException('Invalid session');
     }
 
-    // Singleflight deduplication: coalesce parallel requests for the same user
-    let inFlight = this.inFlightValidations.get(payload.sub);
-    if (!inFlight) {
-      inFlight = (async () => {
-        try {
-          const user = await this.usersService.findByIdForAuth(payload.sub);
-          if (!user || !user.isActive) {
-            throw new UnauthorizedException('User not found or inactive');
-          }
-          if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
-            throw new UnauthorizedException('Session has expired');
-          }
-
-          const authUser = {
-            _id: user._id.toString(),
-            role: user.role,
-            staffType: user.staffType,
-            name: user.name,
-            email: user.email,
-            studentCode: user.studentCode,
-            permissions: user.permissions,
-            mustChangePassword: user.mustChangePassword,
-            tokenVersion: user.tokenVersion ?? 0,
-            isActive: user.isActive,
-          };
-
-          if (this.userCache.size > 2000) {
-            const threshold = Date.now() - this.CACHE_TTL_MS;
-            for (const [k, v] of this.userCache.entries()) {
-              if (v.cachedAt < threshold) this.userCache.delete(k);
-            }
-          }
-          this.userCache.set(payload.sub, {
-            user: authUser,
-            cachedAt: Date.now(),
-          });
-
-          return authUser;
-        } finally {
-          this.inFlightValidations.delete(payload.sub);
-        }
-      })();
-      this.inFlightValidations.set(payload.sub, inFlight);
+    // Load current account policy for every request, including across replicas.
+    // Never share validation promises between tokens with different versions.
+    const user = await this.usersService.findByIdForAuth(payload.sub);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+    if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new UnauthorizedException('Session has expired');
     }
 
-    return await inFlight;
+    return {
+      _id: user._id.toString(),
+      role: user.role,
+      staffType: user.staffType,
+      name: user.name,
+      email: user.email,
+      studentCode: user.studentCode,
+      permissions: user.permissions,
+      mustChangePassword: user.mustChangePassword,
+      tokenVersion: user.tokenVersion ?? 0,
+      isActive: user.isActive,
+    };
   }
 }

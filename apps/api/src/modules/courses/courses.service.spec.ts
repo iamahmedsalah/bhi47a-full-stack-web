@@ -201,6 +201,28 @@ describe('CoursesService Unit Tests', () => {
     });
   });
 
+  describe('downloadSyllabus()', () => {
+    it('keeps permission-protected PDF downloads out of shared caches', async () => {
+      mockCourseModel.findById.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            code: 'CS101',
+            syllabusPdfData: Buffer.from('test PDF').toString('base64'),
+          }),
+        }),
+      });
+      const response = { setHeader: jest.fn(), send: jest.fn() };
+
+      await service.downloadSyllabus(courseId, response, { role: 'admin' });
+
+      expect(response.setHeader).toHaveBeenCalledWith(
+        'Cache-Control',
+        'private, no-store',
+      );
+      expect(response.send).toHaveBeenCalledWith(Buffer.from('test PDF'));
+    });
+  });
+
   describe('findOne()', () => {
     it('throws NotFoundException if course is not found', async () => {
       mockCourseModel.findById.mockResolvedValue(null);

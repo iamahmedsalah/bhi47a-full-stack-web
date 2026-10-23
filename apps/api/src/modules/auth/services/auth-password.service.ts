@@ -27,7 +27,6 @@ import {
 } from '../dto/forgot-password.dto';
 import { renderOtpEmailTemplate } from '../../emails/templates/email-template.builder';
 import { AuthSessionService } from './auth-session.service';
-import { JwtStrategy } from '../strategies/jwt.strategy';
 
 function maskEmail(email: string): string {
   const parts = email.split('@');
@@ -56,11 +55,9 @@ export class AuthPasswordService {
     private readonly studentProfileModel: Model<StudentProfileDocument>,
     @InjectModel(AcademicEmail.name)
     private readonly academicEmailModel: Model<AcademicEmailDocument>,
-    private readonly jwtStrategy: JwtStrategy,
   ) {}
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
-    this.jwtStrategy.invalidate(userId);
     const user = await this.usersService.findByIdWithNationalId(userId);
 
     const cleanCurrent = normalizeArabicNumerals(dto.currentPassword);
@@ -246,7 +243,6 @@ export class AuthPasswordService {
     await user.save();
 
     await this.usersService.resetLoginAttempts(user._id.toString());
-    this.jwtStrategy.invalidate(user._id.toString());
 
     const token = this.jwtService.sign({
       sub: user._id.toString(),

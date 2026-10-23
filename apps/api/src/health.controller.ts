@@ -1,10 +1,12 @@
-import { Controller, Get, Optional } from '@nestjs/common';
+import { Controller, Get, Optional, UseInterceptors } from '@nestjs/common';
 import mongoose from 'mongoose';
 import { Public } from './modules/auth/decorators/public.decorator';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
 import { CacheService } from './core/cache/cache.service';
+import { HealthStatusInterceptor } from './health-status.interceptor';
 
 @Controller()
+@UseInterceptors(HealthStatusInterceptor)
 export class HealthController {
   constructor(@Optional() private readonly cacheService?: CacheService) {}
   @Public()

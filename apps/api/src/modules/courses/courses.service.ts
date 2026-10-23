@@ -628,11 +628,8 @@ export class CoursesService {
       course.syllabusPdfName || fallbackFilename,
     );
 
-    // High performance caching headers for edge CDNs and browsers
-    res.setHeader(
-      'Cache-Control',
-      'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400',
-    );
+    // Downloads are permission checked and must never enter a shared cache.
+    res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Accept-Ranges', 'bytes');
 
     // 1. If stored locally in DB (dev/offline fallback), serve buffer

@@ -5,6 +5,13 @@ export function securityHeadersMiddleware(
   res: Response,
   next: NextFunction,
 ) {
+  // API responses may contain user-specific data, including on GET requests.
+  // Prevent browsers and shared proxies from replaying an authorized response.
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
+  res.vary('Cookie');
+  res.vary('Authorization');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
