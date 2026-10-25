@@ -100,7 +100,7 @@ const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
   },
   {
     pattern: /^\/[^/]+\/admin\/staff/,
-    adminOnly: true,
+    permission: PERMISSIONS.STAFF_READ,
     nameAr: 'إدارة حسابات الموظفين والصلاحيات',
     nameEn: 'Staff & Permissions Management',
   },

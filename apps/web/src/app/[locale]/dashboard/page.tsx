@@ -42,6 +42,7 @@ import dynamic from "next/dynamic";
 import { useAuth } from "@/providers/auth-provider";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
 import { getStudentDisplayNames } from "@/features/students/student-name";
+import { getPublicPortalSettings, settingsKeys } from "@/features/settings/api";
 
 const StudentQrScannerDialog = dynamic(
   () =>
@@ -135,6 +136,15 @@ export default function StudentDashboard() {
   });
 
   // 6. Academic Email Query (rarely changes)
+  const portalSettingsQuery = useQuery({
+    queryKey: settingsKeys.publicPortalSettings,
+    queryFn: getPublicPortalSettings,
+    staleTime: 60 * 1000,
+  });
+
+  const registrationVisible =
+    portalSettingsQuery.data?.registrationVisible ?? true;
+  const syllabiVisible = portalSettingsQuery.data?.syllabiVisible ?? true;
   const academicEmailQuery = useQuery({
     queryKey: ["student-academic-email"],
     queryFn: async () => {
@@ -548,16 +558,18 @@ export default function StudentDashboard() {
             </span>
           </button>
           {/* Registration Direct Access */}
-          <Link href={`/${locale}/dashboard/registration`}>
-            <div className="flex flex-col items-center gap-2.5 p-3.5 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group justify-center h-full shadow-xs">
-              <div className="w-10 h-10 rounded-squircle bg-emerald-500/15 text-emerald-400 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                <GraduationCap className="w-5 h-5" />
+          {registrationVisible && (
+            <Link href={`/${locale}/dashboard/registration`}>
+              <div className="flex flex-col items-center gap-2.5 p-3.5 rounded-squircle border border-border/70 bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all cursor-pointer text-center group justify-center h-full shadow-xs">
+                <div className="w-10 h-10 rounded-squircle bg-emerald-500/15 text-emerald-400 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                  {locale === "ar" ? "تسجيل المقررات" : "Course Registration"}
+                </span>
               </div>
-              <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                {locale === "ar" ? "تسجيل المقررات" : "Course Registration"}
-              </span>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
       </Card>
 
@@ -988,7 +1000,12 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Exam Seat / Place Widget */}
-        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card
+          className={cn(
+            "p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300",
+            syllabiVisible ? "col-span-12 lg:col-span-6" : "col-span-12",
+          )}
+        >
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <div className="flex items-center gap-2.5">
@@ -1147,7 +1164,8 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Course Syllabi & Curriculum Card (Side-by-side with Exam Seating in 2 columns) */}
-        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col justify-between gap-4">
+        {syllabiVisible && (
+          <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col justify-between gap-4">
           <div>
             <div className="flex items-center justify-between gap-2 mb-4 border-b border-border pb-3 text-start">
               <div className="flex items-center gap-2.5">
@@ -1267,13 +1285,21 @@ export default function StudentDashboard() {
             )}
           </div>
 
-          <Link href={`/${locale}/dashboard/registration`} className="w-full">
+          <Link
+            href={
+              registrationVisible
+                ? `/${locale}/dashboard/registration`
+                : `/${locale}/dashboard`
+            }
+            className="w-full"
+          >
             <button className="w-full h-10 text-xs font-semibold rounded-squircle bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center gap-1">
               <span>{locale === "ar" ? "عرض الخطة الدراسية والمقررات" : "View Curriculum & Study Plan"}</span>
               <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
             </button>
           </Link>
         </Card>
+        )}
       </div>
 
       {/* Student QR Scanner Dialog */}

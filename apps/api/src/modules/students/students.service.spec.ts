@@ -10,6 +10,7 @@ describe('StudentsService Unit Tests', () => {
   let mockAdvisingCaseModel: any;
   let mockAcademicEmailModel: any;
   let mockAcademicProfileModel: any;
+  let mockSystemSettingsModel: any;
   let mockUsersService: any;
   let mockEmailsService: any;
   let mockStudentQueryService: any;
@@ -54,9 +55,21 @@ describe('StudentsService Unit Tests', () => {
     mockAcademicProfileModel = {
       find: jest.fn(),
       create: jest.fn().mockResolvedValue({}),
-      updateMany: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ modifiedCount: 5 }),
       updateOne: jest.fn().mockResolvedValue({}),
     };
+
+    const MockSettingsConstructor: any = jest
+      .fn()
+      .mockImplementation((data) => ({
+        ...data,
+        save: jest
+          .fn()
+          .mockResolvedValue({ _id: new Types.ObjectId(), ...data }),
+      }));
+    MockSettingsConstructor.findOne = jest.fn();
+    MockSettingsConstructor.create = jest.fn();
+    mockSystemSettingsModel = MockSettingsConstructor;
 
     mockUsersService = {
       findByStudentCode: jest.fn(),
@@ -81,6 +94,7 @@ describe('StudentsService Unit Tests', () => {
       mockAdvisingCaseModel,
       mockAcademicEmailModel,
       mockAcademicProfileModel,
+      mockSystemSettingsModel,
       mockUsersService,
       mockEmailsService,
       mockStudentQueryService,
@@ -436,6 +450,68 @@ describe('StudentsService Unit Tests', () => {
           }),
         },
         { new: true },
+      );
+    });
+  });
+
+  describe('Portal Settings & Academic Reset', () => {
+    it('getPortalSettings returns default settings when record does not exist', async () => {
+      mockSystemSettingsModel.findOne.mockResolvedValueOnce(null);
+      mockSystemSettingsModel.create.mockResolvedValueOnce({
+        registrationVisible: true,
+        syllabiVisible: true,
+      });
+
+      const res = await service.getPortalSettings();
+      expect(res).toEqual({
+        registrationVisible: true,
+        syllabiVisible: true,
+      });
+      expect(mockSystemSettingsModel.create).toHaveBeenCalled();
+    });
+
+    it('updatePortalSettings persists updated flags and user id', async () => {
+      const mockSettingsDoc = {
+        registrationVisible: true,
+        syllabiVisible: true,
+        save: jest.fn().mockResolvedValue(true),
+      };
+      mockSystemSettingsModel.findOne.mockResolvedValueOnce(mockSettingsDoc);
+
+      const adminId = new Types.ObjectId().toString();
+      const res = await service.updatePortalSettings(
+        { registrationVisible: false, syllabiVisible: false },
+        adminId,
+      );
+
+      expect(res.registrationVisible).toBe(false);
+      expect(res.syllabiVisible).toBe(false);
+      expect(mockSettingsDoc.save).toHaveBeenCalled();
+    });
+
+    it('resetAcademicRecords resets warnings and gpa across profiles to 0', async () => {
+      mockStudentProfileModel.updateMany.mockResolvedValueOnce({
+        modifiedCount: 12,
+      });
+      mockAcademicProfileModel.updateMany
+        .mockResolvedValueOnce({ modifiedCount: 12 }) // for warnings
+        .mockResolvedValueOnce({ modifiedCount: 15 }); // for gpa
+
+      const res = await service.resetAcademicRecords({
+        resetWarnings: true,
+        resetGpa: true,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.warningsResetCount).toBe(24);
+      expect(res.gpaResetCount).toBe(15);
+      expect(mockStudentProfileModel.updateMany).toHaveBeenCalledWith(
+        {},
+        { $set: { academicWarnings: 0 } },
+      );
+      expect(mockAcademicProfileModel.updateMany).toHaveBeenCalledWith(
+        {},
+        { $set: { gpa: 0 } },
       );
     });
   });

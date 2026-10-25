@@ -34,6 +34,10 @@ import { StudentsExportController } from './controllers/students-export.controll
 import { StudentsTuitionController } from './controllers/students-tuition.controller';
 
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
+import {
+  SystemSettings,
+  SystemSettingsSchema,
+} from '../complaints/schemas/system-settings.schema';
 
 @Module({
   imports: [
@@ -48,6 +52,7 @@ import { Course, CourseSchema } from '../courses/schemas/course.schema';
         schema: StudentAcademicProfileSchema,
       },
       { name: Course.name, schema: CourseSchema },
+      { name: SystemSettings.name, schema: SystemSettingsSchema },
     ]),
     UsersModule,
     EmailsModule,

@@ -66,6 +66,8 @@ export const settingsKeys = {
   registrationTerms: ["admin-registration-terms"] as const,
   aiSettings: ["admin-ai-settings"] as const,
   advisingRules: ["admin-advising-rules"] as const,
+  portalSettings: ["admin-portal-settings"] as const,
+  publicPortalSettings: ["portal-settings"] as const,
 };
 
 export async function getAdvisingRules(): Promise<AdvisingRulesItem> {
@@ -190,5 +192,48 @@ export async function updateAiSettings(
   const response = await api.patch<AiSettingsItem>("/admin/ai/settings", {
     studentAdvisorEnabled,
   });
+  return response.data;
+}
+
+export interface PortalSettingsItem {
+  registrationVisible: boolean;
+  syllabiVisible: boolean;
+}
+
+export async function getPortalSettings(): Promise<PortalSettingsItem> {
+  const response = await api.get<PortalSettingsItem>("/admin/portal-settings");
+  return response.data;
+}
+
+export async function getPublicPortalSettings(): Promise<PortalSettingsItem> {
+  const response = await api.get<PortalSettingsItem>("/portal-settings");
+  return response.data;
+}
+
+export async function updatePortalSettings(
+  dto: Partial<PortalSettingsItem>,
+): Promise<PortalSettingsItem> {
+  const response = await api.patch<PortalSettingsItem>(
+    "/admin/portal-settings",
+    dto,
+  );
+  return response.data;
+}
+
+export interface ResetAcademicRecordsResult {
+  success: boolean;
+  warningsResetCount: number;
+  gpaResetCount: number;
+  message: string;
+}
+
+export async function resetAcademicRecords(options: {
+  resetWarnings?: boolean;
+  resetGpa?: boolean;
+}): Promise<ResetAcademicRecordsResult> {
+  const response = await api.post<ResetAcademicRecordsResult>(
+    "/admin/students/reset-academic-records",
+    options,
+  );
   return response.data;
 }

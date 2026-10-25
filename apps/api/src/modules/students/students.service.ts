@@ -24,7 +24,13 @@ import {
   SearchStudentQuery,
   ResetPasswordDto,
   UpdateMyContactDto,
+  UpdatePortalSettingsDto,
+  ResetAcademicRecordsDto,
 } from './dto/student.dto';
+import {
+  SystemSettings,
+  type SystemSettingsDocument,
+} from '../complaints/schemas/system-settings.schema';
 import {
   UpdateTuitionStatusDto,
   BulkToggleTuitionDto,
@@ -68,6 +74,8 @@ export class StudentsService {
     private academicEmailModel: Model<AcademicEmailDocument>,
     @InjectModel(StudentAcademicProfile.name)
     private academicProfileModel: Model<StudentAcademicProfileDocument>,
+    @InjectModel(SystemSettings.name)
+    private systemSettingsModel: Model<SystemSettingsDocument>,
     private usersService: UsersService,
     private emailsService: EmailsService,
     private readonly studentQueryService: StudentQueryService,
@@ -1023,6 +1031,89 @@ export class StudentsService {
 
   async toggleAllMustChangePassword(enabled: boolean) {
     return this.usersService.toggleAllStudentsMustChangePassword(enabled);
+  }
+
+  async getPortalSettings() {
+    let settings = await this.systemSettingsModel.findOne();
+    if (!settings) {
+      settings = await this.systemSettingsModel.create({
+        complaintsSystemOpen: true,
+        gradesSystemOpen: true,
+        registrationVisible: true,
+        syllabiVisible: true,
+      });
+    }
+    return {
+      registrationVisible: settings.registrationVisible ?? true,
+      syllabiVisible: settings.syllabiVisible ?? true,
+    };
+  }
+
+  async updatePortalSettings(dto: UpdatePortalSettingsDto, userId?: string) {
+    let settings = await this.systemSettingsModel.findOne();
+    if (!settings) {
+      settings = new this.systemSettingsModel({
+        complaintsSystemOpen: true,
+        gradesSystemOpen: true,
+        registrationVisible: true,
+        syllabiVisible: true,
+      });
+    }
+    if (dto.registrationVisible !== undefined) {
+      settings.registrationVisible = dto.registrationVisible;
+    }
+    if (dto.syllabiVisible !== undefined) {
+      settings.syllabiVisible = dto.syllabiVisible;
+    }
+    if (userId && Types.ObjectId.isValid(userId)) {
+      settings.updatedBy = new Types.ObjectId(userId);
+    }
+    await settings.save();
+    return {
+      registrationVisible: settings.registrationVisible ?? true,
+      syllabiVisible: settings.syllabiVisible ?? true,
+    };
+  }
+
+  async resetAcademicRecords(dto: ResetAcademicRecordsDto) {
+    let warningsResetCount = 0;
+    let gpaResetCount = 0;
+
+    const resetWarnings = dto.resetWarnings ?? true;
+    const resetGpa = dto.resetGpa ?? true;
+
+    if (resetWarnings) {
+      const [profileResult, academicResult] = await Promise.all([
+        this.studentProfileModel.updateMany(
+          {},
+          { $set: { academicWarnings: 0 } },
+        ),
+        this.academicProfileModel.updateMany(
+          {},
+          { $set: { academicWarnings: 0 } },
+        ),
+      ]);
+      warningsResetCount =
+        (profileResult.modifiedCount || 0) +
+        (academicResult.modifiedCount || 0);
+    }
+
+    if (resetGpa) {
+      const gpaResult = await this.academicProfileModel.updateMany(
+        {},
+        { $set: { gpa: 0 } },
+      );
+      gpaResetCount = gpaResult.modifiedCount || 0;
+    }
+
+    this.invalidateStatsCache();
+
+    return {
+      success: true,
+      warningsResetCount,
+      gpaResetCount,
+      message: 'تم تصفير السجلات الأكاديمية بنجاح لجميع الطلاب',
+    };
   }
 
   async transferDepartment(

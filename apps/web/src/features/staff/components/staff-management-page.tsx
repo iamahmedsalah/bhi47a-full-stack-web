@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/select';
 import { TableCell } from '@/components/ui/table';
 import { getApiErrorMessage } from '@/lib/api';
+import { useAuth } from '@/providers/auth-provider';
 import { useStaffList, useStaffMutations } from '../queries';
 import type { StaffFormValues } from '../schema';
 import type { StaffMember } from '../types';
@@ -56,11 +57,14 @@ export function StaffManagementPage() {
   const t = useTranslations('staff');
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'staff' | 'admin'>('all');
   const [staffType, setStaffType] = useState<'all' | StaffType>('all');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('grid');
 
@@ -77,7 +81,8 @@ export function StaffManagementPage() {
     limit: 20,
     search: deferredSearch || undefined,
     status,
-    staffType,
+    role: isAdmin ? roleFilter : 'staff',
+    staffType: roleFilter === 'admin' ? undefined : staffType,
   });
   const mutations = useStaffMutations();
 
@@ -90,7 +95,11 @@ export function StaffManagementPage() {
         email: values.email,
         username: values.username || undefined,
         phone: values.phone || undefined,
-        staffType: values.staffType as StaffType,
+        role: values.role,
+        staffType:
+          values.role === 'admin'
+            ? undefined
+            : (values.staffType as StaffType),
       };
       if (editing) {
         await mutations.update.mutateAsync({ id: editing._id, input: profile });
@@ -173,7 +182,10 @@ export function StaffManagementPage() {
       .toUpperCase();
   };
 
-  const getRoleBadgeClasses = (type?: string) => {
+  const getRoleBadgeClasses = (type?: string, role?: string) => {
+    if (role === 'admin') {
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400';
+    }
     switch (type) {
       case 'doctor':
         return 'border-teal-500/30 bg-teal-500/10 text-teal-600 dark:text-teal-400';
@@ -184,92 +196,113 @@ export function StaffManagementPage() {
     }
   };
 
-  const renderStaffActionsMenu = (staff: StaffMember) => (
-    <DropdownMenu.Root dir={isAr ? 'rtl' : 'ltr'}>
-      <DropdownMenu.Trigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 rounded-squircle text-muted-foreground hover:bg-secondary/60 hover:text-foreground cursor-pointer"
-          aria-label={t('table.actions')}
-        >
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          className="z-50 min-w-48 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
-        >
-          <DropdownMenu.Item
-            onClick={() => setDetailsTarget(staff)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+  const renderStaffActionsMenu = (staff: StaffMember) => {
+    const isTargetAdmin = staff.role === 'admin';
+    const isTargetAdministrative = staff.staffType === 'administrative';
+    const canModifyTarget =
+      isAdmin || (!isTargetAdmin && !isTargetAdministrative);
+
+    return (
+      <DropdownMenu.Root dir={isAr ? 'rtl' : 'ltr'}>
+        <DropdownMenu.Trigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 rounded-squircle text-muted-foreground hover:bg-secondary/60 hover:text-foreground cursor-pointer"
+            aria-label={t('table.actions')}
           >
-            <Eye className="h-3.5 w-3.5 text-primary" />
-            <span>{t('actions.viewDetails')}</span>
-          </DropdownMenu.Item>
-
-          <DropdownMenu.Item
-            onClick={() => {
-              setEditing(staff);
-              setFormOpen(true);
-            }}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="end"
+            className="z-50 min-w-48 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
           >
-            <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{t('actions.edit')}</span>
-          </DropdownMenu.Item>
-
-          <DropdownMenu.Item
-            onClick={() => setPermissionsTarget(staff)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-          >
-            <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{t('actions.permissions')}</span>
-          </DropdownMenu.Item>
-
-          <DropdownMenu.Item
-            onClick={() => setPasswordTarget(staff)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
-          >
-            <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>{t('actions.resetPassword')}</span>
-          </DropdownMenu.Item>
-
-          <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
-
-          {staff.isActive ? (
             <DropdownMenu.Item
-              onClick={() => setDeactivateTarget(staff)}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 transition-colors"
+              onClick={() => setDetailsTarget(staff)}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
             >
-              <UserX className="h-3.5 w-3.5 text-danger" />
-              <span>{t('actions.deactivate')}</span>
+              <Eye className="h-3.5 w-3.5 text-primary" />
+              <span>{t('actions.viewDetails')}</span>
             </DropdownMenu.Item>
-          ) : (
-            <DropdownMenu.Item
-              onClick={() => activate(staff)}
-              disabled={mutations.activate.isPending}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-success hover:bg-success/10 transition-colors"
-            >
-              <UserCheck className="h-3.5 w-3.5 text-success" />
-              <span>{t('actions.activate')}</span>
-            </DropdownMenu.Item>
-          )}
 
-          <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+            {canModifyTarget && (
+              <DropdownMenu.Item
+                onClick={() => {
+                  setEditing(staff);
+                  setFormOpen(true);
+                }}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+              >
+                <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{t('actions.edit')}</span>
+              </DropdownMenu.Item>
+            )}
 
-          <DropdownMenu.Item
-            onClick={() => setDeleteTarget(staff)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-danger" />
-            <span>{t('actions.delete')}</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
+            {isAdmin && (
+              <DropdownMenu.Item
+                onClick={() => setPermissionsTarget(staff)}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{t('actions.permissions')}</span>
+              </DropdownMenu.Item>
+            )}
+
+            {canModifyTarget && (
+              <DropdownMenu.Item
+                onClick={() => setPasswordTarget(staff)}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+              >
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{t('actions.resetPassword')}</span>
+              </DropdownMenu.Item>
+            )}
+
+            {canModifyTarget && (
+              <>
+                <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+
+                {staff.isActive ? (
+                  <DropdownMenu.Item
+                    onClick={() => setDeactivateTarget(staff)}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 transition-colors"
+                  >
+                    <UserX className="h-3.5 w-3.5 text-danger" />
+                    <span>{t('actions.deactivate')}</span>
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.Item
+                    onClick={() => activate(staff)}
+                    disabled={mutations.activate.isPending}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-success hover:bg-success/10 transition-colors"
+                  >
+                    <UserCheck className="h-3.5 w-3.5 text-success" />
+                    <span>{t('actions.activate')}</span>
+                  </DropdownMenu.Item>
+                )}
+              </>
+            )}
+
+            {isAdmin && (
+              <>
+                <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+
+                <DropdownMenu.Item
+                  onClick={() => setDeleteTarget(staff)}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-danger" />
+                  <span>{t('actions.delete')}</span>
+                </DropdownMenu.Item>
+              </>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    );
+  };
 
   const columns: ColumnDef<StaffMember>[] = [
     {
@@ -299,9 +332,14 @@ export function StaffManagementPage() {
                 <span
                   className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getRoleBadgeClasses(
                     staff.staffType,
+                    staff.role,
                   )}`}
                 >
-                  {t(`types.${staff.staffType ?? 'administrative'}`)}
+                  {staff.role === 'admin'
+                    ? isAr
+                      ? 'مدير نظام'
+                      : 'Administrator'
+                    : t(`types.${staff.staffType ?? 'administrative'}`)}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -355,9 +393,16 @@ export function StaffManagementPage() {
       header: t('table.permissions'),
       render: (staff) => (
         <TableCell className="px-4 py-3 font-mono text-xs">
-          <span className="rounded-md border border-border/70 bg-secondary/30 px-2 py-1">
-            {staff.permissions.length} / {STAFF_ASSIGNABLE_PERMISSIONS.length}
-          </span>
+          {staff.role === 'admin' ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>{isAr ? 'صلاحيات كاملة' : 'Full Access'}</span>
+            </span>
+          ) : (
+            <span className="rounded-md border border-border/70 bg-secondary/30 px-2 py-1">
+              {staff.permissions.length} / {STAFF_ASSIGNABLE_PERMISSIONS.length}
+            </span>
+          )}
         </TableCell>
       ),
     },
@@ -399,10 +444,11 @@ export function StaffManagementPage() {
         icon={<Users className="h-5 w-5" />}
       />
 
-      {/* Filter and View Mode Toolbar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card/60 p-4 shadow-sm backdrop-blur-md md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative min-w-[240px] flex-1">
+      {/* Filter and View Mode Toolbar (Responsive 2-Tier Layout) */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card/60 p-3.5 md:p-4 shadow-sm backdrop-blur-md">
+        {/* Top Tier: Search Bar + Action Controls */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -411,89 +457,114 @@ export function StaffManagementPage() {
                 setPage(1);
               }}
               placeholder={t('searchPlaceholder')}
-              className="rounded-squircle ps-10 h-10 border-white/10 bg-background/60 text-sm focus-visible:ring-primary"
+              className="rounded-squircle ps-10 h-10 border-white/10 bg-background/60 text-sm focus-visible:ring-primary w-full"
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="w-32 sm:w-36">
-              <Select
-                value={status}
-                onValueChange={(value) => {
-                  setStatus(value as typeof status);
-                  setPage(1);
-                }}
+
+          <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+            {/* View Mode Toggle: Table / Grid */}
+            <div className="inline-flex rounded-squircle border border-white/10 bg-background/50 p-1 shrink-0">
+              <Button
+                type="button"
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className="h-8 px-2.5 rounded-squircle gap-1.5 text-xs cursor-pointer"
+                title={t('viewModes.grid')}
               >
-                <SelectTrigger className="h-10 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
-                  <SelectValue placeholder={t('filters.all')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('filters.all')}</SelectItem>
-                  <SelectItem value="active">{t('active')}</SelectItem>
-                  <SelectItem value="inactive">{t('inactive')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-40 sm:w-44">
-              <Select
-                value={staffType}
-                onValueChange={(value) => {
-                  setStaffType(value as typeof staffType);
-                  setPage(1);
-                }}
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t('viewModes.grid')}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('table')}
+                className="h-8 px-2.5 rounded-squircle gap-1.5 text-xs cursor-pointer"
+                title={t('viewModes.table')}
               >
-                <SelectTrigger className="h-10 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
-                  <SelectValue placeholder={t('filters.allTypes')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
-                  {STAFF_TYPE_VALUES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {t(`types.${type}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t('viewModes.table')}</span>
+              </Button>
             </div>
+
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+              className="h-10 rounded-squircle px-4 text-xs font-bold gap-1.5 bg-primary text-white hover:bg-primary-hover shadow-sm shrink-0 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{isAr ? (roleFilter === 'admin' ? 'إضافة حساب مدير' : 'إضافة موظف') : (roleFilter === 'admin' ? 'Add Administrator' : 'Add Staff')}</span>
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          {/* View Mode Toggle: Table / Grid */}
-          <div className="inline-flex rounded-squircle border border-white/10 bg-background/50 p-1">
-            <Button
-              type="button"
-              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className="h-8 px-2.5 rounded-squircle gap-1.5 text-xs"
-              title={t('viewModes.grid')}
+        {/* Lower Tier: Filter Selects */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
+          {isAdmin && (
+            <div className="w-full sm:w-48">
+              <Select
+                value={roleFilter}
+                onValueChange={(value) => {
+                  setRoleFilter(value as typeof roleFilter);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-9 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
+                  <SelectValue placeholder={isAr ? 'نوع الحساب' : 'Account Role'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{isAr ? 'كل الحسابات' : 'All Accounts'}</SelectItem>
+                  <SelectItem value="staff">{isAr ? 'الكادر الأكاديمي والإداري' : 'Academic & Admin Staff'}</SelectItem>
+                  <SelectItem value="admin">{isAr ? 'مديرو النظام (Admins)' : 'Administrators (Admins)'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="w-full sm:w-36">
+            <Select
+              value={status}
+              onValueChange={(value) => {
+                setStatus(value as typeof status);
+                setPage(1);
+              }}
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t('viewModes.grid')}</span>
-            </Button>
-            <Button
-              type="button"
-              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('table')}
-              className="h-8 px-2.5 rounded-squircle gap-1.5 text-xs"
-              title={t('viewModes.table')}
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t('viewModes.table')}</span>
-            </Button>
+              <SelectTrigger className="h-9 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
+                <SelectValue placeholder={t('filters.all')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('filters.all')}</SelectItem>
+                <SelectItem value="active">{t('active')}</SelectItem>
+                <SelectItem value="inactive">{t('inactive')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-            className="h-10 rounded-squircle gap-2 bg-primary font-semibold text-white hover:bg-primary-hover shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>{t('addStaff')}</span>
-          </Button>
+          <div className="w-full sm:w-48">
+            <Select
+              value={staffType}
+              onValueChange={(value) => {
+                setStaffType(value as typeof staffType);
+                setPage(1);
+              }}
+              disabled={roleFilter === 'admin'}
+            >
+              <SelectTrigger className="h-9 w-full rounded-squircle border-white/10 bg-background/60 text-xs">
+                <SelectValue placeholder={t('filters.allTypes')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
+                {STAFF_TYPE_VALUES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {t(`types.${type}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -556,9 +627,14 @@ export function StaffManagementPage() {
                         <span
                           className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getRoleBadgeClasses(
                             staff.staffType,
+                            staff.role,
                           )}`}
                         >
-                          {t(`types.${staff.staffType ?? 'administrative'}`)}
+                          {staff.role === 'admin'
+                            ? isAr
+                              ? 'مدير نظام'
+                              : 'Administrator'
+                            : t(`types.${staff.staffType ?? 'administrative'}`)}
                         </span>
                       </div>
                     </div>
@@ -621,13 +697,23 @@ export function StaffManagementPage() {
                       />
                       {staff.isActive ? t('active') : t('inactive')}
                     </span>
-                    <span
-                      className="rounded bg-secondary/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground flex items-center gap-1"
-                      title={t('table.permissions')}
-                    >
-                      <Shield className="h-3 w-3 text-muted-foreground" />
-                      <span>{staff.permissions.length}</span>
-                    </span>
+                    {staff.role === 'admin' ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400"
+                        title={isAr ? 'صلاحيات كاملة غير مقيدة لكافة أجزاء النظام' : 'Full unrestricted administrator access'}
+                      >
+                        <ShieldCheck className="h-3 w-3 text-amber-500" />
+                        <span>{isAr ? 'صلاحيات كاملة' : 'Full Access'}</span>
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded bg-secondary/50 px-2 py-0.5 text-[11px] font-mono text-muted-foreground flex items-center gap-1"
+                        title={t('table.permissions')}
+                      >
+                        <Shield className="h-3 w-3 text-muted-foreground" />
+                        <span>{staff.permissions.length}</span>
+                      </span>
+                    )}
                   </div>
 
                   <Button

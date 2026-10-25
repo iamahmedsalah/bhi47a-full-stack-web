@@ -7,9 +7,10 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffPermissionsDto } from './dto/update-staff-permissions.dto';
 
 describe('Staff management security contracts', () => {
-  it('protects the complete controller with the admin role', () => {
+  it('protects the complete controller with the admin and staff roles', () => {
     expect(Reflect.getMetadata(ROLES_KEY, StaffManagementController)).toEqual([
       'admin',
+      'staff',
     ]);
   });
 
@@ -41,8 +42,64 @@ describe('Staff management security contracts', () => {
     expect(errors.some((error) => error.property === 'password')).toBe(true);
   });
 
-  it('revokes sessions and forces password change after an admin reset', async () => {
+  it('prevents non-admin actors from creating admin accounts', async () => {
     const users = {
+      exists: jest.fn().mockResolvedValue(false),
+    };
+    const auditLogs = { create: jest.fn().mockResolvedValue({}) };
+    const service = new StaffManagementService(
+      users as never,
+      auditLogs as never,
+    );
+
+    const dto = Object.assign(new CreateStaffDto(), {
+      name: 'Fake Admin',
+      email: 'fakeadmin@example.edu',
+      password: 'StrongPassword123!',
+      role: 'admin' as const,
+      staffType: 'doctor' as const,
+    });
+
+    await expect(
+      service.create(dto, '507f1f77bcf86cd799439012', 'staff'),
+    ).rejects.toThrow(
+      'Administrative staff cannot create administrator accounts',
+    );
+  });
+
+  it('prevents non-admin actors from creating administrative staff accounts', async () => {
+    const users = {
+      exists: jest.fn().mockResolvedValue(false),
+    };
+    const auditLogs = { create: jest.fn().mockResolvedValue({}) };
+    const service = new StaffManagementService(
+      users as never,
+      auditLogs as never,
+    );
+
+    const dto = Object.assign(new CreateStaffDto(), {
+      name: 'Another Admin Staff',
+      email: 'adminstaff@example.edu',
+      password: 'StrongPassword123!',
+      role: 'staff' as const,
+      staffType: 'administrative' as const,
+    });
+
+    await expect(
+      service.create(dto, '507f1f77bcf86cd799439012', 'staff'),
+    ).rejects.toThrow(
+      'Administrative staff may only create Doctor and Teaching Assistant accounts',
+    );
+  });
+
+  it('revokes sessions and forces password change after a password reset', async () => {
+    const mockStaff = {
+      _id: '507f1f77bcf86cd799439011',
+      role: 'staff',
+      staffType: 'doctor',
+    };
+    const users = {
+      findOne: jest.fn().mockResolvedValue(mockStaff),
       updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
     };
     const auditLogs = { create: jest.fn().mockResolvedValue({}) };
@@ -55,10 +112,11 @@ describe('Staff management security contracts', () => {
       '507f1f77bcf86cd799439011',
       { newPassword: 'TemporaryPass123!' },
       '507f1f77bcf86cd799439012',
+      'admin',
     );
 
     expect(users.updateOne).toHaveBeenCalledWith(
-      { _id: '507f1f77bcf86cd799439011', role: 'staff' },
+      { _id: '507f1f77bcf86cd799439011', role: { $in: ['staff', 'admin'] } },
       expect.objectContaining({
         $set: expect.objectContaining({ mustChangePassword: true }),
         $unset: expect.objectContaining({ refreshTokenHash: 1 }),
@@ -72,7 +130,7 @@ describe('Staff management security contracts', () => {
     );
   });
 
-  it('permanently deletes staff and records audit log', async () => {
+  it('permanently deletes staff and records audit log when actor is admin', async () => {
     const mockStaff = {
       _id: '507f1f77bcf86cd799439011',
       userCode: 'STF-0010',
@@ -94,11 +152,12 @@ describe('Staff management security contracts', () => {
     const result = await service.delete(
       '507f1f77bcf86cd799439011',
       '507f1f77bcf86cd799439099',
+      'admin',
     );
 
     expect(users.findOne).toHaveBeenCalledWith({
       _id: '507f1f77bcf86cd799439011',
-      role: 'staff',
+      role: { $in: ['staff', 'admin'] },
     });
     expect(auditLogs.create).toHaveBeenCalledWith(
       expect.objectContaining({

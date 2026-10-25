@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Bot, Calendar, Settings, ShieldCheck } from 'lucide-react';
+import { Bot, Calendar, Settings, ShieldCheck, SlidersHorizontal, GraduationCap, GitPullRequest } from 'lucide-react';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { PermissionGuard } from '@/components/ui/permission-guard';
@@ -11,8 +11,8 @@ import { GpaRulesPanel } from '@/features/settings/components/gpa-rules-panel';
 import { RegistrationTermsPanel } from '@/features/settings/components/registration-terms-panel';
 import { AiSettingsPanel } from '@/features/settings/components/ai-settings-panel';
 import { AdvisingRulesPanel } from '@/features/settings/components/advising-rules-panel';
-import { GraduationCap, GitPullRequest } from 'lucide-react';
 import { ComplaintRoutingPanel } from '@/features/settings/components/complaint-routing-panel';
+import { PortalControlsPanel } from '@/features/settings/components/portal-controls-panel';
 import { useAuth } from '@/providers/auth-provider';
 import { cn } from '@/lib/cn';
 
@@ -39,9 +39,22 @@ function AdminSettingsContent() {
     Boolean(user?.permissions?.includes('complaints.read')) ||
     Boolean(user?.permissions?.includes('complaints.write'));
 
+  const canAccessPortal = user?.role === 'admin';
   const canAccessAi = user?.role === 'admin';
 
   const tabs = [
+    ...(canAccessPortal
+      ? [
+          {
+            id: 'portal' as const,
+            label: isAr ? 'إعدادات البوابة والتحكم الأكاديمي' : 'Portal & Academic Controls',
+            icon: SlidersHorizontal,
+            description: isAr
+              ? 'التحكم في ظهور صفحات وخدمات الطلاب، وتصفير السجلات والمعدلات'
+              : 'Control student portal feature visibility and perform bulk academic resets',
+          },
+        ]
+      : []),
     ...(canAccessRules
       ? [
           {
@@ -89,14 +102,14 @@ function AdminSettingsContent() {
   ];
 
   const searchParams = useSearchParams();
-  const requestedTab = searchParams.get('tab') as 'rules' | 'terms' | 'ai' | 'complaints' | null;
-  const [selectedTab, setSelectedTab] = useState<'rules' | 'terms' | 'ai' | 'complaints' | null>(null);
+  const requestedTab = searchParams.get('tab') as 'portal' | 'rules' | 'terms' | 'ai' | 'complaints' | null;
+  const [selectedTab, setSelectedTab] = useState<'portal' | 'rules' | 'terms' | 'ai' | 'complaints' | null>(null);
 
   const activeTab = selectedTab && tabs.some((t) => t.id === selectedTab)
     ? selectedTab
     : (requestedTab && tabs.some((t) => t.id === requestedTab)
         ? requestedTab
-        : (tabs[0]?.id ?? 'rules'));
+        : (tabs[0]?.id ?? 'portal'));
 
   const [rulesSubTab, setRulesSubTab] = useState<'advising' | 'gpa'>('advising');
 
@@ -191,6 +204,8 @@ function AdminSettingsContent() {
               <GpaRulesPanel locale={locale} />
             )}
           </div>
+        ) : activeTab === 'portal' ? (
+          <PortalControlsPanel locale={locale} />
         ) : activeTab === 'terms' ? (
           <RegistrationTermsPanel locale={locale} />
         ) : activeTab === 'complaints' ? (

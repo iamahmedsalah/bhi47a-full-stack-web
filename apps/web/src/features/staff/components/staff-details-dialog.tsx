@@ -94,7 +94,10 @@ export function StaffDetailsDialog({
       .toUpperCase();
   };
 
-  const getRoleBadgeClasses = (type?: string) => {
+  const getRoleBadgeClasses = (type?: string, role?: string) => {
+    if (role === 'admin') {
+      return 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400';
+    }
     switch (type) {
       case 'doctor':
         return 'border-teal-500/30 bg-teal-500/10 text-teal-600 dark:text-teal-400';
@@ -123,9 +126,14 @@ export function StaffDetailsDialog({
                   <span
                     className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getRoleBadgeClasses(
                       staff.staffType,
+                      staff.role,
                     )}`}
                   >
-                    {t(`types.${staff.staffType ?? 'administrative'}`)}
+                    {staff.role === 'admin'
+                      ? isAr
+                        ? 'مدير نظام'
+                        : 'Administrator'
+                      : t(`types.${staff.staffType ?? 'administrative'}`)}
                   </span>
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
@@ -441,45 +449,68 @@ export function StaffDetailsDialog({
 
           {activeTab === 'permissions' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between pb-1">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  {t('details.permissions')}
-                </span>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
-                  {t('details.activePermissions', {
-                    count: staff.permissions?.length ?? 0,
-                    total: STAFF_ASSIGNABLE_PERMISSIONS.length,
-                  })}
-                </span>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {STAFF_ASSIGNABLE_PERMISSIONS.map((perm) => {
-                  const isEnabled = staff.permissions?.includes(perm);
-                  const labelKey = `permissions.labels.${perm.replaceAll('.', '_')}`;
-                  return (
-                    <div
-                      key={perm}
-                      className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-xs transition-colors ${
-                        isEnabled
-                          ? 'border-primary/40 bg-primary/10 text-foreground'
-                          : 'border-border/40 bg-background/30 text-muted-foreground opacity-50'
-                      }`}
-                    >
-                      {isEnabled ? (
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />
-                      ) : (
-                        <div className="h-4 w-4 rounded-full border border-muted-foreground/30 shrink-0 mt-0.5" />
-                      )}
-                      <div className="space-y-0.5">
-                        <span className="font-semibold block">{t(labelKey as Parameters<typeof t>[0])}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground block" dir="ltr">
-                          {perm}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {staff.role === 'admin' ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-start space-y-3">
+                  <div className="flex items-center gap-2.5 text-amber-600 dark:text-amber-400 font-bold text-sm sm:text-base">
+                    <ShieldCheck className="h-5 w-5 shrink-0" />
+                    <span>
+                      {isAr
+                        ? 'مدير نظام — صلاحيات كاملة وشاملة وغير مقيدة'
+                        : 'System Administrator — Full Unrestricted Root Access'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {isAr
+                      ? 'يمتلك هذا الحساب صلاحيات root إدارية وفنية شاملة لكافة خدمات ولوحات التحكم في البوابة الأكاديمية (الطلاب، المقررات، الدرجات، الجداول، الموظفين، الإعدادات، والمنظومة بالكامل) تلقائياً دون الحاجة لتعيين أذونات وظيفية منفردة.'
+                      : 'This account possesses root administrative and technical privileges across all academic portal modules (students, courses, grades, schedules, staff, settings, and platform operations) automatically without requiring individual functional permissions.'}
+                  </p>
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-300">
+                    <span>✓ {isAr ? 'كافة الصلاحيات مفعّلة افتراضياً' : 'All Platform Permissions Active by Default'}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      {t('details.permissions')}
+                    </span>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+                      {t('details.activePermissions', {
+                        count: staff.permissions?.length ?? 0,
+                        total: STAFF_ASSIGNABLE_PERMISSIONS.length,
+                      })}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {STAFF_ASSIGNABLE_PERMISSIONS.map((perm) => {
+                      const isEnabled = staff.permissions?.includes(perm);
+                      const labelKey = `permissions.labels.${perm.replaceAll('.', '_')}`;
+                      return (
+                        <div
+                          key={perm}
+                          className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-xs transition-colors ${
+                            isEnabled
+                              ? 'border-primary/40 bg-primary/10 text-foreground'
+                              : 'border-border/40 bg-background/30 text-muted-foreground opacity-50'
+                          }`}
+                        >
+                          {isEnabled ? (
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                          ) : (
+                            <div className="h-4 w-4 rounded-full border border-muted-foreground/30 shrink-0 mt-0.5" />
+                          )}
+                          <div className="space-y-0.5">
+                            <span className="font-semibold block">{t(labelKey as Parameters<typeof t>[0])}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground block" dir="ltr">
+                              {perm}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -501,7 +532,7 @@ export function StaffDetailsDialog({
             </Button>
           )}
 
-          {onPermissions && (
+          {onPermissions && staff.role !== 'admin' && (
             <Button
               type="button"
               variant="outline"

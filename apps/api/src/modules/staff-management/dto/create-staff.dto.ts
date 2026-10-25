@@ -18,6 +18,11 @@ import {
 } from '@student-portal/shared';
 
 export class CreateStaffDto {
+  @ApiPropertyOptional({ enum: ['admin', 'staff'], example: 'staff' })
+  @IsOptional()
+  @IsIn(['admin', 'staff'])
+  role?: 'admin' | 'staff';
+
   @ApiPropertyOptional({ enum: STAFF_TYPE_VALUES, example: 'doctor' })
   @IsOptional()
   @IsIn(STAFF_TYPE_VALUES)

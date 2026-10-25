@@ -19,6 +19,8 @@ import {
   UpdateMyContactDto,
   ToggleAllMustChangePasswordDto,
   TransferDepartmentDto,
+  UpdatePortalSettingsDto,
+  ResetAcademicRecordsDto,
 } from './dto/student.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -155,6 +157,45 @@ export class StudentsController {
       dto.targetDepartment,
       dto.targetLevel,
     );
+  }
+
+  @Get('portal-settings')
+  @Roles('student', 'staff', 'admin')
+  @ApiOperation({
+    summary: 'Get current student portal feature visibility flags',
+  })
+  async getPortalSettings() {
+    return this.studentsService.getPortalSettings();
+  }
+
+  @Get('admin/portal-settings')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  @ApiOperation({
+    summary: 'Get current portal feature settings (admin/staff)',
+  })
+  async getAdminPortalSettings() {
+    return this.studentsService.getPortalSettings();
+  }
+
+  @Patch('admin/portal-settings')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Update portal feature flags (admin only)' })
+  async updatePortalSettings(
+    @Body() dto: UpdatePortalSettingsDto,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.studentsService.updatePortalSettings(dto, adminId);
+  }
+
+  @Post('admin/students/reset-academic-records')
+  @Roles('admin')
+  @ApiOperation({
+    summary:
+      'Bulk reset academic warnings and GPA to 0 for all students (admin only)',
+  })
+  async resetAcademicRecords(@Body() dto: ResetAcademicRecordsDto) {
+    return this.studentsService.resetAcademicRecords(dto);
   }
 
   // ─── Student Routes ──────────────────────────────────────

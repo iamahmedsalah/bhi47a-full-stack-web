@@ -9,8 +9,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { PERMISSIONS } from '@student-portal/shared';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequireAnyPermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -22,51 +24,69 @@ import { StaffManagementService } from './staff-management.service';
 
 @ApiTags('Admin Staff Management')
 @Controller('admin/staff')
-@Roles('admin')
+@Roles('admin', 'staff')
 export class StaffManagementController {
   constructor(private readonly staff: StaffManagementService) {}
 
   @Get()
+  @RequireAnyPermissions(
+    PERMISSIONS.STAFF_READ,
+    PERMISSIONS.STAFF_CREATE_ACADEMIC,
+  )
   @ApiOperation({
     summary: 'List staff accounts with pagination and filtering',
   })
-  list(@Query() query: QueryStaffDto) {
-    return this.staff.list(query);
+  list(@Query() query: QueryStaffDto, @CurrentUser('role') actorRole: string) {
+    return this.staff.list(query, actorRole);
   }
 
   @Post()
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({ summary: 'Create a staff account' })
-  create(@Body() dto: CreateStaffDto, @CurrentUser('_id') actorId: string) {
-    return this.staff.create(dto, actorId);
+  create(
+    @Body() dto: CreateStaffDto,
+    @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
+  ) {
+    return this.staff.create(dto, actorId, actorRole);
   }
 
   @Get(':id')
+  @RequireAnyPermissions(
+    PERMISSIONS.STAFF_READ,
+    PERMISSIONS.STAFF_CREATE_ACADEMIC,
+  )
   @ApiOperation({ summary: 'Get one staff account' })
   get(@Param('id', ParseObjectIdPipe) id: string) {
     return this.staff.getById(id);
   }
 
   @Patch(':id')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({ summary: 'Update a staff account profile' })
   update(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: UpdateStaffDto,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.update(id, dto, actorId);
+    return this.staff.update(id, dto, actorId, actorRole);
   }
 
   @Patch(':id/permissions')
+  @Roles('admin')
   @ApiOperation({ summary: 'Replace a staff account permission set' })
   updatePermissions(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: UpdateStaffPermissionsDto,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.updatePermissions(id, dto, actorId);
+    return this.staff.updatePermissions(id, dto, actorId, actorRole);
   }
 
   @Post(':id/reset-password')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({
     summary: 'Reset password, revoke sessions, and require a password change',
   })
@@ -74,11 +94,13 @@ export class StaffManagementController {
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: ResetStaffPasswordDto,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.resetPassword(id, dto, actorId);
+    return this.staff.resetPassword(id, dto, actorId, actorRole);
   }
 
   @Post(':id/deactivate')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({
     summary: 'Deactivate a staff account without deleting history',
   })
@@ -86,29 +108,35 @@ export class StaffManagementController {
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: DeactivateStaffDto,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.deactivate(id, dto, actorId);
+    return this.staff.deactivate(id, dto, actorId, actorRole);
   }
 
   @Post(':id/activate')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({ summary: 'Reactivate a staff account' })
   activate(
     @Param('id', ParseObjectIdPipe) id: string,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.activate(id, actorId);
+    return this.staff.activate(id, actorId, actorRole);
   }
 
   @Delete(':id')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete a staff account permanently' })
   delete(
     @Param('id', ParseObjectIdPipe) id: string,
     @CurrentUser('_id') actorId: string,
+    @CurrentUser('role') actorRole: string,
   ) {
-    return this.staff.delete(id, actorId);
+    return this.staff.delete(id, actorId, actorRole);
   }
 
   @Get(':id/audit')
+  @Roles('admin')
   @ApiOperation({
     summary: 'List recent lifecycle changes for a staff account',
   })

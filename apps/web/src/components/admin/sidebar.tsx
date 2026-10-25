@@ -112,14 +112,14 @@ export default function AdminSidebar() {
       icon: <CalendarDays className="h-5 w-5" />,
       permission: PERMISSIONS.COURSE_SCHEDULES_READ,
     },
+    {
+      key: "staff",
+      href: `/${locale}/admin/staff`,
+      icon: <UserCog className="h-5 w-5" />,
+      permission: PERMISSIONS.STAFF_READ,
+    },
     ...(user?.role === "admin"
       ? [
-          {
-            key: "staff",
-            href: `/${locale}/admin/staff`,
-            icon: <UserCog className="h-5 w-5" />,
-            adminOnly: true,
-          },
           {
             key: "chatAudit",
             href: `/${locale}/admin/chat-audit`,

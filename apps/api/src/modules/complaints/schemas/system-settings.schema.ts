@@ -44,6 +44,12 @@ export class SystemSettings {
   @Prop({ type: [String], default: ['1', '2', '3', '4'] })
   gradesPublishedLevels?: string[];
 
+  @Prop({ default: true })
+  registrationVisible?: boolean;
+
+  @Prop({ default: true })
+  syllabiVisible?: boolean;
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   updatedBy?: Types.ObjectId;
 }

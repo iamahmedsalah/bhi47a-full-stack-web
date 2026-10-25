@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -33,8 +34,8 @@ export interface StaffItem {
   username?: string;
   email?: string;
   phone?: string;
-  role: 'staff';
-  staffType: StaffType;
+  role: 'admin' | 'staff';
+  staffType?: StaffType;
   permissions: string[];
   isActive: boolean;
   deactivatedAt?: Date;
@@ -51,6 +52,7 @@ interface StaffRecord {
   username?: string;
   email?: string;
   phone?: string;
+  role?: 'admin' | 'staff';
   staffType?: StaffType;
   permissions?: string[];
   isActive?: boolean;
@@ -82,8 +84,20 @@ export class StaffManagementService {
     private readonly auditLogs: Model<StaffAuditLogDocument>,
   ) {}
 
-  async list(query: QueryStaffDto) {
-    const filter: FilterQuery<UserDocument> = { role: 'staff' };
+  async list(query: QueryStaffDto, actorRole?: string) {
+    const filter: FilterQuery<UserDocument> = {};
+    if (actorRole === 'admin') {
+      if (query.role === 'admin') {
+        filter.role = 'admin';
+      } else if (query.role === 'staff') {
+        filter.role = 'staff';
+      } else {
+        filter.role = { $in: ['staff', 'admin'] };
+      }
+    } else {
+      filter.role = 'staff';
+    }
+
     if (query.status !== 'all') {
       filter.isActive = query.status === 'active';
     }
@@ -127,22 +141,51 @@ export class StaffManagementService {
     return this.toStaffItem(record);
   }
 
-  async create(dto: CreateStaffDto, actorId: string): Promise<StaffItem> {
+  async create(
+    dto: CreateStaffDto,
+    actorId: string,
+    actorRole?: string,
+  ): Promise<StaffItem> {
+    const targetRole =
+      actorRole === 'admin' && dto.role === 'admin' ? 'admin' : 'staff';
+
+    if (actorRole !== 'admin') {
+      if (dto.role === 'admin') {
+        throw new ForbiddenException(
+          'Administrative staff cannot create administrator accounts',
+        );
+      }
+      if (
+        dto.staffType !== 'doctor' &&
+        dto.staffType !== 'teaching_assistant'
+      ) {
+        throw new ForbiddenException(
+          'Administrative staff may only create Doctor and Teaching Assistant accounts',
+        );
+      }
+    }
+
     const email = dto.email.trim().toLowerCase();
     const username = dto.username?.trim().toLowerCase();
     await this.assertUniqueIdentity(email, username);
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const userCode = await this.generateStaffCode();
-    const staffType = dto.staffType || 'administrative';
+    const userCode =
+      targetRole === 'admin'
+        ? await this.generateAdminCode()
+        : await this.generateStaffCode();
+    const staffType =
+      targetRole === 'admin' ? undefined : dto.staffType || 'administrative';
     const permissions =
-      dto.permissions && dto.permissions.length > 0
-        ? dto.permissions
-        : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType] || [])];
+      targetRole === 'admin'
+        ? []
+        : actorRole === 'admin' && dto.permissions && dto.permissions.length > 0
+          ? dto.permissions
+          : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType!] || [])];
 
     try {
       const created = await this.users.create({
-        role: 'staff',
+        role: targetRole,
         staffType,
         userCode,
         name: dto.name.trim(),
@@ -155,6 +198,7 @@ export class StaffManagementService {
         isActive: true,
       });
       await this.recordAudit(actorId, created._id.toString(), 'created', {
+        role: created.role,
         staffType: created.staffType,
         permissions: created.permissions,
       });
@@ -162,7 +206,7 @@ export class StaffManagementService {
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException(
-          'Staff email, username, or code already exists',
+          'Email, username, or user code already exists',
         );
       }
       throw error;
@@ -173,8 +217,27 @@ export class StaffManagementService {
     id: string,
     dto: UpdateStaffDto,
     actorId: string,
+    actorRole?: string,
   ): Promise<StaffItem> {
     const current = await this.findStaffDocument(id);
+
+    if (actorRole !== 'admin') {
+      if (current.role === 'admin' || current.staffType === 'administrative') {
+        throw new ForbiddenException(
+          'Administrative staff cannot modify administrator or administrative accounts',
+        );
+      }
+      if (
+        dto.staffType &&
+        dto.staffType !== 'doctor' &&
+        dto.staffType !== 'teaching_assistant'
+      ) {
+        throw new ForbiddenException(
+          'Administrative staff may only manage Doctor and Teaching Assistant accounts',
+        );
+      }
+    }
+
     const email = dto.email?.trim().toLowerCase();
     const username = dto.username?.trim().toLowerCase();
     await this.assertUniqueIdentity(email, username, id);
@@ -200,7 +263,7 @@ export class StaffManagementService {
       await current.save();
     } catch (error) {
       if (isDuplicateKeyError(error)) {
-        throw new ConflictException('Staff email or username already exists');
+        throw new ConflictException('Email or username already exists');
       }
       throw error;
     }
@@ -215,7 +278,13 @@ export class StaffManagementService {
     id: string,
     dto: UpdateStaffPermissionsDto,
     actorId: string,
+    actorRole?: string,
   ): Promise<StaffItem> {
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException(
+        'Only administrators can directly modify permission sets',
+      );
+    }
     const staff = await this.findStaffDocument(id);
     const before = [...(staff.permissions ?? [])].sort();
     const after = [...dto.permissions].sort();
@@ -232,10 +301,20 @@ export class StaffManagementService {
     id: string,
     dto: ResetStaffPasswordDto,
     actorId: string,
+    actorRole?: string,
   ): Promise<{ message: string }> {
+    const current = await this.findStaffDocument(id);
+    if (actorRole !== 'admin') {
+      if (current.role === 'admin' || current.staffType === 'administrative') {
+        throw new ForbiddenException(
+          'Administrative staff cannot reset passwords for administrator or administrative accounts',
+        );
+      }
+    }
+
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
     const result = await this.users.updateOne(
-      { _id: id, role: 'staff' },
+      { _id: id, role: { $in: ['staff', 'admin'] } },
       {
         $set: {
           passwordHash,
@@ -254,18 +333,28 @@ export class StaffManagementService {
       },
     );
     if (result.matchedCount === 0)
-      throw new NotFoundException('Staff member not found');
+      throw new NotFoundException('Account not found');
     await this.recordAudit(actorId, id, 'password_reset');
-    return { message: 'Staff password reset successfully' };
+    return { message: 'Password reset successfully' };
   }
 
   async deactivate(
     id: string,
     dto: DeactivateStaffDto,
     actorId: string,
+    actorRole?: string,
   ): Promise<StaffItem> {
+    const current = await this.findStaffDocument(id);
+    if (actorRole !== 'admin') {
+      if (current.role === 'admin' || current.staffType === 'administrative') {
+        throw new ForbiddenException(
+          'Administrative staff cannot deactivate administrator or administrative accounts',
+        );
+      }
+    }
+
     const result = await this.users.updateOne(
-      { _id: id, role: 'staff' },
+      { _id: id, role: { $in: ['staff', 'admin'] } },
       {
         $set: {
           isActive: false,
@@ -278,14 +367,27 @@ export class StaffManagementService {
       },
     );
     if (result.matchedCount === 0)
-      throw new NotFoundException('Staff member not found');
+      throw new NotFoundException('Account not found');
     await this.recordAudit(actorId, id, 'deactivated', undefined, dto.reason);
     return this.getById(id);
   }
 
-  async activate(id: string, actorId: string): Promise<StaffItem> {
+  async activate(
+    id: string,
+    actorId: string,
+    actorRole?: string,
+  ): Promise<StaffItem> {
+    const current = await this.findStaffDocument(id);
+    if (actorRole !== 'admin') {
+      if (current.role === 'admin' || current.staffType === 'administrative') {
+        throw new ForbiddenException(
+          'Administrative staff cannot activate administrator or administrative accounts',
+        );
+      }
+    }
+
     const result = await this.users.updateOne(
-      { _id: id, role: 'staff' },
+      { _id: id, role: { $in: ['staff', 'admin'] } },
       {
         $set: { isActive: true },
         $unset: {
@@ -298,22 +400,28 @@ export class StaffManagementService {
       },
     );
     if (result.matchedCount === 0)
-      throw new NotFoundException('Staff member not found');
+      throw new NotFoundException('Account not found');
     await this.recordAudit(actorId, id, 'activated');
     return this.getById(id);
   }
 
-  async delete(id: string, actorId: string) {
+  async delete(id: string, actorId: string, actorRole?: string) {
+    if (actorRole !== 'admin') {
+      throw new ForbiddenException(
+        'Only administrators can permanently delete accounts',
+      );
+    }
     const staff = await this.findStaffDocument(id);
     await this.recordAudit(actorId, id, 'deleted', {
       userCode: staff.userCode,
       name: staff.name,
       email: staff.email,
       username: staff.username,
+      role: staff.role,
       staffType: staff.staffType,
     });
     await this.users.deleteOne({ _id: staff._id });
-    return { success: true, message: 'Staff member deleted successfully' };
+    return { success: true, message: 'Account deleted successfully' };
   }
 
   async listAudit(id: string) {
@@ -328,17 +436,20 @@ export class StaffManagementService {
   }
 
   private async findStaffDocument(id: string) {
-    const staff = await this.users.findOne({ _id: id, role: 'staff' });
-    if (!staff) throw new NotFoundException('Staff member not found');
+    const staff = await this.users.findOne({
+      _id: id,
+      role: { $in: ['staff', 'admin'] },
+    });
+    if (!staff) throw new NotFoundException('Account not found');
     return staff;
   }
 
   private async findStaffRecord(id: string) {
     const staff = await this.users
-      .findOne({ _id: id, role: 'staff' })
+      .findOne({ _id: id, role: { $in: ['staff', 'admin'] } })
       .select(STAFF_PUBLIC_PROJECTION)
       .lean<StaffRecord>();
-    if (!staff) throw new NotFoundException('Staff member not found');
+    if (!staff) throw new NotFoundException('Account not found');
     return staff;
   }
 
@@ -350,8 +461,10 @@ export class StaffManagementService {
       username: record.username,
       email: record.email,
       phone: record.phone,
-      role: 'staff',
-      staffType: record.staffType || 'administrative',
+      role: record.role || 'staff',
+      staffType:
+        record.staffType ||
+        (record.role === 'admin' ? undefined : 'administrative'),
       permissions: record.permissions ?? [],
       isActive: record.isActive ?? true,
       deactivatedAt: record.deactivatedAt,
@@ -387,6 +500,16 @@ export class StaffManagementService {
       .lean<{ userCode?: string }>();
     const current = Number.parseInt(last?.userCode?.split('-')[1] ?? '0', 10);
     return `STF-${String((Number.isFinite(current) ? current : 0) + 1).padStart(4, '0')}`;
+  }
+
+  private async generateAdminCode() {
+    const last = await this.users
+      .findOne({ role: 'admin', userCode: /^ADM-\d+$/ })
+      .select('userCode')
+      .sort({ userCode: -1 })
+      .lean<{ userCode?: string }>();
+    const current = Number.parseInt(last?.userCode?.split('-')[1] ?? '0', 10);
+    return `ADM-${String((Number.isFinite(current) ? current : 0) + 1).padStart(4, '0')}`;
   }
 
   private async recordAudit(

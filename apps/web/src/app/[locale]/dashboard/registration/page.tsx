@@ -34,6 +34,7 @@ import { CompletedRegistrationCard } from '@/features/registration/components/co
 import { AdvisingRequiredCard } from '@/features/registration/components/advising-required-card';
 import { DirectRegistrationTable } from '@/features/registration/components/direct-registration-table';
 import { RegistrationHistoryCard } from '@/features/registration/components/registration-history-card';
+import { getPublicPortalSettings, settingsKeys } from '@/features/settings/api';
 
 function localizePolicyWarning(warning: string, isEnglish: boolean): string | null {
   const normalized = warning.toLowerCase();
@@ -75,6 +76,12 @@ export default function CourseRegistrationPage() {
   const eligibilityQuery = useQuery({
     queryKey: registrationKeys.eligibility(),
     queryFn: () => getEligibility(),
+  });
+
+  const portalSettingsQuery = useQuery({
+    queryKey: settingsKeys.publicPortalSettings,
+    queryFn: getPublicPortalSettings,
+    staleTime: 60 * 1000,
   });
 
   const latestRegistrationQuery = useQuery({
@@ -207,6 +214,35 @@ export default function CourseRegistrationPage() {
 
   if (eligibilityQuery.isLoading || (eligibility?.canRegisterDirectly && coursesQuery.isLoading)) {
     return <LoadingState title={isEnglish ? 'Loading...' : 'جاري التحميل...'} />;
+  }
+
+  const registrationVisible = portalSettingsQuery.data?.registrationVisible ?? true;
+
+  if (portalSettingsQuery.data && !registrationVisible) {
+    return (
+      <div className="mx-auto max-w-xl py-16 text-center space-y-4 animate-fade-in" dir={isEnglish ? 'ltr' : 'rtl'}>
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm">
+          <BookOpenCheck className="h-8 w-8" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">
+          {isEnglish ? 'Course Registration Closed' : 'خدمة تسجيل المقررات غير متاحة'}
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+          {isEnglish
+            ? 'Course registration is currently disabled by institute administration. Please check back later or consult student affairs.'
+            : 'خدمة تسجيل المقررات الدراسية مغلقة حالياً من قبل إدارة المعهد. يُرجى مراجعة إدارة شؤون الطلاب أو متابعة الإعلانات.'}
+        </p>
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/${locale}/dashboard`)}
+            className="rounded-squircle px-5 py-2.5 bg-primary text-primary-foreground text-xs font-semibold cursor-pointer shadow-md hover:bg-primary/90 transition-all"
+          >
+            {isEnglish ? 'Return to Dashboard' : 'العودة للوحة التحكم'}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

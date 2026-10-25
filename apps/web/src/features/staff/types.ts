@@ -7,7 +7,7 @@ export interface StaffMember {
   username?: string;
   email?: string;
   phone?: string;
-  role: 'staff';
+  role: 'admin' | 'staff';
   staffType?: StaffType;
   permissions: Permission[];
   isActive: boolean;
@@ -31,6 +31,7 @@ export interface StaffListParams {
   limit: number;
   search?: string;
   status: 'all' | 'active' | 'inactive';
+  role?: 'all' | 'staff' | 'admin';
   staffType?: 'all' | StaffType;
 }
 
@@ -39,6 +40,7 @@ export interface StaffProfileInput {
   email: string;
   username?: string;
   phone?: string;
+  role?: 'admin' | 'staff';
   staffType?: StaffType;
 }
 

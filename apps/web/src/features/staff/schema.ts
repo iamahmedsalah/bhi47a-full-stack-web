@@ -12,6 +12,7 @@ export const staffFormSchema = z
       .refine((value) => !value || (value.length >= 3 && /^[a-zA-Z0-9._-]+$/.test(value))),
     phone: z.string().trim().max(30),
     password: z.string().max(100),
+    role: z.enum(['admin', 'staff']),
     staffType: z.enum(STAFF_TYPE_VALUES),
     isCreate: z.boolean(),
   })

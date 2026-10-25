@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Loader2, Sparkles, User, Mail, Shield, Phone, KeyRound, AtSign } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -51,6 +52,18 @@ export function StaffFormDialog({
   onSubmit,
 }: Props) {
   const t = useTranslations('staff');
+  const locale = useLocale();
+  const isAr = locale === 'ar';
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const allowedStaffTypes = useMemo<StaffType[]>(
+    () =>
+      isAdmin
+        ? (STAFF_TYPE_VALUES as unknown as StaffType[])
+        : ['doctor', 'teaching_assistant'],
+    [isAdmin],
+  );
+
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffFormSchema),
     defaultValues: {
@@ -59,10 +72,13 @@ export function StaffFormDialog({
       username: '',
       phone: '',
       password: '',
+      role: 'staff',
       staffType: 'doctor',
       isCreate: true,
     },
   });
+
+  const selectedRole = form.watch('role');
 
   useEffect(() => {
     if (!open) return;
@@ -72,10 +88,11 @@ export function StaffFormDialog({
       username: staff?.username ?? '',
       phone: staff?.phone ?? '',
       password: '',
-      staffType: (staff?.staffType as StaffType) ?? 'doctor',
+      role: staff?.role ?? 'staff',
+      staffType: (staff?.staffType as StaffType) ?? allowedStaffTypes[0] ?? 'doctor',
       isCreate: !staff,
     });
-  }, [form, open, staff]);
+  }, [form, open, staff, allowedStaffTypes]);
 
   const errorText = (message?: string) =>
     message === 'passwordLength' ? t('validation.passwordLength') : message;
@@ -139,34 +156,68 @@ export function StaffFormDialog({
                 )}
               />
 
-              {/* Staff Type / Role */}
-              <FormField
-                control={form.control}
-                name="staffType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
-                      <Shield className="h-3.5 w-3.5 text-primary" />
-                      {t('fields.staffType')}
-                    </FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
-                          <SelectValue placeholder={t('fields.selectStaffType')} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {STAFF_TYPE_VALUES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {t(`types.${type}`)}
+              {/* Account Role (Only selectable by Admin during creation) */}
+              {isAdmin && !staff && (
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                        <Shield className="h-3.5 w-3.5 text-primary" />
+                        {isAr ? 'نوع الحساب' : 'Account Role'}
+                      </FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="staff">
+                            {isAr ? 'حساب كادر (أكاديمي / إداري)' : 'Staff Account'}
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                          <SelectItem value="admin">
+                            {isAr ? 'مدير نظام (Administrator)' : 'System Administrator'}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Staff Type (Only when role is staff) */}
+              {selectedRole !== 'admin' && (
+                <FormField
+                  control={form.control}
+                  name="staffType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                        <Shield className="h-3.5 w-3.5 text-primary" />
+                        {t('fields.staffType')}
+                      </FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
+                            <SelectValue placeholder={t('fields.selectStaffType')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {allowedStaffTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {t(`types.${type}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Email Address */}
               <FormField

@@ -39,6 +39,11 @@ export class QueryStaffDto {
   @IsIn(['all', 'active', 'inactive'])
   status: 'all' | 'active' | 'inactive' = 'all';
 
+  @ApiPropertyOptional({ enum: ['all', 'staff', 'admin'], default: 'all' })
+  @IsOptional()
+  @IsIn(['all', 'staff', 'admin'])
+  role: 'all' | 'staff' | 'admin' = 'all';
+
   @ApiPropertyOptional({
     enum: ['all', ...STAFF_TYPE_VALUES],
     default: 'all',

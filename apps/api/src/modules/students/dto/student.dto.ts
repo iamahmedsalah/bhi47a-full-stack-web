@@ -505,3 +505,41 @@ export class TransferDepartmentDto {
   @IsIn(['1', '2', '3', '4'])
   targetLevel?: string;
 }
+
+export class UpdatePortalSettingsDto {
+  @ApiPropertyOptional({
+    description:
+      'Whether course registration page is visible in student portal',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  registrationVisible?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether course syllabi & curriculum card is visible in student portal',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  syllabiVisible?: boolean;
+}
+
+export class ResetAcademicRecordsDto {
+  @ApiPropertyOptional({
+    description: 'Whether to reset academic warnings for all students to 0',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  resetWarnings?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether to reset cumulative GPA for all students to 0.00',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  resetGpa?: boolean;
+}

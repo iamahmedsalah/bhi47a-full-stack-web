@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
 import { listStudentNotifications } from '@/lib/features/notifications';
+import { getPublicPortalSettings, settingsKeys } from '@/features/settings/api';
 import {
   Award,
   Calendar,
@@ -61,17 +62,36 @@ export default function StudentSidebar() {
     return notificationsQuery.data?.items?.filter((n) => !n.isRead).length || 0;
   }, [notificationsQuery.data]);
 
-  const navItems: NavItem[] = [
-    { key: 'dashboard', href: `/${locale}/dashboard`, icon: <Home className="h-5 w-5" /> },
-    { key: 'profile', href: `/${locale}/dashboard/profile`, icon: <User className="h-5 w-5" /> },
-    { key: 'attendance', href: `/${locale}/dashboard/attendance`, icon: <ClipboardList className="h-5 w-5" /> },
-    { key: 'registration', href: `/${locale}/dashboard/registration`, icon: <BookOpenCheck className="h-5 w-5" /> },
-    { key: 'quizzes', href: `/${locale}/dashboard/quizzes`, icon: <FileText className="h-5 w-5" /> },
-    { key: 'results', href: `/${locale}/dashboard/results`, icon: <Award className="h-5 w-5" /> },
-    { key: 'examSchedule', href: `/${locale}/dashboard/exam-schedule`, icon: <Calendar className="h-5 w-5" /> },
-    { key: 'examPlace', href: `/${locale}/dashboard/exam-place`, icon: <MapPin className="h-5 w-5" /> },
-    { key: 'complaints', href: `/${locale}/dashboard/complaints`, icon: <MessageCircle className="h-5 w-5" /> },
-  ];
+  const portalSettingsQuery = useQuery({
+    queryKey: settingsKeys.publicPortalSettings,
+    queryFn: getPublicPortalSettings,
+    staleTime: 60 * 1000,
+  });
+
+  const registrationVisible =
+    portalSettingsQuery.data?.registrationVisible ?? true;
+
+  const navItems: NavItem[] = useMemo(() => {
+    return [
+      { key: 'dashboard', href: `/${locale}/dashboard`, icon: <Home className="h-5 w-5" /> },
+      { key: 'profile', href: `/${locale}/dashboard/profile`, icon: <User className="h-5 w-5" /> },
+      { key: 'attendance', href: `/${locale}/dashboard/attendance`, icon: <ClipboardList className="h-5 w-5" /> },
+      ...(registrationVisible
+        ? [
+            {
+              key: 'registration',
+              href: `/${locale}/dashboard/registration`,
+              icon: <BookOpenCheck className="h-5 w-5" />,
+            },
+          ]
+        : []),
+      { key: 'quizzes', href: `/${locale}/dashboard/quizzes`, icon: <FileText className="h-5 w-5" /> },
+      { key: 'results', href: `/${locale}/dashboard/results`, icon: <Award className="h-5 w-5" /> },
+      { key: 'examSchedule', href: `/${locale}/dashboard/exam-schedule`, icon: <Calendar className="h-5 w-5" /> },
+      { key: 'examPlace', href: `/${locale}/dashboard/exam-place`, icon: <MapPin className="h-5 w-5" /> },
+      { key: 'complaints', href: `/${locale}/dashboard/complaints`, icon: <MessageCircle className="h-5 w-5" /> },
+    ];
+  }, [locale, registrationVisible]);
 
   const renderContent = (isForceOpen: boolean) => {
     const isSidebarOpen = isForceOpen || sidebarOpen;
