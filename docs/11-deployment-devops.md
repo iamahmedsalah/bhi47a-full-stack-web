@@ -100,6 +100,13 @@ After validation succeeds on `main`:
 The workflow pins Vercel CLI `59.23.2` so CI behavior does not change without
 a reviewed repository update.
 
+Main-branch pushes also deploy the checked commit to the VPS after both validation
+and isolated Docker smoke tests pass. This requires the `production-vps` environment
+and its VPS_HOST, VPS_USER, VPS_SSH_KEY and VPS_KNOWN_HOSTS secrets. Existing Vercel
+jobs remain enabled. Manual main runs with deployment_target=vps are also supported.
+See [the SSH deployment guide](VPS-SSH-DEPLOYMENT-GUIDE.md) for one-time key/environment
+setup, automatic deployment verification and manual fallback commands.
+
 The API deploy intentionally completes before the web deploy. A failed API
 deployment or health check prevents a new frontend release.
 

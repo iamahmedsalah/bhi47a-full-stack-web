@@ -21,8 +21,9 @@ page controls to view more tickets. Global counts do not require downloading the
 
 The repository's `.github/workflows/ci-cd.yml` runs validation and container smoke
 checks on matching pushes. Its main-branch Vercel deployment jobs still run on
-push. The VPS deployment job runs **only** on a manual workflow dispatch from main
-with `deployment_target=vps`; pushing alone does not deploy to the VPS.
+push. The updated VPS deployment job also runs automatically on a main push after
+both validation jobs pass, and still supports manual main runs with target vps.
+It requires the production-vps environment and usable SSH secrets to be configured.
 
 To use that job, configure the `production-vps` GitHub environment and its secrets:
 `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, and `VPS_KNOWN_HOSTS` (verified server host key).
@@ -31,7 +32,8 @@ Actions → CI/CD - Vercel and VPS → Run workflow → main → target vps. Fol
 successful validation and Docker checks, the job fetches main on the VPS, checks
 out the selected commit, and invokes deploy/deploy.sh. It uses a detached checkout.
 Secrets/environment configuration has not been inspected or changed in this work.
-The workflow trigger was not changed to automatic deployment.
+See VPS-SSH-DEPLOYMENT-GUIDE.md for the automatic deployment setup. GitHub settings
+and credentials are configured separately from this checked-in workflow.
 
 For manual deployment after committing/pushing and passing CI, in the VPS terminal:
 

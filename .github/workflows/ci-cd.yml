@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_target:
-        description: Deployment target (VPS requires configured production-vps secrets)
+        description: Manual deployment target (main pushes also deploy to VPS and Vercel)
         type: choice
         default: validate
         options:
@@ -71,6 +71,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify VPS deployment trigger policy
+        run: node --test scripts/vps-workflow.test.cjs
 
       - name: Lint workspace
         run: pnpm run lint
@@ -359,9 +362,13 @@ jobs:
   deploy-vps:
     name: Deploy reviewed commit to VPS
     needs: [validate, docker-validate]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vps'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vps')
     runs-on: ubuntu-latest
-    environment: production-vps
+    timeout-minutes: 30
+    environment:
+      name: production-vps
     concurrency:
       group: production-vps
       cancel-in-progress: false
@@ -375,10 +382,10 @@ jobs:
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          : "${VPS_HOST:?Configure VPS_HOST}"
-          : "${VPS_USER:?Configure VPS_USER}"
-          : "${VPS_SSH_KEY:?Configure VPS_SSH_KEY}"
-          : "${VPS_KNOWN_HOSTS:?Configure VPS_KNOWN_HOSTS}"
+          : "${VPS_HOST:?Configure VPS_HOST in production-vps environment secrets}"
+          : "${VPS_USER:?Configure VPS_USER in production-vps environment secrets}"
+          : "${VPS_SSH_KEY:?Configure VPS_SSH_KEY in production-vps environment secrets}"
+          : "${VPS_KNOWN_HOSTS:?Configure VPS_KNOWN_HOSTS in production-vps environment secrets}"
           [[ "$VPS_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
           [[ "$VPS_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
           umask 077
@@ -402,7 +409,8 @@ jobs:
           git merge-base --is-ancestor "$release" origin/main
           git checkout --detach "$release"
           DEPLOY_CHECKOUT_LOCKED=1 bash deploy/deploy.sh
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            http://127.0.0.1:4000/api/health > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+            http://127.0.0.1:3000/ar/login/student > /dev/null
           REMOTE
-
-
-          
