@@ -1,3 +1,4 @@
+import { SensitiveOperation } from '../auth/guards/recent-auth.guard';
 import {
   Controller,
   Get,
@@ -110,6 +111,7 @@ export class StudentsController {
   }
 
   @Post('admin/students/:id/reset-password')
+  @SensitiveOperation('student-reset:id')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_RESET_PASSWORD)
   @ApiOperation({ summary: 'Reset student password (admin)' })
@@ -215,6 +217,7 @@ export class StudentsController {
   }
 
   @Patch('students/me/contact')
+  @SensitiveOperation('profile:contact')
   @Roles('student')
   @ApiOperation({ summary: 'Update current student optional contact fields' })
   async updateMyContact(

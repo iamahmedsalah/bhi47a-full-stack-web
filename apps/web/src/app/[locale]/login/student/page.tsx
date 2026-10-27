@@ -1,4 +1,5 @@
 "use client";
+import { PasskeyLoginButton } from '@/components/auth/passkey-login-button';
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useTranslations } from "next-intl";
@@ -117,11 +118,11 @@ function StudentLoginContent() {
   const { renderButton, scriptLoaded, isInitialized, prompt } = useGoogleSignIn(
     {
       locale,
-      onSuccess: async (credential) => {
+      onSuccess: async (credential, flow) => {
         setLoading(true);
         setGoogleAuthNotice(null);
         try {
-          await login("google", { credential }, { returnUrl });
+          await login("google", { credential, ...flow }, { returnUrl });
         } catch (err: unknown) {
           const errDetails = getApiErrorDetails(err);
           const rawMessage = getApiErrorMessage(err, t("loginError"));
@@ -606,6 +607,7 @@ function StudentLoginContent() {
               </Alert>
             )}
 
+            <PasskeyLoginButton returnUrl={returnUrl} />
             {/* Google Login Button */}
             <div className="flex justify-center w-full min-h-11">
               <div

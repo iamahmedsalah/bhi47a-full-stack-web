@@ -167,6 +167,18 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
           uri,
           serverSelectionTimeoutMS: serverless ? 8000 : 15000,
           socketTimeoutMS: 45000,
+          // E2E provisions only the indexes its fixtures exercise. Avoid racing
+          // every academic module's automatic DDL against auth startup.
+          ...(process.env.NODE_ENV === 'test'
+            ? {
+                autoIndex: false,
+                autoCreate: false,
+                retryAttempts: 0,
+                connectTimeoutMS: 3000,
+                socketTimeoutMS: 5000,
+                waitQueueTimeoutMS: 5000,
+              }
+            : {}),
           // Keep warm connections in persistent servers to avoid TLS handshakes per query burst.
           // In serverless (Vercel), default to min=1 / max=10 to avoid connection exhaustion across lambda instances.
           minPoolSize: Number.isFinite(minPoolSize)

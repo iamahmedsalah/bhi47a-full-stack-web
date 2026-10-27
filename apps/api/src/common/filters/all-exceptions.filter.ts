@@ -109,6 +109,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
               ...(typeof (body as any).code === 'string'
                 ? { code: (body as any).code }
                 : {}),
+              ...(typeof (body as any).operation === 'string'
+                ? { operation: (body as any).operation }
+                : {}),
               ...(typeof (body as any).messageEn === 'string'
                 ? { messageEn: (body as any).messageEn }
                 : {}),

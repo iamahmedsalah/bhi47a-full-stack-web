@@ -9,6 +9,24 @@ import { AuthLoginService } from './services/auth-login.service';
 import { AuthPasswordService } from './services/auth-password.service';
 import { AuthSessionService } from './services/auth-session.service';
 import { AuthController } from './auth.controller';
+import { AuthSecurityController } from './auth-security.controller';
+import {
+  AuthSessionStore,
+  AuthSessionSchema,
+} from './services/auth-session-store.service';
+import {
+  RecentAuthService,
+  AuthActionSchema,
+} from './services/recent-auth.service';
+import { RecentAuthGuard } from './guards/recent-auth.guard';
+import { AuthOriginGuard } from './guards/auth-origin.guard';
+import { PasskeysController } from './passkeys/passkeys.controller';
+import { PasskeysService } from './passkeys/passkeys.service';
+import {
+  PasskeyCredentialSchema,
+  PasskeyFlowSchema,
+  PasskeySettingsSchema,
+} from './passkeys/passkey.schemas';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -31,6 +49,11 @@ import {
     UsersModule,
     EmailsModule,
     MongooseModule.forFeature([
+      { name: 'AuthSession', schema: AuthSessionSchema },
+      { name: 'AuthAction', schema: AuthActionSchema },
+      { name: 'PasskeyCredential', schema: PasskeyCredentialSchema },
+      { name: 'PasskeyFlow', schema: PasskeyFlowSchema },
+      { name: 'PasskeySettings', schema: PasskeySettingsSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: AcademicEmail.name, schema: AcademicEmailSchema },
     ]),
@@ -46,8 +69,11 @@ import {
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, PasskeysController, AuthSecurityController],
   providers: [
+    AuthSessionStore,
+    RecentAuthService,
+    PasskeysService,
     AuthService,
     AuthLoginService,
     AuthPasswordService,
@@ -74,6 +100,8 @@ import {
       provide: APP_GUARD,
       useClass: PermissionsGuard,
     },
+    { provide: APP_GUARD, useClass: AuthOriginGuard },
+    { provide: APP_GUARD, useClass: RecentAuthGuard },
   ],
   exports: [
     AuthService,

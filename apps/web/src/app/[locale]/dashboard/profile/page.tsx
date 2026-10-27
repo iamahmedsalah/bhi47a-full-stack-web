@@ -1,4 +1,6 @@
 'use client';
+import { PasskeyManager } from '@/components/auth/passkey-manager';
+import { SessionManager } from '@/components/auth/session-manager';
 
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -42,7 +44,6 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 import {
-  calculateGradeScale,
   getGpaScale,
   isValidStudentPassword,
   STUDENT_PASSWORD_MAX_LENGTH,
@@ -196,10 +197,10 @@ export default function StudentProfilePage() {
 
   useGoogleSignIn({
     locale: isEnglish ? 'en' : 'ar',
-    onSuccess: async (credential) => {
+    onSuccess: async (credential, flow) => {
       setVerifyingGoogleOtp(true);
       try {
-        await api.post('/auth/google/link/verify-oauth', { credential });
+        await api.post('/auth/google/link/verify-oauth', { credential, ...flow });
         setGoogleDevOtp('');
         toast.success(
           isEnglish ? 'Google account linked successfully' : 'تم ربط حساب Google بنجاح'
@@ -519,19 +520,19 @@ export default function StudentProfilePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <Card className="relative overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card/80 via-card/50 to-primary/5 p-6 md:p-8 backdrop-blur-xl shadow-xl">
+        <Card className="relative overflow-hidden rounded-3xl border border-border/80 bg-linear-to-br from-card/80 via-card/50 to-primary/5 p-6 md:p-8 backdrop-blur-xl shadow-xl">
           {/* Ambient Glow Orbs */}
-          <div className="absolute -top-24 end-0 w-72 h-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 start-0 w-72 h-72 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
+          <div className="absolute -top-24 inset-e-0 w-72 h-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 inset-s-0 w-72 h-72 rounded-full bg-teal-500/10 blur-3xl pointer-events-none" />
 
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             {/* Student Identity Left/Start */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
               <div className="relative group">
-                <div className="flex h-20 w-20 md:h-24 md:w-24 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 via-teal-500/20 to-sky-500/20 text-primary border border-primary/30 shadow-inner">
+                <div className="flex h-20 w-20 md:h-24 md:w-24 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-primary/25 via-teal-500/20 to-sky-500/20 text-primary border border-primary/30 shadow-inner">
                   <GraduationCap className="h-10 w-10 md:h-12 md:w-12 text-primary" />
                 </div>
-                <div className="absolute -bottom-1 -end-1 flex h-6 w-6 items-center justify-center rounded-full bg-background border border-border shadow-sm">
+                <div className="absolute -bottom-1 -inset-e-1 flex h-6 w-6 items-center justify-center rounded-full bg-background border border-border shadow-sm">
                   <BadgeCheck className="h-4 w-4 text-primary" />
                 </div>
               </div>
@@ -695,7 +696,7 @@ export default function StudentProfilePage() {
             className="space-y-6"
           >
             {/* Grid 0: Cumulative Academic Standing & Credit Hours */}
-            <Card className="rounded-2xl border border-primary/30 bg-gradient-to-br from-card/80 via-card/50 to-primary/5 p-6 backdrop-blur-md shadow-md space-y-4">
+            <Card className="rounded-2xl border border-primary/30 bg-linear-to-br from-card/80 via-card/50 to-primary/5 p-6 backdrop-blur-md shadow-md space-y-4">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1416,6 +1417,7 @@ export default function StudentProfilePage() {
             transition={{ duration: 0.25 }}
             className="grid grid-cols-1 gap-6 lg:grid-cols-12"
           >
+            <div className="lg:col-span-12 space-y-6"><SessionManager /><PasskeyManager /></div>
             {/* Password Change Form */}
             <Card className="lg:col-span-8 rounded-2xl border border-border/80 bg-card/60 p-6 backdrop-blur-md shadow-md space-y-5">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">

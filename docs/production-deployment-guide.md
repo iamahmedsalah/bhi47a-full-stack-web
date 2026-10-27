@@ -1,5 +1,7 @@
 # Production deployment
 
+Authentication changes in this working tree are **NO-GO for production** until the [security readiness checklist](security/DEPLOYMENT_READINESS_CHECKLIST.md) is complete. Review the [remediation evidence](security/AUTH_REMEDIATION_REPORT.md) and [compatible rollback plan](security/ROLLBACK.md) before deploying either host. Preserve the existing shared Atlas database; deployment must never seed, reset or restore it.
+
 Use `main` for both deployment targets:
 
 - Existing Vercel projects: follow [Vercel configuration](11-deployment-devops.md).

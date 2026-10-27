@@ -8,6 +8,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { useTheme } from '@/providers/theme-provider';
 import { isAuthEntryRoute, isPublicRoute } from '@/lib/public-routes';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/browser';
+import { ReauthDialog } from '@/components/auth/reauth-dialog';
 
 interface User {
   _id: string;
@@ -35,9 +37,16 @@ interface AdminLoginPayload {
 
 interface GoogleLoginPayload {
   credential: string;
+  nonceFlowId?: string;
+  nonceProof?: string;
 }
 
-type LoginPayload = StudentLoginPayload | AdminLoginPayload | GoogleLoginPayload;
+interface PasskeyLoginPayload {
+  flowId: string;
+  flowToken: string;
+  response: AuthenticationResponseJSON;
+}
+type LoginPayload = StudentLoginPayload | AdminLoginPayload | GoogleLoginPayload | PasskeyLoginPayload;
 
 interface LoginResponse {
   user: User;
@@ -48,7 +57,7 @@ interface AuthContextType {
   loading: boolean;
   isLoggingOut: boolean;
   login: (
-    type: 'student' | 'admin' | 'google',
+    type: 'student' | 'admin' | 'google' | 'passkey',
     data: LoginPayload,
     options?: { returnUrl?: string | null },
   ) => Promise<void>;
@@ -114,7 +123,7 @@ export function AuthProvider({
   });
 
   const login = useCallback(async (
-    type: 'student' | 'admin' | 'google',
+    type: 'student' | 'admin' | 'google' | 'passkey',
     data: LoginPayload,
     options?: { returnUrl?: string | null },
   ) => {
@@ -123,13 +132,17 @@ export function AuthProvider({
         ? '/auth/student/login'
         : type === 'admin'
           ? '/auth/admin/login'
-          : '/auth/google/login';
+          : type === 'passkey' ? '/auth/passkeys/login/verify' : '/auth/google/login';
     const toastId = toast.loading(
       locale === 'ar' ? 'جاري تسجيل الدخول...' : 'Signing you in...',
     );
 
     try {
-      const res = await api.post<LoginResponse>(endpoint, data);
+      const payload = type === 'passkey' && 'flowToken' in data
+        ? { flowId: data.flowId, response: data.response } : data;
+      const config = type === 'passkey' && 'flowToken' in data
+        ? { headers: { 'x-passkey-flow': data.flowToken } } : undefined;
+      const res = await api.post<LoginResponse>(endpoint, payload, config);
 
       // Confirm the browser really stored the session cookie. Browsers that block
       // third-party cookies accept the login response but drop Set-Cookie, which
@@ -358,6 +371,7 @@ export function AuthProvider({
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
+      <ReauthDialog />
     </AuthContext.Provider>
   );
 }

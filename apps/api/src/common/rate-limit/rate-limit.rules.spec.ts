@@ -14,6 +14,21 @@ function buildRequest(path: string, body: Record<string, unknown>): Request {
 }
 
 describe('rate limit rules - password recovery keys', () => {
+  it.each([
+    '/api/auth/passkeys/login/options',
+    '/api/auth/passkeys/login/verify',
+    '/api/auth/passkeys/reauthenticate',
+    '/api/auth/passkeys/register/options',
+    '/api/auth/passkeys/register/verify',
+  ])('rate limits %s without trusting forwarded-for', (path) => {
+    const first = buildRequest(path, {});
+    const second = buildRequest(path, {});
+    second.headers['x-forwarded-for'] = '198.51.100.99';
+    const rule = findRateLimitRule(first);
+    expect(rule?.name).toBe('passkeys');
+    expect(rule?.keyGenerator?.(first)).toBe('10.0.0.1');
+    expect(rule?.keyGenerator?.(second)).toBe('10.0.0.1');
+  });
   it.each(['/api/auth/forgot-password', '/api/auth/reset-password-otp'])(
     'keys %s on the target identifier so rotating IPs cannot bypass it',
     (path) => {
@@ -31,6 +46,6 @@ describe('rate limit rules - password recovery keys', () => {
   it('falls back to the client IP when no identifier is sent', () => {
     const req = buildRequest('/api/auth/reset-password-otp', {});
     const rule = findRateLimitRule(req);
-    expect(rule!.keyGenerator?.(req)).toBe('203.0.113.7');
+    expect(rule!.keyGenerator?.(req)).toBe('10.0.0.1');
   });
 });

@@ -3,7 +3,7 @@
  * Run with: pnpm --filter @student-portal/api run seed
  */
 import * as mongoose from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import { defaultPasswordHasher } from '../security/password-hasher';
 import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -107,7 +107,7 @@ function usernameFromUser(data: {
 }
 
 async function hashPassword(value: string) {
-  return bcrypt.hash(value, 12);
+  return defaultPasswordHasher.hash(value);
 }
 
 async function generateSeedUserCode(

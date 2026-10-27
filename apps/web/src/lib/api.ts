@@ -25,6 +25,7 @@ export interface ApiErrorPayload {
   message?: string | string[];
   error?: string;
   code?: string;
+  operation?: string;
   reason?: string;
   path?: string;
   timestamp?: string;
@@ -134,7 +135,14 @@ function isUnsafeMethod(method: string | undefined) {
 
 type RetriableAxiosConfig = InternalAxiosRequestConfig & {
   _csrfRetry?: boolean;
+  _reauthRetry?: boolean;
 };
+
+const reauthHandlers: Array<(operation: string) => Promise<void>> = [];
+export function registerReauthenticationHandler(handler: (operation: string) => Promise<void>) {
+  reauthHandlers.push(handler);
+  return () => { const index = reauthHandlers.indexOf(handler); if (index >= 0) reauthHandlers.splice(index, 1); };
+}
 
 function isInvalidCsrfError(error: AxiosError<ApiErrorPayload>) {
   if (error.response?.status !== 403) return false;
@@ -178,6 +186,12 @@ api.interceptors.response.use(
   },
   async (error: AxiosError<ApiErrorPayload>) => {
     const originalConfig = error.config as RetriableAxiosConfig | undefined;
+    const handler = reauthHandlers.at(-1);
+    if (originalConfig && handler && error.response?.status === 403 && error.response.data.code === 'AUTH_REAUTH_REQUIRED' && typeof error.response.data.operation === 'string' && !originalConfig._reauthRetry) {
+      originalConfig._reauthRetry = true;
+      try { await handler(error.response.data.operation); return api.request(originalConfig); }
+      catch (reauthError) { return Promise.reject(reauthError); }
+    }
     if (
       originalConfig &&
       isUnsafeMethod(originalConfig.method) &&

@@ -6,7 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
-import * as bcrypt from 'bcrypt';
+import { defaultPasswordHasher } from '../../../security/password-hasher';
 import { UsersService } from '../../users/users.service';
 import { EmailsService } from '../../emails/emails.service';
 import { StudentLoginDto } from '../dto/student-login.dto';
@@ -31,6 +31,12 @@ function normalizeArabicNumerals(value?: string): string {
 
 import { Optional } from '@nestjs/common';
 import { MetricsService } from '../../../core/metrics/metrics.service';
+import { RecentAuthService } from './recent-auth.service';
+export interface GoogleFlowProof {
+  flowId: string;
+  proof: string;
+  origin: string;
+}
 
 @Injectable()
 export class AuthLoginService {
@@ -43,6 +49,7 @@ export class AuthLoginService {
     private readonly configService: ConfigService,
     private readonly emailsService: EmailsService,
     @Optional() private readonly metricsService?: MetricsService,
+    @Optional() private readonly recentAuth?: RecentAuthService,
   ) {}
 
   async studentLogin(dto: StudentLoginDto) {
@@ -79,22 +86,10 @@ export class AuthLoginService {
       });
     }
 
-    let isPasswordValid = await this.usersService.validatePassword(
+    const isPasswordValid = await this.usersService.validatePassword(
       user,
       cleanPassword,
     );
-    if (!isPasswordValid && user.mustChangePassword && user.nationalId) {
-      const cleanNid = normalizeArabicNumerals(user.nationalId);
-      if (cleanPassword === cleanNid) {
-        isPasswordValid = true;
-        // Self-heal: update passwordHash in the background so future checks are lightning-fast
-        const freshHash = await bcrypt.hash(cleanNid, 10);
-        await this.usersService.updatePasswordHashDirect(
-          user._id.toString(),
-          freshHash,
-        );
-      }
-    }
     if (!isPasswordValid) {
       await this.usersService.incrementLoginAttempts(user._id.toString());
       const updatedUser = await this.usersService.findById(user._id.toString());
@@ -235,10 +230,10 @@ export class AuthLoginService {
     };
   }
 
-  async googleLogin(credential: string) {
+  async googleLogin(credential: string, flow?: GoogleFlowProof) {
     let googleAccount: VerifiedGoogleAccount;
     try {
-      googleAccount = await this.verifyGoogleCredential(credential);
+      googleAccount = await this.verifyGoogleCredential(credential, flow);
     } catch {
       throw new UnauthorizedException(
         'فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.',
@@ -267,18 +262,13 @@ export class AuthLoginService {
       });
     }
 
-    if (user.googleLinkPending && user.googleEmail === googleAccount.email) {
-      user.googleId = googleAccount.googleId;
-      user.googleEmail = googleAccount.email;
-      user.googleLinkPending = false;
-      user.googleLinkedAt = new Date();
-      user.googleLinkOtp = undefined;
-      user.googleLinkOtpExpiresAt = undefined;
-      if (!user.avatarUrl && googleAccount.picture) {
-        user.avatarUrl = googleAccount.picture;
-      }
-      await user.save();
-    }
+    if (
+      user.googleId !== googleAccount.googleId ||
+      this.usersService.isAccountLocked(user)
+    )
+      throw new UnauthorizedException(
+        'Google sign-in is unavailable for this account',
+      );
 
     if (user.googleLinkPending) {
       throw new UnauthorizedException({
@@ -308,11 +298,11 @@ export class AuthLoginService {
       }
       await user.save();
     }
-    const token = this.jwtService.sign({
-      sub: user._id.toString(),
-      role: user.role,
-      tokenVersion: user.tokenVersion ?? 0,
-    });
+    const token = this.sessionService.generateToken(
+      user._id.toString(),
+      user.role,
+      user.tokenVersion ?? 0,
+    );
 
     return {
       token,
@@ -423,7 +413,10 @@ export class AuthLoginService {
       throw new BadRequestException('انتهت صلاحية رمز التحقق (OTP)');
     }
 
-    const otpMatches = await bcrypt.compare(otp, user.googleLinkOtp);
+    const otpMatches = await defaultPasswordHasher.verify(
+      otp,
+      user.googleLinkOtp,
+    );
     if (!otpMatches) {
       throw new BadRequestException('رمز التحقق (OTP) غير صحيح');
     }
@@ -437,7 +430,11 @@ export class AuthLoginService {
     return { message: 'تم ربط حساب Google بنجاح' };
   }
 
-  async verifyGoogleOAuth(userId: string, credential: string) {
+  async verifyGoogleOAuth(
+    userId: string,
+    credential: string,
+    flow?: GoogleFlowProof,
+  ) {
     const user = await this.usersService.findById(userId);
     if (user.role !== 'student') {
       throw new UnauthorizedException('Only student accounts can link Google');
@@ -445,7 +442,7 @@ export class AuthLoginService {
 
     let googleAccount: VerifiedGoogleAccount;
     try {
-      googleAccount = await this.verifyGoogleCredential(credential);
+      googleAccount = await this.verifyGoogleCredential(credential, flow);
     } catch {
       throw new UnauthorizedException(
         'فشل التحقق من حساب Google. يرجى المحاولة مرة أخرى.',
@@ -496,6 +493,7 @@ export class AuthLoginService {
 
   private async verifyGoogleCredential(
     credential: string,
+    flow?: GoogleFlowProof,
   ): Promise<VerifiedGoogleAccount> {
     try {
       const ticket = await this.googleOAuthClient.verifyIdToken({
@@ -504,8 +502,33 @@ export class AuthLoginService {
       });
       const payload = ticket.getPayload();
 
-      if (!payload?.sub || !payload.email || !payload.email_verified) {
+      if (
+        !payload?.sub ||
+        !payload.email ||
+        payload.email_verified !== true ||
+        payload.aud !== this.getGoogleClientId() ||
+        !['accounts.google.com', 'https://accounts.google.com'].includes(
+          payload.iss,
+        ) ||
+        !Number.isSafeInteger(payload.exp) ||
+        payload.exp <= Date.now() / 1000
+      ) {
         throw new UnauthorizedException('Google account is not verified');
+      }
+
+      if (
+        this.configService.get<string>('GOOGLE_NONCE_REQUIRED', 'true') !==
+        'false'
+      ) {
+        const nonce = (payload as { nonce?: unknown }).nonce;
+        if (!flow || !this.recentAuth || typeof nonce !== 'string')
+          throw new UnauthorizedException('Google login flow required');
+        await this.recentAuth.consumeGoogleNonce(
+          flow.flowId,
+          flow.proof,
+          nonce,
+          flow.origin,
+        );
       }
 
       return {
@@ -515,33 +538,6 @@ export class AuthLoginService {
         picture: payload.picture,
       };
     } catch {
-      try {
-        const res = await fetch(
-          'https://www.googleapis.com/oauth2/v3/userinfo',
-          {
-            headers: { Authorization: `Bearer ${credential}` },
-          },
-        );
-        if (res.ok) {
-          const info = (await res.json()) as {
-            sub?: string;
-            email?: string;
-            email_verified?: boolean;
-            name?: string;
-            picture?: string;
-          };
-          if (info.sub && info.email && info.email_verified) {
-            return {
-              googleId: info.sub,
-              email: info.email.toLowerCase(),
-              name: info.name,
-              picture: info.picture,
-            };
-          }
-        }
-      } catch {
-        // ignore
-      }
       throw new UnauthorizedException('Google account is not verified');
     }
   }

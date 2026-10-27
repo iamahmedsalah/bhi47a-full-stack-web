@@ -21,6 +21,7 @@ import { UpdateStaffPermissionsDto } from './dto/update-staff-permissions.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { DeactivateStaffDto } from './dto/deactivate-staff.dto';
 import { StaffManagementService } from './staff-management.service';
+import { SensitiveOperation } from '../auth/guards/recent-auth.guard';
 
 @ApiTags('Admin Staff Management')
 @Controller('admin/staff')
@@ -74,6 +75,7 @@ export class StaffManagementController {
   }
 
   @Patch(':id/permissions')
+  @SensitiveOperation('staff-permissions:id')
   @Roles('admin')
   @ApiOperation({ summary: 'Replace a staff account permission set' })
   updatePermissions(
@@ -86,6 +88,7 @@ export class StaffManagementController {
   }
 
   @Post(':id/reset-password')
+  @SensitiveOperation('staff-reset:id')
   @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
   @ApiOperation({
     summary: 'Reset password, revoke sessions, and require a password change',

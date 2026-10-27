@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import { defaultPasswordHasher } from '../../../security/password-hasher';
 import { randomInt } from 'node:crypto';
 import { UsersService } from '../../users/users.service';
 import { EmailsService } from '../../emails/emails.service';
@@ -66,13 +66,10 @@ export class AuthPasswordService {
     const cleanCurrent = normalizeArabicNumerals(dto.currentPassword);
     const cleanNew = normalizeArabicNumerals(dto.newPassword);
 
-    let isValid = await this.usersService.validatePassword(user, cleanCurrent);
-    if (!isValid && user.mustChangePassword && user.nationalId) {
-      const cleanNid = normalizeArabicNumerals(user.nationalId);
-      if (cleanCurrent === cleanNid) {
-        isValid = true;
-      }
-    }
+    const isValid = await this.usersService.validatePassword(
+      user,
+      cleanCurrent,
+    );
     if (!isValid) {
       throw new UnauthorizedException(
         'Current password is incorrect / كلمة المرور الحالية غير صحيحة',
@@ -151,7 +148,7 @@ export class AuthPasswordService {
     }
 
     const otp = randomInt(100000, 1000000).toString();
-    user.resetPasswordToken = await bcrypt.hash(otp, 12);
+    user.resetPasswordToken = await defaultPasswordHasher.hash(otp);
     user.resetPasswordExpireAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
@@ -215,7 +212,7 @@ export class AuthPasswordService {
       );
     }
 
-    const otpMatches = await bcrypt.compare(
+    const otpMatches = await defaultPasswordHasher.verify(
       dto.otp,
       userLean.resetPasswordToken,
     );
@@ -225,24 +222,29 @@ export class AuthPasswordService {
       );
     }
 
+    if (
+      !(await this.usersService.consumePasswordReset(
+        userLean._id.toString(),
+        userLean.resetPasswordToken,
+      ))
+    )
+      throw new BadRequestException(
+        'Verification code expired or already used',
+      );
     await this.usersService.updatePassword(
       userLean._id.toString(),
       dto.newPassword,
     );
 
     const user = await this.usersService.findById(userLean._id.toString());
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpireAt = undefined;
-    user.mustChangePassword = false;
-    await user.save();
 
     await this.usersService.resetLoginAttempts(user._id.toString());
 
-    const token = this.jwtService.sign({
-      sub: user._id.toString(),
-      role: user.role,
-      tokenVersion: user.tokenVersion ?? 0,
-    });
+    const token = this.sessionService.generateToken(
+      user._id.toString(),
+      user.role,
+      user.tokenVersion ?? 0,
+    );
 
     return {
       token,

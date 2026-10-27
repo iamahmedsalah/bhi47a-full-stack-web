@@ -1,14 +1,18 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Optional } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { UsersService } from '../../users/users.service';
+import { AuthSessionStore } from '../services/auth-session-store.service';
 
 export interface JwtPayload {
   sub: string;
   role: string;
   tokenVersion?: number;
+  sid?: string;
+  iat: number;
+  exp: number;
 }
 
 @Injectable()
@@ -16,6 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private readonly usersService: UsersService,
+    @Optional() private readonly sessions?: AuthSessionStore,
   ) {
     super({
       jwtFromRequest: (req: Request) => {
@@ -23,12 +28,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         return typeof token === 'string' ? token : null;
       },
       ignoreExpiration: false,
+      passReqToCallback: true,
       algorithms: ['HS256'],
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(req: Request, payload: JwtPayload) {
     if (
       typeof payload.sub !== 'string' ||
       !/^[a-f\d]{24}$/i.test(payload.sub) ||
@@ -39,10 +45,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid session');
     }
 
+    if (!this.sessions)
+      throw new UnauthorizedException('Session store unavailable');
+    await this.sessions.assertActive(payload, req.cookies?.access_token);
+
     // Load current account policy for every request, including across replicas.
     // Never share validation promises between tokens with different versions.
     const user = await this.usersService.findByIdForAuth(payload.sub);
-    if (!user || !user.isActive) {
+    if (
+      !user ||
+      !user.isActive ||
+      (user.lockUntil && user.lockUntil > new Date()) ||
+      (user.lockedUntil && user.lockedUntil > new Date())
+    ) {
       throw new UnauthorizedException('User not found or inactive');
     }
     if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
@@ -59,6 +74,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       permissions: user.permissions,
       mustChangePassword: user.mustChangePassword,
       tokenVersion: user.tokenVersion ?? 0,
+      sessionId: payload.sid,
       isActive: user.isActive,
     };
   }

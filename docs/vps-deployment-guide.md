@@ -1,5 +1,7 @@
 # VPS deployment guide
 
+For the authentication remediation candidate, first complete the [security deployment gates](security/DEPLOYMENT_READINESS_CHECKLIST.md). Production requires `RATE_LIMIT_STORE=mongo`; configure only verified trusted proxy CIDRs and exact origins. Passwords retain bcrypt without migration or login rehash. Keep passkeys off until acceptance. Review the [session-compatible rollback](security/ROLLBACK.md).
+
 This is the canonical runbook for this repository. Use the checked-in production files rather than copying Compose or shell scripts from older guides.
 
 ## Architecture and requirements

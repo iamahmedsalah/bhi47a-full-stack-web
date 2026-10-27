@@ -9,6 +9,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import * as express from 'express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -26,9 +27,12 @@ import {
 } from './dto/forgot-password.dto';
 import { Public, OptionalAuth } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { BrowserAuth } from './guards/auth-origin.guard';
+import { SensitiveOperation } from './guards/recent-auth.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
+@BrowserAuth()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -41,7 +45,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.studentLogin(dto);
-    const csrfToken = this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(res, result.token);
     return { user: result.user, csrfToken };
   }
 
@@ -54,7 +58,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.adminLogin(dto);
-    const csrfToken = this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(res, result.token);
     return { user: result.user, csrfToken };
   }
 
@@ -66,8 +70,14 @@ export class AuthController {
 
   @Get('csrf')
   @ApiOperation({ summary: 'Refresh CSRF token for unsafe requests' })
-  refreshCsrf(@Res({ passthrough: true }) res: express.Response) {
-    const csrfToken = this.authService.refreshCsrfToken(res);
+  refreshCsrf(
+    @Res({ passthrough: true }) res: express.Response,
+    @Req() req: express.Request,
+  ) {
+    const csrfToken = this.authService.refreshCsrfToken(
+      res,
+      req.cookies?.access_token,
+    );
     return { csrfToken };
   }
 
@@ -78,8 +88,10 @@ export class AuthController {
   async logout(
     @CurrentUser('_id') userId: string | undefined,
     @Res({ passthrough: true }) res: express.Response,
+    @Req() req: express.Request,
   ) {
     if (userId) {
+      await this.authService.revokeSession(req.cookies?.access_token);
       try {
         await this.authService.recordLogout(userId);
       } catch {
@@ -99,11 +111,12 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const result = await this.authService.changePassword(userId, dto);
-    const csrfToken = this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(res, result.token);
     return { message: result.message, csrfToken };
   }
 
   @Post('google/link/start')
+  @SensitiveOperation('google-link:start')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Prepare current student account for Google linking',
@@ -117,6 +130,7 @@ export class AuthController {
   }
 
   @Delete('google/link')
+  @SensitiveOperation('google-link:remove')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Remove or cancel Google account linking for current student',
@@ -158,11 +172,12 @@ export class AuthController {
     @Res({ passthrough: true }) res?: express.Response,
   ) {
     const result = await this.authService.resetPasswordOtp(dto, acceptLanguage);
-    const csrfToken = this.authService.setCookieToken(res!, result.token);
+    const csrfToken = await this.authService.setCookieToken(res!, result.token);
     return { user: result.user, csrfToken };
   }
 
   @Post('google/link/verify-otp')
+  @SensitiveOperation('google-link:verify-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Verify Google linking using the OTP sent to Gmail',
@@ -175,6 +190,7 @@ export class AuthController {
   }
 
   @Post('google/link/verify-oauth')
+  @SensitiveOperation('google-link:verify-oauth')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Verify Google linking directly using Google ID Token',
@@ -182,8 +198,15 @@ export class AuthController {
   async verifyGoogleOAuth(
     @CurrentUser('_id') userId: string,
     @Body() dto: VerifyGoogleOAuthDto,
+    @Headers('origin') origin: string,
   ) {
-    return this.authService.verifyGoogleOAuth(userId, dto.credential);
+    return this.authService.verifyGoogleOAuth(
+      userId,
+      dto.credential,
+      dto.nonceFlowId && dto.nonceProof
+        ? { flowId: dto.nonceFlowId, proof: dto.nonceProof, origin }
+        : undefined,
+    );
   }
 
   @Public()
@@ -193,9 +216,15 @@ export class AuthController {
   async googleLogin(
     @Body() dto: VerifyGoogleOAuthDto,
     @Res({ passthrough: true }) res: express.Response,
+    @Headers('origin') origin: string,
   ) {
-    const result = await this.authService.googleLogin(dto.credential);
-    const csrfToken = this.authService.setCookieToken(res, result.token);
+    const result = await this.authService.googleLogin(
+      dto.credential,
+      dto.nonceFlowId && dto.nonceProof
+        ? { flowId: dto.nonceFlowId, proof: dto.nonceProof, origin }
+        : undefined,
+    );
+    const csrfToken = await this.authService.setCookieToken(res, result.token);
     return { user: result.user, csrfToken };
   }
 

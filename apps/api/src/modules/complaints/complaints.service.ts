@@ -32,7 +32,7 @@ import {
 import { normalizeSearchTerm } from '../../common/utils/search.util';
 import { AppLoggerService } from '../../core/logger/logger.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import * as bcrypt from 'bcrypt';
+import { defaultPasswordHasher } from '../../security/password-hasher';
 
 @Injectable()
 export class ComplaintsService {
@@ -141,7 +141,10 @@ export class ComplaintsService {
 
     const nationalIdMatches = student
       ? student.nationalIdHash
-        ? await bcrypt.compare(dto.nationalId, student.nationalIdHash)
+        ? await defaultPasswordHasher.verify(
+            dto.nationalId,
+            student.nationalIdHash,
+          )
         : student.nationalId === dto.nationalId
       : false;
 
@@ -874,7 +877,10 @@ export class ComplaintsService {
 
     const nationalIdMatches = student
       ? student.nationalIdHash
-        ? await bcrypt.compare(dto.nationalId.trim(), student.nationalIdHash)
+        ? await defaultPasswordHasher.verify(
+            dto.nationalId.trim(),
+            student.nationalIdHash,
+          )
         : student.nationalId === dto.nationalId.trim()
       : false;
 

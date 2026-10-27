@@ -17,6 +17,10 @@ export class MongoRateLimiterStore implements RateLimiterStore {
 
   constructor(private readonly injectedConnection?: Connection) {}
 
+  async initialize(): Promise<void> {
+    await this.ensureIndexes();
+  }
+
   async increment(
     key: string,
     windowMs: number,
@@ -25,49 +29,29 @@ export class MongoRateLimiterStore implements RateLimiterStore {
     await this.ensureIndexes();
 
     const now = new Date();
-    const existing = await this.collection.findOne<MongoRateLimitDocument>({
-      _id: key,
-    });
-
-    const activeResetAt =
-      existing?.resetAt instanceof Date ? existing.resetAt : undefined;
-
-    if (
-      !existing ||
-      !activeResetAt ||
-      activeResetAt.getTime() <= now.getTime()
-    ) {
-      const resetAt = new Date(now.getTime() + windowMs);
-      await this.collection.updateOne(
-        { _id: key },
+    // Reset and increment in one document operation across all API replicas.
+    const reset = { $lte: [{ $ifNull: ['$resetAt', new Date(0)] }, now] };
+    const nextReset = new Date(now.getTime() + windowMs);
+    const updated = await this.collection.findOneAndUpdate(
+      { _id: key },
+      [
         {
           $set: {
-            count: 1,
-            resetAt,
-            expireAt: resetAt,
+            count: {
+              $cond: [reset, 1, { $add: [{ $ifNull: ['$count', 0] }, 1] }],
+            },
+            resetAt: { $cond: [reset, nextReset, '$resetAt'] },
+            expireAt: { $cond: [reset, nextReset, '$expireAt'] },
+            createdAt: { $ifNull: ['$createdAt', now] },
             updatedAt: now,
           },
-          $setOnInsert: {
-            createdAt: now,
-          },
         },
-        { upsert: true },
-      );
-
-      return this.toHit(1, resetAt, max);
-    }
-
-    const updated = await this.collection.findOneAndUpdate(
-      { _id: key, resetAt: { $gt: now } },
-      {
-        $inc: { count: 1 },
-        $set: { updatedAt: now },
-      },
-      { returnDocument: 'after' },
+      ],
+      { returnDocument: 'after', upsert: true },
     );
 
     if (!updated) {
-      return this.increment(key, windowMs, max);
+      throw new Error('Shared rate counter unavailable');
     }
 
     const document = updated as MongoRateLimitDocument;
@@ -85,7 +69,7 @@ export class MongoRateLimiterStore implements RateLimiterStore {
 
   private async ensureIndexes(): Promise<void> {
     this.indexReady ??= this.collection
-      .createIndex({ expireAt: 1 }, { expireAfterSeconds: 0 })
+      .createIndex({ expireAt: 1 }, { expireAfterSeconds: 0, maxTimeMS: 5000 })
       .then(() => undefined);
 
     await this.indexReady;

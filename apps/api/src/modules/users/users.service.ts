@@ -2,11 +2,15 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
-import * as bcrypt from 'bcrypt';
+import {
+  PasswordHasher,
+  defaultPasswordHasher,
+} from '../../security/password-hasher';
 import type { Role } from '@student-portal/shared';
 
 function maskNationalId(nationalId: string) {
@@ -25,7 +29,11 @@ function readPositiveInt(envKey: string, fallback: number) {
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @Optional()
+    private readonly passwordHasher: PasswordHasher = defaultPasswordHasher,
+  ) {}
 
   async findById(id: string): Promise<UserDocument> {
     const user = await this.userModel
@@ -41,7 +49,7 @@ export class UsersService {
     return this.userModel
       .findById(id)
       .select(
-        '_id role staffType name email studentCode permissions mustChangePassword tokenVersion isActive',
+        '_id role staffType name email studentCode permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil',
       )
       .lean();
   }
@@ -157,12 +165,12 @@ export class UsersService {
     mustChangePassword?: boolean;
     permissions?: string[];
   }): Promise<UserDocument> {
-    const passwordHash = await bcrypt.hash(data.password, 12);
+    const passwordHash = await this.passwordHasher.hash(data.password);
     let nationalIdHash: string | undefined;
     let nationalIdMasked: string | undefined;
 
     if (data.nationalId) {
-      nationalIdHash = await bcrypt.hash(data.nationalId, 12);
+      nationalIdHash = await this.passwordHasher.hash(data.nationalId);
       nationalIdMasked = maskNationalId(data.nationalId);
     }
 
@@ -198,7 +206,7 @@ export class UsersService {
     user: UserDocument,
     password: string,
   ): Promise<boolean> {
-    return bcrypt.compare(password, user.passwordHash);
+    return this.passwordHasher.verify(password, user.passwordHash);
   }
 
   async updatePassword(
@@ -206,7 +214,7 @@ export class UsersService {
     newPassword: string,
     mustChangePassword: boolean = false,
   ): Promise<UserDocument> {
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await this.passwordHasher.hash(newPassword);
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
@@ -225,7 +233,7 @@ export class UsersService {
     userId: string,
     nationalId: string,
   ): Promise<UserDocument> {
-    const nationalIdHash = await bcrypt.hash(nationalId, 12);
+    const nationalIdHash = await this.passwordHasher.hash(nationalId);
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       {
@@ -244,7 +252,7 @@ export class UsersService {
     nationalId: string,
     mustChangePassword = false,
   ): Promise<void> {
-    const passwordHash = await bcrypt.hash(nationalId, 12);
+    const passwordHash = await this.passwordHasher.hash(nationalId);
     await this.userModel.findByIdAndUpdate(userId, {
       passwordHash,
       mustChangePassword,
@@ -253,19 +261,22 @@ export class UsersService {
     });
   }
 
-  async updatePasswordHashDirect(
-    userId: string,
-    passwordHash: string,
-  ): Promise<void> {
-    await this.userModel.findByIdAndUpdate(userId, {
-      $set: {
-        passwordHash,
-        nationalIdHash: passwordHash,
-        failedLoginAttempts: 0,
-        loginAttempts: 0,
+  async revokeAllSessions(userId: string) {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $inc: { tokenVersion: 1 } },
+    );
+  }
+
+  async consumePasswordReset(userId: string, expectedHash: string) {
+    return this.userModel.findOneAndUpdate(
+      {
+        _id: userId,
+        resetPasswordToken: expectedHash,
+        resetPasswordExpireAt: { $gt: new Date() },
       },
-      $unset: { lockUntil: 1 },
-    });
+      { $unset: { resetPasswordToken: 1, resetPasswordExpireAt: 1 } },
+    );
   }
 
   async getStudentsMustChangePasswordSummary() {
@@ -435,7 +446,7 @@ export class UsersService {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = await bcrypt.hash(otp, 12);
+    const hashedOtp = await this.passwordHasher.hash(otp);
     const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
     const user = await this.userModel.findByIdAndUpdate(
@@ -538,8 +549,17 @@ export class UsersService {
     if (newCount >= maxAttempts) {
       const lockUntil = new Date(Date.now() + lockDurationMs);
       await this.userModel.updateOne(
-        { _id: userId },
-        { $set: { lockUntil, lockedUntil: lockUntil } },
+        {
+          _id: userId,
+          $or: [
+            { lockUntil: { $exists: false } },
+            { lockUntil: { $lte: new Date() } },
+          ],
+        },
+        {
+          $set: { lockUntil, lockedUntil: lockUntil },
+          $inc: { tokenVersion: 1 },
+        },
       );
     }
   }
@@ -611,12 +631,7 @@ export class UsersService {
     googleId: string;
     googleEmail: string;
   }): Promise<UserDocument | null> {
-    return this.userModel.findOne({
-      $or: [
-        { googleId: data.googleId.trim() },
-        { googleEmail: data.googleEmail.trim().toLowerCase() },
-      ],
-    });
+    return this.userModel.findOne({ googleId: data.googleId.trim() });
   }
 
   async getActiveUsersForSessions(threshold: Date) {

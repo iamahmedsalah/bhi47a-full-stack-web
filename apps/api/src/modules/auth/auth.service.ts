@@ -6,6 +6,7 @@ import { AuthSessionService } from './services/auth-session.service';
 import { UsersService } from '../users/users.service';
 import type { StudentLoginDto } from './dto/student-login.dto';
 import type { AdminLoginDto } from './dto/admin-login.dto';
+import type { GoogleFlowProof } from './services/auth-login.service';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type {
   ForgotPasswordDto,
@@ -30,8 +31,8 @@ export class AuthService {
     return this.loginService.adminLogin(dto);
   }
 
-  googleLogin(credential: string) {
-    return this.loginService.googleLogin(credential);
+  googleLogin(credential: string, flow?: GoogleFlowProof) {
+    return this.loginService.googleLogin(credential, flow);
   }
 
   startGoogleLink(userId: string, email: string, acceptLanguage?: string) {
@@ -46,8 +47,12 @@ export class AuthService {
     return this.loginService.verifyGoogleOtp(userId, otp);
   }
 
-  verifyGoogleOAuth(userId: string, credential: string) {
-    return this.loginService.verifyGoogleOAuth(userId, credential);
+  verifyGoogleOAuth(
+    userId: string,
+    credential: string,
+    flow?: GoogleFlowProof,
+  ) {
+    return this.loginService.verifyGoogleOAuth(userId, credential, flow);
   }
 
   // ── Password Management ────────────────────────────────────────
@@ -76,8 +81,12 @@ export class AuthService {
     return this.sessionService.clearCookieToken(res);
   }
 
-  refreshCsrfToken(res: Response) {
-    return this.sessionService.refreshCsrfToken(res);
+  refreshCsrfToken(res: Response, token?: string) {
+    return this.sessionService.refreshCsrfToken(res, token);
+  }
+
+  revokeSession(token: string) {
+    return this.sessionService.revokeSession(token);
   }
 
   updateTheme(userId: string, theme: 'light' | 'dark' | 'system') {

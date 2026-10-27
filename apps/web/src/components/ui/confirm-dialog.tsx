@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/cn';
 
 interface ConfirmDialogProps {
+  dir?: 'rtl' | 'ltr';
   /** The trigger element (e.g. a delete button) */
   trigger?: React.ReactNode;
   /** Controlled open state */
@@ -42,6 +43,7 @@ interface ConfirmDialogProps {
  * Supports AR/EN via passed labels. Used for all delete/deactivate operations.
  */
 export function ConfirmDialog({
+  dir,
   trigger,
   open,
   onOpenChange,
@@ -56,7 +58,7 @@ export function ConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
-      <AlertDialogContent className="w-[95vw] max-w-md border-border bg-card p-5 sm:p-6 shadow-2xl rounded-2xl">
+      <AlertDialogContent dir={dir} className="w-[95vw] max-w-md border-border bg-card p-5 sm:p-6 shadow-2xl rounded-2xl">
         <AlertDialogHeader className="space-y-2 text-start">
           <AlertDialogTitle className="text-lg font-bold text-foreground">
             {title}
@@ -65,7 +67,7 @@ export function ConfirmDialog({
             {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-5">
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end rtl:sm:justify-start mt-5">
           <AlertDialogCancel className="w-full sm:w-auto rounded-squircle text-xs border-border hover:bg-secondary cursor-pointer">
             {cancelLabel}
           </AlertDialogCancel>

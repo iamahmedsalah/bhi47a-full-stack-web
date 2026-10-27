@@ -11,10 +11,7 @@ function readLimit(envKey: string, fallback: number): number {
 }
 
 export function getClientIp(req: Request): string {
-  const forwardedFor = String(req.headers['x-forwarded-for'] || '')
-    .split(',')[0]
-    .trim();
-  return forwardedFor || req.ip || req.socket.remoteAddress || 'unknown';
+  return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
 function readBodyString(req: Request, key: string): string | undefined {
@@ -30,6 +27,32 @@ function identityKey(...parts: Array<string | undefined>): string | undefined {
 }
 
 export const rateLimitRules: RateLimitRule[] = [
+  {
+    name: 'google-auth',
+    methods: ['POST', 'DELETE'],
+    pattern: /^\/api\/auth\/google(?:\/.*)?$/,
+    windowMs: 15 * minute,
+    max: readLimit('GOOGLE_AUTH_RATE_LIMIT', 12),
+    message: 'Too many Google authentication attempts. Please retry later.',
+  },
+  {
+    name: 'auth-security',
+    methods: ['POST', 'DELETE'],
+    pattern: /^\/api\/auth\/(reauthenticate|sessions(?:\/.*)?|logout-all)$/,
+    windowMs: 5 * minute,
+    max: readLimit('AUTH_SECURITY_RATE_LIMIT', 12),
+    message: 'Too many security operations. Please retry later.',
+  },
+  {
+    name: 'passkeys',
+    methods: ['POST', 'PATCH', 'DELETE'],
+    pattern: /^\/api\/auth\/passkeys(?:\/.*)?$/,
+    windowMs: 5 * minute,
+    max: readLimit('PASSKEY_RATE_LIMIT', 20),
+    message: 'Too many passkey attempts. Please try again later.',
+    // Never trust caller-supplied forwarded-for. Configure trusted proxy at the edge.
+    keyGenerator: (req) => req.ip || req.socket.remoteAddress || 'unknown',
+  },
   {
     name: 'student-login',
     methods: ['POST'],
@@ -187,4 +210,25 @@ export function findRateLimitRule(req: Request): RateLimitRule | undefined {
   return rateLimitRules.find(
     (rule) => rule.methods.includes(method) && rule.pattern.test(path),
   );
+}
+
+export function findRateLimitRules(req: Request): RateLimitRule[] {
+  const method = req.method.toUpperCase();
+  const path = req.path || req.originalUrl.split('?')[0];
+  const rules = rateLimitRules.filter(
+    (rule) => rule.methods.includes(method) && rule.pattern.test(path),
+  );
+  if (!rules.length || !/^\/api\/auth\//.test(path)) return rules;
+  return [
+    {
+      name: 'auth-ip',
+      methods: ['POST', 'PATCH', 'DELETE'],
+      pattern: /^\/api\/auth\//,
+      windowMs: 15 * minute,
+      max: readLimit('AUTH_IP_RATE_LIMIT', 60),
+      message: 'Too many authentication requests. Please retry later.',
+      keyGenerator: getClientIp,
+    },
+    ...rules,
+  ];
 }

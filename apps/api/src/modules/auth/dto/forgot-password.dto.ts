@@ -7,6 +7,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsUUID } from 'class-validator';
 import {
   STUDENT_PASSWORD_MAX_LENGTH,
   STUDENT_PASSWORD_MIN_LENGTH,
@@ -53,6 +54,15 @@ export class VerifyGoogleOtpDto {
 }
 
 export class VerifyGoogleOAuthDto {
+  @IsOptional()
+  @IsUUID('4')
+  nonceFlowId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(43, 43)
+  nonceProof?: string;
+
   @ApiProperty()
   @IsNotEmpty()
   @IsString()

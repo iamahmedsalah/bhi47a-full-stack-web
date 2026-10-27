@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import { defaultPasswordHasher } from '../../../security/password-hasher';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   StudentProfile,
@@ -26,9 +26,13 @@ import {
   normalizeStudentSemester,
 } from '../upload-utils';
 
+export function explicitPasswordReset(value: unknown) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 interface UpdateUserOp {
   updateOne: {
-    filter: { studentCode: string };
+    filter: Record<string, unknown>;
     update: {
       $set: Record<string, unknown>;
       $setOnInsert: Record<string, unknown>;
@@ -100,52 +104,21 @@ export class StudentImporter implements Importer {
     );
     const existingUsers = await this.userModel
       .find({ studentCode: { $in: studentCodes } })
+      .select('+passwordHash +nationalIdHash +nationalId')
       .lean();
     const userMap = new Map(existingUsers.map((u) => [u.studentCode, u]));
 
     const userOps: UpdateUserOp[] = [];
     const profileOps: UpdateProfileOp[] = [];
-    const passwordHashCache = new Map<string, string>();
-
-    // 1. Identify unhashed unique national IDs across this batch
-    const unhashedNationalIds = new Set<string>();
-    for (const { row } of validRows) {
-      const studentCode = String(row.studentCode).trim();
-      const nationalId = String(row.nationalId).trim();
-      const existingUser = userMap.get(studentCode);
-      const isForcedReset = Boolean(row.mustChangePassword);
-      if (
-        !isForcedReset &&
-        existingUser &&
-        existingUser.nationalId === nationalId &&
-        existingUser.passwordHash
-      ) {
-        continue;
-      }
-      if (nationalId && !passwordHashCache.has(nationalId)) {
-        unhashedNationalIds.add(nationalId);
-      }
-    }
-
-    // 2. Pre-compute hashes in concurrent batches to prevent blocking the event loop
-    const idList = Array.from(unhashedNationalIds);
-    const HASH_CONCURRENCY = 10;
-    for (let i = 0; i < idList.length; i += HASH_CONCURRENCY) {
-      const chunk = idList.slice(i, i + HASH_CONCURRENCY);
-      await Promise.all(
-        chunk.map(async (nid) => {
-          const hash = await bcrypt.hash(nid, 10);
-          passwordHashCache.set(nid, hash);
-        }),
-      );
-    }
 
     for (const { row, rowNum } of validRows) {
       try {
         const studentCode = String(row.studentCode).trim();
         const nationalId = String(row.nationalId).trim();
         const existingUser = userMap.get(studentCode);
-        const isForcedReset = Boolean(row.mustChangePassword);
+        const isForcedReset = explicitPasswordReset(row.mustChangePassword);
+        if (existingUser && existingUser.role !== 'student')
+          throw new Error('Student code belongs to a different account role');
 
         const resolvedName =
           (row.fullName as string)?.trim() ||
@@ -164,56 +137,60 @@ export class StudentImporter implements Importer {
             ? nationalId.substring(0, 3) + '****' + nationalId.substring(11)
             : '111****111';
 
-        let passwordHash: string;
-        if (
-          !isForcedReset &&
-          existingUser &&
-          existingUser.nationalId === nationalId &&
-          existingUser.passwordHash
-        ) {
-          passwordHash = existingUser.passwordHash;
-        } else if (passwordHashCache.has(nationalId)) {
-          passwordHash = passwordHashCache.get(nationalId)!;
-        } else {
-          passwordHash = await bcrypt.hash(nationalId, 10);
-          passwordHashCache.set(nationalId, passwordHash);
+        const passwordHash =
+          !existingUser || isForcedReset
+            ? await defaultPasswordHasher.hash(nationalId)
+            : undefined;
+        if (existingUser && isForcedReset) {
+          const changed = await this.userModel.updateOne(
+            { _id: existingUser._id, passwordHash: existingUser.passwordHash },
+            {
+              $set: {
+                passwordHash,
+                mustChangePassword: true,
+                passwordChangedAt: new Date(),
+                failedLoginAttempts: 0,
+                loginAttempts: 0,
+              },
+              $inc: { tokenVersion: 1 },
+              $unset: { lockUntil: 1, lockedUntil: 1 },
+            },
+          );
+          if (changed.modifiedCount !== 1)
+            throw new Error(
+              'Account password changed during import; retry this row',
+            );
         }
-
-        const mustChange =
-          row.mustChangePassword !== undefined
-            ? Boolean(row.mustChangePassword)
-            : existingUser
-              ? Boolean(existingUser.mustChangePassword)
-              : true;
+        const nationalIdHash =
+          existingUser?.nationalId === nationalId && existingUser.nationalIdHash
+            ? existingUser.nationalIdHash
+            : await defaultPasswordHasher.hash(nationalId);
 
         const userSetFields: Record<string, unknown> = {
           role: 'student',
           studentCode,
           name: resolvedName,
-          passwordHash,
-          nationalIdHash: passwordHash,
+          nationalIdHash,
           nationalIdMasked: maskedId,
           nationalId,
-          mustChangePassword: mustChange,
-          isActive: true,
         };
 
         const userUpdateDoc: Record<string, unknown> = {
           $set: userSetFields,
-          $setOnInsert: { permissions: [] },
+          $setOnInsert: {
+            permissions: [],
+            isActive: true,
+            ...(!existingUser
+              ? { passwordHash, mustChangePassword: true }
+              : {}),
+          },
         };
-
-        if (isForcedReset) {
-          userSetFields.loginAttempts = 0;
-          userSetFields.failedLoginAttempts = 0;
-          userUpdateDoc.$unset = { lockUntil: 1 };
-        }
 
         userOps.push({
           updateOne: {
-            filter: { studentCode },
+            filter: { studentCode, role: 'student' },
             update: userUpdateDoc as any,
-            upsert: true,
+            upsert: !existingUser,
           },
         });
 
@@ -291,7 +268,7 @@ export class StudentImporter implements Importer {
     if (profileOps.length > 0) {
       const updatedUsers = await this.userModel
         .find(
-          { studentCode: { $in: studentCodes } },
+          { studentCode: { $in: studentCodes }, role: 'student' },
           { _id: 1, studentCode: 1 },
         )
         .lean();

@@ -11,6 +11,11 @@ import { PERMISSIONS } from '@student-portal/shared';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuthController } from './modules/auth/auth.controller';
 import { AuthService } from './modules/auth/auth.service';
+import { PasskeysController } from './modules/auth/passkeys/passkeys.controller';
+import { PasskeysService } from './modules/auth/passkeys/passkeys.service';
+import { AuthSessionService } from './modules/auth/services/auth-session.service';
+import { AuthSessionStore } from './modules/auth/services/auth-session-store.service';
+import { RecentAuthService } from './modules/auth/services/recent-auth.service';
 import { JwtStrategy } from './modules/auth/strategies/jwt.strategy';
 import { UsersService } from './modules/users/users.service';
 import { StudentsController } from './modules/students/students.controller';
@@ -28,7 +33,7 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
   let app: INestApplication;
   const originalConnection = ConnectionHolder.connection;
   const originalNodeEnv = process.env.NODE_ENV;
-  const jwt = new JwtService({ secret });
+  const jwt = new JwtService({ secret, signOptions: { expiresIn: '7d' } });
   const findByIdForAuth = jest.fn();
   const stats = jest.fn().mockResolvedValue({ total: 10 });
   const summary = jest.fn().mockResolvedValue({ mustChangeCount: 2 });
@@ -66,10 +71,35 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
       controllers: [
         StudentsController,
         AuthController,
+        PasskeysController,
         MetricsController,
         HealthController,
       ],
       providers: [
+        {
+          provide: RecentAuthService,
+          useValue: { require: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: AuthSessionStore,
+          useValue: new AuthSessionStore(
+            { exists: jest.fn().mockResolvedValue(false) } as never,
+            new ConfigService({
+              LEGACY_JWT_ACCEPT_UNTIL: new Date(
+                Date.now() + 86400000,
+              ).toISOString(),
+            }),
+          ),
+        },
+        {
+          provide: PasskeysService,
+          useValue: {
+            list: jest.fn().mockResolvedValue([]),
+            registerOptions: jest.fn().mockResolvedValue({}),
+            reauthenticate: jest.fn().mockResolvedValue({}),
+          },
+        },
+        { provide: AuthSessionService, useValue: {} },
         ...guards,
         JwtStrategy,
         {
@@ -136,10 +166,33 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
     '/api/admin/metrics',
     '/api/metrics/summary',
     '/api/auth/me',
+    '/api/auth/passkeys',
   ])('rejects anonymous GET %s', async (path) => {
     await request(app.getHttpServer()).get(path).expect(401);
     expect(stats).not.toHaveBeenCalled();
     expect(summary).not.toHaveBeenCalled();
+  });
+
+  it('protects passkey enrollment with JWT, CSRF and forced-password gates', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/passkeys/register/options')
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/passkeys/register/options')
+      .set('Cookie', cookie())
+      .expect(403);
+    account.mustChangePassword = true;
+    await request(app.getHttpServer())
+      .post('/api/auth/passkeys/register/options')
+      .set('Cookie', `${cookie()}; csrf_token=test-csrf`)
+      .set('x-csrf-token', 'test-csrf')
+      .expect(403);
+    account.mustChangePassword = false;
+    await request(app.getHttpServer())
+      .post('/api/auth/passkeys/register/options')
+      .set('Cookie', `${cookie()}; csrf_token=test-csrf`)
+      .set('x-csrf-token', 'test-csrf')
+      .expect(200);
   });
 
   it('rejects unsigned, tampered, expired and invalid-subject sessions', async () => {

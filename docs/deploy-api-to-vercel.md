@@ -1,5 +1,7 @@
 # Deploy the Student Portal API to Vercel
 
+The authentication remediation candidate requires the [security readiness checklist](security/DEPLOYMENT_READINESS_CHECKLIST.md), including coordinated Google nonce/session frontend changes, exact origins, a fixed legacy-token cutoff or planned re-login, and a [compatible rollback artifact](security/ROLLBACK.md). Passwords use bcrypt without migration. Do not deploy the candidate solely because its source compiles.
+
 The web app and API must be two separate Vercel projects connected to the same
 repository. Each app owns its Vercel configuration inside its app directory:
 

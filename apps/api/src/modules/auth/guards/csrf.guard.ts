@@ -29,7 +29,11 @@ export class CsrfGuard implements CanActivate {
       IS_OPTIONAL_AUTH_KEY,
       [context.getHandler(), context.getClass()],
     );
-    if (isOptionalAuth) return true;
+    if (
+      isOptionalAuth &&
+      !context.switchToHttp().getRequest<AuthenticatedRequest>().user
+    )
+      return true;
 
     const isPublicInDev = this.reflector.getAllAndOverride<boolean>(
       IS_PUBLIC_IN_DEV_KEY,

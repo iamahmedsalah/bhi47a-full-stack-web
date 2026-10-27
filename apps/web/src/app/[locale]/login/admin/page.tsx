@@ -1,4 +1,5 @@
 'use client';
+import { PasskeyLoginButton } from '@/components/auth/passkey-login-button';
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useTranslations } from 'next-intl';
@@ -81,6 +82,7 @@ function AdminLoginForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-4">
+      <PasskeyLoginButton area="management" />
       <div className="space-y-4">
         {/* Admin Code/Email */}
         <div className="relative">

@@ -3,6 +3,8 @@ import path from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { trustedProxySources } from './config/trusted-proxy';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
@@ -88,7 +90,7 @@ function printStartupBanner(params: {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
   const configService = app.get(ConfigService);
@@ -105,6 +107,10 @@ async function bootstrap() {
   );
 
   app.useLogger(logger);
+  app.set(
+    'trust proxy',
+    trustedProxySources(configService.get<string>('TRUST_PROXY_CIDRS')),
+  );
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
   app.use(createHttpMetricsMiddleware(app.get(MetricsService)));

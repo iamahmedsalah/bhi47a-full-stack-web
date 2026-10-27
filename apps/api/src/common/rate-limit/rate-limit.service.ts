@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Optional, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
@@ -6,7 +6,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { AppLoggerService } from '../../core/logger/logger.service';
 import { MemoryRateLimiterStore } from './memory-rate-limiter.store';
 import { MongoRateLimiterStore } from './mongo-rate-limiter.store';
-import { findRateLimitRule, getClientIp } from './rate-limit.rules';
+import { findRateLimitRules, getClientIp } from './rate-limit.rules';
+import { createHash } from 'node:crypto';
 import type {
   RateLimitHit,
   RateLimitRule,
@@ -83,7 +84,7 @@ const MESSAGES: Record<string, { ar: string; en: string }> = {
 import { MetricsService } from '../../core/metrics/metrics.service';
 
 @Injectable()
-export class RateLimiterService {
+export class RateLimiterService implements OnModuleInit {
   private readonly store: RateLimiterStore;
 
   constructor(
@@ -96,6 +97,14 @@ export class RateLimiterService {
       'RATE_LIMIT_STORE',
       'mongo',
     );
+    if (
+      this.configService.get<string>('NODE_ENV') === 'production' &&
+      storeType !== 'mongo'
+    ) {
+      throw new Error(
+        'Production authentication requires shared Mongo rate limiting',
+      );
+    }
     if (storeType === 'memory') {
       this.store = new MemoryRateLimiterStore();
       this.logger.log(
@@ -115,6 +124,11 @@ export class RateLimiterService {
     return this.store;
   }
 
+  async onModuleInit(): Promise<void> {
+    if (this.store instanceof MongoRateLimiterStore)
+      await this.store.initialize();
+  }
+
   setRateLimitHeaders(
     res: Response,
     rule: RateLimitRule,
@@ -126,8 +140,8 @@ export class RateLimiterService {
   }
 
   async apply(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const rule = findRateLimitRule(req);
-    if (!rule) {
+    const rules = findRateLimitRules(req);
+    if (!rules.length) {
       next();
       return;
     }
@@ -139,40 +153,40 @@ export class RateLimiterService {
       : 'ar';
 
     try {
-      const identity = rule.keyGenerator?.(req) || getClientIp(req);
-      const key = `${rule.name}:${identity}`;
-      const hit = await this.store.increment(key, rule.windowMs, rule.max);
+      for (const rule of rules) {
+        const identity = rule.keyGenerator?.(req) || getClientIp(req);
+        const key = `${rule.name}:${createHash('sha256').update(identity).digest('hex')}`;
+        const hit = await this.store.increment(key, rule.windowMs, rule.max);
 
-      this.setRateLimitHeaders(res, rule, hit);
+        this.setRateLimitHeaders(res, rule, hit);
 
-      if (hit.count > rule.max) {
-        this.metricsService?.recordRateLimitBlock(rule.name);
-        const ruleMessage = MESSAGES[rule.name]?.[lang] || rule.message;
-        res.setHeader('Retry-After', String(hit.retryAfterSeconds));
-        res.status(429).json({
-          success: false,
-          statusCode: 429,
-          message: ruleMessage,
-          code: 'RATE_LIMIT_EXCEEDED',
-          reason: ruleMessage,
-          timestamp: new Date().toISOString(),
-          path: req.originalUrl,
-        });
-        return;
+        if (hit.count > rule.max) {
+          this.metricsService?.recordRateLimitBlock(rule.name);
+          const ruleMessage = MESSAGES[rule.name]?.[lang] || rule.message;
+          res.setHeader('Retry-After', String(hit.retryAfterSeconds));
+          res.status(429).json({
+            success: false,
+            statusCode: 429,
+            message: ruleMessage,
+            code: 'RATE_LIMIT_EXCEEDED',
+            reason: ruleMessage,
+            timestamp: new Date().toISOString(),
+            path: req.originalUrl,
+          });
+          return;
+        }
       }
 
       next();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Rate limiter error';
-      this.logger.warn(`Rate limiter error: ${message}`, 'RateLimiterService');
+    } catch {
+      this.logger.warn('Rate limiter unavailable', 'RateLimiterService');
       const unavailableMessage = MESSAGES['unavailable'][lang];
       res.status(503).json({
         success: false,
         statusCode: 503,
         message: unavailableMessage,
         code: 'RATE_LIMIT_UNAVAILABLE',
-        reason: message,
+        reason: unavailableMessage,
         timestamp: new Date().toISOString(),
         path: req.originalUrl,
       });

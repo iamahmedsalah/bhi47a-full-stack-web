@@ -3,10 +3,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import {
+  PasswordHasher,
+  defaultPasswordHasher,
+} from '../../security/password-hasher';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -82,6 +86,8 @@ export class StaffManagementService {
     @InjectModel(User.name) private readonly users: Model<UserDocument>,
     @InjectModel(StaffAuditLog.name)
     private readonly auditLogs: Model<StaffAuditLogDocument>,
+    @Optional()
+    private readonly passwordHasher: PasswordHasher = defaultPasswordHasher,
   ) {}
 
   async list(query: QueryStaffDto, actorRole?: string) {
@@ -169,7 +175,7 @@ export class StaffManagementService {
     const username = dto.username?.trim().toLowerCase();
     await this.assertUniqueIdentity(email, username);
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await this.passwordHasher.hash(dto.password);
     const userCode =
       targetRole === 'admin'
         ? await this.generateAdminCode()
@@ -289,6 +295,7 @@ export class StaffManagementService {
     const before = [...(staff.permissions ?? [])].sort();
     const after = [...dto.permissions].sort();
     staff.permissions = after;
+    staff.tokenVersion = (staff.tokenVersion ?? 0) + 1;
     await staff.save();
     await this.recordAudit(actorId, id, 'permissions_updated', {
       before,
@@ -312,7 +319,7 @@ export class StaffManagementService {
       }
     }
 
-    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    const passwordHash = await this.passwordHasher.hash(dto.newPassword);
     const result = await this.users.updateOne(
       { _id: id, role: { $in: ['staff', 'admin'] } },
       {

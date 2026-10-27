@@ -78,6 +78,12 @@ jobs:
       - name: Verify performance query-plan summaries
         run: node --test scripts/performance-query-plans.test.mjs
 
+      - name: Verify authentication admission boundaries
+        run: node --test scripts/auth-admission.test.mjs
+
+      - name: Verify isolated E2E database policy
+        run: node --test scripts/e2e-runner-safety.test.cjs
+
       - name: Lint workspace
         run: pnpm run lint
 
@@ -114,7 +120,13 @@ jobs:
           if (!routes.staticRoutes.some(({page}) => page === '/') || appRoutes['/page'] !== '/')
           throw new Error('The web build does not contain the root route');"
 
-      - name: Test API end to end
+      - name: Install Chromium for passkey acceptance
+        run: pnpm --filter @student-portal/api exec playwright install --with-deps chromium
+
+      - name: Typecheck API end-to-end fixtures
+        run: pnpm --filter @student-portal/api typecheck:e2e
+
+      - name: Test API end to end with browser passkeys
         run: pnpm run test:e2e -- --runInBand
         env:
           NODE_ENV: test

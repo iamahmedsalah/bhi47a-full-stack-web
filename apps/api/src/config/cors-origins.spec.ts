@@ -10,7 +10,7 @@ describe('CORS origin matching', () => {
     'http://localhost:3000, https://bhi47a-support.vercel.app/, https://bhi47a-support-*.vercel.app',
   );
 
-  it('allows exact origins and configured Vercel preview origins', () => {
+  it('allows exact origins and rejects wildcard Vercel preview origins', () => {
     expect(isOriginAllowed('http://localhost:3000', origins)).toBe(true);
     expect(isOriginAllowed('https://bhi47a-support.vercel.app', origins)).toBe(
       true,
@@ -20,7 +20,7 @@ describe('CORS origin matching', () => {
         'https://bhi47a-support-a7tl1k4ds-iamahmedsalahs-projects.vercel.app',
         origins,
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects unrelated and suffix-confusion origins', () => {

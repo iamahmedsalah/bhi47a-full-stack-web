@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import api from '@/lib/api';
 
-type GoogleCredentialHandler = (credential: string) => void;
+export interface GoogleNonceProof { nonceFlowId: string; nonceProof: string; }
+type GoogleCredentialHandler = (credential: string, flow?: GoogleNonceProof) => void;
 type GoogleButtonOptions = {
   theme?: 'outline' | 'filled_blue' | 'filled_black';
   size?: 'small' | 'medium' | 'large';
@@ -15,10 +17,13 @@ type GoogleIdentityState = {
   scriptPromise?: Promise<void>;
   initializedClientId?: string;
   credentialHandler?: GoogleCredentialHandler;
+  flow?: { flowId: string; proof: string; nonce: string; expiresAt: number };
+  preparing?: Promise<void>;
 };
 
 type GoogleIdConfiguration = {
   client_id: string;
+  nonce?: string;
   callback: (response: { credential?: string }) => void;
   ux_mode?: 'popup' | 'redirect';
   auto_select?: boolean;
@@ -53,6 +58,25 @@ const GOOGLE_SCRIPT_ID = 'google-gsi-client';
 function getGoogleIdentityState(): GoogleIdentityState {
   window.__bhiGoogleIdentityState ??= {};
   return window.__bhiGoogleIdentityState;
+}
+
+async function prepareGoogleIdentity(clientId: string): Promise<void> {
+  const state = getGoogleIdentityState();
+  if (state.initializedClientId === clientId && state.flow && state.flow.expiresAt > Date.now() + 60000) return;
+  if (state.preparing) return state.preparing;
+  state.preparing = (async () => {
+    const response = await api.post<{ flowId: string; proof: string; nonce: string }>('/auth/google/nonce', {}, { timeout: 15000 });
+    state.flow = { ...response.data, expiresAt: Date.now() + 5 * 60000 };
+    window.google?.accounts.id.initialize({ client_id: clientId, nonce: state.flow.nonce, ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: true, itp_support: true, use_fedcm_for_button: true, button_auto_select: false,
+      callback: (result) => {
+        const flow = state.flow; state.flow = undefined; state.initializedClientId = undefined;
+        if (result.credential) state.credentialHandler?.(result.credential, flow ? { nonceFlowId: flow.flowId, nonceProof: flow.proof } : undefined);
+        void prepareGoogleIdentity(clientId).catch(() => { /* Password login remains available. */ });
+      },
+    });
+    state.initializedClientId = clientId;
+  })().finally(() => { state.preparing = undefined; });
+  return state.preparing;
 }
 
 function loadGoogleIdentityScript(): Promise<void> {
@@ -95,7 +119,7 @@ export function useGoogleSignIn({
   onSuccess,
   locale = 'ar',
 }: {
-  onSuccess: (credential: string) => void;
+  onSuccess: (credential: string, flow?: GoogleNonceProof) => void;
   locale?: string;
 }) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || '';
@@ -109,8 +133,8 @@ export function useGoogleSignIn({
 
   useEffect(() => {
     const state = getGoogleIdentityState();
-    const handler: GoogleCredentialHandler = (credential) => {
-      onSuccessRef.current(credential);
+    const handler: GoogleCredentialHandler = (credential, flow) => {
+      onSuccessRef.current(credential, flow);
     };
     state.credentialHandler = handler;
 
@@ -155,32 +179,11 @@ export function useGoogleSignIn({
       return;
     }
 
-    const state = getGoogleIdentityState();
-    if (state.initializedClientId === clientId) {
-      queueMicrotask(() => setIsInitialized(true));
-      return;
-    }
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response) => {
-          if (response.credential) {
-            getGoogleIdentityState().credentialHandler?.(response.credential);
-          }
-        },
-        ux_mode: 'popup',
-        auto_select: false,
-        cancel_on_tap_outside: true,
-        itp_support: true,
-        use_fedcm_for_button: true,
-        button_auto_select: false,
-      });
-      state.initializedClientId = clientId;
-      queueMicrotask(() => setIsInitialized(true));
-    } catch (error) {
-      console.error('Error initializing Google GIS:', error);
-    }
+    let active = true;
+    const prepare = () => void prepareGoogleIdentity(clientId).then(() => { if (active) setIsInitialized(true); }).catch(() => { if (active) setIsInitialized(false); });
+    prepare();
+    const interval = window.setInterval(prepare, 3 * 60000);
+    return () => { active = false; window.clearInterval(interval); };
   }, [clientId, scriptLoaded]);
 
   const renderButton = useCallback(

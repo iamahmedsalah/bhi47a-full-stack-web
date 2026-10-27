@@ -49,6 +49,17 @@ pnpm test:e2e
 pnpm clean
 ```
 
+End-to-end tests use isolated localhost services and a Chromium virtual authenticator:
+
+```bash
+pnpm test:services
+pnpm test:browsers
+pnpm test:e2e -- --runInBand
+pnpm test:services:down
+```
+
+The runner rejects remote/non-test MongoDB targets, ignores production dotenv files, builds current shared source, and runs the API/browser tests serially. See the [current bcrypt and admin/staff passkey report](docs/security/BCRYPT_ADMIN_STAFF_PASSKEY_REPORT.md) and [acceptance matrix](docs/security/CROSS_DEVICE_PASSKEY_TEST_MATRIX.md). Passwords remain bcrypt; login never migrates or rewrites an existing hash.
+
 The workspace graph and caching policy are documented in
 `docs/02-monorepo-architecture.md`. Deployment, required Vercel project settings,
 and GitHub secrets are documented in `docs/11-deployment-devops.md`.
@@ -71,3 +82,7 @@ The VPS guide includes a temporary HTTPS hostname for use before buying a domain
 Never commit populated `.env` files. The web and API are deployed as separate
 Vercel projects in the existing automatic deployment workflow; both need access to `packages/shared` from outside their Root
 Directory.
+
+## Optional passkeys
+
+Passkey sign-in and management support students, admins and staff and are disabled by default. See the [current implementation report](docs/security/BCRYPT_ADMIN_STAFF_PASSKEY_REPORT.md) before enabling `PASSKEYS_ENABLED`. Password access remains available for every role; Google remains student-only. No password migration is required.
