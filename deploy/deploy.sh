@@ -48,6 +48,17 @@ if [[ "${1:-}" != --rollback ]]; then
 fi
 if ! "${dc[@]}" up -d --no-build --wait --wait-timeout 240; then
   echo 'Release failed its health checks.' >&2
+  # Capture state before rollback replaces the failed containers. Do not dump
+  # container configuration: it contains production environment secrets.
+  "${dc[@]}" ps --all >&2 || true
+  for service in api web redis; do
+    container=$("${dc[@]}" ps --all --quiet "$service") || container=''
+    if [[ -n "$container" ]]; then
+      echo "Failed release diagnostics: $service" >&2
+      docker inspect --format '{{json .State}}' "$container" >&2 || true
+    fi
+  done
+  "${dc[@]}" logs --no-color --tail 100 api web redis >&2 || true
   if [[ -n "$previous" && "$previous" != "$release" ]]; then
     echo "Restoring previous application images: $previous" >&2
     RELEASE_TAG="$previous" "${dc[@]}" up -d --no-build --wait --wait-timeout 240 || {

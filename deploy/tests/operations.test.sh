@@ -26,6 +26,8 @@ cat > "$work/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 printf '%s %s\n' "${RELEASE_TAG:-unset}" "$*" >> "$TEST_LOG"
 if [[ "$1 $2" == 'image inspect' ]]; then exit 1; fi
+if [[ " $* " == *' ps --all --quiet '* ]]; then echo "fixture-${*: -1}"; fi
+if [[ " $* " == *' logs '* && "${TEST_DIAGNOSTICS_FAIL:-}" == 1 ]]; then exit 1; fi
 if [[ " $* " == *' up '* && "${RELEASE_TAG:-}" == "${TEST_FAIL_RELEASE:-}" ]]; then exit 1; fi
 MOCK
 cat > "$work/bin/mongodump" <<'MOCK'
@@ -43,14 +45,21 @@ chmod +x "$work/bin/"*
 
 printf '%s\n' "$TEST_OLD" > "$work/app/.deploy/current-release"
 export TEST_FAIL_RELEASE="$TEST_NEW"
+export TEST_DIAGNOSTICS_FAIL=1
 if bash "$work/app/deploy/deploy.sh"; then
   echo 'Failed release unexpectedly succeeded' >&2; exit 1;
 fi
 grep -q "$TEST_OLD .*up -d --no-build --wait" "$TEST_LOG"
+grep -q "$TEST_NEW .*inspect --format {{json .State}} fixture-api" "$TEST_LOG"
+grep -q "$TEST_NEW .*logs --no-color --tail 100 api web redis" "$TEST_LOG"
+diagnostics_line=$(grep -n 'logs --no-color' "$TEST_LOG" | head -1 | cut -d: -f1)
+rollback_line=$(grep -n "$TEST_OLD .*up -d --no-build --wait" "$TEST_LOG" | head -1 | cut -d: -f1)
+[[ "$diagnostics_line" -lt "$rollback_line" ]]
 [[ $(cat "$work/app/.deploy/current-release") == "$TEST_OLD" ]]
-echo 'PASS failed startup restores previous images and preserves release marker'
+echo 'PASS failed startup captures diagnostics before rollback, even when logging fails'
 
 unset TEST_FAIL_RELEASE
+unset TEST_DIAGNOSTICS_FAIL
 bash "$work/app/deploy/deploy.sh"
 [[ $(cat "$work/app/.deploy/current-release") == "$TEST_NEW" ]]
 [[ $(cat "$work/app/.deploy/previous-release") == "$TEST_OLD" ]]
