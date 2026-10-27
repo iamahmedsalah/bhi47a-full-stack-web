@@ -379,7 +379,7 @@ function AdminLoginContent() {
       </div>
 
       {/* Language Switcher */}
-      <div className="absolute top-6 end-6 z-10">
+      <div className="absolute top-6 end-6 z-20">
         <LangToggle />
       </div>
 

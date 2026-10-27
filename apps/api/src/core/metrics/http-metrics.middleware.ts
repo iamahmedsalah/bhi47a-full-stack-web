@@ -3,6 +3,7 @@ import type { MetricsService } from './metrics.service';
 import { randomUUID } from 'node:crypto';
 import {
   getRequestQueryContext,
+  measureSynchronousStage,
   runWithRequestQueryMetrics,
 } from './request-query-context';
 
@@ -35,6 +36,16 @@ export function createHttpMetricsMiddleware(
     const start = process.hrtime.bigint();
     runWithRequestQueryMetrics(requestId, () => {
       const context = getRequestQueryContext()!.request;
+      context.method = req.method;
+      context.route = route;
+      const originalJson = res.json;
+      if (originalJson) {
+        res.json = function (body) {
+          return measureSynchronousStage('response.serialization', () =>
+            originalJson.call(this, body),
+          );
+        };
+      }
       res.once('finish', () => {
         const matchedPath: unknown = req.route?.path;
         const recordedRoute =
@@ -52,6 +63,14 @@ export function createHttpMetricsMiddleware(
         metrics.recordRequestDatabaseMetrics?.(
           req.method,
           recordedRoute,
+          context,
+        );
+        metrics.recordHttpOutcome?.(
+          req.method,
+          recordedRoute,
+          res.statusCode,
+          Number(process.hrtime.bigint() - start) / 1e9,
+          Boolean(req.cookies?.access_token),
           context,
         );
       });

@@ -32,6 +32,7 @@ describe('existing password, Google and session contracts', () => {
   };
   const users = {
     findById: jest.fn(),
+    findByIdForAuth: jest.fn(),
     findByStudentCode: jest.fn(),
     findLinkedGoogleAccount: jest.fn(),
     validatePassword: jest.fn(),
@@ -43,6 +44,7 @@ describe('existing password, Google and session contracts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     users.findById.mockResolvedValue(user);
+    users.findByIdForAuth.mockResolvedValue(user);
     users.findByStudentCode.mockResolvedValue(user);
     users.findLinkedGoogleAccount.mockResolvedValue(user);
     users.validatePassword.mockResolvedValue(true);

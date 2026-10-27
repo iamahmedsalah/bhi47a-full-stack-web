@@ -38,11 +38,16 @@ import {
   SystemSettings,
   SystemSettingsSchema,
 } from '../complaints/schemas/system-settings.schema';
+import {
+  TuitionAuditLog,
+  TuitionAuditLogSchema,
+} from './schemas/tuition-audit-log.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: StudentProfile.name, schema: StudentProfileSchema },
+      { name: TuitionAuditLog.name, schema: TuitionAuditLogSchema },
       { name: CourseRegistration.name, schema: CourseRegistrationSchema },
       { name: RegistrationTerm.name, schema: RegistrationTermSchema },
       { name: AdvisingCase.name, schema: AdvisingCaseSchema },

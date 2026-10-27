@@ -10,6 +10,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { RestrictedFeature } from '@/components/admin/restricted-feature';
 import { PERMISSIONS } from '@student-portal/shared';
 import { cn } from '@/lib/cn';
+import { LoadingState } from '@/components/ui/feedback';
 
 interface AdminRouteRule {
   pattern: RegExp;
@@ -160,6 +161,11 @@ export default function AdminLayout({
 
     return null;
   }, [loading, isLoggingOut, user, pathname, isArabic]);
+
+  // Mount protected query consumers only after authentication and the first-login gate.
+  if (loading || isLoggingOut || !user || user.role === 'student' || user.mustChangePassword) {
+    return <LoadingState title={isArabic ? 'جارٍ التحقق من الجلسة...' : 'Checking session...'} />;
+  }
 
   return (
     <div className="min-h-screen">

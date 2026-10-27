@@ -12,12 +12,19 @@ import {
 } from '../decorators/public.decorator';
 import type { Role } from '@student-portal/shared';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
+import { measureSynchronousStage } from '../../../core/metrics/request-query-context';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    return measureSynchronousStage('authorization.roles', () =>
+      this.check(context),
+    );
+  }
+
+  private check(context: ExecutionContext): boolean {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),

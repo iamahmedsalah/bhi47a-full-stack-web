@@ -12,6 +12,7 @@ import {
   defaultPasswordHasher,
 } from '../../security/password-hasher';
 import type { Role } from '@student-portal/shared';
+import { reuseRequestRead } from '../../core/metrics/request-query-context';
 
 function maskNationalId(nationalId: string) {
   return nationalId.slice(0, 3) + '****' + nationalId.slice(-3);
@@ -46,12 +47,14 @@ export class UsersService {
   }
 
   async findByIdForAuth(id: string) {
-    return this.userModel
-      .findById(id)
-      .select(
-        '_id role staffType name email studentCode permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil',
-      )
-      .lean();
+    return reuseRequestRead(`auth-user:${id}`, async () =>
+      this.userModel
+        .findById(id)
+        .select(
+          '_id role staffType name email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt',
+        )
+        .lean(),
+    );
   }
 
   async findByIdWithNationalId(id: string): Promise<UserDocument> {
@@ -370,10 +373,7 @@ export class UsersService {
     // Login (updateLastLogin / resetAttemptsAndUpdateLastLogin) is the only
     // thing allowed to clear lastLogoutAt. A late heartbeat from a session that
     // was just logged out must not mark the user online again.
-    const existing = await this.userModel
-      .findById(userId)
-      .select('lastActiveAt sessionStartedAt lastLogoutAt')
-      .lean();
+    const existing = await this.findByIdForAuth(userId);
 
     if (!existing || existing.lastLogoutAt) {
       return;

@@ -26,6 +26,10 @@ import {
   QueryCourseDto,
   EnrollStudentsBatchDto,
 } from './dto/course.dto';
+import {
+  CreateCourseMaterialDto,
+  QueryCourseMaterialsDto,
+} from './dto/course-material.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -181,6 +185,42 @@ export class CoursesController {
     });
   }
 
+  @Get('admin/courses/:id/enrollments/count')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_READ)
+  @ApiOperation({
+    summary:
+      'Get enrolled students count for a course in a given academic term',
+  })
+  async getCourseEnrollmentsCount(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+  ) {
+    return this.coursesService.getCourseEnrollmentsCount(id, {
+      academicYear,
+      semester,
+    });
+  }
+
+  @Delete('admin/courses/:id/enrollments')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @ApiOperation({
+    summary:
+      'Reset and remove all student enrollments for a specific course (e.g. uploaded wrong data)',
+  })
+  async resetCourseEnrollments(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+  ) {
+    return this.coursesService.resetCourseEnrollments(id, {
+      academicYear,
+      semester,
+    });
+  }
+
   @Post('admin/courses')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
@@ -231,11 +271,12 @@ export class CoursesController {
   async uploadSyllabus(
     @Param('id', ParseObjectIdPipe) id: string,
     @UploadedFile() file: CourseSyllabusFile,
+    @CurrentUser() caller: any,
   ) {
     if (!file) {
       throw new BadRequestException('Please select a PDF file to upload');
     }
-    return this.coursesService.uploadSyllabus(id, file);
+    return this.coursesService.uploadSyllabus(id, file, caller);
   }
 
   @Post('admin/courses/:id/cover-image')
@@ -263,7 +304,7 @@ export class CoursesController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
-    summary: 'Upload course cover image / book thumbnail (Admin/Staff)',
+    summary: 'Upload course cover image / book thumbnail (Admin/Doctor)',
   })
   @ApiBody({
     schema: {
@@ -280,11 +321,12 @@ export class CoursesController {
   async uploadCoverImage(
     @Param('id', ParseObjectIdPipe) id: string,
     @UploadedFile() file: CourseSyllabusFile,
+    @CurrentUser() caller: any,
   ) {
     if (!file) {
       throw new BadRequestException('Please select an image file to upload');
     }
-    return this.coursesService.uploadCoverImage(id, file);
+    return this.coursesService.uploadCoverImage(id, file, caller);
   }
 
   @Patch('admin/courses/:id')
@@ -301,17 +343,94 @@ export class CoursesController {
   @Delete('admin/courses/:id/syllabus')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
-  @ApiOperation({ summary: 'Remove course syllabus PDF (Admin/Staff)' })
-  async removeSyllabus(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.coursesService.removeSyllabus(id);
+  @ApiOperation({ summary: 'Remove course syllabus PDF (Admin/Doctor)' })
+  async removeSyllabus(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.removeSyllabus(id, caller);
   }
 
   @Delete('admin/courses/:id/cover-image')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
-  @ApiOperation({ summary: 'Remove course cover image (Admin/Staff)' })
-  async removeCoverImage(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.coursesService.removeCoverImage(id);
+  @ApiOperation({ summary: 'Remove course cover image (Admin/Doctor)' })
+  async removeCoverImage(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.removeCoverImage(id, caller);
+  }
+
+  // ─── Course Materials (Lectures & Sections) Routes ───────────────────
+
+  @Post(['courses/:id/materials', 'admin/courses/:id/materials'])
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_WRITE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max for academic material
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Upload academic lecture (by Doctor) or section (by TA) for a course',
+  })
+  async uploadMaterial(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @UploadedFile() file: CourseSyllabusFile,
+    @Body() dto: CreateCourseMaterialDto,
+    @CurrentUser() caller: any,
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('يرجى اختيار ملف المحاضرة أو السكشن لرفعه');
+    }
+    return this.coursesService.uploadCourseMaterial(id, file, dto, caller);
+  }
+
+  @Get('courses/:id/materials')
+  @Roles('admin', 'staff', 'student')
+  @ApiOperation({
+    summary:
+      'List course materials (Lectures & Sections). Blocked students are restricted.',
+  })
+  async getMaterials(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query() query: QueryCourseMaterialsDto,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.getCourseMaterials(id, query, caller);
+  }
+
+  @Get('courses/materials/:materialId/download')
+  @Roles('admin', 'staff', 'student')
+  @ApiOperation({
+    summary:
+      'Stream / download course lecture or section file. Blocked students receive 403 Forbidden.',
+  })
+  async downloadMaterial(
+    @Param('materialId', ParseObjectIdPipe) materialId: string,
+    @Res() res: Response,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.downloadCourseMaterial(materialId, res, caller);
+  }
+
+  @Delete([
+    'courses/materials/:materialId',
+    'admin/courses/materials/:materialId',
+  ])
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_DELETE)
+  @ApiOperation({
+    summary: 'Delete course lecture or section (Admin or original uploader)',
+  })
+  async deleteMaterial(
+    @Param('materialId', ParseObjectIdPipe) materialId: string,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.deleteCourseMaterial(materialId, caller);
   }
 
   @Delete('admin/courses/:id')

@@ -1,4 +1,7 @@
-import { measureDatabaseStage } from '../../core/metrics/request-query-context';
+import {
+  measureDatabaseStage,
+  measureSynchronousStage,
+} from '../../core/metrics/request-query-context';
 import {
   Injectable,
   NotFoundException,
@@ -465,9 +468,13 @@ export class ComplaintsService {
       ),
     ]);
 
-    const missingNationalIds = items
-      .filter((i) => !i.nationalId && i.studentId)
-      .map((i) => i.studentId);
+    const missingNationalIds = [
+      ...new Set(
+        items
+          .filter((i) => !i.nationalId && i.studentId)
+          .map((i) => i.studentId.toString()),
+      ),
+    ];
     if (missingNationalIds.length > 0) {
       const students = await measureDatabaseStage('complaints.enrichment', () =>
         this.userModel
@@ -475,16 +482,18 @@ export class ComplaintsService {
           .select({ _id: 1, nationalId: 1 })
           .lean(),
       );
-      const studentMap = new Map(
-        students.map((s) => [s._id.toString(), s.nationalId]),
-      );
-      items.forEach((item) => {
-        if (!item.nationalId && item.studentId) {
-          const nid = studentMap.get(item.studentId.toString());
-          if (nid) {
-            item.nationalId = nid;
+      measureSynchronousStage('complaints.transformation', () => {
+        const studentMap = new Map(
+          students.map((s) => [s._id.toString(), s.nationalId]),
+        );
+        items.forEach((item) => {
+          if (!item.nationalId && item.studentId) {
+            const nid = studentMap.get(item.studentId.toString());
+            if (nid) {
+              item.nationalId = nid;
+            }
           }
-        }
+        });
       });
     }
 

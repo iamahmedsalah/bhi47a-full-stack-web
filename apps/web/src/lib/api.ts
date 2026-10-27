@@ -211,7 +211,9 @@ api.interceptors.response.use(
       }
     }
 
-    if (error.response?.status === 401) {
+    // AuthProvider owns bootstrap redirects. A hard reload for its /me probe
+    // mounts it again on the login page and creates another anonymous 401.
+    if (error.response?.status === 401 && originalConfig?.url !== '/auth/me') {
       // Redirect to login on auth failure (client-side only), but check to prevent infinite loop
       if (
         typeof window !== 'undefined' &&

@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Course, CourseSchema } from './schemas/course.schema';
+import {
+  CourseMaterial,
+  CourseMaterialSchema,
+} from './schemas/course-material.schema';
 import { CoursesService } from './courses.service';
 import { CoursesController } from './courses.controller';
 import {
@@ -17,6 +21,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
   imports: [
     MongooseModule.forFeature([
       { name: Course.name, schema: CourseSchema },
+      { name: CourseMaterial.name, schema: CourseMaterialSchema },
       { name: CourseRegistration.name, schema: CourseRegistrationSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: User.name, schema: UserSchema },

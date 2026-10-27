@@ -1,0 +1,15 @@
+# Performance remediation: evidence and limits
+
+This follow-up uses the user's latest observations: complaints mean 1,330 ms; `/api/auth/me` 240 unauthorized responses; 3,792 user lookups; 2,661 session lookups; zero server-side 5xx in that export. The raw latest export, deployed index inventory, representative database, and request traces were not supplied. These counts are observations from one lifetime, not rates or a before/after experiment. Earlier reports in `docs/PERFORMANCE-REMEDIATION-2026-10-27.md` describe different lifetimes.
+
+| Priority | Source evidence | Confidence | Change / remaining measurement |
+| --- | --- | --- | --- |
+| Complaints | `ComplaintsService.findAll` already uses lean, deterministic sort, parallel exact count and one projected enrichment batch. The schema already declares `{createdAt:-1,_id:-1}`. | High for source behavior; deployed plan unknown | Preserve the full drawer response. Deduplicate enrichment IDs; add transformation, auth and serialization timings and correlated slow HTTP traces. Capture exact limit-100 plans before choosing a query/index change. |
+| 401 traffic | Root `AuthProvider` probes `/auth/me`, including on public pages. Both protected layouts previously mounted query consumers while auth was pending. | Confirmed code paths; attribution of all 240 responses unknown | Gate protected layouts, cancel the bootstrap query before login, consume its cancellation signal, disable retry-on-mount, and retain cookie verification after login. Classify missing-cookie probes separately from cookie-bearing rejections. |
+| User reads | JWT strategy loads a lean user, then `/me` loaded another hydrated user including credential fields. Heartbeat separately loaded activity fields after JWT validation. | Confirmed redundant reads | One projected user-policy read per request reused by `/me` and heartbeat. No reuse across HTTP requests. |
+| Session reads | `AuthSessionStore.assertActive` performs `exists` constrained by hashed `_id`, user, version, revocation and expiration. `_id` is already indexed. | Query shape confirmed; cause of 1,014/1,050 ms unknown | Retain fresh validation; measure driver checkout and command times separately. No session-cache TTL or speculative compound index. |
+| HTTP card | RPS was lifetime requests / process uptime; percentages and means were lifetime counters. | Confirmed | Add window metrics via Prometheus rate/increase and explicit process-local fallback; keep the legacy lifetime response for compatibility. |
+
+The 1,330 ms complaints mean cannot be explained by subtracting a separately sampled 674 ms query from it. Authentication, count, enrichment, serialization, connection acquisition, network and event-loop delays need correlated measurements from the same request. Likewise, zero 5xx in an export does not establish zero failures outside that lifetime.
+
+See [complaints](COMPLAINTS_QUERY_OPTIMIZATION.md), [sessions](SESSION_QUERY_ROOT_CAUSE.md), [authentication](AUTHENTICATION_QUERY_OPTIMIZATION.md), [traffic](HTTP_TRAFFIC_REMEDIATION.md), [benchmarks](BEFORE_AFTER_BENCHMARKS.md), and [rollout](PRODUCTION_ROLLOUT_CHECKLIST.md).

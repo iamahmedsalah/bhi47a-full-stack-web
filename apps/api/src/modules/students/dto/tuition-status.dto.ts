@@ -111,6 +111,23 @@ export class QueryTuitionStatusDto {
   @IsOptional()
   @IsString()
   tuitionFeesStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Hours window to check for recent changes (e.g. 4, 12, 24)',
+    default: 4,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  recentHours?: number = 4;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter only students whose status changed in the recent window ("true" | "false")',
+  })
+  @IsOptional()
+  @IsString()
+  changedInLastHours?: string;
 }
 
 export class BatchTuitionUploadDto {

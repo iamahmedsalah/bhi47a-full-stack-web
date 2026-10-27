@@ -5,6 +5,7 @@ import { Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { UsersService } from '../../users/users.service';
 import { AuthSessionStore } from '../services/auth-session-store.service';
+import { measureDatabaseStage } from '../../../core/metrics/request-query-context';
 
 export interface JwtPayload {
   sub: string;
@@ -47,11 +48,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (!this.sessions)
       throw new UnauthorizedException('Session store unavailable');
-    await this.sessions.assertActive(payload, req.cookies?.access_token);
+    await measureDatabaseStage('auth.session', () =>
+      this.sessions!.assertActive(payload, req.cookies?.access_token),
+    );
 
     // Load current account policy for every request, including across replicas.
     // Never share validation promises between tokens with different versions.
-    const user = await this.usersService.findByIdForAuth(payload.sub);
+    const user = await measureDatabaseStage('auth.user', () =>
+      this.usersService.findByIdForAuth(payload.sub),
+    );
     if (
       !user ||
       !user.isActive ||

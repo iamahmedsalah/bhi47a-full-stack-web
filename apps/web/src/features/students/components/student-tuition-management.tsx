@@ -15,6 +15,7 @@ import {
   Users,
   FileSpreadsheet,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -55,6 +56,12 @@ interface TuitionStudent {
   blockedAt?: string;
   unblockedAt?: string;
   createdAt: string;
+  hasRecentChange?: boolean;
+  recentChange?: {
+    actionType: string;
+    performedByName: string;
+    changedAt: string;
+  };
 }
 
 interface TuitionStats {
@@ -63,6 +70,7 @@ interface TuitionStats {
   paid: number;
   unpaid: number;
   exempt: number;
+  changedInLast4Hours?: number;
 }
 
 interface StudentTuitionManagementProps {
@@ -85,6 +93,7 @@ export function StudentTuitionManagement({
   const [selectedLevel, setSelectedLevel] = useState<string>(() => searchParams?.get('tuitionLevel') || 'all');
   const [selectedBlockStatus, setSelectedBlockStatus] = useState<string>(() => searchParams?.get('tuitionBlock') || 'all');
   const [selectedTuitionStatus, setSelectedTuitionStatus] = useState<string>(() => searchParams?.get('tuitionStatus') || 'all');
+  const [filterRecentChanges, setFilterRecentChanges] = useState<boolean>(() => searchParams?.get('tuitionRecent') === 'true');
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -106,11 +115,14 @@ export function StudentTuitionManagement({
           if (selectedTuitionStatus !== 'all') url.searchParams.set('tuitionStatus', selectedTuitionStatus);
           else url.searchParams.delete('tuitionStatus');
 
+          if (filterRecentChanges) url.searchParams.set('tuitionRecent', 'true');
+          else url.searchParams.delete('tuitionRecent');
+
           window.history.replaceState(null, '', url.toString());
         }
       } catch {}
     }
-  }, [page, search, selectedLevel, selectedBlockStatus, selectedTuitionStatus]);
+  }, [page, search, selectedLevel, selectedBlockStatus, selectedTuitionStatus, filterRecentChanges]);
 
   // Selection for bulk actions
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -175,6 +187,7 @@ export function StudentTuitionManagement({
       selectedLevel,
       selectedBlockStatus,
       selectedTuitionStatus,
+      filterRecentChanges,
     ],
     queryFn: async () => {
       const params: Record<string, string | number> = {
@@ -185,6 +198,7 @@ export function StudentTuitionManagement({
       if (selectedLevel !== 'all') params.level = selectedLevel;
       if (selectedBlockStatus !== 'all') params.isBlocked = selectedBlockStatus;
       if (selectedTuitionStatus !== 'all') params.tuitionFeesStatus = selectedTuitionStatus;
+      if (filterRecentChanges) params.changedInLastHours = 'true';
 
       const res = await api.get('/admin/students/tuition/list', { params });
       return res.data;
@@ -287,6 +301,7 @@ export function StudentTuitionManagement({
       if (selectedLevel !== 'all') params.level = selectedLevel;
       if (selectedBlockStatus !== 'all') params.isBlocked = selectedBlockStatus;
       if (selectedTuitionStatus !== 'all') params.tuitionFeesStatus = selectedTuitionStatus;
+      if (filterRecentChanges) params.changedInLastHours = 'true';
 
       const res = await api.get('/admin/students/tuition/export', {
         params,
@@ -584,6 +599,13 @@ export function StudentTuitionManagement({
           color="#0EA5E9"
           subtitle={isAr ? 'معفيون بقرار إداري' : 'Special grant / exempt'}
         />
+        <StatCard
+          title={isAr ? 'تعديلات آخر 4 ساعات' : 'Recent 4h Changes'}
+          value={isStatsLoading ? '...' : (stats?.changedInLast4Hours ?? 0).toLocaleString()}
+          icon={<Clock className="h-5 w-5" />}
+          color="#F59E0B"
+          subtitle={isAr ? 'تحديثات الحجب وسداد المصروفات' : 'Tuition & block updates'}
+        />
       </StatCardRow>
 
       {/* 2. Action Header: Bulk Excel Buttons */}
@@ -719,6 +741,37 @@ export function StudentTuitionManagement({
             <SelectItem value="exempt">{isAr ? 'معفى من الرسوم' : 'Exempt'}</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* 4h Changes Quick Filter Toggle */}
+        <Button
+          type="button"
+          variant={filterRecentChanges ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setFilterRecentChanges((prev) => !prev);
+            setPage(1);
+          }}
+          className={`h-10 px-3 rounded-squircle text-xs font-semibold gap-1.5 cursor-pointer shrink-0 transition-colors ${
+            filterRecentChanges
+              ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-sm'
+              : 'border-border bg-secondary/50 text-muted-foreground hover:text-foreground'
+          }`}
+          title={isAr ? 'تصفية الطلاب الذين طرأت عليهم تعديلات خلال آخر 4 ساعات' : 'Filter students modified in last 4 hours'}
+        >
+          <Clock className="h-3.5 w-3.5" />
+          <span>{isAr ? 'تعديلات 4س' : '4h Changes'}</span>
+          {typeof stats?.changedInLast4Hours === 'number' && stats.changedInLast4Hours > 0 && (
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                filterRecentChanges
+                  ? 'bg-white/20 text-white'
+                  : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+              }`}
+            >
+              {stats.changedInLast4Hours}
+            </span>
+          )}
+        </Button>
 
         {/* Refresh Button */}
         <Button
@@ -917,15 +970,28 @@ export function StudentTuitionManagement({
                         )}
                       </td>
 
-                      {/* Reason & Date */}
+                      {/* Reason & Date / Recent Audit Info */}
                       <td className="px-4 py-3 text-[11px] text-muted-foreground">
-                        {isBlocked ? (
-                          <span className="text-rose-500/90 font-medium">
-                            {student.blockReason || (isAr ? 'عدم سداد المصروفات' : 'Unpaid tuition')}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/60">—</span>
-                        )}
+                        <div className="space-y-1">
+                          {isBlocked ? (
+                            <span className="text-rose-500/90 font-medium block">
+                              {student.blockReason || (isAr ? 'عدم سداد المصروفات' : 'Unpaid tuition')}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60 block">—</span>
+                          )}
+
+                          {student.hasRecentChange && student.recentChange && (
+                            <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-medium" title={student.recentChange.changedAt}>
+                              <Clock className="h-2.5 w-2.5 shrink-0" />
+                              <span>
+                                {isAr
+                                  ? `تعديل حديث: ${student.recentChange.performedByName || 'مشرف'}`
+                                  : `Updated: ${student.recentChange.performedByName || 'Staff'}`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Quick Action Button */}

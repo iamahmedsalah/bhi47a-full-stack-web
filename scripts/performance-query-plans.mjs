@@ -59,11 +59,23 @@ async function main() {
     } });
     const cases = [
       find('complaints.default-page', 'complaints', {}, { sort: { createdAt: -1, _id: -1 }, limit: 20 }),
+      find('complaints.observed-100-page', 'complaints', {}, { sort: { createdAt: -1, _id: -1 }, skip: 0, limit: 100 }),
+      find('complaints.deep-page', 'complaints', {}, { sort: { createdAt: -1, _id: -1 }, skip: 1000, limit: 20 }),
       find('complaints.open-page', 'complaints', { status: 'open' }, { sort: { createdAt: -1, _id: -1 }, limit: 20 }),
       count('complaints.exact-total', {}), count('complaints.open-total', { status: 'open' }),
       find('registration.current-terms', 'registration_terms', { isCurrent: true }, { sort: { updatedAt: -1, academicYear: -1 } }),
       find('registration.graduation-catalogue', 'courses', { isActive: true }, { projection: { code: 1, semester: 1 } }),
     ];
+    // A diagnostic SID digest must be supplied explicitly; never sample or print sessions.
+    if (process.env.PERF_SESSION_DIGEST) {
+      if (!/^[a-f0-9]{64}$/.test(process.env.PERF_SESSION_DIGEST)) throw new Error('Invalid session digest');
+      cases.push(find('auth.session-primary-key', 'auth_sessions', {
+        _id: process.env.PERF_SESSION_DIGEST, revokedAt: null, expiresAt: { $gt: new Date() },
+      }, { projection: { _id: 1 }, limit: 1 }));
+    }
+    if (sample) cases.push(find('auth.user-primary-key', 'users', { _id: sample._id }, {
+      projection: { role: 1, tokenVersion: 1, isActive: 1, permissions: 1 }, limit: 1,
+    }));
     if (sample) {
       cases.push(
         find('registration.academic-profile', 'student_academic_profiles', { studentId: sample._id }, { limit: 1 }),

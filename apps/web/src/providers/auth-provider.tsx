@@ -111,13 +111,14 @@ export function AuthProvider({
 
   const meQuery = useQuery({
     queryKey: queryKeys.auth.me,
-    queryFn: async () => {
-      const res = await api.get<User>('/auth/me');
+    queryFn: async ({ signal }) => {
+      const res = await api.get<User>('/auth/me', { signal });
       return res.data;
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: false,
+    retryOnMount: false,
     refetchOnWindowFocus: false,
     enabled: !isLoggingOut,
   });
@@ -138,6 +139,9 @@ export function AuthProvider({
     );
 
     try {
+      // Stop an initial anonymous probe from racing the login verification and
+      // overwriting the newly authenticated query cache.
+      await queryClient.cancelQueries({ queryKey: queryKeys.auth.me });
       const payload = type === 'passkey' && 'flowToken' in data
         ? { flowId: data.flowId, response: data.response } : data;
       const config = type === 'passkey' && 'flowToken' in data
@@ -322,7 +326,7 @@ export function AuthProvider({
 
   // Periodic and route-change heartbeat to track live active sessions
   useEffect(() => {
-    if (!meQuery.data?._id || isLoggingOut) return;
+    if (!meQuery.data?._id || meQuery.isError || isLoggingOut) return;
 
     let isMounted = true;
     const sendHeartbeat = (force = false) => {
@@ -355,7 +359,7 @@ export function AuthProvider({
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
-  }, [meQuery.data?._id, pathname, isLoggingOut]);
+  }, [meQuery.data?._id, meQuery.isError, pathname, isLoggingOut]);
 
   const contextValue = React.useMemo<AuthContextType>(
     () => ({

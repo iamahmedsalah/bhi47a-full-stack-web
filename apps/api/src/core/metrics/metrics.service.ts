@@ -19,6 +19,13 @@ import { CacheService } from '../cache/cache.service';
 import { isServerlessRuntime } from '../../common/utils/runtime.util';
 import { METRICS_SLOW_QUERY_THRESHOLD_MS } from './metrics.constants';
 import {
+  classifyHttpOutcome,
+  HttpTrafficWindow,
+  HTTP_LATENCY_BUCKETS,
+  type TrafficWindow,
+} from './http-traffic-window';
+import { prometheusTraffic } from './prometheus-traffic';
+import {
   getRequestQueryContext,
   type RequestQueryMetrics,
 } from './request-query-context';
@@ -138,6 +145,13 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   // HTTP Metrics
   public readonly httpRequestsTotal: Counter<string>;
   public readonly httpRequestDurationSeconds: Histogram<string>;
+  public readonly httpOutcomesTotal: Counter<string>;
+  public readonly poolCheckoutSeconds: Histogram<string>;
+  public readonly poolCheckedOut: Gauge<string>;
+  public readonly poolWaiters: Gauge<string>;
+  public readonly mongoCommandSeconds: Histogram<string>;
+  private readonly trafficWindow = new HttpTrafficWindow();
+  private readonly recentSlowRequests: Array<Record<string, unknown>> = [];
 
   // MongoDB & Database Metrics
   public readonly dbQueryDurationSeconds: Histogram<string>;
@@ -250,7 +264,38 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       name: 'student_portal_http_request_duration_seconds',
       help: 'HTTP request duration in seconds for latency percentiles (p50, p95, p99)',
       labelNames: ['method', 'route', 'status_code'],
-      buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+      buckets: HTTP_LATENCY_BUCKETS.filter(Number.isFinite),
+      registers: [this.registry],
+    });
+
+    this.httpOutcomesTotal = new Counter({
+      name: 'student_portal_http_outcomes_total',
+      help: 'HTTP responses by bounded triage category; security rejections remain visible',
+      labelNames: ['method', 'route', 'outcome'],
+      registers: [this.registry],
+    });
+    this.poolCheckoutSeconds = new Histogram({
+      name: 'student_portal_mongodb_pool_checkout_seconds',
+      help: 'Driver pool checkout duration, including failed checkouts',
+      labelNames: ['outcome'],
+      buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+      registers: [this.registry],
+    });
+    this.poolCheckedOut = new Gauge({
+      name: 'student_portal_mongodb_pool_checked_out',
+      help: 'Connections currently checked out across driver pools',
+      registers: [this.registry],
+    });
+    this.poolWaiters = new Gauge({
+      name: 'student_portal_mongodb_pool_waiters',
+      help: 'Pending driver pool checkouts',
+      registers: [this.registry],
+    });
+    this.mongoCommandSeconds = new Histogram({
+      name: 'student_portal_mongodb_command_duration_seconds',
+      help: 'Driver command round trip; separate from Mongoose operation counts',
+      labelNames: ['command', 'outcome'],
+      buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
       registers: [this.registry],
     });
 
@@ -548,6 +593,78 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  recordHttpOutcome(
+    method: string,
+    route: string,
+    status: number,
+    seconds: number,
+    hasCookie: boolean,
+    context: RequestQueryMetrics,
+  ) {
+    const upper = method.toUpperCase();
+    const normalizedMethod = [
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'OPTIONS',
+      'HEAD',
+    ].includes(upper)
+      ? upper
+      : 'OTHER';
+    if (!this.routeStats.has(`${normalizedMethod} ${route}`)) route = '/other';
+    const outcome = classifyHttpOutcome(
+      normalizedMethod,
+      route,
+      status,
+      hasCookie,
+    );
+    this.httpOutcomesTotal.inc({ method: normalizedMethod, route, outcome });
+    this.trafficWindow.record(
+      normalizedMethod,
+      route,
+      status,
+      seconds,
+      outcome,
+    );
+    if (seconds >= 0.5) {
+      this.recentSlowRequests.unshift({
+        requestId: context.requestId,
+        timestamp: new Date().toISOString(),
+        method: normalizedMethod,
+        route,
+        status,
+        durationMs: seconds * 1000,
+        databaseOperations: context.count,
+        summedDatabaseMs: context.durationSeconds * 1000,
+        stages: Object.fromEntries(
+          [...context.stages].map(([stage, value]) => [
+            stage,
+            value.durationSeconds * 1000,
+          ]),
+        ),
+      });
+      this.recentSlowRequests.length = Math.min(
+        this.recentSlowRequests.length,
+        50,
+      );
+    }
+  }
+
+  async getTraffic(window: TrafficWindow = '5m') {
+    try {
+      const remote = await prometheusTraffic(window);
+      if (remote) return { ...remote, prometheusAvailable: true };
+    } catch {
+      // Never replace missing historical data with lifetime totals or expose credentials.
+    }
+    return {
+      ...this.trafficWindow.summary(window),
+      prometheusAvailable: false,
+    };
+  }
+
   setDbConnected(isConnected: boolean) {
     this.dbConnectedStatus.set(isConnected ? 1 : 0);
   }
@@ -626,7 +743,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     this.incrementLabel(this.excelImportsByType, type, count);
   }
 
-  async getSummary() {
+  async getSummary(window: TrafficWindow = '5m') {
+    const trafficPromise = this.getTraffic(window);
     const memory = process.memoryUsage();
     const uptimeSec = Math.floor(process.uptime());
 
@@ -791,6 +909,10 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     };
 
     return {
+      traffic: await trafficPromise,
+      recentSlowRequests: this.recentSlowRequests.map((entry) => ({
+        ...entry,
+      })),
       timestamp: new Date().toISOString(),
       uptimeSeconds: uptimeSec,
       system: {

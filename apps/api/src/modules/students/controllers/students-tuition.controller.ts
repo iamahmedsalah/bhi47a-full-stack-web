@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import { StudentsService } from '../students.service';
@@ -47,7 +48,14 @@ export class StudentsTuitionController {
     summary:
       'List students with tuition fee status and blocked flags with filtering',
   })
-  async getTuitionList(@Query() query: QueryTuitionStatusDto) {
+  async getTuitionList(@Query() query: QueryTuitionStatusDto): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    changedInRecentHoursCount: number;
+  }> {
     return this.studentsService.getTuitionList(query);
   }
 
@@ -83,8 +91,13 @@ export class StudentsTuitionController {
   async updateStatus(
     @Param('id') studentId: string,
     @Body() dto: UpdateTuitionStatusDto,
+    @CurrentUser() caller: any,
   ) {
-    return this.studentsService.updateStudentTuitionStatus(studentId, dto);
+    return this.studentsService.updateStudentTuitionStatus(
+      studentId,
+      dto,
+      caller,
+    );
   }
 
   @Post('bulk-toggle')
@@ -94,8 +107,11 @@ export class StudentsTuitionController {
     summary:
       'Bulk toggle block status and tuition fees for selected students (Admin/Staff)',
   })
-  async bulkToggle(@Body() dto: BulkToggleTuitionDto) {
-    return this.studentsService.bulkToggleTuitionStatus(dto);
+  async bulkToggle(
+    @Body() dto: BulkToggleTuitionDto,
+    @CurrentUser() caller: any,
+  ) {
+    return this.studentsService.bulkToggleTuitionStatus(dto, caller);
   }
 
   @Post('upload-excel')
@@ -121,6 +137,7 @@ export class StudentsTuitionController {
   })
   async uploadExcel(
     @UploadedFile() file?: { buffer: Buffer; originalname: string },
+    @CurrentUser() caller?: any,
   ) {
     if (!file || !file.buffer) {
       throw new BadRequestException('يرجى تحديد ملف Excel أو CSV لرفعه');
@@ -128,6 +145,7 @@ export class StudentsTuitionController {
     return this.studentsService.bulkUpdateTuitionFromExcel(
       file.buffer,
       file.originalname,
+      caller,
     );
   }
 
@@ -136,13 +154,17 @@ export class StudentsTuitionController {
   @RequirePermissions(PERMISSIONS.TUITION_READ)
   @ApiOperation({
     summary:
-      'Export filtered student tuition and block status records to styled Excel (.xlsx)',
+      'Export filtered student tuition, 4h delta, and audit trail to styled multi-sheet Excel (.xlsx)',
   })
   async exportTuition(
     @Query() query: QueryTuitionStatusDto,
     @Res() res: Response,
+    @CurrentUser() caller: any,
   ) {
-    const result = await this.studentsService.exportTuitionToExcel(query);
+    const result = await this.studentsService.exportTuitionToExcel(
+      query,
+      caller,
+    );
     res.setHeader('Content-Type', result.contentType);
     res.setHeader(
       'Content-Disposition',
@@ -158,7 +180,10 @@ export class StudentsTuitionController {
     summary:
       'Process a batch of parsed tuition/block rows with real-time feedback',
   })
-  async processBatch(@Body() dto: BatchTuitionUploadDto) {
-    return this.studentsService.processBatchTuitionRows(dto.rows);
+  async processBatch(
+    @Body() dto: BatchTuitionUploadDto,
+    @CurrentUser() caller?: any,
+  ) {
+    return this.studentsService.processBatchTuitionRows(dto.rows, caller);
   }
 }

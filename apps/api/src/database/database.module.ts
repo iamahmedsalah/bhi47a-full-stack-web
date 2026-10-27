@@ -10,6 +10,7 @@ import { ConnectionHolder } from '../common/rate-limit/connection-holder';
 import { createMongooseMetricsPlugin } from './mongoose-metrics.plugin';
 import { MetricsService } from '../core/metrics/metrics.service';
 import { isServerlessRuntime } from '../common/utils/runtime.util';
+import { attachMongoDriverMetrics } from './mongodb-driver-metrics';
 
 type ParsedDatabaseError = Error & {
   code?: string;
@@ -188,9 +189,11 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
             ? maxPoolSize
             : Number(defaultMaxPool),
           maxIdleTimeMS: 300000,
+          monitorCommands: true,
           lookup: customLookup,
           connectionFactory: (connection: mongoose.Connection) => {
             ConnectionHolder.connection = connection;
+            attachMongoDriverMetrics(connection.getClient(), metricsService);
             // Nest may invoke the factory after the first connected event.
             metricsService.setDbConnected(Number(connection.readyState) === 1);
 

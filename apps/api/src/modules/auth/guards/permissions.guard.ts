@@ -10,12 +10,19 @@ import {
   ANY_PERMISSIONS_KEY,
 } from '../decorators/permissions.decorator';
 import type { AuthenticatedRequest } from '../types/authenticated-request';
+import { measureSynchronousStage } from '../../../core/metrics/request-query-context';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    return measureSynchronousStage('authorization.permissions', () =>
+      this.check(context),
+    );
+  }
+
+  private check(context: ExecutionContext): boolean {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],

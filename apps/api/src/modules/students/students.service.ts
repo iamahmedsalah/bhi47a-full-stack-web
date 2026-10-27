@@ -58,12 +58,18 @@ import {
   type StudentAcademicProfileDocument,
 } from '../registrations/schemas/student-academic-profile.schema';
 import { StudentQueryService } from './services/student-query.service';
+import {
+  TuitionAuditLog,
+  type TuitionAuditLogDocument,
+} from './schemas/tuition-audit-log.schema';
 
 @Injectable()
 export class StudentsService {
   constructor(
     @InjectModel(StudentProfile.name)
     private studentProfileModel: Model<StudentProfileDocument>,
+    @InjectModel(TuitionAuditLog.name)
+    private tuitionAuditLogModel: Model<TuitionAuditLogDocument>,
     @InjectModel(CourseRegistration.name)
     private registrationModel: Model<CourseRegistrationDocument>,
     @InjectModel(RegistrationTerm.name)
@@ -1197,48 +1203,64 @@ export class StudentsService {
   // ─── Tuition Fees & Block Status Management ──────────────────────
 
   async getTuitionStats() {
-    const [stats] = await this.studentProfileModel.aggregate([
-      {
-        $facet: {
-          total: [{ $count: 'count' }],
-          blocked: [{ $match: { isBlocked: true } }, { $count: 'count' }],
-          paid: [
-            {
-              $match: {
-                $or: [
-                  { tuitionFeesStatus: 'paid' },
-                  { tuitionFeesStatus: null, isBlocked: false },
-                ],
+    const cutoff4h = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const [stats, recentChangedIds] = await Promise.all([
+      this.studentProfileModel.aggregate([
+        {
+          $facet: {
+            total: [{ $count: 'count' }],
+            blocked: [{ $match: { isBlocked: true } }, { $count: 'count' }],
+            paid: [
+              {
+                $match: {
+                  $or: [
+                    { tuitionFeesStatus: 'paid' },
+                    { tuitionFeesStatus: null, isBlocked: false },
+                  ],
+                },
               },
-            },
-            { $count: 'count' },
-          ],
-          unpaid: [
-            {
-              $match: {
-                $or: [{ tuitionFeesStatus: 'unpaid' }, { isBlocked: true }],
+              { $count: 'count' },
+            ],
+            unpaid: [
+              {
+                $match: {
+                  $or: [{ tuitionFeesStatus: 'unpaid' }, { isBlocked: true }],
+                },
               },
-            },
-            { $count: 'count' },
-          ],
-          exempt: [
-            { $match: { tuitionFeesStatus: 'exempt' } },
-            { $count: 'count' },
-          ],
+              { $count: 'count' },
+            ],
+            exempt: [
+              { $match: { tuitionFeesStatus: 'exempt' } },
+              { $count: 'count' },
+            ],
+          },
         },
-      },
+      ]),
+      this.tuitionAuditLogModel.distinct('studentProfileId', {
+        createdAt: { $gte: cutoff4h },
+      }),
     ]);
 
+    const statFacet = stats?.[0];
+
     return {
-      total: stats?.total?.[0]?.count ?? 0,
-      blocked: stats?.blocked?.[0]?.count ?? 0,
-      paid: stats?.paid?.[0]?.count ?? 0,
-      unpaid: stats?.unpaid?.[0]?.count ?? 0,
-      exempt: stats?.exempt?.[0]?.count ?? 0,
+      total: statFacet?.total?.[0]?.count ?? 0,
+      blocked: statFacet?.blocked?.[0]?.count ?? 0,
+      paid: statFacet?.paid?.[0]?.count ?? 0,
+      unpaid: statFacet?.unpaid?.[0]?.count ?? 0,
+      exempt: statFacet?.exempt?.[0]?.count ?? 0,
+      changedInLast4Hours: recentChangedIds.length,
     };
   }
 
-  async getTuitionList(query: QueryTuitionStatusDto) {
+  async getTuitionList(query: QueryTuitionStatusDto): Promise<{
+    items: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    changedInRecentHoursCount: number;
+  }> {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
@@ -1270,6 +1292,27 @@ export class StudentsService {
       filter.tuitionFeesStatus = query.tuitionFeesStatus;
     }
 
+    const hours = Number(query.recentHours) || 4;
+    const cutoffRecent = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const recentLogs = await this.tuitionAuditLogModel
+      .find({ createdAt: { $gte: cutoffRecent } })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const recentChangeMap = new Map<string, any>();
+    recentLogs.forEach((log) => {
+      const code = log.studentCode?.toLowerCase();
+      if (code && !recentChangeMap.has(code)) {
+        recentChangeMap.set(code, log);
+      }
+    });
+
+    if (query.changedInLastHours === 'true') {
+      const recentCodes = Array.from(recentChangeMap.keys());
+      filter.studentCode = { $in: recentCodes };
+    }
+
     const [items, total] = await Promise.all([
       this.studentProfileModel
         .find(filter)
@@ -1283,18 +1326,41 @@ export class StudentsService {
       this.studentProfileModel.countDocuments(filter),
     ]);
 
+    const enrichedItems = items.map((item) => {
+      const code = item.studentCode?.toLowerCase();
+      const recentLog = code ? recentChangeMap.get(code) : undefined;
+      return {
+        ...item,
+        hasRecentChange: Boolean(recentLog),
+        recentChange: recentLog
+          ? {
+              previousTuitionStatus: recentLog.previousTuitionStatus,
+              newTuitionStatus: recentLog.newTuitionStatus,
+              previousBlockStatus: recentLog.previousBlockStatus,
+              newBlockStatus: recentLog.newBlockStatus,
+              actionType: recentLog.actionType,
+              performedByName: recentLog.performedByName,
+              performedByRole: recentLog.performedByRole,
+              changedAt: recentLog.createdAt,
+            }
+          : undefined,
+      };
+    });
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit) || 1,
+      changedInRecentHoursCount: recentChangeMap.size,
     };
   }
 
   async updateStudentTuitionStatus(
     studentId: string,
     dto: UpdateTuitionStatusDto,
+    caller?: any,
   ) {
     let profile = await this.studentProfileModel.findById(studentId);
     if (!profile) {
@@ -1313,6 +1379,9 @@ export class StudentsService {
     if (!profile) {
       throw new NotFoundException('لم يتم العثور على ملف الطالب');
     }
+
+    const prevTuitionStatus = profile.tuitionFeesStatus || 'unpaid';
+    const prevBlockStatus = profile.isBlocked ?? false;
 
     profile.isBlocked = dto.isBlocked;
     if (dto.tuitionFeesStatus) {
@@ -1335,6 +1404,30 @@ export class StudentsService {
 
     await profile.save();
 
+    // Log to TuitionAuditLog
+    const performedBy = caller?._id
+      ? new Types.ObjectId(caller._id)
+      : profile.userId;
+    const performedByName = caller?.name || caller?.fullName || 'مسئول النظام';
+    const performedByRole = caller?.role || 'admin';
+
+    await this.tuitionAuditLogModel.create({
+      studentProfileId: profile._id,
+      studentCode: profile.studentCode,
+      studentName: profile.fullNameAr || profile.fullName,
+      level: profile.level || '1',
+      department: profile.department || 'GENERAL',
+      previousTuitionStatus: prevTuitionStatus,
+      newTuitionStatus: profile.tuitionFeesStatus,
+      previousBlockStatus: prevBlockStatus,
+      newBlockStatus: profile.isBlocked,
+      blockReason: profile.blockReason,
+      actionType: 'manual_single',
+      performedBy,
+      performedByName,
+      performedByRole,
+    });
+
     this.invalidateStatsCache();
 
     return {
@@ -1352,7 +1445,7 @@ export class StudentsService {
     };
   }
 
-  async bulkToggleTuitionStatus(dto: BulkToggleTuitionDto) {
+  async bulkToggleTuitionStatus(dto: BulkToggleTuitionDto, caller?: any) {
     const objectIds: Types.ObjectId[] = [];
     const studentCodes: string[] = [];
 
@@ -1375,6 +1468,13 @@ export class StudentsService {
     const targetTuitionStatus =
       dto.tuitionFeesStatus || (dto.isBlocked ? 'unpaid' : 'paid');
 
+    const affectedStudents = await this.studentProfileModel
+      .find(filter)
+      .select(
+        '_id studentCode fullName fullNameAr level department isBlocked tuitionFeesStatus blockReason',
+      )
+      .lean();
+
     const updateDoc: Record<string, any> = {
       isBlocked: dto.isBlocked,
       tuitionFeesStatus: targetTuitionStatus,
@@ -1390,6 +1490,36 @@ export class StudentsService {
     const result = await this.studentProfileModel.updateMany(filter, {
       $set: updateDoc,
     });
+
+    if (affectedStudents.length > 0) {
+      const performedBy = caller?._id
+        ? new Types.ObjectId(caller._id)
+        : (affectedStudents[0]._id as any);
+      const performedByName =
+        caller?.name || caller?.fullName || 'مسئول النظام';
+      const performedByRole = caller?.role || 'admin';
+
+      const logs = affectedStudents.map((s) => ({
+        studentProfileId: s._id,
+        studentCode: s.studentCode,
+        studentName: s.fullNameAr || s.fullName,
+        level: s.level || '1',
+        department: s.department || 'GENERAL',
+        previousTuitionStatus: s.tuitionFeesStatus || 'unpaid',
+        newTuitionStatus: targetTuitionStatus,
+        previousBlockStatus: s.isBlocked ?? false,
+        newBlockStatus: dto.isBlocked,
+        blockReason:
+          dto.blockReason || s.blockReason || 'عدم سداد المصروفات الدراسية',
+        actionType: 'manual_bulk' as const,
+        performedBy,
+        performedByName,
+        performedByRole,
+      }));
+      void this.tuitionAuditLogModel
+        .insertMany(logs, { ordered: false })
+        .catch(() => {});
+    }
 
     this.invalidateStatsCache();
 
@@ -1519,7 +1649,10 @@ export class StudentsService {
     };
   }
 
-  async processBatchTuitionRows(rows: Record<string, any>[]): Promise<{
+  async processBatchTuitionRows(
+    rows: Record<string, any>[],
+    caller?: any,
+  ): Promise<{
     totalRows: number;
     updatedCount: number;
     errorCount: number;
@@ -1598,20 +1731,28 @@ export class StudentsService {
     }
 
     // Single query bulk lookup
+    // Single query bulk lookup with profile details for auditing
     const existingProfiles = await this.studentProfileModel
       .find({ studentCode: { $in: codesToLookup } })
-      .select('_id studentCode')
+      .select(
+        '_id studentCode fullName fullNameAr level department isBlocked tuitionFeesStatus blockReason',
+      )
       .lean();
 
-    const profileMap = new Map(
-      existingProfiles.map((p) => [p.studentCode, p._id]),
-    );
+    const profileMap = new Map(existingProfiles.map((p) => [p.studentCode, p]));
 
     const bulkOps: any[] = [];
+    const auditLogsToInsert: any[] = [];
+
+    const performedBy = caller?._id
+      ? new Types.ObjectId(caller._id)
+      : (existingProfiles[0]?._id as any) || new Types.ObjectId();
+    const performedByName = caller?.name || caller?.fullName || 'رفع ملف إكسيل';
+    const performedByRole = caller?.role || 'admin';
 
     for (const item of extractedRows) {
-      const profileId = profileMap.get(item.cleanCode);
-      if (!profileId) {
+      const profile = profileMap.get(item.cleanCode);
+      if (!profile) {
         errors.push(
           `السطر ${item.rowNum}: كود الطالب "${item.rawCode}" غير مسجل بالمنظومة`,
         );
@@ -1687,9 +1828,31 @@ export class StudentsService {
       if (Object.keys(updateFields).length > 0) {
         bulkOps.push({
           updateOne: {
-            filter: { _id: profileId },
+            filter: { _id: profile._id },
             update: { $set: updateFields },
           },
+        });
+
+        // Track in audit log
+        auditLogsToInsert.push({
+          studentProfileId: profile._id,
+          studentCode: profile.studentCode,
+          studentName: profile.fullNameAr || profile.fullName,
+          level: updateFields.level || profile.level || '1',
+          department: profile.department || 'GENERAL',
+          previousTuitionStatus: profile.tuitionFeesStatus || 'unpaid',
+          newTuitionStatus:
+            updateFields.tuitionFeesStatus || profile.tuitionFeesStatus,
+          previousBlockStatus: profile.isBlocked ?? false,
+          newBlockStatus:
+            updateFields.isBlocked !== undefined
+              ? updateFields.isBlocked
+              : profile.isBlocked,
+          blockReason: updateFields.blockReason || profile.blockReason,
+          actionType: 'excel_upload' as const,
+          performedBy,
+          performedByName,
+          performedByRole,
         });
       }
     }
@@ -1700,6 +1863,13 @@ export class StudentsService {
         ordered: false,
       });
       updatedCount = bulkResult.modifiedCount ?? bulkOps.length;
+
+      if (auditLogsToInsert.length > 0) {
+        void this.tuitionAuditLogModel
+          .insertMany(auditLogsToInsert, { ordered: false })
+          .catch(() => {});
+      }
+
       this.invalidateStatsCache();
     }
 
@@ -1711,7 +1881,13 @@ export class StudentsService {
     };
   }
 
-  async exportTuitionToExcel(query: QueryTuitionStatusDto) {
+  /**
+   * Export comprehensive multi-sheet analytical Excel workbook:
+   * - Sheet 1: Analytics & KPI Summary Dashboard (Stats, Levels, Departments, Staff Activity).
+   * - Sheet 2: Full Student Tuition Roster (with 4-hour Delta tracking & Staff attribution).
+   * - Sheet 3: Tuition Change Audit Trail (Chronological history).
+   */
+  async exportTuitionToExcel(query: QueryTuitionStatusDto, _caller?: any) {
     const filter: Record<string, any> = {};
     if (query.search && query.search.trim()) {
       const s = query.search.trim();
@@ -1735,47 +1911,53 @@ export class StudentsService {
       filter.tuitionFeesStatus = query.tuitionFeesStatus;
     }
 
-    const students = await this.studentProfileModel
-      .find(filter)
-      .select(
-        'studentCode fullName fullNameAr fullNameEn level department isBlocked tuitionFeesStatus blockReason',
-      )
-      .sort({ level: 1, studentCode: 1 })
-      .lean();
+    const hours = Number(query.recentHours) || 4;
+    const cutoffRecent = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'BH47A Student Portal';
-    workbook.created = new Date();
+    const [students, recentLogs, allLogs] = await Promise.all([
+      this.studentProfileModel
+        .find(filter)
+        .select(
+          'studentCode fullName fullNameAr fullNameEn level department isBlocked tuitionFeesStatus blockReason blockedAt unblockedAt createdAt',
+        )
+        .sort({ level: 1, studentCode: 1 })
+        .lean(),
+      this.tuitionAuditLogModel
+        .find({ createdAt: { $gte: cutoffRecent } })
+        .sort({ createdAt: -1 })
+        .lean(),
+      this.tuitionAuditLogModel
+        .find({})
+        .sort({ createdAt: -1 })
+        .limit(2000)
+        .lean(),
+    ]);
 
-    const sheet = workbook.addWorksheet('المصروفات والحجب', {
-      views: [{ rightToLeft: true }],
+    const recentChangeMap = new Map<string, any>();
+    recentLogs.forEach((log) => {
+      const code = log.studentCode?.toLowerCase();
+      if (code && !recentChangeMap.has(code)) {
+        recentChangeMap.set(code, log);
+      }
     });
 
-    sheet.columns = [
-      { header: 'م', key: 'index', width: 8 },
-      { header: 'كود الطالب', key: 'studentCode', width: 18 },
-      { header: 'اسم الطالب', key: 'studentName', width: 35 },
-      { header: 'الفرقة', key: 'level', width: 18 },
-      { header: 'القسم', key: 'department', width: 16 },
-      { header: 'حالة المصروفات', key: 'tuitionStatus', width: 18 },
-      { header: 'حالة الحجب', key: 'blockStatus', width: 16 },
-      { header: 'سبب الحجب', key: 'blockReason', width: 30 },
-    ];
-
-    const headerRow = sheet.getRow(1);
-    headerRow.height = 30;
-    headerRow.font = {
-      bold: true,
-      color: { argb: 'FFFFFFFF' },
-      size: 11,
-      name: 'Segoe UI',
+    const formatCairoDate = (date?: Date | string) => {
+      if (!date) return '-';
+      try {
+        const d = new Date(date);
+        return new Intl.DateTimeFormat('ar-EG', {
+          timeZone: 'Africa/Cairo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }).format(d);
+      } catch {
+        return String(date);
+      }
     };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF0D9488' },
-    };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
     const LEVEL_MAP: Record<string, string> = {
       '1': 'الفرقة الأولى',
@@ -1790,8 +1972,381 @@ export class StudentsService {
       exempt: 'معفي',
     };
 
+    const ACTION_TYPE_MAP: Record<string, string> = {
+      manual_single: 'تعديل فردي سريع',
+      manual_bulk: 'تعديل جماعي محدد',
+      excel_upload: 'استيراد شيت إكسيل',
+      enrollment_sync: 'مزامنة تسجيل مادة',
+    };
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'BH47A Student Portal';
+    workbook.created = new Date();
+
+    // ─────────────────────────────────────────────────────────────────
+    // SHEET 1: المؤشرات والتحليل الإحصائي (Analytics Dashboard)
+    // ─────────────────────────────────────────────────────────────────
+    const dashSheet = workbook.addWorksheet('المؤشرات والتحليل الإحصائي', {
+      views: [{ rightToLeft: true }],
+    });
+
+    dashSheet.columns = [
+      { width: 26 },
+      { width: 20 },
+      { width: 20 },
+      { width: 20 },
+      { width: 20 },
+      { width: 22 },
+    ];
+
+    // Banner Header
+    dashSheet.mergeCells('A1:F1');
+    const titleCell = dashSheet.getCell('A1');
+    titleCell.value =
+      'المعهد العالي للإدارة وتكنولوجيا المعلومات - لوحة مؤشرات المصروفات والحجب الأكاديمي';
+    titleCell.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 12,
+      name: 'Segoe UI',
+    };
+    titleCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    dashSheet.getRow(1).height = 35;
+
+    dashSheet.mergeCells('A2:F2');
+    const subCell = dashSheet.getCell('A2');
+    subCell.value = `تاريخ استخراج التقرير: ${formatCairoDate(new Date())} | نافذة تتبع التعديلات: آخر (${hours}) ساعات | إجمالي السجلات المستخرجة: (${students.length}) طالب`;
+    subCell.font = {
+      size: 9,
+      italic: true,
+      color: { argb: 'FF475569' },
+      name: 'Segoe UI',
+    };
+    subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    dashSheet.getRow(2).height = 22;
+
+    // KPI Cards Block (Row 4 & 5)
+    dashSheet.addRow([]);
+    const kpiHeaderRow = dashSheet.addRow([
+      'إجمالي الطلاب المقيدين',
+      'مسددي المصروفات (مفعل)',
+      'غير مسددين (محجوب)',
+      'حالات الإعفاء',
+      `تعديلات آخر (${hours}) ساعات`,
+      'نسبة التحصيل الإجمالية',
+    ]);
+    kpiHeaderRow.height = 26;
+    kpiHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    kpiHeaderRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 10,
+      name: 'Segoe UI',
+    };
+    kpiHeaderRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF134E4A' },
+    };
+
+    const totalCount = students.length;
+    const paidCount = students.filter(
+      (s) => !s.isBlocked && s.tuitionFeesStatus === 'paid',
+    ).length;
+    const blockedCount = students.filter((s) => s.isBlocked).length;
+    const exemptCount = students.filter(
+      (s) => s.tuitionFeesStatus === 'exempt',
+    ).length;
+    const recentCount = recentChangeMap.size;
+    const collectionRate =
+      totalCount > 0
+        ? `${(((paidCount + exemptCount) / totalCount) * 100).toFixed(1)}%`
+        : '0%';
+
+    const kpiValRow = dashSheet.addRow([
+      totalCount,
+      paidCount,
+      blockedCount,
+      exemptCount,
+      recentCount,
+      collectionRate,
+    ]);
+    kpiValRow.height = 32;
+    kpiValRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    kpiValRow.font = { bold: true, size: 13, name: 'Segoe UI' };
+    kpiValRow.getCell(2).font = {
+      bold: true,
+      size: 13,
+      color: { argb: 'FF059669' },
+    };
+    kpiValRow.getCell(3).font = {
+      bold: true,
+      size: 13,
+      color: { argb: 'FFE11D48' },
+    };
+    kpiValRow.getCell(5).font = {
+      bold: true,
+      size: 13,
+      color: { argb: 'FF0D9488' },
+    };
+
+    // Section 1: Level Breakdown Table
+    dashSheet.addRow([]);
+    const sec1Row = dashSheet.addRow([
+      'أولاً: توزيع الطلاب وسداد المصروفات حسب الفرقة الدراسية',
+    ]);
+    sec1Row.font = {
+      bold: true,
+      color: { argb: 'FF0F766E' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+
+    const lvlHeaders = dashSheet.addRow([
+      'الفرقة الدراسية',
+      'إجمالي المقيدين',
+      'المسددين (مفعل)',
+      'المحجوبين (غير مسدد)',
+      'المعفيين',
+      'نسبة السداد',
+    ]);
+    lvlHeaders.height = 24;
+    lvlHeaders.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 9,
+      name: 'Segoe UI',
+    };
+    lvlHeaders.alignment = { vertical: 'middle', horizontal: 'center' };
+    lvlHeaders.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+
+    ['1', '2', '3', '4'].forEach((lvlKey) => {
+      const lvlStudents = students.filter((s) => s.level === lvlKey);
+      const lTotal = lvlStudents.length;
+      const lPaid = lvlStudents.filter(
+        (s) => !s.isBlocked && s.tuitionFeesStatus === 'paid',
+      ).length;
+      const lBlocked = lvlStudents.filter((s) => s.isBlocked).length;
+      const lExempt = lvlStudents.filter(
+        (s) => s.tuitionFeesStatus === 'exempt',
+      ).length;
+      const lRate =
+        lTotal > 0
+          ? `${(((lPaid + lExempt) / lTotal) * 100).toFixed(1)}%`
+          : '0%';
+
+      const r = dashSheet.addRow([
+        LEVEL_MAP[lvlKey] || `الفرقة ${lvlKey}`,
+        lTotal,
+        lPaid,
+        lBlocked,
+        lExempt,
+        lRate,
+      ]);
+      r.height = 22;
+      r.alignment = { vertical: 'middle', horizontal: 'center' };
+      r.font = { size: 10, name: 'Segoe UI' };
+    });
+
+    // Section 2: Department Breakdown Table
+    dashSheet.addRow([]);
+    const sec2Row = dashSheet.addRow([
+      'ثانياً: توزيع سداد المصروفات حسب القسم الأكاديمي',
+    ]);
+    sec2Row.font = {
+      bold: true,
+      color: { argb: 'FF0F766E' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+
+    const deptHeaders = dashSheet.addRow([
+      'القسم الأكاديمي',
+      'إجمالي المقيدين',
+      'المسددين',
+      'المحجوبين',
+      'المعفيين',
+      'نسبة الالتزام',
+    ]);
+    deptHeaders.height = 24;
+    deptHeaders.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 9,
+      name: 'Segoe UI',
+    };
+    deptHeaders.alignment = { vertical: 'middle', horizontal: 'center' };
+    deptHeaders.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+
+    const departments = ['GENERAL', 'BIS', 'ACCOUNTING'];
+    departments.forEach((deptKey) => {
+      const deptStudents = students.filter(
+        (s) => (s.department || 'GENERAL').toUpperCase() === deptKey,
+      );
+      const dTotal = deptStudents.length;
+      const dPaid = deptStudents.filter(
+        (s) => !s.isBlocked && s.tuitionFeesStatus === 'paid',
+      ).length;
+      const dBlocked = deptStudents.filter((s) => s.isBlocked).length;
+      const dExempt = deptStudents.filter(
+        (s) => s.tuitionFeesStatus === 'exempt',
+      ).length;
+      const dRate =
+        dTotal > 0
+          ? `${(((dPaid + dExempt) / dTotal) * 100).toFixed(1)}%`
+          : '0%';
+
+      const r = dashSheet.addRow([
+        deptKey === 'GENERAL' ? 'عام (الشعبة العامة)' : deptKey,
+        dTotal,
+        dPaid,
+        dBlocked,
+        dExempt,
+        dRate,
+      ]);
+      r.height = 22;
+      r.alignment = { vertical: 'middle', horizontal: 'center' };
+      r.font = { size: 10, name: 'Segoe UI' };
+    });
+
+    // Section 3: Staff Activity Breakdown Table
+    dashSheet.addRow([]);
+    const sec3Row = dashSheet.addRow([
+      `ثالثاً: نشاط وتعديلات الموظفين (آخر ${hours} ساعات)`,
+    ]);
+    sec3Row.font = {
+      bold: true,
+      color: { argb: 'FF0F766E' },
+      size: 11,
+      name: 'Segoe UI',
+    };
+
+    const staffHeaders = dashSheet.addRow([
+      'اسم الموظف المسئول',
+      'الصفة الوظيفية',
+      'عدد التعديلات المنفذة',
+      'آخر توقيت حركة',
+      'طبيعة الإجراءات',
+      'حالة النشاط',
+    ]);
+    staffHeaders.height = 24;
+    staffHeaders.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 9,
+      name: 'Segoe UI',
+    };
+    staffHeaders.alignment = { vertical: 'middle', horizontal: 'center' };
+    staffHeaders.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+
+    const staffGroupMap = new Map<
+      string,
+      { role: string; count: number; lastTime: Date }
+    >();
+    recentLogs.forEach((l) => {
+      const name = l.performedByName || 'مسئول النظام';
+      const existing = staffGroupMap.get(name);
+      if (existing) {
+        existing.count++;
+        if (new Date(l.createdAt) > existing.lastTime) {
+          existing.lastTime = new Date(l.createdAt);
+        }
+      } else {
+        staffGroupMap.set(name, {
+          role: l.performedByRole || 'staff',
+          count: 1,
+          lastTime: new Date(l.createdAt),
+        });
+      }
+    });
+
+    if (staffGroupMap.size === 0) {
+      const emptyRow = dashSheet.addRow([
+        'لا توجد تعديلات مسجلة للموظفين خلال هذه الفترة',
+        '-',
+        0,
+        '-',
+        '-',
+        'مستقر',
+      ]);
+      emptyRow.height = 22;
+      emptyRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      emptyRow.font = { italic: true, size: 9, color: { argb: 'FF64748B' } };
+    } else {
+      staffGroupMap.forEach((val, staffName) => {
+        const r = dashSheet.addRow([
+          staffName,
+          val.role === 'admin' ? 'مدير نظام' : 'شؤون طلاب / خزينة',
+          val.count,
+          formatCairoDate(val.lastTime),
+          'تحديث ومراجعة مصروفات',
+          'نشط مؤخراً',
+        ]);
+        r.height = 22;
+        r.alignment = { vertical: 'middle', horizontal: 'center' };
+        r.font = { size: 10, name: 'Segoe UI' };
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // SHEET 2: كشف الطلاب وحالة السداد (Student Tuition Roster)
+    // ─────────────────────────────────────────────────────────────────
+    const rosterSheet = workbook.addWorksheet('كشف الطلاب والمصروفات', {
+      views: [{ rightToLeft: true }],
+    });
+
+    rosterSheet.columns = [
+      { header: 'م', key: 'index', width: 8 },
+      { header: 'كود الطالب', key: 'studentCode', width: 18 },
+      { header: 'اسم الطالب', key: 'studentName', width: 34 },
+      { header: 'الفرقة', key: 'level', width: 18 },
+      { header: 'القسم', key: 'department', width: 16 },
+      { header: 'حالة المصروفات', key: 'tuitionStatus', width: 18 },
+      { header: 'حالة الحجب', key: 'blockStatus', width: 16 },
+      { header: 'سبب الحجب', key: 'blockReason', width: 28 },
+      { header: `تعديل آخر (${hours}) س`, key: 'recentChange', width: 20 },
+      { header: 'وقت آخر تعديل', key: 'lastChangedAt', width: 24 },
+      { header: 'الموظف المسئول', key: 'changedByStaff', width: 24 },
+    ];
+
+    const rosterHeaderRow = rosterSheet.getRow(1);
+    rosterHeaderRow.height = 30;
+    rosterHeaderRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 10,
+      name: 'Segoe UI',
+    };
+    rosterHeaderRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    rosterHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
     students.forEach((s, idx) => {
-      const addedRow = sheet.addRow({
+      const codeKey = s.studentCode?.toLowerCase();
+      const recentLog = codeKey ? recentChangeMap.get(codeKey) : undefined;
+      const isRecentlyModified = Boolean(recentLog);
+
+      const addedRow = rosterSheet.addRow({
         index: idx + 1,
         studentCode: s.studentCode,
         studentName: s.fullNameAr || s.fullName,
@@ -1803,10 +2358,32 @@ export class StudentsService {
           'غير محدد',
         blockStatus: s.isBlocked ? 'محجوب' : 'مفعل',
         blockReason: s.blockReason || '',
+        recentChange: isRecentlyModified ? 'نعم 🔄' : 'لا',
+        lastChangedAt: isRecentlyModified
+          ? formatCairoDate(recentLog.createdAt)
+          : formatCairoDate(s.unblockedAt || s.blockedAt),
+        changedByStaff: isRecentlyModified
+          ? recentLog.performedByName || 'مسئول النظام'
+          : '-',
       });
+
       addedRow.height = 22;
       addedRow.alignment = { vertical: 'middle', horizontal: 'center' };
       addedRow.font = { name: 'Segoe UI', size: 10 };
+
+      // Highlight rows modified in the last 4 hours
+      if (isRecentlyModified) {
+        addedRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0FDFA' }, // Light mint/teal
+        };
+        addedRow.getCell('recentChange').font = {
+          bold: true,
+          color: { argb: 'FF0D9488' },
+        };
+      }
+
       if (s.isBlocked) {
         addedRow.getCell('blockStatus').font = {
           bold: true,
@@ -1820,23 +2397,95 @@ export class StudentsService {
       }
     });
 
+    // ─────────────────────────────────────────────────────────────────
+    // SHEET 3: سجل حركة وتعديلات المصروفات (Tuition Audit Trail)
+    // ─────────────────────────────────────────────────────────────────
+    const auditSheet = workbook.addWorksheet('سجل حركة وتعديلات المصروفات', {
+      views: [{ rightToLeft: true }],
+    });
+
+    auditSheet.columns = [
+      { header: 'م', key: 'index', width: 8 },
+      { header: 'التاريخ والوقت (توقيت القاهرة)', key: 'timestamp', width: 25 },
+      { header: 'كود الطالب', key: 'studentCode', width: 18 },
+      { header: 'اسم الطالب', key: 'studentName', width: 32 },
+      { header: 'الفرقة', key: 'level', width: 16 },
+      { header: 'الحالة السابقة', key: 'oldStatus', width: 18 },
+      { header: 'الحالة الجديدة', key: 'newStatus', width: 18 },
+      { header: 'نوع الإجراء', key: 'actionType', width: 22 },
+      { header: 'الموظف القائم بالإجراء', key: 'staffName', width: 24 },
+      { header: 'الصفة الوظيفية', key: 'staffRole', width: 18 },
+      { header: 'السبب والملاحظات', key: 'notes', width: 30 },
+    ];
+
+    const auditHeaderRow = auditSheet.getRow(1);
+    auditHeaderRow.height = 30;
+    auditHeaderRow.font = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 10,
+      name: 'Segoe UI',
+    };
+    auditHeaderRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF134E4A' },
+    };
+    auditHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    allLogs.forEach((log, idx) => {
+      const addedRow = auditSheet.addRow({
+        index: idx + 1,
+        timestamp: formatCairoDate(log.createdAt),
+        studentCode: log.studentCode,
+        studentName: log.studentName,
+        level: LEVEL_MAP[log.level] || `الفرقة ${log.level}`,
+        oldStatus: `${TUITION_MAP[log.previousTuitionStatus] || log.previousTuitionStatus} (${log.previousBlockStatus ? 'محجوب' : 'مفعل'})`,
+        newStatus: `${TUITION_MAP[log.newTuitionStatus] || log.newTuitionStatus} (${log.newBlockStatus ? 'محجوب' : 'مفعل'})`,
+        actionType: ACTION_TYPE_MAP[log.actionType] || log.actionType,
+        staffName: log.performedByName || 'مسئول النظام',
+        staffRole: log.performedByRole === 'admin' ? 'مدير نظام' : 'موظف شؤون',
+        notes: log.blockReason || '-',
+      });
+
+      addedRow.height = 22;
+      addedRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      addedRow.font = { name: 'Segoe UI', size: 10 };
+
+      if (log.newBlockStatus) {
+        addedRow.getCell('newStatus').font = {
+          bold: true,
+          color: { argb: 'FFE11D48' },
+        };
+      } else {
+        addedRow.getCell('newStatus').font = {
+          bold: true,
+          color: { argb: 'FF059669' },
+        };
+      }
+    });
+
     const uint8Array = await workbook.xlsx.writeBuffer();
     return {
       buffer: Buffer.from(uint8Array),
       contentType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      filename: `tuition-and-block-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      filename: `tuition-advanced-analytics-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
     };
   }
 
-  async bulkUpdateTuitionFromExcel(buffer: Buffer, originalname: string) {
+  async bulkUpdateTuitionFromExcel(
+    buffer: Buffer,
+    originalname: string,
+    caller?: any,
+  ) {
     const rows = await this.parseTuitionWorkbookRows(buffer, originalname);
     if (rows.length === 0) {
       throw new BadRequestException(
         'الملف فارغ أو لا يحتوي على صفوف بيانات صالحة',
       );
     }
-    return this.processBatchTuitionRows(rows);
+    return this.processBatchTuitionRows(rows, caller);
   }
 
   private cleanFieldValue(val: any): string {

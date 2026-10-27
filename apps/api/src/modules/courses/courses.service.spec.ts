@@ -6,6 +6,15 @@ describe('CoursesService Unit Tests', () => {
   let service: CoursesService;
 
   const mockCourseModel: any = jest.fn();
+  const mockCourseMaterialModel: any = {
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      }),
+    }),
+    findById: jest.fn(),
+    create: jest.fn(),
+  };
   const mockCourseRegistrationModel: any = {};
   const mockStudentProfileModel: any = {};
   const mockUserModel: any = {};
@@ -40,6 +49,7 @@ describe('CoursesService Unit Tests', () => {
 
     service = new CoursesService(
       mockCourseModel,
+      mockCourseMaterialModel,
       mockCourseRegistrationModel,
       mockStudentProfileModel,
       mockUserModel,
@@ -229,6 +239,113 @@ describe('CoursesService Unit Tests', () => {
 
       await expect(service.findOne(courseId)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('getCourseEnrollmentsCount()', () => {
+    it('returns the enrolled students count for a course in a given term', async () => {
+      mockCourseModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(courseId),
+        code: 'CS101',
+        name: 'Computer Science',
+      });
+      mockCourseRegistrationModel.countDocuments = jest
+        .fn()
+        .mockResolvedValue(42);
+
+      const result = await service.getCourseEnrollmentsCount(courseId, {
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+
+      expect(result.courseCode).toBe('CS101');
+      expect(result.enrolledCount).toBe(42);
+      expect(mockCourseRegistrationModel.countDocuments).toHaveBeenCalledWith({
+        courses: { $in: ['CS101', 'CS101', 'cs101'] },
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+    });
+  });
+
+  describe('resetCourseEnrollments()', () => {
+    it('returns resetCount 0 if no matching registrations are found', async () => {
+      mockCourseModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(courseId),
+        code: 'CS101',
+        name: 'Computer Science',
+        creditHours: 3,
+      });
+      mockCourseRegistrationModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      });
+      mockCourseRegistrationModel.bulkWrite = jest.fn();
+
+      const result = await service.resetCourseEnrollments(courseId, {
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.resetCount).toBe(0);
+      expect(mockCourseRegistrationModel.bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it('removes the course from registrations and decrements credit hours', async () => {
+      const targetCourseId = new Types.ObjectId(courseId);
+      mockCourseModel.findById.mockResolvedValue({
+        _id: targetCourseId,
+        code: 'CS101',
+        name: 'Computer Science',
+        creditHours: 3,
+      });
+      mockCourseRegistrationModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: new Types.ObjectId(),
+              courses: ['CS101', 'MATH101'],
+              totalCreditHours: 6,
+              source: 'manual',
+            },
+            {
+              _id: new Types.ObjectId(),
+              courses: ['CS101'],
+              totalCreditHours: 3,
+              source: 'system',
+            },
+          ]),
+        }),
+      });
+      mockCourseRegistrationModel.bulkWrite = jest
+        .fn()
+        .mockResolvedValue({ ok: 1 });
+
+      const result = await service.resetCourseEnrollments(courseId, {
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.resetCount).toBe(2);
+      expect(mockCourseRegistrationModel.bulkWrite).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateOne: expect.objectContaining({
+              update: expect.objectContaining({
+                $pull: { courses: { $in: ['CS101', 'CS101', 'cs101'] } },
+                $set: { totalCreditHours: 3 },
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            deleteOne: expect.any(Object),
+          }),
+        ]),
+        { ordered: false },
       );
     });
   });

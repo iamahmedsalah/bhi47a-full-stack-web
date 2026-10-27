@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -26,12 +26,15 @@ import {
   Loader2,
   UserCheck,
   BookOpen,
+  RotateCcw,
+  Users,
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 import { toast } from 'sonner';
 import { readSheet as readXlsxFile } from 'read-excel-file/browser';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
 
 export interface CourseStudentEnrollmentDialogProps {
@@ -72,11 +75,15 @@ export function CourseStudentEnrollmentDialog({
 }: CourseStudentEnrollmentDialogProps) {
   const isAr = locale === 'ar';
 
+  const queryClient = useQueryClient();
   const [courseId, setCourseId] = useState<string>('');
   const [academicYear, setAcademicYear] = useState<string>('2026-2027');
   const [semester, setSemester] = useState<'first' | 'second' | 'summer'>('first');
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
 
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -95,6 +102,27 @@ export function CourseStudentEnrollmentDialog({
     retrySecondsLeft: 0,
   });
   const [result, setResult] = useState<EnrollmentResult | null>(null);
+
+  // Fetch count of enrolled students in the selected course for the chosen term
+  const enrollmentsCountQuery = useQuery({
+    queryKey: ['course-enrollments-count', courseId, academicYear, semester],
+    queryFn: async () => {
+      if (!courseId) return null;
+      const res = await api.get<{
+        courseId: string;
+        courseCode: string;
+        courseName: string;
+        enrolledCount: number;
+        academicYear?: string;
+        semester?: string;
+      }>(`/admin/courses/${courseId}/enrollments/count`, {
+        params: { academicYear, semester },
+      });
+      return res.data;
+    },
+    enabled: open && Boolean(courseId),
+    staleTime: 30 * 1000,
+  });
 
   // Load all institute courses independently so all levels (1..4) and semesters are selectable
   const allCoursesQuery = useQuery({
@@ -477,6 +505,7 @@ export function CourseStudentEnrollmentDialog({
           : `Successfully enrolled ${data.enrolledCount} students in ${data.courseCode}`,
       );
 
+      void enrollmentsCountQuery.refetch();
       if (onSuccess) onSuccess();
     } catch (err) {
       setProgressState((prev) => ({
@@ -495,6 +524,48 @@ export function CourseStudentEnrollmentDialog({
       );
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const selectedCourseObj = availableCourses.find((c) => c._id === courseId);
+
+  const handleResetCourseEnrollments = async () => {
+    if (!courseId) return;
+    try {
+      setIsResetting(true);
+      const res = await api.delete<{
+        success: boolean;
+        courseId: string;
+        courseCode: string;
+        courseName: string;
+        resetCount: number;
+        message: string;
+      }>(`/admin/courses/${courseId}/enrollments`, {
+        params: { academicYear, semester },
+      });
+
+      toast.success(
+        res.data?.message ||
+          (isAr
+            ? `تم تصفير تسجيلات المقرر بنجاح (${res.data?.resetCount || 0} طالب)`
+            : `Course enrollments reset successfully (${res.data?.resetCount || 0} students)`),
+      );
+
+      void enrollmentsCountQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: ['courses'] });
+      if (onSuccess) onSuccess();
+      setIsResetConfirmOpen(false);
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isAr
+            ? 'فشل تصفير تسجيلات الطلاب بالمقرر'
+            : 'Failed to reset course enrollments',
+        ),
+      );
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -647,6 +718,49 @@ export function CourseStudentEnrollmentDialog({
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Course Enrolled Students Count & Reset Registrations Bar */}
+              {courseId && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-secondary/30 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    <span className="text-muted-foreground">
+                      {isAr ? 'الطلاب المسجلون حالياً بالمقرر:' : 'Currently Enrolled Students:'}
+                    </span>
+                    {enrollmentsCountQuery.isLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <span className="font-bold text-foreground font-mono">
+                        {enrollmentsCountQuery.data?.enrolledCount ?? 0}{' '}
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          {isAr ? 'طالب' : 'students'}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsResetConfirmOpen(true)}
+                    disabled={
+                      isUploading ||
+                      isResetting ||
+                      enrollmentsCountQuery.isLoading ||
+                      (enrollmentsCountQuery.data?.enrolledCount ?? 0) === 0
+                    }
+                    className="h-7 rounded-squircle border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:border-rose-500/40 dark:text-rose-400 dark:hover:bg-rose-500/15 gap-1.5 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {isResetting ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3 w-3" />
+                    )}
+                    <span>{isAr ? 'تصفير المسجلين بالمقرر' : 'Reset Enrollments'}</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -826,6 +940,43 @@ export function CourseStudentEnrollmentDialog({
             {isAr ? 'إغلاق' : 'Close'}
           </Button>
         </DialogFooter>
+
+        <ConfirmDialog
+          open={isResetConfirmOpen}
+          onOpenChange={setIsResetConfirmOpen}
+          title={isAr ? 'تأكيد تصفير تسجيلات هذا المقرر' : 'Confirm Reset Course Registrations'}
+          description={
+            <div className="space-y-2 text-xs leading-relaxed">
+              <p>
+                {isAr
+                  ? `هل أنت متأكد من تصفير وإلغاء تسجيل جميع الطلاب (${enrollmentsCountQuery.data?.enrolledCount ?? 0} طالب) في مقرر:`
+                  : `Are you sure you want to reset and remove all student registrations (${enrollmentsCountQuery.data?.enrolledCount ?? 0} students) for course:`}
+              </p>
+              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 font-semibold text-rose-600 dark:text-rose-400">
+                <span className="font-mono">
+                  {selectedCourseObj?.code}
+                </span>{' '}
+                - {isAr ? selectedCourseObj?.nameAr || selectedCourseObj?.name : selectedCourseObj?.name}{' '}
+                ({academicYear} -{' '}
+                {semester === 'first'
+                  ? isAr ? 'الترم الأول' : '1st Term'
+                  : semester === 'second'
+                    ? isAr ? 'الترم الثاني' : '2nd Term'
+                    : isAr ? 'صيفي' : 'Summer'})
+              </div>
+              <p className="text-muted-foreground text-[11px]">
+                {isAr
+                  ? 'يُستخدم هذا الإجراء في حال تم رفع شيت تسجيل بالخطأ. سيتم حذف هذا المقرر من استمارات تسجيل الطلاب المحددة فوراً وتحديث إجمالي الساعات المسجلة.'
+                  : 'Use this action if an incorrect enrollment sheet was uploaded. This course will be removed from all matching student registrations immediately.'}
+              </p>
+            </div>
+          }
+          confirmLabel={isAr ? 'نعم، تصفير التسجيلات' : 'Yes, Reset Enrollments'}
+          cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+          destructive
+          disabled={isResetting}
+          onConfirm={handleResetCourseEnrollments}
+        />
       </DialogContent>
     </Dialog>
   );

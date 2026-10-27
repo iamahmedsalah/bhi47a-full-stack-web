@@ -21,6 +21,8 @@ import {
   ListChecks,
   X,
   Users,
+  Layers,
+  RotateCcw,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
@@ -42,6 +44,7 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { TableActionButton } from '@/components/ui/table-action-button';
 import { CourseStudentEnrollmentDialog } from '@/features/courses/components/course-student-enrollment-dialog';
+import { CourseMaterialsDialog } from '@/features/courses/components/course-materials-dialog';
 
 // shadcn
 import { Button } from '@/components/ui/button';
@@ -131,6 +134,7 @@ interface CourseFormDialogProps {
   ) => Promise<void>;
   t: ReturnType<typeof useTranslations>;
   tCommon: ReturnType<typeof useTranslations>;
+  canManageBook?: boolean;
 }
 
 const MAX_COURSE_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB Vercel serverless payload limit
@@ -143,6 +147,7 @@ function CourseFormDialog({
   onSubmit,
   t,
   tCommon,
+  canManageBook = true,
 }: CourseFormDialogProps) {
   const [name, setName] = useState(initialValues.name || '');
   const [nameAr, setNameAr] = useState(initialValues.nameAr || initialValues.name || '');
@@ -581,16 +586,17 @@ function CourseFormDialog({
             <p className="text-[11px] text-muted-foreground/80">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. Supports multi-department placement.</p>
           </div>
 
-          {/* Course Curriculum & Cover Image Media Section (Modern 2-Column Grid) */}
-          <div className="space-y-3 rounded-xl border border-border/80 bg-secondary/15 p-3.5 text-start">
-            <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-              <BookOpen className="h-4 w-4 text-primary" />
-              <h4 className="text-xs font-bold text-foreground">
-                {locale === 'ar' ? 'ملحقات ومحتوى المادة الدراسية' : 'Course Curriculum & Media Attachments'}
-              </h4>
-            </div>
+          {/* Course Curriculum & Cover Image Media Section (Only for Doctor or Admin, hidden for Teaching Assistant) */}
+          {canManageBook ? (
+            <div className="space-y-3 rounded-xl border border-border/80 bg-secondary/15 p-3.5 text-start">
+              <div className="flex items-center gap-2 border-b border-border/60 pb-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <h4 className="text-xs font-bold text-foreground">
+                  {locale === 'ar' ? 'ملحقات ومحتوى المادة الدراسية' : 'Course Curriculum & Media Attachments'}
+                </h4>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {/* Card 1: Curriculum / Syllabus (PDF) */}
               <div className="space-y-2.5 rounded-xl border border-border/80 bg-background/60 p-3 text-start flex flex-col justify-between">
                 <div>
@@ -812,6 +818,16 @@ function CourseFormDialog({
               </div>
             </div>
           </div>
+        ) : (
+          <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 text-xs text-muted-foreground flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span>
+              {locale === 'ar'
+                ? '💡 رفع وتعديل منهج وغلاف المقرر مخصص لأستاذ المادة والإدارة. يمكن للمعيدين رفع السكاشن من قائمة المحاضرات والسكاشن.'
+                : '💡 Course syllabus and book cover uploads are reserved for course doctors and administration. Teaching assistants can manage sections from the Lectures & Sections menu.'}
+            </span>
+          </div>
+        )}
 
           <div className="flex items-center gap-2 pt-1">
             <input type="checkbox" id="isActiveCourse" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 rounded border-input-border bg-input text-primary focus:ring-primary cursor-pointer" />
@@ -1084,7 +1100,10 @@ function CoursesPageContent() {
   } = useCourseStore();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const isDoctor = user?.role === 'staff' && (user as any)?.staffType === 'doctor';
+  const staffType = (user as any)?.staffType;
+  const isDoctor = user?.role === 'staff' && staffType === 'doctor';
+  const isTeachingAssistant = user?.role === 'staff' && staffType === 'teaching_assistant';
+  const canManageBook = isAdmin || isDoctor;
   const canWriteCourses = isAdmin || Boolean(user?.permissions?.includes('courses.write'));
   const canUploadCourses = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
   const canCreateQuiz = isAdmin || Boolean(user?.permissions?.includes('quizzes.write')) || Boolean(user?.permissions?.includes('quizzes.create'));
@@ -1098,6 +1117,8 @@ function CoursesPageContent() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedCourseForPdf, setSelectedCourseForPdf] = useState<Course | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState<Course | null>(null);
+  const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
@@ -1407,20 +1428,22 @@ function CoursesPageContent() {
                 <FileText className="h-3.5 w-3.5" />
                 <span>{locale === 'ar' ? 'عرض PDF' : 'View PDF'}</span>
               </a>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedCourseForPdf(course);
-                  setIsPdfModalOpen(true);
-                }}
-                className="h-7 w-7 p-0 rounded-squircle text-muted-foreground hover:text-primary hover:bg-primary/10"
-                title={locale === 'ar' ? 'استبدال أو إدارة ملف المنهج' : 'Replace or manage syllabus'}
-              >
-                <UploadCloud className="h-3.5 w-3.5" />
-              </Button>
+              {canManageBook && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedCourseForPdf(course);
+                    setIsPdfModalOpen(true);
+                  }}
+                  className="h-7 w-7 p-0 rounded-squircle text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  title={locale === 'ar' ? 'استبدال أو إدارة ملف المنهج' : 'Replace or manage syllabus'}
+                >
+                  <UploadCloud className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
-          ) : (
+          ) : canManageBook ? (
             <Button
               variant="outline"
               size="sm"
@@ -1433,6 +1456,8 @@ function CoursesPageContent() {
               <UploadCloud className="h-3 w-3" />
               <span>{locale === 'ar' ? 'رفع PDF' : 'Upload PDF'}</span>
             </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground/60 italic">—</span>
           )}
         </TableCell>
       ),
@@ -1537,7 +1562,20 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
-                {(canWriteCourses || isDoctor) && (
+                {/* Course Lectures & Sections (Admin, Doctor, TA) */}
+                <DropdownMenu.Item
+                  onClick={() => {
+                    setSelectedCourseForMaterials(course);
+                    setIsMaterialsOpen(true);
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-teal-500/10 hover:text-teal-600 transition-colors"
+                >
+                  <Layers className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>{locale === 'ar' ? 'المحاضرات والسكاشن التعليمية' : 'Lectures & Sections'}</span>
+                </DropdownMenu.Item>
+
+                {/* Upload Syllabus PDF (Doctor or Admin only, hidden for TA) */}
+                {canManageBook && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setSelectedCourseForPdf(course);
@@ -1560,6 +1598,19 @@ function CoursesPageContent() {
                   >
                     <UserCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
                     <span>{locale === 'ar' ? 'تسجيل الطلاب في المقرر (Excel)' : 'Enroll Students in Course (Excel)'}</span>
+                  </DropdownMenu.Item>
+                )}
+
+                {canWriteCourses && !isDoctor && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      setEnrollmentCourseId(course._id);
+                      setIsEnrollmentDialogOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-rose-500/10 hover:text-rose-600 transition-colors text-rose-600 dark:text-rose-400"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>{locale === 'ar' ? 'تصفير وإلغاء تسجيلات المقرر' : 'Reset Course Registrations'}</span>
                   </DropdownMenu.Item>
                 )}
 
@@ -1827,6 +1878,7 @@ function CoursesPageContent() {
         open={isAddOpen}
         onOpenChange={setIsAddOpen}
         mode="add"
+        canManageBook={canManageBook}
         onSubmit={handleAdd}
         t={t}
         tCommon={tCommon}
@@ -1837,6 +1889,7 @@ function CoursesPageContent() {
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
         mode="edit"
+        canManageBook={canManageBook}
         initialValues={selectedCourse || undefined}
         onSubmit={handleEdit}
         t={t}
@@ -1855,6 +1908,23 @@ function CoursesPageContent() {
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
         }}
+      />
+
+      {/* Course Lectures and Sections Materials Dialog */}
+      <CourseMaterialsDialog
+        open={isMaterialsOpen}
+        onOpenChange={(open) => {
+          setIsMaterialsOpen(open);
+          if (!open) setSelectedCourseForMaterials(null);
+        }}
+        courseId={selectedCourseForMaterials?._id || ''}
+        courseCode={selectedCourseForMaterials?.code || ''}
+        courseName={
+          locale === 'ar'
+            ? selectedCourseForMaterials?.nameAr || selectedCourseForMaterials?.name || ''
+            : selectedCourseForMaterials?.name || ''
+        }
+        locale={locale}
       />
 
       {/* Single Course Delete Confirm Dialog */}

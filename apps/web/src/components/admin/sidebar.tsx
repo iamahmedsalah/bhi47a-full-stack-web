@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useParams, usePathname } from "next/navigation";
 import Image from "next/image";
@@ -13,7 +13,6 @@ import {
   Loader2,
   LogOut,
   Mail,
-  Menu,
   MessageSquareWarning,
   MessagesSquare,
   Activity,
@@ -27,12 +26,14 @@ import {
   QrCode,
   HelpCircle,
   CalendarDays,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
 import { useUIStore } from "@/store/ui-store";
 import Themes from "@/components/ui/Themes";
 import LangToggle from "@/components/ui/LangToggle";
+import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { PERMISSIONS, type Permission } from "@student-portal/shared";
 
 interface NavItem {
@@ -40,6 +41,7 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   permission?: Permission;
+  permissions?: Permission[];
   adminOnly?: boolean;
 }
 
@@ -48,15 +50,36 @@ export default function AdminSidebar() {
   const params = useParams();
   const pathname = usePathname();
   const { user, logout, isLoggingOut } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const {
+    sidebarOpen, toggleSidebar,
+    adminMobileSidebarOpen: mobileOpen,
+    setAdminMobileSidebarOpen: setMobileOpen,
+  } = useUIStore();
   const locale = params.locale as string;
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileOpen(false);
+    };
+    closeOnDesktop();
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      desktop.removeEventListener("change", closeOnDesktop);
+      setMobileOpen(false);
+    };
+  }, [setMobileOpen]);
 
   const navItems: NavItem[] = [
     {
       key: "dashboard",
       href: `/${locale}/admin`,
       icon: <LayoutDashboard className="h-5 w-5" />,
+    },
+    {
+      key: "security",
+      href: `/${locale}/admin/security`,
+      icon: <ShieldCheck className="h-5 w-5" />,
     },
     {
       key: "attendance",
@@ -165,7 +188,7 @@ export default function AdminSidebar() {
     // - Hide grades, academicEmails, and generic uploads
     // - Keep students, courses, quizzes, attendance, complaints
     // - Allow examSchedules (viewed in student mode)
-    const isDoctor = user?.role === "staff" && (user as any)?.staffType === "doctor";
+    const isDoctor = user?.role === "staff" && user.staffType === "doctor";
     if (isDoctor) {
       if (item.key === "grades" || item.key === "academicEmails" || item.key === "uploads") {
         return false;
@@ -175,8 +198,8 @@ export default function AdminSidebar() {
       }
     }
 
-    if ('permissions' in item && Array.isArray((item as any).permissions)) {
-      return (item as any).permissions.some((p: string) => user?.permissions?.includes(p));
+    if (item.permissions) {
+      return item.permissions.some((p) => user?.permissions?.includes(p));
     }
     return !item.permission || user?.permissions?.includes(item.permission);
   });
@@ -186,14 +209,14 @@ export default function AdminSidebar() {
     return (
       <div
         className={cn(
-          "flex h-full flex-col border border-white/5 bg-card/95 p-4 shadow-(--shadow-glow) backdrop-blur-sm transition-all duration-300",
+          "flex h-full min-h-0 flex-col overflow-hidden border border-white/5 bg-card/95 p-4 shadow-(--shadow-glow) backdrop-blur-sm transition-all duration-300",
           isSidebarOpen ? "rounded-2xl" : "rounded-squircle",
         )}
       >
         {/* Sidebar Header with Toggle Icon */}
         <div
           className={cn(
-            "flex items-center mb-5",
+            "mb-4 flex shrink-0 items-center gap-2",
             isSidebarOpen ? "justify-between" : "flex-col justify-center gap-3",
           )}
         >
@@ -238,6 +261,17 @@ export default function AdminSidebar() {
               priority
             />
           )}
+          {isForceOpen && (
+            <SheetClose asChild>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-squircle text-white hover:bg-white/10"
+                aria-label={t("closeNavigation")}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </SheetClose>
+          )}
           {!isForceOpen && (
             <button
               onClick={toggleSidebar}
@@ -251,7 +285,7 @@ export default function AdminSidebar() {
 
         <nav
           className={cn(
-            "custom-scroll flex-1 w-full space-y-1.5 overflow-y-auto",
+            "custom-scroll min-h-0 flex-1 w-full space-y-1.5 overflow-y-auto overscroll-contain",
             !isSidebarOpen && "w-fit flex flex-col items-center",
           )}
         >
@@ -265,6 +299,7 @@ export default function AdminSidebar() {
               <Link
                 key={item.key}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center rounded-squircle text-sm transition-colors cursor-pointer",
@@ -302,7 +337,7 @@ export default function AdminSidebar() {
 
         <div
           className={cn(
-            "mt-4 border-t border-white/10 pt-4",
+            "mt-4 shrink-0 border-t border-white/10 pt-4",
             !isSidebarOpen && "flex flex-col items-center",
           )}
         >
@@ -356,15 +391,6 @@ export default function AdminSidebar() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        className="fixed start-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground shadow-(--shadow-glow) backdrop-blur md:hidden cursor-pointer"
-        aria-label="Open navigation"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
       <aside
         className={cn(
           "fixed inset-y-0 start-0 z-40 hidden p-4 md:block transition-all duration-300",
@@ -374,41 +400,22 @@ export default function AdminSidebar() {
         {renderContent(false)}
       </aside>
 
-      <div
-        className={cn(
-          "fixed inset-0 z-100 md:hidden",
-          mobileOpen ? "pointer-events-auto" : "pointer-events-none",
-        )}
-        aria-hidden={!mobileOpen}
-      >
-        <button
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-          className={cn(
-            "absolute inset-0 bg-black/60 transition-opacity cursor-pointer",
-            mobileOpen ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <div
-          className={cn(
-            "absolute inset-y-0 start-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform",
-            mobileOpen
-              ? "translate-x-0"
-              : "-translate-x-full rtl:translate-x-full",
-          )}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          id="admin-mobile-navigation"
+          side={locale === "ar" ? "right" : "left"}
+          dir={locale === "ar" ? "rtl" : "ltr"}
+          aria-describedby={undefined}
+          className="flex h-dvh w-80 max-w-[88vw] flex-col gap-0 overflow-hidden bg-[#0d1821] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden [&>button]:hidden"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            document.getElementById("admin-navigation-trigger")?.focus();
+          }}
         >
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md text-white hover:bg-white/10 cursor-pointer"
-            aria-label="Close navigation"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <SheetTitle className="sr-only">{t("navigation")}</SheetTitle>
           {renderContent(true)}
-        </div>
-      </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

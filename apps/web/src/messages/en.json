@@ -63,6 +63,10 @@
     "error": "Could not complete the request. Check your password and connection, then try again. Password sign-in remains available."
   },
   "nav": {
+    "security": "Account security",
+    "navigation": "Navigation",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
     "academicAdvising": "Academic Advising",
     "dashboard": "Dashboard",
     "students": "Students",

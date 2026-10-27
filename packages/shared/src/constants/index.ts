@@ -10,4 +10,5 @@ export * from "./password";
 export * from "./attendance";
 export * from "./grading";
 export * from "./staff";
-
+export * from "./materials";
+export * from "./tuition-audit";

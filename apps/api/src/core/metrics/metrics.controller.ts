@@ -7,6 +7,8 @@ import {
   Req,
   NotFoundException,
   UnauthorizedException,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { OptionalAuth } from '../../modules/auth/decorators/public.decorator';
@@ -14,6 +16,7 @@ import { Roles } from '../../modules/auth/decorators/roles.decorator';
 import { MetricsService } from './metrics.service';
 import { UsersService } from '../../modules/users/users.service';
 import type { AuthenticatedRequest } from '../../modules/auth/types/authenticated-request';
+import { TRAFFIC_WINDOWS, type TrafficWindow } from './http-traffic-window';
 
 @Controller()
 export class MetricsController {
@@ -72,8 +75,10 @@ export class MetricsController {
    */
   @Roles('admin')
   @Get(['metrics/summary', 'admin/metrics'])
-  async getSummary() {
-    return this.metricsService.getSummary();
+  async getSummary(@Query('window') window = '5m') {
+    if (!Object.hasOwn(TRAFFIC_WINDOWS, window))
+      throw new BadRequestException('Unsupported metrics window');
+    return this.metricsService.getSummary(window as TrafficWindow);
   }
 
   /**

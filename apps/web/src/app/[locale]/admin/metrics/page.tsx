@@ -11,7 +11,6 @@ import {
   Database,
   Server,
   ShieldAlert,
-  Zap,
   Clock,
   RefreshCw,
   Copy,
@@ -60,6 +59,8 @@ import {
   type MetricsSummaryResponse,
 } from '@/features/metrics/api';
 import { LockedAccountsModal } from './locked-accounts-modal';
+import { HttpTrafficCard, HttpTrafficDetails } from '@/features/metrics/http-traffic';
+import type { TrafficWindow } from '@/features/metrics/api';
 
 
 type RouteSort = 'latency' | 'max' | 'count' | 'errors' | 'route';
@@ -170,6 +171,7 @@ export default function AdminMetricsPage() {
   const dateLocale = isAr ? 'ar-EG' : 'en-GB';
 
   const [refreshInterval, setRefreshInterval] = useState<number>(5000);
+  const [trafficWindow, setTrafficWindow] = useState<TrafficWindow>('5m');
   const [copiedUrl, setCopiedUrl] = useState(false);
 
   // Slow Queries filter state
@@ -195,8 +197,8 @@ export default function AdminMetricsPage() {
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useQuery<MetricsSummaryResponse>({
-      queryKey: ['admin-metrics-summary'],
-      queryFn: getMetricsSummary,
+      queryKey: ['admin-metrics-summary', trafficWindow],
+      queryFn: () => getMetricsSummary(trafficWindow),
       refetchInterval: refreshInterval > 0 ? refreshInterval : false,
       refetchOnWindowFocus: true,
     });
@@ -509,39 +511,7 @@ export default function AdminMetricsPage() {
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.1 }}>
-              <Card className={KPI_CARD_CLASS}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    {isAr ? 'حركة الطلبات (HTTP Traffic)' : 'HTTP Requests / RPS'}
-                  </span>
-                  <Zap className="h-4 w-4 text-amber-400" />
-                </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="font-mono text-2xl font-black text-foreground">{data.http.totalRequests}</span>
-                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-squircle border border-amber-500/20" dir="ltr">
-                    {data.http.requestsPerSecond} RPS
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-muted-foreground">
-                    {isAr ? 'متوسط التأخير: ' : 'Avg: '}
-                    <bdi>{data.http.avgLatencyMs} ms</bdi>
-                  </span>
-                  {data.http.errorRatePercent !== undefined && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded-squircle font-bold text-[10px] ${
-                        data.http.errorRatePercent > 5
-                          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                          : data.http.errorRatePercent > 0
-                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                          : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      }`}
-                    >
-                      <bdi>{data.http.errorRatePercent}%</bdi> {isAr ? 'استجابات 4xx/5xx' : '4xx/5xx responses'}
-                    </span>
-                  )}
-                </div>
-              </Card>
+              <HttpTrafficCard traffic={data.traffic} isAr={isAr} window={trafficWindow} onWindowChange={setTrafficWindow} className={KPI_CARD_CLASS} />
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.15 }}>
@@ -713,6 +683,8 @@ export default function AdminMetricsPage() {
               />
             </Card>
           </div>
+
+          <HttpTrafficDetails traffic={data.traffic} slowRequests={data.recentSlowRequests} isAr={isAr} />
 
           {/* ─── ROW 3: Host OS & Infrastructure ─── */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -892,7 +864,7 @@ export default function AdminMetricsPage() {
               <div>
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <BarChart2 className="h-4 w-4 text-cyan-400" />
-                  <span>{isAr ? 'زمن استجابة المسارات (Endpoints Latency)' : 'Endpoints Latency'}</span>
+                  <span>{isAr ? 'زمن استجابة المسارات — منذ بدء العملية' : 'Endpoints Latency — process lifetime'}</span>
                 </h3>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {isAr

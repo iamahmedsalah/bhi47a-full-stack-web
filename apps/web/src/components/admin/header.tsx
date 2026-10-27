@@ -31,12 +31,14 @@ import {
   Calendar,
   Trash2,
   CheckCheck,
+  Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { toast } from 'sonner';
 import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 import LangToggle from '@/components/ui/LangToggle';
 import { Themes } from '@/components/ui/Themes';
+import { useUIStore } from '@/store/ui-store';
 
 const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
 const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
@@ -46,6 +48,8 @@ export default function AdminHeader() {
   const params = useParams();
   const queryClient = useQueryClient();
   const locale = params.locale as string;
+  const tNav = useTranslations('nav');
+  const { adminMobileSidebarOpen, setAdminMobileSidebarOpen } = useUIStore();
 
   const isAr = locale === 'ar';
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -173,9 +177,9 @@ export default function AdminHeader() {
   };
 
   return (
-    <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 pe-14 md:pe-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+    <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
       {/* Right/Start section: Logo & Institute Name */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 md:flex-1">
         <Image
           src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_112,h_112,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
           alt={isAr ? 'شعار المعهد' : 'Institute Logo'}
@@ -184,7 +188,7 @@ export default function AdminHeader() {
           className="object-contain rounded shrink-0"
           priority
         />
-        <div className="text-start min-w-0">
+        <div className="text-start min-w-0 flex-1">
           <h2 className="text-sm md:text-base font-bold text-foreground/90 leading-tight truncate">
             {isAr ? 'المعهد العالى للعلوم الادارية المتقدمة والحاسبات' : 'Higher Institute for Advanced Administrative Sciences & Computer'}
           </h2>
@@ -193,6 +197,18 @@ export default function AdminHeader() {
             {isAr ? 'لوحة تحكم الإدارة الأكاديمية' : 'Admin Control Panel'}
           </span>
         </div>
+        <button
+          id="admin-navigation-trigger"
+          type="button"
+          onClick={() => setAdminMobileSidebarOpen(true)}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground md:hidden"
+          aria-label={tNav('openNavigation')}
+          aria-expanded={adminMobileSidebarOpen}
+          aria-controls="admin-mobile-navigation"
+          aria-haspopup="dialog"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Left/End section: Session timer, language switcher, themes, notifications */}
@@ -204,7 +220,7 @@ export default function AdminHeader() {
         <div className="flex items-center gap-2">
           <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
           <LangToggle hideLabel />
-          <Link href={`/${locale}/admin/security`} className="rounded-squircle px-2 py-1 text-xs hover:bg-white/10">{tSecurity('title')}</Link>
+          <Link href={`/${locale}/admin/security`} className="hidden rounded-squircle px-2 py-1 text-xs hover:bg-white/10 md:inline-flex">{tSecurity('title')}</Link>
           <Themes />
 
           {/* Notifications Slide-out Drawer */}

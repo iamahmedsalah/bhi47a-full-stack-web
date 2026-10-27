@@ -9,6 +9,8 @@ import { useUIStore } from '@/store/ui-store';
 import { cn } from '@/lib/cn';
 import { FcmInitializer } from '@/providers/fcm-initializer';
 import { StudentChatWidget } from '@/features/ai/components/student-chat-widget';
+import { useAuth } from '@/providers/auth-provider';
+import { LoadingState } from '@/components/ui/feedback';
 
 export default function StudentLayout({
   children,
@@ -18,6 +20,11 @@ export default function StudentLayout({
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
   const { sidebarOpen } = useUIStore();
+  const { user, loading, isLoggingOut } = useAuth();
+
+  if (loading || isLoggingOut || !user || user.role !== 'student' || user.mustChangePassword) {
+    return <LoadingState title={locale === 'ar' ? 'جارٍ التحقق من الجلسة...' : 'Checking session...'} />;
+  }
 
   return (
     <div className="min-h-screen">

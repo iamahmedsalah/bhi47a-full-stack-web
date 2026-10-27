@@ -32,7 +32,9 @@ import {
   Eye,
   BookOpen,
   Loader2,
+  Lock,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -43,6 +45,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
 import { getStudentDisplayNames } from "@/features/students/student-name";
 import { getPublicPortalSettings, settingsKeys } from "@/features/settings/api";
+import { CourseMaterialsDialog } from "@/features/courses/components/course-materials-dialog";
 
 const StudentQrScannerDialog = dynamic(
   () =>
@@ -87,6 +90,9 @@ export default function StudentDashboard() {
   const params = useParams();
   const locale = params.locale as string;
   const { user } = useAuth();
+
+  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = React.useState<any | null>(null);
+  const [isMaterialsOpen, setIsMaterialsOpen] = React.useState(false);
 
   // 1. Profile Query (immutable within session)
   const profileQuery = useQuery({
@@ -305,8 +311,8 @@ export default function StudentDashboard() {
               </h3>
               <p className="text-xs md:text-sm text-foreground/90 leading-relaxed">
                 {locale === 'ar'
-                  ? 'تم حجب بعض الخدمات الأكاديمية (مثل خوض الكويزات وتحميل مناهج المواد) نظراً لعدم سداد المصروفات الدراسية المقررة. يرجى مراجعة خزينة المعهد وشؤون الطلاب لتسوية الرسوم وإعادة تفعيل كافة الخدمات.'
-                  : 'Certain portal features (including quiz attempts and syllabus PDF downloads) are restricted due to unpaid tuition fees. Please visit the institute treasury and student affairs office to settle fees and restore full access.'}
+                  ? 'تم حجب بعض الخدمات الأكاديمية (مثل خوض الكويزات وتحميل مناهج ومحاضرات وسكاشن المواد) نظراً لعدم سداد المصروفات الدراسية المقررة. يرجى مراجعة خزينة المعهد وشؤون الطلاب لتسوية الرسوم وإعادة تفعيل كافة الخدمات.'
+                  : 'Certain portal features (including quiz attempts, syllabus PDF, and course lecture/section downloads) are restricted due to unpaid tuition fees. Please visit the institute treasury and student affairs office to settle fees and restore full access.'}
               </p>
               {profile.blockReason && (
                 <div className="pt-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
@@ -1262,17 +1268,50 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      {/* Course Materials Button (Lectures & Sections) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCourseForMaterials(course);
+                          setIsMaterialsOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-squircle bg-secondary/80 hover:bg-secondary text-foreground text-xs font-semibold transition-all cursor-pointer border border-border/60 shadow-2xs"
+                        title={locale === "ar" ? "المحاضرات والسكاشن التعليمية" : "Lectures & Sections"}
+                      >
+                        <Layers className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                        <span className="hidden sm:inline">{locale === "ar" ? "المحاضرات والسكاشن" : "Materials"}</span>
+                      </button>
+
+                      {/* Course Syllabus PDF */}
                       {course.syllabusPdfUrl ? (
-                        <a
-                          href={course._id ? `${apiBaseUrl}/courses/${course._id}/syllabus/download` : course.syllabusPdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-squircle bg-primary hover:bg-primary/85 text-primary-foreground text-xs font-semibold transition-all shadow-xs"
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          <span className="hidden sm:inline">{locale === "ar" ? "تحميل PDF" : "PDF"}</span>
-                        </a>
+                        profile?.isBlocked ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toast.error(
+                                locale === "ar"
+                                  ? "عفواً، تم حجب تحميل منهج المقرر لعدم سداد المصروفات الدراسية"
+                                  : "Syllabus download withheld due to unpaid tuition fees",
+                              );
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-squircle bg-rose-500/10 text-rose-500 text-xs font-semibold border border-rose-500/20 cursor-not-allowed"
+                            title={locale === "ar" ? "محجوب لعدم سداد المصروفات" : "Withheld for unpaid tuition"}
+                          >
+                            <Lock className="h-3 w-3" />
+                            <span className="hidden sm:inline">{locale === "ar" ? "محجوب" : "Locked"}</span>
+                          </button>
+                        ) : (
+                          <a
+                            href={course._id ? `${apiBaseUrl}/courses/${course._id}/syllabus/download` : course.syllabusPdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-squircle bg-primary hover:bg-primary/85 text-primary-foreground text-xs font-semibold transition-all shadow-xs"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{locale === "ar" ? "تحميل PDF" : "PDF"}</span>
+                          </a>
+                        )
                       ) : (
                         <span className="text-[10px] text-muted-foreground/70 italic px-2 py-1 rounded bg-secondary/30">
                           {locale === "ar" ? "قيد الإعداد" : "Pending"}
@@ -1311,6 +1350,25 @@ export default function StudentDashboard() {
           liveSessionsQuery.refetch();
         }}
         locale={locale}
+      />
+
+      {/* Course Lectures & Sections Dialog */}
+      <CourseMaterialsDialog
+        open={isMaterialsOpen}
+        onOpenChange={(open) => {
+          setIsMaterialsOpen(open);
+          if (!open) setSelectedCourseForMaterials(null);
+        }}
+        courseId={selectedCourseForMaterials?._id || selectedCourseForMaterials?.courseId || ''}
+        courseCode={selectedCourseForMaterials?.code || selectedCourseForMaterials?.courseCode || ''}
+        courseName={
+          locale === 'ar'
+            ? selectedCourseForMaterials?.nameAr || selectedCourseForMaterials?.name || ''
+            : selectedCourseForMaterials?.nameEn || selectedCourseForMaterials?.name || ''
+        }
+        locale={locale}
+        isStudent={true}
+        isStudentBlocked={profile?.isBlocked === true}
       />
     </div>
   );

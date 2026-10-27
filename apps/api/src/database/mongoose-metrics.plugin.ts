@@ -158,6 +158,8 @@ export function createMongooseMetricsPlugin(
               options,
               uptimeSeconds: Math.floor(process.uptime()),
               requestId: getRequestQueryContext()?.request.requestId,
+              route: getRequestQueryContext()?.request.route,
+              method: getRequestQueryContext()?.request.method,
               stage: getRequestQueryContext()?.stage,
             },
           );
@@ -198,6 +200,8 @@ export function createMongooseMetricsPlugin(
               durationMs,
               filter,
               requestId: getRequestQueryContext()?.request.requestId,
+              route: getRequestQueryContext()?.request.route,
+              method: getRequestQueryContext()?.request.method,
               stage: getRequestQueryContext()?.stage,
             },
           );
@@ -230,6 +234,8 @@ export function createMongooseMetricsPlugin(
               operation: 'save',
               durationMs,
               requestId: getRequestQueryContext()?.request.requestId,
+              route: getRequestQueryContext()?.request.route,
+              method: getRequestQueryContext()?.request.method,
               stage: getRequestQueryContext()?.stage,
             },
           );

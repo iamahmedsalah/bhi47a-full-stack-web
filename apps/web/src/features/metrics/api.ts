@@ -96,6 +96,11 @@ export const CANONICAL_COLLECTIONS = [
 ] as const;
 
 export interface MetricsSummaryResponse {
+  traffic?: HttpTraffic;
+  recentSlowRequests?: Array<{
+    requestId: string; timestamp: string; method: string; route: string; status: number;
+    durationMs: number; databaseOperations: number; summedDatabaseMs: number; stages: Record<string, number>;
+  }>;
   timestamp: string;
   uptimeSeconds: number;
   system: {
@@ -182,9 +187,23 @@ export interface MetricsSummaryResponse {
 }
 
 /** GET /api/metrics/summary (admin only, JSON envelope). */
-export async function getMetricsSummary(): Promise<MetricsSummaryResponse> {
-  const res = await api.get<MetricsSummaryResponse>('/metrics/summary');
+export async function getMetricsSummary(window: TrafficWindow = '5m'): Promise<MetricsSummaryResponse> {
+  const res = await api.get<MetricsSummaryResponse>('/metrics/summary', { params: { window } });
   return res.data;
+}
+
+export type TrafficWindow = '5m' | '15m' | '1h' | '24h';
+export interface HttpTraffic {
+  source: 'process' | 'prometheus'; window: TrafficWindow; observedSeconds: number; resolutionSeconds: number;
+  prometheusAvailable: boolean;
+  totalRequests: number; requestsPerSecond: number;
+  avgLatencyMs: number | null; p50LatencyMs: number | null; p95LatencyMs: number | null; p99LatencyMs: number | null;
+  status2xx: number; status3xx: number; status4xx: number; status5xx: number;
+  rawErrorRatePercent: number; actionableErrorRatePercent: number;
+  statusCounts: Record<string, number>; outcomes: Record<string, number>;
+  avgDbQueries?: number | null; p95DbQueries?: number | null;
+  successfulP95LatencyMs?: number | null;
+  routes: Array<{ route: string; totalRequests: number; p95LatencyMs: number | null; errorCount?: number; status4xx?: number; status5xx?: number }>;
 }
 
 export interface LockedAccountItem {

@@ -1,4 +1,9 @@
-import { Injectable, Optional, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Optional,
+  UnauthorizedException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Response, CookieOptions } from 'express';
@@ -53,7 +58,8 @@ export class AuthSessionService {
   }
 
   async getMe(userId: string) {
-    const user = await this.usersService.findById(userId);
+    const user = await this.usersService.findByIdForAuth(userId);
+    if (!user) throw new NotFoundException('User not found');
     return {
       _id: user._id,
       name: user.name,

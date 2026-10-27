@@ -5,6 +5,7 @@ import { StudentsService } from './students.service';
 describe('StudentsService Unit Tests', () => {
   let service: StudentsService;
   let mockStudentProfileModel: any;
+  let mockTuitionAuditLogModel: any;
   let mockRegistrationModel: any;
   let mockRegistrationTermModel: any;
   let mockAdvisingCaseModel: any;
@@ -87,8 +88,18 @@ describe('StudentsService Unit Tests', () => {
       findById: jest.fn(),
     };
 
+    mockTuitionAuditLogModel = {
+      create: jest.fn().mockResolvedValue({}),
+      countDocuments: jest.fn().mockResolvedValue(0),
+      distinct: jest.fn().mockResolvedValue([]),
+      find: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      }),
+    };
+
     service = new StudentsService(
       mockStudentProfileModel,
+      mockTuitionAuditLogModel,
       mockRegistrationModel,
       mockRegistrationTermModel,
       mockAdvisingCaseModel,
@@ -239,6 +250,7 @@ describe('StudentsService Unit Tests', () => {
         paid: 85,
         unpaid: 20,
         exempt: 15,
+        changedInLast4Hours: 0,
       });
     });
 
@@ -261,6 +273,7 @@ describe('StudentsService Unit Tests', () => {
         paid: 0,
         unpaid: 0,
         exempt: 0,
+        changedInLast4Hours: 0,
       });
     });
   });

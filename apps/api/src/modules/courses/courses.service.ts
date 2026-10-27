@@ -33,6 +33,14 @@ import {
 } from '../students/schemas/student-profile.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import * as ExcelJS from 'exceljs';
+import {
+  CourseMaterial,
+  CourseMaterialDocument,
+} from './schemas/course-material.schema';
+import {
+  CreateCourseMaterialDto,
+  QueryCourseMaterialsDto,
+} from './dto/course-material.dto';
 
 export interface CourseSyllabusFile {
   fieldname: string;
@@ -56,6 +64,8 @@ export interface StudentSyllabiResponse {
 export class CoursesService {
   constructor(
     @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
+    @InjectModel(CourseMaterial.name)
+    private courseMaterialModel: Model<CourseMaterialDocument>,
     @InjectModel(CourseRegistration.name)
     private courseRegistrationModel: Model<CourseRegistrationDocument>,
     @InjectModel(StudentProfile.name)
@@ -490,8 +500,35 @@ export class CoursesService {
       .digest('hex');
   }
 
-  async uploadSyllabus(courseId: string, file: CourseSyllabusFile) {
+  validateCourseDoctorOrAdmin(course: CourseDocument, caller?: any) {
+    if (!caller || caller.role === 'admin') return;
+    if (caller.role === 'staff') {
+      if (caller.staffType === 'teaching_assistant') {
+        throw new ForbiddenException(
+          'غير مسموح للمعيد برفع أو تعديل كتاب المقرر أو غلافه. هذه الصلاحية خاصة بأستاذ المقرر (دكتور) فقط',
+        );
+      }
+      if (caller.staffType === 'doctor') {
+        const callerId = caller._id?.toString();
+        const isAssigned =
+          course.doctorId?.toString() === callerId ||
+          (course.doctorIds || []).some((d: any) => d.toString() === callerId);
+        if (!isAssigned) {
+          throw new ForbiddenException(
+            'غير مسموح لك برفع أو تعديل كتاب هذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
+          );
+        }
+      }
+    }
+  }
+
+  async uploadSyllabus(
+    courseId: string,
+    file: CourseSyllabusFile,
+    caller?: any,
+  ) {
     const course = await this.findOne(courseId);
+    this.validateCourseDoctorOrAdmin(course, caller);
 
     const isPdf =
       file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname);
@@ -695,6 +732,7 @@ export class CoursesService {
   async uploadCoverImage(
     courseId: string,
     file: CourseSyllabusFile,
+    caller?: any,
   ): Promise<{
     message: string;
     courseId: string;
@@ -702,6 +740,7 @@ export class CoursesService {
     coverImageUrl: string;
   }> {
     const course = await this.findOne(courseId);
+    this.validateCourseDoctorOrAdmin(course, caller);
 
     const isImage =
       file.mimetype.startsWith('image/') ||
@@ -831,19 +870,287 @@ export class CoursesService {
     };
   }
 
-  async removeSyllabus(courseId: string): Promise<{ message: string }> {
+  async removeSyllabus(
+    courseId: string,
+    caller?: any,
+  ): Promise<{ message: string }> {
     const course = await this.findOne(courseId);
+    this.validateCourseDoctorOrAdmin(course, caller);
     course.syllabusPdfUrl = undefined;
     course.syllabusPdfName = undefined;
     await course.save();
     return { message: 'تم إزالة ملف المنهج بنجاح' };
   }
 
-  async removeCoverImage(courseId: string): Promise<{ message: string }> {
+  async removeCoverImage(
+    courseId: string,
+    caller?: any,
+  ): Promise<{ message: string }> {
     const course = await this.findOne(courseId);
+    this.validateCourseDoctorOrAdmin(course, caller);
     course.coverImageUrl = undefined;
     await course.save();
     return { message: 'تم إزالة صورة غلاف المقرر بنجاح' };
+  }
+
+  /**
+   * Upload academic material (Lecture by Doctor or Section by TA) with strict role segregation.
+   */
+  async uploadCourseMaterial(
+    courseId: string,
+    file: CourseSyllabusFile,
+    dto: CreateCourseMaterialDto,
+    caller: any,
+  ) {
+    const course = await this.findOne(courseId);
+
+    const callerRole = caller.role;
+    const staffType = caller.staffType;
+    const callerIdStr = caller._id?.toString();
+
+    let uploadedByRole: 'doctor' | 'teaching_assistant' | 'admin' = 'admin';
+
+    if (callerRole === 'admin') {
+      uploadedByRole = 'admin';
+    } else if (callerRole === 'staff') {
+      if (staffType === 'doctor') {
+        uploadedByRole = 'doctor';
+        const isAssigned =
+          course.doctorId?.toString() === callerIdStr ||
+          (course.doctorIds || []).some(
+            (d: any) => d.toString() === callerIdStr,
+          );
+        if (!isAssigned) {
+          throw new ForbiddenException(
+            'غير مسموح لك برفع مواد لهذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
+          );
+        }
+        if (dto.type !== 'lecture') {
+          throw new BadRequestException(
+            'أستاذ المقرر (دكتور) مخصص له رفع المحاضرات (lecture) فقط',
+          );
+        }
+      } else if (staffType === 'teaching_assistant') {
+        uploadedByRole = 'teaching_assistant';
+        const isAssigned = (course.teachingAssistantIds || []).some(
+          (taId: any) => taId.toString() === callerIdStr,
+        );
+        if (!isAssigned) {
+          throw new ForbiddenException(
+            'غير مسموح لك برفع سكاشن لهذا المقرر لعدم إسناد المادة إليك كمعيد',
+          );
+        }
+        if (dto.type !== 'section') {
+          throw new BadRequestException(
+            'المعيد مخصص له رفع السكاشن والتدريبات العملية (section) فقط',
+          );
+        }
+      } else {
+        throw new ForbiddenException('غير مصرح لك برفع المحتوى الأكاديمي');
+      }
+    } else {
+      throw new ForbiddenException('صلاحية غير كافية لرفع المحتوى');
+    }
+
+    let cleanOriginalName = file.originalname;
+    try {
+      cleanOriginalName = Buffer.from(file.originalname, 'latin1').toString(
+        'utf8',
+      );
+    } catch {
+      cleanOriginalName = file.originalname;
+    }
+
+    const config = this.getCloudinaryConfig();
+    let fileUrl: string;
+
+    if (config) {
+      const { cloudName, apiKey, apiSecret } = config;
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const folder = `course-materials/${dto.type}s`;
+      const accessMode = 'public';
+      const signature = this.createCloudinarySignature(
+        { access_mode: accessMode, folder, timestamp },
+        apiSecret,
+      );
+
+      const ext = file.originalname.split('.').pop() || 'pdf';
+      const safeFilename = `${dto.type}_${course.code || 'course'}_${Date.now()}.${ext}`;
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new Blob([new Uint8Array(file.buffer)], {
+          type: file.mimetype || 'application/octet-stream',
+        }),
+        safeFilename,
+      );
+      formData.append('api_key', apiKey);
+      formData.append('folder', folder);
+      formData.append('timestamp', timestamp);
+      formData.append('access_mode', accessMode);
+      formData.append('signature', signature);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`,
+        { method: 'POST', body: formData },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new BadRequestException(
+          `فشل رفع الملف إلى السحابة: ${errorText || response.statusText}`,
+        );
+      }
+
+      const result = (await response.json()) as { secure_url?: string };
+      fileUrl = result.secure_url || '';
+    } else {
+      const base64 = Buffer.from(file.buffer).toString('base64');
+      fileUrl = `data:${file.mimetype || 'application/pdf'};base64,${base64}`;
+    }
+
+    const material = new this.courseMaterialModel({
+      courseId: course._id,
+      type: dto.type,
+      title: dto.title.trim(),
+      titleAr: dto.titleAr?.trim(),
+      fileUrl,
+      fileName: cleanOriginalName,
+      fileSize: file.buffer.length,
+      mimeType: file.mimetype,
+      weekNumber: dto.weekNumber,
+      description: dto.description?.trim(),
+      isPublished: true,
+      uploadedBy: new Types.ObjectId(caller._id),
+      uploadedByName: caller.name || caller.fullName || 'عضو هيئة تدريس',
+      uploadedByRole,
+    });
+
+    const saved = await material.save();
+    void this.cacheService?.delPattern(`courses:${courseId}:materials*`);
+
+    return {
+      message:
+        dto.type === 'lecture'
+          ? 'تم رفع المحاضرة بنجاح'
+          : 'تم رفع السكشن بنجاح',
+      material: saved,
+    };
+  }
+
+  /**
+   * Retrieve course materials with student withholding check.
+   */
+  async getCourseMaterials(
+    courseId: string,
+    query: QueryCourseMaterialsDto,
+    caller?: any,
+  ) {
+    const course = await this.findOne(courseId);
+
+    // If caller is student: enforce withholding gate for unpaid fees
+    if (caller && caller.role === 'student') {
+      const studentProfile = await this.studentProfileModel
+        .findOne({ userId: caller._id })
+        .lean();
+
+      if (studentProfile?.isBlocked) {
+        throw new ForbiddenException(
+          'عفواً، تم حجب المحاضرات والسكاشن الدراسية نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة إدارة المعهد.',
+        );
+      }
+    }
+
+    const filter: Record<string, any> = { courseId: course._id };
+    if (query.type) {
+      filter.type = query.type;
+    }
+    if (caller && caller.role === 'student') {
+      filter.isPublished = true;
+    }
+
+    const materials = await this.courseMaterialModel
+      .find(filter)
+      .sort({ weekNumber: 1, createdAt: 1 })
+      .lean();
+
+    return {
+      courseId: course._id,
+      courseCode: course.code,
+      courseName: course.name,
+      courseNameAr: course.nameAr,
+      totalCount: materials.length,
+      materials,
+    };
+  }
+
+  /**
+   * Stream / download course material with student withholding check.
+   */
+  async downloadCourseMaterial(materialId: string, res: any, caller?: any) {
+    const material = await this.courseMaterialModel.findById(materialId);
+    if (!material) {
+      throw new NotFoundException('لم يتم العثور على الملف المطلوب');
+    }
+
+    if (caller && caller.role === 'student') {
+      const studentProfile = await this.studentProfileModel
+        .findOne({ userId: caller._id })
+        .lean();
+
+      if (studentProfile?.isBlocked) {
+        throw new ForbiddenException(
+          'عفواً، لا يمكنك تحميل المحاضرات أو السكاشن الدراسية نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة إدارة المعهد.',
+        );
+      }
+    }
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (material.fileUrl.startsWith('data:')) {
+      const parts = material.fileUrl.split(';base64,');
+      const contentType = parts[0].replace('data:', '');
+      const buffer = Buffer.from(parts[1], 'base64');
+      res.setHeader('Content-Type', contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(material.fileName)}"`,
+      );
+      return res.send(buffer);
+    }
+
+    return res.redirect(302, material.fileUrl);
+  }
+
+  /**
+   * Delete course material (admin or original uploader).
+   */
+  async deleteCourseMaterial(materialId: string, caller: any) {
+    const material = await this.courseMaterialModel.findById(materialId);
+    if (!material) {
+      throw new NotFoundException('لم يتم العثور على الملف المطلوب');
+    }
+
+    if (caller.role !== 'admin') {
+      const callerIdStr = caller._id?.toString();
+      if (material.uploadedBy.toString() !== callerIdStr) {
+        throw new ForbiddenException(
+          'لا يمكنك حذف ملف قام برفعه عضو تدريس آخر',
+        );
+      }
+    }
+
+    await this.courseMaterialModel.findByIdAndDelete(materialId);
+    void this.cacheService?.delPattern(
+      `courses:${material.courseId.toString()}:materials*`,
+    );
+
+    return {
+      message:
+        material.type === 'lecture'
+          ? 'تم حذف المحاضرة بنجاح'
+          : 'تم حذف السكشن بنجاح',
+      materialId,
+    };
   }
 
   /**
@@ -1481,5 +1788,144 @@ export class CoursesService {
     });
 
     return rows;
+  }
+
+  /**
+   * Get enrolled students count for a course, optionally filtered by academic year & semester.
+   */
+  async getCourseEnrollmentsCount(
+    courseId: string,
+    options: { academicYear?: string; semester?: string } = {},
+  ): Promise<{
+    courseId: string;
+    courseCode: string;
+    courseName: string;
+    enrolledCount: number;
+    academicYear?: string;
+    semester?: string;
+  }> {
+    const course = await this.findOne(courseId);
+    const codeUpper = course.code.toUpperCase();
+    const codeLower = course.code.toLowerCase();
+
+    const query: Record<string, any> = {
+      courses: { $in: [codeUpper, course.code, codeLower] },
+    };
+    if (options.academicYear && options.academicYear !== 'all') {
+      query.academicYear = options.academicYear;
+    }
+    if (options.semester && options.semester !== 'all') {
+      query.semester = options.semester;
+    }
+
+    const enrolledCount =
+      await this.courseRegistrationModel.countDocuments(query);
+
+    return {
+      courseId: course._id.toString(),
+      courseCode: course.code,
+      courseName: course.name,
+      enrolledCount,
+      academicYear: options.academicYear,
+      semester: options.semester,
+    };
+  }
+
+  /**
+   * Reset and remove all student registrations/enrollments for a specific course.
+   * Useful when an administrator uploads wrong enrollment data.
+   */
+  async resetCourseEnrollments(
+    courseId: string,
+    options: { academicYear?: string; semester?: string } = {},
+  ): Promise<{
+    success: boolean;
+    courseId: string;
+    courseCode: string;
+    courseName: string;
+    resetCount: number;
+    message: string;
+  }> {
+    const course = await this.findOne(courseId);
+    const codeUpper = course.code.toUpperCase();
+    const codeLower = course.code.toLowerCase();
+    const courseCreditHours = course.creditHours || 3;
+
+    const query: Record<string, any> = {
+      courses: { $in: [codeUpper, course.code, codeLower] },
+    };
+    if (options.academicYear && options.academicYear !== 'all') {
+      query.academicYear = options.academicYear;
+    }
+    if (options.semester && options.semester !== 'all') {
+      query.semester = options.semester;
+    }
+
+    // Find all registrations containing this course
+    const matchingRegistrations = await this.courseRegistrationModel
+      .find(query)
+      .select('_id studentId courses totalCreditHours source')
+      .lean();
+
+    if (matchingRegistrations.length === 0) {
+      return {
+        success: true,
+        courseId: course._id.toString(),
+        courseCode: course.code,
+        courseName: course.name,
+        resetCount: 0,
+        message: 'لا توجد تسجيلات طلاب لهذا المقرر في الفترة المحددة',
+      };
+    }
+
+    const bulkOps: any[] = [];
+    for (const reg of matchingRegistrations) {
+      const remainingCourses = (reg.courses || []).filter(
+        (c: string) =>
+          c.toUpperCase() !== codeUpper && c.toLowerCase() !== codeLower,
+      );
+
+      // If registration was auto-created by system and now has 0 courses, delete it
+      if (remainingCourses.length === 0 && reg.source === 'system') {
+        bulkOps.push({
+          deleteOne: {
+            filter: { _id: reg._id },
+          },
+        });
+      } else {
+        const newCreditHours = Math.max(
+          0,
+          (reg.totalCreditHours || 0) - courseCreditHours,
+        );
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: reg._id },
+            update: {
+              $pull: {
+                courses: { $in: [codeUpper, course.code, codeLower] },
+              },
+              $set: { totalCreditHours: newCreditHours },
+            },
+          },
+        });
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await this.courseRegistrationModel.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    // Clear caches
+    void this.cacheService?.delPattern('courses:*');
+    void this.cacheService?.delPattern('registrations:*');
+
+    return {
+      success: true,
+      courseId: course._id.toString(),
+      courseCode: course.code,
+      courseName: course.name,
+      resetCount: matchingRegistrations.length,
+      message: `تم إلغاء وتصفير تسجيل ${matchingRegistrations.length} طالب من مقرر ${course.code} بنجاح`,
+    };
   }
 }

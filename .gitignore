@@ -40,4 +40,15 @@ coverage/
 *.tsbuildinfo
 .turbo/
 outputs/
+/docs/
+/scripts/
 build_import_files.mjs
+
+# Keep the performance deliverables reviewable while retaining the broad ignores above.
+!/docs/
+/docs/*
+!/docs/performance/
+!/scripts/
+/scripts/*
+!/scripts/performance-http-benchmark.mjs
+!/scripts/performance-ui.browser.cjs
