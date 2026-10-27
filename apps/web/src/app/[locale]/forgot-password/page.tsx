@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { AlertMessage } from "@/components/ui/feedback";
 import { PasswordInput } from "@/components/ui/password-input";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, KeyRound, MailWarning } from "lucide-react";
+import { ArrowRight, Loader2, KeyRound, MailWarning, Check, X, AlertTriangle } from "lucide-react";
 import LangToggle from "@/components/ui/LangToggle";
 import { Footer } from "@/components/ui/footer";
 import {
@@ -208,9 +208,14 @@ function ForgotPasswordContent() {
 
           {step === 1 ? (
             <form onSubmit={handleStep1Submit} className="w-full space-y-4">
-              <div className="space-y-1 text-start">
-                <label className="text-xs font-bold text-foreground">
-                  {t("studentCode")}
+              <div className="space-y-1.5 text-start">
+                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                  <span>{t("studentCode")}</span>
+                  {identifier.length > 0 && (
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      {identifier.length}/6
+                    </span>
+                  )}
                 </label>
                 <Input
                   ref={identifierInputRef}
@@ -229,12 +234,18 @@ function ForgotPasswordContent() {
                     const val = e.target.value;
                     if (/^\d*$/.test(val) && val.length <= 6) {
                       setIdentifier(val);
+                      setError("");
                     }
                   }}
                   disabled={loading}
-                  className="h-11 text-center bg-secondary/50 border-border text-foreground font-semibold rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-lg"
+                  className="h-11 text-center bg-secondary/50 border-border text-foreground font-semibold rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-lg font-mono tracking-wider"
                   dir="ltr"
                 />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {isAr
+                    ? "أدخل الكود الأكاديمي المكون من 6 أرقام المسجل به في المعهد (مثال: 271702)"
+                    : "Enter your 6-digit institutional academic code (e.g. 271702)"}
+                </p>
               </div>
 
               <Button
@@ -256,10 +267,31 @@ function ForgotPasswordContent() {
             </form>
           ) : (
             <form onSubmit={handleStep2Submit} className="w-full space-y-4">
-              <div className="space-y-1 text-start">
-                <label className="text-xs font-bold text-foreground">
-                  {t("enterOtp")}
-                </label>
+              {/* Verification OTP */}
+              <div className="space-y-1.5 text-start">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground">
+                    {t("enterOtp")}
+                  </label>
+                  {otp.length > 0 && (
+                    <span
+                      className={`text-[11px] font-semibold flex items-center gap-1 ${
+                        otp.length === 6 && /^\d+$/.test(otp)
+                          ? "text-emerald-400"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {otp.length === 6 && /^\d+$/.test(otp) ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>{isAr ? "6 أرقام مكتملة" : "6 digits complete"}</span>
+                        </>
+                      ) : (
+                        <span>{otp.length}/6</span>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <Input
                   ref={otpInputRef}
                   type="text"
@@ -273,15 +305,22 @@ function ForgotPasswordContent() {
                     const val = e.target.value;
                     if (/^\d*$/.test(val) && val.length <= 6) {
                       setOtp(val);
+                      setError("");
                     }
                   }}
                   disabled={loading}
-                  className="h-11 text-center bg-secondary/50 border-border text-foreground font-semibold rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-lg font-mono tracking-wider"
+                  className="h-11 text-center bg-secondary/50 border-border text-foreground font-semibold rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-lg font-mono tracking-widest"
                   dir="ltr"
                 />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {isAr
+                    ? "رمز التحقق مكوّن من 6 أرقام مرسل إلى بريدك الإلكتروني"
+                    : "Verification code consists of 6 digits sent to your email"}
+                </p>
               </div>
 
-              <div className="space-y-1 text-start">
+              {/* New Password */}
+              <div className="space-y-1.5 text-start">
                 <label className="text-xs font-bold text-foreground">
                   {t("newPassword")}
                 </label>
@@ -296,16 +335,127 @@ function ForgotPasswordContent() {
                       : "8+ characters with a letter and number"
                   }
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setError("");
+                  }}
                   disabled={loading}
                   className="h-11 bg-secondary/50 border-border text-foreground rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-sm"
                 />
+
+                {/* Password Requirements Checklist */}
+                {newPassword.length > 0 && (
+                  <div className="mt-2 rounded-xl border border-border/80 bg-surface/50 p-3 space-y-1.5 text-xs">
+                    <p className="font-semibold text-foreground text-[11px] mb-1">
+                      {isAr ? "شروط كلمة المرور المطلوبة:" : "Password requirements:"}
+                    </p>
+                    <div
+                      className={`flex items-center gap-1.5 text-[11px] ${
+                        newPassword.length >= STUDENT_PASSWORD_MIN_LENGTH &&
+                        newPassword.length <= STUDENT_PASSWORD_MAX_LENGTH
+                          ? "text-emerald-400 font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {newPassword.length >= STUDENT_PASSWORD_MIN_LENGTH &&
+                      newPassword.length <= STUDENT_PASSWORD_MAX_LENGTH ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span>
+                        {isAr
+                          ? "من 8 إلى 100 حرف (أنت الآن أدخلت " + newPassword.length + " أحرف)"
+                          : "8 to 100 characters (currently " + newPassword.length + ")"}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 text-[11px] ${
+                        /[a-zA-Z]/.test(newPassword)
+                          ? "text-emerald-400 font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {/[a-zA-Z]/.test(newPassword) ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span>
+                        {isAr
+                          ? "حرف إنجليزي واحد على الأقل (A-Z أو a-z)"
+                          : "At least 1 Latin letter (A-Z or a-z)"}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 text-[11px] ${
+                        /\d/.test(newPassword)
+                          ? "text-emerald-400 font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {/\d/.test(newPassword) ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span>
+                        {isAr
+                          ? "رقم واحد على الأقل (0-9)"
+                          : "At least 1 number (0-9)"}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`flex items-center gap-1.5 text-[11px] ${
+                        !/\s/.test(newPassword) && newPassword.length > 0
+                          ? "text-emerald-400 font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {!/\s/.test(newPassword) && newPassword.length > 0 ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span>
+                        {isAr ? "بدون أي مسافات" : "No whitespace or spaces"}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1 text-start">
-                <label className="text-xs font-bold text-foreground">
-                  {t("confirmNewPassword")}
-                </label>
+              {/* Confirm New Password */}
+              <div className="space-y-1.5 text-start">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground">
+                    {t("confirmNewPassword")}
+                  </label>
+                  {confirmPassword.length > 0 && (
+                    <span
+                      className={`text-[11px] font-semibold flex items-center gap-1 ${
+                        newPassword === confirmPassword
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {newPassword === confirmPassword ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>{isAr ? "كلمتا المرور متطابقتان" : "Passwords match"}</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                          <span>{isAr ? "غير متطابقتين بعد" : "Passwords do not match yet"}</span>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <PasswordInput
                   required
                   maxLength={STUDENT_PASSWORD_MAX_LENGTH}
@@ -314,9 +464,18 @@ function ForgotPasswordContent() {
                     isAr ? "تأكيد كلمة المرور الجديدة" : "Confirm new password"
                   }
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setError("");
+                  }}
                   disabled={loading}
-                  className="h-11 bg-secondary/50 border-border text-foreground rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-sm"
+                  className={`h-11 bg-secondary/50 border rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-all text-sm ${
+                    confirmPassword.length > 0
+                      ? newPassword === confirmPassword
+                        ? "border-emerald-500/50"
+                        : "border-rose-500/50"
+                      : "border-border"
+                  }`}
                 />
               </div>
 
@@ -328,7 +487,7 @@ function ForgotPasswordContent() {
                   !isValidStudentPassword(newPassword) ||
                   newPassword !== confirmPassword
                 }
-                className="w-full h-11 gap-2 text-sm bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                className="w-full h-11 gap-2 text-sm bg-primary hover:bg-primary/80 text-primary-foreground font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center mt-2"
               >
                 {loading
                   ? isAr

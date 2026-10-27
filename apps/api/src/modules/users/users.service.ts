@@ -638,4 +638,55 @@ export class UsersService {
       .limit(200)
       .lean();
   }
+
+  /**
+   * Find all user accounts that are currently locked out due to brute-force protection
+   */
+  async findLockedAccounts() {
+    const now = new Date();
+    return this.userModel
+      .find({
+        $or: [{ lockUntil: { $gt: now } }, { lockedUntil: { $gt: now } }],
+      })
+      .select(
+        '_id name nameAr role staffType userCode studentCode staffCode email nationalId failedLoginAttempts loginAttempts lockUntil lockedUntil lastLoginAt updatedAt avatarUrl',
+      )
+      .sort({ lockUntil: -1, lockedUntil: -1 })
+      .lean();
+  }
+
+  /**
+   * Instantly unlock a locked account by clearing lockout timestamps and reset failed attempts
+   */
+  async unlockAccount(userId: string) {
+    const res = await this.userModel.findByIdAndUpdate(userId, {
+      $set: { failedLoginAttempts: 0, loginAttempts: 0 },
+      $unset: { lockUntil: 1, lockedUntil: 1 },
+    });
+    return {
+      success: Boolean(res),
+      message: 'تم فك حظر وقفل الحساب بنجاح، ويمكن للمستخدم الدخول فوراً الآن',
+    };
+  }
+
+  /**
+   * Bulk unlock all currently locked accounts immediately
+   */
+  async unlockAllAccounts() {
+    const now = new Date();
+    const result = await this.userModel.updateMany(
+      {
+        $or: [{ lockUntil: { $gt: now } }, { lockedUntil: { $gt: now } }],
+      },
+      {
+        $set: { failedLoginAttempts: 0, loginAttempts: 0 },
+        $unset: { lockUntil: 1, lockedUntil: 1 },
+      },
+    );
+    return {
+      success: true,
+      unlockedCount: result.modifiedCount,
+      message: `تم فك حظر وقفل جميع الحسابات بنجاح (${result.modifiedCount} حساب)`,
+    };
+  }
 }

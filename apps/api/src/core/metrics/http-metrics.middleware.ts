@@ -1,5 +1,10 @@
 import type { RequestHandler } from 'express';
 import type { MetricsService } from './metrics.service';
+import { randomUUID } from 'node:crypto';
+import {
+  getRequestQueryContext,
+  runWithRequestQueryMetrics,
+} from './request-query-context';
 
 export function normalizeMetricRoute(url: string): string {
   return (url.split('?')[0] || '/')
@@ -25,22 +30,32 @@ export function createHttpMetricsMiddleware(
       next();
       return;
     }
+    const requestId = randomUUID();
+    res.setHeader?.('x-correlation-id', requestId);
     const start = process.hrtime.bigint();
-    res.once('finish', () => {
-      const matchedPath: unknown = req.route?.path;
-      const recordedRoute =
-        typeof matchedPath === 'string'
-          ? normalizeMetricRoute(`${req.baseUrl || ''}${matchedPath}`)
-          : res.statusCode === 404
-            ? '/unmatched'
-            : route;
-      metrics.recordHttpRequest(
-        req.method,
-        recordedRoute,
-        res.statusCode,
-        Number(process.hrtime.bigint() - start) / 1e9,
-      );
+    runWithRequestQueryMetrics(requestId, () => {
+      const context = getRequestQueryContext()!.request;
+      res.once('finish', () => {
+        const matchedPath: unknown = req.route?.path;
+        const recordedRoute =
+          typeof matchedPath === 'string'
+            ? normalizeMetricRoute(`${req.baseUrl || ''}${matchedPath}`)
+            : res.statusCode === 404
+              ? '/unmatched'
+              : route;
+        metrics.recordHttpRequest(
+          req.method,
+          recordedRoute,
+          res.statusCode,
+          Number(process.hrtime.bigint() - start) / 1e9,
+        );
+        metrics.recordRequestDatabaseMetrics?.(
+          req.method,
+          recordedRoute,
+          context,
+        );
+      });
+      next();
     });
-    next();
   };
 }

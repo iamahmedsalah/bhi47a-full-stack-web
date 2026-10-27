@@ -251,12 +251,20 @@ export class StudentsService {
 
   async findUserIdsBySearch(search: string) {
     const normalized = normalizeSearchTerm(search);
+    const numericDigits = normalized.replace(/\D/g, '');
+    const nationalIdClause =
+      numericDigits.length >= 10
+        ? [{ nationalId: { $regex: normalized, $options: 'i' } }]
+        : numericDigits.length >= 8
+          ? [{ nationalId: { $regex: `^${normalized}`, $options: 'i' } }]
+          : [];
+
     const profiles = await this.studentProfileModel
       .find({
         $or: [
           { studentCode: { $regex: normalized, $options: 'i' } },
           { fullName: { $regex: normalized, $options: 'i' } },
-          { nationalId: { $regex: normalized, $options: 'i' } },
+          ...nationalIdClause,
         ],
       })
       .select('userId')

@@ -18,6 +18,10 @@ import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
 import { CacheService } from '../cache/cache.service';
 import { isServerlessRuntime } from '../../common/utils/runtime.util';
 import { METRICS_SLOW_QUERY_THRESHOLD_MS } from './metrics.constants';
+import {
+  getRequestQueryContext,
+  type RequestQueryMetrics,
+} from './request-query-context';
 
 /** Queries captured within this many seconds of boot are flagged as cold-start. */
 const COLD_START_WINDOW_SECONDS = 90;
@@ -30,6 +34,8 @@ export interface DbQueryDetails {
 }
 
 export interface RecentSlowQuery {
+  requestId?: string;
+  stage?: string;
   id: string;
   collection: string;
   operation: string;
@@ -137,6 +143,9 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   public readonly dbQueryDurationSeconds: Histogram<string>;
   public readonly dbSlowQueriesTotal: Counter<string>;
   public readonly dbConnectedStatus: Gauge<string>;
+  public readonly requestDbQueries: Histogram<string>;
+  public readonly requestDbDurationSeconds: Histogram<string>;
+  public readonly databaseStageDurationSeconds: Histogram<string>;
 
   // Security Metrics
   public readonly authLoginAttemptsTotal: Counter<string>;
@@ -267,8 +276,34 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       name: 'student_portal_mongodb_connected',
       help: 'MongoDB connection status (1 = connected, 0 = disconnected)',
       registers: [this.registry],
+      collect() {
+        const connection = ConnectionHolder.connection || mongoose.connection;
+        this.set(Number(connection?.readyState) === 1 ? 1 : 0);
+      },
     });
     this.dbConnectedStatus.set(0);
+
+    this.requestDbQueries = new Histogram({
+      name: 'student_portal_http_db_queries',
+      help: 'Completed instrumented MongoDB operations per HTTP response',
+      labelNames: ['method', 'route'],
+      buckets: [0, 1, 2, 3, 5, 8, 12, 20, 40, 80],
+      registers: [this.registry],
+    });
+    this.requestDbDurationSeconds = new Histogram({
+      name: 'student_portal_http_db_duration_seconds',
+      help: 'Sum of completed MongoDB operation durations per response; concurrent operations overlap',
+      labelNames: ['method', 'route'],
+      buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+      registers: [this.registry],
+    });
+    this.databaseStageDurationSeconds = new Histogram({
+      name: 'student_portal_database_stage_duration_seconds',
+      help: 'Wall time of named service stages per response, including application work',
+      labelNames: ['method', 'route', 'stage'],
+      buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+      registers: [this.registry],
+    });
 
     // Security: Auth Login Attempts
     this.authLoginAttemptsTotal = new Counter({
@@ -451,6 +486,11 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     durationSeconds: number,
     details?: DbQueryDetails | string,
   ) {
+    const context = getRequestQueryContext();
+    if (context) {
+      context.request.count++;
+      context.request.durationSeconds += durationSeconds;
+    }
     const labels = { collection, operation };
     this.dbQueryDurationSeconds.observe(labels, durationSeconds);
     this.totalDbQueries++;
@@ -467,6 +507,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
       // Append to ring buffer
       this.recentSlowQueries.unshift({
+        requestId: context?.request.requestId,
+        stage: context?.stage,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         collection,
         operation,
@@ -508,6 +550,38 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   setDbConnected(isConnected: boolean) {
     this.dbConnectedStatus.set(isConnected ? 1 : 0);
+  }
+
+  recordRequestDatabaseMetrics(
+    method: string,
+    route: string,
+    context: RequestQueryMetrics,
+  ) {
+    const upperMethod = method.toUpperCase();
+    // recordHttpRequest has already populated the bounded canonical route map.
+    const known = this.routeStats.has(`${upperMethod} ${route}`);
+    const labels = {
+      method: [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS',
+        'HEAD',
+      ].includes(upperMethod)
+        ? upperMethod
+        : 'OTHER',
+      route: known ? route : '/other',
+    };
+    this.requestDbQueries.observe(labels, context.count);
+    this.requestDbDurationSeconds.observe(labels, context.durationSeconds);
+    for (const [stage, value] of context.stages) {
+      this.databaseStageDurationSeconds.observe(
+        { ...labels, stage },
+        value.durationSeconds,
+      );
+    }
   }
 
   recordLoginAttempt(status: 'success' | 'invalid_credentials' | 'locked') {

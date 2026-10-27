@@ -39,6 +39,7 @@ export interface QuizItem {
   open_at?: string;
   close_at?: string;
   isPublished: boolean;
+  publishResults?: boolean;
   allowReview: boolean;
   allowResume?: boolean;
   questions?: QuizQuestion[];
@@ -90,15 +91,16 @@ export interface StudentQuizViewItem {
   endsAt?: string;
   allowResume?: boolean;
   allowReview?: boolean;
+  publishResults?: boolean;
   isOpen: boolean;
   isEnded: boolean;
   isSubmitted: boolean;
   attemptStatus?: 'in_progress' | 'submitted' | 'terminated_by_exit' | 'timed_out';
   submission?: {
-    score: number;
+    score?: number;
     totalMarks: number;
-    percentage: number;
-    isPassed: boolean;
+    percentage?: number;
+    isPassed?: boolean;
     submittedAt: string;
     durationSeconds: number;
   };
@@ -153,10 +155,11 @@ export interface SubmitQuizPayload {
 
 export interface SubmitQuizResult {
   message: string;
-  score: number;
+  score?: number;
   totalMarks: number;
-  percentage: number;
-  isPassed: boolean;
+  percentage?: number;
+  isPassed?: boolean;
+  publishResults?: boolean;
   submittedAt: string;
   answers?: Array<{
     questionId: string;

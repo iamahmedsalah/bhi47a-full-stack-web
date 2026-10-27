@@ -39,6 +39,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/cn';
+
 import {
   Select,
   SelectContent,
@@ -57,6 +59,8 @@ import {
   type LabelCount,
   type MetricsSummaryResponse,
 } from '@/features/metrics/api';
+import { LockedAccountsModal } from './locked-accounts-modal';
+
 
 type RouteSort = 'latency' | 'max' | 'count' | 'errors' | 'route';
 type RouteTraffic = 'all' | 'active' | 'uncalled';
@@ -184,6 +188,10 @@ export default function AdminMetricsPage() {
   // Raw Prometheus exposition viewer
   const [rawOpen, setRawOpen] = useState(false);
   const [rawSearch, setRawSearch] = useState('');
+
+  // Locked Accounts management dialog
+  const [lockedAccountsOpen, setLockedAccountsOpen] = useState(false);
+
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useQuery<MetricsSummaryResponse>({
@@ -585,11 +593,48 @@ export default function AdminMetricsPage() {
                   value={data.security.invalidCredentialLogins ?? data.security.failedLogins}
                   tone={(data.security.invalidCredentialLogins ?? data.security.failedLogins) > 0 ? 'text-amber-400' : 'text-muted-foreground'}
                 />
-                <StatTile
-                  label={isAr ? 'حسابات مقفلة (Brute-Force)' : 'Locked Accounts'}
-                  value={data.security.lockedLogins ?? 0}
-                  tone={(data.security.lockedLogins ?? 0) > 0 ? 'text-rose-400' : 'text-muted-foreground'}
-                />
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setLockedAccountsOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setLockedAccountsOpen(true);
+                    }
+                  }}
+                  className={cn(
+                    TILE_CLASS,
+                    'group cursor-pointer transition-all duration-200 hover:border-rose-500/60 hover:bg-rose-500/10 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-rose-500/40 relative select-none',
+                  )}
+                  title={
+                    isAr
+                      ? 'انقر لعرض الحسابات المقفلة وفك الحظر اللحظي'
+                      : 'Click to view and instantly unlock locked accounts'
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground block text-[11px] group-hover:text-rose-300 transition-colors">
+                      {isAr ? 'حسابات مقفلة (Brute-Force)' : 'Locked Accounts'}
+                    </span>
+                    <span className="text-[10px] text-rose-400 group-hover:underline flex items-center gap-0.5 font-medium">
+                      {isAr ? 'عرض وفك الحظر ←' : 'View & Unlock →'}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between mt-0.5">
+                    <span
+                      className={`font-mono text-lg font-bold ${(data.security.lockedLogins ?? 0) > 0 ? 'text-rose-400' : 'text-muted-foreground'}`}
+                      dir="ltr"
+                    >
+                      {data.security.lockedLogins ?? 0}
+                    </span>
+                    {(data.security.lockedLogins ?? 0) > 0 && (
+                      <Badge variant="destructive" className="rounded-squircle text-[9.5px] py-0 px-1.5 h-4">
+                        {isAr ? 'حظر نشط' : 'Active'}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
                 <StatTile label={isAr ? 'إجمالي المحاولات الفاشلة' : 'Total Failed Logins'} value={data.security.failedLogins} />
                 <StatTile label={isAr ? 'حظر معدل الطلبات (HTTP 429)' : 'Rate Limit 429 Blocks'} value={data.security.rateLimitBlocks} />
                 <StatTile
@@ -1338,6 +1383,13 @@ export default function AdminMetricsPage() {
           </Card>
         </div>
       )}
+
+      {/* Instant Unlock & Locked Accounts Management Modal */}
+      <LockedAccountsModal
+        open={lockedAccountsOpen}
+        onOpenChange={setLockedAccountsOpen}
+      />
     </div>
   );
 }
+

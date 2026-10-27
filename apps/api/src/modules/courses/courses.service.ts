@@ -1081,6 +1081,7 @@ export class CoursesService {
       candidateArray.length > 0
         ? this.studentProfileModel
             .find({ studentCode: { $in: candidateArray } })
+            .select('_id studentCode userId isBlocked')
             .lean()
             .exec()
         : Promise.resolve([] as any[]),
@@ -1093,6 +1094,7 @@ export class CoursesService {
                 { username: { $in: candidateArray } },
               ],
             })
+            .select('_id code username')
             .lean()
             .exec()
         : Promise.resolve([] as any[]),
@@ -1145,6 +1147,7 @@ export class CoursesService {
               academicYear,
               semester,
             })
+            .select('_id studentId courses')
             .lean()
         : [];
 

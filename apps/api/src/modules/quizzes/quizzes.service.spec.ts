@@ -298,6 +298,7 @@ describe('QuizzesService Unit Tests', () => {
         courseCode: 'CS101',
         courseName: 'Intro to CS',
         isPublished: true,
+        publishResults: true,
         totalMarks: 4,
         passingMarks: 2,
         allowReview: true,
@@ -365,6 +366,7 @@ describe('QuizzesService Unit Tests', () => {
         courseCode: 'CS101',
         courseName: 'Intro to CS',
         isPublished: true,
+        publishResults: true,
         totalMarks: 4,
         passingMarks: 2,
         allowReview: true,
@@ -416,6 +418,56 @@ describe('QuizzesService Unit Tests', () => {
       expect(result.isPassed).toBe(false);
       expect(result.answers?.filter((a: any) => a.isCorrect)).toHaveLength(0);
     });
+
+    it('masks score and answers when publishResults is false', async () => {
+      const mockQuiz = {
+        _id: new Types.ObjectId(quizId),
+        courseId: new Types.ObjectId(courseId),
+        courseCode: 'CS101',
+        courseName: 'Intro to CS',
+        isPublished: true,
+        publishResults: false,
+        totalMarks: 4,
+        passingMarks: 2,
+        allowReview: true,
+        questions: [
+          {
+            id: 'q1',
+            text: 'Question 1',
+            type: 'mcq',
+            options: ['A', 'B'],
+            correctOptionIndex: 0,
+            points: 2,
+          },
+        ],
+      };
+      mockQuizModel.findById.mockResolvedValue(mockQuiz);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+      mockStudentProfileModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          userId: new Types.ObjectId(studentUserId),
+          studentCode: '2026003',
+          fullName: 'Ali Omar',
+        }),
+      });
+
+      function MockSubmissionInstance(this: any, data: any) {
+        Object.assign(this, data);
+        this.save = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+      }
+      mockSubmissionModel.mockImplementation(MockSubmissionInstance);
+
+      const result = await service.submitQuiz(quizId, studentUserId, {
+        answers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+        durationSeconds: 30,
+      });
+
+      expect(result.score).toBeUndefined();
+      expect(result.percentage).toBeUndefined();
+      expect(result.isPassed).toBeUndefined();
+      expect(result.publishResults).toBe(false);
+      expect(result.answers).toBeUndefined();
+    });
   });
 
   describe('getQuizReview', () => {
@@ -431,11 +483,25 @@ describe('QuizzesService Unit Tests', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('throws ForbiddenException if quiz publishResults is false', async () => {
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        title: 'Quiz 1',
+        allowReview: true,
+        publishResults: false,
+      });
+
+      await expect(
+        service.getQuizReview(quizId, studentUserId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('throws ForbiddenException if endsAt is in the future', async () => {
       mockQuizModel.findById.mockResolvedValue({
         _id: new Types.ObjectId(quizId),
         title: 'Quiz 1',
         allowReview: true,
+        publishResults: true,
         endsAt: new Date(Date.now() + 3600000), // 1 hour in future
       });
 
@@ -452,6 +518,7 @@ describe('QuizzesService Unit Tests', () => {
         courseCode: 'CS101',
         courseName: 'Intro to CS',
         allowReview: true,
+        publishResults: true,
         endsAt: pastDate,
         totalMarks: 5,
         passingMarks: 3,

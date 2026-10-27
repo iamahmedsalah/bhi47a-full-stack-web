@@ -484,24 +484,42 @@ export function StaffDetailsDialog({
                   <div className="grid gap-2 sm:grid-cols-2">
                     {STAFF_ASSIGNABLE_PERMISSIONS.map((perm) => {
                       const isEnabled = staff.permissions?.includes(perm);
-                      const labelKey = `permissions.labels.${perm.replaceAll('.', '_')}`;
+                      const keySuffix = perm.replaceAll('.', '_');
+                      const labelKey = `permissions.labels.${keySuffix}` as Parameters<typeof t>[0];
+                      let localizedLabel: string = perm;
+                      try {
+                        localizedLabel = t(labelKey);
+                      } catch {
+                        localizedLabel = perm;
+                      }
+
                       return (
                         <div
                           key={perm}
-                          className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-xs transition-colors ${
+                          onClick={() => {
+                            if (onPermissions && staff.role !== 'admin') {
+                              onPermissions(staff);
+                            }
+                          }}
+                          className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-xs transition-all ${
+                            onPermissions && staff.role !== 'admin'
+                              ? 'cursor-pointer hover:border-primary/60 hover:bg-primary/5'
+                              : ''
+                          } ${
                             isEnabled
                               ? 'border-primary/40 bg-primary/10 text-foreground'
                               : 'border-border/40 bg-background/30 text-muted-foreground opacity-50'
                           }`}
+                          title={onPermissions && staff.role !== 'admin' ? (isAr ? 'اضغط لتعديل الصلاحيات' : 'Click to manage permissions') : undefined}
                         >
                           {isEnabled ? (
                             <CheckCircle2 className="h-4 w-4 shrink-0 text-primary mt-0.5" />
                           ) : (
                             <div className="h-4 w-4 rounded-full border border-muted-foreground/30 shrink-0 mt-0.5" />
                           )}
-                          <div className="space-y-0.5">
-                            <span className="font-semibold block">{t(labelKey as Parameters<typeof t>[0])}</span>
-                            <span className="font-mono text-[10px] text-muted-foreground block" dir="ltr">
+                          <div className="space-y-0.5 flex-1 min-w-0">
+                            <span className="font-semibold block truncate">{localizedLabel}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground block truncate" dir="ltr">
                               {perm}
                             </span>
                           </div>

@@ -62,6 +62,7 @@ export interface QuizListItem extends Record<string, unknown> {
   startsAt?: Date;
   endsAt?: Date;
   allowResume?: boolean;
+  publishResults?: boolean;
   isPublished: boolean;
   submissionsCount: number;
   createdAt?: Date;
@@ -255,6 +256,7 @@ export class QuizzesService implements OnModuleInit {
       endsAt: endsAtVal ? new Date(endsAtVal) : undefined,
       allowResume:
         dto.allowResume !== undefined ? Boolean(dto.allowResume) : true,
+      publishResults: Boolean(dto.publishResults ?? false),
     });
 
     const saved = await quiz.save();
@@ -325,7 +327,7 @@ export class QuizzesService implements OnModuleInit {
       this.quizModel
         .find(filter)
         .select(
-          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume questions createdAt updatedAt',
+          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume publishResults questions createdAt updatedAt',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -469,6 +471,12 @@ export class QuizzesService implements OnModuleInit {
     }
     if (dto.allowResume !== undefined) {
       updatePayload.allowResume = Boolean(dto.allowResume);
+    }
+    if (dto.allowReview !== undefined) {
+      updatePayload.allowReview = Boolean(dto.allowReview);
+    }
+    if (dto.publishResults !== undefined) {
+      updatePayload.publishResults = Boolean(dto.publishResults);
     }
 
     const effectiveStartsAt =
@@ -773,7 +781,7 @@ export class QuizzesService implements OnModuleInit {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -837,16 +845,19 @@ export class QuizzesService implements OnModuleInit {
         endsAt: quiz.endsAt,
         allowResume: quiz.allowResume !== false,
         allowReview: Boolean(quiz.allowReview ?? true),
+        publishResults: Boolean(quiz.publishResults ?? false),
         isOpen,
         isEnded,
         isSubmitted: Boolean(submission),
         attemptStatus: attempt?.status,
         submission: submission
           ? {
-              score: submission.score,
+              score: quiz.publishResults ? submission.score : undefined,
               totalMarks: submission.totalMarks,
-              percentage: submission.percentage,
-              isPassed: submission.isPassed,
+              percentage: quiz.publishResults
+                ? submission.percentage
+                : undefined,
+              isPassed: quiz.publishResults ? submission.isPassed : undefined,
               submittedAt: submission.submittedAt,
               durationSeconds: submission.durationSeconds,
             }
@@ -1403,14 +1414,18 @@ export class QuizzesService implements OnModuleInit {
       throw err;
     }
 
+    const showScore = Boolean(quiz.publishResults);
     return {
-      message: 'تم تسليم الاختبار وتصحيحه بنجاح',
-      score: totalScore,
-      totalMarks,
-      percentage,
-      isPassed,
+      message: showScore
+        ? 'تم تسليم الاختبار وتصحيحه بنجاح'
+        : 'تم تسليم إجابات الاختبار بنجاح، وستظهر النتيجة فور إعلانها من أستاذ المقرر',
+      score: showScore ? totalScore : undefined,
+      totalMarks: showScore ? totalMarks : quiz.totalMarks,
+      percentage: showScore ? percentage : undefined,
+      isPassed: showScore ? isPassed : undefined,
+      publishResults: showScore,
       submittedAt,
-      answers: quiz.allowReview ? gradedAnswers : undefined,
+      answers: showScore && quiz.allowReview ? gradedAnswers : undefined,
     };
   }
 
@@ -1554,6 +1569,12 @@ export class QuizzesService implements OnModuleInit {
     if (quiz.allowReview === false) {
       throw new ForbiddenException(
         'مراجعة أسئلة وإجابات هذا الاختبار غير مفعلة من قِبل المدرس',
+      );
+    }
+
+    if (quiz.publishResults === false) {
+      throw new ForbiddenException(
+        'نتائج وإجابات هذا الاختبار لم يتم إعلانها ونشرها للطلاب بعد من قِبل أستاذ المقرر',
       );
     }
 

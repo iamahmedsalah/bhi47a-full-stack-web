@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ComplaintsService } from './complaints.service';
@@ -41,8 +42,11 @@ export class ComplaintsController {
   @ApiOperation({
     summary: 'Submit a new complaint ticket without requiring login',
   })
-  async createPublic(@Body() dto: PublicCreateComplaintDto) {
-    return this.complaintsService.createPublic(dto);
+  async createPublic(
+    @Body() dto: PublicCreateComplaintDto,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
+    return this.complaintsService.createPublic(dto, acceptLanguage);
   }
 
   @Public()
@@ -86,8 +90,9 @@ export class ComplaintsController {
   async create(
     @Body() dto: CreateComplaintDto,
     @CurrentUser('_id') studentId: string,
+    @Headers('accept-language') acceptLanguage?: string,
   ) {
-    return this.complaintsService.create(dto, studentId);
+    return this.complaintsService.create(dto, studentId, acceptLanguage);
   }
 
   @Get('students/complaints')

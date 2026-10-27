@@ -1,3 +1,4 @@
+import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import {
   Injectable,
   NotFoundException,
@@ -111,19 +112,25 @@ export class ComplaintsService {
   async create(
     dto: CreateComplaintDto,
     studentId: string,
+    acceptLanguage?: string,
   ): Promise<ComplaintDocument> {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
     // 1. Fetch student info
     const student = await this.userModel.findById(studentId);
     if (!student || student.role !== 'student') {
-      throw new BadRequestException('الطالب غير موجود');
+      throw new BadRequestException(
+        isEn ? 'Student not found' : 'الطالب غير موجود',
+      );
     }
 
-    return this.createForStudent(dto, student);
+    return this.createForStudent(dto, student, undefined, acceptLanguage);
   }
 
   async createPublic(
     dto: PublicCreateComplaintDto,
+    acceptLanguage?: string,
   ): Promise<ComplaintDocument> {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
     const student = await this.userModel
       .findOne({
         role: 'student',
@@ -147,17 +154,24 @@ export class ComplaintsService {
         },
       );
       throw new BadRequestException(
-        'Student information could not be verified',
+        isEn
+          ? 'Student information could not be verified'
+          : 'تعذر التحقق من صحة بيانات الطالب أو الرقم القومي',
       );
     }
 
-    return this.createForStudent(dto, student, {
-      requesterName: dto.requesterName,
-      contactPhone: dto.contactPhone,
-      contactEmail: dto.contactEmail,
-      nationalId: dto.nationalId,
-      nationalIdMasked: this.maskNationalId(dto.nationalId),
-    });
+    return this.createForStudent(
+      dto,
+      student,
+      {
+        requesterName: dto.requesterName,
+        contactPhone: dto.contactPhone,
+        contactEmail: dto.contactEmail,
+        nationalId: dto.nationalId,
+        nationalIdMasked: this.maskNationalId(dto.nationalId),
+      },
+      acceptLanguage,
+    );
   }
 
   private async createForStudent(
@@ -170,21 +184,33 @@ export class ComplaintsService {
       nationalId?: string;
       nationalIdMasked?: string;
     },
+    acceptLanguage?: string,
   ): Promise<ComplaintDocument> {
+    const isEn = acceptLanguage?.toLowerCase().startsWith('en');
     // 1. Validate system settings status
     const settings = await this.getSettings();
     if (!settings.complaintsSystemOpen) {
       throw new BadRequestException(
-        'Complaints system is currently closed by the administration',
+        isEn
+          ? 'Complaints system is currently closed by the administration'
+          : 'منظومة الشكاوى مغلقة حالياً من قبل إدارة المعهد',
       );
     }
 
     const now = new Date();
     if (settings.complaintOpenAt && now < settings.complaintOpenAt) {
-      throw new BadRequestException('لم يبدأ وقت استقبال الشكاوى بعد');
+      throw new BadRequestException(
+        isEn
+          ? 'Complaints submission period has not started yet'
+          : 'لم يبدأ وقت استقبال الشكاوى بعد',
+      );
     }
     if (settings.complaintCloseAt && now > settings.complaintCloseAt) {
-      throw new BadRequestException('انتهى وقت استقبال الشكاوى');
+      throw new BadRequestException(
+        isEn
+          ? 'Complaints submission period has ended for today'
+          : 'انتهى وقت استقبال الشكاوى لهذا اليوم',
+      );
     }
 
     // 2. Rolling 24-hour complaint limit (defaults to 3, or configurable 2-3 in settings)
@@ -230,14 +256,18 @@ export class ComplaintsService {
       });
 
       throw new BadRequestException(
-        `لقد وصلت للحد الأقصى من البلاغات (${maxDaily} بلاغات خلال 24 ساعة). يمكنك تقديم بلاغ جديد بعد ${timeRemainingStr} / You reached the limit of ${maxDaily} complaints per 24h. Try again in ${timeRemainingStrEn}.`,
+        isEn
+          ? `You reached the limit of ${maxDaily} complaints per 24 hours. You can submit again in ${timeRemainingStrEn}.`
+          : `لقد وصلت للحد الأقصى من البلاغات (${maxDaily} بلاغات خلال 24 ساعة). يمكنك تقديم بلاغ جديد بعد ${timeRemainingStr}.`,
       );
     }
 
     // 3. Validate student blacklist status
     if (settings.blacklistedStudentCodes.includes(student.studentCode || '')) {
       throw new BadRequestException(
-        'Your account has been suspended from submitting new complaints',
+        isEn
+          ? 'Your account has been suspended from submitting new complaints'
+          : 'تم إيقاف حسابك عن تقديم شكاوى أو بلاغات جديدة',
       );
     }
 
@@ -419,23 +449,29 @@ export class ComplaintsService {
     }
 
     const [items, total] = await Promise.all([
-      this.complaintModel
-        .find(filter)
-        .sort({ createdAt: -1, _id: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      this.complaintModel.countDocuments(filter),
+      measureDatabaseStage('complaints.page', () =>
+        this.complaintModel
+          .find(filter)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ),
+      measureDatabaseStage('complaints.count', () =>
+        this.complaintModel.countDocuments(filter),
+      ),
     ]);
 
     const missingNationalIds = items
       .filter((i) => !i.nationalId && i.studentId)
       .map((i) => i.studentId);
     if (missingNationalIds.length > 0) {
-      const students = await this.userModel
-        .find({ _id: { $in: missingNationalIds } })
-        .select({ _id: 1, nationalId: 1 })
-        .lean();
+      const students = await measureDatabaseStage('complaints.enrichment', () =>
+        this.userModel
+          .find({ _id: { $in: missingNationalIds } })
+          .select({ _id: 1, nationalId: 1 })
+          .lean(),
+      );
       const studentMap = new Map(
         students.map((s) => [s._id.toString(), s.nationalId]),
       );

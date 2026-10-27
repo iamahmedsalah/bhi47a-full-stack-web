@@ -116,6 +116,11 @@ export class CreateQuizDto {
   @IsBoolean()
   allowResume?: boolean;
 
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  publishResults?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
@@ -187,6 +192,11 @@ export class UpdateQuizDto {
   @IsOptional()
   @IsBoolean()
   allowResume?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  publishResults?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -1,3 +1,4 @@
+import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import {
   BadRequestException,
   ConflictException,
@@ -277,28 +278,41 @@ export class RegistrationsService {
   }
 
   async getEligibility(studentId: string) {
-    const storedProfile = await this.getAcademicProfile(studentId);
-    const registrationPeriod = await this.resolveRegistrationPeriod(
-      studentId,
-      storedProfile.semester,
+    const storedProfile = await measureDatabaseStage(
+      'registration.profile',
+      () => this.getAcademicProfile(studentId),
     );
+    const [registrationPeriod, rule] = await Promise.all([
+      measureDatabaseStage('registration.period', () =>
+        this.resolveRegistrationPeriod(studentId, storedProfile.semester),
+      ),
+      measureDatabaseStage('registration.rule', () =>
+        this.getRuleForGpa(storedProfile.gpa),
+      ),
+    ]);
     const profile = {
       ...storedProfile,
       semester: registrationPeriod.semester,
     } as RegistrationAcademicProfile;
-    const rule = await this.getRuleForGpa(profile.gpa);
-    const policy = await this.getSummerPolicy(profile, rule);
     const academicYear = registrationPeriod.academicYear;
-    const registrationTerm = await this.getRegistrationTermStatus(
-      academicYear,
-      profile.semester,
-    );
-
-    const registration = await this.registrationModel.findOne({
-      studentId: profile.studentId,
-      academicYear,
-      semester: profile.semester,
-    });
+    const [policy, registrationTerm, registration] = await Promise.all([
+      measureDatabaseStage('registration.policy', () =>
+        this.getSummerPolicy(profile, rule),
+      ),
+      measureDatabaseStage('registration.term', () =>
+        this.getRegistrationTermStatus(academicYear, profile.semester),
+      ),
+      measureDatabaseStage('registration.existing', () =>
+        this.registrationModel
+          .findOne({
+            studentId: profile.studentId,
+            academicYear,
+            semester: profile.semester,
+          })
+          .select('_id')
+          .lean(),
+      ),
+    ]);
 
     const requiresAdvisor = policy.requiresAdvisor;
     const reason = policy.reason;
@@ -323,10 +337,9 @@ export class RegistrationsService {
     };
 
     if (requiresAdvisor) {
-      response.advisingRequest = await this.ensureAdvisingRequest(
-        profile,
-        reason,
-        warnings,
+      response.advisingRequest = await measureDatabaseStage(
+        'registration.advising',
+        () => this.ensureAdvisingRequest(profile, reason, warnings, rule),
       );
     }
 
@@ -1676,6 +1689,7 @@ export class RegistrationsService {
     profile: StudentAcademicProfileDocument,
     reason?: AdvisingReason,
     policyWarnings: string[] = [],
+    suppliedRule?: EffectiveRule,
   ) {
     const existing = await this.advisingRequestModel
       .findOne({
@@ -1687,7 +1701,7 @@ export class RegistrationsService {
 
     if (existing) return existing;
 
-    const rule = await this.getRuleForGpa(profile.gpa);
+    const rule = suppliedRule ?? (await this.getRuleForGpa(profile.gpa));
     const courses = (await this.courseModel
       .find({ isActive: true })
       .lean()) as unknown as CourseDocument[];
@@ -1906,12 +1920,22 @@ export class RegistrationsService {
   }
 
   private async getAcademicProfile(studentId: string) {
-    let profile = await this.academicProfileModel
-      .findOne({
-        studentId: new Types.ObjectId(studentId),
-      })
-      .lean();
+    const userId = new Types.ObjectId(studentId);
+    const [storedProfile, storedStudentProfile, publishedGrades] =
+      await Promise.all([
+        this.academicProfileModel.findOne({ studentId: userId }).lean(),
+        this.studentProfileModel
+          .findOne({ userId })
+          .select('department academicWarnings')
+          .lean(),
+        this.gradeModel
+          .find({ studentId: userId, isPublished: true })
+          .select('courseCode examType grade maxGrade status')
+          .lean(),
+      ]);
 
+    let profile = storedProfile;
+    let studentProfile = storedStudentProfile;
     if (!profile) {
       // Repair legacy/imported students that predate academic-profile creation.
       const studentProfile = await this.studentsService
@@ -1939,21 +1963,16 @@ export class RegistrationsService {
         .lean();
     }
 
-    const publishedGrades = await this.gradeModel
-      .find({
-        studentId: new Types.ObjectId(studentId),
-        isPublished: true,
-      })
-      .select('courseCode examType grade maxGrade status')
-      .lean();
-    const gradedCourses = await this.courseModel
-      .find({
-        code: {
-          $in: [...new Set(publishedGrades.map((grade) => grade.courseCode))],
-        },
-      })
-      .select('code creditHours')
-      .lean();
+    const courseCodes = [
+      ...new Set(publishedGrades.map((grade) => grade.courseCode)),
+    ];
+    const gradedCourses =
+      courseCodes.length > 0
+        ? await this.courseModel
+            .find({ code: { $in: courseCodes } })
+            .select('code creditHours')
+            .lean()
+        : [];
     const progress = mergeAcademicCourseProgress({
       completedCourses: profile.completedCourses,
       failedCourses: profile.failedCourses,
@@ -1967,10 +1986,16 @@ export class RegistrationsService {
       ),
     });
 
-    const studentProfile = await this.studentProfileModel
-      .findOne({ userId: new Types.ObjectId(studentId) })
-      .select('department academicWarnings')
-      .lean();
+    // A missing academic profile may have repaired a legacy student profile above.
+    if (!studentProfile) {
+      if (storedProfile) {
+        await this.studentsService.findByUserId(studentId).catch(() => null);
+      }
+      studentProfile = await this.studentProfileModel
+        .findOne({ userId })
+        .select('department academicWarnings')
+        .lean();
+    }
     return {
       ...profile,
       ...progress,
@@ -2041,10 +2066,13 @@ export class RegistrationsService {
     profile: StudentAcademicProfileDocument,
     rule: EffectiveRule,
   ) {
-    const activeCourses = await this.courseModel
-      .find({ isActive: true })
-      .select('code semester')
-      .lean();
+    const activeCourses =
+      rule.requireForGraduationPlans && profile.isGraduatingThisYear
+        ? await this.courseModel
+            .find({ isActive: true })
+            .select('code semester')
+            .lean()
+        : [];
     const completed = new Set(normalizeCourseCodes(profile.completedCourses));
     const remaining = activeCourses.filter(
       (course) => !completed.has(course.code.toUpperCase()),
@@ -2085,7 +2113,6 @@ export class RegistrationsService {
       requiresAdvisor,
       reason,
       warnings,
-      remainingCourses: remaining.length,
     };
   }
 
@@ -2144,9 +2171,11 @@ export class RegistrationsService {
     studentId: string,
     preferredSemester?: string,
   ): Promise<{ academicYear: string; semester: string }> {
-    const profile = await this.studentsService
-      .findByUserId(studentId)
-      .catch(() => null);
+    // Most calls already know the semester and resolve from current/open terms.
+    // Avoid loading user + student + academic profiles just to read the year.
+    const profile = preferredSemester
+      ? null
+      : await this.getRegistrationStudentContext(studentId);
 
     const semester = normalizeSemester(preferredSemester ?? profile?.semester);
     const currentTerms = await this.registrationTermModel
@@ -2189,12 +2218,25 @@ export class RegistrationsService {
       };
     }
 
+    const fallbackProfile =
+      profile ?? (await this.getRegistrationStudentContext(studentId));
     return {
       academicYear:
-        profile?.academicYear ??
+        fallbackProfile?.academicYear ??
         `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       semester,
     };
+  }
+
+  private async getRegistrationStudentContext(studentId: string) {
+    const profile = await this.studentProfileModel
+      .findOne({ userId: new Types.ObjectId(studentId) })
+      .select('academicYear semester')
+      .lean();
+    // Retain the existing legacy-profile repair path when the link is missing.
+    return (
+      profile ?? this.studentsService.findByUserId(studentId).catch(() => null)
+    );
   }
 
   async listRegistrationTerms() {

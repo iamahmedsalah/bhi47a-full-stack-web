@@ -148,6 +148,7 @@ function QuizFormDialog({
   const [startsAt, setStartsAt] = useState(toDateTimeLocal(initialValues.startsAt));
   const [endsAt, setEndsAt] = useState(toDateTimeLocal(initialValues.endsAt));
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
+  const [publishResults, setPublishResults] = useState(initialValues.publishResults ?? false);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? true);
   const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
   const [uploadingExcel, setUploadingExcel] = useState(false);
@@ -184,6 +185,7 @@ function QuizFormDialog({
     setStartsAt(toDateTimeLocal(initialValues.startsAt));
     setEndsAt(toDateTimeLocal(initialValues.endsAt));
     setIsPublished(initialValues.isPublished ?? true);
+    setPublishResults(initialValues.publishResults ?? false);
     setAllowReview(initialValues.allowReview ?? true);
     setAllowResume(initialValues.allowResume ?? true);
     setUploadingExcel(false);
@@ -275,6 +277,7 @@ function QuizFormDialog({
           startsAt,
           endsAt,
           isPublished,
+          publishResults,
           allowReview,
           allowResume,
           questions,
@@ -305,6 +308,7 @@ function QuizFormDialog({
     startsAt,
     endsAt,
     isPublished,
+    publishResults,
     allowReview,
     allowResume,
     questions,
@@ -324,6 +328,7 @@ function QuizFormDialog({
       if (parsed.startsAt) setStartsAt(parsed.startsAt);
       if (parsed.endsAt) setEndsAt(parsed.endsAt);
       if (typeof parsed.isPublished === 'boolean') setIsPublished(parsed.isPublished);
+      if (typeof parsed.publishResults === 'boolean') setPublishResults(parsed.publishResults);
       if (typeof parsed.allowReview === 'boolean') setAllowReview(parsed.allowReview);
       if (typeof parsed.allowResume === 'boolean') setAllowResume(parsed.allowResume);
       if (Array.isArray(parsed.questions) && parsed.questions.length > 0) {
@@ -504,6 +509,7 @@ function QuizFormDialog({
         startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
         endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
         isPublished,
+        publishResults,
         allowReview,
         allowResume,
         questions,
@@ -861,6 +867,16 @@ function QuizFormDialog({
                 className="h-4 w-4 rounded-full border-input-border text-primary focus:ring-primary"
               />
               <span>{isAr ? 'إتاحة مراجعة الإجابات بعد التسليم' : 'Allow Review after Submission'}</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+              <input
+                type="checkbox"
+                checked={publishResults}
+                onChange={(e) => setPublishResults(e.target.checked)}
+                className="h-4 w-4 rounded-full border-input-border text-primary focus:ring-primary"
+              />
+              <span>{isAr ? 'إعلان وإظهار نتيجة الاختبار للطلاب' : 'Publish & Show Quiz Results to Students'}</span>
             </label>
 
             <div className="ms-auto flex items-center gap-2 text-xs font-bold text-primary">
@@ -2294,6 +2310,43 @@ function AdminQuizzesContent() {
     }
   };
 
+  const handleTogglePublishResults = async (quiz: QuizItem) => {
+    try {
+      await updateQuiz(quiz._id, { publishResults: !quiz.publishResults });
+      toast.success(
+        quiz.publishResults
+          ? isAr
+            ? 'تم حجب نتائج ودرجات الاختبار عن الطلاب'
+            : 'Quiz results hidden from students'
+          : isAr
+            ? 'تم إعلان ونشر نتائج ودرجات الاختبار للطلاب'
+            : 'Quiz results published to students',
+      );
+      void queryClient.invalidateQueries({ queryKey: ['admin-quizzes'] });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  };
+
+  const handleToggleAllowReview = async (quiz: QuizItem) => {
+    try {
+      const nextReview = quiz.allowReview === false ? true : false;
+      await updateQuiz(quiz._id, { allowReview: nextReview });
+      toast.success(
+        nextReview
+          ? isAr
+            ? 'تم إتاحة مراجعة الإجابات النموذجية للطلاب'
+            : 'Model answers review allowed for students'
+          : isAr
+            ? 'تم تعطيل وحجب مراجعة الإجابات عن الطلاب'
+            : 'Model answers review disabled for students',
+      );
+      void queryClient.invalidateQueries({ queryKey: ['admin-quizzes'] });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  };
+
   const columns: ColumnDef<QuizItem>[] = [
     {
       key: 'course',
@@ -2420,14 +2473,80 @@ function AdminQuizzesContent() {
     },
     {
       key: 'status',
-      header: isAr ? 'الحالة' : 'Status',
+      header: isAr ? 'الحالة والنتائج والمراجعة' : 'Status, Results & Review',
       render: (quiz) => (
         <TableCell className="p-4 text-center">
-          <StatusBadge
-            label={quiz.isPublished ? (isAr ? 'منشور' : 'Published') : (isAr ? 'مسودة' : 'Draft')}
-            variant={quiz.isPublished ? 'success' : 'neutral'}
-            onClick={() => handleTogglePublish(quiz)}
-          />
+          <div className="flex flex-col items-center gap-1.5">
+            <StatusBadge
+              label={quiz.isPublished ? (isAr ? 'منشور' : 'Published') : (isAr ? 'مسودة' : 'Draft')}
+              variant={quiz.isPublished ? 'success' : 'neutral'}
+              onClick={canWrite ? () => handleTogglePublish(quiz) : undefined}
+            />
+            {canWrite ? (
+              <button
+                type="button"
+                onClick={() => handleTogglePublishResults(quiz)}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border transition-all cursor-pointer select-none ${
+                  quiz.publishResults
+                    ? 'bg-teal-500/15 text-teal-400 border-teal-500/30 hover:bg-teal-500/25'
+                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
+                }`}
+                title={
+                  isAr
+                    ? (quiz.publishResults ? 'انقر لحجب النتيجة عن الطلاب' : 'انقر لإعلان النتيجة للطلاب')
+                    : (quiz.publishResults ? 'Click to hide results' : 'Click to publish results')
+                }
+              >
+                {quiz.publishResults
+                  ? (isAr ? 'النتائج معلنة' : 'Results Live')
+                  : (isAr ? 'النتائج محجوبة' : 'Results Hidden')}
+              </button>
+            ) : (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border ${
+                  quiz.publishResults
+                    ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
+                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                }`}
+              >
+                {quiz.publishResults
+                  ? (isAr ? 'النتائج معلنة' : 'Results Live')
+                  : (isAr ? 'النتائج محجوبة' : 'Results Hidden')}
+              </span>
+            )}
+            {canWrite ? (
+              <button
+                type="button"
+                onClick={() => handleToggleAllowReview(quiz)}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border transition-all cursor-pointer select-none ${
+                  quiz.allowReview !== false
+                    ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/25'
+                    : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'
+                }`}
+                title={
+                  isAr
+                    ? (quiz.allowReview !== false ? 'انقر لتعطيل مراجعة الإجابات النموذجية' : 'انقر لإتاحة مراجعة الإجابات النموذجية')
+                    : (quiz.allowReview !== false ? 'Click to disable answer review' : 'Click to allow answer review')
+                }
+              >
+                {quiz.allowReview !== false
+                  ? (isAr ? 'المراجعة متاحة' : 'Review Open')
+                  : (isAr ? 'المراجعة معطلة' : 'Review Disabled')}
+              </button>
+            ) : (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border ${
+                  quiz.allowReview !== false
+                    ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                    : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                }`}
+              >
+                {quiz.allowReview !== false
+                  ? (isAr ? 'المراجعة متاحة' : 'Review Open')
+                  : (isAr ? 'المراجعة معطلة' : 'Review Disabled')}
+              </span>
+            )}
+          </div>
         </TableCell>
       ),
     },
@@ -2503,6 +2622,28 @@ function AdminQuizzesContent() {
                           <span>{isAr ? 'نشر للطلاب' : 'Publish'}</span>
                         </>
                       )}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={() => handleTogglePublishResults(quiz)}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                    >
+                      <Award className={`h-3.5 w-3.5 ${quiz.publishResults ? 'text-amber-400' : 'text-teal-400'}`} />
+                      <span>
+                        {quiz.publishResults
+                          ? (isAr ? 'حجب نتائج ودرجات الاختبار' : 'Hide Results from Students')
+                          : (isAr ? 'إعلان ونشر نتائج الاختبار للطلاب' : 'Publish Results to Students')}
+                      </span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onClick={() => handleToggleAllowReview(quiz)}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
+                    >
+                      <ListChecks className={`h-3.5 w-3.5 ${quiz.allowReview !== false ? 'text-rose-400' : 'text-cyan-400'}`} />
+                      <span>
+                        {quiz.allowReview !== false
+                          ? (isAr ? 'تعطيل مراجعة الإجابات النموذجية' : 'Disable Answer Review')
+                          : (isAr ? 'إتاحة مراجعة الإجابات النموذجية' : 'Allow Answer Review')}
+                      </span>
                     </DropdownMenu.Item>
                     <DropdownMenu.Item
                       onClick={() => {

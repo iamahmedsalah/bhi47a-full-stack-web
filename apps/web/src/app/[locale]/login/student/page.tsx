@@ -52,6 +52,7 @@ function createBanExpiry(lockSeconds: number) {
 function StudentLoginContent() {
   const t = useTranslations("auth");
   const tValidation = useTranslations("validation");
+  const tCommon = useTranslations("common");
   const { login } = useAuth();
   const params = useParams();
   const router = useRouter();
@@ -582,25 +583,26 @@ function StudentLoginContent() {
 
             {/* Google Unlinked Account Friendly Validation Notice */}
             {googleAuthNotice && (
-              <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100 py-3 animate-in fade-in slide-in-from-top-2 duration-200 text-start">
-                <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-amber-900 dark:text-amber-200">
-                      {googleAuthNotice.title}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setGoogleAuthNotice(null)}
-                      className="text-muted-foreground hover:text-foreground text-xs cursor-pointer p-0.5"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <AlertDescription className="text-xs leading-relaxed text-muted-foreground dark:text-amber-200/90">
+              <Alert className="auth-google-notice flex items-start gap-3 rounded-xl p-4 text-start">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle bg-amber-400/10 text-amber-300" aria-hidden="true">
+                  <ShieldAlert className="size-5" strokeWidth={2} />
+                </span>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-xs font-semibold leading-relaxed text-foreground">
+                    {googleAuthNotice.title}
+                  </p>
+                  <AlertDescription className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
                     {googleAuthNotice.description}
                   </AlertDescription>
                 </div>
+                <button
+                  type="button"
+                  aria-label={tCommon("close")}
+                  onClick={() => setGoogleAuthNotice(null)}
+                  className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-squircle text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
               </Alert>
             )}
 

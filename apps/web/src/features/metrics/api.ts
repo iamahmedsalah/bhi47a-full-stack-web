@@ -187,6 +187,55 @@ export async function getMetricsSummary(): Promise<MetricsSummaryResponse> {
   return res.data;
 }
 
+export interface LockedAccountItem {
+  _id: string;
+  name: string;
+  nameAr?: string;
+  role: 'student' | 'admin' | 'staff';
+  staffType?: string;
+  userCode?: string;
+  studentCode?: string;
+  staffCode?: string;
+  email?: string;
+  nationalId?: string;
+  failedLoginAttempts?: number;
+  loginAttempts?: number;
+  lockUntil?: string;
+  lockedUntil?: string;
+  lastLoginAt?: string;
+  updatedAt?: string;
+  avatarUrl?: string;
+}
+
+export interface UnlockAccountResult {
+  success: boolean;
+  message: string;
+}
+
+export interface UnlockAllAccountsResult {
+  success: boolean;
+  unlockedCount: number;
+  message: string;
+}
+
+/** GET /api/admin/metrics/locked-accounts */
+export async function getLockedAccounts(): Promise<LockedAccountItem[]> {
+  const res = await api.get<LockedAccountItem[]>('/admin/metrics/locked-accounts');
+  return res.data;
+}
+
+/** POST /api/admin/metrics/unlock-account/:id */
+export async function unlockAccount(id: string): Promise<UnlockAccountResult> {
+  const res = await api.post<UnlockAccountResult>(`/admin/metrics/unlock-account/${id}`);
+  return res.data;
+}
+
+/** POST /api/admin/metrics/unlock-all-accounts */
+export async function unlockAllAccounts(): Promise<UnlockAllAccountsResult> {
+  const res = await api.post<UnlockAllAccountsResult>('/admin/metrics/unlock-all-accounts');
+  return res.data;
+}
+
 /**
  * GET /api/metrics (admin cookie or scrape secret). Returns raw Prometheus
  * exposition text. The handler writes the response directly (bypassing the
@@ -200,3 +249,4 @@ export async function getRawPrometheusMetrics(): Promise<string> {
   });
   return typeof raw === 'string' ? raw : String(raw ?? '');
 }
+

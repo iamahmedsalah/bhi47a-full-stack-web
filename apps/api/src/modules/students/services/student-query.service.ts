@@ -105,6 +105,9 @@ export class StudentQueryService {
 
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
+      const numericDigits = search.replace(/\D/g, '');
+      const isPureNumeric = /^\d+$/.test(search);
+
       // Generate Arabic-variant tolerant regex:
       // Unify alef forms (ا, أ, إ, آ), taa marbuta/haa (ة, ه), and yaa/alef maksura (ي, ى)
       const arabicTolerant = search
@@ -112,16 +115,29 @@ export class StudentQueryService {
         .replace(/[ةه]/g, '[ةه]')
         .replace(/[يى]/g, '[يى]');
 
+      // Egyptian national ID is always 14 digits.
+      // Searching a 4-8 digit academic code (like 271702) must NEVER perform an arbitrary
+      // substring search across 14-digit national IDs, which causes unrelated students to match.
+      const nationalIdClause =
+        numericDigits.length >= 10
+          ? [{ nationalId: { $regex: search, $options: 'i' } }]
+          : numericDigits.length >= 8
+            ? [{ nationalId: { $regex: `^${search}`, $options: 'i' } }]
+            : [];
+
       filter.$or = [
-        { studentCode: { $regex: search, $options: 'i' } },
+        {
+          studentCode: {
+            $regex: isPureNumeric ? `^${search}` : search,
+            $options: 'i',
+          },
+        },
         { fullName: { $regex: arabicTolerant, $options: 'i' } },
         { fullNameAr: { $regex: arabicTolerant, $options: 'i' } },
         { fullNameEn: { $regex: search, $options: 'i' } },
         { seatNumber: { $regex: search, $options: 'i' } },
         { academicEmail: { $regex: search, $options: 'i' } },
-        ...(search.replace(/\D/g, '').length >= 3
-          ? [{ nationalId: { $regex: search, $options: 'i' } }]
-          : []),
+        ...nationalIdClause,
       ];
     }
 
@@ -256,6 +272,17 @@ export class StudentQueryService {
         .lean(),
       this.studentProfileModel.countDocuments(filter),
     ]);
+
+    if (query.search) {
+      const cleanSearch = normalizeSearchTerm(query.search).trim();
+      const exactIndex = items.findIndex(
+        (it) => it.studentCode?.trim() === cleanSearch,
+      );
+      if (exactIndex > 0) {
+        const [exactMatch] = items.splice(exactIndex, 1);
+        items.unshift(exactMatch);
+      }
+    }
 
     const enrichedItems = await this.attachRegistrationSummaries(
       items,

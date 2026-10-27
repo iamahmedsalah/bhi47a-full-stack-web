@@ -2,6 +2,7 @@ import type { Schema } from 'mongoose';
 import type { MetricsService } from '../core/metrics/metrics.service';
 import type { AppLoggerService } from '../core/logger/logger.service';
 import { METRICS_SLOW_QUERY_THRESHOLD_MS } from '../core/metrics/metrics.constants';
+import { getRequestQueryContext } from '../core/metrics/request-query-context';
 
 const DEFAULT_SLOW_QUERY_THRESHOLD_MS =
   process.env.NODE_ENV === 'production' ? 100 : 350;
@@ -156,6 +157,8 @@ export function createMongooseMetricsPlugin(
               filter,
               options,
               uptimeSeconds: Math.floor(process.uptime()),
+              requestId: getRequestQueryContext()?.request.requestId,
+              stage: getRequestQueryContext()?.stage,
             },
           );
         }
@@ -174,7 +177,16 @@ export function createMongooseMetricsPlugin(
         const durationMs = Math.round(durationNs / 1e6);
         const collectionName = this._model?.collection?.name || 'aggregate';
 
-        metricsService?.recordDbQuery(collectionName, 'aggregate', durationSec);
+        const filter =
+          durationMs >= METRICS_SLOW_QUERY_THRESHOLD_MS
+            ? safeStringify(filterShape(this.pipeline()), 300)
+            : undefined;
+        metricsService?.recordDbQuery(
+          collectionName,
+          'aggregate',
+          durationSec,
+          { filter },
+        );
 
         if (durationMs >= thresholdMs) {
           logger?.warn(
@@ -184,6 +196,9 @@ export function createMongooseMetricsPlugin(
               collection: collectionName,
               operation: 'aggregate',
               durationMs,
+              filter,
+              requestId: getRequestQueryContext()?.request.requestId,
+              stage: getRequestQueryContext()?.stage,
             },
           );
         }
@@ -214,6 +229,8 @@ export function createMongooseMetricsPlugin(
               collection: collectionName,
               operation: 'save',
               durationMs,
+              requestId: getRequestQueryContext()?.request.requestId,
+              stage: getRequestQueryContext()?.stage,
             },
           );
         }

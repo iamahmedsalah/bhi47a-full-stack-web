@@ -1,4 +1,5 @@
 import { MetricsService } from './metrics.service';
+import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
 
 describe('metrics summary semantics', () => {
   let metrics: MetricsService;
@@ -57,5 +58,23 @@ describe('metrics summary semantics', () => {
     expect(
       counters!.values.find((value) => value.labels.route === '/other')?.value,
     ).toBe(20);
+  });
+
+  it('samples the active connection on every scrape even if its connected event was missed', async () => {
+    const previous = ConnectionHolder.connection;
+    const connection = { readyState: 1 };
+    ConnectionHolder.connection = connection as never;
+    try {
+      metrics.setDbConnected(false);
+      expect(await metrics.getMetrics()).toContain(
+        'student_portal_mongodb_connected 1',
+      );
+      connection.readyState = 0;
+      expect(await metrics.getMetrics()).toContain(
+        'student_portal_mongodb_connected 0',
+      );
+    } finally {
+      ConnectionHolder.connection = previous;
+    }
   });
 });

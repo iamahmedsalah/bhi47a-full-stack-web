@@ -288,16 +288,66 @@ export function getApiErrorDetails(error: unknown, fallback = 'Something went wr
   };
 }
 
+const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
+  'Your account has been suspended from submitting new complaints': {
+    ar: 'تم إيقاف حسابك عن تقديم شكاوى أو بلاغات جديدة',
+    en: 'Your account has been suspended from submitting new complaints',
+  },
+  'Student information could not be verified': {
+    ar: 'تعذر التحقق من صحة بيانات الطالب أو الرقم القومي',
+    en: 'Student information could not be verified',
+  },
+  'Complaints system is currently closed by the administration': {
+    ar: 'منظومة الشكاوى مغلقة حالياً من قبل إدارة المعهد',
+    en: 'Complaints system is currently closed by the administration',
+  },
+  'Student not found': {
+    ar: 'الطالب غير موجود',
+    en: 'Student not found',
+  },
+  'Invalid CSRF token': {
+    ar: 'انتهت صلاحية رمز الأمان، يرجى إعادة المحاولة',
+    en: 'Security token expired. Please retry.',
+  },
+  'Account not found': {
+    ar: 'الحساب غير موجود',
+    en: 'Account not found',
+  },
+  'Verification code (OTP) expired': {
+    ar: 'انتهت صلاحية رمز التحقق (OTP)',
+    en: 'Verification code (OTP) expired',
+  },
+  'Invalid verification code (OTP)': {
+    ar: 'رمز التحقق (OTP) غير صحيح',
+    en: 'Invalid verification code (OTP)',
+  },
+  'Password recovery was not requested or verification code expired': {
+    ar: 'لم يتم طلب استعادة كلمة المرور أو انتهت صلاحية الرمز',
+    en: 'Password recovery was not requested or verification code expired',
+  },
+};
+
+function localizeErrorMessage(rawMsg: string): string {
+  if (typeof window === 'undefined') return rawMsg;
+  const isEn = window.location.pathname.startsWith('/en');
+  const cleanMsg = rawMsg.trim();
+  const entry = ERROR_TRANSLATIONS[cleanMsg];
+  if (entry) {
+    return isEn ? entry.en : entry.ar;
+  }
+  return rawMsg;
+}
+
 export function getApiErrorMessage(error: unknown, fallback = 'Something went wrong') {
   const payload = getErrorPayload(error);
 
   if (payload) {
     const message = (payload as ApiErrorPayload).message;
     if (Array.isArray(message)) {
-      return message.join(', ');
+      return message.map(localizeErrorMessage).join(', ');
     }
     if (message) {
-      return message;
+      return localizeErrorMessage(message);
     }
   }
 

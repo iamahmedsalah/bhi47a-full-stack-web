@@ -93,6 +93,9 @@ export class Quiz {
   @Prop({ default: true })
   allowResume!: boolean;
 
+  @Prop({ default: false })
+  publishResults!: boolean;
+
   @Prop({ type: Array, default: [] })
   questions!: QuizQuestion[];
 }

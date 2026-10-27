@@ -60,6 +60,13 @@ export function StaffPermissionsDialog({ staff, pending, onClose, onSave }: Prop
               <div className="grid gap-2 md:grid-cols-2">
                 {group.permissions.map((permission) => {
                   const checked = selected.includes(permission);
+                  const keySuffix = permission.replaceAll('.', '_');
+                  let label: string = permission;
+                  try {
+                    label = t(`permissions.labels.${keySuffix}` as Parameters<typeof t>[0]);
+                  } catch {
+                    label = permission;
+                  }
                   return (
                     <button
                       key={permission}
@@ -67,10 +74,10 @@ export function StaffPermissionsDialog({ staff, pending, onClose, onSave }: Prop
                       role="checkbox"
                       aria-checked={checked}
                       onClick={() => toggle(permission)}
-                      className={`flex items-start gap-3 rounded-xl border p-3 text-start transition-colors ${checked ? 'border-primary/50 bg-primary/10' : 'border-border/60 bg-card/40 hover:bg-surface/60'}`}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-start transition-colors cursor-pointer ${checked ? 'border-primary/50 bg-primary/10' : 'border-border/60 bg-card/40 hover:bg-surface/60'}`}
                     >
                       {checked ? <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : <Square className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
-                      <span><span className="block text-xs font-semibold">{t(`permissions.labels.${permission.replaceAll('.', '_')}`)}</span><span className="mt-1 block font-mono text-[10px] text-muted-foreground">{permission}</span></span>
+                      <span><span className="block text-xs font-semibold">{label}</span><span className="mt-1 block font-mono text-[10px] text-muted-foreground" dir="ltr">{permission}</span></span>
                     </button>
                   );
                 })}

@@ -179,6 +179,8 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
           lookup: customLookup,
           connectionFactory: (connection: mongoose.Connection) => {
             ConnectionHolder.connection = connection;
+            // Nest may invoke the factory after the first connected event.
+            metricsService.setDbConnected(Number(connection.readyState) === 1);
 
             const slowThreshold = Number(
               configService.get<string>('SLOW_QUERY_THRESHOLD_MS'),
@@ -205,7 +207,9 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
               logger.warn('Database connection disconnected', 'DatabaseModule');
             });
             connection.on('error', (err) => {
-              metricsService.setDbConnected(false);
+              metricsService.setDbConnected(
+                Number(connection.readyState) === 1,
+              );
               const parsedError = parseDatabaseError(err);
               logger.error(
                 parsedError.customMessage || parsedError.message,

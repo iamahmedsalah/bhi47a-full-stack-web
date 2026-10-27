@@ -28,6 +28,7 @@ import {
   Eye,
   Lightbulb,
   AlertCircle,
+  ListChecks,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -736,53 +737,82 @@ function TakeQuizModal({
         {submissionResult ? (
           /* ─── Result Celebration Card ─── */
           <div className="space-y-6 py-4 text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-teal-500/25 border border-primary/30 shadow-lg">
-              {submissionResult.isPassed ? (
-                <Award className="h-10 w-10 text-primary" />
-              ) : (
-                <AlertTriangle className="h-10 w-10 text-amber-400" />
-              )}
-            </div>
+            {submissionResult.publishResults === false || submissionResult.score === undefined ? (
+              <>
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                  <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+                </div>
 
-            <div className="space-y-1">
-              <h2 className="text-xl font-extrabold text-foreground">
-                {submissionResult.isPassed
-                  ? isAr ? 'أحسنت! تم اجتياز الاختبار بنجاح' : 'Great Job! Quiz Passed'
-                  : isAr ? 'تم الانتهاء من الاختبار' : 'Quiz Completed'}
-              </h2>
-              <p className="text-xs text-muted-foreground">{quiz?.title}</p>
-            </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-extrabold text-foreground">
+                    {isAr ? 'تم تسليم الاختبار بنجاح!' : 'Quiz Submitted Successfully!'}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">{quiz?.title}</p>
+                </div>
 
-            <div className="mx-auto max-w-sm rounded-2xl border border-border/80 bg-secondary/30 p-5 shadow-inner space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{isAr ? 'الدرجة المحصلة:' : 'Score:'}</span>
-                <span className="font-mono text-xl font-extrabold text-foreground">
-                  <span className="text-primary">{submissionResult.score}</span> / {submissionResult.totalMarks}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{isAr ? 'النسبة المئوية:' : 'Percentage:'}</span>
-                <span
-                  className={`font-mono font-bold px-2 py-0.5 rounded-full text-xs ${
-                    submissionResult.isPassed
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  }`}
-                >
-                  {submissionResult.percentage}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{isAr ? 'النتيجة:' : 'Standing:'}</span>
-                <span
-                  className={`font-bold text-xs ${
-                    submissionResult.isPassed ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {submissionResult.isPassed ? (isAr ? 'ناجح' : 'Passed') : (isAr ? 'راسب' : 'Failed')}
-                </span>
-              </div>
-            </div>
+                <div className="mx-auto max-w-sm rounded-2xl border border-border/80 bg-secondary/30 p-5 shadow-inner space-y-2 text-start">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <Clock className="h-4 w-4 text-amber-400 shrink-0" />
+                    <span>{isAr ? 'حالة النتيجة والدرجات' : 'Results & Scores Status'}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {isAr
+                      ? 'تم تسجيل وحفظ جميع إجاباتك بنجاح في النظام. سيتم إعلان وإظهار نتيجتك ودرجاتك فور اعتمادها ونشرها من قبل أستاذ المقرر.'
+                      : 'All your answers were recorded and saved in the system. Your results and scores will be visible once reviewed and published by your instructor.'}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/25 to-teal-500/25 border border-primary/30 shadow-lg">
+                  {submissionResult.isPassed ? (
+                    <Award className="h-10 w-10 text-primary" />
+                  ) : (
+                    <AlertTriangle className="h-10 w-10 text-amber-400" />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <h2 className="text-xl font-extrabold text-foreground">
+                    {submissionResult.isPassed
+                      ? isAr ? 'أحسنت! تم اجتياز الاختبار بنجاح' : 'Great Job! Quiz Passed'
+                      : isAr ? 'تم الانتهاء من الاختبار' : 'Quiz Completed'}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">{quiz?.title}</p>
+                </div>
+
+                <div className="mx-auto max-w-sm rounded-2xl border border-border/80 bg-secondary/30 p-5 shadow-inner space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{isAr ? 'الدرجة المحصلة:' : 'Score:'}</span>
+                    <span className="font-mono text-xl font-extrabold text-foreground">
+                      <span className="text-primary">{submissionResult.score}</span> / {submissionResult.totalMarks}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{isAr ? 'النسبة المئوية:' : 'Percentage:'}</span>
+                    <span
+                      className={`font-mono font-bold px-2 py-0.5 rounded-full text-xs ${
+                        submissionResult.isPassed
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                      }`}
+                    >
+                      {submissionResult.percentage}%
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{isAr ? 'النتيجة:' : 'Standing:'}</span>
+                    <span
+                      className={`font-bold text-xs ${
+                        submissionResult.isPassed ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {submissionResult.isPassed ? (isAr ? 'ناجح' : 'Passed') : (isAr ? 'راسب' : 'Failed')}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
 
             <Button
               onClick={() => {
@@ -1377,6 +1407,147 @@ function QuizReviewModal({
   );
 }
 
+/* ─── Student Quiz Result Modal Component ─────────────────── */
+interface StudentQuizResultModalProps {
+  quiz: StudentQuizViewItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenReview: (quizId: string) => void;
+  isAr: boolean;
+}
+
+function StudentQuizResultModal({
+  quiz,
+  open,
+  onOpenChange,
+  onOpenReview,
+  isAr,
+}: StudentQuizResultModalProps) {
+  if (!quiz) return null;
+  const sub = quiz.submission;
+  const canReview = quiz.allowReview !== false && (quiz.isEnded || !quiz.endsAt);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md p-6 bg-card border border-border/80 shadow-2xl rounded-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+        <DialogHeader className="space-y-2 text-start">
+          <div className="flex items-center gap-2 text-primary font-bold">
+            <Award className="h-5 w-5" />
+            <DialogTitle className="text-base font-extrabold text-foreground">
+              {isAr ? 'نتيجة الاختبار وتقرير الأداء' : 'Quiz Result & Performance'}
+            </DialogTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {quiz.title} • {isAr ? (quiz.courseNameAr || quiz.courseName) : (quiz.courseNameEn || quiz.courseName)}
+          </p>
+        </DialogHeader>
+
+        {sub && typeof sub.score === 'number' ? (
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border/70 bg-secondary/30 p-3.5 text-center">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? 'الدرجة المحصلة' : 'Score'}
+                </span>
+                <div className="mt-1 text-2xl font-black font-mono text-primary">
+                  {sub.score}{' '}
+                  <span className="text-xs font-normal text-muted-foreground">/ {sub.totalMarks}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-secondary/30 p-3.5 text-center">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? 'النسبة المئوية' : 'Percentage'}
+                </span>
+                <div className="mt-1 text-2xl font-black font-mono text-foreground">
+                  {sub.percentage}%
+                </div>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'rounded-xl border p-3.5 text-center flex items-center justify-between px-4',
+                sub.isPassed
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                  : 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+              )}
+            >
+              <span className="text-xs font-bold">
+                {isAr ? 'التقييم العام:' : 'Result Status:'}
+              </span>
+              <span className="text-sm font-extrabold">
+                {sub.isPassed ? (isAr ? 'ناجح (اجتياز بنجاح)' : 'Passed') : (isAr ? 'راسب' : 'Failed')}
+              </span>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground font-mono space-y-1 pt-1 border-t border-border/60">
+              {sub.submittedAt && (
+                <div className="flex items-center justify-between">
+                  <span>{isAr ? 'تاريخ التسليم:' : 'Submitted At:'}</span>
+                  <span>
+                    {new Date(sub.submittedAt).toLocaleString(isAr ? 'ar-EG' : 'en-GB', {
+                      timeZone: 'Africa/Cairo',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              )}
+              {sub.durationSeconds > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>{isAr ? 'مدة الإجابة:' : 'Duration:'}</span>
+                  <span>
+                    {Math.floor(sub.durationSeconds / 60)} {isAr ? 'دقيقة' : 'm'}{' '}
+                    {sub.durationSeconds % 60} {isAr ? 'ثانية' : 's'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {canReview && (
+              <Button
+                onClick={() => {
+                  onOpenChange(false);
+                  onOpenReview(quiz._id);
+                }}
+                className="w-full rounded-squircle gap-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs h-9"
+              >
+                <ListChecks className="h-4 w-4" />
+                <span>{isAr ? 'مراجعة الأسئلة والإجابات النموذجية' : 'Review Questions & Model Answers'}</span>
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="py-6 text-center space-y-2">
+            <Clock className="h-8 w-8 text-amber-400 mx-auto" />
+            <p className="text-sm font-bold text-foreground">
+              {isAr ? 'النتيجة قيد الإعلان والاعتماد' : 'Results Pending Release'}
+            </p>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+              {isAr
+                ? 'لم يقم أستاذ المقرر بإعلان نتائج الاختبار بعد. ستظهر النتيجة تلقائياً هنا بمجرد اعتمادها.'
+                : 'The course instructor has not published results yet. They will appear here once released.'}
+            </p>
+          </div>
+        )}
+
+        <DialogFooter className="sm:justify-start rtl:sm:justify-start">
+          <Button
+            variant="secondary"
+            onClick={() => onOpenChange(false)}
+            className="rounded-squircle px-6 text-xs font-semibold"
+          >
+            {isAr ? 'إغلاق' : 'Close'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Main Student Quizzes Page ────────────────────────── */
 export default function StudentQuizzesPage() {
   const t = useTranslations('studentPortal');
@@ -1391,6 +1562,7 @@ export default function StudentQuizzesPage() {
   const [takingQuizId, setTakingQuizId] = useState<string | null>(null);
   const [confirmStartQuiz, setConfirmStartQuiz] = useState<StudentQuizViewItem | null>(null);
   const [reviewQuizId, setReviewQuizId] = useState<string | null>(null);
+  const [resultModalQuiz, setResultModalQuiz] = useState<StudentQuizViewItem | null>(null);
 
   // 1. Fetch Online Quizzes from Quizzes module
   const onlineQuizzesQuery = useQuery({
@@ -1460,7 +1632,7 @@ export default function StudentQuizzesPage() {
         };
       }
       coursesMap[code].onlineQuizzes.push(q);
-      if (q.submission) {
+      if (q.submission && q.publishResults && typeof q.submission.score === 'number') {
         coursesMap[code].totalGrade += q.submission.score;
         coursesMap[code].maxTotalGrade += q.submission.totalMarks;
       }
@@ -1585,27 +1757,27 @@ export default function StudentQuizzesPage() {
                           </span>
 
                           {quiz.isSubmitted ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                            <span className="inline-flex items-center gap-1 rounded-squircle border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
                               <CheckCircle2 className="h-3 w-3" />
                               <span>{isAr ? 'تم التسليم' : 'Submitted'}</span>
                             </span>
                           ) : isTerminated ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-400">
+                            <span className="inline-flex items-center gap-1 rounded-squircle border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 text-xs font-bold text-rose-400">
                               <AlertTriangle className="h-3 w-3" />
                               <span>{isAr ? 'ملغى (خروج)' : 'Terminated'}</span>
                             </span>
                           ) : isInProgress && quiz.allowResume !== false ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-xs font-bold text-cyan-400">
+                            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 text-xs font-bold text-cyan-400">
                               <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                               <span>{isAr ? 'جارٍ وقابل للاستئناف' : 'In Progress (Resumable)'}</span>
                             </span>
                           ) : quiz.isOpen ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-xs font-bold text-teal-400">
+                            <span className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-xs font-bold text-teal-400">
                               <span className="h-2 w-2 rounded-full bg-teal-400 animate-ping" />
                               <span>{isAr ? 'متاح الآن' : 'Open Now'}</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-muted/30 bg-muted/10 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 rounded-squircle border border-muted/30 bg-muted/10 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                               <span>{isAr ? 'غير متاح' : 'Closed'}</span>
                             </span>
                           )}
@@ -1690,39 +1862,38 @@ export default function StudentQuizzesPage() {
 
                       {/* Bottom Action / Score Info */}
                       <div className="pt-4 border-t border-border/70 mt-4 flex flex-col gap-3">
-                        {quiz.isSubmitted && quiz.submission ? (
-                          <>
-                            <div className="flex items-center justify-between w-full">
-                              <div className="space-y-0.5">
-                                <span className="text-[11px] text-muted-foreground block">
-                                  {isAr ? 'درجتك في الاختبار:' : 'Your Score:'}
-                                </span>
-                                <span className="font-mono text-base font-black text-primary">
-                                  {quiz.submission.score} / {quiz.submission.totalMarks}
-                                </span>
+                        {quiz.isSubmitted ? (
+                          !quiz.publishResults || typeof quiz.submission?.score !== 'number' ? (
+                            <div className="flex flex-col gap-2 rounded-squircle bg-secondary/35 border border-border/70 p-3 text-start">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                                <Clock className="h-4 w-4 text-amber-400 shrink-0" />
+                                <span>{isAr ? 'تم استلام الإجابات بنجاح' : 'Answers Received Successfully'}</span>
                               </div>
-                              <span
-                                className={`font-mono text-xs font-bold px-2.5 py-1 rounded-full ${
-                                  quiz.submission.isPassed
-                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                                }`}
-                              >
-                                {quiz.submission.percentage}% ({quiz.submission.isPassed ? (isAr ? 'ناجح' : 'Pass') : (isAr ? 'راسب' : 'Fail')})
-                              </span>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                {isAr
+                                  ? 'بانتظار إعلان ونشر النتيجة والدرجات من أستاذ المقرر. سيتاح زر الاطلاع على النتيجة هنا فور اعتمادها.'
+                                  : 'Awaiting results release from course instructor. The view result button will be available once announced.'}
+                              </p>
                             </div>
+                          ) : (
+                            <div className="flex flex-col gap-2.5 w-full">
+                              <Button
+                                onClick={() => setResultModalQuiz(quiz)}
+                                className="w-full rounded-squircle gap-2 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs h-9 shadow-md shadow-teal-600/20"
+                              >
+                                <Eye className="h-4 w-4" />
+                                <span>{isAr ? 'عرض نتيجة ودرجة الاختبار' : 'See Quiz Result'}</span>
+                              </Button>
 
-                            {/* Quiz Review Button / Scheduled Notice */}
-                            {quiz.allowReview !== false && (
-                              <div className="w-full">
-                                {quiz.isEnded || !quiz.endsAt ? (
+                              {quiz.allowReview !== false && (
+                                quiz.isEnded || !quiz.endsAt ? (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setReviewQuizId(quiz._id)}
-                                    className="w-full rounded-squircle gap-2 border-primary/40 text-primary hover:bg-primary/10 font-bold text-xs"
+                                    className="w-full rounded-squircle gap-2 border-primary/40 text-primary hover:bg-primary/10 font-bold text-xs h-8"
                                   >
-                                    <Eye className="h-3.5 w-3.5" />
+                                    <ListChecks className="h-3.5 w-3.5" />
                                     <span>
                                       {isAr
                                         ? 'مراجعة الأسئلة والإجابات النموذجية'
@@ -1730,18 +1901,18 @@ export default function StudentQuizzesPage() {
                                     </span>
                                   </Button>
                                 ) : (
-                                  <div className="flex items-center justify-center gap-1.5 rounded-squircle bg-amber-500/10 border border-amber-500/20 py-1.5 px-2.5 text-[11px] text-amber-300 font-medium">
-                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                  <div className="flex items-center justify-center gap-1.5 rounded-squircle bg-amber-500/10 border border-amber-500/20 py-1 px-2 text-[10px] text-amber-300 font-medium">
+                                    <Clock className="h-3 w-3 shrink-0" />
                                     <span>
                                       {isAr
-                                        ? 'تتاح مراجعة الأسئلة والإجابات بعد انتهاء موعد الاختبار'
+                                        ? 'تتاح مراجعة الأسئلة بعد انتهاء موعد الاختبار'
                                         : 'Review unlocks after quiz deadline'}
                                     </span>
                                   </div>
-                                )}
-                              </div>
-                            )}
-                          </>
+                                )
+                              )}
+                            </div>
+                          )
                         ) : isTerminated ? (
                           <>
                             <div className="flex flex-col items-center justify-center w-full py-1 text-center space-y-1">
@@ -1856,7 +2027,9 @@ export default function StudentQuizzesPage() {
                           </span>
                           <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
                         </div>
-                        <span className="text-2xl font-black font-mono text-foreground">{combinedOverallPct}%</span>
+                        <span className="text-2xl font-black font-mono text-foreground">
+                          {allMaxTotalGrade > 0 ? `${combinedOverallPct}%` : '—'}
+                        </span>
                       </Card>
                     </motion.div>
 
@@ -1869,7 +2042,7 @@ export default function StudentQuizzesPage() {
                           <Award className="h-4.5 w-4.5 text-primary" />
                         </div>
                         <span className="text-2xl font-black font-mono text-foreground">
-                          {allTotalGrade} / {allMaxTotalGrade}
+                          {allMaxTotalGrade > 0 ? `${allTotalGrade} / ${allMaxTotalGrade}` : '—'}
                         </span>
                       </Card>
                     </motion.div>
@@ -1922,12 +2095,20 @@ export default function StudentQuizzesPage() {
 
                               <div className="flex items-center gap-4">
                                 <div className="text-end">
-                                  <span className="text-sm font-bold text-foreground block font-mono">
-                                    {course.totalGrade} / {course.maxTotalGrade}
-                                  </span>
-                                  <span className="text-[10px] font-semibold text-primary">
-                                    ({coursePct}%)
-                                  </span>
+                                  {course.maxTotalGrade > 0 ? (
+                                    <>
+                                      <span className="text-sm font-bold text-foreground block font-mono">
+                                        {course.totalGrade} / {course.maxTotalGrade}
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-primary">
+                                        ({coursePct}%)
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-amber-400 block">
+                                      {isAr ? 'النتائج قيد الإعلان' : 'Results Pending'}
+                                    </span>
+                                  )}
                                 </div>
                                 {isExpanded ? (
                                   <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -1984,10 +2165,10 @@ export default function StudentQuizzesPage() {
                                                     </p>
                                                   </div>
 
-                                                  {sub ? (
+                                                  {q.publishResults && sub && typeof sub.score === 'number' ? (
                                                     <span
                                                       className={cn(
-                                                        'font-mono text-[11px] font-bold px-2 py-0.5 rounded-full border',
+                                                        'font-mono text-[11px] font-bold px-2 py-0.5 rounded-squircle border',
                                                         sub.isPassed
                                                           ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                                                           : 'bg-rose-500/15 text-rose-400 border-rose-500/30',
@@ -1996,8 +2177,8 @@ export default function StudentQuizzesPage() {
                                                       {sub.score} / {sub.totalMarks} ({sub.percentage}%)
                                                     </span>
                                                   ) : (
-                                                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                                                      {isAr ? 'ملغى' : 'Terminated'}
+                                                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-squircle bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                                      {isAr ? 'النتيجة قيد الإعلان' : 'Results Pending'}
                                                     </span>
                                                   )}
                                                 </div>
@@ -2013,28 +2194,49 @@ export default function StudentQuizzesPage() {
                                                       : '—'}
                                                   </span>
 
-                                                  {canReview ? (
-                                                    <Button
-                                                      variant="outline"
-                                                      size="sm"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setReviewQuizId(q._id);
-                                                      }}
-                                                      className="rounded-squircle gap-1.5 border-primary/40 text-primary hover:bg-primary/10 font-bold text-xs h-7.5 px-3"
-                                                    >
-                                                      <Eye className="h-3.5 w-3.5" />
-                                                      <span>
-                                                        {isAr ? 'مراجعة الإجابات' : 'Review Answers'}
+                                                  <div className="flex items-center gap-1.5">
+                                                    {q.publishResults && sub && typeof sub.score === 'number' && (
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setResultModalQuiz(q);
+                                                        }}
+                                                        className="rounded-squircle gap-1 border border-border/80 text-foreground hover:bg-secondary/60 font-semibold text-xs h-7.5 px-2.5"
+                                                      >
+                                                        <Award className="h-3.5 w-3.5 text-teal-400" />
+                                                        <span>{isAr ? 'النتيجة' : 'Result'}</span>
+                                                      </Button>
+                                                    )}
+
+                                                    {q.publishResults && canReview ? (
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setReviewQuizId(q._id);
+                                                        }}
+                                                        className="rounded-squircle gap-1.5 border-primary/40 text-primary hover:bg-primary/10 font-bold text-xs h-7.5 px-3"
+                                                      >
+                                                        <Eye className="h-3.5 w-3.5" />
+                                                        <span>
+                                                          {isAr ? 'مراجعة الإجابات' : 'Review Answers'}
+                                                        </span>
+                                                      </Button>
+                                                    ) : !q.publishResults ? (
+                                                      <span className="text-[10px] text-muted-foreground font-medium">
+                                                        {isAr ? 'بانتظار إعلان أستاذ المقرر' : 'Pending instructor release'}
                                                       </span>
-                                                    </Button>
-                                                  ) : (
-                                                    <span className="text-[10px] text-amber-300/90 font-medium">
-                                                      {isAr
-                                                        ? 'تتاح المراجعة بعد موعد الإغلاق'
-                                                        : 'Unlocks after deadline'}
-                                                    </span>
-                                                  )}
+                                                    ) : (
+                                                      <span className="text-[10px] text-amber-300/90 font-medium">
+                                                        {isAr
+                                                          ? 'تتاح المراجعة بعد موعد الإغلاق'
+                                                          : 'Unlocks after deadline'}
+                                                      </span>
+                                                    )}
+                                                  </div>
                                                 </div>
                                               </div>
                                             );
@@ -2157,6 +2359,17 @@ export default function StudentQuizzesPage() {
         onOpenChange={(op) => {
           if (!op) setReviewQuizId(null);
         }}
+        isAr={isAr}
+      />
+
+      {/* Student Quiz Result Modal */}
+      <StudentQuizResultModal
+        quiz={resultModalQuiz}
+        open={Boolean(resultModalQuiz)}
+        onOpenChange={(op) => {
+          if (!op) setResultModalQuiz(null);
+        }}
+        onOpenReview={(id) => setReviewQuizId(id)}
         isAr={isAr}
       />
     </div>

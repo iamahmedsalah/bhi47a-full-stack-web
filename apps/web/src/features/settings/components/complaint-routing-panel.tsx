@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Gauge,
   HelpCircle,
+  CircleOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -382,11 +383,10 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
             return (
               <Card
                 key={dept.key}
-                className={`relative overflow-hidden border p-4 transition-all duration-200 ${
-                  hasAssigned
+                className={`relative overflow-hidden border p-4 transition-all duration-200 ${hasAssigned
                     ? 'border-primary/40 bg-card/90 shadow-sm'
                     : 'border-white/10 bg-card/50 opacity-90'
-                }`}
+                  }`}
               >
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
@@ -445,11 +445,12 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
                         }
                       />
                     </SelectTrigger>
-                    <SelectContent className="border-border bg-card">
+                    <SelectContent className="border-border bg-card ">
                       <SelectItem value="none" className="text-xs text-muted-foreground cursor-pointer">
-                        {isAr
-                          ? '🚫 بدون تعيين (غير معين)'
-                          : '🚫 No Staff (Unassigned)'}
+                        <div className="flex items-center gap-2">
+                          <CircleOff className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                          <span>{isAr ? 'بدون تعيين (غير معين)' : 'No Staff (Unassigned)'}</span>
+                        </div>
                       </SelectItem>
                       {assignees.map((staff) => (
                         <SelectItem
@@ -463,11 +464,11 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
                             <span className="text-[10px] text-muted-foreground">
                               {staff.role === 'admin'
                                 ? isAr
-                                ? '(مسؤول)'
-                                : '(Admin)'
+                                  ? '(مسؤول)'
+                                  : '(Admin)'
                                 : isAr
-                                ? '(موظف)'
-                                : '(Staff)'}
+                                  ? '(موظف)'
+                                  : '(Staff)'}
                             </span>
                           </div>
                         </SelectItem>

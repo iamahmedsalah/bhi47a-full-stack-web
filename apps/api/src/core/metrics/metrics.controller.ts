@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Post,
+  Param,
   Res,
   Req,
   NotFoundException,
@@ -10,11 +12,15 @@ import type { Request, Response } from 'express';
 import { OptionalAuth } from '../../modules/auth/decorators/public.decorator';
 import { Roles } from '../../modules/auth/decorators/roles.decorator';
 import { MetricsService } from './metrics.service';
+import { UsersService } from '../../modules/users/users.service';
 import type { AuthenticatedRequest } from '../../modules/auth/types/authenticated-request';
 
 @Controller()
 export class MetricsController {
-  constructor(private readonly metricsService: MetricsService) {}
+  constructor(
+    private readonly metricsService: MetricsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   /**
    * Raw Prometheus exposition endpoint for scrapers or Admins.
@@ -68,5 +74,32 @@ export class MetricsController {
   @Get(['metrics/summary', 'admin/metrics'])
   async getSummary() {
     return this.metricsService.getSummary();
+  }
+
+  /**
+   * Get all currently locked accounts due to brute force protection
+   */
+  @Roles('admin')
+  @Get('admin/metrics/locked-accounts')
+  async getLockedAccounts() {
+    return this.usersService.findLockedAccounts();
+  }
+
+  /**
+   * Instantly unlock a specific locked account
+   */
+  @Roles('admin')
+  @Post('admin/metrics/unlock-account/:id')
+  async unlockAccount(@Param('id') id: string) {
+    return this.usersService.unlockAccount(id);
+  }
+
+  /**
+   * Bulk unlock all locked accounts instantly
+   */
+  @Roles('admin')
+  @Post('admin/metrics/unlock-all-accounts')
+  async unlockAllAccounts() {
+    return this.usersService.unlockAllAccounts();
   }
 }
