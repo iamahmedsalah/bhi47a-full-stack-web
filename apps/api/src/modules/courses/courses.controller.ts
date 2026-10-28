@@ -25,6 +25,7 @@ import {
   UpdateCourseDto,
   QueryCourseDto,
   EnrollStudentsBatchDto,
+  EnrollmentOptionsDto,
 } from './dto/course.dto';
 import {
   CreateCourseMaterialDto,
@@ -169,9 +170,8 @@ export class CoursesController {
   async enrollStudentsFromExcel(
     @Param('id', ParseObjectIdPipe) id: string,
     @UploadedFile() file: CourseSyllabusFile,
-    @Query('academicYear') academicYear?: string,
-    @Query('semester') semester?: string,
-    @Query('skipBlocked') skipBlocked?: string,
+    @Query() options: EnrollmentOptionsDto,
+    @CurrentUser() caller: { _id: string; role: string },
   ) {
     if (!file) {
       throw new BadRequestException(
@@ -183,9 +183,8 @@ export class CoursesController {
       file.buffer,
       file.originalname,
       {
-        academicYear,
-        semester,
-        skipBlocked: skipBlocked === 'true' || skipBlocked === '1',
+        ...options,
+        actor: { _id: String(caller._id), role: caller.role },
       },
     );
   }
@@ -199,6 +198,7 @@ export class CoursesController {
   async enrollStudentsBatch(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: EnrollStudentsBatchDto,
+    @CurrentUser() caller: { _id: string; role: string },
   ) {
     if (!dto.rows || !Array.isArray(dto.rows) || dto.rows.length === 0) {
       throw new BadRequestException(
@@ -209,6 +209,9 @@ export class CoursesController {
       academicYear: dto.academicYear,
       semester: dto.semester,
       skipBlocked: dto.skipBlocked,
+      overrideRegistrationLimits: dto.overrideRegistrationLimits,
+      overrideReason: dto.overrideReason,
+      actor: { _id: String(caller._id), role: caller.role },
     });
   }
 

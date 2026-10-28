@@ -11,6 +11,34 @@ export type CourseRegistrationDocument = CourseRegistration & Document;
   timestamps: true,
 })
 export class CourseRegistration {
+  @Prop({
+    type: [
+      {
+        _id: false,
+        actorId: { type: Types.ObjectId, ref: 'User', required: true },
+        reason: { type: String, required: true, maxlength: 500 },
+        courseCode: { type: String, required: true },
+        createdAt: { type: Date, required: true },
+        currentCourseCount: { type: Number, required: true },
+        proposedCourseCount: { type: Number, required: true },
+        currentCreditHours: { type: Number, required: true },
+        proposedCreditHours: { type: Number, required: true },
+        maxCourses: { type: Number, required: true },
+        maxCreditHours: { type: Number, required: true },
+      },
+    ],
+    default: [],
+    select: false,
+  })
+  administrativeLimitOverrides?: Array<
+    import('@student-portal/shared').CourseEnrollmentLimitDetails & {
+      actorId: Types.ObjectId;
+      reason: string;
+      courseCode: string;
+      createdAt: Date;
+    }
+  >;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   studentId!: Types.ObjectId;
 

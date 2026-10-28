@@ -33,6 +33,7 @@ interface DepartmentTransferDialogProps {
   onOpenChange: (open: boolean) => void;
   student?: Student | null;
   selectedStudents?: Student[];
+  selectedKeys?: string[];
   onSuccess?: () => void;
   locale?: string;
 }
@@ -69,6 +70,7 @@ export function DepartmentTransferDialog({
   onOpenChange,
   student,
   selectedStudents = [],
+  selectedKeys = [],
   onSuccess,
   locale: propLocale,
 }: DepartmentTransferDialogProps) {
@@ -77,13 +79,32 @@ export function DepartmentTransferDialog({
   const isAr = locale.startsWith('ar');
   const queryClient = useQueryClient();
 
-  const isBulk = !student && selectedStudents.length > 0;
+  const isBulk = !student && (selectedStudents.length > 0 || selectedKeys.length > 0);
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
-  const baseStudents = useMemo(
-    () => (student ? [student] : selectedStudents),
-    [student, selectedStudents],
-  );
+  const baseStudents = useMemo(() => {
+    if (student) return [student];
+    const map = new Map<string, Student>();
+    for (const s of selectedStudents) {
+      if (s && s._id) {
+        map.set(s._id, s);
+      }
+    }
+    if (selectedKeys && selectedKeys.length > 0) {
+      for (const id of selectedKeys) {
+        if (!map.has(id)) {
+          map.set(id, {
+            _id: id,
+            studentCode: id,
+            fullName: isAr ? 'طالب محدد' : 'Selected Student',
+            level: '3',
+            enrollmentStatus: 'active',
+          } as Student);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [student, selectedStudents, selectedKeys, isAr]);
 
   const activeStudents = useMemo(
     () => baseStudents.filter((s) => !excludedIds.includes(s._id)),

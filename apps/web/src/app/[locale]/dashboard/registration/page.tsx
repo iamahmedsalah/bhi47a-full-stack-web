@@ -255,7 +255,7 @@ export default function CourseRegistrationPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
-      <div className="relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-teal-950/40 via-teal-900/20 to-transparent p-6 shadow-lg md:flex-row md:items-center">
+      <div className="relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl border border-primary/20 bg-linear-to-r from-teal-950/40 via-teal-900/20 to-transparent p-6 shadow-lg md:flex-row md:items-center">
         <div className="z-10 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 font-semibold text-xs text-primary">

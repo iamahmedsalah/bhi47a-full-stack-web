@@ -14,8 +14,10 @@ import {
   ValidateIf,
   ArrayMaxSize,
   ArrayUnique,
+  MinLength,
+  MaxLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   COURSE_LEVEL_VALUES,
@@ -458,7 +460,7 @@ export class QueryCourseDto {
   limit?: number;
 }
 
-export class EnrollStudentsBatchDto {
+export class EnrollmentOptionsDto {
   @ApiPropertyOptional({ example: '2026-2027' })
   @IsOptional()
   @IsString()
@@ -466,14 +468,43 @@ export class EnrollStudentsBatchDto {
 
   @ApiPropertyOptional({ enum: ['first', 'second', 'summer'] })
   @IsOptional()
-  @IsString()
-  semester?: string;
+  @IsIn(['first', 'second', 'summer'])
+  semester?: 'first' | 'second' | 'summer';
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
+  @Type(() => Object)
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
   skipBlocked?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Object)
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' ? true : value === 'false' ? false : value,
+  )
+  overrideRegistrationLimits?: boolean;
+
+  @ApiPropertyOptional()
+  @ValidateIf(
+    (dto: EnrollmentOptionsDto) =>
+      dto.overrideRegistrationLimits === true ||
+      dto.overrideReason !== undefined,
+  )
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  overrideReason?: string;
+}
+
+export class EnrollStudentsBatchDto extends EnrollmentOptionsDto {
   @ApiProperty({
     description: 'Array of student row objects to enroll',
     type: 'array',

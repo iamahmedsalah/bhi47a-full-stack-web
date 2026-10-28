@@ -3,6 +3,8 @@ export * from "./exam-types";
 export * from "./ticket-statuses";
 export * from "./course-levels";
 export * from "./course-curricula";
+export * from "./specialization-curricula";
+export * from "./course-enrollment";
 export * from "./grade-statuses";
 export * from "./upload-types";
 export * from "./enrollment-statuses";

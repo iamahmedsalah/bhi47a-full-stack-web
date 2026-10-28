@@ -60,6 +60,7 @@ async function main() {
       totalCreditHours: count * 3, registrationStatus: 'approved', date: '2026-10-28', advisorNotes: 'ملاحظات المرشد الأكاديمي للاختبار' });
     for (const [locale, department, semester, count] of [['ar', 'ACCOUNTING', 'first', 6], ['en', 'BIS', 'second', 6], ['ar', 'ACCOUNTING', 'first', 35]]) {
       const form = makeForm(department, semester, count);
+      if (locale === 'ar' && count === 6) form.studentInformation.studentNameAr = 'طالب اختبار الاسم الرباعي الطويل لطباعة استمارة تسجيل المقررات الدراسية بشكل صحيح';
       await page.evaluate(() => { window.captures = []; window.capturedCourses = []; });
       const pending = page.waitForEvent('download', { timeout: 60000 });
       await page.evaluate(({ form, locale }) => window.RegistrationPrint.downloadRegistrationPdf(form, locale), { form, locale });
@@ -80,6 +81,7 @@ async function main() {
       console.log(`${department} ${locale} ${count} courses: ${pages} page(s), ${pdf.length} bytes`);
     }
     const form = makeForm('ACCOUNTING', 'first');
+    assert.equal(await page.evaluate(() => window.RegistrationPrint.localizeCourseType('institute_req', 'ar')), 'متطلب معهد');
     const popupPromise = page.waitForEvent('popup');
     await page.evaluate((form) => window.RegistrationPrint.openRegistrationPrintView(form, 'download', 'ar'), form);
     const popup = await popupPromise;

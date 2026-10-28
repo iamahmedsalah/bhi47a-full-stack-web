@@ -234,15 +234,15 @@ export function DataTableShell<T>({
                   return (
                     <TableHead
                       key={column.key}
-                      className={cn('px-4 py-3 text-start text-xs font-semibold text-foreground', column.className)}
+                      className={cn('px-4 py-3 text-start text-xs font-semibold text-foreground whitespace-nowrap', column.className)}
                     >
                       {column.sortable && onSortChange ? (
                         <button
                           type="button"
                           onClick={() => onSortChange(fieldKey, nextOrder)}
                           className={cn(
-                            'group inline-flex items-center gap-1.5 transition-colors cursor-pointer select-none rounded-squircle -ms-1 px-1.5 py-0.5 hover:bg-secondary/60 hover:text-foreground',
-                            isSorted ? 'text-primary font-bold' : 'text-foreground',
+                            'group inline-flex items-center gap-1.5 transition-all cursor-pointer select-none rounded-squircle -ms-1 px-2 py-1 hover:bg-secondary/60 hover:text-foreground whitespace-nowrap',
+                            isSorted ? 'bg-primary/10 text-primary font-bold border border-primary/25 shadow-2xs' : 'text-foreground',
                           )}
                           title={
                             isSorted
@@ -252,7 +252,7 @@ export function DataTableShell<T>({
                               : 'انقر للترتيب'
                           }
                         >
-                          <span>{column.header}</span>
+                          <span className="whitespace-nowrap">{column.header}</span>
                           {isSorted ? (
                             sortOrder === 'asc' ? (
                               <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -264,7 +264,7 @@ export function DataTableShell<T>({
                           )}
                         </button>
                       ) : (
-                        column.header
+                        <span className="whitespace-nowrap">{column.header}</span>
                       )}
                     </TableHead>
                   );

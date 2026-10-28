@@ -246,9 +246,7 @@ function StudentsPageContent() {
     );
 
     try {
-      const selectedStudents = students.filter((s) =>
-        selectedKeys.includes(s._id),
-      );
+      const selectedStudents = selectedStudentsList;
       const payload: Record<string, unknown> = {
         academicYear: autoRegYear.trim() || '2026-2027',
         semester: autoRegSemester,
@@ -328,10 +326,71 @@ function StudentsPageContent() {
   const total = studentsQuery.data?.total ?? 0;
   const totalPages = studentsQuery.data?.totalPages ?? 1;
 
-  const selectedStudentsList = React.useMemo(
-    () => students.filter((s) => selectedKeys.includes(s._id)),
-    [students, selectedKeys],
-  );
+  const [selectedStudentsMap, setSelectedStudentsMap] = React.useState<Map<string, Student>>(new Map());
+
+  // Cache selected students across pagination and filter changes
+  React.useEffect(() => {
+    if (selectedKeys.length === 0) {
+      setSelectedStudentsMap(new Map());
+      return;
+    }
+
+    setSelectedStudentsMap((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+
+      // Add currently loaded students if selected
+      for (const st of students) {
+        if (selectedKeys.includes(st._id) && !next.has(st._id)) {
+          next.set(st._id, st);
+          changed = true;
+        }
+      }
+
+      // Evict students no longer selected
+      for (const id of next.keys()) {
+        if (!selectedKeys.includes(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [students, selectedKeys]);
+
+  // Fetch any missing selected students from other pages
+  React.useEffect(() => {
+    if (selectedKeys.length === 0) return;
+    const missingIds = selectedKeys.filter((id) => !selectedStudentsMap.has(id));
+    if (missingIds.length === 0) return;
+
+    let isMounted = true;
+    Promise.all(missingIds.map((id) => getStudent(id).catch(() => null))).then((results) => {
+      if (!isMounted) return;
+      setSelectedStudentsMap((prev) => {
+        const next = new Map(prev);
+        let updated = false;
+        for (const item of results) {
+          if (item && selectedKeys.includes(item._id) && !next.has(item._id)) {
+            next.set(item._id, item);
+            updated = true;
+          }
+        }
+        return updated ? next : prev;
+      });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedKeys, selectedStudentsMap]);
+
+  const selectedStudentsList = React.useMemo(() => {
+    return selectedKeys
+      .map((id) => selectedStudentsMap.get(id) || students.find((s) => s._id === id))
+      .filter((s): s is Student => Boolean(s));
+  }, [selectedKeys, selectedStudentsMap, students]);
 
   const invalidateStudents = () => {
     void queryClient.invalidateQueries({ queryKey: ['students'] });
@@ -626,7 +685,7 @@ function StudentsPageContent() {
               value={level}
               onValueChange={(val) => setFilter('level', val)}
             >
-              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-42.5">
                 <SelectValue placeholder={t('level')} />
               </SelectTrigger>
               <SelectContent className="border-border bg-card">
@@ -645,7 +704,7 @@ function StudentsPageContent() {
               value={department}
               onValueChange={(val) => setFilter('department', val)}
             >
-              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-47.5">
                 <SelectValue
                   placeholder={
                     locale === 'ar' ? 'القسم / الشعبة' : 'Department'
@@ -678,7 +737,7 @@ function StudentsPageContent() {
               value={status}
               onValueChange={(val) => setFilter('status', val)}
             >
-              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[170px]">
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-42.5">
                 <SelectValue placeholder={t('status')} />
               </SelectTrigger>
               <SelectContent className="border-border bg-card">
@@ -701,7 +760,7 @@ function StudentsPageContent() {
                 setTableFilter('sortOrder' as any, o);
               }}
             >
-              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-47.5">
                 <SelectValue placeholder={locale === 'ar' ? 'الترتيب' : 'Sort by'} />
               </SelectTrigger>
               <SelectContent className="border-border bg-card">
@@ -769,7 +828,7 @@ function StudentsPageContent() {
             }}
             onBulkEdit={() => {
               if (selectedKeys.length === 1) {
-                const found = students.find((s) => s._id === selectedKeys[0]);
+                const found = selectedStudentsMap.get(selectedKeys[0]) || students.find((s) => s._id === selectedKeys[0]);
                 if (found) {
                   setSelectedStudent(found);
                   setIsEditOpen(true);
@@ -909,8 +968,10 @@ function StudentsPageContent() {
         }}
         student={transferStudent}
         selectedStudents={selectedStudentsList}
+        selectedKeys={selectedKeys}
         onSuccess={() => {
           setSelectedKeys([]);
+          setSelectedStudentsMap(new Map());
           invalidateStudents();
         }}
         locale={locale}
@@ -929,6 +990,7 @@ function StudentsPageContent() {
         onConfirm={async () => {
           await Promise.all(selectedKeys.map((id) => deactivateStudent(id)));
           setSelectedKeys([]);
+          setSelectedStudentsMap(new Map());
           setIsBulkDeactivateOpen(false);
           invalidateStudents();
         }}

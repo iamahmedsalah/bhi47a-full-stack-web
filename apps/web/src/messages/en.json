@@ -709,6 +709,7 @@
         "advising": "Academic advising",
         "courseSchedules": "Lecture & Section Schedules",
         "tuition": "Tuition Fees & Blocking",
+        "courseMaterials": "Course Materials & Content",
         "staffManagement": "Faculty & Staff Management"
       },
       "labels": {
@@ -761,9 +762,15 @@
         "course_schedules_write": "Manage & upload lecture schedules",
         "tuition_read": "View tuition fees & student blocking status",
         "tuition_write": "Manage tuition fees, block/unblock students & upload Excel",
+        "tuition_audit_read": "View tuition audit logs & financial history",
+        "tuition_export_advanced": "Advanced tuition & hold export (Excel)",
+        "course_materials_read": "View course materials & files",
+        "course_materials_write": "Upload & manage course materials",
+        "course_materials_delete": "Delete course materials",
         "staff_read": "View faculty and staff directory & profiles",
         "staff_create_academic": "Create and manage doctor & teaching assistant accounts",
-        "admins_manage": "Manage system administrator accounts & access"
+        "admins_manage": "Manage system administrator accounts & access",
+        "danger_zone_delete_all": "Delete all platform data (danger zone)"
       }
     }
   },

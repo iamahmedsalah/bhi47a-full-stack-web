@@ -2,7 +2,21 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Edit2, ExternalLink, Eye, Lock, MoreVertical, Trash2, UserCheck, UserX } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Edit2,
+  ExternalLink,
+  Eye,
+  GraduationCap,
+  Hash,
+  Lock,
+  Mail,
+  MoreVertical,
+  Trash2,
+  User,
+  UserCheck,
+  UserX,
+} from 'lucide-react';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -151,29 +165,39 @@ export function StudentTable({
   const columns: ColumnDef<Student>[] = [
     {
       key: 'studentCode',
-      header: t('studentCode'),
+      header: (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <Hash className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+          <span>{t('studentCode')}</span>
+        </span>
+      ),
       sortable: true,
-      className: 'w-28 text-start',
+      className: 'min-w-[150px] whitespace-nowrap text-start',
       render: (student) => (
-        <TableCell className="w-28 py-2.5 px-3 font-mono font-bold text-foreground">
+        <TableCell className="min-w-[150px] py-2.5 px-3 font-mono font-bold text-foreground whitespace-nowrap">
           <button
             type="button"
             onClick={() => onViewStudent(student)}
-            className="text-start hover:opacity-85 transition-opacity cursor-pointer"
+            className="group inline-flex items-center gap-1.5 rounded-squircle border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-mono font-bold text-primary transition-all hover:border-primary/50 hover:bg-primary/10 hover:shadow-xs cursor-pointer select-none"
+            title={locale === 'ar' ? 'عرض الملف الأكاديمي' : 'View academic profile'}
           >
-            <span className="bg-secondary/50 px-2.5 py-1 rounded-squircle border border-border/60 hover:border-primary/40 hover:bg-primary/10 transition-colors inline-block text-primary">
-              {student.studentCode}
-            </span>
+            <Hash className="h-3 w-3 text-primary/60 group-hover:text-primary transition-colors shrink-0" />
+            <span dir="ltr">{student.studentCode}</span>
           </button>
         </TableCell>
       ),
     },
     {
       key: 'fullName',
-      header: t('studentName'),
+      header: (
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <User className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+          <span>{t('studentName')}</span>
+        </span>
+      ),
       sortable: true,
       sortKey: 'fullName',
-      className: 'min-w-[180px] text-start',
+      className: 'min-w-[220px] text-start',
       render: (student) => {
         const isAr = locale === 'ar';
         const primaryName = isAr
@@ -182,15 +206,35 @@ export function StudentTable({
         const secondaryName = isAr ? student.fullNameEn : student.fullNameAr;
 
         return (
-          <TableCell className="min-w-[180px] py-2.5 px-3">
-            <div className="font-semibold text-foreground leading-tight">{primaryName}</div>
-            {secondaryName && secondaryName !== primaryName ? (
-              <div className="text-[11px] text-muted-foreground/80 mt-0.5 truncate max-w-[220px]">
-                {secondaryName}
+          <TableCell className="min-w-[220px] py-2.5 px-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle border border-border/60 bg-secondary/40 text-muted-foreground group-hover:border-primary/30 group-hover:text-primary transition-colors">
+                <GraduationCap className="h-4 w-4 text-primary/80" />
               </div>
-            ) : null}
-            <div className="mt-0.5 text-xs text-muted-foreground truncate max-w-[220px]">
-              {student.academicEmail || 'No academic email'}
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-foreground leading-tight truncate">
+                  {primaryName}
+                </div>
+                {secondaryName && secondaryName !== primaryName ? (
+                  <div className="text-[11px] text-muted-foreground/80 mt-0.5 truncate max-w-[240px]">
+                    {secondaryName}
+                  </div>
+                ) : null}
+                <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground truncate max-w-[240px]">
+                  {student.academicEmail ? (
+                    <>
+                      <Mail className="h-2.5 w-2.5 shrink-0 opacity-70" />
+                      <span className="truncate font-mono text-[11px]" dir="ltr">
+                        {student.academicEmail}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/60 italic">
+                      {locale === 'ar' ? 'لا يوجد بريد أكاديمي' : 'No academic email'}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </TableCell>
         );

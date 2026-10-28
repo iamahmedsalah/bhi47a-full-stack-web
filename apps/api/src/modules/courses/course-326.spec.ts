@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import * as ExcelJS from 'exceljs';
 import { CourseImporter } from '../uploads/importers/course.importer';
@@ -6,7 +7,11 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { COURSE_326_CURRICULA, type Semester } from '@student-portal/shared';
 import { CoursesService } from './courses.service';
-import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
+import {
+  CreateCourseDto,
+  UpdateCourseDto,
+  EnrollmentOptionsDto,
+} from './dto/course.dto';
 import { courseForDepartment } from './utils/course-curriculum.util';
 import { isCourseOfferedForTerm } from '../registrations/utils/term-availability.util';
 
@@ -248,7 +253,212 @@ describe('current student books', () => {
   });
 });
 
+describe('administrative limit override authorization and audit', () => {
+  const actor = { _id: new Types.ObjectId().toHexString(), role: 'admin' };
+  const reason = 'Approved by the academic administration';
+  const limits = {
+    currentCourseCount: 6,
+    proposedCourseCount: 7,
+    currentCreditHours: 18,
+    proposedCreditHours: 21,
+    maxCourses: 6,
+    maxCreditHours: 18,
+  };
+  it.each([
+    undefined,
+    { ...actor, role: 'staff' },
+    { ...actor, _id: 'invalid' },
+  ])('rejects untrusted actors', async (caller) => {
+    const h = harness();
+    await expect(
+      h.service.processEnrollmentRows(
+        course as never,
+        [{ studentCode: '3001' }],
+        {
+          semester: 'first',
+          overrideRegistrationLimits: true,
+          overrideReason: reason,
+          actor: caller,
+        },
+      ),
+    ).rejects.toThrow('administrators');
+    expect(h.registrations.bulkWrite).not.toHaveBeenCalled();
+  });
+  it('requires a meaningful reason on both DTO and service', async () => {
+    const h = harness();
+    await expect(
+      h.service.processEnrollmentRows(course as never, [], {
+        overrideRegistrationLimits: true,
+        overrideReason: 'short',
+        actor,
+      }),
+    ).rejects.toThrow('reason');
+    for (const raw of [undefined, '', 'short', ' '.repeat(20)]) {
+      expect(
+        (
+          await validate(
+            plainToInstance(
+              EnrollmentOptionsDto,
+              { overrideRegistrationLimits: true, overrideReason: raw },
+              { enableImplicitConversion: true },
+            ),
+          )
+        ).some((error) => error.property === 'overrideReason'),
+      ).toBe(true);
+    }
+  });
+  it.each(['false', 'true', false, true])(
+    'parses multipart boolean %s without implicit truthiness',
+    async (value) => {
+      const dto = plainToInstance(
+        EnrollmentOptionsDto,
+        {
+          overrideRegistrationLimits: value,
+          skipBlocked: value,
+          overrideReason: reason,
+        },
+        { enableImplicitConversion: true },
+      );
+      expect(dto.overrideRegistrationLimits).toBe(
+        value === true || value === 'true',
+      );
+      expect(dto.skipBlocked).toBe(value === true || value === 'true');
+      expect(await validate(dto)).toHaveLength(0);
+    },
+  );
+  it('records the actor, reason and counts in the same existing-registration update', async () => {
+    const h = harness();
+    const regId = new Types.ObjectId();
+    h.registrations.find.mockReturnValue(
+      query([
+        {
+          _id: regId,
+          studentId: h.studentId,
+          courses: ['1', '2', '3', '4', '5', '6'],
+        },
+      ]),
+    );
+    h.period.assertAdministrativeCourseAddition.mockResolvedValue(limits);
+    const result = await h.service.processEnrollmentRows(
+      course as never,
+      [{ studentCode: '3001' }],
+      {
+        semester: 'first',
+        overrideRegistrationLimits: true,
+        overrideReason: reason,
+        actor,
+      },
+    );
+    expect(result).toMatchObject({
+      enrolledCount: 1,
+      overriddenCount: 1,
+      errorCount: 0,
+    });
+    expect(h.period.assertAdministrativeCourseAddition).toHaveBeenCalledWith(
+      h.studentId.toHexString(),
+      expect.anything(),
+      ['1', '2', '3', '4', '5', '6'],
+      'first',
+      true,
+    );
+    expect(h.registrations.bulkWrite).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: regId, courses: { $ne: '326' } },
+            update: expect.objectContaining({
+              $addToSet: { courses: '326' },
+              $push: {
+                administrativeLimitOverrides: expect.objectContaining({
+                  ...limits,
+                  actorId: new Types.ObjectId(actor._id),
+                  reason,
+                  courseCode: '326',
+                }),
+              },
+            }),
+          }),
+        }),
+      ],
+      { ordered: false },
+    );
+  });
+  it('does not record an override for students within limits', async () => {
+    const h = harness();
+    const result = await h.service.processEnrollmentRows(
+      course as never,
+      [{ studentCode: '3001' }],
+      {
+        semester: 'first',
+        overrideRegistrationLimits: true,
+        overrideReason: reason,
+        actor,
+      },
+    );
+    expect(result.overriddenCount).toBe(0);
+    const ops = (h.registrations.bulkWrite.mock.calls as unknown[][])[0][0] as {
+      insertOne: { document: Record<string, unknown> };
+    }[];
+    expect(ops[0].insertOne.document).not.toHaveProperty(
+      'administrativeLimitOverrides',
+    );
+  });
+  it('preserves department/semester rejection even with an administrative exception', async () => {
+    const h = harness('BIS', 'first');
+    const result = await h.service.processEnrollmentRows(
+      course as never,
+      [{ studentCode: '3001' }],
+      {
+        semester: 'first',
+        overrideRegistrationLimits: true,
+        overrideReason: reason,
+        actor,
+      },
+    );
+    expect(result).toMatchObject({
+      enrolledCount: 0,
+      overriddenCount: 0,
+      errorCount: 1,
+    });
+    expect(h.period.assertAdministrativeCourseAddition).not.toHaveBeenCalled();
+    expect(h.registrations.bulkWrite).not.toHaveBeenCalled();
+  });
+  it('returns structured counts without bypass when the exception is disabled', async () => {
+    const h = harness();
+    h.period.assertAdministrativeCourseAddition.mockRejectedValue(
+      new BadRequestException({
+        code: 'REGISTRATION_LIMIT_EXCEEDED',
+        message: 'Limit exceeded',
+        limits,
+      }),
+    );
+    const result = await h.service.processEnrollmentRows(
+      course as never,
+      [{ studentCode: '3001' }],
+      { semester: 'first' },
+    );
+    expect(result).toMatchObject({
+      enrolledCount: 0,
+      errorCount: 1,
+      issues: [{ row: 2, code: 'REGISTRATION_LIMIT_EXCEEDED', limits }],
+    });
+    expect(h.registrations.bulkWrite).not.toHaveBeenCalled();
+  });
+});
+
 describe('administrative enrollment', () => {
+  it('returns an actionable format error for unsupported or corrupt workbooks', async () => {
+    const h = harness();
+    jest.spyOn(h.service, 'findOne').mockResolvedValue(course as never);
+    await expect(
+      h.service.enrollStudentsFromExcel(
+        course._id.toHexString(),
+        Buffer.from('invalid workbook'),
+        'binary.xls',
+      ),
+    ).rejects.toThrow('XLSX or CSV');
+    expect(h.registrations.bulkWrite).not.toHaveBeenCalled();
+  });
   it('reports eligibility failures without writing a registration', async () => {
     const h = harness();
     h.period.assertAdministrativeCourseAddition.mockRejectedValue(
@@ -273,7 +483,7 @@ describe('administrative enrollment', () => {
     const result = await h.service.processEnrollmentRows(
       course as never,
       [{ studentCode: '3001' }],
-      { semester: String(semester), academicYear: '2026-2027' },
+      { semester: semester as Semester, academicYear: '2026-2027' },
     );
     expect(result.enrolledCount).toBe(enrolled);
     expect(result.errorCount).toBe(enrolled ? 0 : 1);

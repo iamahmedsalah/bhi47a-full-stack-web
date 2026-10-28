@@ -1,6 +1,6 @@
 import type { FilterQuery } from 'mongoose';
 import {
-  COURSE_326_CURRICULA,
+  APPROVED_SPECIALIZATION_CURRICULA,
   departmentAliases,
   normalizeDepartment,
 } from '@student-portal/shared';
@@ -36,7 +36,7 @@ export function courseCurriculumFilter(
   const noCurricula = { 'curricula.0': { $exists: false } };
   const legacyConditions: FilterQuery<CourseDocument>[] = [
     noCurricula,
-    { code: { $ne: '326' } },
+    { code: { $nin: Object.keys(APPROVED_SPECIALIZATION_CURRICULA) } },
   ];
   if (level)
     legacyConditions.push({
@@ -81,22 +81,24 @@ export function courseCurriculumFilter(
     });
   }
   branches.push({ $and: legacyConditions });
-  if (
-    COURSE_326_CURRICULA.some(
+  for (const [code, placements] of Object.entries(
+    APPROVED_SPECIALIZATION_CURRICULA,
+  )) {
+    const placement = placements.find(
       (item) =>
         (!department || item.department === department) &&
         (!level || item.academicLevel === level) &&
         (!query.semester || item.semester === query.semester),
-    )
-  ) {
-    branches.push({
-      ...noCurricula,
-      code: '326',
-      $or: [
-        { academicLevel: '3' },
-        { academicLevel: { $exists: false }, level: '3' },
-      ],
-    });
+    );
+    if (placement)
+      branches.push({
+        ...noCurricula,
+        code,
+        $or: [
+          { academicLevel: placement.academicLevel },
+          { academicLevel: { $exists: false }, level: placement.academicLevel },
+        ],
+      });
   }
   return { $or: branches };
 }

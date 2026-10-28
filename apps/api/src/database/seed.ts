@@ -3,6 +3,7 @@
  * Run with: pnpm --filter @student-portal/api run seed
  */
 import * as mongoose from 'mongoose';
+import { approvedCourseCurricula } from '@student-portal/shared';
 import { defaultPasswordHasher } from '../security/password-hasher';
 import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
@@ -481,37 +482,20 @@ async function seed() {
           : department === 'ACCOUNTING'
             ? 'ACCOUNTING'
             : 'BIS';
-      const curricula =
-        course.code === '326'
-          ? [
-              {
-                department: 'ACCOUNTING',
-                academicLevel: '3',
-                semester: 'first',
-                type: 'elective',
-              },
-              {
-                department: 'BIS',
-                academicLevel: '3',
-                semester: 'second',
-                type: 'elective',
-              },
-            ]
-          : ['317', '411', '318', '319'].includes(course.code)
-            ? ['ACCOUNTING', 'BIS'].map((dept) => ({
-                department: dept,
-                academicLevel: course.academicLevel,
-                semester: course.semester,
-                type: course.type,
-              }))
-            : [
-                {
-                  department: curriculumDepartment,
-                  academicLevel: course.academicLevel,
-                  semester: course.semester,
-                  type: course.type,
-                },
-              ];
+      const approved = approvedCourseCurricula(
+        course.code,
+        course.academicLevel,
+      );
+      const curricula = approved.length
+        ? approved
+        : [
+            {
+              department: curriculumDepartment,
+              academicLevel: course.academicLevel,
+              semester: course.semester,
+              type: course.type,
+            },
+          ];
 
       const result = await coursesCollection.findOneAndUpdate(
         { code: course.code },
@@ -531,8 +515,9 @@ async function seed() {
             department: course.department,
             creditHours: course.creditHours,
             prerequisites: course.prerequisites,
-            offeredTerms:
-              course.code === '326' ? ['first', 'second'] : [course.semester],
+            offeredTerms: [
+              ...new Set(curricula.map((placement) => placement.semester)),
+            ],
             type: course.type,
             isActive: course.isActive,
             updatedAt: now,

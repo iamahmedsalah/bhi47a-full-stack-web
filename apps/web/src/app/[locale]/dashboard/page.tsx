@@ -300,7 +300,7 @@ export default function StudentDashboard() {
     >
       {/* Blocked Account / Tuition Fees Alert Banner */}
       {profile?.isBlocked && (
-        <div className="rounded-2xl border-2 border-rose-500/40 bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-rose-500/5 p-4 md:p-5 text-start shadow-lg shadow-rose-950/20 animate-in fade-in slide-in-from-top-2">
+        <div className="rounded-2xl border-2 border-rose-500/40 bg-linear-to-r from-rose-500/15 via-rose-500/10 to-rose-500/5 p-4 md:p-5 text-start shadow-lg shadow-rose-950/20 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-start gap-3.5">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-500 border border-rose-500/30">
               <ShieldAlert className="h-5 w-5" />
@@ -327,7 +327,7 @@ export default function StudentDashboard() {
       )}
 
       {/* Welcome Widget */}
-      <div className="relative overflow-hidden bg-card/45 backdrop-blur-sm border border-border/70 shadow-[var(--shadow-glow)] rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-primary/30 transition-all duration-300">
+      <div className="relative overflow-hidden bg-card/45 backdrop-blur-sm border border-border/70 shadow-(--shadow-glow) rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-primary/30 transition-all duration-300">
         <div className="space-y-2.5 z-10 text-start">
           <div className="inline-flex max-w-full items-center gap-2 rounded-squircle border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <GraduationCap className="w-3.5 h-3.5 shrink-0" />
@@ -404,11 +404,11 @@ export default function StudentDashboard() {
       {activeLiveSession &&
         !activeLiveSession.alreadyCheckedIn &&
         activeLiveSession.remainingSeconds > 0 && (
-          <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm p-4 sm:p-5 shadow-[var(--shadow-glow)] animate-fade-in flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm p-4 sm:p-5 shadow-(--shadow-glow) animate-fade-in flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3.5 z-10">
               <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary">
                 <QrCode className="h-5 w-5" />
-                <span className="absolute -top-1 -end-1 flex h-3 w-3 items-center justify-center">
+                <span className="absolute -top-1 -inset-e-1 flex h-3 w-3 items-center justify-center">
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
                 </span>
               </div>
@@ -462,7 +462,7 @@ export default function StudentDashboard() {
 
       {/* Active/Open Quiz Alert Banner */}
       {activeQuiz && (
-        <div className="relative overflow-hidden rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/10 to-transparent backdrop-blur-sm p-4 sm:p-5 shadow-[0_0_25px_rgba(14,165,233,0.15)] animate-fade-in flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="relative overflow-hidden rounded-2xl border border-primary/40 bg-linear-to-r from-primary/15 via-primary/10 to-transparent backdrop-blur-sm p-4 sm:p-5 shadow-[0_0_25px_rgba(14,165,233,0.15)] animate-fade-in flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5 z-10 text-start">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-squircle bg-primary/20 border border-primary/30 text-primary">
               <FileText className="h-6 w-6 animate-pulse" />
@@ -515,7 +515,7 @@ export default function StudentDashboard() {
       )}
 
       {/* Quick Academic Services (Placed immediately after welcome header & alerts) */}
-      <Card className="p-5 bg-card/60 backdrop-blur-sm border-border/80 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 rounded-2xl">
+      <Card className="p-5 bg-card/60 backdrop-blur-sm border-border/80 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300 rounded-2xl">
         <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -583,7 +583,7 @@ export default function StudentDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* GPA & Advising Widget */}
-        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <h3 className="font-bold text-base text-foreground flex items-center gap-2">
@@ -671,7 +671,7 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Academic Profile Widget */}
-        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <h3 className="font-bold text-base text-foreground flex items-center gap-2">
@@ -741,7 +741,7 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Attendance Widget */}
-        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="col-span-12 lg:col-span-4 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <h3 className="font-bold text-base text-foreground flex items-center gap-2">
@@ -810,7 +810,7 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Academic Email Card */}
-        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <div className="flex items-center gap-2.5">
@@ -901,7 +901,7 @@ export default function StudentDashboard() {
               href="https://mail.google.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 h-10 px-3 text-xs font-bold rounded-squircle bg-gradient-to-r from-teal-700 via-teal-600 to-teal-700 hover:from-teal-600 hover:to-teal-500 text-white shadow-md hover:shadow-teal-900/30 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-teal-500/30 whitespace-nowrap"
+              className="flex-1 h-10 px-3 text-xs font-bold rounded-squircle bg-linear-to-r from-teal-700 via-teal-600 to-teal-700 hover:from-teal-600 hover:to-teal-500 text-white shadow-md hover:shadow-teal-900/30 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-teal-500/30 whitespace-nowrap"
             >
               <Mail className="w-4 h-4 text-teal-100 shrink-0" />
               <span className="font-bold">{locale === "ar" ? "دخول بريد Google (Gmail)" : "Sign In to Google Mail"}</span>
@@ -917,7 +917,7 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Exam Schedule Thumbnail Widget */}
-        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+        <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
           <div>
             <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
               <div className="flex items-center gap-2.5">
@@ -961,7 +961,7 @@ export default function StudentDashboard() {
                           e.currentTarget.style.display = 'none';
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent flex items-end p-3">
+                      <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent flex items-end p-3">
                         <div className="text-white text-xs font-bold drop-shadow">
                           {activeSchedule.title}
                         </div>
@@ -1010,7 +1010,7 @@ export default function StudentDashboard() {
         {/* Exam Seat / Place Widget */}
         <Card
           className={cn(
-            "p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300",
+            "p-5 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between gap-4 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300",
             syllabiVisible ? "col-span-12 lg:col-span-6" : "col-span-12",
           )}
         >
@@ -1085,7 +1085,7 @@ export default function StudentDashboard() {
 
                 {/* Seating Mini-Map Section */}
                 <div className="md:col-span-7 flex flex-col justify-center items-center">
-                  <div className="w-full max-w-[280px] bg-secondary/20 border border-border/60 rounded-xl p-3 text-center relative shadow-sm">
+                  <div className="w-full max-w-70 bg-secondary/20 border border-border/60 rounded-xl p-3 text-center relative shadow-sm">
                     {/* Front representation */}
                     <div className="w-full bg-secondary/70 border border-border/40 py-1 rounded text-[8px] font-bold text-muted-foreground uppercase tracking-widest mb-3">
                       {locale === "ar"
@@ -1173,7 +1173,7 @@ export default function StudentDashboard() {
 
         {/* Course Syllabi & Curriculum Card (Side-by-side with Exam Seating in 2 columns) */}
         {syllabiVisible && (
-          <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 flex flex-col justify-between gap-4">
+          <Card className="col-span-12 lg:col-span-6 p-5 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300 flex flex-col justify-between gap-4">
           <div>
             <div className="flex items-center justify-between gap-2 mb-4 border-b border-border pb-3 text-start">
               <div className="flex items-center gap-2.5">
@@ -1211,7 +1211,7 @@ export default function StudentDashboard() {
             ) : !(syllabiQuery.data?.registeredCourses?.length || syllabiQuery.data?.availableLevelCourses?.length) ? (
               <p className="p-4 text-sm text-muted-foreground">{locale === 'ar' ? 'لا توجد مقررات متاحة لقسمك ومستواك في الفصل الحالي.' : 'No courses are available for your department and level this semester.'}</p>
             ) : (
-              <div className="space-y-3 max-h-[380px] overflow-y-auto pe-1 scrollbar-thin">
+              <div className="space-y-3 max-h-95 overflow-y-auto pe-1 scrollbar-thin">
                 {(
                   syllabiQuery.data?.registeredCourses?.length
                     ? syllabiQuery.data.registeredCourses
@@ -1235,7 +1235,7 @@ export default function StudentDashboard() {
                           />
                         </div>
                       ) : (
-                        <div className="w-12 h-16 rounded-md bg-gradient-to-b from-primary/20 via-primary/10 to-primary/5 border border-primary/25 flex flex-col items-center justify-between p-1.5 shrink-0 text-primary group-hover:border-primary/45 transition-colors shadow-xs">
+                        <div className="w-12 h-16 rounded-md bg-linear-to-b from-primary/20 via-primary/10 to-primary/5 border border-primary/25 flex flex-col items-center justify-between p-1.5 shrink-0 text-primary group-hover:border-primary/45 transition-colors shadow-xs">
                           <BookOpen className="w-4 h-4 opacity-80 mt-1" />
                           <span className="text-[8px] font-mono font-bold leading-none">{course.code}</span>
                           <span className="w-4 h-0.5 rounded-full bg-primary/40 mb-0.5" />

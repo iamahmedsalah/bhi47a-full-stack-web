@@ -1,987 +1,917 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  BookOpen,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  RotateCcw,
+  UploadCloud,
+  UserCheck,
+  Users,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { readEnrollmentSheet } from "../enrollment-sheet";
+import {
+  courseCurriculumSummary,
+  curriculumDepartmentLabel,
+  getCourseCurricula,
+  type CourseCurriculum,
+  type CourseEnrollmentResult,
+  type Semester,
+} from "@student-portal/shared";
+import api, { getApiErrorMessage, type PaginatedResponse } from "@/lib/api";
+import { downloadFileBlob, EXCEL_MIME_TYPE } from "@/lib/export-utils";
+import { useAuth } from "@/providers/auth-provider";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DataUploadProgress } from "@/components/ui/data-upload-progress";
+import type { BatchUploadProgressState } from "@/features/uploads/use-batch-upload";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Download,
-  UploadCloud,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertTriangle,
-  Loader2,
-  UserCheck,
-  BookOpen,
-  RotateCcw,
-  Users,
-} from 'lucide-react';
-import api, { getApiErrorMessage } from '@/lib/api';
-import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
-import { getCourseCurricula, courseCurriculumSummary, type CourseCurriculum } from '@student-portal/shared';
-import { toast } from 'sonner';
-import { readSheet as readXlsxFile } from 'read-excel-file/browser';
-import { DataUploadProgress } from '@/components/ui/data-upload-progress';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
+  enrollmentResultStatus,
+  localizeEnrollmentError,
+  matchesEnrollmentCourse,
+  mergeEnrollmentResults,
+} from "../enrollment-utils";
+import { EnrollmentSelect } from "./enrollment-select";
 
+interface EnrollmentCourse {
+  _id: string;
+  code: string;
+  name: string;
+  nameAr?: string;
+  nameEn?: string;
+  level?: string;
+  academicLevel?: string;
+  semester?: string;
+  department?: string;
+  curricula?: CourseCurriculum[];
+}
 export interface CourseStudentEnrollmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  courses?: Array<{
-    _id: string;
-    code: string;
-    name: string;
-    nameAr?: string;
-    level?: string;
-    semester?: string;
-    curricula?: CourseCurriculum[];
-  }>;
+  courses?: EnrollmentCourse[];
   selectedCourseId?: string | null;
   locale: string;
   onSuccess?: () => void;
 }
-
-interface EnrollmentResult {
-  courseId: string;
-  courseCode: string;
-  courseName: string;
-  totalRows: number;
-  enrolledCount: number;
-  alreadyEnrolledCount: number;
-  skippedBlockedCount: number;
-  errorCount: number;
-  errors: string[];
-}
+const initialProgress: BatchUploadProgressState = {
+  isUploading: false,
+  phase: "idle",
+  percentage: 0,
+  currentBatch: 1,
+  totalBatches: 1,
+  processedRows: 0,
+  totalRows: 0,
+  elapsedSeconds: 0,
+  estimatedSecondsLeft: null,
+  rowsPerSecond: 0,
+  isNetworkInterrupted: false,
+  retrySecondsLeft: 0,
+};
 
 export function CourseStudentEnrollmentDialog({
   open,
   onOpenChange,
   courses: initialCourses = [],
-  selectedCourseId: initialCourseId,
+  selectedCourseId,
   locale,
   onSuccess,
 }: CourseStudentEnrollmentDialogProps) {
-  const isAr = locale === 'ar';
-
+  const isAr = locale === "ar";
+  const text = (ar: string, en: string) => (isAr ? ar : en);
   const queryClient = useQueryClient();
-  const [courseId, setCourseId] = useState<string>('');
-  const [academicYear, setAcademicYear] = useState<string>('2026-2027');
-  const [semester, setSemester] = useState<'first' | 'second' | 'summer'>('first');
-  const [filterLevel, setFilterLevel] = useState<string>('all');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const { user } = useAuth();
+  const fileInputId = useId();
+  const initialized = useRef("");
+  const [courseId, setCourseId] = useState("");
+  const [academicYear, setAcademicYear] = useState("2026-2027");
+  const [semester, setSemester] = useState<Semester>("first");
+  const [level, setLevel] = useState("all");
+  const [department, setDepartment] = useState("all");
+  const [search, setSearch] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [result, setResult] = useState<CourseEnrollmentResult | null>(null);
+  const [progress, setProgress] = useState(initialProgress);
+  const [override, setOverride] = useState(false);
+  const [reason, setReason] = useState("");
+  const [confirmOverride, setConfirmOverride] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
-  const [isResetting, setIsResetting] = useState<boolean>(false);
-
-  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState<boolean>(false);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [progressState, setProgressState] = useState<BatchUploadProgressState>({
-    isUploading: false,
-    phase: 'idle',
-    percentage: 0,
-    currentBatch: 1,
-    totalBatches: 1,
-    processedRows: 0,
-    totalRows: 0,
-    elapsedSeconds: 0,
-    estimatedSecondsLeft: null,
-    rowsPerSecond: 0,
-    isNetworkInterrupted: false,
-    retrySecondsLeft: 0,
-  });
-  const [result, setResult] = useState<EnrollmentResult | null>(null);
-
-  // Fetch count of enrolled students in the selected course for the chosen term
-  const enrollmentsCountQuery = useQuery({
-    queryKey: ['course-enrollments-count', courseId, academicYear, semester],
-    queryFn: async () => {
-      if (!courseId) return null;
-      const res = await api.get<{
-        courseId: string;
-        courseCode: string;
-        courseName: string;
-        enrolledCount: number;
-        academicYear?: string;
-        semester?: string;
-    curricula?: CourseCurriculum[];
-      }>(`/admin/courses/${courseId}/enrollments/count`, {
-        params: { academicYear, semester },
-      });
-      return res.data;
-    },
-    enabled: open && Boolean(courseId),
-    staleTime: 30 * 1000,
-  });
-
-  // Load all institute courses independently so all levels (1..4) and semesters are selectable
-  const allCoursesQuery = useQuery({
-    queryKey: ['admin-all-courses-for-enrollment'],
-    queryFn: async () => {
-      const res = await api.get<{
-        items: Array<{
-          _id: string;
-          code: string;
-          name: string;
-          nameAr?: string;
-          level?: string;
-          semester?: string;
-    curricula?: CourseCurriculum[];
-        }>;
-      }>('/admin/courses', {
-        params: { limit: 500 },
-      });
-      return res.data?.items || [];
-    },
+  const coursesQuery = useQuery({
+    queryKey: ["admin-all-courses-for-enrollment"],
     enabled: open,
-    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const items: EnrollmentCourse[] = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const response = await api.get<PaginatedResponse<EnrollmentCourse>>(
+          "/admin/courses",
+          { params: { page, limit: 100 } },
+        );
+        items.push(...response.data.items);
+        totalPages = response.data.totalPages;
+        page++;
+      } while (page <= totalPages);
+      return items;
+    },
+    staleTime: 60_000,
   });
-
-  const availableCourses =
-    allCoursesQuery.data && allCoursesQuery.data.length > 0
-      ? allCoursesQuery.data
-      : initialCourses;
-
-  // Filter courses by selected level and registration semester
-  const filteredCourses = availableCourses.filter((c) => {
-    const placements = getCourseCurricula(c);
-    if (filterLevel !== 'all' && !placements.length && String(c.level) !== filterLevel) return false;
-    if (semester && placements.length && !placements.some((item) => item.semester === semester && (filterLevel === 'all' || item.academicLevel === filterLevel))) return false;
-    if (!placements.length && semester && c.semester && c.semester !== semester) return false;
-    return true;
+  const courses = coursesQuery.data ?? initialCourses;
+  const selected = courses.find((course) => course._id === courseId);
+  const filtered = courses.filter(
+    (course) =>
+      matchesEnrollmentCourse(course, { level, department, semester }) &&
+      `${course.code} ${course.name} ${course.nameAr ?? ""} ${course.nameEn ?? ""}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
+  );
+  const validCourse = Boolean(
+    selected &&
+    matchesEnrollmentCourse(selected, { level, department, semester }),
+  );
+  const countQuery = useQuery({
+    queryKey: ["course-enrollments-count", courseId, academicYear, semester],
+    enabled: open && validCourse,
+    queryFn: async () =>
+      (
+        await api.get<{ enrolledCount: number }>(
+          `/admin/courses/${courseId}/enrollments/count`,
+          { params: { academicYear, semester } },
+        )
+      ).data,
   });
-
-  useEffect(() => {
-    if (initialCourseId && availableCourses.length > 0) {
-      setCourseId(initialCourseId);
-      const match = availableCourses.find((c) => c._id === initialCourseId);
-      if (match) {
-        if (match.level) setFilterLevel(String(match.level));
-        if (getCourseCurricula(match).length <= 1 && match.semester && ['first', 'second', 'summer'].includes(match.semester)) {
-          setSemester(match.semester as 'first' | 'second' | 'summer');
-        }
-      }
-    } else if (filteredCourses.length > 0 && !courseId) {
-      setCourseId(filteredCourses[0]._id);
-    }
-  }, [initialCourseId, availableCourses, filteredCourses.length]);
-
-  // Reset file and result when dialog opens/closes
   useEffect(() => {
     if (!open) {
-      setSelectedFile(null);
+      initialized.current = "";
+      setFile(null);
       setResult(null);
-      setIsUploading(false);
-      setProgressState((prev) => ({
-        ...prev,
-        isUploading: false,
-        phase: 'idle',
-        percentage: 0,
-        processedRows: 0,
-      }));
+      setOverride(false);
+      setReason("");
+      setProgress(initialProgress);
+      return;
     }
-  }, [open]);
+    if (
+      selectedCourseId &&
+      courses.length &&
+      initialized.current !== selectedCourseId
+    ) {
+      const course = courses.find((item) => item._id === selectedCourseId);
+      if (course) {
+        initialized.current = selectedCourseId;
+        setDepartment("all");
+        setSearch("");
+        setCourseId(course._id);
+        setLevel(course.academicLevel ?? course.level ?? "all");
+        const terms = [
+          ...new Set(getCourseCurricula(course).map((item) => item.semester)),
+        ];
+        if (terms.length === 1) setSemester(terms[0]);
+      }
+    }
+    // Initialize only when opening or when the requested course becomes available.
+  }, [open, selectedCourseId, courses]);
 
-  const handleDownloadTemplate = async () => {
+  function changeFilter(change: () => void) {
+    change();
+    setCourseId("");
+    setResult(null);
+  }
+  function chooseFile(next?: File) {
+    if (!next) return;
+    if (!/\.(xlsx|xls|csv)$/i.test(next.name) || next.size > 10 * 1024 * 1024) {
+      toast.error(
+        text(
+          "اختر ملف Excel أو CSV بحجم لا يتجاوز 10 ميجابايت.",
+          "Choose an Excel or CSV file up to 10MB.",
+        ),
+      );
+      return;
+    }
+    setFile(next);
+    setResult(null);
+    setProgress(initialProgress);
+  }
+  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    chooseFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
+  async function downloadTemplate() {
+    setTemplateLoading(true);
     try {
-      setIsDownloadingTemplate(true);
-      const res = await api.get('/admin/courses/enrollment-template', {
-        params: { format: 'xlsx' },
-        responseType: 'blob',
+      const blob = await api.get("/admin/courses/enrollment-template", {
+        params: { format: "xlsx" },
+        responseType: "blob",
       });
       await downloadFileBlob(
-        res,
-        'course-students-enrollment-template.xlsx',
+        blob,
+        "course-students-enrollment-template.xlsx",
         EXCEL_MIME_TYPE,
       );
-      toast.success(
-        isAr
-          ? 'تم تنزيل نموذج تسجيل الطلاب في المقرر بنجاح'
-          : 'Enrollment template downloaded successfully',
-      );
-    } catch (err) {
+    } catch (error) {
       toast.error(
         getApiErrorMessage(
-          err,
-          isAr ? 'فشل تحميل النموذج' : 'Failed to download template',
+          error,
+          text("تعذر تنزيل النموذج.", "Could not download the template."),
         ),
       );
     } finally {
-      setIsDownloadingTemplate(false);
+      setTemplateLoading(false);
     }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setResult(null);
-      setProgressState((prev) => ({
-        ...prev,
-        phase: 'idle',
-        percentage: 0,
-        processedRows: 0,
-      }));
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!courseId) {
-      toast.error(isAr ? 'يرجى اختيار المقرر أولاً' : 'Please select a course');
-      return;
-    }
-    if (!selectedFile) {
+  }
+  function notify(summary: CourseEnrollmentResult) {
+    const status = enrollmentResultStatus(summary);
+    if (status === "failed")
       toast.error(
-        isAr ? 'يرجى اختيار ملف Excel للرفع' : 'Please select an Excel file',
+        text(
+          `لم يتم تسجيل طلاب؛ تعذر تنفيذ ${summary.errorCount} صفًا. راجع التفاصيل.`,
+          `No students enrolled; ${summary.errorCount} rows failed. Review the details.`,
+        ),
+      );
+    else if (status === "partial")
+      toast.warning(
+        text(
+          `تم تسجيل ${summary.enrolledCount} طالب وتعذر ${summary.errorCount} صفًا.`,
+          `${summary.enrolledCount} enrolled; ${summary.errorCount} rows failed.`,
+        ),
+      );
+    else if (status === "unchanged")
+      toast.info(
+        text(
+          "لا توجد تسجيلات جديدة؛ راجع نتيجة الملف.",
+          "No new enrollments. Review the results.",
+        ),
+      );
+    else
+      toast.success(
+        text(
+          `تم تسجيل ${summary.enrolledCount} طالب بنجاح.`,
+          `${summary.enrolledCount} students enrolled.`,
+        ),
+      );
+  }
+  async function upload() {
+    if (!file || !validCourse || uploading) return;
+    if (override && (user?.role !== "admin" || reason.trim().length < 10)) {
+      toast.error(
+        text(
+          "اكتب سبب الاستثناء في 10 أحرف على الأقل.",
+          "Enter an exception reason of at least 10 characters.",
+        ),
       );
       return;
     }
-
+    setUploading(true);
+    setResult(null);
+    setConfirmOverride(false);
+    const started = Date.now();
+    let aggregate: CourseEnrollmentResult | null = null;
+    const options = {
+      academicYear,
+      semester,
+      ...(override
+        ? { overrideRegistrationLimits: true, overrideReason: reason.trim() }
+        : {}),
+    };
+    setProgress({
+      ...initialProgress,
+      isUploading: true,
+      phase: "inspecting",
+      percentage: 5,
+    });
+    const timer = setInterval(
+      () =>
+        setProgress((value) => ({
+          ...value,
+          elapsedSeconds: Math.floor((Date.now() - started) / 1000),
+        })),
+      1000,
+    );
     try {
-      setIsUploading(true);
-      setResult(null);
-
-      const startTime = Date.now();
-      let timer: NodeJS.Timeout | null = null;
-
-      // Start live real-time elapsed counter
-      timer = setInterval(() => {
-        const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
-        setProgressState((prev) => {
-          if (!prev.isUploading) return prev;
-          const speed =
-            prev.processedRows > 0
-              ? Math.round((prev.processedRows / elapsed) * 10) / 10
-              : 0;
-          const remainingRows = Math.max(0, prev.totalRows - prev.processedRows);
-          const eta =
-            speed > 0 && remainingRows > 0
-              ? Math.ceil(remainingRows / speed)
-              : null;
-          return {
-            ...prev,
-            elapsedSeconds: elapsed,
-            rowsPerSecond: speed,
-            estimatedSecondsLeft: eta,
-          };
-        });
-      }, 1000);
-
-      // Attempt client-side parse for accurate batching and real row counts
-      let parsedRows: Record<string, any>[] = [];
-      const isExcel = /\.(xlsx|xls|ods)$/i.test(selectedFile.name);
-
-      if (isExcel) {
-        setProgressState({
-          isUploading: true,
-          phase: 'inspecting',
-          percentage: 5,
-          currentBatch: 1,
-          totalBatches: 1,
-          processedRows: 0,
-          totalRows: 0,
-          elapsedSeconds: 0,
-          estimatedSecondsLeft: null,
-          rowsPerSecond: 0,
-          isNetworkInterrupted: false,
-          retrySecondsLeft: 0,
-        });
-
-        try {
-          const rawSheet = await readXlsxFile(selectedFile);
-          if (rawSheet && rawSheet.length > 1) {
-            const headers = rawSheet[0].map((h) => String(h ?? '').trim());
-            for (let i = 1; i < rawSheet.length; i++) {
-              const row = rawSheet[i];
-              if (
-                row &&
-                row.some(
-                  (cell) =>
-                    cell !== null &&
-                    cell !== undefined &&
-                    String(cell).trim() !== '',
-                )
-              ) {
-                const rowObj: Record<string, any> = {};
-                headers.forEach((h, colIdx) => {
-                  if (h) rowObj[h] = row[colIdx] ?? '';
-                });
-                parsedRows.push(rowObj);
-              }
-            }
-          }
-        } catch {
-          // If readXlsxFile fails on unusual binary, fallback will be used
-          parsedRows = [];
-        }
-      }
-
-      // If client parsed rows successfully, process in batches of 150 rows
-      if (parsedRows.length > 0) {
-        const BATCH_SIZE = 150;
-        const totalRowsCount = parsedRows.length;
-        const batches: Record<string, any>[][] = [];
-        for (let i = 0; i < parsedRows.length; i += BATCH_SIZE) {
-          batches.push(parsedRows.slice(i, i + BATCH_SIZE));
-        }
-
-        const totalBatches = batches.length;
-        let cumulativeEnrolled = 0;
-        let cumulativeAlready = 0;
-        let cumulativeSkipped = 0;
-        let cumulativeErrors: string[] = [];
-        let finalCourseCode = '';
-        let finalCourseName = '';
-
-        for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
-          const currentBatchRows = batches[bIdx];
-          const processedSoFar = bIdx * BATCH_SIZE;
-          const currentProcessed = Math.min(
-            processedSoFar + currentBatchRows.length,
-            totalRowsCount,
-          );
-          const percent = Math.min(
-            99,
-            Math.max(5, Math.round((currentProcessed / totalRowsCount) * 100)),
-          );
-
-          setProgressState((prev) => ({
-            ...prev,
-            isUploading: true,
-            phase: 'uploading',
-            percentage: percent,
-            currentBatch: bIdx + 1,
-            totalBatches,
-            processedRows: currentProcessed,
-            totalRows: totalRowsCount,
-          }));
-
-          const batchRes = await api.post<EnrollmentResult>(
+      const rows = await readEnrollmentSheet(file);
+      if (rows.length) {
+        const batchSize = 150;
+        const totalBatches = Math.ceil(rows.length / batchSize);
+        for (let offset = 0; offset < rows.length; offset += batchSize) {
+          const response = await api.post<CourseEnrollmentResult>(
             `/admin/courses/${courseId}/enroll-students-batch`,
-            {
-              academicYear,
-              semester,
-              rows: currentBatchRows,
-            },
+            { ...options, rows: rows.slice(offset, offset + batchSize) },
           );
-
-          const data =
-            batchRes.data ?? (batchRes as unknown as EnrollmentResult);
-          finalCourseCode = data.courseCode || finalCourseCode;
-          finalCourseName = data.courseName || finalCourseName;
-          cumulativeEnrolled += data.enrolledCount || 0;
-          cumulativeAlready += data.alreadyEnrolledCount || 0;
-          cumulativeSkipped += data.skippedBlockedCount || 0;
-          if (data.errors && data.errors.length > 0) {
-            cumulativeErrors = [...cumulativeErrors, ...data.errors];
-          }
+          aggregate = mergeEnrollmentResults(aggregate, response.data, offset);
+          const processed = Math.min(offset + batchSize, rows.length);
+          setProgress((value) => ({
+            ...value,
+            phase: "uploading",
+            percentage: Math.min(
+              99,
+              Math.round((processed / rows.length) * 100),
+            ),
+            processedRows: processed,
+            totalRows: rows.length,
+            currentBatch: Math.floor(offset / batchSize) + 1,
+            totalBatches,
+          }));
         }
-
-        if (timer) clearInterval(timer);
-        const finalElapsed = Math.max(
-          1,
-          Math.floor((Date.now() - startTime) / 1000),
-        );
-        const finalSpeed =
-          Math.round((totalRowsCount / finalElapsed) * 10) / 10;
-
-        setProgressState({
-          isUploading: false,
-          phase: 'completed',
-          percentage: 100,
-          currentBatch: totalBatches,
-          totalBatches,
-          processedRows: totalRowsCount,
-          totalRows: totalRowsCount,
-          elapsedSeconds: finalElapsed,
-          estimatedSecondsLeft: 0,
-          rowsPerSecond: finalSpeed,
-          isNetworkInterrupted: false,
-          retrySecondsLeft: 0,
-        });
-
-        const combinedResult: EnrollmentResult = {
-          courseId,
-          courseCode: finalCourseCode,
-          courseName: finalCourseName,
-          totalRows: totalRowsCount,
-          enrolledCount: cumulativeEnrolled,
-          alreadyEnrolledCount: cumulativeAlready,
-          skippedBlockedCount: cumulativeSkipped,
-          errorCount: cumulativeErrors.length,
-          errors: cumulativeErrors.slice(0, 20),
-        };
-
-        setResult(combinedResult);
-        toast.success(
-          isAr
-            ? `تم تسجيل ${cumulativeEnrolled} طالب بنجاح في مقرر ${finalCourseCode || ''}`
-            : `Successfully enrolled ${cumulativeEnrolled} students in ${finalCourseCode || ''}`,
-        );
-
-        if (onSuccess) onSuccess();
-        return;
-      }
-
-      // Fallback: multipart Excel upload to fast server endpoint
-      setProgressState({
-        isUploading: true,
-        phase: 'uploading',
-        percentage: 30,
-        currentBatch: 1,
-        totalBatches: 1,
-        processedRows: 0,
-        totalRows: 0,
-        elapsedSeconds: 0,
-        estimatedSecondsLeft: null,
-        rowsPerSecond: 0,
-        isNetworkInterrupted: false,
-        retrySecondsLeft: 0,
-      });
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const res = await api.post<EnrollmentResult>(
-        `/admin/courses/${courseId}/enroll-students-excel`,
-        formData,
-        {
-          params: { academicYear, semester },
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const bytePercent = Math.min(
-                85,
-                Math.max(
-                  15,
-                  Math.round(
-                    (progressEvent.loaded * 85) / progressEvent.total,
-                  ),
-                ),
-              );
-              setProgressState((prev) => ({
-                ...prev,
-                percentage: bytePercent,
-                phase: bytePercent >= 80 ? 'processing' : 'uploading',
-              }));
-            }
+      } else {
+        const body = new FormData();
+        body.append("file", file);
+        const response = await api.post<CourseEnrollmentResult>(
+          `/admin/courses/${courseId}/enroll-students-excel`,
+          body,
+          {
+            params: options,
+            onUploadProgress: (event) =>
+              setProgress((value) => ({
+                ...value,
+                phase: "uploading",
+                percentage: event.total
+                  ? Math.min(95, Math.round((event.loaded / event.total) * 95))
+                  : 20,
+              })),
           },
-        },
-      );
-
-      if (timer) clearInterval(timer);
-      const data = res.data ?? (res as unknown as EnrollmentResult);
-      const total =
-        data.totalRows || data.enrolledCount + data.alreadyEnrolledCount;
-      const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
-      const speed = Math.round((total / elapsed) * 10) / 10;
-
-      setProgressState({
-        isUploading: false,
-        phase: 'completed',
-        percentage: 100,
-        currentBatch: 1,
-        totalBatches: 1,
-        processedRows: total,
-        totalRows: total,
-        elapsedSeconds: elapsed,
-        estimatedSecondsLeft: 0,
-        rowsPerSecond: speed,
-        isNetworkInterrupted: false,
-        retrySecondsLeft: 0,
-      });
-
-      setResult(data);
-      toast.success(
-        isAr
-          ? `تم تسجيل ${data.enrolledCount} طالب بنجاح في مقرر ${data.courseCode}`
-          : `Successfully enrolled ${data.enrolledCount} students in ${data.courseCode}`,
-      );
-
-      void enrollmentsCountQuery.refetch();
-      if (onSuccess) onSuccess();
-    } catch (err) {
-      setProgressState((prev) => ({
-        ...prev,
-        isUploading: false,
-        phase: 'error',
-        percentage: 0,
-      }));
+        );
+        aggregate = response.data;
+      }
+      if (aggregate) {
+        setResult(aggregate);
+        notify(aggregate);
+        setProgress((value) => ({
+          ...value,
+          percentage: 100,
+          phase: "completed",
+          totalRows: aggregate!.totalRows,
+          processedRows: aggregate!.totalRows,
+        }));
+      }
+      await countQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["registration"] });
+      void queryClient.invalidateQueries({ queryKey: ["student-syllabi"] });
+      onSuccess?.();
+    } catch (error) {
+      if (aggregate) setResult(aggregate);
       toast.error(
         getApiErrorMessage(
-          err,
-          isAr
-            ? 'حدث خطأ أثناء تسجيل الطلاب بالمقرر'
-            : 'Failed to enroll students',
+          error,
+          text(
+            "تعذر إكمال التسجيل. التسجيلات السابقة في هذه العملية محفوظة.",
+            "Enrollment could not finish. Earlier completed batches were preserved.",
+          ),
         ),
       );
     } finally {
-      setIsUploading(false);
+      clearInterval(timer);
+      setUploading(false);
+      setProgress((value) => ({ ...value, isUploading: false }));
     }
-  };
-
-  const selectedCourseObj = availableCourses.find((c) => c._id === courseId);
-
-  const handleResetCourseEnrollments = async () => {
-    if (!courseId) return;
+  }
+  async function reset() {
+    setResetting(true);
     try {
-      setIsResetting(true);
-      const res = await api.delete<{
-        success: boolean;
-        courseId: string;
-        courseCode: string;
-        courseName: string;
-        resetCount: number;
-        message: string;
-      }>(`/admin/courses/${courseId}/enrollments`, {
+      await api.delete(`/admin/courses/${courseId}/enrollments`, {
         params: { academicYear, semester },
       });
-
+      await countQuery.refetch();
+      setConfirmReset(false);
       toast.success(
-        res.data?.message ||
-          (isAr
-            ? `تم تصفير تسجيلات المقرر بنجاح (${res.data?.resetCount || 0} طالب)`
-            : `Course enrollments reset successfully (${res.data?.resetCount || 0} students)`),
-      );
-
-      void enrollmentsCountQuery.refetch();
-      void queryClient.invalidateQueries({ queryKey: ['courses'] });
-      if (onSuccess) onSuccess();
-      setIsResetConfirmOpen(false);
-    } catch (err) {
-      toast.error(
-        getApiErrorMessage(
-          err,
-          isAr
-            ? 'فشل تصفير تسجيلات الطلاب بالمقرر'
-            : 'Failed to reset course enrollments',
+        text(
+          "تم حذف تسجيلات هذا المقرر للفصل المحدد.",
+          "Course enrollments reset for the selected term.",
         ),
       );
+      onSuccess?.();
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
     } finally {
-      setIsResetting(false);
+      setResetting(false);
     }
-  };
+  }
+  const state = result ? enrollmentResultStatus(result) : null;
+  const summary = result
+    ? ([
+        [text("إجمالي الصفوف", "Total rows"), result.totalRows],
+        [text("تسجيل جديد", "Newly enrolled"), result.enrolledCount],
+        [text("مسجل مسبقًا", "Already enrolled"), result.alreadyEnrolledCount],
+        [text("تعذر تسجيلهم", "Failed rows"), result.errorCount],
+      ] as const)
+    : [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!uploading && !resetting) onOpenChange(value);
+      }}
+    >
       <DialogContent
-        className="glass max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6 text-start"
-        dir={isAr ? 'rtl' : 'ltr'}
+        dir={isAr ? "rtl" : "ltr"}
+        className="flex max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border-border bg-card p-0 text-start"
       >
-        <DialogHeader className="border-b border-border/70 pb-4 text-start">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <UserCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                {isAr
-                  ? 'تسجيل الطلاب في المقرر عبر شيت Excel'
-                  : 'Enroll Students into Course via Excel'}
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground">
-                {isAr
-                  ? 'تسجيل مجموعة من الطلاب دفعة واحدة في مقرر دراسي لجميع الفرق والفصول الدراسية'
-                  : 'Batch-enroll students into a course across all academic levels and semesters'}
-              </p>
-            </div>
-          </div>
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-5 pe-12 text-start">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <UserCheck className="h-5 w-5 text-primary" />
+            {text("تسجيل طلاب بمقرر", "Enroll students in a course")}
+          </DialogTitle>
+          <DialogDescription>
+            {text(
+              "حدد القسم والفصل، ثم أرفق شيت الطلاب وراجع نتيجة التسجيل.",
+              "Choose the programme and term, upload the student sheet, then review the results.",
+            )}
+          </DialogDescription>
         </DialogHeader>
-
-        <div className="mt-4 space-y-4">
-          {/* Unified Configuration Card */}
-          <div className="rounded-xl border border-border/80 bg-secondary/15 p-3.5 space-y-3">
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-              {/* 1. Academic Year */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-foreground">
-                  {isAr ? 'العام الأكاديمي' : 'Academic Year'}
-                </label>
-                <Select value={academicYear} onValueChange={setAcademicYear}>
-                  <SelectTrigger disabled={isUploading} className="h-8 rounded-squircle border-border bg-card text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                    <SelectItem value="2026-2027">2026-2027</SelectItem>
-                    <SelectItem value="2025-2026">2025-2026</SelectItem>
-                    <SelectItem value="2024-2025">2024-2025</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* 2. Registration Semester */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-foreground">
-                  {isAr ? 'الفصل الدراسي' : 'Semester'}
-                </label>
-                <Select
-                  value={semester}
-                  onValueChange={(val) => {
-                    const s = val as 'first' | 'second' | 'summer';
-                    setSemester(s);
-                    const matched = availableCourses.filter(
-                      (c) =>
-                        (filterLevel === 'all' || String(c.level) === filterLevel) &&
-                        (!c.semester || c.semester === 'both' || c.semester === s),
-                    );
-                    if (matched.length > 0) setCourseId(matched[0]._id);
-                  }}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          <section
+            className="space-y-4"
+            aria-label={text("خيارات التسجيل", "Enrollment settings")}
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                {
+                  label: text("العام الأكاديمي", "Academic year"),
+                  value: academicYear,
+                  options: ["2026-2027", "2025-2026", "2024-2025"].map(
+                    (value) => ({ value, label: value }),
+                  ),
+                  change: (value: string) =>
+                    changeFilter(() => setAcademicYear(value)),
+                },
+                {
+                  label: text("القسم", "Department"),
+                  value: department,
+                  options: [
+                    {
+                      value: "all",
+                      label: text("كل الأقسام", "All departments"),
+                    },
+                    ...["GENERAL", "ACCOUNTING", "BIS"].map((value) => ({
+                      value,
+                      label: curriculumDepartmentLabel(value, locale),
+                    })),
+                  ],
+                  change: (value: string) =>
+                    changeFilter(() => setDepartment(value)),
+                },
+                {
+                  label: text("المستوى الدراسي", "Academic level"),
+                  value: level,
+                  options: [
+                    { value: "all", label: text("كل المستويات", "All levels") },
+                    ...["1", "2", "3", "4"].map((value) => ({
+                      value,
+                      label: text(`المستوى ${value}`, `Level ${value}`),
+                    })),
+                  ],
+                  change: (value: string) =>
+                    changeFilter(() => setLevel(value)),
+                },
+                {
+                  label: text("الفصل الدراسي", "Semester"),
+                  value: semester,
+                  options: [
+                    {
+                      value: "first",
+                      label: text("الفصل الأول", "First semester"),
+                    },
+                    {
+                      value: "second",
+                      label: text("الفصل الثاني", "Second semester"),
+                    },
+                    { value: "summer", label: text("الفصل الصيفي", "Summer") },
+                  ],
+                  change: (value: string) =>
+                    changeFilter(() => setSemester(value as Semester)),
+                },
+              ].map((field) => (
+                <label
+                  key={field.label}
+                  className="space-y-1.5 text-xs font-medium"
                 >
-                  <SelectTrigger disabled={isUploading} className="h-8 rounded-squircle border-border bg-card text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                    <SelectItem value="first">{isAr ? 'الفصل الدراسي الأول' : 'First Semester'}</SelectItem>
-                    <SelectItem value="second">{isAr ? 'الفصل الدراسي الثاني' : 'Second Semester'}</SelectItem>
-                    <SelectItem value="summer">{isAr ? 'الفصل الصيفي' : 'Summer Semester'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* 3. Level Filter */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-foreground">
-                  {isAr ? 'الفرقة الدراسية' : 'Level'}
+                  <span>{field.label}</span>
+                  <EnrollmentSelect
+                    label={field.label}
+                    locale={locale}
+                    value={field.value}
+                    options={field.options}
+                    onValueChange={field.change}
+                    disabled={uploading}
+                  />
                 </label>
-                <Select
-                  value={filterLevel}
-                  onValueChange={(val) => {
-                    setFilterLevel(val);
-                    const matched = availableCourses.filter(
-                      (c) =>
-                        (val === 'all' || String(c.level) === val) &&
-                        (!c.semester || c.semester === 'both' || c.semester === semester),
-                    );
-                    if (matched.length > 0) setCourseId(matched[0]._id);
-                  }}
-                >
-                  <SelectTrigger disabled={isUploading} className="h-8 rounded-squircle border-border bg-card text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                    <SelectItem value="all">{isAr ? 'جميع الفرق (الكل)' : 'All Levels'}</SelectItem>
-                    <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-                    <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-                    <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-                    <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              ))}
             </div>
-
-            {/* Target Course Selector */}
-            <div className="space-y-1 pt-2 border-t border-border/60">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <BookOpen className="h-3.5 w-3.5 text-primary" />
-                  <span>{isAr ? 'المقرر الدراسي المستهدف *' : 'Target Course *'}</span>
-                </label>
-                <span className="text-[11px] text-muted-foreground">
-                  {isAr
-                    ? `(${filteredCourses.length} مادة دراسية متاحة)`
-                    : `(${filteredCourses.length} courses available)`}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 text-xs font-medium">
+                <span className="flex items-center gap-1.5">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  {text("المقرر الدراسي", "Course")}
+                </span>
+                <span className="text-muted-foreground">
+                  {filtered.length} {text("متاح", "available")}
                 </span>
               </div>
-
-              <Select value={courseId} onValueChange={setCourseId}>
-                <SelectTrigger disabled={isUploading} className="w-full rounded-squircle border-border bg-card text-xs h-9">
-                  <SelectValue
-                    placeholder={
-                      filteredCourses.length === 0
-                        ? isAr
-                          ? 'لا توجد مواد مطابقة للخيارات المحددة'
-                          : 'No courses match criteria'
-                        : isAr
-                          ? 'اختر المقرر المطلوب تسجيل الطلاب به'
-                          : 'Select target course'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent className="max-h-60 border-border bg-card" dir={isAr ? 'rtl' : 'ltr'}>
-                  {filteredCourses.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      <span className="font-mono text-xs font-bold text-primary">
-                        {c.code}
-                      </span>{' '}
-                      - {isAr ? c.nameAr || c.name : c.name} · {courseCurriculumSummary(c, locale)}{' '}
-                      <span className="text-[10px] text-muted-foreground">
-                        ({isAr ? `الفرقة ${c.level || 1}` : `L${c.level || 1}`})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Course Enrolled Students Count & Reset Registrations Bar */}
-              {courseId && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-secondary/30 px-3 py-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" />
-                    <span className="text-muted-foreground">
-                      {isAr ? 'الطلاب المسجلون حالياً بالمقرر:' : 'Currently Enrolled Students:'}
-                    </span>
-                    {enrollmentsCountQuery.isLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <span className="font-bold text-foreground font-mono">
-                        {enrollmentsCountQuery.data?.enrolledCount ?? 0}{' '}
-                        <span className="text-[11px] font-normal text-muted-foreground">
-                          {isAr ? 'طالب' : 'students'}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsResetConfirmOpen(true)}
-                    disabled={
-                      isUploading ||
-                      isResetting ||
-                      enrollmentsCountQuery.isLoading ||
-                      (enrollmentsCountQuery.data?.enrolledCount ?? 0) === 0
-                    }
-                    className="h-7 rounded-squircle border-rose-500/30 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:border-rose-500/40 dark:text-rose-400 dark:hover:bg-rose-500/15 gap-1.5 text-xs font-semibold disabled:opacity-50"
+              <Input
+                aria-label={text("بحث المقررات", "Search courses")}
+                placeholder={text(
+                  "بحث باسم أو كود المقرر",
+                  "Search by course name or code",
+                )}
+                value={search}
+              onChange={(event) => changeFilter(() => setSearch(event.target.value))}
+                disabled={uploading}
+              />
+              <EnrollmentSelect
+                label={text("المقرر الدراسي", "Course")}
+                locale={locale}
+                value={validCourse ? courseId : ""}
+                onValueChange={(value) => {
+                  setCourseId(value);
+                  setResult(null);
+                }}
+                options={filtered.map((course) => ({
+                  value: course._id,
+                  label: `${course.code} · ${isAr ? course.nameAr || course.name : course.nameEn || course.name}`,
+                }))}
+                placeholder={
+                  coursesQuery.isLoading
+                    ? text("جارٍ تحميل المقررات…", "Loading courses…")
+                    : text("اختر مقررًا", "Select a course")
+                }
+                disabled={
+                  uploading || coursesQuery.isLoading || !filtered.length
+                }
+              />
+              {coursesQuery.isError && (
+                <p role="alert" className="text-xs text-danger">
+                  {text("تعذر تحميل المقررات.", "Could not load courses.")}{" "}
+                  <button
+                    className="underline"
+                    onClick={() => coursesQuery.refetch()}
                   >
-                    {isResetting ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-3 w-3" />
-                    )}
-                    <span>{isAr ? 'تصفير المسجلين بالمقرر' : 'Reset Enrollments'}</span>
-                  </Button>
-                </div>
+                    {text("إعادة المحاولة", "Retry")}
+                  </button>
+                </p>
               )}
             </div>
-          </div>
-
-          {/* Template Info & Download */}
-          <div className="flex flex-col gap-2 rounded-xl border border-teal-500/25 bg-teal-500/5 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-2.5">
-              <FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400" />
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-foreground">
-                  {isAr ? 'نموذج شيت التسجيل المعتمد (.xlsx)' : 'Standard Enrollment Template'}
+            {validCourse && selected && (
+              <div className="space-y-2 rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+                <p className="font-medium">
+                  {courseCurriculumSummary(selected, locale)}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {isAr
-                    ? 'الأعمدة: كود الطالب | الفرقة | الحجب (مفعل / محجوب) | اسم الطالب (اختياري)'
-                    : 'Columns: Student Code | Level | Status (مفعل / محجوب) | Name (Optional)'}
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  {text(
+                    "المسجلون في الفصل المحدد:",
+                    "Enrolled in this term:",
+                  )}{" "}
+                  {countQuery.isLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <bdi className="font-bold text-foreground">
+                      {countQuery.data?.enrolledCount ?? 0}
+                    </bdi>
+                  )}
+                </p>
+                {(countQuery.data?.enrolledCount ?? 0) > 0 && (
+                  <details>
+                    <summary className="cursor-pointer text-danger">
+                      {text(
+                        "إدارة التسجيلات السابقة",
+                        "Manage existing enrollments",
+                      )}
+                    </summary>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 text-danger"
+                      disabled={uploading || resetting}
+                      onClick={() => setConfirmReset(true)}
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      {text("تصفير تسجيلات المقرر", "Reset course enrollments")}
+                    </Button>
+                  </details>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section
+            className="space-y-3 border-t border-border pt-4"
+            aria-label={text("شيت الطلاب", "Student sheet")}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold">
+                  {text("شيت الطلاب", "Student sheet")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {text(
+                    "كود الطالب · المستوى · الحالة · الاسم (اختياري)",
+                    "Student code · Level · Status · Name (optional)",
+                  )}
                 </p>
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={downloadTemplate}
+                disabled={templateLoading || uploading}
+              >
+                {templateLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {text("النموذج", "Template")}
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadTemplate}
-              disabled={isDownloadingTemplate}
-              className="h-8 shrink-0 rounded-squircle border-teal-500/30 text-teal-700 hover:bg-teal-500/10 dark:text-teal-300 gap-1.5 text-xs font-semibold"
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (!uploading) setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragging(false);
+                if (!uploading) chooseFile(event.dataTransfer.files[0]);
+              }}
+              className={`rounded-xl border-2 border-dashed p-5 text-center ${dragging ? "border-primary bg-primary/10" : "border-border bg-secondary/10"}`}
             >
-              {isDownloadingTemplate ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              <span>{isAr ? 'تحميل النموذج' : 'Download Template'}</span>
-            </Button>
-          </div>
-
-          {/* File Upload Zone */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">
-              {isAr ? 'ملف شيت الطلاب (.xlsx / .csv) *' : 'Students Sheet File (.xlsx / .csv) *'}
-            </label>
-            <div className="relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-surface/40 p-5 text-center transition-all hover:border-primary/50 hover:bg-primary/5">
               <input
+                id={fileInputId}
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                onChange={handleFileChange}
-                disabled={isUploading}
-                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                className="sr-only"
+                disabled={uploading}
+                onChange={onFileChange}
               />
-              <UploadCloud className="h-8 w-8 text-primary/70 mb-2" />
-              {selectedFile ? (
-                <div className="flex items-center gap-2 rounded-squircle bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span>{selectedFile.name}</span>
-                  <span className="text-muted-foreground text-[10px]">
-                    ({(selectedFile.size / 1024).toFixed(1)} KB)
-                  </span>
+              {file ? (
+                <div className="flex items-start gap-3 text-start">
+                  <FileSpreadsheet className="mt-1 h-6 w-6 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-sm font-medium">
+                      {file.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      <bdi>{(file.size / 1024).toFixed(1)} KB</bdi>
+                    </p>
+                  </div>
+                  <Button
+                    aria-label={text("إزالة الملف", "Remove file")}
+                    variant="ghost"
+                    size="sm"
+                    disabled={uploading}
+                    onClick={() => setFile(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-foreground">
-                    {isAr
-                      ? 'اضغط هنا أو اسحب الملف للإفلات'
-                      : 'Click to browse or drag and drop file here'}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {isAr
-                      ? 'يدعم ملفات Excel (.xlsx, .xls) أو ملفات CSV حتى 10 ميجابايت'
-                      : 'Supports Excel (.xlsx, .xls) or CSV files up to 10MB'}
-                  </p>
-                </div>
+                <label
+                  htmlFor={fileInputId}
+                  className="flex cursor-pointer flex-col items-center gap-2"
+                >
+                  <UploadCloud className="h-7 w-7 text-primary" />
+                  <span className="text-sm font-medium">
+                    {text(
+                      "اسحب الشيت هنا أو اضغط لاختياره",
+                      "Drop the sheet here or choose a file",
+                    )}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Excel / CSV · {text("حتى 10 ميجابايت", "Up to 10MB")}
+                  </span>
+                </label>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Upload Progress Bar (Unified Batch Architecture) */}
-          {progressState.isUploading && (
-            <div className="pt-1">
-              <DataUploadProgress state={progressState} locale={locale} />
-            </div>
+          {user?.role === "admin" && (
+            <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs">
+              <label className="flex items-center gap-2 font-medium">
+                <Checkbox
+                  checked={override}
+                  disabled={uploading}
+                  onCheckedChange={(value) => setOverride(value === true)}
+                />
+                {text(
+                  "السماح باستثناء حد المقررات والساعات",
+                  "Allow a course/credit limit exception",
+                )}
+              </label>
+              {override && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-muted-foreground">
+                    {text(
+                      "يتطلب تأكيدًا إداريًا ويُحفظ السبب مع التسجيل. لا يتجاوز شروط القسم أو الفصل أو المتطلبات السابقة.",
+                      "Requires administrative confirmation. The reason is saved with the registration. Department, term and prerequisite checks remain in force.",
+                    )}
+                  </p>
+                  <Textarea
+                    aria-label={text("سبب الاستثناء", "Exception reason")}
+                    placeholder={text(
+                      "سبب الاستثناء (10 أحرف على الأقل)",
+                      "Exception reason (at least 10 characters)",
+                    )}
+                    minLength={10}
+                    maxLength={500}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    disabled={uploading}
+                  />
+                </div>
+              )}
+            </section>
           )}
-
-          {/* Results Summary Box */}
+          {uploading && <DataUploadProgress state={progress} locale={locale} />}
           {result && (
-            <div className="space-y-2.5 rounded-xl border border-primary/25 bg-primary/5 p-4 animate-in fade-in-50">
-              <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>
-                  {isAr
-                    ? `تقرير تسجيل الطلاب في المقرر (${result.courseCode})`
-                    : `Registration Report for (${result.courseCode})`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                <div className="rounded-lg bg-card/80 p-2 text-center border border-border/60">
-                  <span className="text-muted-foreground text-[10px] block">
-                    {isAr ? 'إجمالي الصفوف' : 'Total Rows'}
-                  </span>
-                  <span className="font-bold text-foreground text-sm">
-                    {result.totalRows}
-                  </span>
-                </div>
-                <div className="rounded-lg bg-emerald-500/10 p-2 text-center border border-emerald-500/20">
-                  <span className="text-emerald-700 dark:text-emerald-400 text-[10px] block font-semibold">
-                    {isAr ? 'تم تسجيلهم حديثاً' : 'Newly Enrolled'}
-                  </span>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400 text-sm">
-                    {result.enrolledCount}
-                  </span>
-                </div>
-                <div className="rounded-lg bg-blue-500/10 p-2 text-center border border-blue-500/20">
-                  <span className="text-blue-700 dark:text-blue-400 text-[10px] block font-semibold">
-                    {isAr ? 'مسجلين مسبقاً' : 'Already Enrolled'}
-                  </span>
-                  <span className="font-bold text-blue-700 dark:text-blue-400 text-sm">
-                    {result.alreadyEnrolledCount}
-                  </span>
-                </div>
-                <div className="rounded-lg bg-amber-500/10 p-2 text-center border border-amber-500/20">
-                  <span className="text-amber-700 dark:text-amber-400 text-[10px] block font-semibold">
-                    {isAr ? 'محجوب / مستبعد' : 'Skipped Blocked'}
-                  </span>
-                  <span className="font-bold text-amber-700 dark:text-amber-400 text-sm">
-                    {result.skippedBlockedCount}
-                  </span>
-                </div>
-              </div>
-
-              {result.errors && result.errors.length > 0 && (
-                <div className="mt-2 space-y-1 rounded-lg border border-danger/30 bg-danger/10 p-2.5 text-xs">
-                  <div className="flex items-center gap-1.5 font-semibold text-danger">
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    <span>
-                      {isAr
-                        ? `تنبيهات وأخطاء (${result.errorCount})`
-                        : `Warnings & Errors (${result.errorCount})`}
-                    </span>
+            <section
+              aria-live="polite"
+              className={`space-y-3 rounded-xl border p-4 ${state === "failed" ? "border-danger/30 bg-danger/5" : state === "partial" ? "border-amber-500/30 bg-amber-500/5" : "border-primary/25 bg-primary/5"}`}
+            >
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                {state === "failed" || state === "partial" ? (
+                  <AlertTriangle className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {state === "failed"
+                  ? text("لم يتم تسجيل طلاب", "No students enrolled")
+                  : state === "partial"
+                    ? text(
+                        "اكتمل التسجيل مع ملاحظات",
+                        "Enrollment completed with issues",
+                      )
+                    : state === "unchanged"
+                      ? text("لا توجد تسجيلات جديدة", "No new enrollments")
+                      : text("اكتمل تسجيل الطلاب", "Enrollment completed")}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {summary.map(([label, count]) => (
+                  <div
+                    key={label}
+                    className="rounded-lg border border-border bg-card p-2 text-center"
+                  >
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <bdi className="text-lg font-bold">{count}</bdi>
                   </div>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-danger/90 max-h-28 overflow-y-auto">
-                    {result.errors.map((err, idx) => (
-                      <li key={idx}>{err}</li>
-                    ))}
+                ))}
+              </div>
+              {(result.overriddenCount ?? 0) > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {text(
+                    `تم تسجيل ${result.overriddenCount} طالب باستثناء إداري موثّق.`,
+                    `${result.overriddenCount} students enrolled with a recorded administrative exception.`,
+                  )}
+                </p>
+              )}
+              {result.skippedBlockedCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {text(
+                    `استُبعد ${result.skippedBlockedCount} طالب محجوب.`,
+                    `${result.skippedBlockedCount} blocked students skipped.`,
+                  )}
+                </p>
+              )}
+              {result.errorCount > 0 && (
+                <div className="space-y-2 text-xs">
+                  <p className="font-medium text-danger">
+                    {text(
+                      `عرض ${result.errors.length} من ${result.errorCount} أخطاء`,
+                      `Showing ${result.errors.length} of ${result.errorCount} errors`,
+                    )}
+                  </p>
+                  <ul className="max-h-52 space-y-2 overflow-y-auto pe-1">
+                    {result.errors.map((message, index) => {
+                      const issue = result.issues?.[index];
+                      return (
+                        <li
+                          key={index}
+                          className="rounded-lg border border-danger/15 bg-card p-2 leading-relaxed text-danger"
+                        >
+                          {issue?.limits ? (
+                            <>
+                              <p>
+                                {text(
+                                  `السطر ${issue.row}: تجاوز حد التسجيل`,
+                                  `Row ${issue.row}: Registration limit exceeded`,
+                                )}
+                              </p>
+                              <p className="text-muted-foreground">
+                                {text(
+                                  `بعد الإضافة: ${issue.limits.proposedCourseCount} مقررات / الحد ${issue.limits.maxCourses}، و${issue.limits.proposedCreditHours} ساعة / الحد ${issue.limits.maxCreditHours}.`,
+                                  `After adding: ${issue.limits.proposedCourseCount}/${issue.limits.maxCourses} courses and ${issue.limits.proposedCreditHours}/${issue.limits.maxCreditHours} credits.`,
+                                )}
+                              </p>
+                            </>
+                          ) : (
+                            localizeEnrollmentError(message, locale)
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
-            </div>
+            </section>
           )}
         </div>
-
-        <DialogFooter className="mt-5 flex items-center gap-2 rtl:sm:justify-start">
+        <DialogFooter className="shrink-0 flex-row gap-2 border-t border-border bg-card px-5 py-4 rtl:sm:justify-start">
           <Button
-            type="button"
-            onClick={handleUpload}
-            disabled={isUploading || !selectedFile || !courseId}
-            className="rounded-squircle bg-primary px-5 font-semibold text-white shadow-md hover:bg-primary-hover gap-2"
+            disabled={
+              uploading ||
+              !file ||
+              !validCourse ||
+              (override && reason.trim().length < 10)
+            }
+            onClick={() =>
+              override ? setConfirmOverride(true) : void upload()
+            }
           >
-            {isUploading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>{isAr ? 'جارٍ تسجيل الطلاب...' : 'Enrolling Students...'}</span>
-              </>
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <>
-                <UserCheck className="h-4 w-4" />
-                <span>{isAr ? 'بدء تسجيل الطلاب بالمقرر' : 'Start Enrollment'}</span>
-              </>
+              <UserCheck className="h-4 w-4" />
             )}
+            {uploading
+              ? text("جارٍ التسجيل…", "Enrolling…")
+              : text("تسجيل الطلاب", "Enroll students")}
           </Button>
-
           <Button
-            type="button"
-            variant="ghost"
+            variant="outline"
+            disabled={uploading || resetting}
             onClick={() => onOpenChange(false)}
-            disabled={isUploading}
-            className="rounded-squircle text-muted-foreground hover:bg-secondary/60"
           >
-            {isAr ? 'إغلاق' : 'Close'}
+            {text("إغلاق", "Close")}
           </Button>
         </DialogFooter>
-
         <ConfirmDialog
-          open={isResetConfirmOpen}
-          onOpenChange={setIsResetConfirmOpen}
-          title={isAr ? 'تأكيد تصفير تسجيلات هذا المقرر' : 'Confirm Reset Course Registrations'}
+          dir={isAr ? "rtl" : "ltr"}
+          destructive={false}
+          open={confirmOverride}
+          onOpenChange={setConfirmOverride}
+          title={text(
+            "تأكيد الاستثناء الإداري",
+            "Confirm administrative exception",
+          )}
           description={
-            <div className="space-y-2 text-xs leading-relaxed">
-              <p>
-                {isAr
-                  ? `هل أنت متأكد من تصفير وإلغاء تسجيل جميع الطلاب (${enrollmentsCountQuery.data?.enrolledCount ?? 0} طالب) في مقرر:`
-                  : `Are you sure you want to reset and remove all student registrations (${enrollmentsCountQuery.data?.enrolledCount ?? 0} students) for course:`}
-              </p>
-              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 font-semibold text-rose-600 dark:text-rose-400">
-                <span className="font-mono">
-                  {selectedCourseObj?.code}
-                </span>{' '}
-                - {isAr ? selectedCourseObj?.nameAr || selectedCourseObj?.name : selectedCourseObj?.name}{' '}
-                ({academicYear} -{' '}
-                {semester === 'first'
-                  ? isAr ? 'الترم الأول' : '1st Term'
-                  : semester === 'second'
-                    ? isAr ? 'الترم الثاني' : '2nd Term'
-                    : isAr ? 'صيفي' : 'Summer'})
-              </div>
-              <p className="text-muted-foreground text-[11px]">
-                {isAr
-                  ? 'يُستخدم هذا الإجراء في حال تم رفع شيت تسجيل بالخطأ. سيتم حذف هذا المقرر من استمارات تسجيل الطلاب المحددة فوراً وتحديث إجمالي الساعات المسجلة.'
-                  : 'Use this action if an incorrect enrollment sheet was uploaded. This course will be removed from all matching student registrations immediately.'}
-              </p>
-            </div>
+            <span className="block space-y-2">
+              <span className="block">
+                {text(
+                  "سيُسمح بتجاوز حد المقررات والساعات فقط للطلاب المستوفين باقي الشروط، وستُحفظ هوية المسؤول وسبب الاستثناء.",
+                  "Only course/credit limits may be exceeded for otherwise eligible students. The administrator and reason will be recorded.",
+                )}
+              </span>
+              <span className="block rounded-lg border border-border p-2 text-sm">
+                {reason}
+              </span>
+            </span>
           }
-          confirmLabel={isAr ? 'نعم، تصفير التسجيلات' : 'Yes, Reset Enrollments'}
-          cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+          confirmLabel={text("تأكيد وبدء التسجيل", "Confirm and enroll")}
+          cancelLabel={text("رجوع", "Back")}
+          onConfirm={upload}
+        />
+        <ConfirmDialog
+          dir={isAr ? "rtl" : "ltr"}
+          open={confirmReset}
+          onOpenChange={setConfirmReset}
+          title={text("تصفير تسجيلات المقرر؟", "Reset course enrollments?")}
+          description={
+            <span>
+              {text(
+                "سيُحذف هذا المقرر من تسجيلات الفصل المحدد وتُحدّث الساعات.",
+                "This course will be removed from registrations in the selected term and credit totals updated.",
+              )}{" "}
+              <bdi>
+                {selected?.code} · {academicYear}
+              </bdi>
+            </span>
+          }
           destructive
-          disabled={isResetting}
-          onConfirm={handleResetCourseEnrollments}
+          disabled={resetting}
+          confirmLabel={text("تصفير التسجيلات", "Reset enrollments")}
+          cancelLabel={text("إلغاء", "Cancel")}
+          onConfirm={reset}
         />
       </DialogContent>
     </Dialog>

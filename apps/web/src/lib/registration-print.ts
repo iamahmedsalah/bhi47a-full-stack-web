@@ -108,6 +108,10 @@ export function localizeAcademicLevel(level: unknown, locale: RegistrationLocale
 
 export function localizeCourseType(type: unknown, locale: RegistrationLocale): string {
   const t = String(type ?? "").toLowerCase().trim();
+  const requirementLabels: Record<string, string> = locale === "ar"
+    ? { university_req: "متطلب جامعة", institute_req: "متطلب معهد", specialization_req: "متطلب تخصص" }
+    : { university_req: "University requirement", institute_req: "Institute requirement", specialization_req: "Specialization requirement" };
+  if (requirementLabels[t]) return requirementLabels[t];
   if (locale === "ar") {
     if (t === "required" || t.includes("إجبار")) return "إجباري";
     if (t === "elective" || t.includes("اختيار")) return "اختياري";
@@ -430,12 +434,15 @@ export const registrationDocumentStyles = `
   }
   .detail-header {
     display: flex;
+    flex-shrink: 0;
     justify-content: space-between;
     align-items: baseline;
     gap: 6px;
     margin-bottom: 2px;
   }
   .detail-header .label {
+    white-space: nowrap;
+    flex-shrink: 0;
     font-size: 9px;
     font-weight: 800;
     color: #0d5d67;
@@ -443,6 +450,8 @@ export const registrationDocumentStyles = `
     letter-spacing: 0.2px;
   }
   .detail-header .sub-label {
+    white-space: nowrap;
+    flex-shrink: 0;
     font-size: 8px;
     font-weight: 600;
     color: #64748b;

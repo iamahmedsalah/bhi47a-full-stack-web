@@ -18,6 +18,9 @@ import {
   normalizeDepartment,
   type Semester,
   type CourseLevel,
+  type CourseEnrollmentResult,
+  type CourseEnrollmentIssue,
+  type CourseEnrollmentLimitDetails,
 } from '@student-portal/shared';
 import { RegistrationsService } from '../registrations/registrations.service';
 import { isCourseOfferedForTerm } from '../registrations/utils/term-availability.util';
@@ -31,6 +34,7 @@ import {
   CreateCourseDto,
   UpdateCourseDto,
   QueryCourseDto,
+  EnrollmentOptionsDto,
 } from './dto/course.dto';
 import {
   buildPaginationOptions,
@@ -55,6 +59,10 @@ import {
   CreateCourseMaterialDto,
   QueryCourseMaterialsDto,
 } from './dto/course-material.dto';
+
+export interface CourseEnrollmentOptions extends EnrollmentOptionsDto {
+  actor?: { _id: string; role: string };
+}
 
 export interface CourseSyllabusFile {
   fieldname: string;
@@ -1432,11 +1440,7 @@ export class CoursesService {
     courseId: string,
     buffer: Buffer,
     originalname: string,
-    options: {
-      academicYear?: string;
-      semester?: string;
-      skipBlocked?: boolean;
-    } = {},
+    options: CourseEnrollmentOptions = {},
   ): Promise<{
     courseId: string;
     courseCode: string;
@@ -1467,11 +1471,7 @@ export class CoursesService {
   async enrollStudentsBatch(
     courseId: string,
     rawRows: Record<string, any>[],
-    options: {
-      academicYear?: string;
-      semester?: string;
-      skipBlocked?: boolean;
-    } = {},
+    options: CourseEnrollmentOptions = {},
   ): Promise<{
     courseId: string;
     courseCode: string;
@@ -1496,22 +1496,31 @@ export class CoursesService {
   async processEnrollmentRows(
     course: CourseDocument,
     rawRows: Record<string, any>[],
-    options: {
-      academicYear?: string;
-      semester?: string;
-      skipBlocked?: boolean;
-    } = {},
-  ): Promise<{
-    courseId: string;
-    courseCode: string;
-    courseName: string;
-    totalRows: number;
-    enrolledCount: number;
-    alreadyEnrolledCount: number;
-    skippedBlockedCount: number;
-    errorCount: number;
-    errors: string[];
-  }> {
+    options: CourseEnrollmentOptions = {},
+  ): Promise<CourseEnrollmentResult> {
+    const allowLimitOverride = options.overrideRegistrationLimits === true;
+    const overrideReason = options.overrideReason?.trim();
+    if (allowLimitOverride) {
+      if (
+        options.actor?.role !== 'admin' ||
+        !Types.ObjectId.isValid(String(options.actor._id))
+      )
+        throw new ForbiddenException(
+          'Only administrators can approve registration limit exceptions',
+        );
+      if (
+        !overrideReason ||
+        overrideReason.length < 10 ||
+        overrideReason.length > 500
+      )
+        throw new BadRequestException(
+          'A 10–500 character reason is required for a registration limit exception',
+        );
+      if (!this.registrationsService)
+        throw new BadRequestException(
+          'Registration validation service is unavailable',
+        );
+    }
     const academicYear = options.academicYear || '2026-2027';
     const semester =
       (options.semester as 'first' | 'second' | 'summer') || 'first';
@@ -1619,6 +1628,8 @@ export class CoursesService {
     });
 
     let enrolledCount = 0;
+    let overriddenCount = 0;
+    const limitIssues = new Map<number, CourseEnrollmentIssue>();
     let alreadyEnrolledCount = 0;
     let skippedBlockedCount = 0;
     const errors: string[] = [];
@@ -1704,19 +1715,38 @@ export class CoursesService {
       }
       processedStudentIds.add(studentUserIdStr);
 
+      let limitException: CourseEnrollmentLimitDetails | undefined;
       const existingCodes: string[] =
         regByStudentId.get(studentUserIdStr)?.courses ?? [];
       if (
         !existingCodes.some((code) => code.toUpperCase() === courseCodeUpper)
       ) {
         try {
-          await this.registrationsService?.assertAdministrativeCourseAddition(
-            studentUserIdStr,
-            scopedCourse,
-            existingCodes,
-            semester,
-          );
+          limitException =
+            await this.registrationsService?.assertAdministrativeCourseAddition(
+              studentUserIdStr,
+              scopedCourse,
+              existingCodes,
+              semester,
+              allowLimitOverride,
+            );
         } catch (error) {
+          if (error instanceof BadRequestException) {
+            const response = error.getResponse();
+            if (
+              typeof response === 'object' &&
+              'code' in response &&
+              response.code === 'REGISTRATION_LIMIT_EXCEEDED' &&
+              'limits' in response
+            ) {
+              limitIssues.set(rowNum, {
+                row: rowNum,
+                code: 'REGISTRATION_LIMIT_EXCEEDED',
+                message: error.message,
+                limits: response.limits as CourseEnrollmentLimitDetails,
+              });
+            }
+          }
           errors.push(
             `السطر ${rowNum}: ${error instanceof Error ? error.message : 'تعذر التحقق من أهلية التسجيل'}`,
           );
@@ -1804,6 +1834,16 @@ export class CoursesService {
 
       const studentUserObjId = new Types.ObjectId(studentUserId);
       const existingReg = regByStudentId.get(studentUserIdStr);
+      const audit =
+        limitException && options.actor
+          ? {
+              ...limitException,
+              actorId: new Types.ObjectId(options.actor._id),
+              reason: overrideReason!,
+              courseCode: courseCodeUpper,
+              createdAt: new Date(),
+            }
+          : undefined;
 
       if (existingReg) {
         const existingCourses = (existingReg.courses || []).map((c: string) =>
@@ -1823,10 +1863,14 @@ export class CoursesService {
                 $addToSet: { courses: courseCodeUpper },
                 $set: { status: 'approved', approvedAt: new Date() },
                 $inc: { totalCreditHours: courseCreditHours },
+                ...(audit
+                  ? { $push: { administrativeLimitOverrides: audit } }
+                  : {}),
               },
             },
           });
           enrolledCount++;
+          if (audit) overriddenCount++;
         }
       } else {
         registrationBulkOps.push({
@@ -1837,6 +1881,7 @@ export class CoursesService {
               academicYear,
               semester,
               totalCreditHours: courseCreditHours,
+              ...(audit ? { administrativeLimitOverrides: [audit] } : {}),
               source: 'system',
               status: 'approved',
               approvedAt: new Date(),
@@ -1846,6 +1891,7 @@ export class CoursesService {
           },
         });
         enrolledCount++;
+        if (audit) overriddenCount++;
       }
     }
 
@@ -1876,6 +1922,17 @@ export class CoursesService {
       alreadyEnrolledCount,
       skippedBlockedCount,
       errorCount: errors.length,
+      overriddenCount,
+      issues: errors.slice(0, 20).map((message) => {
+        const row = Number(message.match(/^(?:السطر|Row) (\d+)/)?.[1] ?? 0);
+        return (
+          limitIssues.get(row) ?? {
+            row,
+            code: 'VALIDATION_ERROR' as const,
+            message,
+          }
+        );
+      }),
       errors: errors.slice(0, 20),
     };
   }
@@ -1941,7 +1998,13 @@ export class CoursesService {
     }
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
+    try {
+      await workbook.xlsx.load(buffer as any);
+    } catch {
+      throw new BadRequestException(
+        'تعذر قراءة ملف Excel. احفظه بصيغة XLSX أو CSV ثم أعد الرفع / Could not read the workbook. Save it as XLSX or CSV and upload again',
+      );
+    }
     const sheet = workbook.worksheets[0];
     if (!sheet || sheet.rowCount <= 1) return [];
 

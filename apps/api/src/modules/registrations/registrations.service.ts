@@ -1796,6 +1796,7 @@ export class RegistrationsService {
     course: CourseDocument,
     existingCodes: string[],
     semester: 'first' | 'second' | 'summer',
+    allowLimitOverride = false,
   ) {
     const profile = await this.getAcademicProfile(studentId);
     const completed = new Set(normalizeCourseCodes(profile.completedCourses));
@@ -1847,9 +1848,20 @@ export class RegistrationsService {
       selected.length > Math.min(rule.maxCourses, limits.maxCourses) ||
       hours > Math.min(rule.maxCreditHours, limits.maxCreditHours)
     ) {
-      throw new BadRequestException(
-        'Registration course or credit limit exceeded / تجاوز الحد الأقصى للمقررات أو الساعات',
-      );
+      const details = {
+        currentCourseCount: normalizeCourseCodes(existingCodes).length,
+        proposedCourseCount: selected.length,
+        currentCreditHours: Math.max(0, hours - (course.creditHours ?? 0)),
+        proposedCreditHours: hours,
+        maxCourses: Math.min(rule.maxCourses, limits.maxCourses),
+        maxCreditHours: Math.min(rule.maxCreditHours, limits.maxCreditHours),
+      };
+      if (allowLimitOverride) return details;
+      throw new BadRequestException({
+        code: 'REGISTRATION_LIMIT_EXCEEDED',
+        message: `Registration limit exceeded: ${details.proposedCourseCount}/${details.maxCourses} courses, ${hours}/${details.maxCreditHours} credits / تجاوز الحد: ${details.proposedCourseCount} من ${details.maxCourses} مقررات و${hours} من ${details.maxCreditHours} ساعة`,
+        limits: details,
+      });
     }
   }
 
