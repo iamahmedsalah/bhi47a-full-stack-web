@@ -34,9 +34,13 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const updateUrl = useCallback(
     (params: URLSearchParams) => {
+      const query = params.toString();
+      const newUrl = query ? `${pathname}?${query}` : pathname;
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', newUrl);
+      }
       startTransition(() => {
-        const query = params.toString();
-        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+        router.replace(newUrl, { scroll: false });
       });
     },
     [pathname, router],
@@ -73,15 +77,18 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const setSearch = useCallback(
     (newSearch: string) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      const currentSearch = (searchParams?.get('search') ?? '').trim();
       const trimmed = newSearch.trim();
+      if (trimmed === currentSearch) {
+        return;
+      }
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
       if (!trimmed) {
         params.delete('search');
       } else {
         params.set('search', trimmed);
       }
       params.delete('page');
-      setSelectedKeys([]);
       updateUrl(params);
     },
     [searchParams, updateUrl],
@@ -89,15 +96,18 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const setFilter = useCallback(
     <K extends keyof TFilters>(key: K, value: TFilters[K] | undefined | null) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      const currentVal = searchParams?.get(String(key)) ?? defaultFilters[key] ?? '';
       const strVal = value !== undefined && value !== null ? String(value) : '';
+      if (strVal === currentVal) {
+        return;
+      }
+      const params = new URLSearchParams(searchParams?.toString() ?? '');
       if (!strVal || strVal === 'all' || strVal === defaultFilters[key]) {
         params.delete(String(key));
       } else {
         params.set(String(key), strVal);
       }
       params.delete('page');
-      setSelectedKeys([]);
       updateUrl(params);
     },
     [defaultFilters, searchParams, updateUrl],

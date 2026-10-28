@@ -26,12 +26,13 @@ import {
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
-import { COURSE_LEVEL_VALUES } from '@student-portal/shared';
+import { COURSE_LEVEL_VALUES, getCourseCurricula, courseCurriculumSummary, type CourseCurriculum } from '@student-portal/shared';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
-import { useCourseStore } from '@/store/course-store';
-import { downloadExcel } from '@/lib/utils';
+import { useTableState } from '@/hooks/use-table-state';
+import { CoursePlacementsEditor } from '@/features/courses/components/course-placements-editor';
+import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 
 
 // Reusable components
@@ -81,7 +82,7 @@ interface Course {
   minimumGpa?: number;
   registrationPriority?: number;
   description?: string;
-  curricula?: { department: string; academicLevel: string; semester: string; type: CourseType }[];
+  curricula?: CourseCurriculum[];
   syllabusPdfUrl?: string;
   syllabusPdfName?: string;
   syllabusUpdatedAt?: string;
@@ -157,7 +158,7 @@ function CourseFormDialog({
   const [semester, setSemester] = useState(initialValues.semester || 'first');
   const [creditHours, setCreditHours] = useState(initialValues.creditHours || 3);
   const [department, setDepartment] = useState(initialValues.department || '');
-  const [programCurricula, setProgramCurricula] = useState('');
+  const [placements, setPlacements] = useState<CourseCurriculum[]>(initialValues.code ? getCourseCurricula(initialValues as Course) : []);
   const [prerequisites, setPrerequisites] = useState((initialValues.prerequisites || []).join(', '));
   const [courseType, setCourseType] = useState<CourseType>(initialValues.type || 'required');
   const [isActive, setIsActive] = useState(initialValues.isActive ?? true);
@@ -264,7 +265,7 @@ function CourseFormDialog({
       setSemester(initialValues.semester || 'first');
       setCreditHours(initialValues.creditHours || 3);
       setDepartment(initialValues.department || '');
-      setProgramCurricula(initialValues.curricula?.map((item) => `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`).join('|') || '');
+      setPlacements(initialValues.code ? getCourseCurricula(initialValues as Course) : []);
       setPrerequisites((initialValues.prerequisites || []).join(', '));
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
@@ -306,6 +307,10 @@ function CourseFormDialog({
       return;
     }
 
+    if (new Set(placements.map((item) => item.department)).size !== placements.length) {
+      toast.error(t('placements.invalid'));
+      return;
+    }
     setLoading(true);
     try {
       await onSubmit({
@@ -313,17 +318,12 @@ function CourseFormDialog({
         nameAr,
         nameEn,
         code,
-        level,
-        academicLevel: level,
-        semester,
+        level: placements[0]?.academicLevel ?? level,
+        academicLevel: placements[0]?.academicLevel ?? level,
+        semester: placements[0]?.semester ?? semester,
         creditHours,
         department,
-        curricula: programCurricula.trim()
-          ? programCurricula.split('|').map((entry) => {
-              const [curriculumDepartment, academicLevel, curriculumSemester, type] = entry.split(':').map((part) => part.trim());
-              return { department: curriculumDepartment, academicLevel, semester: curriculumSemester, type: type as CourseType };
-            })
-          : undefined,
+        curricula: placements,
         prerequisites: prerequisites
           .split(',')
           .map((item) => item.trim().toUpperCase())
@@ -393,7 +393,7 @@ function CourseFormDialog({
               <label className="text-xs font-semibold text-muted">{t('level')} *</label>
               <Select value={level} onValueChange={setLevel}>
                 <SelectTrigger className="bg-secondary/50 border-border"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                   {COURSE_LEVEL_VALUES.map((l) => (
                     <SelectItem key={l} value={l}>{t(`level_${l}`)}</SelectItem>
                   ))}
@@ -404,7 +404,7 @@ function CourseFormDialog({
               <label className="text-xs font-semibold text-muted">{t('semester')} *</label>
               <Select value={semester} onValueChange={setSemester}>
                 <SelectTrigger className="bg-secondary/50 border-border"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                   <SelectItem value="first">{t('semester_first')}</SelectItem>
                   <SelectItem value="second">{t('semester_second')}</SelectItem>
                   <SelectItem value="summer">{t('semester_summer')}</SelectItem>
@@ -448,7 +448,7 @@ function CourseFormDialog({
                       }
                     />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                     {doctorsList
                       .filter((doc) => !doctorIds.includes(doc._id))
                       .map((staff) => (
@@ -510,7 +510,7 @@ function CourseFormDialog({
                   <SelectTrigger className="bg-secondary/50 border-border">
                     <SelectValue placeholder={locale === 'ar' ? 'اختر معيداً لإضافته للمقرر...' : 'Select teaching assistant to add...'} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                     {teachingAssistantsList
                       .filter((ta) => !teachingAssistantIds.includes(ta._id))
                       .map((ta) => (
@@ -569,7 +569,7 @@ function CourseFormDialog({
               <label className="text-xs font-semibold text-muted">Course type</label>
               <Select value={courseType} onValueChange={(value) => setCourseType(value as CourseType)}>
                 <SelectTrigger className="bg-secondary/50 border-border"><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                   <SelectItem value="required">Required</SelectItem>
                   <SelectItem value="elective">Elective</SelectItem>
                   <SelectItem value="university_req">University requirement</SelectItem>
@@ -580,11 +580,7 @@ function CourseFormDialog({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted">Program placements</label>
-            <Input type="text" dir="ltr" value={programCurricula} onChange={(e) => setProgramCurricula(e.target.value)} placeholder="ACCOUNTING:3:first:elective|BIS:3:second:elective" />
-            <p className="text-[11px] text-muted-foreground/80">Use DEPARTMENT:LEVEL:SEMESTER:TYPE entries separated by |. Supports multi-department placement.</p>
-          </div>
+          <CoursePlacementsEditor value={placements} onChange={setPlacements} locale={locale} />
 
           {/* Course Curriculum & Cover Image Media Section (Only for Doctor or Admin, hidden for Teaching Assistant) */}
           {canManageBook ? (
@@ -981,7 +977,7 @@ function UploadCoursePdfDialog({
 
             {course.syllabusPdfUrl && (
               <div className="flex items-center justify-between pt-1 border-t border-border/50">
-                <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]">
+                <span className="font-mono text-[11px] text-muted-foreground truncate max-w-60">
                   📄 {course.syllabusPdfName || `${course.code}_syllabus.pdf`}
                 </span>
                 <div className="flex items-center gap-2">
@@ -1091,13 +1087,9 @@ function CoursesPageContent() {
   const queryClient = useQueryClient();
 
   const {
-    search,
-    activeLevel,
-    activeSemester,
-    selectedKeys,
-    setFilter,
-    setSelectedKeys,
-  } = useCourseStore();
+    search, filters: { activeLevel, activeSemester, department: activeDepartment },
+    page, limit, setPage, selectedKeys, setSelectedKeys, setFilter, setSearch,
+  } = useTableState({ defaultFilters: { activeLevel: 'all', activeSemester: 'all', department: 'all' }, defaultLimit: 10 });
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const staffType = (user as any)?.staffType;
@@ -1123,16 +1115,15 @@ function CoursesPageContent() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   const coursesQuery = useQuery({
-    queryKey: ['courses', search, activeLevel, activeSemester, page, limit, user?._id],
+    queryKey: ['courses', search, activeLevel, activeSemester, activeDepartment, page, limit, user?._id],
     queryFn: async () => {
       const params: Record<string, string | number> = { page, limit };
       if (search) params.search = search;
       if (activeLevel !== 'all') params.level = activeLevel;
       if (activeSemester !== 'all') params.semester = activeSemester;
+      if (activeDepartment !== 'all') params.department = activeDepartment;
       if (isDoctor && user?._id) params.doctorId = user._id;
       const res = await api.get<PaginatedResponse<Course>>('/admin/courses', { params });
       return res.data;
@@ -1162,6 +1153,8 @@ function CoursesPageContent() {
           fd.append('file', syllabusFile);
           await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
         } catch {
+          setSelectedCourseForPdf({ ...coursePayload, _id: newCourseId });
+          setIsPdfModalOpen(true);
           toast.error(
             locale === 'ar'
               ? 'تم إضافة المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
@@ -1187,6 +1180,8 @@ function CoursesPageContent() {
       locale === 'ar' ? 'تم إضافة المادة بنجاح' : 'Course added successfully',
     );
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
   };
 
   const handleEdit = async (
@@ -1223,6 +1218,8 @@ function CoursesPageContent() {
         fd.append('file', syllabusFile);
         await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
       } catch {
+        setSelectedCourseForPdf({ ...selectedCourse, ...coursePayload });
+        setIsPdfModalOpen(true);
         toast.error(
           locale === 'ar'
             ? 'تم تحديث المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
@@ -1255,6 +1252,8 @@ function CoursesPageContent() {
       locale === 'ar' ? 'تم تحديث المادة بنجاح' : 'Course updated successfully',
     );
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
   };
 
   const handleBulkDelete = async (ids: string[]) => {
@@ -1264,6 +1263,8 @@ function CoursesPageContent() {
       toast.success(locale === 'ar' ? 'تم حذف المواد المحددة بنجاح' : 'Selected courses deleted successfully', { id: toastId });
       setSelectedKeys([]);
       void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
     } catch (err) {
       toast.error(getApiErrorMessage(err, locale === 'ar' ? 'فشل حذف بعض المواد' : 'Failed to delete some courses'), { id: toastId });
     }
@@ -1282,6 +1283,8 @@ function CoursesPageContent() {
     try {
       await api.patch(`/admin/courses/${course._id}`, { isActive: !course.isActive });
       void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     }
@@ -1290,67 +1293,13 @@ function CoursesPageContent() {
   const exportCourses = async () => {
     setIsExporting(true);
     try {
-      const allCourses: Course[] = [];
-      let exportPage = 1;
-      let totalPages = 1;
-
-      do {
-        const queryParams: Record<string, string | number> = { page: exportPage, limit: 100 };
-        if (search) queryParams.search = search;
-        if (activeLevel !== 'all') queryParams.level = activeLevel;
-        if (activeSemester !== 'all') queryParams.semester = activeSemester;
-
-        const res = await api.get<PaginatedResponse<Course>>('/admin/courses', {
-          params: queryParams,
-        });
-        allCourses.push(...res.data.items);
-        totalPages = res.data.totalPages || 1;
-        exportPage += 1;
-      } while (exportPage <= totalPages);
-
-      downloadExcel(
-        allCourses.map((course) => ({
-          code: course.code,
-          name: course.name,
-          nameAr: course.nameAr || '',
-          nameEn: course.nameEn || '',
-          level: course.level,
-          semester: course.semester,
-          department: course.department || '',
-          creditHours: course.creditHours || 3,
-          type: course.type || 'required',
-          prerequisites: course.prerequisites?.join(', ') || '',
-          coRequisites: course.coRequisites?.join(', ') || '',
-          equivalentCourses: course.equivalentCourses?.join(', ') || '',
-          offeredTerms: course.offeredTerms?.join(', ') || course.semester,
-          recommendedSemester: course.recommendedSemester || '',
-          minimumGpa: course.minimumGpa ?? '',
-          registrationPriority: course.registrationPriority ?? 0,
-          description: course.description || '',
-          status: course.isActive ? 'Active' : 'Inactive',
-        })),
-        [
-          'courseCode',
-          'courseName',
-          'courseNameAr',
-          'courseNameEn',
-          'level',
-          'semester',
-          'department',
-          'creditHours',
-          'type',
-          'prerequisites',
-          'coRequisites',
-          'equivalentCourses',
-          'offeredTerms',
-          'recommendedSemester',
-          'minimumGpa',
-          'registrationPriority',
-          'description',
-          'status',
-        ],
-        `courses_export_${new Date().toISOString().slice(0, 10)}`,
-      );
+      const params: Record<string, string> = {};
+      if (search) params.search = search;
+      if (activeLevel !== 'all') params.level = activeLevel;
+      if (activeSemester !== 'all') params.semester = activeSemester;
+      if (activeDepartment !== 'all') params.department = activeDepartment;
+      const blob = await api.get('/admin/courses/export', { params, responseType: 'blob' });
+      downloadFileBlob(blob, 'courses_export.xlsx', EXCEL_MIME_TYPE);
       toast.success(locale === 'ar' ? 'تم تجهيز ملف المواد' : 'Courses export is ready');
     } catch (err) {
       toast.error(getApiErrorMessage(err, locale === 'ar' ? 'فشل تصدير المواد' : 'Failed to export courses'));
@@ -1393,14 +1342,7 @@ function CoursesPageContent() {
       key: 'semester',
       header: locale === 'ar' ? 'الفصل الدراسي' : 'Semester',
       render: (course) => {
-        const semesterLabel =
-          course.semester === 'first'
-            ? locale === 'ar' ? 'الترم الأول' : 'First Term'
-            : course.semester === 'second'
-              ? locale === 'ar' ? 'الترم الثاني' : 'Second Term'
-              : course.semester === 'summer'
-                ? locale === 'ar' ? 'الترم الصيفي' : 'Summer Term'
-                : course.semester;
+        const semesterLabel = courseCurriculumSummary(course, locale);
 
         return (
           <TableCell className="p-4">
@@ -1711,8 +1653,7 @@ function CoursesPageContent() {
       <FilterBar
         search={search}
         onSearchChange={(val) => {
-          setFilter('search', val);
-          setPage(1);
+          setSearch(val);
         }}
         searchPlaceholder={t('searchPlaceholder')}
       >
@@ -1720,10 +1661,9 @@ function CoursesPageContent() {
           value={activeLevel}
           onValueChange={(val) => {
             setFilter('activeLevel', val);
-            setPage(1);
           }}
         >
-          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-[170px]">
+          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-42.5">
             <SelectValue placeholder={locale === 'ar' ? 'المستوى: الكل' : 'Level: All'} />
           </SelectTrigger>
           <SelectContent className="border-border bg-card">
@@ -1740,10 +1680,9 @@ function CoursesPageContent() {
           value={activeSemester}
           onValueChange={(val) => {
             setFilter('activeSemester', val);
-            setPage(1);
           }}
         >
-          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-[180px]">
+          <SelectTrigger className="w-full border-border bg-secondary/50 sm:w-45">
             <SelectValue placeholder={locale === 'ar' ? 'الفصل: الكل' : 'Semester: All'} />
           </SelectTrigger>
           <SelectContent className="border-border bg-card">
@@ -1753,6 +1692,13 @@ function CoursesPageContent() {
             <SelectItem value="first">{locale === 'ar' ? 'الترم الأول' : 'First Semester'}</SelectItem>
             <SelectItem value="second">{locale === 'ar' ? 'الترم الثاني' : 'Second Semester'}</SelectItem>
             <SelectItem value="summer">{locale === 'ar' ? 'الترم الصيفي' : 'Summer Semester'}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={activeDepartment} onValueChange={(value) => setFilter('department', value)}>
+          <SelectTrigger className="w-full sm:w-47.5"><SelectValue /></SelectTrigger>
+          <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+            <SelectItem value="all">{locale === 'ar' ? 'كل الأقسام' : 'All departments'}</SelectItem>
+            {(['GENERAL', 'BIS', 'ACCOUNTING'] as const).map((dept) => <SelectItem key={dept} value={dept}>{t(`placements.values.${dept}`)}</SelectItem>)}
           </SelectContent>
         </Select>
       </FilterBar>
@@ -1807,7 +1753,7 @@ function CoursesPageContent() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          onClick={() => setPage(Math.max(1, page - 1))}
           disabled={page === 1 || coursesQuery.isLoading}
         >
           {tCommon('previous')}
@@ -1818,7 +1764,7 @@ function CoursesPageContent() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+          onClick={() => setPage(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages || coursesQuery.isLoading}
         >
           {tCommon('next')}
@@ -1841,13 +1787,7 @@ function CoursesPageContent() {
               <span>{t(`level_${course.level}`)}</span>
               <span>•</span>
               <span>
-                {course.semester === 'first'
-                  ? locale === 'ar' ? 'الترم الأول' : 'First Term'
-                  : course.semester === 'second'
-                    ? locale === 'ar' ? 'الترم الثاني' : 'Second Term'
-                    : course.semester === 'summer'
-                      ? locale === 'ar' ? 'الترم الصيفي' : 'Summer Term'
-                      : course.semester}
+                {courseCurriculumSummary(course, locale)}
               </span>
             </p>
             <div className="flex gap-2 border-t border-border/50 pt-3">
@@ -1907,6 +1847,8 @@ function CoursesPageContent() {
         locale={locale}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
         }}
       />
 
@@ -1965,6 +1907,8 @@ function CoursesPageContent() {
         expectedColumns={courseImportColumns}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
         }}
       />
 
@@ -2001,6 +1945,8 @@ function CoursesPageContent() {
         locale={locale}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
         }}
       />
     </div>

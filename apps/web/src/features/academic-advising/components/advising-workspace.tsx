@@ -3883,11 +3883,13 @@ function RegistrationSummary({
 }) {
   const locale: AdvisingLocale = isArabic ? "ar" : "en";
   const print = async (registrationId: string) => {
+    const printWindow = window.open('about:blank', '_blank');
+    if (!printWindow) { toast.error(isArabic ? 'يرجى السماح بالنوافذ المنبثقة' : 'Please allow pop-ups'); return; }
     try {
       const form = await apiGet<PrintableRegistrationForm>(
         `/registrations/${registrationId}/print`,
       );
-      if (!openRegistrationPrintView(form, "print", isArabic ? "ar" : "en")) {
+      if (!openRegistrationPrintView(form, "print", isArabic ? "ar" : "en", printWindow)) {
         toast.error(
           isArabic
             ? "يرجى السماح بالنوافذ المنبثقة لفتح الاستمارة"
@@ -3895,6 +3897,7 @@ function RegistrationSummary({
         );
       }
     } catch (error) {
+      printWindow.close();
       toast.error(getApiErrorMessage(error));
     }
   };

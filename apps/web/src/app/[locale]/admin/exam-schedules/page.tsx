@@ -9,11 +9,17 @@ import StudentExamSchedulePage from '@/features/exam-schedules/student-exam-sche
 
 function ExamSchedulesContent() {
   const { user } = useAuth();
-  const isDoctor =
-    user?.role === 'staff' && (user as any)?.staffType === 'doctor';
+  const staffType = (user as any)?.staffType;
+  const isTeachingOrFinanceStaff =
+    user?.role === 'staff' &&
+    ['doctor', 'teaching_assistant', 'ta', 'accountant'].includes(staffType || '');
 
-  if (isDoctor) {
-    return <StudentExamSchedulePage />;
+  if (isTeachingOrFinanceStaff) {
+    return (
+      <PermissionGuard permission="exam_schedules.manage">
+        <div />
+      </PermissionGuard>
+    );
   }
 
   return (

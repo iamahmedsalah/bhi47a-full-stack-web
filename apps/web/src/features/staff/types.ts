@@ -1,4 +1,4 @@
-import type { Permission, StaffType } from '@student-portal/shared';
+import type { CourseCurriculum, Permission, StaffType } from '@student-portal/shared';
 
 export interface StaffMember {
   _id: string;
@@ -50,6 +50,7 @@ export interface CreateStaffInput extends StaffProfileInput {
 }
 
 export interface StaffAssignedCourse {
+  curricula?: CourseCurriculum[];
   _id: string;
   name: string;
   nameAr?: string;

@@ -91,6 +91,18 @@ export class QueryGradeDto {
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional({
+    enum: ['studentCode', 'courseCode', 'grade', 'createdAt'],
+  })
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsString()
+  sortOrder?: 'asc' | 'desc';
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   page?: number;

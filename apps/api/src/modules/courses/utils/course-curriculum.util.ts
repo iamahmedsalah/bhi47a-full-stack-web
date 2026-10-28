@@ -1,57 +1,40 @@
-import type {
-  CourseDocument,
-  CourseCurriculumDepartment,
-} from '../schemas/course.schema';
+import type { CurriculumCourse } from '@student-portal/shared';
+
+import {
+  normalizeDepartment,
+  getCourseCurricula,
+} from '@student-portal/shared';
 
 const SHARED_LEVEL_THREE = new Set(['317', '411', '318', '319', '326']);
-const DEPARTMENT_ALIASES: Record<string, CourseCurriculumDepartment> = {
-  GENERAL: 'GENERAL',
-  'BUSINESS INFORMATION SYSTEMS': 'BIS',
-  'BUSINESS INFORMATION SYSTEM': 'BIS',
-  'BIS DEPARTMENT': 'BIS',
-  'نظم معلومات الأعمال': 'BIS',
-  'قسم نظم معلومات الأعمال': 'BIS',
-  BIS: 'BIS',
-  ACCOUNTING: 'ACCOUNTING',
-  ACCOUNTANT: 'ACCOUNTING',
-  'ACCOUNTING DEPARTMENT': 'ACCOUNTING',
-  'ACCOUNTANT DEPARTMENT': 'ACCOUNTING',
-  'قسم المحاسبة': 'ACCOUNTING',
-  محاسبة: 'ACCOUNTING',
-  'المحاسبة والتمويل': 'ACCOUNTING',
-  'المحاسبة والمراجعة': 'ACCOUNTING',
-  'قسم المحاسبة والمراجعة': 'ACCOUNTING',
-  'الشعبة العامة': 'GENERAL',
-  عام: 'GENERAL',
-};
-
-export function normalizeDepartment(
-  value?: string,
-): CourseCurriculumDepartment | undefined {
-  return value ? DEPARTMENT_ALIASES[value.trim().toUpperCase()] : undefined;
-}
+export { normalizeDepartment } from '@student-portal/shared';
 
 /** Return the student's curriculum view without mutating the stored course. */
-export function courseForDepartment(
-  course: CourseDocument,
+export function courseForDepartment<T extends CurriculumCourse>(
+  course: T,
   department?: string,
-): CourseDocument | null {
+): T | null {
   const dept = normalizeDepartment(department);
   if (!dept) return null;
 
+  const curricula =
+    course.curricula?.length ||
+    (course.code.toUpperCase() === '326' && course.academicLevel === '3')
+      ? getCourseCurricula(course)
+      : [];
   const assignment =
-    course.curricula?.find((item) => item.department === dept) ??
-    course.curricula?.find((item) => item.department === 'GENERAL');
+    curricula.find((item) => item.department === dept) ??
+    curricula.find((item) => item.department === 'GENERAL');
   if (assignment) {
     return {
       ...course,
+      curricula: [{ ...assignment }],
       academicLevel: assignment.academicLevel,
       level: assignment.academicLevel,
       semester: assignment.semester,
       offeredTerms: [assignment.semester],
       type: assignment.type,
       department: assignment.department,
-    } as CourseDocument;
+    };
   }
   if (course.curricula?.length) return null;
 
@@ -78,15 +61,15 @@ export function courseForDepartment(
       offeredTerms: [semester],
       type: 'elective',
       department: dept,
-    } as CourseDocument;
+    };
   }
   return course;
 }
 
-export function coursesForDepartment(
-  courses: CourseDocument[],
+export function coursesForDepartment<T extends CurriculumCourse>(
+  courses: T[],
   department?: string,
-): CourseDocument[] {
+): T[] {
   return courses.flatMap((course) => {
     const resolved = courseForDepartment(course, department);
     return resolved ? [resolved] : [];

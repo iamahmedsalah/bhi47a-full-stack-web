@@ -447,10 +447,27 @@ export class GradesService implements OnModuleInit {
       filter.status = query.status;
     }
 
+    let sortField = 'createdAt';
+    if (query.sortBy === 'studentCode' || query.sortBy === 'studentName')
+      sortField = 'studentCode';
+    else if (query.sortBy === 'courseCode' || query.sortBy === 'course')
+      sortField = 'courseCode';
+    else if (query.sortBy === 'grade') sortField = 'grade';
+    else if (query.sortBy === 'createdAt') sortField = 'createdAt';
+
+    const sortDir: 1 | -1 =
+      query.sortOrder === 'asc'
+        ? 1
+        : query.sortOrder === 'desc'
+          ? -1
+          : sortField === 'studentCode' || sortField === 'courseCode'
+            ? 1
+            : -1;
+
     const [items, total] = await Promise.all([
       this.gradeModel
         .find(filter)
-        .sort({ createdAt: -1 })
+        .sort({ [sortField]: sortDir })
         .skip(skip)
         .limit(limit)
         .populate('studentId', 'name')

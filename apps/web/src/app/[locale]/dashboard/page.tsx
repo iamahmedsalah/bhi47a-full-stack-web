@@ -35,7 +35,9 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { courseCurriculumSummary } from "@student-portal/shared";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/cn";
@@ -835,7 +837,7 @@ export default function StudentDashboard() {
               >
                 {academicEmailQuery.data?.status === "active"
                   ? locale === "ar" ? "نشط ومفعل" : "Active"
-                  : locale === "ar" ? "قيد الإعداد" : "Pending"}
+                  : locale === "ar" ? "لم يُرفع كتاب بعد" : "No book uploaded yet"}
               </span>
             </div>
 
@@ -1200,16 +1202,20 @@ export default function StudentDashboard() {
               )}
             </div>
 
-            {syllabiQuery.isLoading ? (
+            {syllabiQuery.isError ? (
+              <div role="alert" className="p-4 text-sm text-danger">{locale === 'ar' ? 'تعذر تحميل الكتب. حاول مرة أخرى.' : 'Unable to load books. Please try again.'}<Button variant="outline" onClick={() => syllabiQuery.refetch()}>{locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}</Button></div>
+            ) : syllabiQuery.isLoading ? (
               <div className="flex items-center justify-center py-10">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
+            ) : !(syllabiQuery.data?.registeredCourses?.length || syllabiQuery.data?.availableLevelCourses?.length) ? (
+              <p className="p-4 text-sm text-muted-foreground">{locale === 'ar' ? 'لا توجد مقررات متاحة لقسمك ومستواك في الفصل الحالي.' : 'No courses are available for your department and level this semester.'}</p>
             ) : (
               <div className="space-y-3 max-h-[380px] overflow-y-auto pe-1 scrollbar-thin">
                 {(
                   syllabiQuery.data?.registeredCourses?.length
                     ? syllabiQuery.data.registeredCourses
-                    : (syllabiQuery.data?.availableLevelCourses || []).slice(0, 6)
+                    : (syllabiQuery.data?.availableLevelCourses || [])
                 ).map((course: any) => (
                   <div
                     key={course.code}
@@ -1252,6 +1258,7 @@ export default function StudentDashboard() {
                             ? course.nameAr || course.name
                             : course.nameEn || course.name}
                         </p>
+                        <p className="text-[11px] text-muted-foreground">{courseCurriculumSummary(course, locale)}</p>
                         {course.doctorName && (
                           <p className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
                             <UserCheck className="w-3 h-3 text-primary shrink-0" />

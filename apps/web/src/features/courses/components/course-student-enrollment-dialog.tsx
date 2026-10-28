@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
+import { getCourseCurricula, courseCurriculumSummary, type CourseCurriculum } from '@student-portal/shared';
 import { toast } from 'sonner';
 import { readSheet as readXlsxFile } from 'read-excel-file/browser';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
@@ -47,6 +48,7 @@ export interface CourseStudentEnrollmentDialogProps {
     nameAr?: string;
     level?: string;
     semester?: string;
+    curricula?: CourseCurriculum[];
   }>;
   selectedCourseId?: string | null;
   locale: string;
@@ -115,6 +117,7 @@ export function CourseStudentEnrollmentDialog({
         enrolledCount: number;
         academicYear?: string;
         semester?: string;
+    curricula?: CourseCurriculum[];
       }>(`/admin/courses/${courseId}/enrollments/count`, {
         params: { academicYear, semester },
       });
@@ -136,6 +139,7 @@ export function CourseStudentEnrollmentDialog({
           nameAr?: string;
           level?: string;
           semester?: string;
+    curricula?: CourseCurriculum[];
         }>;
       }>('/admin/courses', {
         params: { limit: 500 },
@@ -153,8 +157,10 @@ export function CourseStudentEnrollmentDialog({
 
   // Filter courses by selected level and registration semester
   const filteredCourses = availableCourses.filter((c) => {
-    if (filterLevel !== 'all' && String(c.level) !== filterLevel) return false;
-    if (semester && c.semester && c.semester !== 'both' && c.semester !== semester) return false;
+    const placements = getCourseCurricula(c);
+    if (filterLevel !== 'all' && !placements.length && String(c.level) !== filterLevel) return false;
+    if (semester && placements.length && !placements.some((item) => item.semester === semester && (filterLevel === 'all' || item.academicLevel === filterLevel))) return false;
+    if (!placements.length && semester && c.semester && c.semester !== semester) return false;
     return true;
   });
 
@@ -164,7 +170,7 @@ export function CourseStudentEnrollmentDialog({
       const match = availableCourses.find((c) => c._id === initialCourseId);
       if (match) {
         if (match.level) setFilterLevel(String(match.level));
-        if (match.semester && ['first', 'second', 'summer'].includes(match.semester)) {
+        if (getCourseCurricula(match).length <= 1 && match.semester && ['first', 'second', 'summer'].includes(match.semester)) {
           setSemester(match.semester as 'first' | 'second' | 'summer');
         }
       }
@@ -710,7 +716,7 @@ export function CourseStudentEnrollmentDialog({
                       <span className="font-mono text-xs font-bold text-primary">
                         {c.code}
                       </span>{' '}
-                      - {isAr ? c.nameAr || c.name : c.name}{' '}
+                      - {isAr ? c.nameAr || c.name : c.name} · {courseCurriculumSummary(c, locale)}{' '}
                       <span className="text-[10px] text-muted-foreground">
                         ({isAr ? `الفرقة ${c.level || 1}` : `L${c.level || 1}`})
                       </span>

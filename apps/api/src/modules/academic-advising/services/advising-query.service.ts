@@ -12,6 +12,7 @@ import {
   type Semester,
 } from '@student-portal/shared';
 
+import { coursesForDepartment } from '../../courses/utils/course-curriculum.util';
 import { Course } from '../../courses/schemas/course.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
 import { User } from '../../users/schemas/user.schema';
@@ -636,7 +637,7 @@ export class AdvisingQueryService {
     const [
       profile,
       studentProfile,
-      courses,
+      storedCourses,
       grades,
       approvedPlan,
       recs,
@@ -644,7 +645,7 @@ export class AdvisingQueryService {
       firstRegistration,
     ] = await Promise.all([
       this.academicProfiles.findOne({ studentId }).lean(),
-      this.studentProfiles.findOne({ studentId }).lean(),
+      this.studentProfiles.findOne({ userId: studentId }).lean(),
       this.courses.find({ isActive: true }).sort({ code: 1 }).lean(),
       this.grades
         .find({ studentId, isPublished: true })
@@ -677,6 +678,10 @@ export class AdvisingQueryService {
     if (!profile)
       throw new NotFoundException('Student academic profile not found');
 
+    const courses = coursesForDepartment(
+      storedCourses,
+      studentProfile?.department,
+    );
     const gradeSummaryByCourse = this.summarizeGradesByCourse(grades);
     const courseCredits = Object.fromEntries(
       courses.map((course) => [

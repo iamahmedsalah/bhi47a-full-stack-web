@@ -328,6 +328,11 @@ function StudentsPageContent() {
   const total = studentsQuery.data?.total ?? 0;
   const totalPages = studentsQuery.data?.totalPages ?? 1;
 
+  const selectedStudentsList = React.useMemo(
+    () => students.filter((s) => selectedKeys.includes(s._id)),
+    [students, selectedKeys],
+  );
+
   const invalidateStudents = () => {
     void queryClient.invalidateQueries({ queryKey: ['students'] });
   };
@@ -687,6 +692,39 @@ function StudentsPageContent() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Select
+              value={`${sortBy || 'createdAt'}:${sortOrder || 'desc'}`}
+              onValueChange={(val) => {
+                const [f, o] = val.split(':');
+                setTableFilter('sortBy' as any, f);
+                setTableFilter('sortOrder' as any, o);
+              }}
+            >
+              <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[190px]">
+                <SelectValue placeholder={locale === 'ar' ? 'الترتيب' : 'Sort by'} />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-card">
+                <SelectItem value="studentCode:asc">
+                  {locale === 'ar' ? 'كود الطالب (تصاعدي 1-9)' : 'Student Code (Asc 1-9)'}
+                </SelectItem>
+                <SelectItem value="studentCode:desc">
+                  {locale === 'ar' ? 'كود الطالب (تنازلي 9-1)' : 'Student Code (Desc 9-1)'}
+                </SelectItem>
+                <SelectItem value="fullName:asc">
+                  {locale === 'ar' ? 'اسم الطالب (أ - ي)' : 'Student Name (A - Z)'}
+                </SelectItem>
+                <SelectItem value="fullName:desc">
+                  {locale === 'ar' ? 'اسم الطالب (ي - أ)' : 'Student Name (Z - A)'}
+                </SelectItem>
+                <SelectItem value="createdAt:desc">
+                  {locale === 'ar' ? 'تاريخ الإضافة (الأحدث أولاً)' : 'Date Added (Newest)'}
+                </SelectItem>
+                <SelectItem value="createdAt:asc">
+                  {locale === 'ar' ? 'تاريخ الإضافة (الأقدم أولاً)' : 'Date Added (Oldest)'}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </FilterBar>
 
           <StudentTable
@@ -698,6 +736,12 @@ function StudentsPageContent() {
             canViewSensitiveStudentData={canViewSensitiveStudentData}
             selectedKeys={selectedKeys}
             onSelectedKeysChange={setSelectedKeys}
+            sortBy={sortBy}
+            sortOrder={sortOrder as 'asc' | 'desc'}
+            onSortChange={(field, order) => {
+              setTableFilter('sortBy' as any, field);
+              setTableFilter('sortOrder' as any, order);
+            }}
             onViewStudent={(st) => setProfileStudent(st)}
             onEditStudent={(st) => {
               setSelectedStudent(st);
@@ -858,14 +902,13 @@ function StudentsPageContent() {
         locale={locale}
       />
       <DepartmentTransferDialog
-        key={isTransferOpen ? transferStudent?._id ?? selectedKeys.join(',') : 'closed'}
         open={isTransferOpen}
         onOpenChange={(open) => {
           setIsTransferOpen(open);
           if (!open) setTransferStudent(null);
         }}
         student={transferStudent}
-        selectedStudents={students.filter((s) => selectedKeys.includes(s._id))}
+        selectedStudents={selectedStudentsList}
         onSuccess={() => {
           setSelectedKeys([]);
           invalidateStudents();

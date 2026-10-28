@@ -163,7 +163,12 @@ describe('CoursesService Unit Tests', () => {
   describe('getStudentSyllabi()', () => {
     it('returns student registered course syllabi and available level syllabi', async () => {
       mockStudentProfileModel.findOne.mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ level: '2' }),
+        lean: jest.fn().mockResolvedValue({
+          level: '2',
+          department: 'BIS',
+          semester: 'first',
+          academicYear: '2026-2027',
+        }),
       });
 
       mockCourseRegistrationModel.findOne.mockReturnValue({
@@ -186,6 +191,8 @@ describe('CoursesService Unit Tests', () => {
         _id: new Types.ObjectId(),
         code: 'CS201',
         name: 'CS 201',
+        department: 'BIS',
+        semester: 'first',
         syllabusPdfUrl: 'http://cdn/cs201.pdf',
       };
 

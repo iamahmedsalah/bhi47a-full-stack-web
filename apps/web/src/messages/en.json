@@ -232,7 +232,35 @@
     "level_1": "Level 1",
     "level_2": "Level 2",
     "level_3": "Level 3",
-    "level_4": "Level 4"
+    "level_4": "Level 4",
+    "placements": {
+      "title": "Program placements",
+      "help": "Add one placement per department. Books and materials are shared.",
+      "department": "Department",
+      "academicLevel": "Level",
+      "semester": "Semester",
+      "type": "Course type",
+      "add": "Add placement",
+      "remove": "Remove placement",
+      "invalid": "Each department can have only one placement",
+      "values": {
+        "1": "First",
+        "2": "Second",
+        "3": "Third",
+        "4": "Fourth",
+        "GENERAL": "General",
+        "BIS": "Business Information Systems",
+        "ACCOUNTING": "Accounting",
+        "first": "First semester",
+        "second": "Second semester",
+        "summer": "Summer semester",
+        "required": "Required",
+        "elective": "Elective",
+        "university_req": "University requirement",
+        "institute_req": "Institute requirement",
+        "specialization_req": "Specialization requirement"
+      }
+    }
   },
   "grades": {
     "title": "Grades Management",

@@ -208,8 +208,12 @@ export class StudentQueryService {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }
     const filter = this.buildFilter(query, doctorStudentUserIds);
-    const sortField =
-      query.sortBy === 'createdAt' ? 'createdAt' : 'studentCode';
+    let sortField = 'studentCode';
+    if (query.sortBy === 'createdAt') sortField = 'createdAt';
+    else if (query.sortBy === 'fullName' || query.sortBy === 'name')
+      sortField = 'fullName';
+    else if (query.sortBy === 'level') sortField = 'level';
+    else if (query.sortBy === 'department') sortField = 'department';
     const sortDir: 1 | -1 = query.sortOrder === 'desc' ? -1 : 1;
 
     return this.studentProfileModel
@@ -242,14 +246,20 @@ export class StudentQueryService {
 
     const filter = this.buildFilter(query, doctorStudentUserIds);
 
-    const sortField =
-      query.sortBy === 'studentCode' ? 'studentCode' : 'createdAt';
+    let sortField = 'createdAt';
+    if (query.sortBy === 'studentCode') sortField = 'studentCode';
+    else if (query.sortBy === 'fullName' || query.sortBy === 'name')
+      sortField = 'fullName';
+    else if (query.sortBy === 'level') sortField = 'level';
+    else if (query.sortBy === 'department') sortField = 'department';
+    else if (query.sortBy === 'createdAt') sortField = 'createdAt';
+
     const sortDir: 1 | -1 =
       query.sortOrder === 'asc'
         ? 1
         : query.sortOrder === 'desc'
           ? -1
-          : query.sortBy === 'studentCode'
+          : sortField === 'studentCode' || sortField === 'fullName'
             ? 1
             : -1;
 

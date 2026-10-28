@@ -7,6 +7,7 @@ import {
 } from './schemas/course-material.schema';
 import { CoursesService } from './courses.service';
 import { CoursesController } from './courses.controller';
+import { RegistrationsModule } from '../registrations/registrations.module';
 import {
   CourseRegistration,
   CourseRegistrationSchema,
@@ -19,6 +20,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
   imports: [
+    RegistrationsModule,
     MongooseModule.forFeature([
       { name: Course.name, schema: CourseSchema },
       { name: CourseMaterial.name, schema: CourseMaterialSchema },

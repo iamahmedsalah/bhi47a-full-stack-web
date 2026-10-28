@@ -16,6 +16,8 @@ import {
   type AdvisingGraphEdge,
   type AdvisingGraphNode,
 } from '../schemas/advising-graph.schema';
+import { StudentProfile } from '../../students/schemas/student-profile.schema';
+import { courseForDepartment } from '../../courses/utils/course-curriculum.util';
 import { Course } from '../../courses/schemas/course.schema';
 import { StudentAcademicProfile } from '../../registrations/schemas/student-academic-profile.schema';
 import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
@@ -42,6 +44,9 @@ export class AdvisingPlanService {
     private readonly validation: PlanValidationService,
     private readonly audit: AdvisingAuditService,
     @Optional() private readonly cacheService?: CacheService,
+    @Optional()
+    @InjectModel(StudentProfile.name)
+    private readonly studentProfiles?: Model<StudentProfile>,
   ) {}
 
   async createPlan(
@@ -213,10 +218,26 @@ export class AdvisingPlanService {
       .findOne({ studentId: plan.studentId })
       .lean();
 
-    const selectedCourseObjs = await this.courses
+    const enrollmentProfile = await this.studentProfiles
+      ?.findOne({ userId: plan.studentId })
+      .lean();
+    const storedCourseObjs = await this.courses
       .find({ _id: { $in: plan.selectedCourses } })
       .lean();
 
+    const scopedCourseObjs = storedCourseObjs.map((course) =>
+      courseForDepartment(course, enrollmentProfile?.department),
+    );
+    if (
+      scopedCourseObjs.some((course) => !course) ||
+      !enrollmentProfile?.department
+    )
+      throw new BadRequestException(
+        'Course does not belong to the student department / المقرر غير متاح لقسم الطالب',
+      );
+    const selectedCourseObjs = scopedCourseObjs.filter(
+      (course) => course !== null,
+    );
     const result = this.validation.validate({
       courses: selectedCourseObjs,
       completedCodes: studentProfile?.completedCourses ?? [],
@@ -258,10 +279,26 @@ export class AdvisingPlanService {
       .findOne({ studentId: plan.studentId })
       .lean();
 
-    const selectedCourseObjs = await this.courses
+    const enrollmentProfile = await this.studentProfiles
+      ?.findOne({ userId: plan.studentId })
+      .lean();
+    const storedCourseObjs = await this.courses
       .find({ _id: { $in: plan.selectedCourses } })
       .lean();
 
+    const scopedCourseObjs = storedCourseObjs.map((course) =>
+      courseForDepartment(course, enrollmentProfile?.department),
+    );
+    if (
+      scopedCourseObjs.some((course) => !course) ||
+      !enrollmentProfile?.department
+    )
+      throw new BadRequestException(
+        'Course does not belong to the student department / المقرر غير متاح لقسم الطالب',
+      );
+    const selectedCourseObjs = scopedCourseObjs.filter(
+      (course) => course !== null,
+    );
     const validationResult = this.validation.validate({
       courses: selectedCourseObjs,
       completedCodes: studentProfile?.completedCourses ?? [],

@@ -107,6 +107,8 @@ function GradesPageContent() {
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("studentCode");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const limit = 10;
 
   const coursesQuery = useQuery({
@@ -126,6 +128,8 @@ function GradesPageContent() {
     page,
     limit,
     examType: activeTab,
+    sortBy,
+    sortOrder,
     ...(search.trim() ? { studentCode: search.trim() } : {}),
     ...(selectedCourse !== "all" ? { courseCode: selectedCourse } : {}),
     ...(selectedStatus !== "all" ? { status: selectedStatus } : {}),
@@ -279,6 +283,7 @@ function GradesPageContent() {
     {
       key: "studentCode",
       header: isAr ? "كود الطالب" : "Student Code",
+      sortable: true,
       render: (item) => (
         <TableCell className="p-4 font-mono">
           <bdi className="font-semibold text-foreground px-2 py-0.5 rounded-squircle bg-muted/60 border border-border/50 text-xs inline-block">
@@ -290,6 +295,7 @@ function GradesPageContent() {
     {
       key: "studentName",
       header: isAr ? "اسم الطالب" : "Student Name",
+      sortable: true,
       render: (item) => (
         <TableCell className="p-4 font-medium text-foreground">
           {item.studentName || "—"}
@@ -299,6 +305,8 @@ function GradesPageContent() {
     {
       key: "course",
       header: isAr ? "المقرر" : "Course",
+      sortable: true,
+      sortKey: "courseCode",
       render: (item) => (
         <TableCell className="p-4">
           <span className="font-semibold text-foreground block text-xs">
@@ -313,6 +321,7 @@ function GradesPageContent() {
     {
       key: "grade",
       header: t("gradeValue"),
+      sortable: true,
       render: (item) => {
         const pct =
           item.percentage ??
@@ -600,6 +609,46 @@ function GradesPageContent() {
             ))}
           </SelectContent>
         </Select>
+
+        <Select
+          value={`${sortBy}:${sortOrder}`}
+          onValueChange={(val) => {
+            const [f, o] = val.split(":");
+            setSortBy(f);
+            setSortOrder(o as "asc" | "desc");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-56">
+            <SelectValue placeholder={isAr ? "الترتيب" : "Sort by"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="studentCode:asc">
+              {isAr ? "كود الطالب (تصاعدي 1-9)" : "Student Code (Asc 1-9)"}
+            </SelectItem>
+            <SelectItem value="studentCode:desc">
+              {isAr ? "كود الطالب (تنازلي 9-1)" : "Student Code (Desc 9-1)"}
+            </SelectItem>
+            <SelectItem value="studentName:asc">
+              {isAr ? "اسم الطالب (أ - ي)" : "Student Name (A - Z)"}
+            </SelectItem>
+            <SelectItem value="studentName:desc">
+              {isAr ? "اسم الطالب (ي - أ)" : "Student Name (Z - A)"}
+            </SelectItem>
+            <SelectItem value="grade:desc">
+              {isAr ? "الدرجة (الأعلى أولاً)" : "Grade (Highest first)"}
+            </SelectItem>
+            <SelectItem value="grade:asc">
+              {isAr ? "الدرجة (الأقل أولاً)" : "Grade (Lowest first)"}
+            </SelectItem>
+            <SelectItem value="createdAt:desc">
+              {isAr ? "تاريخ الإضافة (الأحدث أولاً)" : "Date Added (Newest)"}
+            </SelectItem>
+            <SelectItem value="createdAt:asc">
+              {isAr ? "تاريخ الإضافة (الأقدم أولاً)" : "Date Added (Oldest)"}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </FilterBar>
 
       <p className="text-sm text-muted-foreground">
@@ -618,6 +667,13 @@ function GradesPageContent() {
         isLoading={gradesQuery.isLoading}
         isError={gradesQuery.isError}
         error={gradesQuery.error}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={(field, order) => {
+          setSortBy(field);
+          setSortOrder(order);
+          setPage(1);
+        }}
         emptyMessage={
           isAr
             ? "لا توجد درجات مطابقة للفلاتر."

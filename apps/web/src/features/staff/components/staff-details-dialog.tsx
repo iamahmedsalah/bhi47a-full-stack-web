@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { courseCurriculumSummary, curriculumDepartmentLabel } from '@student-portal/shared';
 import {
   BookOpen,
   Calendar,
@@ -381,13 +382,13 @@ export function StaffDetailsDialog({
                             {course.semester && (
                               <>
                                 <span>·</span>
-                                <span>{t('details.semester', { semester: course.semester })}</span>
+                                <span>{courseCurriculumSummary(course, locale)}</span>
                               </>
                             )}
                             {course.department && (
                               <>
                                 <span>·</span>
-                                <span className="uppercase">{course.department}</span>
+                                <span>{curriculumDepartmentLabel(course.department, locale)}</span>
                               </>
                             )}
                           </div>

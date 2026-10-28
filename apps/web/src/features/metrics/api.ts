@@ -5,6 +5,12 @@ export interface LabelCount {
   count: number;
 }
 
+export function latencyTone(ms: number, warn = 50, danger = 200) {
+  if (ms >= danger) return 'bg-rose-500/15 text-rose-400 border border-rose-500/30';
+  if (ms >= warn) return 'bg-amber-500/15 text-amber-300 border border-amber-500/30';
+  return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+}
+
 export interface RouteLatencyStat {
   route: string;
   method?: string;

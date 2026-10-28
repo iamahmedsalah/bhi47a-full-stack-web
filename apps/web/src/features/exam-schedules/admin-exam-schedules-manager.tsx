@@ -92,7 +92,13 @@ function AdminExamSchedulesManagerContent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const canWriteSchedules = isAdmin || Boolean(user?.permissions?.includes('exam_schedules.write'));
+  const staffType = (user as any)?.staffType;
+  const isTeachingOrFinanceStaff =
+    user?.role === 'staff' &&
+    ['doctor', 'teaching_assistant', 'ta', 'accountant'].includes(staffType || '');
+  const canWriteSchedules =
+    !isTeachingOrFinanceStaff &&
+    (isAdmin || Boolean(user?.permissions?.includes('exam_schedules.write')));
 
   const [selectedType, setSelectedType] = useState<ExamScheduleType>('final');
   const [title, setTitle] = useState('');

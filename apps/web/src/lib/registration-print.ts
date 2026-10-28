@@ -1,4 +1,5 @@
-import html2canvas from "html2canvas";
+import { toCanvas } from "html-to-image";
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import { jsPDF } from "jspdf";
 
 export interface PrintableRegistrationCourse {
@@ -230,7 +231,8 @@ export function getRegistrationCopy(locale: RegistrationLocale) {
 }
 
 export const registrationDocumentStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700;800&display=swap');
+  @font-face { font-family: Cairo; src: url('/fonts/ar/Cairo-VariableFont_slnt,wght.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: Inter; src: url('/fonts/en/DMSans-VariableFont_opsz,wght.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 
   @page {
     size: A4 portrait;
@@ -294,16 +296,16 @@ export const registrationDocumentStyles = `
   .sheet {
     position: relative;
     width: 210mm;
-    height: 297mm;
+    height: auto;
     min-height: 297mm;
-    max-height: 297mm;
+    max-height: none;
     margin: 12px auto;
     padding: 11mm 13mm 10mm;
     background: #ffffff;
     box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
     color: #0f172a;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -655,28 +657,30 @@ export const registrationDocumentStyles = `
     border: 1px solid #cbd5e1;
   }
 
+  tr, .metrics-grid, .notes-box, .signatures-grid, footer { break-inside: avoid; }
+  thead { display: table-header-group; }
   @media print {
     html, body {
       width: 210mm !important;
-      height: 297mm !important;
+      height: auto !important;
       margin: 0 !important;
       padding: 0 !important;
       background: #ffffff !important;
-      overflow: hidden !important;
+      overflow: visible !important;
     }
     .toolbar {
       display: none !important;
     }
     .sheet {
       width: 210mm !important;
-      height: 297mm !important;
+      height: auto !important;
       min-height: 297mm !important;
-      max-height: 297mm !important;
+      max-height: none !important;
       margin: 0 !important;
       padding: 11mm 13mm 10mm !important;
       box-shadow: none !important;
       page-break-after: avoid !important;
-      page-break-inside: avoid !important;
+      page-break-inside: auto !important;
       display: flex !important;
       flex-direction: column !important;
       justify-content: space-between !important;
@@ -706,12 +710,13 @@ export function generateRegistrationDocumentHtml(
   const nationalId = String(info.nationalId || info.nationalIdMasked || "—");
   const academicLevel = localizeAcademicLevel(info.academicLevel, locale);
   const semester = localizeSemester(info.semester, locale);
-  const academicYear = String(form.academicYear || info.academicYear || "2026-2027");
-  const department = String(form.department || info.department || (isAr ? "نظم معلومات الأعمال (BIS)" : "Business Information Systems (BIS)"));
+  const academicYear = String(form.academicYear || info.academicYear || "—");
+  const department = curriculumDepartmentLabel(String(form.department || info.department || ""), locale);
   const gpa = typeof info.gpa === "number" ? info.gpa.toFixed(2) : String(info.gpa ?? "—");
   const advisorName = String(info.advisorName || info.approvedBy || (isAr ? "د. المرشد الأكاديمي" : "Academic Advisor"));
-  const approvedAt = String(info.approvedAt || form.date || new Date().toISOString().slice(0, 10));
+  const approvedAt = String(info.approvedAt || form.date || new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
 
+  const displayDate = /^\d{4}-\d{2}-\d{2}$/.test(approvedAt) ? new Intl.DateTimeFormat(isAr ? "ar-EG" : "en-GB", { timeZone: "Africa/Cairo" }).format(new Date(`${approvedAt}T12:00:00Z`)) : approvedAt;
   const rows = form.registeredCourses
     .map((course, index) => {
       const primaryName = isAr
@@ -792,7 +797,7 @@ export function generateRegistrationDocumentHtml(
         <span class="label">${escapeHtml(item.label)}</span>
         <span class="sub-label">${escapeHtml(item.sub)}</span>
       </div>
-      <strong class="${item.isMono ? "code-text" : ""}">${item.isMono ? `<bdi class="code-text">${escapeHtml(item.value)}</bdi>` : escapeHtml(item.value)}</strong>
+      <strong class="${item.isMono ? "code-text" : ""}">${item.isMono ? `<bdi class="code-text">${escapeHtml(item.value)}</bdi>` : escapeHtml(item.value).replace(escapeHtml(academicYear), `<bdi dir="ltr">${escapeHtml(academicYear)}</bdi>`)}</strong>
       ${item.extraSub ? `<span style="font-size: 8px; color: #64748b; margin-top: 1px;">${escapeHtml(item.extraSub)}</span>` : ""}
     </div>`,
     )
@@ -812,7 +817,7 @@ export function generateRegistrationDocumentHtml(
         <div class="header-content">
           <p class="ministry">${escapeHtml(copy.ministry)}</p>
           <h1>${escapeHtml(form.titleAr && isAr ? form.titleAr : form.titleEn && !isAr ? form.titleEn : copy.title)}</h1>
-          <p class="subtitle">${escapeHtml(copy.subtitle)} · ${escapeHtml(academicYear)}</p>
+          <p class="subtitle">${escapeHtml(copy.subtitle)} · <bdi dir="ltr">${escapeHtml(academicYear)}</bdi></p>
         </div>
         <div class="badge-card">
           <span class="tag-main">${escapeHtml(copy.badgeOfficial)}</span>
@@ -895,7 +900,7 @@ export function generateRegistrationDocumentHtml(
       <footer>
         <div class="footer-left">
           ${escapeHtml(copy.footerNotice)}<br />
-          <span>${escapeHtml(copy.generatedOn)} ${escapeHtml(approvedAt)} · ${escapeHtml(copy.officialSystem)}</span>
+          <span>${escapeHtml(copy.generatedOn)} ${escapeHtml(displayDate)} · ${escapeHtml(copy.officialSystem)}</span>
         </div>
         <div class="footer-serial">
           ${escapeHtml(serialCode)}
@@ -905,155 +910,118 @@ export function generateRegistrationDocumentHtml(
   `;
 }
 
+/** Shared document used by the screen preview, print window and PDF renderer. */
+export function registrationDocumentPage(form: PrintableRegistrationForm, locale: RegistrationLocale): string {
+  return `<!doctype html><html lang="${locale}" dir="${locale === "ar" ? "rtl" : "ltr"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(getRegistrationCopy(locale).title)}</title><style>${registrationDocumentStyles}</style></head><body>${generateRegistrationDocumentHtml(form, locale, "/logo.webp")}</body></html>`;
+}
+
+export async function waitForRegistrationAssets(doc: Document): Promise<void> {
+  await Promise.all([doc.fonts.load('400 12px Cairo'), doc.fonts.load('700 12px Inter')]);
+  await doc.fonts.ready;
+  await Promise.all(Array.from(doc.images, (img) => img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+    img.addEventListener("load", () => resolve(), { once: true });
+    img.addEventListener("error", () => resolve(), { once: true });
+  })));
+}
+
 export function openRegistrationPrintView(
   form: PrintableRegistrationForm,
   action: "print" | "download" = "print",
   initialLocale: RegistrationLocale = "ar",
+  existingWindow?: Window | null,
 ) {
-  const printWindow = window.open("about:blank", "_blank");
-  if (!printWindow) return false;
-
-  const logoUrl = `${window.location.origin}/logo.webp`;
-
-  const windowScript = `
-    <script>
-      let currentLocale = "${initialLocale}";
-      const formData = ${JSON.stringify(form)};
-      const logoUrl = "${logoUrl}";
-
-      function switchLocale(nextLocale) {
-        currentLocale = nextLocale;
-        window.location.search = '?locale=' + nextLocale;
-      }
-
-      window.addEventListener('load', function() {
-        if ("${action}" === "print") {
-          setTimeout(() => window.print(), 350);
-        }
-      });
-    </script>
-  `;
-
-  const copy = getRegistrationCopy(initialLocale);
-  const otherLocale = initialLocale === "ar" ? "en" : "ar";
-  const switchBtnText = initialLocale === "ar" ? "English Version 🇬🇧" : "النسخة العربية 🇸🇦";
-
-  const toolbarHtml = `
-    <div class="toolbar">
-      <button onclick="window.print()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-        ${escapeHtml(copy.printBtn)}
-      </button>
-      <button class="secondary" onclick="window.opener ? window.opener.downloadRegistrationPdf(formData, currentLocale) : window.print()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        ${escapeHtml(copy.downloadBtn)}
-      </button>
-      <button class="outline-btn" onclick="document.body.innerHTML = ''; window.location.href = window.location.pathname + '?locale=${otherLocale}'">
-        ${escapeHtml(switchBtnText)}
-      </button>
-    </div>
-  `;
-
-  const targetLocale = (printWindow.location.search.includes("locale=en") ? "en" : printWindow.location.search.includes("locale=ar") ? "ar" : initialLocale) as RegistrationLocale;
-
-  printWindow.document.write(`<!doctype html>
-<html lang="${targetLocale}" dir="${targetLocale === "ar" ? "rtl" : "ltr"}">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${escapeHtml(form.title || (targetLocale === "ar" ? "استمارة تسجيل المقررات الدراسية" : "Course Registration Form"))}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <style>${registrationDocumentStyles}</style>
-  ${windowScript}
-</head>
-<body>
-  ${toolbarHtml}
-  ${generateRegistrationDocumentHtml(form, targetLocale, logoUrl)}
-</body>
-</html>`);
-
-  printWindow.document.close();
-  printWindow.focus();
+  const printWindow = existingWindow ?? window.open("about:blank", "_blank");
+  if (!printWindow || printWindow.closed) return false;
+  let currentLocale = initialLocale;
+  const render = async (autoPrint: boolean) => {
+    const doc = printWindow.document;
+    doc.open();
+    doc.write(registrationDocumentPage(form, currentLocale));
+    doc.close();
+    const copy = getRegistrationCopy(currentLocale);
+    const toolbar = doc.createElement("nav");
+    toolbar.className = "toolbar";
+    const status = doc.createElement("span");
+    status.setAttribute("role", "alert");
+    status.style.color = "white";
+    const button = (label: string, handler: () => void | Promise<void>) => {
+      const element = doc.createElement("button");
+      element.textContent = label;
+      element.type = "button";
+      element.addEventListener("click", () => { void handler(); });
+      toolbar.appendChild(element);
+    };
+    button(copy.printBtn, async () => { await waitForRegistrationAssets(doc); printWindow.focus(); printWindow.print(); });
+    button(copy.downloadBtn, async () => {
+      status.textContent = copy.generatingPdf;
+      try { await downloadRegistrationPdf(form, currentLocale); status.textContent = ""; }
+      catch { status.textContent = currentLocale === "ar" ? "فشل إنشاء PDF. أعد المحاولة." : "PDF generation failed. Please retry."; }
+    });
+    button(copy.switchLangBtn, () => { currentLocale = currentLocale === "ar" ? "en" : "ar"; void render(false); });
+    toolbar.appendChild(status);
+    doc.body.prepend(toolbar);
+    await waitForRegistrationAssets(doc);
+    if (autoPrint && !printWindow.closed) { printWindow.focus(); printWindow.print(); }
+  };
+  void render(action === "print");
   return true;
 }
 
-export async function downloadRegistrationPdf(
-  form: PrintableRegistrationForm,
-  locale: RegistrationLocale = "ar",
-): Promise<boolean> {
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "0";
-  container.style.top = "0";
-  container.style.width = "210mm";
-  container.style.height = "297mm";
-  container.style.zIndex = "-9999";
-  container.style.opacity = "0";
-  container.style.pointerEvents = "none";
-  container.style.background = "#ffffff";
-  container.style.direction = locale === "ar" ? "rtl" : "ltr";
-
-  const logoUrl = `${window.location.origin}/logo.webp`;
-
-  container.innerHTML = `
-    <style>
-      ${registrationDocumentStyles}
-      .sheet {
-        margin: 0 !important;
-        box-shadow: none !important;
-        width: 210mm !important;
-        height: 297mm !important;
-        min-height: 297mm !important;
-        max-height: 297mm !important;
-        box-sizing: border-box !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-      }
-    </style>
-    ${generateRegistrationDocumentHtml(form, locale, logoUrl)}
-  `;
-
-  document.body.appendChild(container);
-
+export async function downloadRegistrationPdf(form: PrintableRegistrationForm, locale: RegistrationLocale = "ar"): Promise<boolean> {
+  // A separate visible document avoids inherited opacity, theme styles and CSS leakage.
+  const frame = document.createElement("iframe");
+  frame.title = getRegistrationCopy(locale).title;
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;background:white;";
+  const loaded = new Promise<void>((resolve) => frame.addEventListener("load", () => resolve(), { once: true }));
+  frame.srcdoc = registrationDocumentPage(form, locale);
+  document.body.appendChild(frame);
   try {
-    if ("fonts" in document && document.fonts.ready) {
-      await document.fonts.ready;
+    await loaded;
+    const doc = frame.contentDocument;
+    if (!doc) throw new Error("Print document could not be opened");
+    await waitForRegistrationAssets(doc);
+    const sheet = doc.querySelector<HTMLElement>(".sheet");
+    if (!sheet) throw new Error("Registration sheet is missing");
+    const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
+    // Paginate whole rows and sections, keeping the title and course header on every page.
+    const originalRows = Array.from(sheet.querySelectorAll("tbody tr"));
+    const tableBody = sheet.querySelector("tbody");
+    const trailing = Array.from(sheet.children).filter((element) => ["metrics-grid", "notes-box", "signatures-grid"].some((name) => element.classList.contains(name)) || element.tagName === "FOOTER");
+    const maxHeight = 297 * 96 / 25.4;
+    sheet.style.minHeight = "0";
+    sheet.style.justifyContent = "flex-start";
+    sheet.style.margin = "0";
+    // Remove decorative overflow from measurement; all content is measured before capture.
+    sheet.querySelector(".watermark-container")?.remove();
+    originalRows.forEach((row) => row.remove());
+    trailing.forEach((element) => element.remove());
+    let pageCount = 0;
+    const capture = async () => {
+      if (pageCount++) pdf.addPage();
+      sheet.style.minHeight = "297mm";
+      const canvas = await toCanvas(sheet, { pixelRatio: 2, backgroundColor: "#ffffff", width: sheet.offsetWidth, height: sheet.scrollHeight, preferredFontFormat: "truetype" });
+      const imageHeight = canvas.height * 210 / canvas.width;
+      if (imageHeight > 298) throw new Error("A registration section exceeds the printable page height");
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, Math.min(297, imageHeight), undefined, "FAST");
+      sheet.style.minHeight = "0";
+    };
+    for (const row of originalRows) {
+      tableBody?.appendChild(row);
+      if (sheet.scrollHeight > maxHeight && tableBody && tableBody.children.length > 1) {
+        row.remove(); await capture(); tableBody.replaceChildren(row);
+      }
     }
-    await new Promise((resolve) => setTimeout(resolve, 350));
-
-    const sheet = container.querySelector<HTMLElement>(".sheet");
-    if (!sheet) return false;
-
-    const canvas = await html2canvas(sheet, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-      width: sheet.offsetWidth,
-      height: sheet.offsetHeight,
-      windowWidth: sheet.offsetWidth,
-      windowHeight: sheet.offsetHeight,
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-
-    const studentCode = String(form.studentInformation.studentCode || "registration");
-    pdf.save(`registration_${studentCode}_${locale}.pdf`);
+    for (const section of trailing) {
+      sheet.appendChild(section);
+      if (sheet.scrollHeight > maxHeight) {
+        section.remove(); await capture(); tableBody?.replaceChildren();
+        trailing.filter((element) => element.parentElement === sheet).forEach((element) => element.remove());
+        sheet.appendChild(section);
+      }
+    }
+    await capture();
+    const code = String(form.studentInformation.studentCode || "registration").replace(/[^a-zA-Z0-9_-]/g, "_");
+    pdf.save(`registration_${code}_${locale}.pdf`);
     return true;
-  } catch (error) {
-    console.error("Registration PDF generation failed", error);
-    return false;
-  } finally {
-    if (document.body.contains(container)) {
-      document.body.removeChild(container);
-    }
-  }
+  } finally { frame.remove(); }
 }

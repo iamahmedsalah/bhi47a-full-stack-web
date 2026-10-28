@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLocale } from 'next-intl';
 import {
   Dialog,
@@ -78,19 +78,21 @@ export function DepartmentTransferDialog({
   const queryClient = useQueryClient();
 
   const isBulk = !student && selectedStudents.length > 0;
-  const [activeStudents, setActiveStudents] = useState<Student[]>(() =>
-    student ? [student] : selectedStudents,
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
+
+  const baseStudents = useMemo(
+    () => (student ? [student] : selectedStudents),
+    [student, selectedStudents],
   );
 
-  const [prevDeps, setPrevDeps] = useState({ student, selectedStudents, open });
-  if (
-    prevDeps.student !== student ||
-    prevDeps.selectedStudents !== selectedStudents ||
-    prevDeps.open !== open
-  ) {
-    setPrevDeps({ student, selectedStudents, open });
-    setActiveStudents(student ? [student] : selectedStudents);
-  }
+  const activeStudents = useMemo(
+    () => baseStudents.filter((s) => !excludedIds.includes(s._id)),
+    [baseStudents, excludedIds],
+  );
+
+  const removeStudentFromList = (id: string) => {
+    setExcludedIds((prev) => [...prev, id]);
+  };
 
   const [targetDepartment, setTargetDepartment] = useState<string>(() => {
     if (student) {
@@ -108,10 +110,6 @@ export function DepartmentTransferDialog({
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const removeStudentFromList = (id: string) => {
-    setActiveStudents((prev) => prev.filter((s) => s._id !== id));
-  };
 
   const handleTransfer = async () => {
     if (!activeStudents.length) {
@@ -169,7 +167,13 @@ export function DepartmentTransferDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={isSubmitting ? undefined : onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setExcludedIds([]);
+        if (!isSubmitting) onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-w-xl sm:max-w-2xl rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-2xl overflow-hidden" dir={isAr ? 'rtl' : 'ltr'}>
         {/* Header */}
         <DialogHeader className="text-start space-y-1">
@@ -211,7 +215,7 @@ export function DepartmentTransferDialog({
               {isBulk && activeStudents.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => setActiveStudents([])}
+                  onClick={() => setExcludedIds(baseStudents.map((s) => s._id))}
                   className="text-[11px] text-muted-foreground hover:text-rose-400 cursor-pointer transition-colors"
                 >
                   {isAr ? 'إلغاء تحديد الكل' : 'Clear all'}

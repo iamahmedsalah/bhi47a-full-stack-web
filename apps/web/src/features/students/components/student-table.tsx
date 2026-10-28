@@ -107,6 +107,9 @@ interface StudentTableProps {
   onOpenBulkDeactivate: () => void;
   onTransferDepartment?: (student: Student) => void;
   onBulkTransferDepartment?: () => void;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSortChange?: (field: string, order: 'asc' | 'desc') => void;
   onRetry: () => void;
   t: (key: string) => string;
   tCommon: (key: string) => string;
@@ -121,6 +124,9 @@ export function StudentTable({
   canViewSensitiveStudentData,
   selectedKeys,
   onSelectedKeysChange,
+  sortBy,
+  sortOrder,
+  onSortChange,
   onViewStudent,
   onEditStudent,
   onResetPassword,
@@ -146,6 +152,7 @@ export function StudentTable({
     {
       key: 'studentCode',
       header: t('studentCode'),
+      sortable: true,
       className: 'w-28 text-start',
       render: (student) => (
         <TableCell className="w-28 py-2.5 px-3 font-mono font-bold text-foreground">
@@ -164,6 +171,8 @@ export function StudentTable({
     {
       key: 'fullName',
       header: t('studentName'),
+      sortable: true,
+      sortKey: 'fullName',
       className: 'min-w-[180px] text-start',
       render: (student) => {
         const isAr = locale === 'ar';
@@ -409,6 +418,9 @@ export function StudentTable({
         enableSelection={canViewSensitiveStudentData}
         selectedKeys={selectedKeys}
         onSelectedKeysChange={onSelectedKeysChange}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={onSortChange}
         bulkActions={[
           ...(canWriteStudents && selectedKeys.length === 1
             ? [{

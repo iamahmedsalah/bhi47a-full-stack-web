@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Inbox, Loader2 } from 'lucide-react';
 import { getApiErrorDetails } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { GlassCard } from '@/components/ui/glass-card';
@@ -91,6 +91,8 @@ export interface ColumnDef<T> {
   key: string;
   header: React.ReactNode;
   className?: string;
+  sortable?: boolean;
+  sortKey?: string;
   render: (item: T, index: number) => React.ReactNode;
 }
 
@@ -110,6 +112,9 @@ interface DataTableShellProps<T> {
   enableSelection?: boolean;
   selectedKeys?: string[];
   onSelectedKeysChange?: (keys: string[]) => void;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  onSortChange?: (field: string, order: 'asc' | 'desc') => void;
   bulkActions?: {
     label: string;
     onClick: (keys: string[]) => void | Promise<void>;
@@ -134,6 +139,9 @@ export function DataTableShell<T>({
   enableSelection = false,
   selectedKeys = [],
   onSelectedKeysChange,
+  sortBy,
+  sortOrder,
+  onSortChange,
   bulkActions = [],
 }: DataTableShellProps<T>) {
   const allKeys = data.map(keyExtractor);
@@ -166,7 +174,11 @@ export function DataTableShell<T>({
               <button
                 key={action.label}
                 type="button"
-                onClick={() => action.onClick(selectedKeys)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  action.onClick(selectedKeys);
+                }}
                 className={cn(
                   'inline-flex min-h-9 items-center gap-1.5 rounded-squircle border px-3 py-1.5 text-xs font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer',
                   action.variant === 'destructive'
@@ -214,14 +226,49 @@ export function DataTableShell<T>({
                     />
                   </TableHead>
                 )}
-                {columns.map((column) => (
-                  <TableHead
-                    key={column.key}
-                    className={cn('px-4 py-3 text-start text-xs font-semibold text-foreground', column.className)}
-                  >
-                    {column.header}
-                  </TableHead>
-                ))}
+                {columns.map((column) => {
+                  const fieldKey = column.sortKey || column.key;
+                  const isSorted = Boolean(column.sortable && sortBy === fieldKey);
+                  const nextOrder = isSorted && sortOrder === 'asc' ? 'desc' : 'asc';
+
+                  return (
+                    <TableHead
+                      key={column.key}
+                      className={cn('px-4 py-3 text-start text-xs font-semibold text-foreground', column.className)}
+                    >
+                      {column.sortable && onSortChange ? (
+                        <button
+                          type="button"
+                          onClick={() => onSortChange(fieldKey, nextOrder)}
+                          className={cn(
+                            'group inline-flex items-center gap-1.5 transition-colors cursor-pointer select-none rounded-squircle -ms-1 px-1.5 py-0.5 hover:bg-secondary/60 hover:text-foreground',
+                            isSorted ? 'text-primary font-bold' : 'text-foreground',
+                          )}
+                          title={
+                            isSorted
+                              ? sortOrder === 'asc'
+                                ? 'مرتب تصاعدياً (انقر للتنازلي)'
+                                : 'مرتب تنازلياً (انقر للتصاعدي)'
+                              : 'انقر للترتيب'
+                          }
+                        >
+                          <span>{column.header}</span>
+                          {isSorted ? (
+                            sortOrder === 'asc' ? (
+                              <ArrowUp className="h-3.5 w-3.5 text-primary shrink-0" />
+                            ) : (
+                              <ArrowDown className="h-3.5 w-3.5 text-primary shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3.5 w-3.5 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+                          )}
+                        </button>
+                      ) : (
+                        column.header
+                      )}
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             </TableHeader>
             <TableBody>

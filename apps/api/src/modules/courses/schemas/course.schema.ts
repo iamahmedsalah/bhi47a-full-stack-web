@@ -5,18 +5,15 @@ import {
   SEMESTER_VALUES,
   type CourseLevel,
   type Semester,
+  type CourseCurriculum,
 } from '@student-portal/shared';
 
 export type CourseDocument = Course & Document;
 
-export type CourseCurriculumDepartment = 'GENERAL' | 'BIS' | 'ACCOUNTING';
-
-export interface CourseCurriculum {
-  department: CourseCurriculumDepartment;
-  academicLevel: CourseLevel;
-  semester: Semester;
-  type: Course['type'];
-}
+export type {
+  CourseCurriculum,
+  CourseCurriculumDepartment,
+} from '@student-portal/shared';
 
 @Schema({
   collection: 'courses',
@@ -190,6 +187,12 @@ CourseSchema.index({
 });
 CourseSchema.index({ level: 1 });
 CourseSchema.index({ academicLevel: 1, semester: 1 });
+CourseSchema.index({
+  isActive: 1,
+  'curricula.department': 1,
+  'curricula.academicLevel': 1,
+  'curricula.semester': 1,
+});
 CourseSchema.index({ level: 1, code: 1 });
 CourseSchema.index({ level: 1, semester: 1, code: 1 });
 CourseSchema.index({ isActive: 1, code: 1 });

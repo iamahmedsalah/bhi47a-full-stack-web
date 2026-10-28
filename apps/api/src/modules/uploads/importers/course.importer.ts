@@ -144,7 +144,7 @@ export class CourseImporter implements Importer {
               rawCurriculumSemester.toLowerCase()
             : '';
           const curriculumType = rawType?.toLowerCase();
-          const key = `${curriculumDepartment}:${curriculumLevel}:${curriculumSemester}`;
+          const key = curriculumDepartment ?? '';
           if (
             !['GENERAL', 'BIS', 'ACCOUNTING'].includes(
               curriculumDepartment ?? '',

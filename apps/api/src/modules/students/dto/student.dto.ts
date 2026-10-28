@@ -381,7 +381,9 @@ export class SearchStudentQuery {
   @IsString()
   tuitionFeesStatus?: string;
 
-  @ApiPropertyOptional({ enum: ['studentCode', 'createdAt'] })
+  @ApiPropertyOptional({
+    enum: ['studentCode', 'fullName', 'createdAt', 'level', 'department'],
+  })
   @IsOptional()
   @IsString()
   sortBy?: string;

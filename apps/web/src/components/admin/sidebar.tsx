@@ -77,11 +77,6 @@ export default function AdminSidebar() {
       icon: <LayoutDashboard className="h-5 w-5" />,
     },
     {
-      key: "security",
-      href: `/${locale}/admin/security`,
-      icon: <ShieldCheck className="h-5 w-5" />,
-    },
-    {
       key: "attendance",
       href: `/${locale}/admin/attendance`,
       icon: <QrCode className="h-5 w-5" />,
@@ -180,21 +175,31 @@ export default function AdminSidebar() {
         PERMISSIONS.STUDY_PLAN_MANAGE,
       ],
     },
+    {
+      key: "security",
+      href: `/${locale}/admin/security`,
+      icon: <ShieldCheck className="h-5 w-5" />,
+    },
   ].filter((item) => {
     if (user?.role === "admin") return true;
     if (item.adminOnly) return false;
 
+    // Exam schedules management is strictly administrative (hide from doctor, TA, accountant)
+    const staffType = (user as any)?.staffType;
+    const isAcademicOrFinanceStaff =
+      user?.role === "staff" &&
+      ["doctor", "teaching_assistant", "ta", "accountant"].includes(staffType || "");
+    if (isAcademicOrFinanceStaff && item.key === "examSchedules") {
+      return false;
+    }
+
     // Doctor specific visibility rules:
     // - Hide grades, academicEmails, and generic uploads
     // - Keep students, courses, quizzes, attendance, complaints
-    // - Allow examSchedules (viewed in student mode)
-    const isDoctor = user?.role === "staff" && user.staffType === "doctor";
+    const isDoctor = user?.role === "staff" && staffType === "doctor";
     if (isDoctor) {
       if (item.key === "grades" || item.key === "academicEmails" || item.key === "uploads") {
         return false;
-      }
-      if (item.key === "examSchedules") {
-        return true;
       }
     }
 
@@ -393,7 +398,7 @@ export default function AdminSidebar() {
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 start-0 z-40 hidden p-4 md:block transition-all duration-300",
+          "fixed inset-y-0 inset-s-0 z-40 hidden p-4 md:block transition-all duration-300",
           sidebarOpen ? "w-72" : "w-28",
         )}
       >

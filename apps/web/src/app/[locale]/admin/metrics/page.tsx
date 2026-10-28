@@ -49,7 +49,7 @@ import {
 } from '@/components/ui/select';
 import { LoadingState, ErrorState } from '@/components/ui/feedback';
 import { getApiErrorMessage } from '@/lib/api';
-import { downloadFileBlob } from '@/lib/export-utils';
+import { downloadFileBlob, exportMetricsToCsv } from '@/lib/export-utils';
 import {
   getMetricsSummary,
   getRawPrometheusMetrics,
@@ -337,6 +337,96 @@ export default function AdminMetricsPage() {
       `prometheus-metrics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`,
       'text/plain;charset=utf-8',
     );
+  };
+
+  const handleDownloadEndpointsCsv = () => {
+    if (filteredRoutes.length === 0) return;
+    const rows = filteredRoutes.map((r) => {
+      const parts = r.route.split(' ');
+      const method = r.method ?? (parts.length > 1 ? parts[0] : 'GET');
+      return {
+        route: r.route,
+        method,
+        calls: r.count,
+        avgLatencyMs: r.avgLatencyMs,
+        maxLatencyMs: r.maxLatencyMs ?? '',
+        clientErrors4xx: r.clientErrorCount ?? 0,
+        serverErrors5xx: r.serverErrorCount ?? 0,
+        statusBreakdown: Object.entries(r.statusCounts ?? {})
+          .map(([s, c]) => `${s}:${c}`)
+          .join('; '),
+      };
+    });
+    exportMetricsToCsv(
+      rows,
+      `endpoints-latency-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
+      [
+        { key: 'route', header: isAr ? 'المسار' : 'Route' },
+        { key: 'method', header: isAr ? 'الطريقة' : 'Method' },
+        { key: 'calls', header: isAr ? 'عدد الطلبات' : 'Calls' },
+        { key: 'avgLatencyMs', header: isAr ? 'متوسط التأخير (ms)' : 'Avg Latency (ms)' },
+        { key: 'maxLatencyMs', header: isAr ? 'أقصى تأخير (ms)' : 'Max Latency (ms)' },
+        { key: 'clientErrors4xx', header: isAr ? 'أخطاء عميل 4xx' : 'Client 4xx' },
+        { key: 'serverErrors5xx', header: isAr ? 'أخطاء خادم 5xx' : 'Server 5xx' },
+        { key: 'statusBreakdown', header: isAr ? 'تفاصيل الرموز' : 'Status Codes' },
+      ],
+    );
+    toast.success(isAr ? 'تم تصدير سجل المسارات (CSV)' : 'Endpoints report exported as CSV');
+  };
+
+  const handleDownloadSlowQueriesCsv = () => {
+    if (filteredSlowQueries.length === 0) return;
+    const rows = filteredSlowQueries.map((q) => ({
+      collection: q.collection,
+      operation: q.operation,
+      durationMs: q.durationMs,
+      phase: q.isColdStart
+        ? (isAr ? 'إقلاع بارد' : 'Cold Start')
+        : (isAr ? 'تشغيل مستقر' : 'Steady State'),
+      filter: q.filter || '',
+      options: q.options || '',
+      timestamp: q.timestamp,
+    }));
+    exportMetricsToCsv(
+      rows,
+      `slow-queries-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
+      [
+        { key: 'collection', header: isAr ? 'المجموعة' : 'Collection' },
+        { key: 'operation', header: isAr ? 'العملية' : 'Operation' },
+        { key: 'durationMs', header: isAr ? 'المدة (ms)' : 'Duration (ms)' },
+        { key: 'phase', header: isAr ? 'المرحلة' : 'Phase' },
+        { key: 'filter', header: isAr ? 'الفلتر' : 'Filter' },
+        { key: 'options', header: isAr ? 'خيارات الاستعلام' : 'Query Options' },
+        { key: 'timestamp', header: isAr ? 'الوقت' : 'Timestamp' },
+      ],
+    );
+    toast.success(isAr ? 'تم تصدير سجل الاستعلامات البطيئة (CSV)' : 'Slow queries exported as CSV');
+  };
+
+  const handleDownloadSqByCollectionCsv = () => {
+    const list = data?.database?.slowQueriesByCollection ?? [];
+    if (list.length === 0) return;
+    const rows = list.map((agg) => ({
+      collection: agg.collection,
+      operation: agg.operation,
+      count: agg.count,
+      avgMs: agg.avgMs,
+      maxMs: agg.maxMs,
+      coldStartCount: agg.coldStartCount,
+    }));
+    exportMetricsToCsv(
+      rows,
+      `slow-queries-by-collection-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
+      [
+        { key: 'collection', header: isAr ? 'المجموعة' : 'Collection' },
+        { key: 'operation', header: isAr ? 'العملية' : 'Operation' },
+        { key: 'count', header: isAr ? 'العدد' : 'Count' },
+        { key: 'avgMs', header: isAr ? 'المتوسط (ms)' : 'Avg (ms)' },
+        { key: 'maxMs', header: isAr ? 'الأقصى (ms)' : 'Max (ms)' },
+        { key: 'coldStartCount', header: isAr ? 'أثناء الإقلاع' : 'Cold Start Count' },
+      ],
+    );
+    toast.success(isAr ? 'تم تصدير ملخص الاستعلامات حسب المجموعة' : 'Queries by collection exported');
   };
 
   const formatUptime = (seconds: number) => {
@@ -684,147 +774,243 @@ export default function AdminMetricsPage() {
             </Card>
           </div>
 
-          <HttpTrafficDetails traffic={data.traffic} slowRequests={data.recentSlowRequests} isAr={isAr} />
-
           {/* ─── ROW 3: Host OS & Infrastructure ─── */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card className={CARD_CLASS}>
-              <SectionHeader
-                icon={<Cpu className="h-4 w-4 text-cyan-400" />}
-                title={isAr ? 'مواصفات الخادم والنظام (Host OS & Hardware)' : 'Host OS & Hardware Telemetry'}
-                badge={
-                  <Badge variant="outline" className="rounded-squircle text-[10px] font-mono" dir="ltr">
-                    {data.system.nodeVersion}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 items-stretch">
+            <Card className={cn(CARD_CLASS, 'h-full flex flex-col justify-between')}>
+              <div className="space-y-4">
+                <SectionHeader
+                  icon={<Cpu className="h-4 w-4 text-cyan-400" />}
+                  title={isAr ? 'مواصفات الخادم والنظام (Host OS & Hardware)' : 'Host OS & Hardware Telemetry'}
+                  badge={
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="rounded-squircle text-[10px] font-mono text-cyan-400 border-cyan-500/30" dir="ltr">
+                        {data.system.platform || 'linux'} ({data.system.arch || 'x64'})
+                      </Badge>
+                      <Badge variant="outline" className="rounded-squircle text-[10px] font-mono text-teal-400 border-teal-500/30" dir="ltr">
+                        {data.system.nodeVersion}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-squircle text-[10px] font-mono text-emerald-400 border-emerald-500/30" dir="ltr">
+                        {data.system.cpuCores || 1} {isAr ? 'أنوية' : 'Cores'}
+                      </Badge>
+                    </div>
+                  }
+                />
+                <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                  <StatTile
+                    label={isAr ? 'نظام التشغيل والمعمارية' : 'Platform & Arch'}
+                    value={<span className="text-sm">{data.system.platform || 'node'} ({data.system.arch || 'x64'})</span>}
+                  />
+                  <StatTile label={isAr ? 'أنوية المعالج' : 'CPU Cores'} value={data.system.cpuCores || 1} tone="text-cyan-400" />
+                  <StatTile
+                    label={isAr ? 'معدل الحمل (1/5/15د)' : 'Load Avg (1m/5m/15m)'}
+                    value={<span className="text-xs">{data.system.loadAverage ? data.system.loadAverage.join(' / ') : '-'}</span>}
+                  />
+                  <StatTile
+                    label={isAr ? 'ذاكرة النظام (RAM)' : 'Host System RAM'}
+                    value={
+                      <span className="text-xs">
+                        {data.system.totalMemoryMb
+                          ? `${Math.round(data.system.totalMemoryMb - (data.system.freeMemoryMb || 0))} / ${data.system.totalMemoryMb} MB`
+                          : '-'}
+                      </span>
+                    }
+                  />
+                  <StatTile
+                    label={isAr ? 'زمن المعالج (مستخدم/نظام)' : 'CPU Time (user/sys)'}
+                    value={
+                      <span className="text-xs">
+                        {`${Math.round(data.system.cpuUsage.user / 1e6)}s / ${Math.round(data.system.cpuUsage.system / 1e6)}s`}
+                      </span>
+                    }
+                  />
+                  <StatTile
+                    label={isAr ? 'تأخير حلقة الأحداث (p99)' : 'Event Loop Lag (p99)'}
+                    value={<span className="text-xs">{data.system.eventLoop ? `${data.system.eventLoop.p99Ms} ms` : '-'}</span>}
+                    tone={
+                      (data.system.eventLoop?.p99Ms ?? 0) >= 100
+                        ? 'text-rose-400'
+                        : (data.system.eventLoop?.p99Ms ?? 0) >= 50
+                        ? 'text-amber-400'
+                        : 'text-emerald-400'
+                    }
+                  />
+                  <StatTile
+                    label={isAr ? 'مدة تشغيل الخادم' : 'Process Uptime'}
+                    value={<span className="text-xs">{formatUptime(data.uptimeSeconds)}</span>}
+                    tone="text-emerald-400"
+                  />
+                  <StatTile
+                    label={isAr ? 'نسبة إشغال الرام' : 'Host RAM Load'}
+                    value={
+                      <span className="text-xs">
+                        {data.system.totalMemoryMb
+                          ? `${Math.round(((data.system.totalMemoryMb - (data.system.freeMemoryMb || 0)) / data.system.totalMemoryMb) * 100)}%`
+                          : '-'}
+                      </span>
+                    }
+                    tone={
+                      data.system.totalMemoryMb &&
+                      ((data.system.totalMemoryMb - (data.system.freeMemoryMb || 0)) / data.system.totalMemoryMb) >= 0.85
+                        ? 'text-rose-400'
+                        : 'text-teal-400'
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Host Runtime Environment & Capacity Summary */}
+              <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Server className="h-4 w-4 text-cyan-400" />
+                    <span className="text-xs font-bold text-foreground">
+                      {isAr ? 'بيئة تشغيل السيرفر (VPS / Server Host)' : 'VPS Host Runtime & Capacity'}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="rounded-squircle font-mono text-[10px] text-cyan-400 border-cyan-500/30">
+                    {data.system.platform || 'Linux'} VPS
                   </Badge>
-                }
-              />
-              <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                <StatTile
-                  label={isAr ? 'نظام التشغيل والمعمارية' : 'Platform & Arch'}
-                  value={<span className="text-sm">{data.system.platform || 'node'} ({data.system.arch || 'x64'})</span>}
-                />
-                <StatTile label={isAr ? 'أنوية المعالج' : 'CPU Cores'} value={data.system.cpuCores || 1} tone="text-cyan-400" />
-                <StatTile
-                  label={isAr ? 'معدل الحمل (1/5/15د)' : 'Load Avg (1m/5m/15m)'}
-                  value={<span className="text-xs">{data.system.loadAverage ? data.system.loadAverage.join(' / ') : '-'}</span>}
-                />
-                <StatTile
-                  label={isAr ? 'ذاكرة النظام (RAM)' : 'Host System RAM'}
-                  value={
-                    <span className="text-xs">
-                      {data.system.totalMemoryMb
-                        ? `${Math.round(data.system.totalMemoryMb - (data.system.freeMemoryMb || 0))} / ${data.system.totalMemoryMb} MB`
-                        : '-'}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
+                    <span>{isAr ? 'استهلاك ذاكرة المضيف (Host RAM):' : 'Host RAM Utilization:'}</span>
+                    <span>
+                      <bdi>{Math.round((data.system.totalMemoryMb ?? 0) - (data.system.freeMemoryMb || 0))} MB</bdi> /{' '}
+                      <bdi>{data.system.totalMemoryMb ?? 0} MB</bdi>
+                      {' '}({data.system.totalMemoryMb ? Math.round((((data.system.totalMemoryMb) - (data.system.freeMemoryMb || 0)) / data.system.totalMemoryMb) * 100) : 0}%)
                     </span>
-                  }
-                />
-                <StatTile
-                  label={isAr ? 'زمن المعالج (مستخدم/نظام)' : 'CPU Time (user/sys)'}
-                  value={
-                    <span className="text-xs">
-                      {`${Math.round(data.system.cpuUsage.user / 1e6)}s / ${Math.round(data.system.cpuUsage.system / 1e6)}s`}
-                    </span>
-                  }
-                />
-                <StatTile
-                  label={isAr ? 'تأخير حلقة الأحداث (p99)' : 'Event Loop Lag (p99)'}
-                  value={<span className="text-xs">{data.system.eventLoop ? `${data.system.eventLoop.p99Ms} ms` : '-'}</span>}
-                  tone={
-                    (data.system.eventLoop?.p99Ms ?? 0) >= 100
-                      ? 'text-rose-400'
-                      : (data.system.eventLoop?.p99Ms ?? 0) >= 50
-                      ? 'text-amber-400'
-                      : 'text-emerald-400'
-                  }
-                />
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/50">
+                    <div
+                      className="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, Math.round((((data.system.totalMemoryMb ?? 1) - (data.system.freeMemoryMb || 0)) / (data.system.totalMemoryMb || 1)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isAr
+                    ? `تأخير حلقة أحداث Node.js: متوسط ${data.system.eventLoop?.meanMs ?? 0} ms · أقصى ${data.system.eventLoop?.maxMs ?? 0} ms. استجابة المعالج مستقرة.`
+                    : `Node.js Event Loop Lag: mean ${data.system.eventLoop?.meanMs ?? 0} ms · max ${data.system.eventLoop?.maxMs ?? 0} ms.`}
+                </p>
               </div>
             </Card>
 
-            <Card className={CARD_CLASS}>
-              <SectionHeader
-                icon={<Layers className="h-4 w-4 text-emerald-400" />}
-                title={isAr ? 'حالة البنية التحتية والخدمات (Infrastructure)' : 'Infrastructure & Services'}
-                badge={
-                  <Badge variant="outline" className="rounded-squircle text-[10px] text-emerald-400 border-emerald-500/30">
-                    {isAr ? 'فحص تلقائي' : 'Auto Health'}
-                  </Badge>
-                }
-              />
-              <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
-                <div className={TILE_CLASS}>
-                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'طوابير Redis / BullMQ' : 'Redis Queue / BullMQ'}</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block h-2 w-2 rounded-full ${data.infrastructure?.redis === 'online' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {data.infrastructure?.redis === 'online'
-                        ? isAr ? 'متصل (Distributed)' : 'Online (Redis)'
-                        : isAr ? 'داخلي (Inline Fallback)' : 'Inline Fallback'}
-                    </span>
-                  </div>
-                </div>
-                <div className={TILE_CLASS}>
-                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'منظومة التخزين المؤقت (Cache)' : 'Cache Engine'}</span>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-2 w-2 rounded-full ${
-                        data.cache?.status === 'healthy'
-                          ? 'bg-emerald-400'
-                          : data.cache?.status === 'degraded'
-                          ? 'bg-amber-400'
-                          : 'bg-muted-foreground'
-                      }`}
-                    />
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {data.cache
-                        ? data.cache.effectiveDriver === 'hybrid'
+            <Card className={cn(CARD_CLASS, 'h-full flex flex-col justify-between')}>
+              <div className="space-y-4">
+                <SectionHeader
+                  icon={<Layers className="h-4 w-4 text-emerald-400" />}
+                  title={isAr ? 'حالة البنية التحتية والخدمات (Infrastructure)' : 'Infrastructure & Services'}
+                  badge={
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="rounded-squircle text-[10px] text-emerald-400 border-emerald-500/30 font-mono">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 me-1.5" />
+                        MongoDB {data.database.status === 'connected' ? (isAr ? 'متصل' : 'Ready') : (isAr ? 'منقطع' : 'Down')}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'rounded-squircle text-[10px] font-mono',
+                          data.infrastructure?.redis === 'online'
+                            ? 'text-emerald-400 border-emerald-500/30'
+                            : 'text-amber-400 border-amber-500/30',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-1.5 w-1.5 rounded-full me-1.5',
+                            data.infrastructure?.redis === 'online' ? 'bg-emerald-400' : 'bg-amber-400',
+                          )}
+                        />
+                        {data.infrastructure?.redis === 'online' ? 'Redis Online' : 'Inline Fallback'}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-squircle text-[10px] text-teal-400 border-teal-500/30 font-mono">
+                        {data.cache?.effectiveDriver === 'hybrid'
                           ? 'Hybrid L1+L2'
-                          : data.cache.effectiveDriver === 'redis'
+                          : data.cache?.effectiveDriver === 'redis'
                           ? 'Redis L2'
-                          : isAr ? 'ذاكرة محلية (0 Quota)' : 'In-Memory (0 Quota)'
-                        : isAr ? 'محلي' : 'Memory'}
-                    </span>
+                          : isAr ? 'ذاكرة محلية' : 'Memory Cache'}
+                      </Badge>
+                    </div>
+                  }
+                />
+                <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                  <div className={TILE_CLASS}>
+                    <span className="text-muted-foreground block text-[11px]">{isAr ? 'طوابير Redis / BullMQ' : 'Redis Queue / BullMQ'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 rounded-full ${data.infrastructure?.redis === 'online' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {data.infrastructure?.redis === 'online'
+                          ? isAr ? 'متصل (Distributed)' : 'Online (Redis)'
+                          : isAr ? 'داخلي (Inline Fallback)' : 'Inline Fallback'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className={TILE_CLASS}>
-                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'عناصر الذاكرة المؤقتة (L1 Items)' : 'L1 Cached Objects'}</span>
-                  <div className="flex items-center gap-1.5" dir="ltr">
-                    <span className="font-mono text-xs font-bold text-teal-400">
-                      {data.cache?.itemCount ?? 0}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {data.cache?.redisConnected ? '(Redis Connected)' : '(Quota Safe)'}
-                    </span>
+                  <div className={TILE_CLASS}>
+                    <span className="text-muted-foreground block text-[11px]">{isAr ? 'منظومة التخزين المؤقت (Cache)' : 'Cache Engine'}</span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2 w-2 rounded-full ${
+                          data.cache?.status === 'healthy'
+                            ? 'bg-emerald-400'
+                            : data.cache?.status === 'degraded'
+                            ? 'bg-amber-400'
+                            : 'bg-muted-foreground'
+                        }`}
+                      />
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {data.cache
+                          ? data.cache.effectiveDriver === 'hybrid'
+                            ? 'Hybrid L1+L2'
+                            : data.cache.effectiveDriver === 'redis'
+                            ? 'Redis L2'
+                            : isAr ? 'ذاكرة محلية (0 Quota)' : 'In-Memory (0 Quota)'
+                          : isAr ? 'محلي' : 'Memory'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className={TILE_CLASS}>
-                  <span className="text-muted-foreground block text-[11px]">{isAr ? 'إشعارات Firebase (FCM)' : 'Firebase Admin SDK'}</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block h-2 w-2 rounded-full ${data.infrastructure?.firebase === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                    <span className="font-mono text-xs font-bold text-foreground">
-                      {data.infrastructure?.firebase === 'online'
-                        ? isAr ? 'مفعّل (Active)' : 'Active FCM'
-                        : isAr ? 'غير مفعّل (Disabled)' : 'Disabled'}
-                    </span>
+                  <div className={TILE_CLASS}>
+                    <span className="text-muted-foreground block text-[11px]">{isAr ? 'عناصر الذاكرة المؤقتة (L1 Items)' : 'L1 Cached Objects'}</span>
+                    <div className="flex items-center gap-1.5" dir="ltr">
+                      <span className="font-mono text-xs font-bold text-teal-400">
+                        {data.cache?.itemCount ?? 0}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {data.cache?.redisConnected ? '(Redis Connected)' : '(Quota Safe)'}
+                      </span>
+                    </div>
                   </div>
+                  <div className={TILE_CLASS}>
+                    <span className="text-muted-foreground block text-[11px]">{isAr ? 'إشعارات Firebase (FCM)' : 'Firebase Admin SDK'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 rounded-full ${data.infrastructure?.firebase === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {data.infrastructure?.firebase === 'online'
+                          ? isAr ? 'مفعّل (Active)' : 'Active FCM'
+                          : isAr ? 'غير مفعّل (Disabled)' : 'Disabled'}
+                      </span>
+                    </div>
+                  </div>
+                  <StatTile
+                    label={isAr ? 'حالة الاتصال (readyState)' : 'Mongo readyState'}
+                    value={<span className="text-xs">{data.database.readyState}</span>}
+                    tone={data.database.readyState === 1 ? 'text-emerald-400' : 'text-rose-400'}
+                  />
+                  <StatTile
+                    label={isAr ? 'زمن فحص الـ Ping' : 'DB Ping Latency'}
+                    value={<span className="text-xs">{data.database.pingLatencyMs >= 0 ? `${data.database.pingLatencyMs} ms` : '-'}</span>}
+                    tone="text-emerald-400"
+                  />
+                  <StatTile
+                    label={isAr ? 'حجم مجمع الاتصالات (min/max)' : 'Connection Pool (min/max)'}
+                    value={<span className="text-xs">{data.database.pool ? `${data.database.pool.minPoolSize} / ${data.database.pool.maxPoolSize}` : '-'}</span>}
+                  />
+                  <StatTile
+                    label={isAr ? 'حد الاستعلام البطيء' : 'Slow Query Threshold'}
+                    value={<span className="text-xs">{`${data.database.slowQueryThresholdMs ?? 100} ms`}</span>}
+                  />
                 </div>
-                <StatTile
-                  label={isAr ? 'حالة الاتصال (readyState)' : 'Mongo readyState'}
-                  value={<span className="text-xs">{data.database.readyState}</span>}
-                  tone={data.database.readyState === 1 ? 'text-emerald-400' : 'text-rose-400'}
-                />
-                <StatTile
-                  label={isAr ? 'زمن فحص الـ Ping' : 'DB Ping Latency'}
-                  value={<span className="text-xs">{data.database.pingLatencyMs >= 0 ? `${data.database.pingLatencyMs} ms` : '-'}</span>}
-                  tone="text-emerald-400"
-                />
-                <StatTile
-                  label={isAr ? 'حجم مجمع الاتصالات (min/max)' : 'Connection Pool (min/max)'}
-                  value={<span className="text-xs">{data.database.pool ? `${data.database.pool.minPoolSize} / ${data.database.pool.maxPoolSize}` : '-'}</span>}
-                />
-                <StatTile
-                  label={isAr ? 'حد الاستعلام البطيء' : 'Slow Query Threshold'}
-                  value={<span className="text-xs">{`${data.database.slowQueryThresholdMs ?? 100} ms`}</span>}
-                />
               </div>
 
               {/* Redis provider and process-local cache activity */}
@@ -858,6 +1044,9 @@ export default function AdminMetricsPage() {
             </Card>
           </div>
 
+          {/* ─── HTTP Traffic Diagnostics & Slow Requests ─── */}
+          <HttpTrafficDetails traffic={data.traffic} slowRequests={data.recentSlowRequests} isAr={isAr} />
+
           {/* ─── ROW 4: Endpoints latency (all routes, filterable) ─── */}
           <Card className={CARD_CLASS}>
             <div className="flex flex-col gap-2 border-b border-border/60 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -872,14 +1061,27 @@ export default function AdminMetricsPage() {
                     : 'All endpoints recorded since boot — search, filter by method, and sort'}
                 </p>
               </div>
-              <span className="text-xs font-mono text-muted-foreground">
-                <bdi>{filteredRoutes.length}</bdi> / <bdi>{allRoutes.length}</bdi>
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono text-muted-foreground">
+                  <bdi>{filteredRoutes.length}</bdi> / <bdi>{allRoutes.length}</bdi>
+                </span>
+                <Button
+                  id="metrics-endpoints-download"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadEndpointsCsv}
+                  disabled={filteredRoutes.length === 0}
+                  className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <div className="relative">
-                <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="metrics-route-search"
                   value={routeSearch}
@@ -929,7 +1131,7 @@ export default function AdminMetricsPage() {
                 {isAr ? 'لا توجد مسارات مطابقة' : 'No matching endpoints'}
               </p>
             ) : (
-              <div className="max-h-[420px] overflow-auto">
+              <div className="max-h-105 overflow-auto">
                 <table className="w-full text-xs text-start">
                   <thead className="sticky top-0 bg-card/95 backdrop-blur-sm">
                     <tr className="border-b border-border/60 text-muted-foreground">
@@ -1001,9 +1203,21 @@ export default function AdminMetricsPage() {
                 icon={<HardDrive className="h-4 w-4 text-amber-400" />}
                 title={isAr ? 'ملخص الاستعلامات البطيئة حسب المجموعة' : 'Slow Queries by Collection'}
                 badge={
-                  <Badge variant="outline" className="rounded-squircle text-[10px]">
-                    {isAr ? 'منذ التشغيل' : 'Since boot'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="rounded-squircle text-[10px]">
+                      {isAr ? 'منذ التشغيل' : 'Since boot'}
+                    </Badge>
+                    <Button
+                      id="metrics-sq-by-collection-download"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadSqByCollectionCsv}
+                      className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
+                    </Button>
+                  </div>
                 }
               />
               <div className="overflow-x-auto">
@@ -1053,7 +1267,7 @@ export default function AdminMetricsPage() {
                     : `Last 50 queries over ${data.database.slowQueryThresholdMs ?? 100}ms. Queries in the first ${data.database.coldStartWindowSeconds ?? 90}s after boot are flagged as cold-start.`}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-mono text-muted-foreground">
                   <bdi>{filteredSlowQueries.length}</bdi> / <bdi>{slowQueries.length}</bdi>
                 </span>
@@ -1069,12 +1283,23 @@ export default function AdminMetricsPage() {
                     <span>{isAr ? 'إعادة ضبط' : 'Reset'}</span>
                   </Button>
                 )}
+                <Button
+                  id="metrics-sq-download"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadSlowQueriesCsv}
+                  disabled={filteredSlowQueries.length === 0}
+                  className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
+                </Button>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <div className="relative lg:col-span-1">
-                <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="metrics-sq-search"
                   value={sqSearch}
@@ -1149,7 +1374,7 @@ export default function AdminMetricsPage() {
                 </p>
               </div>
             ) : (
-              <div className="max-h-[480px] overflow-auto">
+              <div className="max-h-120rflow-auto">
                 <table className="w-full text-xs text-start">
                   <thead className="sticky top-0 bg-card/95 backdrop-blur-sm">
                     <tr className="border-b border-border/60 text-muted-foreground">
@@ -1184,11 +1409,11 @@ export default function AdminMetricsPage() {
                             {q.durationMs} ms
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-muted-foreground max-w-[220px] truncate text-[11px]" dir="ltr" title={q.filter}>
+                        <td className="py-2.5 px-3 text-muted-foreground max-w-55 truncate text-[11px]" dir="ltr" title={q.filter}>
                           {q.filter || '-'}
                         </td>
                         <td
-                          className={`py-2.5 px-3 max-w-[260px] truncate text-[11px] ${q.options?.includes('limit=NONE') ? 'text-rose-300' : 'text-muted-foreground'}`}
+                          className={`py-2.5 px-3 max-w-65 truncate text-[11px] ${q.options?.includes('limit=NONE') ? 'text-rose-300' : 'text-muted-foreground'}`}
                           dir="ltr"
                           title={q.options}
                         >
@@ -1283,7 +1508,7 @@ export default function AdminMetricsPage() {
               <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <div className="relative flex-1">
-                    <SlidersHorizontal className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <SlidersHorizontal className="pointer-events-none absolute inset-s-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="metrics-raw-search"
                       value={rawSearch}
@@ -1340,7 +1565,7 @@ export default function AdminMetricsPage() {
                     </div>
                     <pre
                       dir="ltr"
-                      className="max-h-[420px] overflow-auto rounded-xl border border-border/70 bg-background/70 p-3 text-start font-mono text-[10.5px] leading-relaxed text-muted-foreground"
+                      className="max-h-105 overflow-auto rounded-xl border border-border/70 bg-background/70 p-3 text-start font-mono text-[10.5px] leading-relaxed text-muted-foreground"
                     >
                       {rawLines.map((line, idx) => (
                         <div key={idx} className={line.startsWith('#') ? 'text-sky-300/70' : 'text-foreground/90'}>

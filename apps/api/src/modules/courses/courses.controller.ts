@@ -47,7 +47,12 @@ export class CoursesController {
   @Get('courses')
   @Roles('student', 'admin', 'staff')
   @ApiOperation({ summary: 'List active courses' })
-  async findActive(@Query() query: QueryCourseDto) {
+  async findActive(
+    @Query() query: QueryCourseDto,
+    @CurrentUser() user: { _id: string; role: string },
+  ) {
+    if (user.role === 'student')
+      return this.coursesService.findStudentCourses(query, user._id.toString());
     return this.coursesService.findAll({ ...query, isActive: true });
   }
 
@@ -113,6 +118,28 @@ export class CoursesController {
       `attachment; filename="${result.filename}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
     );
     res.send(result.buffer);
+  }
+
+  @Get('admin/courses/export')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_READ)
+  async exportCourses(
+    @Query() query: QueryCourseDto,
+    @CurrentUser() caller: { _id: string; role: string },
+    @Res() res: Response,
+  ) {
+    const buffer = await this.coursesService.exportCourses(query, caller);
+    const filename = 'courses_export.xlsx';
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buffer);
   }
 
   @Post('admin/courses/:id/enroll-students-excel')

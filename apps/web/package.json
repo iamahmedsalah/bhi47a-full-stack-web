@@ -9,6 +9,7 @@
     "preview": "next build && next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
+    "test:registration": "node tests/registration-print.browser.mjs",
     "test:location": "node --test tests/attendance-location.test.mjs tests/attendance-presentation.test.mjs tests/attendance-table.test.mjs tests/student-name.test.mjs",
     "clean": "rimraf .next"
   },

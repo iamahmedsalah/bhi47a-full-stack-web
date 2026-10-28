@@ -56,7 +56,10 @@ import {
   recommendCourses,
 } from './utils/course-recommendation.util';
 import { isCourseOfferedForTerm } from './utils/term-availability.util';
-import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
+import {
+  courseForDepartment,
+  coursesForDepartment,
+} from '../courses/utils/course-curriculum.util';
 import { isRegistrationTermCurrentlyOpen } from './utils/registration-term.util';
 import { isNewStudentWithoutAcademicHistory } from './utils/academic-standing.util';
 import { getRegistrationSelectionLimits } from './utils/registration-selection.util';
@@ -1633,10 +1636,20 @@ export class RegistrationsService {
         gpa: academicProfile.gpa,
         advisorName: advisor,
         approvedBy: advisor,
-        approvedAt: registration.approvedAt?.toISOString().slice(0, 10),
+        approvedAt: registration.approvedAt
+          ? new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Africa/Cairo',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(registration.approvedAt)
+          : undefined,
       },
       registeredCourses: registration.courses.map((code) => {
-        const course = courses.find((item) => item.code === code);
+        const storedCourse = courses.find((item) => item.code === code);
+        const course = storedCourse
+          ? (courseForDepartment(storedCourse, department) ?? storedCourse)
+          : undefined;
         return {
           code,
           courseName: course?.nameAr ?? course?.name ?? code,
@@ -1645,9 +1658,11 @@ export class RegistrationsService {
           creditHours: course?.creditHours ?? 0,
           type: course?.type ?? 'required',
           status:
-            registration.source === 'advisor'
-              ? 'advisor-approved'
-              : 'registered',
+            registration.status !== 'approved'
+              ? registration.status
+              : registration.source === 'advisor'
+                ? 'advisor-approved'
+                : 'registered',
         };
       }),
       totalCreditHours: registration.totalCreditHours,
@@ -1655,7 +1670,12 @@ export class RegistrationsService {
       advisorNotes: registration.advisorNotes,
       studentSignature: '',
       advisorSignature: '',
-      date: new Date().toISOString().slice(0, 10),
+      date: new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Cairo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date()),
     };
   }
 
@@ -1767,6 +1787,70 @@ export class RegistrationsService {
 
     counts.sort((a, b) => a.count - b.count);
     return counts[0].advisor._id;
+  }
+
+  /** Bulk imports build a registration one course at a time; enforce upper limits
+   * and academic eligibility without applying the final minimum to each row. */
+  async assertAdministrativeCourseAddition(
+    studentId: string,
+    course: CourseDocument,
+    existingCodes: string[],
+    semester: 'first' | 'second' | 'summer',
+  ) {
+    const profile = await this.getAcademicProfile(studentId);
+    const completed = new Set(normalizeCourseCodes(profile.completedCourses));
+    if (
+      completed.has(course.code.toUpperCase()) ||
+      !hasPassedPrerequisites(course, completed) ||
+      course.equivalentCourses?.some((code) =>
+        completed.has(code.toUpperCase()),
+      )
+    ) {
+      throw new BadRequestException(
+        'Course is already completed or prerequisites are not passed / المقرر ناجح سابقًا أو متطلباته غير مكتملة',
+      );
+    }
+    if (
+      Number(course.academicLevel ?? course.level) >
+        Number(profile.academicLevel) ||
+      (course.minimumGpa != null && profile.gpa < course.minimumGpa)
+    ) {
+      throw new BadRequestException(
+        'Course level or GPA requirement is not met / لم تتحقق شروط المستوى أو المعدل',
+      );
+    }
+    const selected = normalizeCourseCodes([...existingCodes, course.code]);
+    if (
+      course.coRequisites?.some(
+        (code) =>
+          !completed.has(code.toUpperCase()) &&
+          !selected.includes(code.toUpperCase()),
+      )
+    ) {
+      throw new BadRequestException(
+        'Required co-requisite is not registered / المتطلب المتزامن غير مسجل',
+      );
+    }
+    const [rule, courses] = await Promise.all([
+      this.getRuleForGpa(profile.gpa),
+      this.courseModel
+        .find({ code: { $in: selected } })
+        .select('creditHours')
+        .lean(),
+    ]);
+    const limits = getRegistrationSelectionLimits(semester);
+    const hours = courses.reduce(
+      (sum, item) => sum + (item.creditHours ?? 0),
+      0,
+    );
+    if (
+      selected.length > Math.min(rule.maxCourses, limits.maxCourses) ||
+      hours > Math.min(rule.maxCreditHours, limits.maxCreditHours)
+    ) {
+      throw new BadRequestException(
+        'Registration course or credit limit exceeded / تجاوز الحد الأقصى للمقررات أو الساعات',
+      );
+    }
   }
 
   private async validateCourseSelection(
@@ -2167,7 +2251,7 @@ export class RegistrationsService {
     );
   }
 
-  private async resolveRegistrationPeriod(
+  async resolveRegistrationPeriod(
     studentId: string,
     preferredSemester?: string,
   ): Promise<{ academicYear: string; semester: string }> {

@@ -152,6 +152,11 @@ export default function CourseRegistrationPage() {
 
   const printRegistration = async (registration?: Registration | null, action: 'print' | 'download' | 'view' = 'print') => {
     if (!registration) return;
+    const printWindow = action === 'print' ? window.open('about:blank', '_blank') : null;
+    if (action === 'print' && !printWindow) {
+      toast.error(isEnglish ? 'Allow pop-ups to open the registration sheet' : 'يرجى السماح بالنوافذ المنبثقة');
+      return;
+    }
     try {
       const data = await getRegistrationPrintData(registration._id);
       if (action === 'view') {
@@ -160,12 +165,13 @@ export default function CourseRegistrationPage() {
       } else if (action === 'download') {
         await downloadRegistrationPdf(data, isEnglish ? 'en' : 'ar');
       } else {
-        if (!openRegistrationPrintView(data, action, isEnglish ? 'en' : 'ar')) {
+        if (!openRegistrationPrintView(data, action, isEnglish ? 'en' : 'ar', printWindow)) {
           toast.error(isEnglish ? 'Allow pop-ups to open the registration sheet' : 'يرجى السماح بالنوافذ المنبثقة لفتح استمارة التسجيل');
         }
       }
     } catch {
-      toast.error(isEnglish ? 'Failed to fetch registration slip' : 'فشل جلب استمارة التسجيل');
+      printWindow?.close();
+      toast.error(isEnglish ? 'Failed to prepare registration PDF' : 'فشل تجهيز استمارة التسجيل أو ملف PDF');
     }
   };
 
@@ -175,6 +181,7 @@ export default function CourseRegistrationPage() {
       const newReg = await submitDirectRegistration(selected);
       toast.success(isEnglish ? 'Registration successful' : 'تم تسجيل المواد بنجاح');
       void queryClient.invalidateQueries({ queryKey: registrationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
       if (newReg) await printRegistration(newReg, 'view');
     } catch {
       toast.error(isEnglish ? 'Registration failed' : 'فشل تسجيل المواد');
@@ -204,6 +211,7 @@ export default function CourseRegistrationPage() {
       const newReg = await submitApprovedPlan();
       toast.success(isEnglish ? 'The approved advising plan was registered successfully' : 'تم تسجيل خطة الإرشاد المعتمدة بنجاح');
       void queryClient.invalidateQueries({ queryKey: registrationKeys.all });
+      void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
       if (newReg) await printRegistration(newReg, 'view');
     } catch {
       toast.error(isEnglish ? 'Failed to submit approved plan' : 'فشل تسجيل الخطة المعتمدة');

@@ -7,6 +7,20 @@ import {
   Optional,
 } from '@nestjs/common';
 import { CacheService } from '../../core/cache/cache.service';
+import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
+import { courseCurriculumFilter } from './utils/course-filter.util';
+import {
+  courseForDepartment,
+  coursesForDepartment,
+} from './utils/course-curriculum.util';
+import {
+  getCourseCurricula,
+  normalizeDepartment,
+  type Semester,
+  type CourseLevel,
+} from '@student-portal/shared';
+import { RegistrationsService } from '../registrations/registrations.service';
+import { isCourseOfferedForTerm } from '../registrations/utils/term-availability.util';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -53,6 +67,8 @@ export interface CourseSyllabusFile {
 
 export interface StudentSyllabiResponse {
   studentLevel: string;
+  academicYear: string;
+  semester: string;
   registeredCount: number;
   registeredCourses: Array<Record<string, unknown> & { isRegistered: boolean }>;
   availableLevelCourses: Array<
@@ -74,9 +90,15 @@ export class CoursesService {
     private userModel: Model<UserDocument>,
     private configService: ConfigService,
     @Optional() private cacheService?: CacheService,
+    @Optional() private registrationsService?: RegistrationsService,
   ) {}
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
+    if (dto.curricula?.length) {
+      dto.offeredTerms = [
+        ...new Set(dto.curricula.map((item) => item.semester)),
+      ];
+    }
     const existing = await this.courseModel.findOne({
       code: dto.code.toUpperCase(),
     });
@@ -223,24 +245,15 @@ export class CoursesService {
       filter.$and = andConditions;
     }
 
-    if (query.level) {
-      filter.level = query.level;
-    }
-
-    if (query.academicLevel) {
-      filter.academicLevel = query.academicLevel;
-    }
-
-    if (query.semester) {
-      filter.semester = query.semester;
-    }
+    andConditions.push(courseCurriculumFilter(query));
+    filter.$and = andConditions;
 
     if (query.isActive !== undefined) {
       filter.isActive = query.isActive;
     }
 
     const cacheKey = !query.search
-      ? `courses:list:${query.doctorId || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
+      ? `courses:list:${caller?._id || 'all'}:${query.doctorId || 'all'}:${query.teachingAssistantId || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
       : null;
 
     if (cacheKey && this.cacheService) {
@@ -275,6 +288,103 @@ export class CoursesService {
     return createPaginatedResult(items, total, page, limit);
   }
 
+  async findStudentCourses(query: QueryCourseDto, studentId: string) {
+    const profile = await this.studentProfileModel
+      .findOne({ userId: new Types.ObjectId(studentId) })
+      .lean();
+    const department = normalizeDepartment(profile?.department);
+    if (!department)
+      throw new BadRequestException(
+        'Student department is missing or unknown / يرجى مراجعة شؤون الطلاب لتحديد القسم',
+      );
+    const result = await this.findAll(
+      { ...query, department, isActive: true },
+      { _id: studentId, role: 'student' },
+    );
+    return { ...result, items: coursesForDepartment(result.items, department) };
+  }
+
+  async exportCourses(
+    query: QueryCourseDto,
+    caller: { _id: string; role: string },
+  ) {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Courses');
+    const headers = [
+      'courseCode',
+      'courseName',
+      'courseNameAr',
+      'courseNameEn',
+      'level',
+      'semester',
+      'department',
+      'creditHours',
+      'type',
+      'prerequisites',
+      'coRequisites',
+      'equivalentCourses',
+      'offeredTerms',
+      'recommendedSemester',
+      'minimumGpa',
+      'registrationPriority',
+      'description',
+      'programCurricula',
+      'status',
+    ];
+    sheet.columns = headers.map((key) => ({ header: key, key, width: 18 }));
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const result = await this.findAll({ ...query, page, limit: 100 }, caller);
+      for (const course of result.items) {
+        sheet.addRow({
+          courseCode: course.code,
+          courseName: course.name,
+          courseNameAr: course.nameAr,
+          courseNameEn: course.nameEn,
+          level: course.level,
+          semester: course.semester,
+          department: course.department,
+          creditHours: course.creditHours,
+          type: course.type,
+          prerequisites: course.prerequisites?.join(', '),
+          coRequisites: course.coRequisites?.join(', '),
+          equivalentCourses: course.equivalentCourses?.join(', '),
+          offeredTerms: course.offeredTerms?.join(', '),
+          recommendedSemester: course.recommendedSemester,
+          minimumGpa: course.minimumGpa,
+          registrationPriority: course.registrationPriority,
+          description: course.description,
+          programCurricula: getCourseCurricula(course)
+            .map(
+              (item) =>
+                `${item.department}:${item.academicLevel}:${item.semester}:${item.type}`,
+            )
+            .join('|'),
+          status: course.isActive ? 'Active' : 'Inactive',
+        });
+      }
+      totalPages = result.totalPages;
+      page++;
+    } while (page <= totalPages);
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    sheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet.columns.forEach((column) => {
+      let width = 12;
+      column.eachCell?.({ includeEmpty: false }, (cell) => {
+        width = Math.max(width, cell.text.length + 2);
+      });
+      column.width = Math.min(width, 80);
+    });
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
   async findOne(id: string): Promise<CourseDocument> {
     const course = await this.courseModel.findById(id);
     if (!course) {
@@ -284,6 +394,11 @@ export class CoursesService {
   }
 
   async update(id: string, dto: UpdateCourseDto): Promise<CourseDocument> {
+    if (dto.curricula?.length) {
+      dto.offeredTerms = [
+        ...new Set(dto.curricula.map((item) => item.semester)),
+      ];
+    }
     const course = await this.findOne(id);
 
     if (dto.code && dto.code.toUpperCase() !== course.code) {
@@ -312,6 +427,8 @@ export class CoursesService {
     if (dto.syllabusPdfUrl === null || dto.syllabusPdfUrl === '') {
       updatePayload.syllabusPdfUrl = null;
       updatePayload.syllabusPdfName = null;
+      updatePayload.syllabusPdfData = null;
+      updatePayload.syllabusUpdatedAt = null;
     }
     if (dto.coverImageUrl === null || dto.coverImageUrl === '') {
       updatePayload.coverImageUrl = null;
@@ -527,6 +644,14 @@ export class CoursesService {
     file: CourseSyllabusFile,
     caller?: any,
   ) {
+    if (
+      file.size > MAX_HTTP_UPLOAD_SIZE_BYTES ||
+      file.buffer.length > MAX_HTTP_UPLOAD_SIZE_BYTES
+    ) {
+      throw new BadRequestException(
+        'PDF must not exceed 4MB / الحد الأقصى لملف PDF هو 4 ميجابايت',
+      );
+    }
     const course = await this.findOne(courseId);
     this.validateCourseDoctorOrAdmin(course, caller);
 
@@ -627,6 +752,7 @@ export class CoursesService {
     }
 
     await course.save();
+    await this.cacheService?.delPattern('courses:*');
 
     return {
       message: 'تم رفع وتحديث منهج المقرر بنجاح',
@@ -823,10 +949,25 @@ export class CoursesService {
       .findOne({ userId: studentUserObjId })
       .lean();
 
+    if (!profile) throw new NotFoundException('Student profile not found');
+    if (!normalizeDepartment(profile.department)) {
+      throw new BadRequestException(
+        'يرجى مراجعة شؤون الطلاب لتحديد القسم الدراسي / Student department is missing or unknown',
+      );
+    }
+    const period = this.registrationsService
+      ? await this.registrationsService.resolveRegistrationPeriod(
+          studentUserId,
+          profile.semester,
+        )
+      : { academicYear: profile.academicYear, semester: profile.semester };
+
     const latestRegistration = await this.courseRegistrationModel
       .findOne({
         studentId: studentUserObjId,
         status: 'approved',
+        academicYear: period.academicYear,
+        semester: period.semester,
       })
       .sort({ createdAt: -1 })
       .lean();
@@ -849,7 +990,11 @@ export class CoursesService {
         : [],
       this.courseModel
         .find({
-          $or: [{ level: studentLevel }, { academicLevel: studentLevel }],
+          ...courseCurriculumFilter({
+            level: studentLevel as CourseLevel,
+            department: normalizeDepartment(profile.department),
+            semester: period.semester as Semester,
+          }),
           isActive: true,
         })
         .sort({ code: 1 })
@@ -858,15 +1003,22 @@ export class CoursesService {
 
     return {
       studentLevel,
+      academicYear: period.academicYear,
+      semester: period.semester,
       registeredCount: registeredCourses.length,
       registeredCourses: registeredCourses.map((c) => ({
-        ...c,
+        ...(courseForDepartment(c, profile.department) ?? c),
         isRegistered: true,
       })),
-      availableLevelCourses: levelCourses.map((c) => ({
-        ...c,
-        isRegistered: registeredCodes.includes(c.code.toUpperCase()),
-      })),
+      availableLevelCourses: coursesForDepartment(
+        levelCourses,
+        profile.department,
+      )
+        .filter((c) => isCourseOfferedForTerm(c, period.semester as Semester))
+        .map((c) => ({
+          ...c,
+          isRegistered: registeredCodes.includes(c.code.toUpperCase()),
+        })),
     };
   }
 
@@ -878,7 +1030,10 @@ export class CoursesService {
     this.validateCourseDoctorOrAdmin(course, caller);
     course.syllabusPdfUrl = undefined;
     course.syllabusPdfName = undefined;
+    course.syllabusPdfData = undefined;
+    course.syllabusUpdatedAt = undefined;
     await course.save();
+    await this.cacheService?.delPattern('courses:*');
     return { message: 'تم إزالة ملف المنهج بنجاح' };
   }
 
@@ -1388,7 +1543,7 @@ export class CoursesService {
       candidateArray.length > 0
         ? this.studentProfileModel
             .find({ studentCode: { $in: candidateArray } })
-            .select('_id studentCode userId isBlocked')
+            .select('_id studentCode userId isBlocked department')
             .lean()
             .exec()
         : Promise.resolve([] as any[]),
@@ -1532,11 +1687,42 @@ export class CoursesService {
         continue;
       }
 
+      const scopedCourse = courseForDepartment(
+        course.toObject ? (course.toObject() as CourseDocument) : course,
+        profile?.department,
+      );
+      if (!scopedCourse || !isCourseOfferedForTerm(scopedCourse, semester)) {
+        errors.push(
+          `السطر ${rowNum}: المقرر ${course.code} غير متاح لقسم الطالب في هذا الفصل / Course is not offered for this student's department and term`,
+        );
+        continue;
+      }
+
       const studentUserIdStr = studentUserId.toString();
       if (processedStudentIds.has(studentUserIdStr)) {
         continue;
       }
       processedStudentIds.add(studentUserIdStr);
+
+      const existingCodes: string[] =
+        regByStudentId.get(studentUserIdStr)?.courses ?? [];
+      if (
+        !existingCodes.some((code) => code.toUpperCase() === courseCodeUpper)
+      ) {
+        try {
+          await this.registrationsService?.assertAdministrativeCourseAddition(
+            studentUserIdStr,
+            scopedCourse,
+            existingCodes,
+            semester,
+          );
+        } catch (error) {
+          errors.push(
+            `السطر ${rowNum}: ${error instanceof Error ? error.message : 'تعذر التحقق من أهلية التسجيل'}`,
+          );
+          continue;
+        }
+      }
 
       // Sync level & block/tuition status if profile exists
       let isStudentBlocked = profile?.isBlocked || false;
@@ -1629,7 +1815,10 @@ export class CoursesService {
         } else {
           registrationBulkOps.push({
             updateOne: {
-              filter: { _id: existingReg._id },
+              filter: {
+                _id: existingReg._id,
+                courses: { $ne: courseCodeUpper },
+              },
               update: {
                 $addToSet: { courses: courseCodeUpper },
                 $set: { status: 'approved', approvedAt: new Date() },

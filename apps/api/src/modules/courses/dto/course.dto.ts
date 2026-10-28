@@ -13,6 +13,7 @@ import {
   ValidateNested,
   ValidateIf,
   ArrayMaxSize,
+  ArrayUnique,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -48,6 +49,8 @@ export class CreateCourseDto {
   @ApiPropertyOptional({ type: [CourseCurriculumDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(3)
+  @ArrayUnique((item: CourseCurriculumDto) => item.department)
   @ValidateNested({ each: true })
   @Type(() => CourseCurriculumDto)
   curricula?: CourseCurriculumDto[];
@@ -221,6 +224,8 @@ export class UpdateCourseDto {
   @ApiPropertyOptional({ type: [CourseCurriculumDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(3)
+  @ArrayUnique((item: CourseCurriculumDto) => item.department)
   @ValidateNested({ each: true })
   @Type(() => CourseCurriculumDto)
   curricula?: CourseCurriculumDto[];
@@ -403,6 +408,11 @@ export class UpdateCourseDto {
 }
 
 export class QueryCourseDto {
+  @ApiPropertyOptional({ enum: ['GENERAL', 'BIS', 'ACCOUNTING'] })
+  @IsOptional()
+  @IsIn(['GENERAL', 'BIS', 'ACCOUNTING'])
+  department?: 'GENERAL' | 'BIS' | 'ACCOUNTING';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -17,6 +17,7 @@ import {
 } from '../../students/schemas/student-profile.schema';
 import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
 import { Grade } from '../../grades/schemas/grade.schema';
+import { coursesForDepartment } from '../../courses/utils/course-curriculum.util';
 import { RulesBasedRecommendationProvider } from '../../registrations/recommendations/rules-based-recommendation.provider';
 import { mergeAcademicCourseProgress } from '../../registrations/utils/academic-course-progress.util';
 import { AdvisingAuditService } from './advising-audit.service';
@@ -108,7 +109,10 @@ export class AdvisingRecommendationService {
 
     await this.assertPreviousSemesterReady(caseItem, student);
 
-    const activeCourses = await this.courses.find({ isActive: true });
+    const activeCourses = coursesForDepartment(
+      await this.courses.find({ isActive: true }).lean(),
+      studentProfile?.department,
+    );
 
     const grades = await this.grades
       .find({ studentId: caseItem.studentId })
