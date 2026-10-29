@@ -12,4 +12,4 @@ The checkout already contained enrollment, complaints and metrics patches when t
 - Existing route-catalog and unified metrics UI changes remain present. Removed an unnecessary assertion that failed API lint; other unrelated metric-screen work was preserved.
 - Regression coverage: enrollment read scaling and GPA equivalence, rule bounds/overlap/repair, partial/uncertain writes, telemetry privacy/isolation, actual MongoDB writes/races/retries, complaints projection/filtering/counts/permissions/detail, and Arabic/English browser interactions.
 
-There is no production migration, secret change, production index build, deployment, commit or push. Validation 
+This task did not initiate a production migration, secret change, production index build, deployment, commit or push. Another process advanced local HEAD to `082deec` during verification; the final fixture typing and report corrections remain in the working tree. Validation and measurement limitations are recorded in [BEFORE_AFTER.md](BEFORE_AFTER.md).

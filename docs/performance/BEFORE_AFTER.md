@@ -48,7 +48,7 @@ Local complaint execution uses `createdAt_-1__id_-1`, examines 100 documents/100
 | Check | Observed result |
 | --- | --- |
 | CSV verification | Passed: 296 endpoint rows, 9 correlations, 50 slow-query samples, 2 traffic rows |
-| Focused performance/telemetry/session units | 41 tests passed across 10 suites; production partial-error-envelope regression also passed (1 test) |
+| Focused performance/telemetry/session units | 43 distinct tests passed across 11 suites over focused runs: 41 initial cases, the production partial-error-envelope case, and the new legacy-code credit case. The finalized enrollment suite was rerun: 11/11 passed |
 | Real MongoDB/HTTP performance fixture | Five tests passed in the retained measurement run, including concurrent write protection and complaint authorization |
 | Arabic/English complaints browser regression | Passed for both locales: summaries, detail retries, overlapping requests, replies, closing and same-page ticket-link changes |
 | Web production build and fresh root manifests | Passed |
@@ -56,4 +56,19 @@ Local complaint execution uses `createdAt_-1__id_-1`, examines 100 documents/100
 | Workflow/query-plan/auth-admission/E2E-safety and unified-metrics script tests | 12 passed |
 | Attendance location/presentation/table/student-name tests | 26 passed |
 | Final workspace typecheck | Passed, 4/4 cached tasks |
-| Workspace lint | Failed: 52 API err
+| Final E2E fixture typecheck | Passed with a fresh `tsc --noEmit --incremental false -p apps/api/tsconfig.e2e.json` run |
+| Focused source lint | Passed for the changed performance source/tests; the fixture also passed its final lint/fix check |
+| Workspace lint | Failed: 52 API errors in the recorded full run. The test await/formatting errors from this work were then corrected; upload/schedule errors remain in concurrent edits. Detailed log: `outputs/performance/final-lint.log` |
+| Full API units | Last full run: 56/60 suites passed, 399/400 tests passed; one failing performance expectation was corrected and independently verified afterward. Three suites could not load concurrently changing upload imports. The final full unit rerun was declined at the execution-permission step and was not attempted by another mechanism |
+| Full API E2E | 2/3 suites passed, 10/24 tests passed. AppModule initialization failed with localhost MongoDB connection timeouts during a resource-heavy build; failed authentication/passkey fixtures are not considered validated |
+| Builds | Earlier monorepo attempt failed during concurrent upload/schedule edits. Both web production build and the final direct API `nest build` retry subsequently passed. No fresh successful combined root build is claimed |
+
+The final legacy-code regression preserves exact case-sensitive course-credit queries per student even when the batch shares course data. The retained timing fixture uses canonical uppercase codes; the edge-case correction does not alter its workload or query-count formula. No historical/cached result is presented as a fresh successful full CI run. The current checkout is not release-verified. Fix the remaining global lint errors, rerun the full unit/E2E workflow in a stable environment, and obtain representative staging evidence before release.
+
+During verification another process advanced local HEAD to `082deec` and committed most of the working tree. This task did not initiate a commit or push. The final uncommitted changes are the correctly typed session-plan fixture and the updated measurement/change reports. Final API build, fixture typecheck and performance-source lint passed; include the remaining diff before running CI on the intended release commit. The temporary MongoDB and frontend used for local verification were stopped.
+
+## Representative staging acceptance still required
+
+Use an approved staging copy with actual 25/100/500 row batches, invalid rows, existing enrollments, missing profiles, override and no-override cases. Record exact row outcomes and integrity checks, query counts per student, p50/p95, concurrent imports and duplicate retries. Keep identity, data, indexes, app versions, filters, pool settings and concurrency fixed. Compare complaint page/query/count/enrichment/serialization independently and retain HTTP bytes and BSON-size observations. Capture checkout and command histograms alongside `auth.session`; do not subtract overlapping database durations from HTTP time.
+
+No staging access was provided and no production load test was run. Production p95 and app-wide error-rate improvement remain unclaimed.

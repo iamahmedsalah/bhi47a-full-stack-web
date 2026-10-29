@@ -35,7 +35,7 @@ import { MetricsService } from '../src/core/metrics/metrics.service';
 import { createMongooseMetricsPlugin } from '../src/database/mongoose-metrics.plugin';
 import { createHttpMetricsMiddleware } from '../src/core/metrics/http-metrics.middleware';
 import { getRequestQueryContext } from '../src/core/metrics/request-query-context';
-import { AuthSessionSchema, type AuthSessionRecord } from '../src/modules/auth/services/auth-session-store.service';
+import { AuthSessionSchema } from '../src/modules/auth/services/auth-session-store.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
 
 // Synthetic, credential-free localhost fixtures. This is not a staging benchmark.
@@ -373,16 +373,20 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
           .explain('executionStats'),
       ),
       session: planSummary(
-        await connection.db!.collection<AuthSessionRecord>(sessions.collection.name)
-          .find({
-            _id: 'a'.repeat(64),
-            userId: String(ids[0]),
-            tokenVersion: 0,
-            revokedAt: null,
-            expiresAt: { $gt: new Date() },
-          })
-          .limit(1)
-          .explain('executionStats'),
+        await connection.db!.command({
+          explain: {
+            find: sessions.collection.name,
+            filter: {
+              _id: 'a'.repeat(64),
+              userId: String(ids[0]),
+              tokenVersion: 0,
+              revokedAt: null,
+              expiresAt: { $gt: new Date() },
+            },
+            limit: 1,
+          },
+          verbosity: 'executionStats',
+        }),
       ),
     };
     report.complaintBsonSizes = await complaints.aggregate([
