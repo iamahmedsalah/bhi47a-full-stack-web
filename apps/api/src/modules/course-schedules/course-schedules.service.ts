@@ -270,6 +270,14 @@ export class CourseSchedulesService {
     return { message: 'تم حذف موعد المحاضرة/السكشن بنجاح' };
   }
 
+  async clearAll(): Promise<{ message: string; deletedCount: number }> {
+    const result = await this.scheduleModel.deleteMany({});
+    return {
+      message: 'تم مسح جميع مواعيد المحاضرات والسكاشن بنجاح',
+      deletedCount: result.deletedCount || 0,
+    };
+  }
+
   /**
    * Generate standardized Excel template for lecture, section, and lab schedules.
    */

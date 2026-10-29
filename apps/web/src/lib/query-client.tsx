@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useState } from 'react';
+import { queryRetry, queryRetryDelay } from './query-retry-policy';
 
 export function AppQueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -12,7 +13,8 @@ export function AppQueryProvider({ children }: { children: ReactNode }) {
             staleTime: 30_000,
             gcTime: 5 * 60_000,
             refetchOnWindowFocus: false,
-            retry: 1,
+            retry: queryRetry,
+            retryDelay: queryRetryDelay,
           },
           mutations: {
             retry: 0,

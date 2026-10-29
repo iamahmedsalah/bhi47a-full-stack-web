@@ -14,6 +14,8 @@ import type {
   RegistrationResponseJSON,
 } from '@simplewebauthn/server';
 import { Transform } from 'class-transformer';
+import { PASSKEY_UNLOCK_METHODS } from './passkey.schemas';
+import type { PasskeyUnlockMethod } from './passkey.schemas';
 
 export class UpdatePasskeySettingsDto {
   // Preserve the raw value: global implicit conversion turns "false" into true.
@@ -37,6 +39,10 @@ export class PasskeyNameDto {
   @IsString()
   @Length(1, 80)
   name!: string;
+
+  @IsOptional()
+  @IsIn(PASSKEY_UNLOCK_METHODS)
+  unlockMethod?: PasskeyUnlockMethod;
 }
 
 export class PasskeyLoginOptionsDto {

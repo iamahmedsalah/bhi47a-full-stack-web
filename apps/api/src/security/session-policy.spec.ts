@@ -19,7 +19,7 @@ function records() {
       if (value && typeof value === 'object' && '$gt' in value)
         return row[key] > value.$gt;
       if (value && typeof value === 'object' && '$ne' in value)
-        return row[key] != null;
+        return value.$ne === null ? row[key] != null : row[key] !== value.$ne;
       return value === null ? row[key] == null : row[key] === value;
     });
   return {
@@ -37,7 +37,10 @@ function records() {
         row = { ...filter, ...update.$setOnInsert };
         rows.push(row);
       }
-      if (row) Object.assign(row, update.$set);
+      if (row) {
+        Object.assign(row, update.$set);
+        for (const key of Object.keys(update.$unset ?? {})) delete row[key];
+      }
       return Promise.resolve({ matchedCount: row ? 1 : 0 });
     }),
     deleteMany: jest.fn((filter: Row) => {
@@ -48,6 +51,15 @@ function records() {
     findOneAndDelete: jest.fn((filter: Row) => {
       const index = rows.findIndex((r) => matches(r, filter));
       return Promise.resolve(index < 0 ? null : rows.splice(index, 1)[0]);
+    }),
+    find: jest.fn((filter: Row) => {
+      const query = {
+        select: (_: string) => query,
+        sort: (_: Row) => query,
+        limit: (_: number) => query,
+        lean: () => Promise.resolve(rows.filter((row) => matches(row, filter))),
+      };
+      return query;
     }),
   };
 }
@@ -99,6 +111,72 @@ describe('revocable session policy', () => {
     await store.revoke(first, 'first');
     await store.assertActive(second, 'second');
   });
+  it('registers concurrent retries once without extending expiry, then refuses to resurrect a revoked session', async () => {
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const token = claims();
+    await Promise.all(Array.from({ length: 8 }, () => store.register(token)));
+    expect(model.rows).toHaveLength(1);
+    const createdAt = model.rows[0].createdAt;
+    const expiresAt = model.rows[0].expiresAt;
+    await store.register({ ...token, exp: token.exp + 3600 });
+    expect(model.rows[0].createdAt).toBe(createdAt);
+    expect(model.rows[0].expiresAt).toBe(expiresAt);
+    await store.revoke(token, 'raw');
+    await expect(store.register(token)).rejects.toThrow(
+      'Session revoked or expired',
+    );
+    expect(model.rows).toHaveLength(1);
+  });
+  it('accepts a concurrent unique-index race only when the winning record is active and owned by the same user', async () => {
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const token = claims();
+    await store.register(token);
+    model.updateOne.mockRejectedValueOnce(
+      Object.assign(new Error(), { code: 11000 }),
+    );
+    await store.register(token);
+    model.updateOne.mockRejectedValueOnce(
+      Object.assign(new Error(), { code: 11000 }),
+    );
+    await expect(
+      store.register({ ...token, sub: 'different-user' }),
+    ).rejects.toThrow();
+    model.updateOne.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(store.register(token)).rejects.toThrow('database unavailable');
+  });
+  it('hides fabricated legacy metadata and clears it when upgrading only the current session', async () => {
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const token = claims();
+    await store.register(token);
+    Object.assign(model.rows[0], {
+      ip: '156.204.18.92',
+      location: 'Cairo',
+      networkType: 'Wi-Fi',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0) Chrome/130.0',
+    });
+    const id = sessionDigest(token.sid!);
+    expect((await store.list(userId, id))[0]).toMatchObject({
+      current: true,
+      os: 'Windows',
+      ip: undefined,
+      location: undefined,
+      networkType: undefined,
+    });
+    expect(await store.needsMetadata(token)).toBe(true);
+    await store.upgradeMetadata(token, {
+      metadataVersion: 1,
+      device: 'computer',
+      ip: '127.0.0.1',
+    });
+    expect(await store.needsMetadata(token)).toBe(false);
+    expect(model.rows[0].location).toBeUndefined();
+    expect(model.rows[0].networkType).toBeUndefined();
+    expect((await store.list(userId, id))[0].ip).toBe('127.0.0.1');
+    expect(await store.list('different-user', id)).toEqual([]);
+  });
   it.each([
     { iss: 'wrong' },
     { aud: 'wrong' },
@@ -147,6 +225,60 @@ describe('revocable session policy', () => {
     expect(options.httpOnly).toBe(true);
     expect(options.maxAge).toBeGreaterThan(3500000);
     expect(options.maxAge).toBeLessThanOrEqual(3600000);
+  });
+  it('reuses a verified same-browser session across password/passkey sign-ins without merging other browsers', async () => {
+    const jwt = new JwtService({
+      secret: 'synthetic-session-secret-at-least-32-bytes',
+      signOptions: { expiresIn: '1h' },
+    });
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const service = new AuthSessionService({} as never, jwt, config, store);
+    const first = service.generateToken(userId, 'student', 0);
+    await service.setCookieToken({ cookie: jest.fn() } as never, first);
+    const cookie = jest.fn();
+    await service.setCookieToken(
+      { cookie } as never,
+      service.generateToken(userId, 'student', 0),
+      { cookies: { access_token: first } } as never,
+    );
+    expect(cookie.mock.calls[0][1]).toBe(first);
+    expect(model.rows).toHaveLength(1);
+    await service.setCookieToken(
+      { cookie: jest.fn() } as never,
+      service.generateToken(userId, 'student', 0),
+    );
+    expect(model.rows).toHaveLength(2);
+    await store.revoke(jwt.verify(first), first);
+    await service.setCookieToken(
+      { cookie } as never,
+      service.generateToken(userId, 'student', 0),
+      { cookies: { access_token: first } } as never,
+    );
+    expect(model.rows).toHaveLength(3);
+    expect(cookie.mock.calls.at(-2)![1]).not.toBe(first);
+  });
+  it('does not reuse another account or an older token version from the same browser', async () => {
+    const jwt = new JwtService({
+      secret: 'synthetic-session-secret-at-least-32-bytes',
+      signOptions: { expiresIn: '1h' },
+    });
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const service = new AuthSessionService({} as never, jwt, config, store);
+    const first = service.generateToken(userId, 'student', 0);
+    await service.setCookieToken({ cookie: jest.fn() } as never, first);
+    for (const next of [
+      service.generateToken('another-account', 'student', 0),
+      service.generateToken(userId, 'student', 1),
+    ]) {
+      const cookie = jest.fn();
+      await service.setCookieToken({ cookie } as never, next, {
+        cookies: { access_token: first },
+      } as never);
+      expect(cookie.mock.calls[0][1]).toBe(next);
+    }
+    expect(model.rows).toHaveLength(3);
   });
 });
 

@@ -12,6 +12,7 @@ import { getPublicPortalSettings, settingsKeys } from '@/features/settings/api';
 import {
   Award,
   Calendar,
+  CalendarDays,
   ClipboardList,
   BookOpenCheck,
   FileText,
@@ -76,6 +77,7 @@ export default function StudentSidebar() {
       { key: 'dashboard', href: `/${locale}/dashboard`, icon: <Home className="h-5 w-5" /> },
       { key: 'profile', href: `/${locale}/dashboard/profile`, icon: <User className="h-5 w-5" /> },
       { key: 'attendance', href: `/${locale}/dashboard/attendance`, icon: <ClipboardList className="h-5 w-5" /> },
+      { key: 'schedules', href: `/${locale}/dashboard/schedules`, icon: <CalendarDays className="h-5 w-5" /> },
       ...(registrationVisible
         ? [
             {

@@ -1417,7 +1417,7 @@ export default function StudentProfilePage() {
             transition={{ duration: 0.25 }}
             className="grid grid-cols-1 gap-6 lg:grid-cols-12"
           >
-            <div className="lg:col-span-12 space-y-6"><SessionManager /><PasskeyManager /></div>
+            <div className="grid items-start gap-6 lg:col-span-12 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"><SessionManager /><PasskeyManager /></div>
             {/* Password Change Form */}
             <Card className="lg:col-span-8 rounded-2xl border border-border/80 bg-card/60 p-6 backdrop-blur-md shadow-md space-y-5">
               <div className="flex items-center justify-between border-b border-border/60 pb-3">

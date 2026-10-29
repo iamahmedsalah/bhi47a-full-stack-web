@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   BookOpenCheck,
@@ -14,33 +14,33 @@ import {
   Loader2,
   Eye,
   EyeOff,
-} from 'lucide-react';
-import { toast } from 'sonner';
+} from "lucide-react";
+import { toast } from "sonner";
 
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { getApiErrorMessage } from '@/lib/api';
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { getApiErrorMessage } from "@/lib/api";
 import {
   getPortalSettings,
   updatePortalSettings,
   resetAcademicRecords,
   settingsKeys,
   type PortalSettingsItem,
-} from '../api';
+} from "../api";
 
 interface PortalControlsPanelProps {
   locale: string;
 }
 
 export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
-  const isAr = locale === 'ar';
+  const isAr = locale === "ar";
   const queryClient = useQueryClient();
 
   // Reset Confirmation Dialog State
   const [resetModalType, setResetModalType] = useState<
-    'warnings' | 'gpa' | 'all' | null
+    "warnings" | "gpa" | "all" | null
   >(null);
 
   // Queries
@@ -63,7 +63,9 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
         queryKey: settingsKeys.publicPortalSettings,
       });
       toast.success(
-        isAr ? 'تم تحديث إعدادات البوابة بنجاح' : 'Portal settings updated successfully',
+        isAr
+          ? "تم تحديث إعدادات البوابة بنجاح"
+          : "Portal settings updated successfully",
       );
     },
     onError: (err) => {
@@ -71,8 +73,8 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
         getApiErrorMessage(
           err,
           isAr
-            ? 'فشل تحديث إعدادات البوابة'
-            : 'Failed to update portal settings',
+            ? "فشل تحديث إعدادات البوابة"
+            : "Failed to update portal settings",
         ),
       );
     },
@@ -83,10 +85,14 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
       resetAcademicRecords(options),
     onSuccess: (res) => {
       setResetModalType(null);
-      void queryClient.invalidateQueries({ queryKey: ['admin-students'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-students-stats'] });
-      void queryClient.invalidateQueries({ queryKey: ['student-profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['registration-eligibility'] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-students"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin-students-stats"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["student-profile"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["registration-eligibility"],
+      });
 
       const details: string[] = [];
       if (res.warningsResetCount > 0) {
@@ -107,10 +113,10 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
       toast.success(
         res.message ||
           (isAr
-            ? 'تم تصفير السجلات الأكاديمية بنجاح'
-            : 'Academic records reset successfully'),
+            ? "تم تصفير السجلات الأكاديمية بنجاح"
+            : "Academic records reset successfully"),
         {
-          description: details.join(' · '),
+          description: details.join(" · "),
         },
       );
     },
@@ -119,8 +125,8 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
         getApiErrorMessage(
           err,
           isAr
-            ? 'فشل تنفيذ عملية التصفير الأكاديمي'
-            : 'Failed to execute academic reset',
+            ? "فشل تنفيذ عملية التصفير الأكاديمي"
+            : "Failed to execute academic reset",
         ),
       );
     },
@@ -139,407 +145,363 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
   };
 
   const handleExecuteReset = () => {
-    if (resetModalType === 'warnings') {
+    if (resetModalType === "warnings") {
       resetRecordsMutation.mutate({ resetWarnings: true, resetGpa: false });
-    } else if (resetModalType === 'gpa') {
+    } else if (resetModalType === "gpa") {
       resetRecordsMutation.mutate({ resetWarnings: false, resetGpa: true });
-    } else if (resetModalType === 'all') {
+    } else if (resetModalType === "all") {
       resetRecordsMutation.mutate({ resetWarnings: true, resetGpa: true });
     }
   };
 
+  const features = [
+    {
+      id: "registration",
+      Icon: BookOpenCheck,
+      visible: settings.registrationVisible,
+      title: isAr ? "صفحة تسجيل المقررات الأكاديمية" : "Course Registration Page",
+      subtitle: "dashboard/registration/",
+      description: isAr
+        ? "عند إخفاء الصفحة، يُزال رابط التسجيل من القائمة الجانبية والأزرار السريعة في لوحة تحكم الطالب، ويتم منع الدخول المباشر إليها."
+        : "When hidden, the registration link is removed from student navigation and quick actions, and direct access is blocked.",
+      statusText: settings.registrationVisible
+        ? isAr
+          ? "الخدمة ظاهرة ومتاحة للطلاب"
+          : "Visible and open to students"
+        : isAr
+          ? "الخدمة معطلة ومخفية عن الطلاب"
+          : "Hidden from students",
+      btnText: settings.registrationVisible
+        ? isAr
+          ? "إخفاء الصفحة للطلاب"
+          : "Hide page from students"
+        : isAr
+          ? "إتاحة الصفحة للطلاب"
+          : "Make page available",
+      toggle: handleToggleRegistration,
+    },
+    {
+      id: "syllabi",
+      Icon: BookOpen,
+      visible: settings.syllabiVisible,
+      title: isAr
+        ? "المناهج ومحتوى المقررات الدراسية (PDF)"
+        : "Course Syllabi & Materials (PDF)",
+      subtitle: isAr
+        ? "كارت استعراض وتحميل المنهج بلوحة الطالب"
+        : "Syllabi card on student dashboard",
+      description: isAr
+        ? "عند إخفاء هذا الكارت، لن يظهر كارت المناهج وتحميل المقررات الدراسية (PDF) للطلاب على الصفحة الرئيسية وتتسع بطاقة لجان الامتحانات تلقائياً."
+        : "When hidden, the syllabi card will not appear on the student dashboard, allowing the exam room card to expand automatically.",
+      statusText: settings.syllabiVisible
+        ? isAr
+          ? "الكارت ظاهر في لوحة تحكم الطالب"
+          : "Card is visible on student dashboard"
+        : isAr
+          ? "الكارت مخفي من لوحة الطالب"
+          : "Card is hidden from student dashboard",
+      btnText: settings.syllabiVisible
+        ? isAr
+          ? "إخفاء كارت المناهج"
+          : "Hide syllabi card"
+        : isAr
+          ? "إظهار كارت المناهج"
+          : "Show syllabi card",
+      toggle: handleToggleSyllabi,
+    },
+  ];
+  const resetOptions = [
+    {
+      id: "warnings" as const,
+      Icon: AlertTriangle,
+      title: isAr ? "تصفير الإنذارات" : "Reset warnings",
+      description: isAr
+        ? "تعيين عدد الإنذارات الأكاديمية إلى صفر لجميع الطلاب."
+        : "Set academic warning counts to zero for every student.",
+      action: isAr ? "تصفير جميع الإنذارات" : "Reset all warnings",
+    },
+    {
+      id: "gpa" as const,
+      Icon: GraduationCap,
+      title: isAr ? "تصفير المعدل التراكمي" : "Reset cumulative GPA",
+      description: isAr
+        ? "تعيين المعدل التراكمي إلى 0.00 لجميع الطلاب."
+        : "Set the cumulative GPA to 0.00 for every student.",
+      action: isAr ? "تصفير جميع المعدلات" : "Reset all GPAs",
+    },
+    {
+      id: "all" as const,
+      Icon: Flame,
+      title: isAr ? "تصفير المعدل والإنذارات" : "Reset GPA and warnings",
+      description: isAr
+        ? "تصفير المعدلات والإنذارات لجميع الطلاب في عملية واحدة."
+        : "Reset both GPA and academic warnings for every student in one operation.",
+      action: isAr ? "تصفير المعدل والإنذارات" : "Reset GPA and warnings",
+    },
+  ];
+
   return (
-    <div className="space-y-8 animate-fade-in text-start">
-      {/* Introduction Card */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-card/90 via-card/60 to-primary/5 p-6 backdrop-blur-sm shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-1 text-xs font-semibold text-primary border border-primary/20">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>{isAr ? 'التحكم الإداري المباشر' : 'Live Portal Controls'}</span>
-            </div>
-            <h2 className="text-lg font-bold text-foreground">
+    <div className="@container min-w-0 space-y-8 animate-fade-in text-start">
+      <section aria-labelledby="portal-visibility-title" className="space-y-4">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/20 bg-primary/10 text-primary mt-0.5">
+            <SlidersHorizontal className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 space-y-1">
+            <h2 id="portal-visibility-title" className="text-base font-bold break-words">
               {isAr
-                ? 'إعدادات ظهور خدمات بوابة الطلاب والعمليات الأكاديمية'
-                : 'Student Portal Feature Visibility & Academic Operations'}
+                ? "مفاتيح ظهور وإتاحة خدمات بوابة الطلاب"
+                : "Student portal services"}
             </h2>
-            <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+            <p className="text-xs md:text-sm leading-relaxed text-muted-foreground break-words">
               {isAr
-                ? 'تحكم في ظهور أو إخفاء صفحات وخدمات الطلاب (مثل تسجيل المقررات وكارت المناهج PDF)، ونفذ إجراءات التصفير الشامل للسجلات والإنذارات والمعدلات الأكاديمية.'
-                : 'Toggle student feature visibility (such as Course Registration & Syllabi PDF card), and execute administrative resets for academic warnings and GPAs.'}
+                ? "تفعيل أو إخفاء الأقسام من واجهة ولوحة تحكم الطالب بشكل فوري."
+                : "Choose which services students can see. Changes apply as soon as they are saved."}
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Feature Toggles Section */}
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Eye className="h-4 w-4 text-primary" />
-            <span>
+        {portalSettingsQuery.isPending ? (
+          <div
+            role="status"
+            className="flex items-center gap-2 rounded-xl border border-border p-4 text-sm text-muted-foreground"
+          >
+            <Loader2 className="size-4 shrink-0 animate-spin" />
+            {isAr ? "جارٍ تحميل إعدادات البوابة…" : "Loading portal settings…"}
+          </div>
+        ) : portalSettingsQuery.isError ? (
+          <div
+            role="alert"
+            className="space-y-3 rounded-xl border border-danger/30 bg-danger/5 p-4"
+          >
+            <p className="text-sm">
               {isAr
-                ? 'مفاتيح ظهور وإتاحة خدمات بوابة الطلاب'
-                : 'Student Portal Feature Visibility Switches'}
-            </span>
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {isAr
-              ? 'تفعيل أو إخفاء الأقسام من واجهة ولوحة تحكم الطالب بشكل فوري.'
-              : 'Instantly show or hide specific sections on the student portal and dashboard.'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Toggle 1: Course Registration Page */}
-          <Card className="rounded-2xl border border-white/10 bg-card/70 p-5 backdrop-blur-sm shadow-sm flex flex-col justify-between gap-5 transition-all duration-300 hover:border-primary/30">
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shrink-0">
-                    <BookOpenCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-foreground">
-                      {isAr
-                        ? 'صفحة تسجيل المقررات الأكاديمية'
-                        : 'Course Registration Page'}
-                    </h4>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      /dashboard/registration
-                    </span>
-                  </div>
-                </div>
-
-                <StatusBadge
-                  label={
-                    settings.registrationVisible
-                      ? isAr
-                        ? 'مفعلة وظاهرة'
-                        : 'Visible'
-                      : isAr
-                        ? 'معطلة ومخفية'
-                        : 'Hidden'
-                  }
-                  variant={settings.registrationVisible ? 'success' : 'neutral'}
-                />
-              </div>
-
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isAr
-                  ? 'عند إخفاء الصفحة، يُزال رابط التسجيل من القائمة الجانبية والأزرار السريعة في لوحة تحكم الطالب، ويتم منع الدخول المباشر إليها.'
-                  : 'When hidden, the registration navigation link and quick access buttons are removed from student dashboard, blocking direct access.'}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs">
-                {settings.registrationVisible ? (
-                  <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-                    <Eye className="h-3.5 w-3.5" />
-                    {isAr ? 'الخدمة ظاهرة ومتاحة للطلاب' : 'Visible & accessible to students'}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 font-medium text-amber-400">
-                    <EyeOff className="h-3.5 w-3.5" />
-                    {isAr ? 'الخدمة مخفية ومغلقة للطلاب' : 'Hidden & closed for students'}
-                  </span>
-                )}
-              </div>
-
-              <Button
-                type="button"
-                variant={settings.registrationVisible ? 'destructive' : 'default'}
-                size="sm"
-                className="rounded-squircle text-xs font-semibold cursor-pointer h-9 px-4 gap-2 transition-all shadow-xs"
-                disabled={updateSettingsMutation.isPending}
-                onClick={handleToggleRegistration}
-              >
-                {updateSettingsMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : settings.registrationVisible ? (
-                  <>
-                    <EyeOff className="h-3.5 w-3.5" />
-                    <span>{isAr ? 'إخفاء الصفحة للطلاب' : 'Hide from Students'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>{isAr ? 'إظهار الصفحة للطلاب' : 'Show to Students'}</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-
-          {/* Toggle 2: Syllabi & Curriculum Card (PDF) */}
-          <Card className="rounded-2xl border border-white/10 bg-card/70 p-5 backdrop-blur-sm shadow-sm flex flex-col justify-between gap-5 transition-all duration-300 hover:border-primary/30">
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/25 shrink-0">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-foreground">
-                      {isAr
-                        ? 'المناهج ومحتوى المقررات الدراسية (PDF)'
-                        : 'Course Curriculum & Syllabi (PDF)'}
-                    </h4>
-                    <span className="text-[11px] text-muted-foreground">
-                      {isAr
-                        ? 'كارت استعراض وتحميل المنهج بلوحة الطالب'
-                        : 'Official syllabus card on student dashboard'}
-                    </span>
-                  </div>
-                </div>
-
-                <StatusBadge
-                  label={
-                    settings.syllabiVisible
-                      ? isAr
-                        ? 'مفعل وظاهر'
-                        : 'Visible'
-                      : isAr
-                        ? 'معطل ومخفي'
-                        : 'Hidden'
-                  }
-                  variant={settings.syllabiVisible ? 'success' : 'neutral'}
-                />
-              </div>
-
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isAr
-                  ? 'عند إخفاء هذا الكارت، لن يظهر كارت المناهج وتحميل المقررات الدراسية (PDF) للطلاب على الصفحة الرئيسية وتتسع بطاقة لجان الامتحانات تلقائياً.'
-                  : 'When hidden, the official syllabi download card is hidden from student dashboard, expanding the seating card automatically.'}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-white/5">
-              <div className="flex items-center gap-2 text-xs">
-                {settings.syllabiVisible ? (
-                  <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-                    <Eye className="h-3.5 w-3.5" />
-                    {isAr ? 'الكارت ظاهر في لوحة تحكم الطالب' : 'Card visible on dashboard'}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 font-medium text-amber-400">
-                    <EyeOff className="h-3.5 w-3.5" />
-                    {isAr ? 'الكارت مخفي من لوحة تحكم الطالب' : 'Card hidden from dashboard'}
-                  </span>
-                )}
-              </div>
-
-              <Button
-                type="button"
-                variant={settings.syllabiVisible ? 'destructive' : 'default'}
-                size="sm"
-                className="rounded-squircle text-xs font-semibold cursor-pointer h-9 px-4 gap-2 transition-all shadow-xs"
-                disabled={updateSettingsMutation.isPending}
-                onClick={handleToggleSyllabi}
-              >
-                {updateSettingsMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : settings.syllabiVisible ? (
-                  <>
-                    <EyeOff className="h-3.5 w-3.5" />
-                    <span>{isAr ? 'إخفاء كارت المناهج' : 'Hide Syllabi Card'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>{isAr ? 'إظهار كارت المناهج' : 'Show Syllabi Card'}</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Bulk Academic Reset / Danger Zone Section */}
-      <div className="space-y-4 pt-4 border-t border-white/10">
-        <div>
-          <h3 className="text-sm font-bold text-destructive flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4" />
-            <span>
-              {isAr
-                ? 'منطقة العمليات الحرجة: تصفير السجلات والإنذارات والمعدلات الأكاديمية'
-                : 'Danger Zone: Bulk Academic Warning & GPA Resets'}
-            </span>
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {isAr
-              ? 'تتيح هذه العمليات تصفير الإنذارات أو المعدل التراكمي لجميع الطلاب دفعة واحدة وبشكل نهائي.'
-              : 'Bulk administrative actions to reset academic warnings and cumulative GPA across all students.'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Action 1: Reset Warnings to 0 */}
-          <Card className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 backdrop-blur-sm shadow-sm flex flex-col justify-between gap-4">
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
-                  <AlertTriangle className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-foreground">
-                    {isAr
-                      ? 'تصفير الإنذارات الأكاديمية (0)'
-                      : 'Reset Academic Warnings (0)'}
-                  </h4>
-                  <span className="text-[10px] text-muted-foreground">
-                    {isAr ? 'لكافة الطلاب المسجلين' : 'For all enrolled students'}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isAr
-                  ? 'يقوم بتعيين عدد الإنذارات الأكاديمية لجميع الطلاب في ملف الطالب والملف الأكاديمي إلى 0.'
-                  : 'Resets the recorded academic warnings to 0 across both student profiles and academic profiles.'}
-              </p>
-            </div>
-
+                ? "تعذر تحميل الإعدادات. أعد المحاولة قبل إجراء تغييرات."
+                : "Could not load settings. Try again before making changes."}
+            </p>
             <Button
-              type="button"
               variant="outline"
-              className="rounded-squircle border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 text-xs font-semibold cursor-pointer h-9 px-3 gap-2 w-full shadow-xs"
-              onClick={() => setResetModalType('warnings')}
-              disabled={resetRecordsMutation.isPending}
+              onClick={() => void portalSettingsQuery.refetch()}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>{isAr ? 'تصفير الإنذارات للجميع (0)' : 'Reset Warnings to 0'}</span>
+              {isAr ? "إعادة المحاولة" : "Try again"}
             </Button>
-          </Card>
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-4 @2xl:grid-cols-2">
+            {features.map(
+              ({
+                id,
+                Icon,
+                visible,
+                title,
+                subtitle,
+                description,
+                statusText,
+                btnText,
+                toggle,
+              }) => (
+                <Card
+                  key={id}
+                  className="@container/feature min-w-0 flex flex-col justify-between rounded-2xl border border-border/70 bg-secondary/10 p-4 sm:p-5 shadow-sm hover:border-primary/30 transition-all gap-4"
+                >
+                  <div className="flex flex-col gap-3 min-w-0">
+                    {/* Header: Title + Subtitle + Icon & Badge */}
+                    <div className="flex flex-col gap-3 min-w-0 @sm/feature:flex-row @sm/feature:items-start @sm/feature:justify-between">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/20 bg-primary/10 text-primary mt-0.5">
+                          <Icon className="size-5" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-bold text-foreground leading-snug break-words">
+                            {title}
+                          </h3>
+                          {subtitle && (
+                            <p
+                              className="text-[11px] font-mono text-primary/80 mt-0.5 break-all"
+                              dir="ltr"
+                            >
+                              {subtitle}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <StatusBadge
+                        label={
+                          visible
+                            ? isAr
+                              ? "مفعل وظاهر"
+                              : "Active & Visible"
+                            : isAr
+                              ? "معطل ومخفي"
+                              : "Disabled"
+                        }
+                        variant={visible ? "success" : "neutral"}
+                        className="shrink-0 text-[11px] px-2.5 py-0.5 rounded-squircle"
+                      />
+                    </div>
 
-          {/* Action 2: Reset GPA to 0.00 */}
-          <Card className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 backdrop-blur-sm shadow-sm flex flex-col justify-between gap-4">
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-destructive/15 text-destructive border border-destructive/25 shrink-0">
-                  <GraduationCap className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-foreground">
-                    {isAr
-                      ? 'تصفير المعدل التراكمي (GPA)'
-                      : 'Reset Cumulative GPA (0.00)'}
-                  </h4>
-                  <span className="text-[10px] text-muted-foreground">
-                    {isAr ? 'لكافة الطلاب المسجلين' : 'For all enrolled students'}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isAr
-                  ? 'يقوم بإعادة تعيين المعدل التراكمي (GPA) لجميع الطلاب في السجلات الأكاديمية ليصبح 0.00.'
-                  : 'Resets cumulative GPA to 0.00 across all student academic profile records in the system.'}
-              </p>
-            </div>
+                    {/* Description with proper wrap */}
+                    <p className="text-xs leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
+                      {description}
+                    </p>
+                  </div>
 
-            <Button
-              type="button"
-              variant="destructive"
-              className="rounded-squircle text-xs font-semibold cursor-pointer h-9 px-3 gap-2 w-full shadow-xs"
-              onClick={() => setResetModalType('gpa')}
-              disabled={resetRecordsMutation.isPending}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>{isAr ? 'تصفير المعدل للجميع (0.00)' : 'Reset GPA to 0.00'}</span>
-            </Button>
-          </Card>
+                  {/* Footer: One column on phone view, button in single column */}
+                  <div className="border-t border-border/60 pt-3.5 flex flex-col gap-2.5 w-full">
+                    {/* Status Text Indicator */}
+                    <div className="flex items-center gap-2 text-xs font-medium">
+                      <span
+                        className={`inline-block size-2 rounded-full shrink-0 ${
+                          visible ? "bg-teal-400" : "bg-muted-foreground/50"
+                        }`}
+                      />
+                      <span
+                        className={`break-words text-[11px] sm:text-xs ${
+                          visible
+                            ? "text-teal-400 font-semibold"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {statusText}
+                      </span>
+                    </div>
 
-          {/* Action 3: Reset Both Warnings & GPA */}
-          <Card className="rounded-2xl border border-rose-500/40 bg-gradient-to-b from-rose-950/20 to-card/60 p-5 backdrop-blur-sm shadow-sm flex flex-col justify-between gap-4">
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
-                  <Flame className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-rose-300">
-                    {isAr
-                      ? 'تصفير شامل (GPA والإنذارات)'
-                      : 'Reset Both GPA & Warnings'}
-                  </h4>
-                  <span className="text-[10px] text-muted-foreground">
-                    {isAr ? 'تصفير مزدوج شامل' : 'Comprehensive dual reset'}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isAr
-                  ? 'تصفير شامل وفوري لكلاً من المعدل التراكمي وجميع الإنذارات الأكاديمية لكافة الطلاب في عملية واحدة.'
-                  : 'Simultaneously zeroes both the GPA and all academic warning counters for all students in one step.'}
-              </p>
-            </div>
+                    {/* Toggle Button in single column / full width */}
+                    <Button
+                      type="button"
+                      onClick={toggle}
+                      disabled={
+                        updateSettingsMutation.isPending ||
+                        portalSettingsQuery.isFetching
+                      }
+                      variant={visible ? "outline" : "default"}
+                      className={`h-auto min-h-11 w-full whitespace-normal rounded-squircle px-3 py-2.5 text-xs font-semibold gap-2 transition-all cursor-pointer ${
+                        visible
+                          ? "border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 active:scale-[0.99]"
+                          : "bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm active:scale-[0.99]"
+                      }`}
+                    >
+                      {updateSettingsMutation.isPending ? (
+                        <Loader2 className="size-4 animate-spin shrink-0" />
+                      ) : visible ? (
+                        <EyeOff className="size-4 shrink-0" />
+                      ) : (
+                        <Eye className="size-4 shrink-0" />
+                      )}
+                      <span className="min-w-0 break-words leading-relaxed">{btnText}</span>
+                    </Button>
+                  </div>
+                </Card>
+              ),
+            )}
+          </div>
+        )}
+      </section>
 
-            <Button
-              type="button"
-              variant="destructive"
-              className="rounded-squircle bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold cursor-pointer h-9 px-3 gap-2 w-full shadow-md"
-              onClick={() => setResetModalType('all')}
-              disabled={resetRecordsMutation.isPending}
-            >
-              <Flame className="h-3.5 w-3.5" />
-              <span>{isAr ? 'تصفير شامل (GPA والإنذارات)' : 'Reset All GPA & Warnings'}</span>
-            </Button>
-          </Card>
+      <section
+        aria-labelledby="academic-reset-title"
+        className="space-y-4 border-t border-border/70 pt-6"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-danger/20 bg-danger/10 text-danger">
+            <ShieldAlert className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 space-y-1">
+            <h2 id="academic-reset-title" className="text-base font-bold">
+              {isAr ? "تصفير السجلات الأكاديمية" : "Reset academic records"}
+            </h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {isAr
+                ? "تؤثر هذه العمليات على جميع الطلاب ولا يمكن التراجع عنها. يلزم تأكيد كل عملية."
+                : "These actions affect every student and cannot be undone. Each action requires confirmation."}
+            </p>
+          </div>
         </div>
-      </div>
+        <div className="grid min-w-0 gap-4 @2xl:grid-cols-2 @4xl:grid-cols-3">
+          {resetOptions.map(({ id, Icon, title, description, action }) => (
+            <Card
+              key={id}
+              className="flex min-w-0 flex-col gap-4 rounded-2xl border border-danger/20 bg-danger/5 p-4 sm:p-5"
+            >
+              <div className="flex items-start gap-2.5">
+                <Icon
+                  className="mt-0.5 size-5 shrink-0 text-danger"
+                  aria-hidden="true"
+                />
+                <h3 className="min-w-0 text-sm font-bold leading-relaxed">
+                  {title}
+                </h3>
+              </div>
+              <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
+                {description}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={resetRecordsMutation.isPending}
+                onClick={() => setResetModalType(id)}
+                className={`h-auto min-h-11 w-full whitespace-normal rounded-squircle px-3 py-2.5 text-sm leading-relaxed ${id === "all" ? "border-danger bg-danger text-danger-foreground hover:bg-danger-hover hover:text-danger-foreground" : "border-danger/30 text-danger hover:border-danger/50 hover:bg-danger/10 hover:text-danger"}`}
+              >
+                <RotateCcw />
+                <span>{action}</span>
+              </Button>
+            </Card>
+          ))}
+        </div>
+      </section>
 
-      {/* Confirmation Dialog for Danger Zone Actions */}
       <ConfirmDialog
+        dir={isAr ? "rtl" : "ltr"}
+        disabled={resetRecordsMutation.isPending}
         open={Boolean(resetModalType)}
         onOpenChange={(open) => {
-          if (!open) setResetModalType(null);
+          if (!open && !resetRecordsMutation.isPending) setResetModalType(null);
         }}
         title={
-          resetModalType === 'warnings'
+          resetModalType === "warnings"
             ? isAr
-              ? 'تأكيد تصفير الإنذارات الأكاديمية لجميع الطلاب'
-              : 'Confirm Reset Academic Warnings for All Students'
-            : resetModalType === 'gpa'
+              ? "تأكيد تصفير الإنذارات الأكاديمية لجميع الطلاب"
+              : "Confirm Reset Academic Warnings for All Students"
+            : resetModalType === "gpa"
               ? isAr
-                ? 'تأكيد تصفير المعدل التراكمي لجميع الطلاب (0.00)'
-                : 'Confirm Reset GPA to 0.00 for All Students'
+                ? "تأكيد تصفير المعدل التراكمي لجميع الطلاب (0.00)"
+                : "Confirm Reset GPA to 0.00 for All Students"
               : isAr
-                ? 'تأكيد التصفير الشامل للمعدل والإنذارات للجميع'
-                : 'Confirm Comprehensive Reset of GPA & Warnings'
+                ? "تأكيد التصفير الشامل للمعدل والإنذارات للجميع"
+                : "Confirm Comprehensive Reset of GPA & Warnings"
         }
         description={
-          resetModalType === 'warnings'
+          resetModalType === "warnings"
             ? isAr
-              ? 'هل أنت متأكد من تصفير الإنذارات الأكاديمية لكافة الطلاب المسجلين؟ سيتم تعيين عداد الإنذارات إلى (0) في جميع السجلات.'
-              : 'Are you sure you want to reset academic warnings for all students? Warning counters will be permanently set to 0.'
-            : resetModalType === 'gpa'
+              ? "هل أنت متأكد من تصفير الإنذارات الأكاديمية لكافة الطلاب المسجلين؟ سيتم تعيين عداد الإنذارات إلى (0) في جميع السجلات."
+              : "Are you sure you want to reset academic warnings for all students? Warning counters will be permanently set to 0."
+            : resetModalType === "gpa"
               ? isAr
-                ? 'هل أنت متأكد من تصفير المعدل التراكمي (GPA) لجميع الطلاب؟ سيتم تعيين المعدل إلى (0.00) في الملفات الأكاديمية.'
-                : 'Are you sure you want to reset GPA to 0.00 for all students across the entire institution database?'
+                ? "هل أنت متأكد من تصفير المعدل التراكمي (GPA) لجميع الطلاب؟ سيتم تعيين المعدل إلى (0.00) في الملفات الأكاديمية."
+                : "Are you sure you want to reset GPA to 0.00 for all students across the entire institution database?"
               : isAr
-                ? 'تحذير شديد: سيتم تصفير كلاً من المعدل التراكمي وجميع الإنذارات الأكاديمية لكل الطلاب ليصبح المعدل 0.00 والإنذارات 0. هذا الإجراء لا يمكن التراجع عنه.'
-                : 'Critical Warning: This will reset both cumulative GPA (0.00) and all academic warnings (0) for all students. This action cannot be undone.'
+                ? "تحذير شديد: سيتم تصفير كلاً من المعدل التراكمي وجميع الإنذارات الأكاديمية لكل الطلاب ليصبح المعدل 0.00 والإنذارات 0. هذا الإجراء لا يمكن التراجع عنه."
+                : "Critical Warning: This will reset both cumulative GPA (0.00) and all academic warnings (0) for all students. This action cannot be undone."
         }
         destructive
         confirmLabel={
           resetRecordsMutation.isPending
             ? isAr
-              ? 'جاري التنفيذ...'
-              : 'Executing...'
-            : resetModalType === 'warnings'
+              ? "جاري التنفيذ..."
+              : "Executing..."
+            : resetModalType === "warnings"
               ? isAr
-                ? 'نعم، صفر جميع الإنذارات (0)'
-                : 'Yes, Reset Warnings to 0'
-              : resetModalType === 'gpa'
+                ? "نعم، صفر جميع الإنذارات (0)"
+                : "Yes, Reset Warnings to 0"
+              : resetModalType === "gpa"
                 ? isAr
-                  ? 'نعم، صفر المعدل التراكمي (0.00)'
-                  : 'Yes, Reset GPA to 0.00'
+                  ? "نعم، صفر المعدل التراكمي (0.00)"
+                  : "Yes, Reset GPA to 0.00"
                 : isAr
-                  ? 'نعم، نفذ التصفير الشامل الآن'
-                  : 'Yes, Reset GPA & Warnings Now'
+                  ? "نعم، نفذ التصفير الشامل الآن"
+                  : "Yes, Reset GPA & Warnings Now"
         }
-        cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+        cancelLabel={isAr ? "إلغاء" : "Cancel"}
         onConfirm={handleExecuteReset}
       />
     </div>

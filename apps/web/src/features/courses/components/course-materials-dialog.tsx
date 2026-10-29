@@ -85,6 +85,31 @@ export function CourseMaterialsDialog({
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const MAX_MATERIAL_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+  const handleFileSelect = (selectedFile: File | null) => {
+    if (!selectedFile) {
+      setFile(null);
+      return;
+    }
+    if (selectedFile.size > MAX_MATERIAL_FILE_SIZE) {
+      toast.error(
+        isAr
+          ? `حجم الملف (${(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (10 ميجابايت)`
+          : `File size (${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the maximum limit of 10 MB`,
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setFile(selectedFile);
+    if (!title.trim()) {
+      const defaultTitle = selectedFile.name.replace(/\.[^/.]+$/, '');
+      setTitle(defaultTitle);
+    }
+  };
 
   // Delete state
   const [materialToDelete, setMaterialToDelete] = useState<CourseMaterialDto | null>(null);
@@ -110,6 +135,13 @@ export function CourseMaterialsDialog({
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error(isAr ? 'يرجى اختيار ملف' : 'Please select a file');
+      if (file.size > MAX_MATERIAL_FILE_SIZE) {
+        throw new Error(
+          isAr
+            ? 'حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)'
+            : 'File size exceeds 10 MB limit',
+        );
+      }
       if (!title.trim()) throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
 
       const fd = new FormData();
@@ -446,21 +478,88 @@ export function CourseMaterialsDialog({
                 />
               </div>
 
-              {/* File Input */}
+              {/* Modern Drag-and-Drop File Upload Zone */}
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                  {isAr ? 'ملف المحتوى (PDF, Word, PowerPoint, Excel) *' : 'File *'}
+                  {isAr ? 'ملف المحتوى التعليمي (الحد الأقصى: 10 ميجابايت) *' : 'Material File (Max 10 MB) *'}
                 </label>
-                <Input
+
+                <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.rar"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="text-xs file:mr-2 file:rounded-squircle file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                  className="hidden"
                 />
-                {file && (
-                  <p className="text-[11px] text-emerald-500 font-semibold mt-1">
-                    ✓ {file.name} ({formatFileSize(file.size)})
-                  </p>
+
+                {!file ? (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const droppedFile = e.dataTransfer.files?.[0] || null;
+                      handleFileSelect(droppedFile);
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 text-center ${
+                      isDragging
+                        ? 'border-primary bg-primary/10 shadow-sm scale-[1.01]'
+                        : 'border-border/80 hover:border-primary/50 bg-secondary/20 hover:bg-secondary/40'
+                    }`}
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-2">
+                      <UploadCloud className="h-5 w-5" />
+                    </div>
+                    <p className="text-xs font-semibold text-foreground">
+                      {isAr
+                        ? 'اسحب وأفلت الملف هنا أو انقر لاختياره'
+                        : 'Drag & drop file here or click to browse'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {isAr
+                        ? 'PDF, Word, PowerPoint, Excel — الحد الأقصى 10 ميجابايت'
+                        : 'PDF, Word, PowerPoint, Excel — Max size 10 MB'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-xl border border-teal-500/30 bg-teal-500/5 dark:bg-teal-500/10 p-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400">
+                        <FileCheck className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 text-start">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          {file.name}
+                        </p>
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                          <span className="font-mono">{formatFileSize(file.size)}</span>
+                          <span>•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                            {isAr ? 'جاهز للرفع (أقل من 10 ميجابايت)' : 'Ready to upload (< 10 MB)'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer shrink-0"
+                      title={isAr ? 'إلغاء اختيار الملف' : 'Remove selected file'}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
 

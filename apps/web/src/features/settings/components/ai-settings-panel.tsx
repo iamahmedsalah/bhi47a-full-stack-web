@@ -70,18 +70,18 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
   return (
     <div className="space-y-5">
       <section className="flex flex-col gap-4 rounded-2xl border border-border bg-secondary/15 p-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Bot className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-bold">{t("advisorTitle")}</h2>
               <span
                 className={
                   data.studentAdvisorEnabled
-                    ? "rounded-full bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-400"
-                    : "rounded-full bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-400"
+                    ? "rounded-squircle bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-400"
+                    : "rounded-squircle bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-400"
                 }
               >
                 {data.studentAdvisorEnabled ? t("enabled") : t("disabled")}
@@ -96,7 +96,7 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
           variant={data.studentAdvisorEnabled ? "destructive" : "default"}
           disabled={toggle.isPending}
           onClick={() => toggle.mutate(!data.studentAdvisorEnabled)}
-          className="min-w-36"
+          className="h-auto min-h-11 shrink-0 whitespace-normal rounded-squircle px-4 py-2.5 md:max-w-56"
         >
           {toggle.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -124,8 +124,8 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
           <span
             className={
               data.apiKeyConfigured
-                ? "flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
-                : "flex items-center gap-1 rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-400"
+                ? "flex items-center gap-1 rounded-squircle bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
+                : "flex items-center gap-1 rounded-squircle bg-amber-500/15 px-3 py-1 text-xs text-amber-400"
             }
           >
             {data.apiKeyConfigured ? (

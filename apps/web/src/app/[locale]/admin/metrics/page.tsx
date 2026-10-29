@@ -469,15 +469,21 @@ export default function AdminMetricsPage() {
                   </div>
                   <div className="flex items-baseline justify-between mt-0.5">
                     <span
-                      className={`font-mono text-lg font-bold ${(data.security.lockedLogins ?? 0) > 0 ? 'text-rose-400' : 'text-muted-foreground'}`}
+                      className={`font-mono text-lg font-bold ${(data.security.currentlyLockedAccounts ?? 0) > 0 ? 'text-rose-400' : 'text-muted-foreground'}`}
                       dir="ltr"
                     >
-                      {data.security.lockedLogins ?? 0}
+                      {data.security.currentlyLockedAccounts ?? 0}
                     </span>
-                    {(data.security.lockedLogins ?? 0) > 0 && (
+                    {(data.security.currentlyLockedAccounts ?? 0) > 0 ? (
                       <Badge variant="destructive" className="rounded-squircle text-[9.5px] py-0 px-1.5 h-4">
                         {isAr ? 'حظر نشط' : 'Active'}
                       </Badge>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">
+                        {isAr
+                          ? `${data.security.lockedLogins ?? 0} محاولات محجوبة`
+                          : `${data.security.lockedLogins ?? 0} blocked tries`}
+                      </span>
                     )}
                   </div>
                 </div>

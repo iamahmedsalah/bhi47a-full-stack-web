@@ -18,7 +18,8 @@ export function PasskeySettings() {
   const isAdmin = user?.role === "admin";
   const settings = useQuery({
     queryKey: settingsKey,
-    queryFn: async () => (await api.get<Settings>("/auth/passkeys/settings")).data,
+    queryFn: async () =>
+      (await api.get<Settings>("/auth/passkeys/settings")).data,
     enabled: isAdmin,
   });
   const capabilities = useQuery({
@@ -28,7 +29,11 @@ export function PasskeySettings() {
   });
   const mutation = useMutation({
     mutationFn: async (studentLoginEnabled: boolean) =>
-      (await api.patch<Settings>("/auth/passkeys/settings", { studentLoginEnabled })).data,
+      (
+        await api.patch<Settings>("/auth/passkeys/settings", {
+          studentLoginEnabled,
+        })
+      ).data,
     onSuccess: async (data) => {
       client.setQueryData(settingsKey, data);
       await client.invalidateQueries({ queryKey: passkeyKeys.capabilities });
@@ -39,30 +44,46 @@ export function PasskeySettings() {
   if (!isAdmin) return null;
 
   return (
-    <Card className="space-y-4 rounded-2xl p-5">
+    <Card className="min-w-0 space-y-4 rounded-2xl p-4 sm:p-5">
       <h2 className="text-lg font-semibold">{t("title")}</h2>
-      <p className="text-sm text-muted-foreground">{t("description")}</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {t("description")}
+      </p>
       {settings.isPending && <p role="status">{t("loading")}</p>}
       {settings.isError && (
         <div role="alert" className="space-y-2">
           <p>{t("error")}</p>
-          <Button variant="outline" onClick={() => void settings.refetch()}>{t("retry")}</Button>
+          <Button variant="outline" onClick={() => void settings.refetch()}>
+            {t("retry")}
+          </Button>
         </div>
       )}
       {currentSettings && (
         <>
-          <p>{t(currentSettings.studentLoginEnabled ? "enabled" : "disabled")}</p>
+          <p>
+            {t(currentSettings.studentLoginEnabled ? "enabled" : "disabled")}
+          </p>
           {capabilities.data?.enabled === false && (
-            <p className="text-sm text-muted-foreground">{t("serverDisabled")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("serverDisabled")}
+            </p>
           )}
           <Button
             type="button"
-            className="rounded-squircle"
+            className="w-full sm:w-auto h-auto min-h-11 whitespace-normal rounded-squircle px-4 py-2.5 text-start leading-relaxed"
             variant="outline"
             disabled={mutation.isPending || settings.isFetching}
-            onClick={() => mutation.mutate(!currentSettings.studentLoginEnabled)}
+            onClick={() =>
+              mutation.mutate(!currentSettings.studentLoginEnabled)
+            }
           >
-            {t(mutation.isPending ? "saving" : currentSettings.studentLoginEnabled ? "hide" : "show")}
+            {t(
+              mutation.isPending
+                ? "saving"
+                : currentSettings.studentLoginEnabled
+                  ? "hide"
+                  : "show",
+            )}
           </Button>
         </>
       )}

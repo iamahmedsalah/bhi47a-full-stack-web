@@ -108,6 +108,7 @@ export function AuthProvider({
   const queryClient = useQueryClient();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const lastHeartbeatTimeRef = useRef<number>(0);
+  const loginInFlight = useRef<Promise<void> | null>(null);
 
   const meQuery = useQuery({
     queryKey: queryKeys.auth.me,
@@ -123,7 +124,7 @@ export function AuthProvider({
     enabled: !isLoggingOut,
   });
 
-  const login = useCallback(async (
+  const executeLogin = useCallback(async (
     type: 'student' | 'admin' | 'google' | 'passkey',
     data: LoginPayload,
     options?: { returnUrl?: string | null },
@@ -183,6 +184,17 @@ export function AuthProvider({
       throw error;
     }
   }, [locale, queryClient, router]);
+
+  const login = useCallback((...args: Parameters<typeof executeLogin>) => {
+    if (loginInFlight.current) return loginInFlight.current;
+    const pending = executeLogin(...args);
+    loginInFlight.current = pending;
+    const clear = () => {
+      if (loginInFlight.current === pending) loginInFlight.current = null;
+    };
+    void pending.then(clear, clear);
+    return pending;
+  }, [executeLogin]);
 
   const logout = useCallback(async () => {
     if (isLoggingOut) return;

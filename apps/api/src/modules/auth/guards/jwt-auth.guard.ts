@@ -11,6 +11,15 @@ import {
   IS_OPTIONAL_AUTH_KEY,
 } from '../decorators/public.decorator';
 
+interface RequestValidation {
+  token: unknown;
+  principal: unknown;
+  pending: Promise<boolean>;
+}
+// Global and controller guards can be distinct instances. Only a successful,
+// unchanged authentication on this exact request may be reused by either one.
+const requestValidations = new WeakMap<object, RequestValidation>();
+
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private reflector: Reflector) {
@@ -38,7 +47,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     );
     if (isOptionalAuth) {
       try {
-        await (super.canActivate(context) as Promise<boolean>);
+        await this.authenticateRequest(context);
       } catch (error) {
         if (!(error instanceof UnauthorizedException)) throw error;
         // Missing/invalid token: continue anonymously; handler enforces policy.
@@ -46,6 +55,45 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    return (await super.canActivate(context)) as boolean;
+    return this.authenticateRequest(context);
+  }
+
+  private authenticateRequest(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<{
+      cookies?: { access_token?: unknown };
+      user?: unknown;
+    }>();
+    const token = request.cookies?.access_token;
+    const previous = requestValidations.get(request);
+    if (
+      previous &&
+      previous.token === token &&
+      previous.principal === request.user
+    ) {
+      return previous.pending;
+    }
+    const validation: RequestValidation = {
+      token,
+      principal: request.user,
+      pending: Promise.resolve(false),
+    };
+    // Start after installing the entry so synchronous failures are evicted too.
+    validation.pending = Promise.resolve().then(async () => {
+      try {
+        const allowed = await (super.canActivate(context) as Promise<boolean>);
+        if (allowed && request.user) {
+          validation.principal = request.user;
+        } else if (requestValidations.get(request) === validation) {
+          requestValidations.delete(request);
+        }
+        return allowed;
+      } catch (error) {
+        if (requestValidations.get(request) === validation)
+          requestValidations.delete(request);
+        throw error;
+      }
+    });
+    requestValidations.set(request, validation);
+    return validation.pending;
   }
 }

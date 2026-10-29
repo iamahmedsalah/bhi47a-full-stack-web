@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { UpdatePasskeySettingsDto } from './passkeys.dto';
+import { PasskeyNameDto, UpdatePasskeySettingsDto } from './passkeys.dto';
 import type { Model } from 'mongoose';
 import mongoose from 'mongoose';
 import {
@@ -222,6 +222,32 @@ function authenticator() {
 }
 
 describe('passkey policy', () => {
+  it.each([
+    'touchId',
+    'faceId',
+    'windowsHello',
+    'fingerprint',
+    'securityKey',
+    'devicePin',
+    'unspecified',
+    undefined,
+  ])('accepts optional display method %s', async (unlockMethod) => {
+    expect(
+      await validate(
+        plainToInstance(PasskeyNameDto, { name: 'My key', unlockMethod }),
+      ),
+    ).toHaveLength(0);
+  });
+  it.each(['detected-face', 1, true, {}, ['touchId']])(
+    'rejects invalid display method %s',
+    async (unlockMethod) => {
+      expect(
+        await validate(
+          plainToInstance(PasskeyNameDto, { name: 'My key', unlockMethod }),
+        ),
+      ).not.toHaveLength(0);
+    },
+  );
   it.each(['false', 'true', 0, 1, null, undefined])(
     'rejects non-boolean student login setting %s with implicit conversion enabled',
     async (value) => {
@@ -355,12 +381,16 @@ describe('passkey service with real WebAuthn cryptography and in-memory persiste
       settings as unknown as Model<PasskeySettings>,
     );
   });
-  async function register(device = authenticator()) {
+  async function register(
+    device = authenticator(),
+    unlockMethod?: PasskeyCredential['unlockMethod'],
+  ) {
     await service.reauthenticate(userId, token, 'correct-password', origin);
     const flow = await service.registerOptions(userId, token, origin);
     await service.registerVerify(userId, token, origin, {
       flowId: flow.flowId,
       name: 'My device',
+      unlockMethod,
       response: device.registration(flow.options.challenge),
     });
     return device;
@@ -603,6 +633,7 @@ describe('passkey service with real WebAuthn cryptography and in-memory persiste
       service.loginVerify(origin, flow.flowToken, dto),
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(complete).toHaveBeenCalledTimes(1);
   });
   it('rejects wrong browser flow secrets and mismatched user handles', async () => {
     const device = await register();
@@ -639,7 +670,7 @@ describe('passkey service with real WebAuthn cryptography and in-memory persiste
     await expect(login(device, 6)).rejects.toThrow();
   });
   it('owner-scopes list, rename and delete and keeps other credentials usable', async () => {
-    const first = await register();
+    const first = await register(authenticator(), 'faceId');
     const second = await register();
     const id = credentials.rows[0]._id as string;
     await service.reauthenticate(
@@ -650,8 +681,15 @@ describe('passkey service with real WebAuthn cryptography and in-memory persiste
       'rename',
       id,
     );
-    await service.rename(userId, token, origin, id, 'New name');
+    expect(credentials.rows[0].unlockMethod).toBe('faceId');
+    expect(credentials.rows[1].unlockMethod).toBe('unspecified');
+    await service.rename(userId, token, origin, id, 'New name', 'windowsHello');
     expect(credentials.rows[0].name).toBe('New name');
+    expect(credentials.rows[0].unlockMethod).toBe('windowsHello');
+    expect(credentials.updateOne).toHaveBeenLastCalledWith(
+      { _id: id, userId },
+      { $set: { name: 'New name', unlockMethod: 'windowsHello' } },
+    );
     await expect(
       service.rename(userId, token, origin, id, 'Replay'),
     ).rejects.toThrow();

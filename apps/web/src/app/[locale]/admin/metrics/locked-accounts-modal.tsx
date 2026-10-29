@@ -90,6 +90,19 @@ export function LockedAccountsModal({
     });
   }, [lockedAccounts, search, roleFilter]);
 
+  const studentCount = useMemo(
+    () => lockedAccounts.filter((a) => a.role === 'student').length,
+    [lockedAccounts],
+  );
+  const staffCount = useMemo(
+    () => lockedAccounts.filter((a) => a.role === 'staff').length,
+    [lockedAccounts],
+  );
+  const adminCount = useMemo(
+    () => lockedAccounts.filter((a) => a.role === 'admin').length,
+    [lockedAccounts],
+  );
+
   const handleUnlockSingle = async (acc: LockedAccountItem) => {
     try {
       setUnlockingId(acc._id);
@@ -223,10 +236,10 @@ export function LockedAccountsModal({
                         : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    {r === 'all' && (isAr ? 'الكل' : 'All')}
-                    {r === 'student' && (isAr ? 'الطلاب' : 'Students')}
-                    {r === 'staff' && (isAr ? 'هيئة التدريس' : 'Staff')}
-                    {r === 'admin' && (isAr ? 'المسؤولين' : 'Admins')}
+                    {r === 'all' && (isAr ? `الكل (${lockedAccounts.length})` : `All (${lockedAccounts.length})`)}
+                    {r === 'student' && (isAr ? `الطلاب (${studentCount})` : `Students (${studentCount})`)}
+                    {r === 'staff' && (isAr ? `هيئة التدريس (${staffCount})` : `Staff (${staffCount})`)}
+                    {r === 'admin' && (isAr ? `المسؤولين (${adminCount})` : `Admins (${adminCount})`)}
                   </button>
                 ))}
               </div>
@@ -262,7 +275,7 @@ export function LockedAccountsModal({
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold">
-                    {search || roleFilter !== 'all'
+                    {search || (roleFilter !== 'all' && lockedAccounts.length > 0)
                       ? isAr
                         ? 'لا توجد نتائج مطابقة لبحثك'
                         : 'No accounts match your search filter'

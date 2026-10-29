@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Response, CookieOptions } from 'express';
+import { Response, Request, CookieOptions } from 'express';
 import { randomBytes } from 'node:crypto';
 import { UsersService } from '../../users/users.service';
 import type { UserDocument } from '../../users/schemas/user.schema';
@@ -15,6 +15,7 @@ import {
   sessionDigest,
   type SessionClaims,
 } from './auth-session-store.service';
+import { AuthSessionMetadataService } from './auth-session-metadata.service';
 
 @Injectable()
 export class AuthSessionService {
@@ -23,6 +24,7 @@ export class AuthSessionService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Optional() private readonly sessionStore?: AuthSessionStore,
+    @Optional() private readonly metadata?: AuthSessionMetadataService,
   ) {}
 
   generateToken(userId: string, role: string, tokenVersion: number): string {
@@ -78,8 +80,8 @@ export class AuthSessionService {
     };
   }
 
-  async setCookieToken(res: Response, token: string) {
-    const claims = this.jwtService.verify<SessionClaims>(token, {
+  async setCookieToken(res: Response, token: string, req?: Request) {
+    let claims = this.jwtService.verify<SessionClaims>(token, {
       algorithms: ['HS256'],
     });
     if (
@@ -88,7 +90,29 @@ export class AuthSessionService {
       claims.exp * 1000 <= Date.now()
     )
       throw new UnauthorizedException('Session persistence unavailable');
-    await this.sessionStore.register(claims);
+
+    // Credentials have already been verified by the caller. A second sign-in in
+    // the same browser can retain its active session instead of leaving orphans.
+    const existingToken = req?.cookies?.access_token;
+    if (typeof existingToken === 'string') {
+      try {
+        const existing = this.jwtService.verify<SessionClaims>(existingToken, {
+          algorithms: ['HS256'],
+        });
+        if (
+          existing.sid &&
+          existing.sub === claims.sub &&
+          (existing.tokenVersion ?? 0) === (claims.tokenVersion ?? 0)
+        ) {
+          await this.sessionStore.assertActive(existing, existingToken);
+          token = existingToken;
+          claims = existing;
+        }
+      } catch {
+        /* Expired/revoked cookies require the freshly verified session. */
+      }
+    }
+    await this.sessionStore.register(claims, await this.metadata?.resolve(req));
     const maxAge = Math.max(0, claims.exp * 1000 - Date.now());
     res.cookie('access_token', token, {
       ...this.getCookieOptions(true),
@@ -138,11 +162,21 @@ export class AuthSessionService {
     );
   }
 
-  async listSessions(userId: string, token: string) {
+  async listSessions(userId: string, token: string, req?: Request) {
     if (!this.sessionStore) throw new UnauthorizedException();
     const claims = this.jwtService.verify<SessionClaims>(token, {
       algorithms: ['HS256'],
     });
+    if (
+      claims.sid &&
+      this.metadata &&
+      (await this.sessionStore.needsMetadata(claims))
+    ) {
+      await this.sessionStore.upgradeMetadata(
+        claims,
+        await this.metadata.resolve(req),
+      );
+    }
     return this.sessionStore.list(
       userId,
       sessionDigest(claims.sid ?? `legacy:${token}`),

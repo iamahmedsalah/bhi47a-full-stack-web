@@ -4,6 +4,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { isPublicRoute } from '@/lib/public-routes';
+import { retryAfterDeadline } from './query-retry-policy';
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -20,6 +21,7 @@ export interface PaginatedResponse<T> {
 }
 
 export interface ApiErrorPayload {
+  retryAfterAt?: number;
   success?: false;
   statusCode?: number;
   message?: string | string[];
@@ -163,6 +165,15 @@ api.interceptors.request.use((config) => {
     if (locale === 'ar' || locale === 'en') {
       headers.set('accept-language', locale);
     }
+    if (config.url?.startsWith('/auth/')) {
+      const connection = (navigator as Navigator & {
+        connection?: { type?: string };
+      }).connection;
+      // effectiveType is a speed estimate (e.g. 4g), not Wi-Fi vs mobile data.
+      if (connection?.type && ['wifi', 'cellular', 'ethernet', 'bluetooth', 'wimax'].includes(connection.type)) {
+        headers.set('x-client-network-type', connection.type);
+      }
+    }
   }
 
   if (isUnsafeMethod(config.method)) {
@@ -227,7 +238,13 @@ api.interceptors.response.use(
         window.location.href = targetLogin;
       }
     }
-    return Promise.reject(error.response?.data || error);
+    const payload = error.response?.data;
+    const deadline = retryAfterDeadline(error.response?.headers?.['retry-after']);
+    // Keep the existing error payload shape, while preserving lost HTTP metadata.
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return Promise.reject({ ...payload, statusCode: payload.statusCode ?? error.response?.status, ...(deadline !== undefined ? { retryAfterAt: deadline } : {}) });
+    }
+    return Promise.reject(error);
   },
 );
 
@@ -305,6 +322,10 @@ export function getApiErrorDetails(error: unknown, fallback = 'Something went wr
 }
 
 const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
+  'Something went wrong': {
+    ar: 'حدث خطأ غير متوقع، يرجى المحاولة لاحقاً',
+    en: 'Something went wrong, please try again later',
+  },
   'Your account has been suspended from submitting new complaints': {
     ar: 'تم إيقاف حسابك عن تقديم شكاوى أو بلاغات جديدة',
     en: 'Your account has been suspended from submitting new complaints',

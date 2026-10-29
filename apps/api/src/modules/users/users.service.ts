@@ -656,18 +656,39 @@ export class UsersService {
 
   /**
    * Find all user accounts that are currently locked out due to brute-force protection
+   * or flagged with excess failed login attempts.
    */
   async findLockedAccounts() {
     const now = new Date();
     return this.userModel
       .find({
-        $or: [{ lockUntil: { $gt: now } }, { lockedUntil: { $gt: now } }],
+        $or: [
+          { lockUntil: { $gt: now } },
+          { lockedUntil: { $gt: now } },
+          { failedLoginAttempts: { $gte: 5 } },
+          { loginAttempts: { $gte: 5 } },
+        ],
       })
       .select(
         '_id name nameAr role staffType userCode studentCode staffCode email nationalId failedLoginAttempts loginAttempts lockUntil lockedUntil lastLoginAt updatedAt avatarUrl',
       )
-      .sort({ lockUntil: -1, lockedUntil: -1 })
+      .sort({ lockUntil: -1, lockedUntil: -1, failedLoginAttempts: -1 })
       .lean();
+  }
+
+  /**
+   * Count how many user accounts are currently locked or flagged.
+   */
+  async countLockedAccounts(): Promise<number> {
+    const now = new Date();
+    return this.userModel.countDocuments({
+      $or: [
+        { lockUntil: { $gt: now } },
+        { lockedUntil: { $gt: now } },
+        { failedLoginAttempts: { $gte: 5 } },
+        { loginAttempts: { $gte: 5 } },
+      ],
+    });
   }
 
   /**
@@ -691,7 +712,12 @@ export class UsersService {
     const now = new Date();
     const result = await this.userModel.updateMany(
       {
-        $or: [{ lockUntil: { $gt: now } }, { lockedUntil: { $gt: now } }],
+        $or: [
+          { lockUntil: { $gt: now } },
+          { lockedUntil: { $gt: now } },
+          { failedLoginAttempts: { $gte: 5 } },
+          { loginAttempts: { $gte: 5 } },
+        ],
       },
       {
         $set: { failedLoginAttempts: 0, loginAttempts: 0 },

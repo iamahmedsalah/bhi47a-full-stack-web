@@ -177,6 +177,7 @@ export interface MetricsSummaryResponse {
     failedLogins: number;
     invalidCredentialLogins?: number;
     lockedLogins?: number;
+    currentlyLockedAccounts?: number;
     rateLimitBlocks: number;
     antiCheatViolations: number;
     rateLimitByEndpoint?: LabelCount[];

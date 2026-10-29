@@ -5,7 +5,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import * as os from 'os';
-import { monitorEventLoopDelay } from 'perf_hooks';
+import { monitorEventLoopDelay, performance } from 'perf_hooks';
 import {
   Counter,
   Histogram,
@@ -244,6 +244,21 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(@Optional() private readonly cacheService?: CacheService) {
     this.registry = new Registry();
+    let previousUtilization = performance.eventLoopUtilization();
+    new Gauge({
+      name: 'student_portal_nodejs_eventloop_utilization_ratio',
+      help: 'Event loop utilization since the previous scrape, from 0 to 1',
+      registers: [this.registry],
+      collect() {
+        const current = performance.eventLoopUtilization();
+        const interval = performance.eventLoopUtilization(
+          current,
+          previousUtilization,
+        );
+        previousUtilization = current;
+        this.set(interval.utilization);
+      },
+    });
 
     // Default System Metrics (CPU, Memory Heap/RSS, Event Loop Lag, GC)
     collectDefaultMetrics({

@@ -102,14 +102,24 @@ export class CourseSchedulesController {
     );
   }
 
-  @Get('admin/course-schedules')
-  @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.COURSE_SCHEDULES_READ)
+  @Get(['admin/course-schedules', 'course-schedules'])
+  @Roles('admin', 'staff', 'student')
   @ApiOperation({
-    summary: 'List all course, lecture & section schedules (Admin/Staff)',
+    summary:
+      'List all course, lecture & section schedules (Admin/Staff/Student)',
   })
   async findAll(@Query() query: QueryCourseScheduleDto) {
     return this.schedulesService.findAll(query);
+  }
+
+  @Delete('admin/course-schedules/all')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COURSE_SCHEDULES_WRITE)
+  @ApiOperation({
+    summary: 'Clear all course lecture & section schedules (Admin only)',
+  })
+  async clearAll() {
+    return this.schedulesService.clearAll();
   }
 
   @Post('admin/course-schedules')

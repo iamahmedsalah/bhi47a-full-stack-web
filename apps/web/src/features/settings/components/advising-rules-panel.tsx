@@ -137,13 +137,13 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => setGuideOpen((prev) => !prev)}
-            className="h-9 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+            className="h-auto min-h-11 whitespace-normal rounded-squircle px-3 py-2 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
           >
             <HelpCircle className="h-4 w-4" />
             <span>{isAr ? 'شرح المحرك الأكاديمي' : 'Engine Guide'}</span>
@@ -153,7 +153,7 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
           <Button
             onClick={() => updateMutation.mutate()}
             disabled={!canManage || updateMutation.isPending}
-            className="h-9 gap-2 px-5 text-xs font-semibold shadow-md disabled:opacity-50"
+            className="h-auto min-h-11 whitespace-normal rounded-squircle gap-2 px-4 py-2 text-xs font-semibold shadow-md disabled:opacity-50"
             title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل الإرشاد الأكاديمي' : 'Requires advising.write') : undefined}
           >
             {updateMutation.isPending ? (

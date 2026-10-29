@@ -4,6 +4,17 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 
+export const passkeyUnlockMethods = [
+  "unspecified",
+  "touchId",
+  "faceId",
+  "windowsHello",
+  "fingerprint",
+  "securityKey",
+  "devicePin",
+] as const;
+export type PasskeyUnlockMethod = (typeof passkeyUnlockMethods)[number];
+
 export interface PasskeyMetadata {
   _id: string;
   name: string;
@@ -11,6 +22,8 @@ export interface PasskeyMetadata {
   lastUsedAt?: string;
   backedUp: boolean;
   deviceType: string;
+  /** User-selected label. This is not a detected biometric or security assertion. */
+  unlockMethod?: PasskeyUnlockMethod;
 }
 
 export const passkeyKeys = {
@@ -30,7 +43,9 @@ export async function getPasskeys() {
   return res.data;
 }
 
-export async function passkeyLoginOptions(area: 'student' | 'management' = 'student') {
+export async function passkeyLoginOptions(
+  area: "student" | "management" = "student",
+) {
   const res = await api.post<{
     flowId: string;
     flowToken: string;

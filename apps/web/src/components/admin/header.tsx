@@ -44,7 +44,6 @@ const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
 const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
 
 export default function AdminHeader() {
-  const tSecurity = useTranslations('authSecurity');
   const params = useParams();
   const queryClient = useQueryClient();
   const locale = params.locale as string;
@@ -220,7 +219,6 @@ export default function AdminHeader() {
         <div className="flex items-center gap-2">
           <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
           <LangToggle hideLabel />
-          <Link href={`/${locale}/admin/security`} className="hidden rounded-squircle px-2 py-1 text-xs hover:bg-white/10 md:inline-flex">{tSecurity('title')}</Link>
           <Themes />
 
           {/* Notifications Slide-out Drawer */}

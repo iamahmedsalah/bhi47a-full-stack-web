@@ -3,10 +3,14 @@
 import React, { Suspense, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { useTableState } from '@/hooks/use-table-state';
+import { WeeklyTimetable } from '@/features/course-schedules/weekly-timetable';
+import { ScheduleGroupFilter, ScheduleSearch } from '@/features/course-schedules/schedule-filters';
+import { filterScheduleEntries, scheduleGroups } from '@/features/course-schedules/timetable-model';
 import {
   CalendarDays,
   Plus,
-  Search,
   MoreVertical,
   Edit2,
   Trash2,
@@ -22,6 +26,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   User,
+  List,
+  Layers,
+  Table2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +57,8 @@ import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { EmptyState } from '@/components/ui/feedback';
 import { downloadFileBlob, EXCEL_MIME_TYPE, CSV_MIME_TYPE } from '@/lib/export-utils';
+import { exportScheduleAsLandscapeImage, exportScheduleAsLandscapePdf, type ScheduleExportFormat } from '@/features/course-schedules/export-schedule-image';
+import { ScheduleExportButtons } from '@/features/course-schedules/schedule-export-buttons';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
@@ -259,17 +268,24 @@ function SchedulesManagementContent() {
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
   const isAr = locale === 'ar';
+  const timetableText = useTranslations('courseTimetable');
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const isStaff = user?.role === 'staff';
 
   // Filters State
-  const [search, setSearch] = useState('');
-  const [selectedStaff, setSelectedStaff] = useState<string>('all');
-  const [selectedDay, setSelectedDay] = useState<string>('all');
-  const [selectedType, setSelectedType] = useState<string>('all');
-  const [selectedLevel, setSelectedLevel] = useState<string>('all');
+  const tableState = useTableState({ defaultFilters: { staff: 'all', day: 'all', type: 'all', level: 'all', group: 'all', category: 'all', view: 'timetable' } });
+  const { search, setSearch } = tableState;
+  const { staff: selectedStaff, day: selectedDay, type: selectedType, level: selectedLevel, group: selectedGroup } = tableState.filters;
+  const activeCategoryTab = tableState.filters.category === 'lecture' || tableState.filters.category === 'section' ? tableState.filters.category : 'all';
+  const viewMode = tableState.filters.view === 'table' ? 'table' : 'timetable';
+  const setSelectedStaff = (value: string) => tableState.setFilter('staff', value);
+  const setSelectedDay = (value: string) => tableState.setFilter('day', value);
+  const setSelectedType = (value: string) => tableState.setFilter('type', value);
+  const setSelectedLevel = (value: string) => tableState.setFilter('level', value);
+  const setActiveCategoryTab = (value: string) => tableState.setFilter('category', value);
+  const setViewMode = (value: string) => tableState.setFilter('view', value);
 
   // Modal State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -322,24 +338,9 @@ function SchedulesManagementContent() {
 
   // 1. Fetch schedules
   const schedulesQuery = useQuery({
-    queryKey: [
-      'admin-schedules',
-      selectedStaff,
-      selectedDay,
-      selectedType,
-      selectedLevel,
-      search,
-    ],
+    queryKey: ['admin-schedules'],
     queryFn: async () => {
-      const res = await api.get<CourseScheduleItem[]>('/admin/course-schedules', {
-        params: {
-          staffId: selectedStaff !== 'all' ? selectedStaff : undefined,
-          dayOfWeek: selectedDay !== 'all' ? selectedDay : undefined,
-          type: selectedType !== 'all' ? selectedType : undefined,
-          level: selectedLevel !== 'all' ? selectedLevel : undefined,
-          search: search || undefined,
-        },
-      });
+      const res = await api.get<CourseScheduleItem[]>('/admin/course-schedules');
       return res.data ?? [];
     },
   });
@@ -373,7 +374,86 @@ function SchedulesManagementContent() {
     },
   });
 
-  const schedules = schedulesQuery.data ?? [];
+  const rawSchedules = schedulesQuery.data ?? [];
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
+  const handleClearAllSchedules = async () => {
+    setIsClearingAll(true);
+    try {
+      const res = await api.delete<{ message: string; deletedCount: number }>(
+        '/admin/course-schedules/all',
+      );
+      toast.success(
+        isAr
+          ? `تم مسح جميع المواعيد بنجاح (${res.data.deletedCount} موعد)`
+          : `All schedules cleared successfully (${res.data.deletedCount} slots)`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['admin-schedules'] });
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, isAr ? 'فشل مسح المواعيد' : 'Failed to clear schedules'),
+      );
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
+
+  const [exportingFormat, setExportingFormat] = useState<ScheduleExportFormat | null>(null);
+
+  const handleDownloadImage = async (format: ScheduleExportFormat) => {
+    if (exportingFormat) return;
+
+    if (schedules.length === 0) {
+      toast.warning(
+        isAr
+          ? 'لا توجد مواعيد مسجلة لهذه الفرقة لعرضها في صورة الجدول.'
+          : 'No schedules found for this level to export as an image.',
+      );
+      return;
+    }
+
+    setExportingFormat(format);
+    try {
+      const exportFile = format === 'pdf' ? exportScheduleAsLandscapePdf : exportScheduleAsLandscapeImage;
+      await exportFile({
+        items: schedules,
+        level: selectedLevel,
+        group: selectedGroup !== 'all' ? selectedGroup : undefined,
+        categoryTab: activeCategoryTab,
+        locale,
+      });
+      toast.success(format === 'pdf' ? (isAr ? 'تم تحميل ملف PDF بالعرض بنجاح!' : 'Landscape PDF downloaded successfully!') :
+        isAr
+          ? 'تم تحميل صورة الجدول الدراسي بنجاح!'
+          : 'Schedule image downloaded successfully!',
+      );
+    } catch {
+      toast.error(format === 'pdf' ? (isAr ? 'تعذر تحميل ملف PDF، يرجى المحاولة مرة أخرى.' : 'Failed to download PDF, please try again.') :
+        isAr
+          ? 'تعذر تحميل صورة الجدول، يرجى المحاولة مرة أخرى.'
+          : 'Failed to download schedule image, please try again.',
+      );
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const matchingSchedules = useMemo(() => filterScheduleEntries(rawSchedules, {
+    staff: selectedStaff, day: selectedDay, type: selectedType, level: selectedLevel, group: selectedGroup, search,
+  }), [rawSchedules, selectedStaff, selectedDay, selectedType, selectedLevel, selectedGroup, search]);
+  const schedules = useMemo(() => filterScheduleEntries(matchingSchedules, { category: activeCategoryTab }), [matchingSchedules, activeCategoryTab]);
+  const groups = useMemo(() => scheduleGroups(rawSchedules), [rawSchedules]);
+
+  const lectureCount = useMemo(
+    () => matchingSchedules.filter((s) => s.type === 'lecture').length,
+    [matchingSchedules],
+  );
+  const sectionCount = useMemo(
+    () => matchingSchedules.filter((s) => s.type === 'section' || s.type === 'lab').length,
+    [matchingSchedules],
+  );
+  const totalCount = matchingSchedules.length;
+
   const courses = coursesQuery.data ?? [];
   const staffMembers = staffQuery.data ?? [];
 
@@ -439,7 +519,7 @@ function SchedulesManagementContent() {
     const conflicts: string[] = [];
     const normalizedLoc = formLocation.trim().toLowerCase();
 
-    for (const item of schedules) {
+    for (const item of rawSchedules) {
       if (editingItem && item._id === editingItem._id) continue;
       if (item.dayOfWeek !== formDay) continue;
 
@@ -497,7 +577,7 @@ function SchedulesManagementContent() {
     formDepartment,
     formGroup,
     formSection,
-    schedules,
+    rawSchedules,
     editingItem,
     isAr,
   ]);
@@ -578,6 +658,7 @@ function SchedulesManagementContent() {
         startTime: formStartTime,
         endTime: formEndTime,
         location: formLocation.trim(),
+        locationAr: editingItem && formLocation.trim() === editingItem.location ? editingItem.locationAr : formLocation.trim(),
         level: formLevel,
         semester: formSemester,
         department: formDepartment,
@@ -808,6 +889,44 @@ function SchedulesManagementContent() {
         icon={<CalendarDays className="h-5 w-5 text-primary" />}
       >
         <div className="flex flex-wrap items-center gap-2.5">
+          {isAdmin && rawSchedules.length > 0 && (
+            <ConfirmDialog
+              title={isAr ? 'مسح جميع مواعيد الجدول الدراسي' : 'Clear All Course Schedules'}
+              description={
+                isAr
+                  ? 'تحذير أمني: سيتم حذف كافة مواعيد المحاضرات والسكاشن المسجلة نهائياً من قاعدة البيانات. هل أنت متأكد من الاستمرار؟'
+                  : 'Warning: This will permanently remove all lecture and section schedule entries from the database. Are you sure you want to proceed?'
+              }
+              confirmLabel={isAr ? 'نعم، مسح كل المواعيد' : 'Yes, Clear All'}
+              cancelLabel={isAr ? 'إلغاء' : 'Cancel'}
+              dir={isAr ? 'rtl' : 'ltr'}
+              destructive
+              disabled={isClearingAll}
+              onConfirm={handleClearAllSchedules}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isClearingAll}
+                  className="flex items-center gap-2 rounded-squircle border-rose-500/30 bg-rose-500/10 text-rose-400 font-semibold hover:bg-rose-500/20 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-400" />
+                  <span>
+                    {isClearingAll
+                      ? isAr
+                        ? 'جاري المسح...'
+                        : 'Clearing...'
+                      : isAr
+                        ? 'مسح جميع المواعيد'
+                        : 'Clear All'}
+                  </span>
+                </Button>
+              }
+            />
+          )}
+
+          <ScheduleExportButtons locale={locale} busyFormat={exportingFormat} disabled={schedulesQuery.isPending || schedulesQuery.isError || schedules.length === 0} onExport={format => void handleDownloadImage(format)} />
+
           {isAdmin && (
             <Button
               type="button"
@@ -882,22 +1001,112 @@ function SchedulesManagementContent() {
         </div>
       )}
 
+      {/* Category Tabs & View Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Category Tabs: الكل / محاضرات الأساتذة / سكاشن المعيدين */}
+        <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border/70 bg-card/60 p-1.5 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('all')}
+            className={`flex items-center gap-2 rounded-squircle px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              activeCategoryTab === 'all'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>{isAr ? 'الكل (جميع المواعيد)' : 'All Schedules'}</span>
+            <span
+              className={`rounded-squircle px-1.5 py-0.5 text-[10px] font-bold ${
+                activeCategoryTab === 'all'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-secondary text-muted-foreground'
+              }`}
+            >
+              {totalCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('lecture')}
+            className={`flex items-center gap-2 rounded-squircle px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              activeCategoryTab === 'lecture'
+                ? 'bg-teal-600 text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-teal-500/10 hover:text-teal-300'
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5 text-teal-400" />
+            <span>{isAr ? 'محاضرات الأساتذة (دكتور)' : 'Doctor Lectures'}</span>
+            <span
+              className={`rounded-squircle px-1.5 py-0.5 text-[10px] font-bold ${
+                activeCategoryTab === 'lecture'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-teal-500/15 text-teal-300'
+              }`}
+            >
+              {lectureCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('section')}
+            className={`flex items-center gap-2 rounded-squircle px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              activeCategoryTab === 'section'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-purple-500/10 hover:text-purple-300'
+            }`}
+          >
+            <GraduationCap className="h-3.5 w-3.5 text-purple-400" />
+            <span>{isAr ? 'سكاشن وتطبيقات المعيدين' : 'TA Sections'}</span>
+            <span
+              className={`rounded-squircle px-1.5 py-0.5 text-[10px] font-bold ${
+                activeCategoryTab === 'section'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-purple-500/15 text-purple-300'
+              }`}
+            >
+              {sectionCount}
+            </span>
+          </button>
+        </div>
+
+        {/* View Mode Toggle: Table View vs Timetable View */}
+        <div className="flex items-center gap-1 rounded-2xl border border-border/70 bg-card/60 p-1 backdrop-blur-md">
+          <button
+            type="button"
+            aria-pressed={viewMode === 'timetable'}
+            onClick={() => setViewMode('timetable')}
+            className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              viewMode === 'timetable'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {timetableText('view')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`flex items-center gap-1.5 rounded-squircle px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+              viewMode === 'table'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <List className="h-3.5 w-3.5" />
+            <span>{isAr ? 'جدول منظم' : 'Table View'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Filter Bar with Radix Selects */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card/60 p-4 backdrop-blur-md">
         {/* Search */}
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={
-              isAr
-                ? 'بحث باسم المادة، الدكتور، القاعة، السكشن...'
-                : 'Search course, staff, hall, section...'
-            }
-            className="ps-9 rounded-squircle text-xs"
-          />
-        </div>
+        <ScheduleSearch value={search} onChange={setSearch} />
+        <div className="min-w-36"><ScheduleGroupFilter value={selectedGroup} groups={groups} onChange={value => tableState.setFilter('group', value)} /></div>
 
         {/* Doctor / Staff Filter Dropdown */}
         <div className="min-w-[190px]">
@@ -983,7 +1192,7 @@ function SchedulesManagementContent() {
         {/* Level Filter */}
         <div className="w-[130px]">
           <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-            <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+            <SelectTrigger aria-label={isAr ? 'تصفية حسب الفرقة' : 'Filter by level'} className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
               <SelectValue placeholder={isAr ? 'جميع الفرق' : 'All Levels'} />
             </SelectTrigger>
             <SelectContent>
@@ -995,11 +1204,12 @@ function SchedulesManagementContent() {
             </SelectContent>
           </Select>
         </div>
+        {(search || [selectedStaff, selectedDay, selectedType, selectedLevel, selectedGroup].some(value => value !== 'all')) && <Button type="button" variant="ghost" size="sm" onClick={tableState.resetAll} className="rounded-squircle text-xs">{timetableText('reset')}</Button>}
       </div>
 
       {/* Schedules Table */}
-      <div className="rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md shadow-sm overflow-hidden">
-        {schedulesQuery.isLoading ? (
+      <div className={viewMode === 'timetable' ? 'min-w-0' : 'rounded-2xl border border-border/80 bg-card/60 backdrop-blur-md shadow-sm overflow-hidden'}>
+        {schedulesQuery.isError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-5 text-sm"><span>{timetableText('loadFailed')}</span><Button type="button" variant="outline" onClick={() => void schedulesQuery.refetch()}>{timetableText('retry')}</Button></div> : schedulesQuery.isLoading ? (
           <div className="flex min-h-64 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -1022,6 +1232,13 @@ function SchedulesManagementContent() {
                 </Button>
               ) : undefined
             }
+          />
+        ) : viewMode === 'timetable' ? (
+          <WeeklyTimetable
+            entries={schedules}
+            category={activeCategoryTab}
+            onEdit={isAdmin ? handleOpenEdit : undefined}
+            onDelete={isAdmin ? setItemToDelete : undefined}
           />
         ) : (
           <div className="overflow-x-auto">

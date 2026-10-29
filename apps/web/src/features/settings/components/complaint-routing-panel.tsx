@@ -228,7 +228,7 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-squircle bg-primary/10 border border-primary/20 text-primary">
               <GitPullRequest className="h-5 w-5" />
             </div>
             <div>
@@ -289,7 +289,7 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
       <Card className="border-border/70 bg-card/90 p-5 shadow-[var(--shadow-glow)] space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/50 pb-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle bg-teal-500/10 border border-teal-500/20 text-teal-400">
               <Gauge className="h-4 w-4" />
             </div>
             <div>
@@ -332,7 +332,7 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
             dir="ltr"
           />
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {[1, 2, 3, 5].map((preset) => (
               <Button
                 key={preset}
@@ -494,14 +494,14 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
             {hasChanges && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleReset}
                 disabled={saveMutation.isPending}
-                className="gap-1.5 rounded-squircle text-xs cursor-pointer"
+                className="h-auto min-h-11 whitespace-normal px-3 py-2 gap-1.5 rounded-squircle text-xs cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>{isAr ? 'تراجع' : 'Discard'}</span>
@@ -512,7 +512,7 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
               onClick={handleSave}
               disabled={!hasChanges || saveMutation.isPending}
               size="sm"
-              className="gap-2 rounded-squircle text-xs cursor-pointer"
+              className="h-auto min-h-11 whitespace-normal px-3 py-2 gap-2 rounded-squircle text-xs cursor-pointer"
             >
               {saveMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

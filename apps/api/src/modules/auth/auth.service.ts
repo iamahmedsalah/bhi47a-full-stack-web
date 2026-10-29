@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Response, Request } from 'express';
 import { AuthLoginService } from './services/auth-login.service';
 import { AuthPasswordService } from './services/auth-password.service';
 import { AuthSessionService } from './services/auth-session.service';
@@ -73,8 +73,8 @@ export class AuthService {
     return this.sessionService.getMe(userId);
   }
 
-  setCookieToken(res: Response, token: string) {
-    return this.sessionService.setCookieToken(res, token);
+  setCookieToken(res: Response, token: string, req?: Request) {
+    return this.sessionService.setCookieToken(res, token, req);
   }
 
   clearCookieToken(res: Response) {

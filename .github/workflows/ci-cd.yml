@@ -103,6 +103,9 @@ jobs:
       - name: Test attendance location acquisition
         run: pnpm --filter @student-portal/web test:location
 
+      - name: Test course timetable layout and filtering
+        run: pnpm --filter @student-portal/web test:timetable
+
       - name: Build workspace
         run: pnpm run build
 
@@ -125,6 +128,12 @@ jobs:
 
       - name: Typecheck API end-to-end fixtures
         run: pnpm --filter @student-portal/api typecheck:e2e
+
+      - name: Test timetable views and PNG downloads in Chromium
+        run: pnpm --filter @student-portal/web test:timetable:browser
+
+      - name: Test responsive security and settings in Chromium
+        run: pnpm --filter @student-portal/web test:security
 
       - name: Test API end to end with browser passkeys
         run: pnpm run test:e2e -- --runInBand

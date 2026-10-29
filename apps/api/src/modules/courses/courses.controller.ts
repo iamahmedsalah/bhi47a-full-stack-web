@@ -144,11 +144,11 @@ export class CoursesController {
   }
 
   @Post('admin/courses/:id/enroll-students-excel')
-  @Roles('admin', 'staff')
+  @Roles('admin')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max for academic material
     }),
   )
   @ApiConsumes('multipart/form-data')
@@ -190,7 +190,7 @@ export class CoursesController {
   }
 
   @Post('admin/courses/:id/enroll-students-batch')
-  @Roles('admin', 'staff')
+  @Roles('admin')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({
     summary: 'Bulk enroll students in this course from JSON batch rows',
@@ -233,8 +233,56 @@ export class CoursesController {
     });
   }
 
-  @Delete('admin/courses/:id/enrollments')
+  @Get('admin/courses/:id/enrolled-students')
   @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_READ)
+  @ApiOperation({
+    summary:
+      'Get enrolled students list for a course with full student profile details',
+  })
+  async getCourseEnrolledStudents(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.coursesService.getCourseEnrolledStudents(id, {
+      academicYear,
+      semester,
+      search,
+    });
+  }
+
+  @Get('admin/courses/:id/enrolled-students/export')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSES_READ)
+  @ApiOperation({
+    summary:
+      'Export course enrolled students roster as styled Excel (.xlsx) file',
+  })
+  async exportCourseEnrolledStudents(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Res() res: Response,
+    @Query('academicYear') academicYear?: string,
+    @Query('semester') semester?: string,
+  ) {
+    const { buffer, filename, contentType } =
+      await this.coursesService.exportCourseEnrolledStudents(id, {
+        academicYear,
+        semester,
+      });
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buffer);
+  }
+
+  @Delete('admin/courses/:id/enrollments')
+  @Roles('admin')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({
     summary:
@@ -399,7 +447,7 @@ export class CoursesController {
   @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_WRITE)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max for academic material
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max for academic material
     }),
   )
   @ApiConsumes('multipart/form-data')

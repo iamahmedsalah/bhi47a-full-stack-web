@@ -26,17 +26,17 @@ interface StatusBadgeProps {
 
 const variantStyles: Record<BadgeVariant, string> = {
   success:
-    'bg-success/15 border-success/30 text-success',
+    'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 shadow-xs shadow-emerald-500/10',
   danger:
-    'bg-danger/15 border-danger/30 text-danger',
+    'bg-rose-500/15 border-rose-500/40 text-rose-400 shadow-xs shadow-rose-500/10',
   warning:
-    'bg-yellow-500/15 border-yellow-500/30 text-yellow-400',
+    'bg-amber-500/15 border-amber-500/40 text-amber-400 shadow-xs shadow-amber-500/10',
   info:
-    'bg-primary/15 border-primary/30 text-primary',
+    'bg-primary/15 border-primary/40 text-primary shadow-xs shadow-primary/10',
   neutral:
-    'bg-muted/15 border-muted/30 text-muted-foreground',
+    'bg-muted/20 border-border text-muted-foreground',
   primary:
-    'bg-primary/15 border-primary/30 text-primary',
+    'bg-primary/15 border-primary/40 text-primary shadow-xs shadow-primary/10',
 };
 
 /**
@@ -76,6 +76,8 @@ export function StatusBadge({
         case 'rejected': return 'Rejected';
         case 'published': return 'Published';
         case 'hidden': return 'Hidden';
+        case 'results_hidden': return 'Results Hidden';
+        case 'review_disabled': return 'Review Disabled';
         case 'pass': return 'Pass';
         case 'fail': return 'Fail';
         default: return label;
@@ -107,6 +109,10 @@ export function StatusBadge({
         return 'منشور';
       case 'hidden':
         return 'مخفي';
+      case 'results_hidden':
+        return 'النتائج محجوبة';
+      case 'review_disabled':
+        return 'المراجعة معطلة';
       case 'pass':
         return 'ناجح';
       case 'fail':

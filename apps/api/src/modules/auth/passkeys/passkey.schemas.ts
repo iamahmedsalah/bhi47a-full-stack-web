@@ -1,5 +1,17 @@
 import { Schema } from 'mongoose';
 
+// A user-chosen display label, never evidence of the authenticator's UV method.
+export const PASSKEY_UNLOCK_METHODS = [
+  'unspecified',
+  'touchId',
+  'faceId',
+  'windowsHello',
+  'fingerprint',
+  'securityKey',
+  'devicePin',
+] as const;
+export type PasskeyUnlockMethod = (typeof PASSKEY_UNLOCK_METHODS)[number];
+
 export interface PasskeySettings {
   _id: string;
   studentLoginEnabled: boolean;
@@ -24,6 +36,7 @@ export interface PasskeyCredential {
   deviceType: string;
   backedUp: boolean;
   name: string;
+  unlockMethod?: PasskeyUnlockMethod;
   createdAt: Date;
   lastUsedAt?: Date;
 }
@@ -40,6 +53,11 @@ export const PasskeyCredentialSchema = new Schema<PasskeyCredential>(
     deviceType: { type: String, required: true },
     backedUp: { type: Boolean, required: true },
     name: { type: String, required: true, maxlength: 80 },
+    unlockMethod: {
+      type: String,
+      enum: PASSKEY_UNLOCK_METHODS,
+      default: 'unspecified',
+    },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: Date,
   },

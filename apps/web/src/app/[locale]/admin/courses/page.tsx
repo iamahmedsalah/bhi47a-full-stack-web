@@ -46,6 +46,7 @@ import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { TableActionButton } from '@/components/ui/table-action-button';
 import { CourseStudentEnrollmentDialog } from '@/features/courses/components/course-student-enrollment-dialog';
 import { CourseMaterialsDialog } from '@/features/courses/components/course-materials-dialog';
+import { CourseEnrolledStudentsDialog } from '@/features/courses/components/course-enrolled-students-dialog';
 
 // shadcn
 import { Button } from '@/components/ui/button';
@@ -1101,6 +1102,7 @@ function CoursesPageContent() {
   const canCreateQuiz = isAdmin || Boolean(user?.permissions?.includes('quizzes.write')) || Boolean(user?.permissions?.includes('quizzes.create'));
   const canReadQuizzes = isAdmin || Boolean(user?.permissions?.includes('quizzes.read'));
 
+  const [activeMainTab, setActiveMainTab] = useState<'courses' | 'materials'>('courses');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -1115,6 +1117,8 @@ function CoursesPageContent() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
+  const [selectedEnrolledCourse, setSelectedEnrolledCourse] = useState<Course | null>(null);
+  const [isEnrolledStudentsOpen, setIsEnrolledStudentsOpen] = useState(false);
 
   const coursesQuery = useQuery({
     queryKey: ['courses', search, activeLevel, activeSemester, activeDepartment, page, limit, user?._id],
@@ -1320,10 +1324,20 @@ function CoursesPageContent() {
       header: t('courseName'),
       render: (course) => (
         <TableCell className="p-4 font-medium text-foreground">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4 shrink-0 text-muted" />
-            <span>{getCourseName(course)}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedEnrolledCourse(course);
+              setIsEnrolledStudentsOpen(true);
+            }}
+            className="flex items-center gap-2 text-start font-medium text-foreground hover:text-primary transition-colors cursor-pointer group"
+            title={locale === 'ar' ? 'عرض كشف الطلاب المسجلين' : 'View enrolled students'}
+          >
+            <BookOpen className="h-4 w-4 shrink-0 text-muted group-hover:text-primary transition-colors" />
+            <span className="group-hover:underline underline-offset-4 decoration-primary/60">
+              {getCourseName(course)}
+            </span>
+          </button>
         </TableCell>
       ),
     },
@@ -1491,7 +1505,7 @@ function CoursesPageContent() {
                 align="end"
                 className="z-50 min-w-52 overflow-hidden rounded-xl border border-border/80 bg-popover/95 p-1 text-popover-foreground shadow-xl backdrop-blur-md animate-in fade-in-0 zoom-in-95 text-start"
               >
-                {(canWriteCourses || isDoctor) && (
+                {isAdmin && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setSelectedCourse(course);
@@ -1503,6 +1517,18 @@ function CoursesPageContent() {
                     <span>{locale === 'ar' ? 'تعديل غلاف وبيانات المقرر' : 'Edit Book Cover & Course'}</span>
                   </DropdownMenu.Item>
                 )}
+
+                {/* View Enrolled Students (Admin and Staff) */}
+                <DropdownMenu.Item
+                  onClick={() => {
+                    setSelectedEnrolledCourse(course);
+                    setIsEnrolledStudentsOpen(true);
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
+                >
+                  <Users className="h-3.5 w-3.5 text-primary" />
+                  <span>{locale === 'ar' ? 'عرض كشف الطلاب المسجلين' : 'View Enrolled Students'}</span>
+                </DropdownMenu.Item>
 
                 {/* Course Lectures & Sections (Admin, Doctor, TA) */}
                 <DropdownMenu.Item
@@ -1530,7 +1556,7 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
-                {(canWriteCourses || isDoctor) && (
+                {isAdmin && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setEnrollmentCourseId(course._id);
@@ -1543,7 +1569,7 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
-                {canWriteCourses && !isDoctor && (
+                {isAdmin && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setEnrollmentCourseId(course._id);
@@ -1580,7 +1606,7 @@ function CoursesPageContent() {
                   </DropdownMenu.Item>
                 )}
 
-                {canWriteCourses && !isDoctor && (
+                {isAdmin && (
                   <>
                     <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
                     <DropdownMenu.Item
@@ -1621,7 +1647,7 @@ function CoursesPageContent() {
             {locale === 'ar' ? 'رفع المقررات' : 'Upload Courses'}
           </Button>
         )}
-        {canWriteCourses && !isDoctor && (
+        {isAdmin && (
           <Button
             variant="outline"
             onClick={() => {
@@ -1638,7 +1664,7 @@ function CoursesPageContent() {
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {locale === 'ar' ? 'تصدير' : 'Export'}
         </Button>
-        {canWriteCourses && !isDoctor && (
+        {isAdmin && (
           <Button
             onClick={() => setIsAddOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-primary font-semibold text-white shadow-lg hover:bg-primary-hover active:scale-[0.98]"
@@ -1648,6 +1674,35 @@ function CoursesPageContent() {
           </Button>
         )}
       </PageTitleBanner>
+
+      {/* Main Tabs: Courses vs Lectures & Sections */}
+      <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('courses')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-squircle text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+            activeMainTab === 'courses'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          <span>{locale === 'ar' ? 'المقررات الدراسية' : 'Courses'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('materials')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-squircle text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+            activeMainTab === 'materials'
+              ? 'bg-primary text-white shadow-sm'
+              : 'bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>{locale === 'ar' ? 'المحاضرات والسكاشن التعليمية' : 'Lectures & Sections'}</span>
+        </button>
+      </div>
 
       {/* Level Filter Dropdown */}
       <FilterBar
@@ -1703,7 +1758,9 @@ function CoursesPageContent() {
         </Select>
       </FilterBar>
 
-      {/* Total count */}
+      {activeMainTab === 'courses' ? (
+        <>
+          {/* Total count */}
       <p className="text-sm text-muted">
         Showing <span className="font-bold text-foreground">{fromRow}-{toRow}</span> of{' '}
         <span className="font-bold text-foreground">{total}</span>
@@ -1812,6 +1869,123 @@ function CoursesPageContent() {
           </div>
         ))}
       </div>
+
+        </>
+      ) : (
+        /* ─── Lectures & Sections Hub View ─────────────────── */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-2xl border border-teal-500/20 bg-teal-500/5 dark:bg-teal-500/10 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/20 text-teal-600 dark:text-teal-400">
+                <Layers className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  {locale === 'ar' ? 'المحاضرات والسكاشن التعليمية للمقررات' : 'Course Lectures & Practical Sections'}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {locale === 'ar'
+                    ? 'اختر المقرر لرفع واستعراض المحاضرات والسكاشن (الحد الأقصى لحجم الملف: 10 ميجابايت)'
+                    : 'Select a course to view or upload lectures and sections (Max upload size: 10 MB)'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground font-medium">
+              {locale === 'ar' ? `عدد المقررات المتاحة: ${courses.length}` : `Available courses: ${courses.length}`}
+            </p>
+          </div>
+
+          {coursesQuery.isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="text-xs">{tCommon('loading')}</span>
+            </div>
+          ) : courses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-2xl p-8">
+              <BookOpen className="h-8 w-8 text-muted mb-2" />
+              <p className="text-xs font-semibold text-foreground">{tCommon('noData')}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {locale === 'ar' ? 'لا توجد مقررات دراسية مطابقة للفلاتر المحددة.' : 'No courses match the selected filters.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {courses.map((course) => (
+                <div
+                  key={course._id}
+                  className="flex flex-col justify-between rounded-2xl border border-border/70 bg-card p-4.5 shadow-xs hover:border-teal-500/40 hover:shadow-sm transition-all"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[11px] font-mono font-bold bg-primary/10 text-primary">
+                        {course.code}
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-medium bg-muted text-muted-foreground">
+                        {t(`level_${course.level}`)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground leading-snug line-clamp-1">
+                        {getCourseName(course)}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {courseCurriculumSummary(course, locale)}
+                      </p>
+                    </div>
+
+                    {/* Staff details */}
+                    <div className="rounded-xl border border-border/50 bg-secondary/30 p-2.5 space-y-1.5 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">{locale === 'ar' ? 'أستاذ المقرر:' : 'Doctor:'}</span>
+                        <span className="font-medium text-foreground truncate max-w-37.5">
+                          {(course as any).doctor?.name || (course as any).doctorName || (locale === 'ar' ? 'لم يُحدد' : 'Unassigned')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">{locale === 'ar' ? 'المعيد:' : 'TA:'}</span>
+                        <span className="font-medium text-foreground truncate max-w-37.5">
+                          {(course as any).teachingAssistant?.name || (course as any).teachingAssistantName || (locale === 'ar' ? 'لم يُحدد' : 'Unassigned')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/50 flex flex-col gap-2 mt-3">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCourseForMaterials(course);
+                        setIsMaterialsOpen(true);
+                      }}
+                      className="w-full rounded-squircle bg-primary text-white hover:bg-primary-hover font-semibold text-xs h-8 gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      <span>{locale === 'ar' ? 'المحاضرات والسكاشن' : 'Lectures & Sections'}</span>
+                    </Button>
+
+                    {canManageBook && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedCourseForPdf(course);
+                          setIsPdfModalOpen(true);
+                        }}
+                        className="w-full rounded-squircle text-xs h-8 gap-1.5 border-teal-500/30 text-teal-700 dark:text-teal-300 hover:bg-teal-500/10 cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        <span>{locale === 'ar' ? 'منهج المقرر (PDF)' : 'Syllabus PDF'}</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Course Dialog */}
       <CourseFormDialog
@@ -1947,6 +2121,14 @@ function CoursesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+        }}
+      />
+      <CourseEnrolledStudentsDialog
+        course={selectedEnrolledCourse}
+        isOpen={isEnrolledStudentsOpen}
+        onClose={() => {
+          setIsEnrolledStudentsOpen(false);
+          setSelectedEnrolledCourse(null);
         }}
       />
     </div>

@@ -22,6 +22,10 @@ import {
 import { UsersService } from '../../users/users.service';
 import { AuthSessionService } from '../services/auth-session.service';
 import { MetricsService } from '../../../core/metrics/metrics.service';
+import {
+  StudentProfile,
+  type StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
 import { readPasskeyConfig } from './passkeys.config';
 import type {
   PasskeyCredential,
@@ -29,6 +33,7 @@ import type {
   PasskeySettings,
 } from './passkey.schemas';
 import type {
+  PasskeyNameDto,
   PasskeyLoginVerifyDto,
   PasskeyRegisterVerifyDto,
 } from './passkeys.dto';
@@ -57,6 +62,9 @@ export class PasskeysService implements OnModuleInit {
     private readonly sessions: AuthSessionService,
     @InjectModel('PasskeySettings')
     private readonly settings: Model<PasskeySettings>,
+    @Optional()
+    @InjectModel(StudentProfile.name)
+    private readonly studentProfiles?: Model<StudentProfileDocument>,
     @Optional() private readonly metrics?: MetricsService,
   ) {
     this.policy = readPasskeyConfig(config);
@@ -221,14 +229,76 @@ export class PasskeysService implements OnModuleInit {
 
   async registerOptions(userId: string, token: string, origin: string) {
     const binding = await this.requireRecent(userId, token, origin);
+    const user = await this.activeUser(userId);
     const existing = await this.credentials.find({ userId }).limit(100).lean();
     if (existing.length >= 20)
       throw new BadRequestException('Maximum number of passkeys reached');
+
+    const userAny = user as unknown as Record<string, unknown>;
+    let resolvedCode =
+      (typeof user.studentCode === 'string' && user.studentCode.trim()) ||
+      (typeof userAny.userCode === 'string' && userAny.userCode.trim()) ||
+      undefined;
+
+    let resolvedEmail =
+      (typeof user.email === 'string' && user.email.trim()) ||
+      (typeof userAny.googleEmail === 'string' && userAny.googleEmail.trim()) ||
+      (typeof userAny.academicEmail === 'string' &&
+        userAny.academicEmail.trim()) ||
+      undefined;
+
+    let resolvedName =
+      (typeof user.name === 'string' && user.name.trim()) ||
+      (typeof userAny.fullName === 'string' && userAny.fullName.trim()) ||
+      (typeof userAny.fullNameAr === 'string' && userAny.fullNameAr.trim()) ||
+      (typeof userAny.fullNameEn === 'string' && userAny.fullNameEn.trim()) ||
+      undefined;
+
+    if (user.role === 'student' && this.studentProfiles) {
+      try {
+        const profile = await this.studentProfiles.findOne({ userId }).lean();
+        if (profile) {
+          if (!resolvedCode && profile.studentCode) {
+            resolvedCode = profile.studentCode.trim();
+          }
+          if (!resolvedName) {
+            resolvedName =
+              profile.fullName?.trim() ||
+              profile.fullNameAr?.trim() ||
+              profile.fullNameEn?.trim() ||
+              undefined;
+          }
+          if (!resolvedEmail && profile.academicEmail) {
+            resolvedEmail = profile.academicEmail.trim();
+          }
+        }
+      } catch {
+        /* Fallback gracefully */
+      }
+    }
+
+    const resolvedUsername =
+      (typeof user.username === 'string' && user.username.trim()) || undefined;
+
+    // Prefer human-readable identifiers: Student Code, Email, Username, or Full Name.
+    const accountIdentifier =
+      resolvedCode ||
+      resolvedEmail ||
+      resolvedUsername ||
+      resolvedName ||
+      (user.role === 'student'
+        ? `student-${userId.slice(-6)}`
+        : `admin-${userId.slice(-6)}`);
+
+    const userDisplayName =
+      resolvedName || resolvedEmail || resolvedCode || accountIdentifier;
+
     const options = await generateRegistrationOptions({
       rpName: 'Student Portal',
       rpID: this.policy.rpID,
       userID: new Uint8Array(this.userHandle(userId)),
-      userName: this.userHandle(userId).toString('base64url'),
+      userName: accountIdentifier,
+      userDisplayName,
       attestationType: 'none',
       authenticatorSelection: {
         residentKey: 'required',
@@ -323,6 +393,7 @@ export class PasskeysService implements OnModuleInit {
         deviceType: info.credentialDeviceType,
         backedUp: info.credentialBackedUp,
         name,
+        unlockMethod: dto.unlockMethod ?? 'unspecified',
       });
     } catch (error) {
       if ((error as { code?: number }).code === 11000)
@@ -441,7 +512,7 @@ export class PasskeysService implements OnModuleInit {
     if (!this.policy.enabled) throw new NotFoundException();
     return this.credentials
       .find({ userId })
-      .select('name createdAt lastUsedAt deviceType backedUp')
+      .select('name createdAt lastUsedAt deviceType backedUp unlockMethod')
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();
@@ -465,13 +536,19 @@ export class PasskeysService implements OnModuleInit {
     origin: string,
     id: string,
     name: string,
+    unlockMethod?: PasskeyNameDto['unlockMethod'],
   ) {
     await this.requireRecent(userId, token, origin, `rename:${id}`);
     if (!/^[a-f\d]{24}$/i.test(id) || !name.trim())
       throw new BadRequestException('Invalid passkey');
     const result = await this.credentials.updateOne(
       { _id: id, userId },
-      { $set: { name: name.trim() } },
+      {
+        $set: {
+          name: name.trim(),
+          ...(unlockMethod !== undefined ? { unlockMethod } : {}),
+        },
+      },
     );
     if (!result.matchedCount) throw new NotFoundException('Passkey not found');
     return { ok: true };

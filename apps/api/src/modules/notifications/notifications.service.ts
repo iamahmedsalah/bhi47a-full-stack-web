@@ -28,6 +28,7 @@ import {
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { QueueService } from '../../core/queues/queue.service';
+import { getRequestQueryContext } from '../../core/metrics/request-query-context';
 
 interface PushNotificationJob {
   notificationId: string;
@@ -629,7 +630,13 @@ export class NotificationsService implements OnModuleInit {
   }
 
   private async buildStudentNotificationFilter(userId: string) {
-    const student = await this.userModel.findById(userId);
+    // Reuse only the authenticated identity loaded for this same HTTP request.
+    const authenticated = getRequestQueryContext()?.request.reads.get(
+      `auth-user:${userId}`,
+    ) as Promise<{ _id: Types.ObjectId } | null> | undefined;
+    // Do not populate the auth-owned cache with an incomplete _id-only record.
+    const student = await (authenticated ??
+      this.userModel.findById(userId).select('_id').lean());
     if (!student) {
       throw new NotFoundException('Student not found');
     }

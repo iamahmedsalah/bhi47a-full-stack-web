@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { AuthLoginService } from './services/auth-login.service';
 import { AuthPasswordService } from './services/auth-password.service';
 import { AuthSessionService } from './services/auth-session.service';
+import { AuthSessionMetadataService } from './services/auth-session-metadata.service';
 import { AuthController } from './auth.controller';
 import { AuthSecurityController } from './auth-security.controller';
 import {
@@ -72,6 +73,7 @@ import {
   controllers: [AuthController, PasskeysController, AuthSecurityController],
   providers: [
     AuthSessionStore,
+    AuthSessionMetadataService,
     RecentAuthService,
     PasskeysService,
     AuthService,

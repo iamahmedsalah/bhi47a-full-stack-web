@@ -405,8 +405,8 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-teal-950/40 via-teal-900/15 to-transparent p-5 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 text-xs font-semibold text-primary">
-              <ShieldCheck className="h-3.5 w-3.5" />
+            <div className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
               {isAr ? 'إدارة فترات وسنوات التسجيل الأكاديمي' : 'Academic Registration Terms Management'}
             </div>
             <h3 className="text-base font-bold text-foreground">
@@ -419,13 +419,13 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
             </p>
           </div>
 
-          <div className="flex flex-wrap shrink-0 items-center gap-2">
+          <div className="grid shrink-0 gap-2 md:max-w-64">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setGuideOpen((prev) => !prev)}
-              className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+              className="h-auto min-h-11 whitespace-normal rounded-squircle px-3 py-2.5 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
             >
               <HelpCircle className="h-3.5 w-3.5" />
               <span>{isAr ? 'دليل قفل وإدارة الفصول' : 'Term Locking Guide'}</span>
@@ -444,7 +444,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                 }
                 setCreateDialogOpen(true);
               }}
-              className="gap-2 bg-primary font-semibold text-xs text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+              className="h-auto min-h-11 whitespace-normal rounded-squircle gap-2 bg-primary px-3 py-2.5 font-semibold text-xs text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
               title={!canManage ? (isAr ? 'يتطلب صلاحية تعديل التسجيل' : 'Requires registration.write') : undefined}
             >
               <CalendarPlus className="h-4 w-4" />
@@ -543,35 +543,35 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       </div>
 
       {/* View Switcher & Action Bar */}
-      <div className="flex items-center justify-between border-b border-border/60 pb-3">
+      <div className="flex flex-col gap-3 border-b border-border/60 pb-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <h4 className="text-sm font-bold text-foreground">
             {isAr ? 'الفصول والسنوات المسجلة' : 'Registered Terms & Years'}
           </h4>
-          <span className="rounded-full bg-surface px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+          <span className="rounded-squircle bg-surface px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
             {academicYears.length}
           </span>
         </div>
 
-        <div className="inline-flex rounded-lg border border-border/80 bg-surface/60 p-0.5">
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-border/80 bg-surface/60 p-1">
           <button
             type="button"
             onClick={() => setViewMode('grid')}
             className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              'flex min-w-0 items-center justify-center gap-1.5 rounded-squircle px-2 py-2 text-xs font-medium transition-colors',
               viewMode === 'grid'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Grid3X3 className="h-3.5 w-3.5" />
+            <Grid3X3 className="h-3.5 w-3.5 shrink-0" />
             {isAr ? 'عرض البطاقات' : 'Card Grid'}
           </button>
           <button
             type="button"
             onClick={() => setViewMode('table')}
             className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+              'flex min-w-0 items-center justify-center gap-1.5 rounded-squircle px-2 py-2 text-xs font-medium transition-colors',
               viewMode === 'table'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
@@ -610,12 +610,12 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                     <Calendar className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-base font-bold text-foreground">
                         {group.academicYear}
                       </span>
                       {group.isCurrent && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">
+                        <span className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-300">
                           <Star className="h-3 w-3 fill-amber-300" />
                           {isAr ? 'السنة الرسمية الحالية' : 'Authoritative Current'}
                         </span>

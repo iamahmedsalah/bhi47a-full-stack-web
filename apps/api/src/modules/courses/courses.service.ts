@@ -959,6 +959,7 @@ export class CoursesService {
     const studentUserObjId = new Types.ObjectId(studentUserId);
     const profile = await this.studentProfileModel
       .findOne({ userId: studentUserObjId })
+      .select('level department semester academicYear')
       .lean();
 
     if (!profile) throw new NotFoundException('Student profile not found');
@@ -982,6 +983,7 @@ export class CoursesService {
         semester: period.semester,
       })
       .sort({ createdAt: -1 })
+      .select('courses')
       .lean();
 
     const registeredCodes = (latestRegistration?.courses ?? []).map((c) =>
@@ -2259,6 +2261,253 @@ export class CoursesService {
       courseName: course.name,
       resetCount: matchingRegistrations.length,
       message: `تم إلغاء وتصفير تسجيل ${matchingRegistrations.length} طالب من مقرر ${course.code} بنجاح`,
+    };
+  }
+
+  /**
+   * Get all students enrolled in a specific course with profile details.
+   */
+  async getCourseEnrolledStudents(
+    courseId: string,
+    options: { academicYear?: string; semester?: string; search?: string } = {},
+  ) {
+    const course = await this.findOne(courseId);
+    const codeUpper = course.code.toUpperCase();
+    const codeLower = course.code.toLowerCase();
+
+    const query: Record<string, any> = {
+      courses: { $in: [codeUpper, course.code, codeLower] },
+    };
+    if (options.academicYear && options.academicYear !== 'all') {
+      query.academicYear = options.academicYear;
+    }
+    if (options.semester && options.semester !== 'all') {
+      query.semester = options.semester;
+    }
+
+    const registrations = await this.courseRegistrationModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const studentUserIds = [...new Set(registrations.map((r) => r.studentId))];
+
+    const profiles = await this.studentProfileModel
+      .find({ userId: { $in: studentUserIds } })
+      .lean();
+    const profileMap = new Map(profiles.map((p) => [p.userId.toString(), p]));
+
+    const users = await this.userModel
+      .find({ _id: { $in: studentUserIds } })
+      .select('name email studentCode nationalIdMasked phone')
+      .lean();
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    let students = registrations.map((reg) => {
+      const sId = reg.studentId.toString();
+      const profile = profileMap.get(sId);
+      const user = userMap.get(sId);
+
+      return {
+        registrationId: reg._id.toString(),
+        studentId: sId,
+        studentCode: profile?.studentCode || user?.studentCode || '',
+        name: profile?.fullName || user?.name || '',
+        nameAr: profile?.fullNameAr || profile?.fullName || user?.name || '',
+        level: profile?.level || '',
+        department: profile?.department || '',
+        group: profile?.group || '',
+        section: profile?.section || '',
+        academicEmail: profile?.academicEmail || user?.email || '',
+        nationalIdMasked:
+          profile?.nationalIdMasked || user?.nationalIdMasked || '',
+        status: reg.status,
+        enrolledAt: (reg as any).createdAt,
+      };
+    });
+
+    if (options.search?.trim()) {
+      const q = options.search.trim().toLowerCase();
+      students = students.filter(
+        (s) =>
+          s.studentCode.toLowerCase().includes(q) ||
+          s.name.toLowerCase().includes(q) ||
+          s.nameAr.toLowerCase().includes(q) ||
+          s.department.toLowerCase().includes(q) ||
+          s.group.toLowerCase().includes(q) ||
+          s.section.toLowerCase().includes(q) ||
+          s.academicEmail.toLowerCase().includes(q),
+      );
+    }
+
+    return {
+      course: {
+        id: course._id.toString(),
+        code: course.code,
+        name: course.name,
+        nameAr: course.nameAr,
+        nameEn: course.nameEn,
+        creditHours: course.creditHours,
+        department: course.department,
+        level: course.level,
+      },
+      totalEnrolled: registrations.length,
+      filteredCount: students.length,
+      academicYear: options.academicYear,
+      semester: options.semester,
+      students,
+    };
+  }
+
+  /**
+   * Export all students enrolled in a course as a beautifully styled Excel (.xlsx) file.
+   */
+  async exportCourseEnrolledStudents(
+    courseId: string,
+    options: { academicYear?: string; semester?: string } = {},
+  ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+    const data = await this.getCourseEnrolledStudents(courseId, options);
+    const { course, students } = data;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Student Portal';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Enrolled Students', {
+      views: [{ rightToLeft: true }],
+    });
+
+    // Title Row
+    const titleRow = sheet.addRow([
+      `كشف الطلاب المسجلين لمقرر: ${course.code} - ${course.nameAr || course.name}`,
+    ]);
+    titleRow.font = {
+      name: 'Segoe UI',
+      size: 14,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    titleRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0D9488' },
+    };
+    sheet.mergeCells(1, 1, 1, 10);
+    titleRow.height = 36;
+
+    // Meta Row
+    const metaRow = sheet.addRow([
+      `عدد الطلاب: ${students.length} | الساعات المعتمدة: ${course.creditHours} | الفرقة: ${course.level || 'عام'} | تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}`,
+    ]);
+    metaRow.font = {
+      name: 'Segoe UI',
+      size: 10,
+      italic: true,
+      color: { argb: 'FF334155' },
+    };
+    metaRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    metaRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF1F5F9' },
+    };
+    sheet.mergeCells(2, 1, 2, 10);
+    metaRow.height = 24;
+
+    // Blank row
+    sheet.addRow([]);
+
+    // Table Headers
+    const headers = [
+      'م',
+      'كود الطالب',
+      'اسم الطالب',
+      'الفرقة الدراسية',
+      'القسم / التخصص',
+      'المجموعة',
+      'السكشن',
+      'البريد الأكاديمي',
+      'الرقم القومي',
+      'تاريخ التسجيل',
+    ];
+
+    const headerRow = sheet.addRow(headers);
+    headerRow.font = {
+      name: 'Segoe UI',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F766E' },
+    };
+    headerRow.height = 28;
+
+    // Add Data Rows
+    students.forEach((s, index) => {
+      const regDate = s.enrolledAt
+        ? new Date(s.enrolledAt).toLocaleDateString('ar-EG')
+        : '—';
+
+      const row = sheet.addRow([
+        index + 1,
+        s.studentCode,
+        s.nameAr || s.name,
+        s.level ? `الفرقة ${s.level}` : '—',
+        s.department || 'عام',
+        s.group || '—',
+        s.section || '—',
+        s.academicEmail || '—',
+        s.nationalIdMasked || '—',
+        regDate,
+      ]);
+
+      row.font = { name: 'Segoe UI', size: 10 };
+      row.alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(8).alignment = { horizontal: 'left', vertical: 'middle' };
+
+      if (index % 2 === 1) {
+        row.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8FAFC' },
+        };
+      }
+      row.height = 22;
+    });
+
+    // Auto-fit column widths
+    const colWidths = [6, 16, 32, 16, 20, 14, 12, 30, 18, 16];
+    colWidths.forEach((w, i) => {
+      sheet.getColumn(i + 1).width = w;
+    });
+
+    for (let r = 4; r <= 4 + students.length; r++) {
+      const row = sheet.getRow(r);
+      for (let c = 1; c <= 10; c++) {
+        row.getCell(c).border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+      }
+    }
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const sanitizedCode = course.code.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `enrolled_students_${sanitizedCode}.xlsx`;
+
+    return {
+      buffer,
+      filename,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
   }
 }

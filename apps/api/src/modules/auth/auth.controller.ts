@@ -43,9 +43,14 @@ export class AuthController {
   async studentLogin(
     @Body() dto: StudentLoginDto,
     @Res({ passthrough: true }) res: express.Response,
+    @Req() req: express.Request,
   ) {
     const result = await this.authService.studentLogin(dto);
-    const csrfToken = await this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(
+      res,
+      result.token,
+      req,
+    );
     return { user: result.user, csrfToken };
   }
 
@@ -56,9 +61,14 @@ export class AuthController {
   async adminLogin(
     @Body() dto: AdminLoginDto,
     @Res({ passthrough: true }) res: express.Response,
+    @Req() req: express.Request,
   ) {
     const result = await this.authService.adminLogin(dto);
-    const csrfToken = await this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(
+      res,
+      result.token,
+      req,
+    );
     return { user: result.user, csrfToken };
   }
 
@@ -109,9 +119,14 @@ export class AuthController {
     @CurrentUser('_id') userId: string,
     @Body() dto: ChangePasswordDto,
     @Res({ passthrough: true }) res: express.Response,
+    @Req() req: express.Request,
   ) {
     const result = await this.authService.changePassword(userId, dto);
-    const csrfToken = await this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(
+      res,
+      result.token,
+      req,
+    );
     return { message: result.message, csrfToken };
   }
 
@@ -170,9 +185,14 @@ export class AuthController {
     @Body() dto: ResetPasswordOtpDto,
     @Headers('accept-language') acceptLanguage?: string,
     @Res({ passthrough: true }) res?: express.Response,
+    @Req() req?: express.Request,
   ) {
     const result = await this.authService.resetPasswordOtp(dto, acceptLanguage);
-    const csrfToken = await this.authService.setCookieToken(res!, result.token);
+    const csrfToken = await this.authService.setCookieToken(
+      res!,
+      result.token,
+      req,
+    );
     return { user: result.user, csrfToken };
   }
 
@@ -217,6 +237,7 @@ export class AuthController {
     @Body() dto: VerifyGoogleOAuthDto,
     @Res({ passthrough: true }) res: express.Response,
     @Headers('origin') origin: string,
+    @Req() req: express.Request,
   ) {
     const result = await this.authService.googleLogin(
       dto.credential,
@@ -224,7 +245,11 @@ export class AuthController {
         ? { flowId: dto.nonceFlowId, proof: dto.nonceProof, origin }
         : undefined,
     );
-    const csrfToken = await this.authService.setCookieToken(res, result.token);
+    const csrfToken = await this.authService.setCookieToken(
+      res,
+      result.token,
+      req,
+    );
     return { user: result.user, csrfToken };
   }
 

@@ -78,7 +78,18 @@ export class MetricsController {
   async getSummary(@Query('window') window = '5m') {
     if (!Object.hasOwn(TRAFFIC_WINDOWS, window))
       throw new BadRequestException('Unsupported metrics window');
-    return this.metricsService.getSummary(window as TrafficWindow);
+    const summary = await this.metricsService.getSummary(
+      window as TrafficWindow,
+    );
+    const currentlyLockedAccounts =
+      await this.usersService.countLockedAccounts();
+    return {
+      ...summary,
+      security: {
+        ...summary.security,
+        currentlyLockedAccounts,
+      },
+    };
   }
 
   /**

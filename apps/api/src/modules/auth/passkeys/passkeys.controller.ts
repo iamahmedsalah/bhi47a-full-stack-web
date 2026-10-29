@@ -125,9 +125,14 @@ export class PasskeysController {
     @Headers('x-passkey-flow') flowToken: string | undefined,
     @Body() dto: PasskeyLoginVerifyDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
   ) {
     const result = await this.passkeys.loginVerify(origin, flowToken, dto);
-    const csrfToken = await this.sessions.setCookieToken(res, result.token);
+    const csrfToken = await this.sessions.setCookieToken(
+      res,
+      result.token,
+      req,
+    );
     res.setHeader('Cache-Control', 'no-store');
     return { user: result.user, csrfToken };
   }
@@ -151,6 +156,7 @@ export class PasskeysController {
       origin,
       params.id,
       dto.name,
+      dto.unlockMethod,
     );
   }
 

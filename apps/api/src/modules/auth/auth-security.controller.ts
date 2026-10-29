@@ -62,7 +62,7 @@ export class AuthSecurityController {
 
   @Get('sessions')
   sessionsList(@CurrentUser('_id') userId: string, @Req() req: Request) {
-    return this.sessions.listSessions(userId, req.cookies?.access_token);
+    return this.sessions.listSessions(userId, req.cookies?.access_token, req);
   }
 
   @Delete('sessions/:id')

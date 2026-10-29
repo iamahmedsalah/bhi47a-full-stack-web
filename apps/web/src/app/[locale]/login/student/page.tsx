@@ -584,27 +584,34 @@ function StudentLoginContent() {
 
             {/* Google Unlinked Account Friendly Validation Notice */}
             {googleAuthNotice && (
-              <Alert className="auth-google-notice flex items-start gap-3 rounded-xl p-4 text-start">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-squircle bg-amber-400/10 text-amber-300" aria-hidden="true">
+              <div
+                role="alert"
+                dir={locale === "ar" ? "rtl" : "ltr"}
+                className="relative flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 md:p-4 text-start shadow-sm backdrop-blur-sm transition-all animate-in fade-in zoom-in-95"
+              >
+                <div
+                  className="flex size-9 shrink-0 items-center justify-center rounded-squircle border border-amber-500/30 bg-amber-500/20 text-amber-300 shadow-xs mt-0.5"
+                  aria-hidden="true"
+                >
                   <ShieldAlert className="size-5" strokeWidth={2} />
-                </span>
+                </div>
                 <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-xs font-semibold leading-relaxed text-foreground">
+                  <h4 className="text-xs md:text-sm font-bold leading-relaxed text-amber-300">
                     {googleAuthNotice.title}
-                  </p>
-                  <AlertDescription className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+                  </h4>
+                  <p className="text-xs leading-relaxed text-foreground/90 font-medium [overflow-wrap:anywhere] break-words">
                     {googleAuthNotice.description}
-                  </AlertDescription>
+                  </p>
                 </div>
                 <button
                   type="button"
                   aria-label={tCommon("close")}
                   onClick={() => setGoogleAuthNotice(null)}
-                  className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-squircle text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-squircle text-muted-foreground transition-colors hover:bg-amber-500/20 hover:text-amber-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
-              </Alert>
+              </div>
             )}
 
             <PasskeyLoginButton returnUrl={returnUrl} />
