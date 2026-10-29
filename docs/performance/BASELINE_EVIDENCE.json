@@ -1,0 +1,259 @@
+{
+  "sources": [
+    {
+      "name": "endpoints-latency-2026-10-28-01-55-43.csv",
+      "sha256": "ce7937afdd3d798fa07960fe87d5bd09ad5c72a320159c739ea45da3495b9efb",
+      "rowCount": 296
+    },
+    {
+      "name": "slow-requests-correlation.csv",
+      "sha256": "33dcef5bca26b6cb1bffc1eae0f409fb7be0a44aebcb1e7aca70f148112e5f9a",
+      "rowCount": 9
+    },
+    {
+      "name": "slow-queries-2026-10-28-01-55-50.csv",
+      "sha256": "fe5794a39a31554d1366376171bffba4c22f2b683ced5d73131cbad31829adfa",
+      "rowCount": 50
+    },
+    {
+      "name": "traffic-routes-diagnostics.csv",
+      "sha256": "34a9bbb0d4d5cb4e2bfc79868bf8f5fda6b2a5927e33dd39599b1ca102e684ce",
+      "rowCount": 2
+    }
+  ],
+  "endpoints": [
+    {
+      "route": "POST /api/admin/courses/:id/enroll-students-batch",
+      "requests": 4,
+      "meanMs": 4827,
+      "maxMs": 7345,
+      "clientErrors": 0,
+      "serverErrors": 0,
+      "statusCounts": "201:4"
+    },
+    {
+      "route": "GET /api/admin/complaints",
+      "requests": 12,
+      "meanMs": 732,
+      "maxMs": 2293,
+      "clientErrors": 0,
+      "serverErrors": 0,
+      "statusCounts": "200:12"
+    },
+    {
+      "route": "GET /api/admin/students",
+      "requests": 28,
+      "meanMs": 168,
+      "maxMs": 576,
+      "clientErrors": 0,
+      "serverErrors": 0,
+      "statusCounts": "200:28"
+    },
+    {
+      "route": "GET /api/registration/eligibility",
+      "requests": 7,
+      "meanMs": 125,
+      "maxMs": 235,
+      "clientErrors": 0,
+      "serverErrors": 0,
+      "statusCounts": "200:7"
+    },
+    {
+      "route": "GET /api/admin/courses",
+      "requests": 32,
+      "meanMs": 97,
+      "maxMs": 382,
+      "clientErrors": 0,
+      "serverErrors": 0,
+      "statusCounts": "200:32"
+    }
+  ],
+  "correlations": [
+    {
+      "method": "POST",
+      "route": "/api/admin/courses/:id/enroll-students-batch",
+      "status": 201,
+      "httpMs": 2439.345366,
+      "databaseCalls": 246,
+      "summedDatabaseMs": 4228.250483999999,
+      "stages": {
+        "auth.session": 13.770902,
+        "auth.user": 13.578996,
+        "authorization.roles": 0.023411,
+        "authorization.permissions": 0.009470000000000001,
+        "response.serialization": 0.722051
+      }
+    },
+    {
+      "method": "POST",
+      "route": "/api/admin/courses/:id/enroll-students-batch",
+      "status": 201,
+      "httpMs": 7345.2913579999995,
+      "databaseCalls": 756,
+      "summedDatabaseMs": 12625.830614000004,
+      "stages": {
+        "auth.session": 15.948054999999998,
+        "auth.user": 14.992825,
+        "authorization.roles": 0.030101,
+        "authorization.permissions": 0.022481,
+        "response.serialization": 2.9245550000000002
+      }
+    },
+    {
+      "method": "POST",
+      "route": "/api/admin/courses/:id/enroll-students-batch",
+      "status": 201,
+      "httpMs": 2272.043053,
+      "databaseCalls": 246,
+      "summedDatabaseMs": 4406.076973000001,
+      "stages": {
+        "auth.session": 11.888446,
+        "auth.user": 14.800969,
+        "authorization.roles": 0.030761,
+        "authorization.permissions": 0.01503,
+        "response.serialization": 1.327609
+      }
+    },
+    {
+      "method": "POST",
+      "route": "/api/admin/courses/:id/enroll-students-batch",
+      "status": 201,
+      "httpMs": 7251.141672,
+      "databaseCalls": 756,
+      "summedDatabaseMs": 12810.483914000006,
+      "stages": {
+        "auth.session": 8.542117,
+        "auth.user": 8.341942,
+        "authorization.roles": 0.046372000000000003,
+        "authorization.permissions": 0.02075,
+        "response.serialization": 1.292788
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/admin/complaints",
+      "status": 200,
+      "httpMs": 1788.398431,
+      "databaseCalls": 5,
+      "summedDatabaseMs": 664.7511939999999,
+      "stages": {
+        "auth.session": 26.160449,
+        "auth.user": 34.973511,
+        "authorization.roles": 0.022391,
+        "authorization.permissions": 0.008060000000000001,
+        "complaints.count": 20.013962,
+        "complaints.page": 577.5440189999999,
+        "complaints.enrichment": 11.123419,
+        "complaints.transformation": 0.293228,
+        "response.serialization": 208.784525
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/admin/complaints",
+      "status": 200,
+      "httpMs": 1713.1742860000002,
+      "databaseCalls": 5,
+      "summedDatabaseMs": 621.3470960000001,
+      "stages": {
+        "auth.session": 25.865881,
+        "auth.user": 38.465568,
+        "authorization.roles": 0.022691,
+        "authorization.permissions": 0.00815,
+        "complaints.count": 32.230831,
+        "complaints.page": 518.5340600000001,
+        "complaints.enrichment": 10.27843,
+        "complaints.transformation": 0.337011,
+        "response.serialization": 195.178428
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/admin/complaints",
+      "status": 200,
+      "httpMs": 2015.4051220000001,
+      "databaseCalls": 5,
+      "summedDatabaseMs": 744.660817,
+      "stages": {
+        "auth.session": 54.048457,
+        "auth.user": 15.348993,
+        "authorization.roles": 0.02001,
+        "authorization.permissions": 0.008780999999999999,
+        "complaints.count": 29.712999,
+        "complaints.page": 638.452537,
+        "complaints.enrichment": 10.340442999999999,
+        "complaints.transformation": 0.36656,
+        "response.serialization": 204.321435
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/admin/complaints",
+      "status": 200,
+      "httpMs": 2293.057567,
+      "databaseCalls": 5,
+      "summedDatabaseMs": 838.8972020000001,
+      "stages": {
+        "auth.session": 25.480939,
+        "auth.user": 6.6127970000000005,
+        "authorization.roles": 0.160674,
+        "authorization.permissions": 0.007890999999999999,
+        "complaints.count": 10.257151,
+        "complaints.page": 786.634918,
+        "complaints.enrichment": 12.733289,
+        "complaints.transformation": 1.032319,
+        "response.serialization": 205.439853
+      }
+    },
+    {
+      "method": "GET",
+      "route": "/api/admin/students",
+      "status": 200,
+      "httpMs": 575.937006,
+      "databaseCalls": 9,
+      "summedDatabaseMs": 749.3802279999999,
+      "stages": {
+        "auth.session": 263.292866,
+        "auth.user": 17.584487,
+        "authorization.roles": 0.030311,
+        "authorization.permissions": 0.012461,
+        "response.serialization": 5.828935
+      }
+    }
+  ],
+  "sampledSlowOperations": {
+    "auth_sessions.findOne": 3,
+    "gpa_registration_rules.findOne": 9,
+    "courses.find": 7,
+    "student_academic_profiles.findOne": 9,
+    "student_profiles.findOne": 4,
+    "grades.find": 4,
+    "users.find": 1,
+    "registration_terms.find": 1,
+    "advising_cases.aggregate": 1,
+    "courses.countDocuments": 2,
+    "complaints.find": 5,
+    "student_profiles.find": 2,
+    "course_recommendations.find": 1,
+    "tuition_audit_logs.find": 1
+  },
+  "traffic": [
+    {
+      "method": "POST",
+      "route": "/api/auth/heartbeat",
+      "requests": 5,
+      "reportedP95Ms": 95.83333333333334,
+      "clientErrors": 0,
+      "serverErrors": 0
+    },
+    {
+      "method": "GET",
+      "route": "/api/health",
+      "requests": 14,
+      "reportedP95Ms": 46.88888888888889,
+      "clientErrors": 0,
+      "serverErrors": 0
+    }
+  ],
+  "limitations": "No enrollment batch sizes, HTTP time series, representative staging workload, production query plans, request IDs, or raw query values retained. Slow-query rows are a sample, not lifetime counts."
+}

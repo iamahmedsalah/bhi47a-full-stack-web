@@ -127,6 +127,13 @@ interface EffectiveRule {
   exemptNewStudentsFromGpaRule: boolean;
 }
 
+/** Request-local snapshot; never reuse across imports or authorization checks. */
+export interface AdministrativeEnrollmentContext {
+  profiles: Map<string, RegistrationAcademicProfile>;
+  rules: GpaRegistrationRule[];
+  courses: Map<string, { creditHours?: number }>;
+}
+
 interface SelectionOverrides {
   overridePrerequisites?: boolean;
   overrideMaxCreditHours?: boolean;
@@ -1797,8 +1804,11 @@ export class RegistrationsService {
     existingCodes: string[],
     semester: 'first' | 'second' | 'summer',
     allowLimitOverride = false,
+    context?: AdministrativeEnrollmentContext,
   ) {
-    const profile = await this.getAcademicProfile(studentId);
+    const profile =
+      context?.profiles.get(studentId) ??
+      (await this.getAcademicProfile(studentId));
     const completed = new Set(normalizeCourseCodes(profile.completedCourses));
     if (
       completed.has(course.code.toUpperCase()) ||
@@ -1833,11 +1843,23 @@ export class RegistrationsService {
       );
     }
     const [rule, courses] = await Promise.all([
-      this.getRuleForGpa(profile.gpa),
-      this.courseModel
-        .find({ code: { $in: selected } })
-        .select('creditHours')
-        .lean(),
+      context
+        ? this.effectiveRule(
+            context.rules.find(
+              (rule) =>
+                rule.minGpa <= profile.gpa && rule.maxGpa >= profile.gpa,
+            ),
+          )
+        : this.getRuleForGpa(profile.gpa),
+      context
+        ? selected.flatMap((code) => {
+            const item = context.courses.get(code);
+            return item ? [item] : [];
+          })
+        : this.courseModel
+            .find({ code: { $in: selected } })
+            .select('creditHours')
+            .lean(),
     ]);
     const limits = getRegistrationSelectionLimits(semester);
     const hours = courses.reduce(
@@ -1863,6 +1885,107 @@ export class RegistrationsService {
         limits: details,
       });
     }
+  }
+
+  async prepareAdministrativeEnrollment(
+    studentIds: string[],
+    selectedCodes: string[],
+  ): Promise<AdministrativeEnrollmentContext> {
+    const context: AdministrativeEnrollmentContext = {
+      profiles: new Map(),
+      rules: await this.gpaRuleModel
+        .find({ isActive: true })
+        .sort({ minGpa: -1, _id: 1 })
+        .lean(),
+      courses: new Map(),
+    };
+    const codes = new Set(normalizeCourseCodes(selectedCodes));
+    const ids = [...new Set(studentIds)];
+    // Three reads per 100 students, instead of 3–6 reads per student.
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids
+        .slice(offset, offset + 100)
+        .map((id) => new Types.ObjectId(id));
+      const [profiles, students, grades] = await Promise.all([
+        this.academicProfileModel
+          .find({ studentId: { $in: batch } })
+          .select(
+            'studentId academicLevel gpa completedCourses failedCourses lowGradeCourses academicWarnings',
+          )
+          .lean(),
+        this.studentProfileModel
+          .find({ userId: { $in: batch } })
+          .select('userId department academicWarnings')
+          .lean(),
+        this.gradeModel
+          .find({ studentId: { $in: batch }, isPublished: true })
+          .select('studentId courseCode examType grade maxGrade status')
+          .lean(),
+      ]);
+      const studentsById = new Map(
+        students.map((student) => [String(student.userId), student]),
+      );
+      const gradesById = new Map<string, typeof grades>();
+      for (const grade of grades) {
+        const key = String(grade.studentId);
+        const list = gradesById.get(key) ?? [];
+        list.push(grade);
+        gradesById.set(key, list);
+      }
+      // Credits are needed to derive GPA exactly as in the single-student path.
+      const gradeCodes = [
+        ...new Set(grades.map((grade) => grade.courseCode)),
+      ].filter((code) => !context.courses.has(code));
+      for (let start = 0; start < gradeCodes.length; start += 500) {
+        const courses = await this.courseModel
+          .find({ code: { $in: gradeCodes.slice(start, start + 500) } })
+          .select('code creditHours')
+          .lean();
+        for (const course of courses) {
+          context.courses.set(course.code, course);
+        }
+      }
+      for (const profile of profiles) {
+        const key = String(profile.studentId);
+        const student = studentsById.get(key);
+        // Retain the existing repair behavior for legacy students with missing profiles.
+        if (!student) continue;
+        const studentGrades = gradesById.get(key) ?? [];
+        const progress = mergeAcademicCourseProgress({
+          completedCourses: profile.completedCourses,
+          failedCourses: profile.failedCourses,
+          lowGradeCourses: profile.lowGradeCourses,
+          grades: studentGrades,
+          // Preserve the single-student `$in` query's exact, case-sensitive
+          // lookup even when other students have differently cased legacy codes.
+          courseCredits: Object.fromEntries(
+            studentGrades.flatMap((grade) => {
+              const course = context.courses.get(grade.courseCode);
+              return course
+                ? [[grade.courseCode.toUpperCase(), course.creditHours ?? 1]]
+                : [];
+            }),
+          ),
+        });
+        context.profiles.set(key, {
+          ...profile,
+          ...progress,
+          department: student.department,
+          academicWarnings:
+            profile.academicWarnings ?? student.academicWarnings ?? 0,
+          gpa: progress.calculatedGpa ?? profile.gpa,
+        } as unknown as RegistrationAcademicProfile);
+      }
+    }
+    const remaining = [...codes].filter((code) => !context.courses.has(code));
+    for (let offset = 0; offset < remaining.length; offset += 500) {
+      const courses = await this.courseModel
+        .find({ code: { $in: remaining.slice(offset, offset + 500) } })
+        .select('code creditHours')
+        .lean();
+      for (const course of courses) context.courses.set(course.code, course);
+    }
+    return context;
   }
 
   private async validateCourseSelection(
@@ -2109,9 +2232,13 @@ export class RegistrationsService {
         minGpa: { $lte: gpa },
         maxGpa: { $gte: gpa },
       })
-      .sort({ minGpa: -1 })
+      .sort({ minGpa: -1, _id: 1 })
       .lean();
 
+    return this.effectiveRule(rule ?? undefined);
+  }
+
+  private effectiveRule(rule?: GpaRegistrationRule): EffectiveRule {
     if (rule) {
       return {
         minGpa: rule.minGpa,

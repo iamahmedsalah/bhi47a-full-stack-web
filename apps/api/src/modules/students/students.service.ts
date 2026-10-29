@@ -383,7 +383,7 @@ export class StudentsService {
     await this.usersService.activateUser(profile.userId.toString());
     this.invalidateStatsCache();
 
-    return { message: 'ØªÙ… ØªÙØ¹ÙŠÙ„ Ø­Ø³Ø§Ø¨ Ø§Ù„Ø·Ø§Ù„Ø¨' };
+    return { message: 'ØªÙ… ØªÙ Ø¹ÙŠÙ„ Ø­Ø³Ø§Ø¨ Ø§Ù„Ø·Ø§Ù„Ø¨' };
   }
 
   async deactivate(id: string) {
@@ -1405,9 +1405,10 @@ export class StudentsService {
     await profile.save();
 
     // Log to TuitionAuditLog
-    const performedBy = caller?._id
-      ? new Types.ObjectId(caller._id)
-      : profile.userId;
+    const performedBy =
+      caller?._id && Types.ObjectId.isValid(String(caller._id))
+        ? new Types.ObjectId(String(caller._id))
+        : profile.userId;
     const performedByName = caller?.name || caller?.fullName || 'مسئول النظام';
     const performedByRole = caller?.role || 'admin';
 
@@ -1492,9 +1493,10 @@ export class StudentsService {
     });
 
     if (affectedStudents.length > 0) {
-      const performedBy = caller?._id
-        ? new Types.ObjectId(caller._id)
-        : (affectedStudents[0]._id as any);
+      const performedBy =
+        caller?._id && Types.ObjectId.isValid(String(caller._id))
+          ? new Types.ObjectId(String(caller._id))
+          : (affectedStudents[0]._id as any);
       const performedByName =
         caller?.name || caller?.fullName || 'مسئول النظام';
       const performedByRole = caller?.role || 'admin';
@@ -1682,9 +1684,9 @@ export class StudentsService {
       const rawCode = this.extractFieldValue(row, [
         'كود الطالب',
         'كود_الطالب',
-        'كود',
         'student_code',
         'studentcode',
+        'كود',
         'code',
       ]);
 
@@ -1693,7 +1695,11 @@ export class StudentsService {
         continue;
       }
 
-      const cleanCode = rawCode.trim();
+      const cleanCode = rawCode
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/\.0+$/, '')
+        .trim();
       codesToLookup.push(cleanCode);
 
       extractedRows.push({
@@ -1702,6 +1708,7 @@ export class StudentsService {
         rawCode,
         rawLevel: this.extractFieldValue(row, [
           'الفرقة',
+          'الفرقة الدراسية',
           'فرقة',
           'level',
           'السنة',
@@ -1710,27 +1717,27 @@ export class StudentsService {
         rawTuition: this.extractFieldValue(row, [
           'حالة المصروفات',
           'المصروفات',
-          'tuition',
           'tuition_status',
+          'tuition',
         ]),
         rawBlock: this.extractFieldValue(row, [
           'الحجب',
           'حجب',
+          'حالة الحجب',
+          'block_status',
+          'block',
           'الحالة',
           'status',
-          'block',
-          'block_status',
         ]),
         rawReason: this.extractFieldValue(row, [
           'سبب الحجب',
           'السبب',
-          'reason',
           'block_reason',
+          'reason',
         ]),
       });
     }
 
-    // Single query bulk lookup
     // Single query bulk lookup with profile details for auditing
     const existingProfiles = await this.studentProfileModel
       .find({ studentCode: { $in: codesToLookup } })
@@ -1744,9 +1751,10 @@ export class StudentsService {
     const bulkOps: any[] = [];
     const auditLogsToInsert: any[] = [];
 
-    const performedBy = caller?._id
-      ? new Types.ObjectId(caller._id)
-      : (existingProfiles[0]?._id as any) || new Types.ObjectId();
+    const performedBy =
+      caller?._id && Types.ObjectId.isValid(String(caller._id))
+        ? new Types.ObjectId(String(caller._id))
+        : (existingProfiles[0]?._id as any) || new Types.ObjectId();
     const performedByName = caller?.name || caller?.fullName || 'رفع ملف إكسيل';
     const performedByRole = caller?.role || 'admin';
 
@@ -1859,10 +1867,26 @@ export class StudentsService {
 
     let updatedCount = 0;
     if (bulkOps.length > 0) {
-      const bulkResult = await this.studentProfileModel.bulkWrite(bulkOps, {
-        ordered: false,
-      });
-      updatedCount = bulkResult.modifiedCount ?? bulkOps.length;
+      try {
+        const bulkResult = await this.studentProfileModel.bulkWrite(bulkOps, {
+          ordered: false,
+        });
+        updatedCount = bulkResult.modifiedCount ?? bulkOps.length;
+      } catch (err: any) {
+        const writeErrors = Array.isArray(err?.writeErrors)
+          ? err.writeErrors
+          : [];
+        if (writeErrors.length > 0) {
+          updatedCount = Math.max(0, bulkOps.length - writeErrors.length);
+          for (const we of writeErrors) {
+            errors.push(we?.errmsg || 'خطأ أثناء حفظ سجل الطالب');
+          }
+        } else {
+          errors.push(
+            err instanceof Error ? err.message : 'فشل تحديث السجلات الجماعي',
+          );
+        }
+      }
 
       if (auditLogsToInsert.length > 0) {
         void this.tuitionAuditLogModel
@@ -2490,20 +2514,61 @@ export class StudentsService {
 
   private cleanFieldValue(val: any): string {
     if (val === null || val === undefined) return '';
-    return String(val).trim();
+    if (typeof val === 'object') {
+      if (Array.isArray(val.richText)) {
+        return val.richText
+          .map((t: any) => t?.text ?? '')
+          .join('')
+          .trim();
+      }
+      if ('result' in val && val.result !== undefined && val.result !== null) {
+        return String(val.result).trim();
+      }
+      if ('text' in val && val.text !== undefined && val.text !== null) {
+        return String(val.text).trim();
+      }
+    }
+    return String(val)
+      .replace(/^\uFEFF/, '')
+      .trim();
   }
 
   private extractFieldValue(
     row: Record<string, any>,
     possibleKeys: string[],
   ): string {
+    const normalizeToken = (s: string) =>
+      s
+        .replace(/^\uFEFF/, '')
+        .toLowerCase()
+        .replace(/[\s_\-()*]/g, '');
+
+    // Pass 1: exact match or match before parenthetical suffix
     for (const key of possibleKeys) {
-      const cleanKey = key.toLowerCase().replace(/[\s_\-()]/g, '');
+      const cleanKey = normalizeToken(key);
+      if (!cleanKey) continue;
       for (const [rowKey, rowValue] of Object.entries(row)) {
-        const cleanRowKey = rowKey.toLowerCase().replace(/[\s_\-()]/g, '');
-        if (cleanRowKey === cleanKey || cleanRowKey.includes(cleanKey)) {
+        const cleanRowKey = normalizeToken(rowKey);
+        const beforeParen = normalizeToken(rowKey.split('(')[0] || '');
+        if (cleanRowKey === cleanKey || beforeParen === cleanKey) {
           if (rowValue !== undefined && rowValue !== null) {
-            return this.cleanFieldValue(rowValue);
+            const cleaned = this.cleanFieldValue(rowValue);
+            if (cleaned !== '') return cleaned;
+          }
+        }
+      }
+    }
+
+    // Pass 2: substring match only for sufficiently specific keys (length >= 6)
+    for (const key of possibleKeys) {
+      const cleanKey = normalizeToken(key);
+      if (cleanKey.length < 6) continue;
+      for (const [rowKey, rowValue] of Object.entries(row)) {
+        const cleanRowKey = normalizeToken(rowKey);
+        if (cleanRowKey.includes(cleanKey)) {
+          if (rowValue !== undefined && rowValue !== null) {
+            const cleaned = this.cleanFieldValue(rowValue);
+            if (cleaned !== '') return cleaned;
           }
         }
       }
@@ -2517,8 +2582,8 @@ export class StudentsService {
   ): Promise<Record<string, any>[]> {
     const isCsv = originalname.toLowerCase().endsWith('.csv');
 
-    if (isCsv) {
-      const text = buffer.toString('utf-8');
+    const parseCsvBuffer = () => {
+      const text = buffer.toString('utf-8').replace(/^\uFEFF/, '');
       const lines = text
         .split(/\r?\n/)
         .map((l) => l.trim())
@@ -2546,10 +2611,26 @@ export class StudentsService {
         }
       }
       return rows;
+    };
+
+    if (isCsv) {
+      return parseCsvBuffer();
     }
 
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
+    try {
+      await workbook.xlsx.load(buffer as any);
+    } catch {
+      try {
+        const fallbackRows = parseCsvBuffer();
+        if (fallbackRows.length > 0) return fallbackRows;
+      } catch {
+        // ignore fallback error
+      }
+      throw new BadRequestException(
+        'تعذر قراءة ملف الإكسيل. تأكد من أن الملف بصيغة .xlsx أو .csv سليمة وغير تالف',
+      );
+    }
     const sheet = workbook.worksheets[0];
     if (!sheet || sheet.rowCount <= 1) return [];
 
@@ -2573,9 +2654,10 @@ export class StudentsService {
       headers.forEach((h, idx) => {
         if (!h) return;
         const cell = values[idx + 1];
-        if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
+        const cleaned = this.cleanFieldValue(cell);
+        if (cleaned !== '') {
           hasData = true;
-          rowData[h] = typeof cell === 'object' && cell.text ? cell.text : cell;
+          rowData[h] = cleaned;
         }
       });
 

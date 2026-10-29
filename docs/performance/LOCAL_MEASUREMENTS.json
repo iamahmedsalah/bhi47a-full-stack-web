@@ -1,0 +1,191 @@
+{
+  "environment": "localhost synthetic fixtures",
+  "auth": "test-only identity middleware; real role/permission guards",
+  "samples": 3,
+  "warmups": 1,
+  "concurrency": 1,
+  "lookupPlans": {
+    "academicProfile": {
+      "stages": [
+        "EXPRESS_IXSCAN"
+      ],
+      "indexes": [
+        "studentId_1"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1
+    },
+    "studentProfile": {
+      "stages": [
+        "EXPRESS_IXSCAN"
+      ],
+      "indexes": [
+        "userId_1"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1
+    },
+    "courseCredits": {
+      "stages": [
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "code_1"
+      ],
+      "totalDocsExamined": 2,
+      "totalKeysExamined": 3
+    },
+    "grades": {
+      "stages": [
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "studentId_1_isPublished_1"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1
+    },
+    "gpaRule": {
+      "stages": [
+        "SORT",
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "minGpa_1_maxGpa_1_isActive_1"
+      ],
+      "totalDocsExamined": 2,
+      "totalKeysExamined": 2
+    },
+    "session": {
+      "stages": [
+        "LIMIT",
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "_id_"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1
+    }
+  },
+  "complaintBsonSizes": [
+    {
+      "_id": null,
+      "meanBytes": 70402.9,
+      "maxBytes": 70404
+    }
+  ],
+  "enrollment25": [
+    {
+      "variant": "legacy validator",
+      "p50HttpMs": 262.16159999999945,
+      "p95HttpMs": 281.54269999999997,
+      "databaseCalls": [
+        155,
+        155,
+        155
+      ],
+      "callsPerStudent": 6.2
+    },
+    {
+      "variant": "batched validator",
+      "p50HttpMs": 48.14719999999943,
+      "p95HttpMs": 54.28299999999945,
+      "databaseCalls": [
+        11,
+        11,
+        11
+      ],
+      "callsPerStudent": 0.44
+    }
+  ],
+  "enrollment100": [
+    {
+      "variant": "legacy validator",
+      "p50HttpMs": 530.3374999999996,
+      "p95HttpMs": 606.5282000000007,
+      "databaseCalls": [
+        605,
+        605,
+        605
+      ],
+      "callsPerStudent": 6.05
+    },
+    {
+      "variant": "batched validator",
+      "p50HttpMs": 77.09679999999935,
+      "p95HttpMs": 106.29709999999977,
+      "databaseCalls": [
+        11,
+        11,
+        11
+      ],
+      "callsPerStudent": 0.11
+    }
+  ],
+  "enrollment500": [
+    {
+      "variant": "legacy validator",
+      "p50HttpMs": 2746.4840999999997,
+      "p95HttpMs": 3050.5388999999996,
+      "databaseCalls": [
+        3015,
+        3015,
+        3015
+      ],
+      "callsPerStudent": 6.03
+    },
+    {
+      "variant": "batched validator",
+      "p50HttpMs": 262.59950000000026,
+      "p95HttpMs": 309.132999999998,
+      "databaseCalls": [
+        33,
+        33,
+        33
+      ],
+      "callsPerStudent": 0.066
+    }
+  ],
+  "complaints": [
+    {
+      "view": "full",
+      "bytes": 7045849,
+      "p50HttpMs": 94.8760000000002,
+      "p95HttpMs": 113.64530000000013,
+      "p95QueryMs": 28.7818,
+      "p95SerializationMs": 17.1973
+    },
+    {
+      "view": "summary",
+      "bytes": 34949,
+      "p50HttpMs": 11.57890000000043,
+      "p95HttpMs": 23.590000000000146,
+      "p95QueryMs": 3.294,
+      "p95SerializationMs": 1.2654999999999998
+    }
+  ],
+  "complaintPlan": {
+    "stages": [
+      "LIMIT",
+      "FETCH",
+      "IXSCAN"
+    ],
+    "indexes": [
+      "createdAt_-1__id_-1"
+    ],
+    "totalDocsExamined": 100,
+    "totalKeysExamined": 100
+  },
+  "measurementDate": "2026-10-29",
+  "nodeVersion": "v24.15.0",
+  "notes": [
+    "Small-sample local snapshot; a workspace build was also running.",
+    "Baseline disables snapshot prefetch on the current HTTP/write path; this is not the historical deployed binary.",
+    "Identity is synthetic; authorization guards, services and MongoDB writes are real."
+  ]
+}

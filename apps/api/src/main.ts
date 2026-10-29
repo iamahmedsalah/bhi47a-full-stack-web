@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { NestFactory } from '@nestjs/core';
+import { ModulesContainer, NestFactory } from '@nestjs/core';
+import { collectMetricRoutes } from './core/metrics/route-catalog';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -162,8 +163,17 @@ async function bootstrap() {
   // Register all endpoints from the API catalog into MetricsService
   try {
     const metricsService = app.get(MetricsService);
-    const catalogRoutes: Array<{ method: string; path: string }> = [];
-    const validMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+    const catalogRoutes = collectMetricRoutes(app.get(ModulesContainer));
+    const validMethods = new Set([
+      'GET',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'HEAD',
+      'OPTIONS',
+      'TRACE',
+    ]);
     for (const [rawPath, pathItem] of Object.entries(document.paths || {})) {
       if (!pathItem || typeof pathItem !== 'object') continue;
       const cleanPath = rawPath.replace(/\{([^}]+)\}/g, ':$1');
@@ -175,8 +185,11 @@ async function bootstrap() {
       }
     }
     metricsService.registerCatalogRoutes(catalogRoutes);
-  } catch {
-    // Non-fatal if route scanning fails
+  } catch (error) {
+    logger.warn(
+      `Metrics route catalog unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+      'Bootstrap',
+    );
   }
 
   const isSwaggerAllowed =

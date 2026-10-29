@@ -37,15 +37,24 @@ export class QuizImporter implements Importer {
   validate(rows: Record<string, unknown>[]) {
     const errors: string[] = [];
     const validRows: { row: Record<string, unknown>; rowNum: number }[] = [];
+    const currentYear = new Date().getFullYear();
+    const defaultAcademicYear = `${currentYear}-${currentYear + 1}`;
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
+      if (!row.academicYear) {
+        row.academicYear = defaultAcademicYear;
+      }
+      if (!row.semester) {
+        row.semester = 'first';
+      }
+      if (row.maxGrade === undefined && row.grade !== undefined) {
+        row.maxGrade = 10;
+      }
       if (
         !row.studentCode ||
         !row.courseCode ||
-        !row.academicYear ||
-        !row.semester ||
         row.quizNumber === undefined ||
         row.grade === undefined ||
         row.maxGrade === undefined
@@ -197,7 +206,20 @@ export class QuizImporter implements Importer {
     }
 
     if (modifiedDocs.size > 0) {
-      await Promise.all(Array.from(modifiedDocs).map((doc) => doc.save()));
+      const docs = Array.from(modifiedDocs);
+      const saveResults = await Promise.allSettled(
+        docs.map((doc) => doc.save()),
+      );
+      for (const res of saveResults) {
+        if (res.status === 'rejected') {
+          successCount = Math.max(0, successCount - 1);
+          const msg =
+            res.reason instanceof Error
+              ? res.reason.message
+              : 'تعذر حفظ سجل الكويز';
+          errors.push(`خطأ أثناء حفظ الكويز: ${msg}`);
+        }
+      }
     }
 
     return { successCount, errors };

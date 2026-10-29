@@ -26,10 +26,22 @@ const MAX_UPLOAD_SIZE_BYTES = MAX_HTTP_UPLOAD_SIZE_BYTES;
 const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'application/vnd.ms-excel.sheet.macroEnabled.12',
+  'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
+  'application/excel',
+  'application/x-excel',
+  'application/x-msexcel',
+  'application/zip',
+  'application/x-zip-compressed',
   'application/octet-stream',
   'text/csv',
+  'text/comma-separated-values',
   'application/csv',
+  'application/x-csv',
   'text/plain',
+  'text/xml',
+  'application/xml',
+  '',
 ]);
 
 @ApiTags('Uploads')
@@ -138,7 +150,13 @@ export class UploadsController {
         const hasSupportedExtension = /\.(xlsx|xls|csv)$/i.test(
           file.originalname || '',
         );
-        if (!hasSupportedExtension || !ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        const mime = (file.mimetype || '').toLowerCase();
+        const isAllowedMime =
+          ALLOWED_MIME_TYPES.has(mime) ||
+          mime.includes('spreadsheet') ||
+          mime.includes('excel') ||
+          mime.includes('csv');
+        if (!hasSupportedExtension || !isAllowedMime) {
           callback(
             new BadRequestException('Only xlsx, xls, or csv files are allowed'),
             false,
@@ -170,6 +188,7 @@ export class UploadsController {
             'quizzes',
             'attendance',
             'academic-emails',
+            'academic-warnings',
           ],
         },
       },

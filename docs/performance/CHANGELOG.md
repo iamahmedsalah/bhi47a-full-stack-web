@@ -1,0 +1,15 @@
+# Targeted performance change log — 29 October 2026
+
+The checkout already contained enrollment, complaints and metrics patches when this task began. They were retained and completed. Unrelated upload/import, course-schedule, student and exam-schedule changes appeared during verification and were not reverted or rewritten as part of this performance work.
+
+- `apps/api/src/modules/registrations/registrations.service.ts`: request-local academic/grade/rule/credit snapshots, projected batch reads, cross-chunk credit reuse and deterministic GPA rule precedence. Retains legacy profile repair, each student's exact course-credit lookup semantics (including legacy casing), and the shared GPA/progress calculation.
+- `apps/api/src/modules/courses/courses.service.ts`: bounded candidate/registration reads, bounded writes, exact course-array compare before updates, unnecessary level-update avoidance, and explicit measurement of bulk-write calls. Prerequisite/GPA/term/department/blocked/override/audit rules remain in the existing services.
+- `apps/api/src/modules/courses/utils/enrollment-bulk.util.ts`: reports acknowledged, rejected, uncertain and unattempted writes. Duplicate-key, concurrent-update and validation failures return a conflict; unknown/network/write-concern outcomes return a sanitized unavailable response. No partially failed batch receives a success response. Retrying a completed enrollment remains idempotent.
+- `apps/api/src/common/filters/all-exceptions.filter.ts`: preserves the partial-write summary in the production error envelope while whitelisting its write kind and nonnegative integer counts.
+- `apps/api/src/modules/complaints/{complaints.controller.ts,complaints.service.ts,dto/complaint.dto.ts}`: opt-in summary projection and permission-protected full detail. Full-list compatibility, filtered totals, stable ordering and student ownership filtering remain intact.
+- `apps/web/src/features/complaints/api.ts` and `apps/web/src/app/[locale]/admin/complaints/page.tsx`: typed summary items, query-keyed detail loading, retry/cancel, stale-response isolation, detail-cache updates and URL-selected ticket handling. Arabic/English loading and errors are translated in `apps/web/src/messages/{ar,en}.json`. CSV exports include a UTF-8 BOM.
+- `apps/api/src/core/metrics/{request-query-context.ts,metrics.service.ts}` and `apps/api/src/database/mongoose-metrics.plugin.ts`: bounded request operation/fingerprint diagnostics and per-stage/per-row operation counts. No student/session identifiers or query values are metric labels.
+- Existing route-catalog and unified metrics UI changes remain present. Removed an unnecessary assertion that failed API lint; other unrelated metric-screen work was preserved.
+- Regression coverage: enrollment read scaling and GPA equivalence, rule bounds/overlap/repair, partial/uncertain writes, telemetry privacy/isolation, actual MongoDB writes/races/retries, complaints projection/filtering/counts/permissions/detail, and Arabic/English browser interactions.
+
+There is no production migration, secret change, production index build, deployment, commit or push. Validation 

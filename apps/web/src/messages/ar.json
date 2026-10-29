@@ -1,4 +1,10 @@
 {
+  "complaintDetails": {
+    "loading": "جاري تحميل تفاصيل البلاغ…",
+    "failed": "تعذر تحميل تفاصيل البلاغ.",
+    "retry": "إعادة المحاولة",
+    "cancel": "إلغاء"
+  },
   "authSecurity": {
     "title": "أمان الحساب",
     "verifyTitle": "تأكيد هويتك",

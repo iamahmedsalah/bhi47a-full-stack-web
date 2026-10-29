@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import {
   Activity,
+  ArrowUpDown,
   Cpu,
   Database,
   Server,
@@ -22,13 +23,8 @@ import {
   HardDrive,
   Layers,
   Radio,
-  BarChart2,
   Search,
-  Filter,
   SlidersHorizontal,
-  RotateCcw,
-  ArrowUpDown,
-  Snowflake,
   Download,
   Terminal,
   Link2,
@@ -49,23 +45,18 @@ import {
 } from '@/components/ui/select';
 import { LoadingState, ErrorState } from '@/components/ui/feedback';
 import { getApiErrorMessage } from '@/lib/api';
-import { downloadFileBlob, exportMetricsToCsv } from '@/lib/export-utils';
+import { downloadFileBlob } from '@/lib/export-utils';
 import {
   getMetricsSummary,
   getRawPrometheusMetrics,
-  CANONICAL_COLLECTIONS,
-  CANONICAL_OPERATIONS,
   type LabelCount,
   type MetricsSummaryResponse,
 } from '@/features/metrics/api';
 import { LockedAccountsModal } from './locked-accounts-modal';
-import { HttpTrafficCard, HttpTrafficDetails } from '@/features/metrics/http-traffic';
+import { HttpTrafficCard, HttpTrafficDiagnostics } from '@/features/metrics/http-traffic';
+import { UnifiedPerformanceTables } from '@/features/metrics/unified-tables';
 import type { TrafficWindow } from '@/features/metrics/api';
 
-
-type RouteSort = 'latency' | 'max' | 'count' | 'errors' | 'route';
-type RouteTraffic = 'all' | 'active' | 'uncalled';
-type SlowPhase = 'all' | 'cold' | 'steady';
 
 const CARD_CLASS =
   'p-5 bg-card/45 backdrop-blur-sm border-border/70 rounded-2xl space-y-4';
@@ -174,19 +165,6 @@ export default function AdminMetricsPage() {
   const [trafficWindow, setTrafficWindow] = useState<TrafficWindow>('5m');
   const [copiedUrl, setCopiedUrl] = useState(false);
 
-  // Slow Queries filter state
-  const [sqCollection, setSqCollection] = useState<string>('all');
-  const [sqOperation, setSqOperation] = useState<string>('all');
-  const [sqThreshold, setSqThreshold] = useState<string>('0');
-  const [sqPhase, setSqPhase] = useState<SlowPhase>('all');
-  const [sqSearch, setSqSearch] = useState<string>('');
-
-  // Endpoints filter & sort state
-  const [routeSearch, setRouteSearch] = useState<string>('');
-  const [routeMethod, setRouteMethod] = useState<string>('all');
-  const [routeTraffic, setRouteTraffic] = useState<RouteTraffic>('all');
-  const [routeSort, setRouteSort] = useState<RouteSort>('latency');
-
   // Raw Prometheus exposition viewer
   const [rawOpen, setRawOpen] = useState(false);
   const [rawSearch, setRawSearch] = useState('');
@@ -209,100 +187,6 @@ export default function AdminMetricsPage() {
     enabled: rawOpen,
     refetchInterval: rawOpen && refreshInterval > 0 ? Math.max(refreshInterval, 15000) : false,
   });
-
-  const slowQueries = useMemo(
-    () => data?.database?.recentSlowQueries ?? [],
-    [data?.database?.recentSlowQueries],
-  );
-
-  const availableCollections = useMemo(() => {
-    const set = new Set<string>([
-      ...CANONICAL_COLLECTIONS,
-      ...(data?.database?.availableCollections ?? []),
-      ...slowQueries.map((q) => q.collection),
-    ]);
-    return Array.from(set).sort();
-  }, [data?.database?.availableCollections, slowQueries]);
-
-  const availableOperations = useMemo(() => {
-    const set = new Set<string>([
-      ...CANONICAL_OPERATIONS,
-      ...(data?.database?.availableOperations ?? []),
-      ...slowQueries.map((q) => q.operation),
-    ]);
-    return Array.from(set).sort();
-  }, [data?.database?.availableOperations, slowQueries]);
-
-  const filteredSlowQueries = useMemo(() => {
-    const minMs = Number(sqThreshold) || 0;
-    const term = sqSearch.trim().toLowerCase();
-    return slowQueries.filter((q) => {
-      if (sqCollection !== 'all' && q.collection !== sqCollection) return false;
-      if (sqOperation !== 'all' && q.operation !== sqOperation) return false;
-      if (minMs > 0 && q.durationMs < minMs) return false;
-      if (sqPhase === 'cold' && !q.isColdStart) return false;
-      if (sqPhase === 'steady' && q.isColdStart) return false;
-      if (term) {
-        const haystack = `${q.collection} ${q.operation} ${q.filter ?? ''} ${q.options ?? ''}`.toLowerCase();
-        if (!haystack.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [slowQueries, sqCollection, sqOperation, sqThreshold, sqPhase, sqSearch]);
-
-  const sqFiltersActive =
-    sqCollection !== 'all' ||
-    sqOperation !== 'all' ||
-    sqThreshold !== '0' ||
-    sqPhase !== 'all' ||
-    sqSearch.trim() !== '';
-
-  const resetSlowQueryFilters = () => {
-    setSqCollection('all');
-    setSqOperation('all');
-    setSqThreshold('0');
-    setSqPhase('all');
-    setSqSearch('');
-  };
-
-  const allRoutes = useMemo(
-    () => data?.http?.routes ?? data?.http?.topSlowestRoutes ?? [],
-    [data?.http?.routes, data?.http?.topSlowestRoutes],
-  );
-
-  const availableMethods = useMemo(() => {
-    const methods = new Set<string>([
-      'GET',
-      'POST',
-      'PUT',
-      'PATCH',
-      'DELETE',
-      ...(data?.http?.availableMethods ?? []),
-      ...allRoutes.map((r) => r.method ?? r.route.split(' ')[0]),
-    ]);
-    return Array.from(methods).filter(Boolean);
-  }, [data?.http?.availableMethods, allRoutes]);
-
-  const filteredRoutes = useMemo(() => {
-    const term = routeSearch.trim().toLowerCase();
-    const list = allRoutes.filter((r) => {
-      const parts = r.route.split(' ');
-      const method = r.method ?? (parts.length > 1 ? parts[0] : 'GET');
-      if (routeMethod !== 'all' && method !== routeMethod) return false;
-      if (routeTraffic === 'active' && r.count === 0) return false;
-      if (routeTraffic === 'uncalled' && r.count > 0) return false;
-      if (term && !r.route.toLowerCase().includes(term)) return false;
-      return true;
-    });
-    const sorters: Record<RouteSort, (a: (typeof list)[number], b: (typeof list)[number]) => number> = {
-      latency: (a, b) => b.avgLatencyMs - a.avgLatencyMs,
-      max: (a, b) => (b.maxLatencyMs ?? 0) - (a.maxLatencyMs ?? 0),
-      count: (a, b) => b.count - a.count,
-      errors: (a, b) => (b.errorCount ?? 0) - (a.errorCount ?? 0),
-      route: (a, b) => a.route.localeCompare(b.route),
-    };
-    return [...list].sort(sorters[routeSort]);
-  }, [allRoutes, routeSearch, routeMethod, routeTraffic, routeSort]);
 
   const rawLines = useMemo(() => {
     const text = rawQuery.data ?? '';
@@ -339,96 +223,6 @@ export default function AdminMetricsPage() {
     );
   };
 
-  const handleDownloadEndpointsCsv = () => {
-    if (filteredRoutes.length === 0) return;
-    const rows = filteredRoutes.map((r) => {
-      const parts = r.route.split(' ');
-      const method = r.method ?? (parts.length > 1 ? parts[0] : 'GET');
-      return {
-        route: r.route,
-        method,
-        calls: r.count,
-        avgLatencyMs: r.avgLatencyMs,
-        maxLatencyMs: r.maxLatencyMs ?? '',
-        clientErrors4xx: r.clientErrorCount ?? 0,
-        serverErrors5xx: r.serverErrorCount ?? 0,
-        statusBreakdown: Object.entries(r.statusCounts ?? {})
-          .map(([s, c]) => `${s}:${c}`)
-          .join('; '),
-      };
-    });
-    exportMetricsToCsv(
-      rows,
-      `endpoints-latency-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
-      [
-        { key: 'route', header: isAr ? 'المسار' : 'Route' },
-        { key: 'method', header: isAr ? 'الطريقة' : 'Method' },
-        { key: 'calls', header: isAr ? 'عدد الطلبات' : 'Calls' },
-        { key: 'avgLatencyMs', header: isAr ? 'متوسط التأخير (ms)' : 'Avg Latency (ms)' },
-        { key: 'maxLatencyMs', header: isAr ? 'أقصى تأخير (ms)' : 'Max Latency (ms)' },
-        { key: 'clientErrors4xx', header: isAr ? 'أخطاء عميل 4xx' : 'Client 4xx' },
-        { key: 'serverErrors5xx', header: isAr ? 'أخطاء خادم 5xx' : 'Server 5xx' },
-        { key: 'statusBreakdown', header: isAr ? 'تفاصيل الرموز' : 'Status Codes' },
-      ],
-    );
-    toast.success(isAr ? 'تم تصدير سجل المسارات (CSV)' : 'Endpoints report exported as CSV');
-  };
-
-  const handleDownloadSlowQueriesCsv = () => {
-    if (filteredSlowQueries.length === 0) return;
-    const rows = filteredSlowQueries.map((q) => ({
-      collection: q.collection,
-      operation: q.operation,
-      durationMs: q.durationMs,
-      phase: q.isColdStart
-        ? (isAr ? 'إقلاع بارد' : 'Cold Start')
-        : (isAr ? 'تشغيل مستقر' : 'Steady State'),
-      filter: q.filter || '',
-      options: q.options || '',
-      timestamp: q.timestamp,
-    }));
-    exportMetricsToCsv(
-      rows,
-      `slow-queries-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
-      [
-        { key: 'collection', header: isAr ? 'المجموعة' : 'Collection' },
-        { key: 'operation', header: isAr ? 'العملية' : 'Operation' },
-        { key: 'durationMs', header: isAr ? 'المدة (ms)' : 'Duration (ms)' },
-        { key: 'phase', header: isAr ? 'المرحلة' : 'Phase' },
-        { key: 'filter', header: isAr ? 'الفلتر' : 'Filter' },
-        { key: 'options', header: isAr ? 'خيارات الاستعلام' : 'Query Options' },
-        { key: 'timestamp', header: isAr ? 'الوقت' : 'Timestamp' },
-      ],
-    );
-    toast.success(isAr ? 'تم تصدير سجل الاستعلامات البطيئة (CSV)' : 'Slow queries exported as CSV');
-  };
-
-  const handleDownloadSqByCollectionCsv = () => {
-    const list = data?.database?.slowQueriesByCollection ?? [];
-    if (list.length === 0) return;
-    const rows = list.map((agg) => ({
-      collection: agg.collection,
-      operation: agg.operation,
-      count: agg.count,
-      avgMs: agg.avgMs,
-      maxMs: agg.maxMs,
-      coldStartCount: agg.coldStartCount,
-    }));
-    exportMetricsToCsv(
-      rows,
-      `slow-queries-by-collection-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`,
-      [
-        { key: 'collection', header: isAr ? 'المجموعة' : 'Collection' },
-        { key: 'operation', header: isAr ? 'العملية' : 'Operation' },
-        { key: 'count', header: isAr ? 'العدد' : 'Count' },
-        { key: 'avgMs', header: isAr ? 'المتوسط (ms)' : 'Avg (ms)' },
-        { key: 'maxMs', header: isAr ? 'الأقصى (ms)' : 'Max (ms)' },
-        { key: 'coldStartCount', header: isAr ? 'أثناء الإقلاع' : 'Cold Start Count' },
-      ],
-    );
-    toast.success(isAr ? 'تم تصدير ملخص الاستعلامات حسب المجموعة' : 'Queries by collection exported');
-  };
-
   const formatUptime = (seconds: number) => {
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);
@@ -439,15 +233,7 @@ export default function AdminMetricsPage() {
     return isAr ? `${m} دقيقة ${s} ثانية` : `${m}m ${s}s`;
   };
 
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString(dateLocale, {
-      timeZone: 'Africa/Cairo',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-
-  const operationLabel = (op: string) => op;
+  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(dateLocale, { timeZone: 'Africa/Cairo' });
 
   return (
     <div className="space-y-6" dir={dir}>
@@ -1044,391 +830,8 @@ export default function AdminMetricsPage() {
             </Card>
           </div>
 
-          {/* ─── HTTP Traffic Diagnostics & Slow Requests ─── */}
-          <HttpTrafficDetails traffic={data.traffic} slowRequests={data.recentSlowRequests} isAr={isAr} />
-
-          {/* ─── ROW 4: Endpoints latency (all routes, filterable) ─── */}
-          <Card className={CARD_CLASS}>
-            <div className="flex flex-col gap-2 border-b border-border/60 pb-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <BarChart2 className="h-4 w-4 text-cyan-400" />
-                  <span>{isAr ? 'زمن استجابة المسارات — منذ بدء العملية' : 'Endpoints Latency — process lifetime'}</span>
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {isAr
-                    ? 'جميع المسارات المسجلة منذ التشغيل مع إمكانية البحث والتصفية والترتيب'
-                    : 'All endpoints recorded since boot — search, filter by method, and sort'}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-mono text-muted-foreground">
-                  <bdi>{filteredRoutes.length}</bdi> / <bdi>{allRoutes.length}</bdi>
-                </span>
-                <Button
-                  id="metrics-endpoints-download"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadEndpointsCsv}
-                  disabled={filteredRoutes.length === 0}
-                  className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="metrics-route-search"
-                  value={routeSearch}
-                  onChange={(e) => setRouteSearch(e.target.value)}
-                  placeholder={isAr ? 'ابحث عن مسار...' : 'Search route...'}
-                  className="rounded-squircle ps-9 text-xs"
-                  dir="ltr"
-                />
-              </div>
-              <Select value={routeMethod} onValueChange={setRouteMethod}>
-                <SelectTrigger id="metrics-route-method" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'الطريقة' : 'Method'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="all">{isAr ? 'كل الطرق' : 'All methods'}</SelectItem>
-                  {availableMethods.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={routeTraffic} onValueChange={(v) => setRouteTraffic(v as RouteTraffic)}>
-                <SelectTrigger id="metrics-route-traffic" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'حالة النشاط' : 'Traffic status'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="all">{isAr ? 'كل المسارات' : 'All endpoints'}</SelectItem>
-                  <SelectItem value="active">{isAr ? 'مسارات نشطة' : 'Active with traffic'}</SelectItem>
-                  <SelectItem value="uncalled">{isAr ? 'مسارات خاملة (كتالوج)' : 'Catalog only (idle)'}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={routeSort} onValueChange={(v) => setRouteSort(v as RouteSort)}>
-                <SelectTrigger id="metrics-route-sort" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'ترتيب حسب' : 'Sort by'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="latency">{isAr ? 'متوسط التأخير' : 'Avg latency'}</SelectItem>
-                  <SelectItem value="max">{isAr ? 'أقصى تأخير' : 'Max latency'}</SelectItem>
-                  <SelectItem value="count">{isAr ? 'عدد الطلبات' : 'Call count'}</SelectItem>
-                  <SelectItem value="errors">{isAr ? 'عدد الأخطاء' : 'Error count'}</SelectItem>
-                  <SelectItem value="route">{isAr ? 'المسار (أبجدي)' : 'Route name (A-Z)'}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {filteredRoutes.length === 0 ? (
-              <p className="py-6 text-center text-xs text-muted-foreground">
-                {isAr ? 'لا توجد مسارات مطابقة' : 'No matching endpoints'}
-              </p>
-            ) : (
-              <div className="max-h-105 overflow-auto">
-                <table className="w-full text-xs text-start">
-                  <thead className="sticky top-0 bg-card/95 backdrop-blur-sm">
-                    <tr className="border-b border-border/60 text-muted-foreground">
-                      <th className="py-2 px-3 text-start">{isAr ? 'المسار والطريقة' : 'Route & Method'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'عدد الطلبات' : 'Calls'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'متوسط التأخير' : 'Avg'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'أقصى تأخير' : 'Max'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'رفض العميل 4xx' : 'Client 4xx'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'أخطاء الخادم 5xx' : 'Server 5xx'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'رموز الرفض' : 'Rejection statuses'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
-                    {filteredRoutes.map((r) => {
-                      const isUncalled = r.count === 0;
-                      return (
-                        <tr key={r.route} className="hover:bg-secondary/20 transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-foreground">
-                            <div className="flex items-center gap-2">
-                              <bdi dir="ltr">{r.route}</bdi>
-                              {isUncalled && (
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-squircle px-1.5 py-0 text-[10px] text-muted-foreground border-border/50"
-                                >
-                                  {isAr ? 'كتالوج' : 'Catalog'}
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-foreground">{r.count}</td>
-                          <td className="py-2.5 px-3">
-                            {isUncalled ? (
-                              <span className="text-muted-foreground/50">—</span>
-                            ) : (
-                              <span className={`px-2 py-0.5 rounded-squircle font-bold ${latencyTone(r.avgLatencyMs)}`} dir="ltr">
-                                {r.avgLatencyMs} ms
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">
-                            {isUncalled ? (
-                              <span className="text-muted-foreground/50">—</span>
-                            ) : r.maxLatencyMs !== undefined ? (
-                              `${r.maxLatencyMs} ms`
-                            ) : (
-                              '-'
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-amber-400">{r.clientErrorCount ?? '—'}</td>
-                          <td className="py-2.5 px-3 text-rose-400">{r.serverErrorCount ?? '—'}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">
-                            {Object.entries(r.statusCounts ?? {}).filter(([status]) => Number(status) >= 400)
-                              .map(([status, count]) => `${status} × ${count}`).join(', ') || '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-
-          {/* ─── ROW 5: Slow queries aggregated by collection ─── */}
-          {(data.database.slowQueriesByCollection?.length ?? 0) > 0 && (
-            <Card className={CARD_CLASS}>
-              <SectionHeader
-                icon={<HardDrive className="h-4 w-4 text-amber-400" />}
-                title={isAr ? 'ملخص الاستعلامات البطيئة حسب المجموعة' : 'Slow Queries by Collection'}
-                badge={
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="rounded-squircle text-[10px]">
-                      {isAr ? 'منذ التشغيل' : 'Since boot'}
-                    </Badge>
-                    <Button
-                      id="metrics-sq-by-collection-download"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDownloadSqByCollectionCsv}
-                      className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
-                    </Button>
-                  </div>
-                }
-              />
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-start">
-                  <thead>
-                    <tr className="border-b border-border/60 text-muted-foreground">
-                      <th className="py-2 px-3 text-start">{isAr ? 'المجموعة' : 'Collection'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'العملية' : 'Operation'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'العدد' : 'Count'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'المتوسط' : 'Avg'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'الأقصى' : 'Max'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'أثناء الإقلاع' : 'Cold-start'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
-                    {data.database.slowQueriesByCollection?.map((agg) => (
-                      <tr key={`${agg.collection}:${agg.operation}`} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-foreground"><bdi dir="ltr">{agg.collection}</bdi></td>
-                        <td className="py-2.5 px-3 text-cyan-300 font-semibold"><bdi dir="ltr">{operationLabel(agg.operation)}</bdi></td>
-                        <td className="py-2.5 px-3 text-foreground">{agg.count}</td>
-                        <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded-squircle font-bold ${latencyTone(agg.avgMs, 100, 500)}`} dir="ltr">
-                            {agg.avgMs} ms
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground" dir="ltr">{agg.maxMs} ms</td>
-                        <td className="py-2.5 px-3 text-sky-300">{agg.coldStartCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-
-          {/* ─── ROW 6: Recent Slow Queries (filterable) ─── */}
-          <Card className={CARD_CLASS}>
-            <div className="flex flex-col gap-2 border-b border-border/60 pb-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  <span>{isAr ? 'سجل الاستعلامات البطيئة المكتشفة تلقائياً' : 'Automated Slow Queries Detector'}</span>
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {isAr
-                    ? `آخر 50 استعلاماً تجاوز ${data.database.slowQueryThresholdMs ?? 100}ms. الاستعلامات خلال أول ${data.database.coldStartWindowSeconds ?? 90} ثانية من التشغيل مُعلَّمة كـ "إقلاع بارد".`
-                    : `Last 50 queries over ${data.database.slowQueryThresholdMs ?? 100}ms. Queries in the first ${data.database.coldStartWindowSeconds ?? 90}s after boot are flagged as cold-start.`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-mono text-muted-foreground">
-                  <bdi>{filteredSlowQueries.length}</bdi> / <bdi>{slowQueries.length}</bdi>
-                </span>
-                {sqFiltersActive && (
-                  <Button
-                    id="metrics-sq-reset"
-                    variant="ghost"
-                    size="sm"
-                    onClick={resetSlowQueryFilters}
-                    className="rounded-squircle gap-1 text-xs"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    <span>{isAr ? 'إعادة ضبط' : 'Reset'}</span>
-                  </Button>
-                )}
-                <Button
-                  id="metrics-sq-download"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadSlowQueriesCsv}
-                  disabled={filteredSlowQueries.length === 0}
-                  className="rounded-squircle gap-1.5 text-xs border-border/70 font-semibold"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="relative lg:col-span-1">
-                <Search className="pointer-events-none absolute inset-s-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="metrics-sq-search"
-                  value={sqSearch}
-                  onChange={(e) => setSqSearch(e.target.value)}
-                  placeholder={isAr ? 'بحث في الفلتر...' : 'Search filter/shape...'}
-                  className="rounded-squircle ps-9 text-xs"
-                  dir="ltr"
-                />
-              </div>
-              <Select value={sqCollection} onValueChange={setSqCollection}>
-                <SelectTrigger id="metrics-sq-collection" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'المجموعة' : 'Collection'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="all">{isAr ? 'كل المجموعات' : 'All collections'}</SelectItem>
-                  {availableCollections.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={sqOperation} onValueChange={setSqOperation}>
-                <SelectTrigger id="metrics-sq-operation" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'العملية' : 'Operation'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="all">{isAr ? 'كل العمليات' : 'All operations'}</SelectItem>
-                  {availableOperations.map((op) => (
-                    <SelectItem key={op} value={op}>{op}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={sqThreshold} onValueChange={setSqThreshold}>
-                <SelectTrigger id="metrics-sq-threshold" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'الحد الأدنى للمدة' : 'Min duration'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="0">{isAr ? 'أي مدة' : 'Any duration'}</SelectItem>
-                  <SelectItem value="250">≥ 250 ms</SelectItem>
-                  <SelectItem value="500">≥ 500 ms</SelectItem>
-                  <SelectItem value="1000">≥ 1000 ms</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sqPhase} onValueChange={(v) => setSqPhase(v as SlowPhase)}>
-                <SelectTrigger id="metrics-sq-phase" className="rounded-squircle text-xs">
-                  <SelectValue placeholder={isAr ? 'المرحلة' : 'Phase'} />
-                </SelectTrigger>
-                <SelectContent dir={dir}>
-                  <SelectItem value="all">{isAr ? 'كل المراحل' : 'All phases'}</SelectItem>
-                  <SelectItem value="cold">{isAr ? 'إقلاع بارد' : 'Cold-start only'}</SelectItem>
-                  <SelectItem value="steady">{isAr ? 'تشغيل مستقر' : 'Steady-state only'}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {slowQueries.length === 0 ? (
-              <div className="py-8 text-center space-y-2">
-                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-                <p className="text-xs font-bold text-foreground">
-                  {isAr ? 'لا توجد استعلامات بطيئة مسجلة حالياً' : 'No slow queries captured'}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {isAr
-                    ? 'جميع استعلامات قاعدة البيانات تنفذ في زمن أقل من الحد المسموح.'
-                    : 'All database queries are executing under the latency threshold.'}
-                </p>
-              </div>
-            ) : filteredSlowQueries.length === 0 ? (
-              <div className="py-6 text-center space-y-2">
-                <Filter className="h-6 w-6 text-muted-foreground mx-auto" />
-                <p className="text-xs text-muted-foreground">
-                  {isAr ? 'لا توجد نتائج مطابقة للفلاتر الحالية' : 'No queries match the current filters'}
-                </p>
-              </div>
-            ) : (
-              <div className="max-h-120rflow-auto">
-                <table className="w-full text-xs text-start">
-                  <thead className="sticky top-0 bg-card/95 backdrop-blur-sm">
-                    <tr className="border-b border-border/60 text-muted-foreground">
-                      <th className="py-2 px-3 text-start">{isAr ? 'المجموعة' : 'Collection'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'العملية' : 'Operation'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'المدة' : 'Duration'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'الفلتر' : 'Filter'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'شكل الاستعلام' : 'Query Shape'}</th>
-                      <th className="py-2 px-3 text-start">{isAr ? 'الوقت' : 'Time'}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40 font-mono">
-                    {filteredSlowQueries.map((q) => (
-                      <tr key={q.id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <bdi dir="ltr">{q.collection}</bdi>
-                            {q.isColdStart && (
-                              <span
-                                className="inline-flex items-center gap-0.5 rounded-squircle border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-bold text-sky-300"
-                                title={isAr ? 'حدث أثناء الإقلاع البارد (فتح اتصالات جديدة)' : 'Captured during cold start (new pool connections)'}
-                              >
-                                <Snowflake className="h-2.5 w-2.5" />
-                                {isAr ? 'بارد' : 'cold'}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-3 text-cyan-300 font-semibold"><bdi dir="ltr">{q.operation}</bdi></td>
-                        <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded-squircle font-bold ${latencyTone(q.durationMs, 100, 500)}`} dir="ltr">
-                            {q.durationMs} ms
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground max-w-55 truncate text-[11px]" dir="ltr" title={q.filter}>
-                          {q.filter || '-'}
-                        </td>
-                        <td
-                          className={`py-2.5 px-3 max-w-65 truncate text-[11px] ${q.options?.includes('limit=NONE') ? 'text-rose-300' : 'text-muted-foreground'}`}
-                          dir="ltr"
-                          title={q.options}
-                        >
-                          {q.options || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-muted-foreground text-[10px]">
-                          <bdi>{formatTime(q.timestamp)}</bdi>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          <HttpTrafficDiagnostics traffic={data.traffic} isAr={isAr} />
+          <UnifiedPerformanceTables data={data} isAr={isAr} />
 
           {/* ─── ROW 7: Endpoints catalogue + Raw Prometheus exposition ─── */}
           <Card className={CARD_CLASS}>

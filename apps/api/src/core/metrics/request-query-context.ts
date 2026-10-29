@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type DatabaseStage =
+  | 'enrollment.prefetch'
+  | 'enrollment.rules'
+  | 'enrollment.bulkWrite'
   | 'auth.session'
   | 'auth.user'
   | 'authorization.roles'
@@ -24,13 +27,24 @@ export interface RequestQueryMetrics {
   route?: string;
   count: number;
   durationSeconds: number;
-  stages: Map<DatabaseStage, { count: number; durationSeconds: number }>;
+  stages: Map<
+    DatabaseStage,
+    {
+      count: number;
+      durationSeconds: number;
+      databaseOperations?: number;
+      maxOperationsPerInvocation?: number;
+    }
+  >;
+  operations: Map<string, number>;
+  fingerprints: Map<string, number>;
   reads: Map<string, Promise<unknown>>;
 }
 
 const storage = new AsyncLocalStorage<{
   request: RequestQueryMetrics;
   stage?: DatabaseStage;
+  stageQueries?: { count: number };
 }>();
 
 export function getRequestQueryContext() {
@@ -48,6 +62,8 @@ export function runWithRequestQueryMetrics<T>(
         count: 0,
         durationSeconds: 0,
         stages: new Map(),
+        operations: new Map(),
+        fingerprints: new Map(),
         reads: new Map(),
       },
     },
@@ -96,14 +112,24 @@ export async function measureDatabaseStage<T>(
   const context = storage.getStore();
   if (!context) return action();
   const start = process.hrtime.bigint();
+  const stageQueries = { count: 0 };
   try {
     // Mongoose queries are lazy thenables: execute/await them inside the stage,
     // rather than returning them and letting the caller's context execute them.
-    return await storage.run({ ...context, stage }, async () => await action());
+    return await storage.run(
+      { ...context, stage, stageQueries },
+      async () => await action(),
+    );
   } finally {
     const previous = context.request.stages.get(stage);
     context.request.stages.set(stage, {
       count: (previous?.count ?? 0) + 1,
+      databaseOperations:
+        (previous?.databaseOperations ?? 0) + stageQueries.count,
+      maxOperationsPerInvocation: Math.max(
+        previous?.maxOperationsPerInvocation ?? 0,
+        stageQueries.count,
+      ),
       durationSeconds:
         (previous?.durationSeconds ?? 0) +
         Number(process.hrtime.bigint() - start) / 1e9,

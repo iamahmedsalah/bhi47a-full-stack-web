@@ -61,15 +61,30 @@ function harness(department = 'ACCOUNTING', semester = 'first') {
   const registrations = {
     findOne: jest.fn().mockReturnValue(query(null)),
     find: jest.fn().mockReturnValue(query([])),
-    bulkWrite: jest.fn().mockResolvedValue({}),
+    bulkWrite: jest.fn((ops: Array<{ insertOne?: unknown }>) =>
+      Promise.resolve({
+        insertedCount: ops.filter((op) => op.insertOne).length,
+        matchedCount: ops.filter((op) => !op.insertOne).length,
+      }),
+    ),
   };
   const profiles = {
     findOne: jest.fn().mockReturnValue(query(profile)),
     find: jest.fn().mockReturnValue(query([profile])),
-    bulkWrite: jest.fn().mockResolvedValue({}),
+    bulkWrite: jest.fn((ops: unknown[]) =>
+      Promise.resolve({
+        matchedCount: ops.length,
+        insertedCount: 0,
+      }),
+    ),
   };
   const users = { find: jest.fn().mockReturnValue(query([])) };
   const period = {
+    prepareAdministrativeEnrollment: jest.fn().mockResolvedValue({
+      profiles: new Map(),
+      courses: new Map(),
+      rules: [],
+    }),
     assertAdministrativeCourseAddition: jest.fn().mockResolvedValue(undefined),
     resolveRegistrationPeriod: jest
       .fn()
@@ -360,12 +375,13 @@ describe('administrative limit override authorization and audit', () => {
       ['1', '2', '3', '4', '5', '6'],
       'first',
       true,
+      expect.objectContaining({ profiles: expect.any(Map) }),
     );
     expect(h.registrations.bulkWrite).toHaveBeenCalledWith(
       [
         expect.objectContaining({
           updateOne: expect.objectContaining({
-            filter: { _id: regId, courses: { $ne: '326' } },
+            filter: { _id: regId, courses: ['1', '2', '3', '4', '5', '6'] },
             update: expect.objectContaining({
               $addToSet: { courses: '326' },
               $push: {
@@ -380,7 +396,7 @@ describe('administrative limit override authorization and audit', () => {
           }),
         }),
       ],
-      { ordered: false },
+      { ordered: false, throwOnValidationError: true },
     );
   });
   it('does not record an override for students within limits', async () => {

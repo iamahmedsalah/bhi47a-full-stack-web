@@ -535,6 +535,24 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     if (context) {
       context.request.count++;
       context.request.durationSeconds += durationSeconds;
+      if (context.stageQueries) context.stageQueries.count++;
+      const operationKey = `${collection}.${operation}`.slice(0, 120);
+      const operations = context.request.operations;
+      if (operations.size < 64 || operations.has(operationKey)) {
+        operations.set(operationKey, (operations.get(operationKey) ?? 0) + 1);
+      }
+      if (context.stage?.startsWith('enrollment.')) {
+        // Details supplied by the Mongoose plugin contain structural placeholders only.
+        const shape = typeof details === 'object' ? (details.filter ?? '') : '';
+        const fingerprint = `${operationKey} ${shape}`.slice(0, 240);
+        const fingerprints = context.request.fingerprints;
+        if (fingerprints.size < 32 || fingerprints.has(fingerprint)) {
+          fingerprints.set(
+            fingerprint,
+            (fingerprints.get(fingerprint) ?? 0) + 1,
+          );
+        }
+      }
     }
     const labels = { collection, operation };
     this.dbQueryDurationSeconds.observe(labels, durationSeconds);
@@ -638,6 +656,18 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         durationMs: seconds * 1000,
         databaseOperations: context.count,
         summedDatabaseMs: context.durationSeconds * 1000,
+        operationCounts: Object.fromEntries(context.operations),
+        queryFingerprints: Object.fromEntries(context.fingerprints),
+        stageOperations: Object.fromEntries(
+          [...context.stages].map(([stage, value]) => [
+            stage,
+            {
+              invocations: value.count,
+              databaseOperations: value.databaseOperations ?? 0,
+              maxOperationsPerInvocation: value.maxOperationsPerInvocation ?? 0,
+            },
+          ]),
+        ),
         stages: Object.fromEntries(
           [...context.stages].map(([stage, value]) => [
             stage,
@@ -945,7 +975,18 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         avgLatencyMs,
         topSlowestRoutes,
         routes: allRoutes,
-        availableMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+        availableMethods: [
+          ...new Set([
+            'GET',
+            'POST',
+            'PUT',
+            'PATCH',
+            'DELETE',
+            'HEAD',
+            'OPTIONS',
+            ...allRoutes.map((route) => route.method),
+          ]),
+        ].sort(),
       },
       infrastructure: {
         redis: this.cacheService?.getHealth().redisConnected

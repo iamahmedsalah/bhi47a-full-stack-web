@@ -17,6 +17,36 @@ type ErrorLike = Error & {
   customMessage?: string;
 };
 
+/** Enrollment conflicts expose counts only, never driver errors or row identifiers. */
+function partialWriteSummary(body: unknown) {
+  if (!body || typeof body !== 'object' || !('partialWrite' in body)) return;
+  const value = body.partialWrite;
+  if (!value || typeof value !== 'object') return;
+  const data = value as Record<string, unknown>;
+  if (data.writeKind !== 'profiles' && data.writeKind !== 'registrations')
+    return;
+  const fields = [
+    'plannedCount',
+    'appliedCount',
+    'rejectedCount',
+    'uncertainCount',
+    'unattemptedCount',
+  ] as const;
+  if (
+    !fields.every(
+      (field) =>
+        typeof data[field] === 'number' &&
+        Number.isSafeInteger(data[field]) &&
+        data[field] >= 0,
+    )
+  )
+    return;
+  return {
+    writeKind: data.writeKind,
+    ...Object.fromEntries(fields.map((field) => [field, data[field]])),
+  };
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(private readonly logger: AppLoggerService) {}
@@ -91,6 +121,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const status = exception.getStatus();
       logRequestError(status);
       const body = exception.getResponse();
+      const partialWrite = partialWriteSummary(body);
       const message =
         typeof body === 'object' && body !== null && 'message' in body
           ? (body as { message: string | string[] }).message
@@ -104,6 +135,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
           : message || 'Error',
         timestamp: new Date().toISOString(),
         path: url,
+        ...(partialWrite ? { partialWrite } : {}),
         ...(typeof body === 'object' && body !== null
           ? {
               ...(typeof (body as any).code === 'string'

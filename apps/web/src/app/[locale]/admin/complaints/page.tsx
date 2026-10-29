@@ -4,6 +4,7 @@ import React, { Suspense, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 import {
   Eye,
@@ -37,6 +38,7 @@ import { cn } from '@/lib/cn';
 import {
   complaintKeys,
   getComplaintSettings,
+  getAdminComplaint,
   listAdminComplaints,
   listAdminComplaintStats,
   listAssignableStaff,
@@ -46,6 +48,7 @@ import {
   deleteComplaint,
   bulkDeleteComplaints,
   clearAllComplaints,
+  type ComplaintListItem,
 } from '@/features/complaints/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -356,7 +359,9 @@ function AdminComplaintsContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams ? searchParams.get('ticket') : null;
 
-  const [selectedTicketOverride, setSelectedTicketOverride] = useState<Complaint | null | 'CLOSED'>('CLOSED');
+  const detailsText = useTranslations('complaintDetails');
+  const [selectedTicketOverride, setSelectedTicketOverride] = useState<Complaint | null | 'CLOSED'>(null);
+  const [openedTicketId, setOpenedTicketId] = useState<string | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [drawerLoading, setDrawerLoading] = useState(false);
@@ -416,27 +421,23 @@ function AdminComplaintsContent() {
   const settings = settingsQuery.data ?? null;
   const assignees = assigneesQuery.data ?? [];
 
-  const selectedTicket = useMemo(() => {
-    if (selectedTicketOverride === 'CLOSED') {
-      return null;
-    }
-    if (selectedTicketOverride) {
-      return selectedTicketOverride;
-    }
-    if (ticketParam && complaints.length > 0) {
-      return complaints.find((c) => c.ticketNumber === ticketParam) ?? null;
-    }
-    return null;
-  }, [selectedTicketOverride, ticketParam, complaints]);
-
-  const setSelectedTicket = (ticket: Complaint | null | ((prev: Complaint | null) => Complaint | null)) => {
-    if (typeof ticket === 'function') {
-      setSelectedTicketOverride((prev) => {
-        const current = prev === 'CLOSED' ? null : prev;
-        const next = ticket(current);
-        return next ?? 'CLOSED';
-      });
+  const detailId = selectedTicketOverride === 'CLOSED' ? null :
+    openedTicketId ?? complaints.find((ticket) => ticket.ticketNumber === ticketParam)?._id ?? null;
+  const detailQuery = useQuery({
+    queryKey: complaintKeys.detail(detailId ?? ''),
+    queryFn: () => getAdminComplaint(detailId!),
+    enabled: Boolean(detailId) && !selectedTicketOverride,
+    retry: false,
+  });
+  const selectedTicket = selectedTicketOverride === 'CLOSED' ? null :
+    selectedTicketOverride ?? detailQuery.data ?? null;
+  const openingTicket = Boolean(detailId) && !selectedTicketOverride && detailQuery.isPending;
+  const setSelectedTicket = (ticket: Complaint | ComplaintListItem | null) => {
+    if (ticket && !('description' in ticket)) {
+      setOpenedTicketId(ticket._id);
+      setSelectedTicketOverride(null);
     } else {
+      setOpenedTicketId(null);
       setSelectedTicketOverride(ticket ?? 'CLOSED');
     }
   };
@@ -461,7 +462,8 @@ function AdminComplaintsContent() {
   }, [statsQuery.data, locale]);
 
   const updateCachesAfterTicket = (ticket: Complaint) => {
-    setSelectedTicket((current) => (current?._id === ticket._id ? ticket : current));
+    queryClient.setQueryData(complaintKeys.detail(ticket._id), ticket);
+    setSelectedTicketOverride((current) => current && current !== 'CLOSED' && current._id === ticket._id ? ticket : current);
     void queryClient.invalidateQueries({ queryKey: complaintKeys.adminLists() });
     void queryClient.invalidateQueries({ queryKey: complaintKeys.stats() });
   };
@@ -644,7 +646,7 @@ function AdminComplaintsContent() {
       ]),
     ];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -658,6 +660,14 @@ function AdminComplaintsContent() {
   
   return (
     <div className="space-y-6 p-2 md:p-6 animate-fade-in" dir={isAr ? "rtl" : "ltr"}>
+      {openingTicket && <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />{detailsText('loading')}</div>}
+      {detailId && !selectedTicketOverride && detailQuery.isError && (
+        <div role="alert" className="flex items-center gap-2 text-sm">
+          {detailsText('failed')}
+          <Button variant="outline" onClick={() => void detailQuery.refetch()}>{detailsText('retry')}</Button>
+          <Button variant="ghost" onClick={() => setSelectedTicket(null)}>{detailsText('cancel')}</Button>
+        </div>
+      )}
       <section className="overflow-hidden rounded-xl border border-border/70 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
@@ -1485,11 +1495,16 @@ function AdminComplaintsContent() {
   );
 }
 
+function RoutedComplaintsContent() {
+  const ticket = useSearchParams().get('ticket');
+  return <AdminComplaintsContent key={ticket ?? ''} />;
+}
+
 export default function ComplaintsPage() {
   return (
     <Suspense fallback={<PageSkeletonLoader />}>
       <PermissionGuard permission="complaints.read">
-        <AdminComplaintsContent />
+        <RoutedComplaintsContent />
       </PermissionGuard>
     </Suspense>
   );

@@ -53,6 +53,16 @@ describe('request database telemetry isolation', () => {
         expect(result.requestId).toBe(i === 0 ? 'request-a' : 'request-b');
         expect(result.count).toBe(2);
         expect(result.durationSeconds).toBeCloseTo(0.21);
+        expect(Object.fromEntries(result.operations)).toEqual({
+          'complaints.find': 1,
+          'complaints.countDocuments': 1,
+        });
+        expect(result.stages.get('complaints.page')?.databaseOperations).toBe(
+          1,
+        );
+        expect(
+          result.stages.get('complaints.enrichment')?.databaseOperations,
+        ).toBe(0);
         expect(result.stages.size).toBe(3);
         metrics.recordHttpRequest('GET', '/api/admin/complaints', 200, 0.25);
         metrics.recordRequestDatabaseMetrics(
@@ -73,6 +83,34 @@ describe('request database telemetry isolation', () => {
         'request-b',
       ]);
       expect(slow.every((row) => row.stage === 'complaints.page')).toBe(true);
+    } finally {
+      metrics.onModuleDestroy();
+      metrics.getRegistry().clear();
+    }
+  });
+
+  it('reports per-row query counts without row identities or cross-request reuse', async () => {
+    const metrics = new MetricsService();
+    try {
+      await runWithRequestQueryMetrics('enrollment', async () => {
+        for (const queries of [0, 2, 1]) {
+          await measureDatabaseStage('enrollment.rules', () => {
+            for (let index = 0; index < queries; index++)
+              metrics.recordDbQuery('grades', 'find', 0.001);
+            return Promise.resolve();
+          });
+        }
+        expect(
+          getRequestQueryContext()!.request.stages.get('enrollment.rules'),
+        ).toMatchObject({
+          count: 3,
+          databaseOperations: 3,
+          maxOperationsPerInvocation: 2,
+        });
+      });
+      runWithRequestQueryMetrics('next-enrollment', () => {
+        expect(getRequestQueryContext()!.request.operations.size).toBe(0);
+      });
     } finally {
       metrics.onModuleDestroy();
       metrics.getRegistry().clear();

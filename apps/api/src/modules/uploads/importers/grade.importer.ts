@@ -217,10 +217,40 @@ export class GradeImporter implements Importer {
     }
 
     if (gradeOps.length > 0) {
-      await this.gradeModel.bulkWrite(gradeOps, { ordered: false });
-      await this.gradesService.syncPublishedAcademicProgress(
-        Array.from(affectedStudentIds),
-      );
+      try {
+        await this.gradeModel.bulkWrite(gradeOps, { ordered: false });
+      } catch (err: unknown) {
+        const bulkError = err as {
+          writeErrors?: Array<{ errmsg?: string; message?: string }>;
+        };
+        if (bulkError?.writeErrors?.length) {
+          successCount = Math.max(
+            0,
+            successCount - bulkError.writeErrors.length,
+          );
+          for (const we of bulkError.writeErrors) {
+            errors.push(
+              `خطأ أثناء حفظ الدرجة: ${we.errmsg || we.message || 'خطأ غير معروف'}`,
+            );
+          }
+        } else {
+          successCount = 0;
+          const message =
+            err instanceof Error ? err.message : 'خطأ أثناء حفظ الدرجات';
+          errors.push(`فشل حفظ الدرجات: ${message}`);
+        }
+      }
+      try {
+        await this.gradesService.syncPublishedAcademicProgress(
+          Array.from(affectedStudentIds),
+        );
+      } catch (syncErr: unknown) {
+        const message =
+          syncErr instanceof Error
+            ? syncErr.message
+            : 'تعذر تحديث التقدم الأكاديمي';
+        errors.push(`تنبيه تحديث السجل الأكاديمي: ${message}`);
+      }
     }
 
     return { successCount, errors };

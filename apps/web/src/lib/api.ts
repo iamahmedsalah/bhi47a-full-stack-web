@@ -323,7 +323,7 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
   },
   'Invalid CSRF token': {
     ar: 'انتهت صلاحية رمز الأمان، يرجى إعادة المحاولة',
-    en: 'Security token expired. Please retry.',
+    en: 'Security token expired. Please retry',
   },
   'Account not found': {
     ar: 'الحساب غير موجود',
@@ -341,17 +341,56 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'لم يتم طلب استعادة كلمة المرور أو انتهت صلاحية الرمز',
     en: 'Password recovery was not requested or verification code expired',
   },
+  'Internal server error': {
+    ar: 'حدث خطأ في الخادم أثناء معالجة البيانات، يرجى التحقق من الملف والمحاولة مرة أخرى',
+    en: 'Internal server error while processing request. Please check your data and try again',
+  },
+  'Only xlsx, xls, or csv files are allowed': {
+    ar: 'يُسمح فقط برفع ملفات بصيغة XLSX أو XLS أو CSV',
+    en: 'Only XLSX, XLS, or CSV files are allowed',
+  },
+  'Only PNG, JPG, WEBP, or PDF files are allowed': {
+    ar: 'يُسمح فقط برفع ملفات الصور (PNG, JPG, WEBP) أو PDF',
+    en: 'Only PNG, JPG, WEBP, or PDF files are allowed',
+  },
+  'Please select an image to upload': {
+    ar: 'يرجى اختيار صورة أو ملف لرفعه',
+    en: 'Please select a file to upload',
+  },
+  'File too large': {
+    ar: 'حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)',
+    en: 'File size exceeds the maximum allowed limit (10 MB)',
+  },
+  'Network Error': {
+    ar: 'تعذر الاتصال بالخادم، يرجى التحقق من اتصال الإنترنت',
+    en: 'Network connection error. Please check your internet connection',
+  },
+  'Bad Request': {
+    ar: 'بيانات الطلب غير صالحة، يرجى مراجعة المدخلات',
+    en: 'Invalid request data. Please check your inputs',
+  },
 };
+
+const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>(
+  Object.entries(ERROR_TRANSLATIONS).map(([k, v]) => [k.toLowerCase(), v]),
+);
 
 function localizeErrorMessage(rawMsg: string): string {
   if (typeof window === 'undefined') return rawMsg;
   const isEn = window.location.pathname.startsWith('/en');
-  const cleanMsg = rawMsg.trim();
-  const entry = ERROR_TRANSLATIONS[cleanMsg];
+  const cleanMsg = rawMsg.replace(/^\.+|\.+$/g, '').trim();
+  const entry =
+    ERROR_TRANSLATIONS[cleanMsg] ??
+    LOWERCASE_ERROR_TRANSLATIONS.get(cleanMsg.toLowerCase());
   if (entry) {
     return isEn ? entry.en : entry.ar;
   }
-  return rawMsg;
+  if (cleanMsg.toLowerCase().startsWith('uploaded file is too large')) {
+    return isEn
+      ? cleanMsg
+      : 'حجم الملف المرفوع يتجاوز الحد الأقصى المسموح به (10 ميجابايت)';
+  }
+  return cleanMsg || rawMsg;
 }
 
 export function getApiErrorMessage(error: unknown, fallback = 'Something went wrong') {
@@ -360,12 +399,20 @@ export function getApiErrorMessage(error: unknown, fallback = 'Something went wr
   if (payload) {
     const message = (payload as ApiErrorPayload).message;
     if (Array.isArray(message)) {
-      return message.map(localizeErrorMessage).join(', ');
+      return message.map(localizeErrorMessage).join('، ');
     }
-    if (message) {
+    if (message && typeof message === 'string') {
+      const cleaned = message.replace(/^\.+|\.+$/g, '').trim();
+      if (
+        cleaned.toLowerCase() === 'internal server error' &&
+        fallback &&
+        fallback !== 'Something went wrong'
+      ) {
+        return localizeErrorMessage(fallback);
+      }
       return localizeErrorMessage(message);
     }
   }
 
-  return fallback;
+  return localizeErrorMessage(fallback);
 }

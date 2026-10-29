@@ -586,7 +586,6 @@ export class CourseSchedulesService {
       const rawCourseName = this.extractFieldValue(row, [
         'course_name',
         'coursename',
-        'name',
         'اسم المقرر',
         'اسم المادة',
       ]);
@@ -639,7 +638,6 @@ export class CourseSchedulesService {
       const rawStaffName = this.extractFieldValue(row, [
         'doctor_name',
         'staff_name',
-        'name',
         'اسم الدكتور',
         'اسم المحاضر',
         'اسم المعيد',
@@ -794,8 +792,18 @@ export class CourseSchedulesService {
         matchedCourse.department ||
         'GENERAL';
 
-      const semester =
+      const rawSemester =
         this.extractFieldValue(row, ['semester', 'الفصل', 'الترم']) || 'first';
+      const semester =
+        rawSemester === '2' ||
+        rawSemester.toLowerCase() === 'second' ||
+        rawSemester.includes('ثان')
+          ? 'second'
+          : rawSemester === '3' ||
+              rawSemester.toLowerCase() === 'summer' ||
+              rawSemester.includes('صيف')
+            ? 'summer'
+            : 'first';
 
       const group = this.extractFieldValue(row, [
         'group',
@@ -806,54 +814,60 @@ export class CourseSchedulesService {
       const notes = this.extractFieldValue(row, ['notes', 'ملاحظات']);
 
       // 7. Check for existing slot to update or create
-      const queryExisting: any = {
-        courseId: matchedCourse._id,
-        dayOfWeek: normalizedDay,
-        startTime,
-        location,
-      };
-      if (group) queryExisting.group = group;
-      if (section) queryExisting.section = section;
-
-      const existingSlot = await this.scheduleModel.findOne(queryExisting);
-
-      if (existingSlot) {
-        existingSlot.staffId = staffId;
-        existingSlot.staffName = staffName;
-        existingSlot.staffType = staffType;
-        existingSlot.type = type;
-        existingSlot.endTime = endTime;
-        existingSlot.level = level;
-        existingSlot.department = department;
-        existingSlot.semester = semester;
-        if (group) existingSlot.group = group;
-        if (section) existingSlot.section = section;
-        if (notes) existingSlot.notes = notes;
-        await existingSlot.save();
-        updatedCount++;
-      } else {
-        await this.scheduleModel.create({
+      try {
+        const queryExisting: any = {
           courseId: matchedCourse._id,
-          courseCode: matchedCourse.code,
-          courseName: matchedCourse.name,
-          courseNameAr: matchedCourse.nameAr || matchedCourse.name,
-          staffId,
-          staffName,
-          staffType,
-          type,
           dayOfWeek: normalizedDay,
           startTime,
-          endTime,
           location,
-          level,
-          semester,
-          department,
-          group: group || undefined,
-          section: section || undefined,
-          notes: notes || undefined,
-          isActive: true,
-        });
-        insertedCount++;
+        };
+        if (group) queryExisting.group = group;
+        if (section) queryExisting.section = section;
+
+        const existingSlot = await this.scheduleModel.findOne(queryExisting);
+
+        if (existingSlot) {
+          existingSlot.staffId = staffId;
+          existingSlot.staffName = staffName;
+          existingSlot.staffType = staffType;
+          existingSlot.type = type;
+          existingSlot.endTime = endTime;
+          existingSlot.level = level;
+          existingSlot.department = department;
+          existingSlot.semester = semester;
+          if (group) existingSlot.group = group;
+          if (section) existingSlot.section = section;
+          if (notes) existingSlot.notes = notes;
+          await existingSlot.save();
+          updatedCount++;
+        } else {
+          await this.scheduleModel.create({
+            courseId: matchedCourse._id,
+            courseCode: matchedCourse.code,
+            courseName: matchedCourse.name,
+            courseNameAr: matchedCourse.nameAr || matchedCourse.name,
+            staffId,
+            staffName,
+            staffType,
+            type,
+            dayOfWeek: normalizedDay,
+            startTime,
+            endTime,
+            location,
+            level,
+            semester,
+            department,
+            group: group || undefined,
+            section: section || undefined,
+            notes: notes || undefined,
+            isActive: true,
+          });
+          insertedCount++;
+        }
+      } catch (rowErr: unknown) {
+        const msg =
+          rowErr instanceof Error ? rowErr.message : 'تعذر حفظ موعد الجدول';
+        errors.push(`السطر ${rowNum}: ${msg}`);
       }
     }
 
@@ -868,18 +882,76 @@ export class CourseSchedulesService {
 
   private cleanString(val: any): string {
     if (val === null || val === undefined) return '';
-    return String(val).trim();
+    if (val instanceof Date) {
+      if (Number.isNaN(val.getTime())) return '';
+      const hours = val.getUTCHours();
+      const minutes = val.getUTCMinutes();
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const h12 = hours % 12 || 12;
+      return `${String(h12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+    }
+    if (typeof val === 'object') {
+      if ('error' in val) return '';
+      if ('result' in val && val.result !== undefined) {
+        return this.cleanString(val.result);
+      }
+      if ('richText' in val && Array.isArray(val.richText)) {
+        return val.richText
+          .map((p: any) => String(p?.text ?? ''))
+          .join('')
+          .trim();
+      }
+      if ('text' in val && val.text !== undefined) {
+        return this.cleanString(val.text);
+      }
+      return '';
+    }
+    return String(val)
+      .replace(/^\uFEFF/, '')
+      .trim();
   }
 
   private extractFieldValue(
     row: Record<string, any>,
     possibleKeys: string[],
   ): string {
+    const entries = Object.entries(row);
+
+    // Pass 1: exact match on cleaned header or parenthetical token
     for (const key of possibleKeys) {
       const cleanKey = key.toLowerCase().replace(/[\s_\-()]/g, '');
-      for (const [rowKey, rowValue] of Object.entries(row)) {
+      for (const [rowKey, rowValue] of entries) {
         const cleanRowKey = rowKey.toLowerCase().replace(/[\s_\-()]/g, '');
-        if (cleanRowKey === cleanKey || cleanRowKey.includes(cleanKey)) {
+        const beforeParen = rowKey
+          .split('(')[0]
+          .toLowerCase()
+          .replace(/[\s_\-()]/g, '');
+        const parenMatch = rowKey.match(/\(([^)]+)\)/);
+        const insideParenFirstToken = parenMatch
+          ? parenMatch[1]
+              .split(/[:\s]/)[0]
+              .toLowerCase()
+              .replace(/[\s_\-()]/g, '')
+          : '';
+        if (
+          cleanRowKey === cleanKey ||
+          beforeParen === cleanKey ||
+          (insideParenFirstToken && insideParenFirstToken === cleanKey)
+        ) {
+          if (rowValue !== undefined && rowValue !== null) {
+            return this.cleanString(rowValue);
+          }
+        }
+      }
+    }
+
+    // Pass 2: substring match only for longer keys (>= 6 chars) to prevent 'type'/'name' collisions
+    for (const key of possibleKeys) {
+      const cleanKey = key.toLowerCase().replace(/[\s_\-()]/g, '');
+      if (cleanKey.length < 6) continue;
+      for (const [rowKey, rowValue] of entries) {
+        const cleanRowKey = rowKey.toLowerCase().replace(/[\s_\-()]/g, '');
+        if (cleanRowKey.includes(cleanKey)) {
           if (rowValue !== undefined && rowValue !== null) {
             return this.cleanString(rowValue);
           }
@@ -889,6 +961,37 @@ export class CourseSchedulesService {
     return '';
   }
 
+  private parseCsvText(text: string): Record<string, any>[] {
+    const lines = text
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length <= 1) return [];
+
+    const headers = lines[0].split(/[,;\t]/).map((h) =>
+      this.cleanString(h)
+        .replace(/^["']|["']$/g, '')
+        .toLowerCase(),
+    );
+
+    const rows: Record<string, any>[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i]
+        .split(/[,;\t]/)
+        .map((p) => this.cleanString(p).replace(/^["']|["']$/g, ''));
+      if (parts.some((p) => p.length > 0)) {
+        const rowData: Record<string, any> = {};
+        headers.forEach((h, idx) => {
+          if (h) rowData[h] = parts[idx] ?? '';
+        });
+        rows.push(rowData);
+      }
+    }
+    return rows;
+  }
+
   private async parseWorkbookRows(
     buffer: Buffer,
     originalname: string,
@@ -896,73 +999,53 @@ export class CourseSchedulesService {
     const isCsv = originalname.toLowerCase().endsWith('.csv');
 
     if (isCsv) {
-      const text = buffer.toString('utf-8');
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
-
-      if (lines.length <= 1) return [];
-
-      const headers = lines[0].split(/[,;\t]/).map((h) =>
-        this.cleanString(h)
-          .replace(/^["']|["']$/g, '')
-          .toLowerCase(),
-      );
-
-      const rows: Record<string, any>[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i]
-          .split(/[,;\t]/)
-          .map((p) => this.cleanString(p).replace(/^["']|["']$/g, ''));
-        if (parts.some((p) => p.length > 0)) {
-          const rowData: Record<string, any> = {};
-          headers.forEach((h, idx) => {
-            if (h) rowData[h] = parts[idx] ?? '';
-          });
-          rows.push(rowData);
-        }
-      }
-      return rows;
+      return this.parseCsvText(buffer.toString('utf-8'));
     }
 
-    // Excel parser
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
-    const sheet = workbook.worksheets[0];
-    if (!sheet || sheet.rowCount <= 1) return [];
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer as any);
+      const sheet = workbook.worksheets[0];
+      if (!sheet || sheet.rowCount <= 1) return [];
 
-    const rows: Record<string, any>[] = [];
-    let headers: string[] = [];
+      const rows: Record<string, any>[] = [];
+      let headers: string[] = [];
 
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) {
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) {
+          const values = row.values as any[];
+          headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
+            this.cleanString(v).toLowerCase(),
+          );
+          return;
+        }
+
         const values = row.values as any[];
-        headers = (Array.isArray(values) ? values.slice(1) : []).map((v) =>
-          this.cleanString(v).toLowerCase(),
-        );
-        return;
-      }
+        if (!Array.isArray(values)) return;
 
-      const values = row.values as any[];
-      if (!Array.isArray(values)) return;
+        const rowData: Record<string, any> = {};
+        let hasData = false;
+        headers.forEach((h, idx) => {
+          if (!h) return;
+          const cellStr = this.cleanString(values[idx + 1]);
+          if (cellStr !== '') {
+            hasData = true;
+            rowData[h] = cellStr;
+          }
+        });
 
-      const rowData: Record<string, any> = {};
-      let hasData = false;
-      headers.forEach((h, idx) => {
-        if (!h) return;
-        const cell = values[idx + 1];
-        if (cell !== undefined && cell !== null && String(cell).trim() !== '') {
-          hasData = true;
-          rowData[h] = typeof cell === 'object' && cell.text ? cell.text : cell;
+        if (hasData) {
+          rows.push(rowData);
         }
       });
 
-      if (hasData) {
-        rows.push(rowData);
-      }
-    });
-
-    return rows;
+      return rows;
+    } catch {
+      const fallbackRows = this.parseCsvText(buffer.toString('utf-8'));
+      if (fallbackRows.length > 0) return fallbackRows;
+      throw new BadRequestException(
+        'يتعذر قراءة ملف الجدول. يرجى التأكد من أن الملف بصيغة .xlsx أو .csv صالحة',
+      );
+    }
   }
 }

@@ -7,6 +7,7 @@ import { QueryComplaintDto } from './dto/complaint.dto';
 describe('complaint list', () => {
   it('requests only the selected page and preserves the full matching total', async () => {
     const chain = {
+      select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
@@ -26,6 +27,7 @@ describe('complaint list', () => {
     expect(chain.skip).toHaveBeenCalledWith(40);
     expect(chain.limit).toHaveBeenCalledWith(20);
     expect(countDocuments).toHaveBeenCalledWith({ status: 'open' });
+    expect(chain.select).toHaveBeenCalledWith('');
   });
 
   it('keeps student ownership filtering when paging and searching', async () => {
@@ -106,6 +108,7 @@ describe('complaint list', () => {
     const items = [{ studentId, nationalId: undefined as string | undefined }];
     const lean = jest.fn().mockResolvedValue(items);
     const chain = {
+      select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
@@ -151,5 +154,49 @@ describe('complaint list', () => {
         }),
       ),
     ).toEqual([]);
+  });
+
+  it('excludes large ticket bodies only for the opt-in summary and keeps filters, counts and ordering', async () => {
+    const chain = {
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([{ ticketNumber: 'TKT-1' }]),
+    };
+    const find = jest.fn().mockReturnValue(chain);
+    const countDocuments = jest.fn().mockResolvedValue(42);
+    const service = new ComplaintsService(
+      { find, countDocuments } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const result = await service.findAll({
+      view: 'summary',
+      status: 'open',
+      page: 2,
+      limit: 10,
+    });
+    expect(chain.select).toHaveBeenCalledWith(
+      '-description -screenshotUrl -replies -internalNotes -statusHistory',
+    );
+    expect(chain.sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
+    expect(chain.skip).toHaveBeenCalledWith(10);
+    expect(find).toHaveBeenCalledWith({ status: 'open' });
+    expect(countDocuments).toHaveBeenCalledWith({ status: 'open' });
+    expect(result).toMatchObject({
+      total: 42,
+      totalPages: 5,
+      items: [{ ticketNumber: 'TKT-1' }],
+    });
+    expect(
+      (
+        await validate(
+          Object.assign(new QueryComplaintDto(), { view: 'invalid' }),
+        )
+      ).length,
+    ).toBeGreaterThan(0);
   });
 });

@@ -120,10 +120,17 @@ export const complaintKeys = {
   stats: () => [...complaintKeys.all, 'stats'] as const,
   settings: () => [...complaintKeys.all, 'settings'] as const,
   assignees: () => [...complaintKeys.all, 'assignees'] as const,
+  detail: (id: string) => [...complaintKeys.all, 'detail', id] as const,
 };
 
+export type ComplaintListItem = Omit<Complaint, 'description' | 'screenshotUrl' | 'replies' | 'internalNotes' | 'statusHistory'>;
+
 export function listAdminComplaints(params: ComplaintListParams) {
-  return apiGet<PaginatedResponse<Complaint>>('/admin/complaints', { params });
+  return apiGet<PaginatedResponse<ComplaintListItem>>('/admin/complaints', { params: { ...params, view: 'summary' } });
+}
+
+export function getAdminComplaint(id: string) {
+  return apiGet<Complaint>(`/admin/complaints/${id}`);
 }
 
 export interface ComplaintSummary {

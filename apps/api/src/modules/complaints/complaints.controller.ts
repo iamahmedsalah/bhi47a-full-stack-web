@@ -175,6 +175,14 @@ export class ComplaintsController {
     return this.complaintsService.updateSettings(dto, adminId);
   }
 
+  @Get('admin/complaints/:id')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COMPLAINTS_READ)
+  @ApiOperation({ summary: 'Get full complaint details (Admin/Staff)' })
+  async detail(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.complaintsService.findOne(id);
+  }
+
   @Patch('admin/complaints/:id')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COMPLAINTS_WRITE)

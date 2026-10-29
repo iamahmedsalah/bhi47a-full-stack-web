@@ -7,17 +7,28 @@ import type {
 } from './types';
 import { UPLOAD_CATALOGS, validateCatalogRow } from './upload-catalog';
 
+function toAsciiDigits(str: string): string {
+  return str
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06f0));
+}
+
 function normalizeHeaderKey(header: string): string {
   return header
+    .replace(/^\uFEFF/, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\*/g, '')
     .trim()
     .toLowerCase()
-    .replace(/[\s_\-]/g, '');
+    .replace(/[\s_-]/g, '');
 }
 
 /**
  * Parses XML Spreadsheet 2003 (.xls) text if user uploads legacy XML format
  */
-function parseXmlSpreadsheet(xmlText: string): { headers: string[]; rows: string[][] } | null {
+function parseXmlSpreadsheet(
+  xmlText: string,
+): { headers: string[]; rows: string[][] } | null {
   try {
     if (!xmlText.includes('<Workbook') && !xmlText.includes('<?xml')) {
       return null;
@@ -57,7 +68,10 @@ function parseXmlSpreadsheet(xmlText: string): { headers: string[]; rows: string
  */
 export async function extractRawSheetRows(
   file: File,
-): Promise<{ headers: string[]; rawRows: (string | number | boolean | null)[][] }> {
+): Promise<{
+  headers: string[];
+  rawRows: (string | number | boolean | null)[][];
+}> {
   const isExcel = /\.(xlsx|xls|xlsb|ods)$/i.test(file.name);
   const buffer = await file.arrayBuffer();
   const firstBytes = new Uint8Array(buffer.slice(0, 4));
@@ -68,8 +82,17 @@ export async function extractRawSheetRows(
     try {
       const sheetData = await readXlsxFile(file);
       if (sheetData && sheetData.length > 0) {
-        const headers = sheetData[0].map((cell) => String(cell ?? '').trim());
-        const rawRows = sheetData.slice(1) as (string | number | boolean | null)[][];
+        const headers = sheetData[0].map((cell) =>
+          String(cell ?? '')
+            .replace(/^\uFEFF/, '')
+            .trim(),
+        );
+        const rawRows = sheetData.slice(1) as (
+          | string
+          | number
+          | boolean
+          | null
+        )[][];
         return { headers, rawRows };
       }
     } catch {
@@ -78,8 +101,11 @@ export async function extractRawSheetRows(
   }
 
   // 2. Secondary: XML Spreadsheet 2003
-  const text = new TextDecoder('utf-8').decode(buffer);
-  if ((text.includes('<Workbook') || text.includes('<?xml')) && !text.startsWith('PK')) {
+  const text = new TextDecoder('utf-8').decode(buffer).replace(/^\uFEFF/, '');
+  if (
+    (text.includes('<Workbook') || text.includes('<?xml')) &&
+    !text.startsWith('PK')
+  ) {
     const xmlParsed = parseXmlSpreadsheet(text);
     if (xmlParsed) {
       return { headers: xmlParsed.headers, rawRows: xmlParsed.rows };
@@ -90,15 +116,20 @@ export async function extractRawSheetRows(
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !l.startsWith('<?xml') && !l.startsWith('<Workbook'));
+    .filter(
+      (l) =>
+        l.length > 0 && !l.startsWith('<?xml') && !l.startsWith('<Workbook'),
+    );
 
   if (lines.length > 0) {
     const headers = lines[0]
       .split(/[,;\t]/)
       .map((h) => h.trim().replace(/^["']|["']$/g, ''));
-    const rawRows = lines.slice(1).map((line) =>
-      line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, '')),
-    );
+    const rawRows = lines
+      .slice(1)
+      .map((line) =>
+        line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, '')),
+      );
     return { headers, rawRows };
   }
 
@@ -127,7 +158,11 @@ export async function inspectAndValidateFile(
   const cleanHeaders = rawHeaders.filter((h) => h && h.trim().length > 0);
 
   if (cleanHeaders.length === 0) {
-    throw new Error(isAr ? 'الملف لا يحتوي على عناوين أعمدة صالحة' : 'File has no valid headers');
+    throw new Error(
+      isAr
+        ? 'الملف لا يحتوي على عناوين أعمدة صالحة'
+        : 'File has no valid headers',
+    );
   }
 
   // Map file headers to catalog fields
@@ -136,7 +171,6 @@ export async function inspectAndValidateFile(
   const matchedFieldKeys = new Set<string>();
 
   // Pass 1: EXACT match against field.key, aliases, labelAr, labelEn
-  // This guarantees that 'grade' and 'maxGrade' / 'maxScore' are mapped to their exact distinct fields
   for (let hIdx = 0; hIdx < rawHeaders.length; hIdx++) {
     const fileHeader = rawHeaders[hIdx];
     if (!fileHeader) continue;
@@ -175,7 +209,6 @@ export async function inspectAndValidateFile(
       const fieldNorm = normalizeHeaderKey(f.key);
       const labelArNorm = normalizeHeaderKey(f.labelAr);
       const labelEnNorm = normalizeHeaderKey(f.labelEn);
-      // Guard against short substring collisions
       if (fieldNorm.length < 4 || norm.length < 4) return false;
       return (
         norm.startsWith(fieldNorm) ||
@@ -196,7 +229,9 @@ export async function inspectAndValidateFile(
   const missingRequiredColumns: string[] = [];
   for (const field of catalog.fields) {
     if (field.required) {
-      const isMatched = matchedColumns.some((mc) => mc.expectedKey === field.key);
+      const isMatched = matchedColumns.some(
+        (mc) => mc.expectedKey === field.key,
+      );
       if (!isMatched) {
         missingRequiredColumns.push(isAr ? field.labelAr : field.labelEn);
       }
@@ -225,11 +260,19 @@ export async function inspectAndValidateFile(
 
     const rowData: Record<string, unknown> = {};
     for (let cIdx = 0; cIdx < rowValues.length; cIdx++) {
+      const cellVal = rowValues[cIdx];
+      const strVal =
+        cellVal !== null && cellVal !== undefined
+          ? toAsciiDigits(String(cellVal).trim())
+          : '';
       const fieldKey = headerIndexToFieldKey.get(cIdx);
       if (fieldKey) {
-        const cellVal = rowValues[cIdx];
-        rowData[fieldKey] =
-          cellVal !== null && cellVal !== undefined ? String(cellVal).trim() : '';
+        rowData[fieldKey] = strVal;
+      } else {
+        const rawHeader = rawHeaders[cIdx];
+        if (rawHeader && strVal !== '') {
+          rowData[rawHeader] = strVal;
+        }
       }
     }
 
@@ -248,10 +291,12 @@ export async function inspectAndValidateFile(
         (type === 'grades' || type === 'quizzes' || type === 'attendance');
 
       if (allowDuplicate) {
-        // When duplicate student code is allowed (e.g. multi-course upload),
-        // protect against exact duplicate entries for the SAME student and SAME course.
         if (courseStr) {
-          const pairKey = `${codeStr}:::${courseStr}`;
+          const quizNumStr =
+            type === 'quizzes' && rowData.quizNumber !== undefined
+              ? `:::${String(rowData.quizNumber).trim()}`
+              : '';
+          const pairKey = `${codeStr}:::${courseStr}${quizNumStr}`;
           if (seenUniqueKeys.has(pairKey)) {
             const firstSeenRow = seenUniqueKeys.get(pairKey)!;
             rowIssues.push({

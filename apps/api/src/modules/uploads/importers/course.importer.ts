@@ -252,7 +252,37 @@ export class CourseImporter implements Importer {
     }
 
     if (courseOps.length > 0) {
-      await this.courseModel.bulkWrite(courseOps, { ordered: false });
+      try {
+        await this.courseModel.bulkWrite(courseOps, { ordered: false });
+      } catch (err: unknown) {
+        const bulkError = err as {
+          writeErrors?: Array<{
+            index?: number;
+            errmsg?: string;
+            message?: string;
+          }>;
+        };
+        if (bulkError?.writeErrors?.length) {
+          successCount = Math.max(
+            0,
+            courseOps.length - bulkError.writeErrors.length,
+          );
+          for (const we of bulkError.writeErrors) {
+            const rowNum =
+              we.index !== undefined && validRows[we.index]
+                ? validRows[we.index].rowNum
+                : '؟';
+            errors.push(
+              `السطر ${rowNum}: ${we.errmsg || we.message || 'خطأ أثناء حفظ المقرر'}`,
+            );
+          }
+        } else {
+          successCount = 0;
+          const message =
+            err instanceof Error ? err.message : 'خطأ أثناء حفظ المقررات';
+          errors.push(`فشل حفظ المقررات: ${message}`);
+        }
+      }
     }
 
     return { successCount, errors };

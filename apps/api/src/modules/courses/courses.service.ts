@@ -7,8 +7,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { CacheService } from '../../core/cache/cache.service';
+import { measureDatabaseStage } from '../../core/metrics/request-query-context';
+import { MetricsService } from '../../core/metrics/metrics.service';
 import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
 import { courseCurriculumFilter } from './utils/course-filter.util';
+import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
 import {
   courseForDepartment,
   coursesForDepartment,
@@ -99,6 +102,7 @@ export class CoursesService {
     private configService: ConfigService,
     @Optional() private cacheService?: CacheService,
     @Optional() private registrationsService?: RegistrationsService,
+    @Optional() private metricsService?: MetricsService,
   ) {}
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
@@ -1548,28 +1552,42 @@ export class CoursesService {
     const candidateArray = Array.from(codeCandidates);
 
     // 2. Preload ONLY the matching student profiles and users
-    const [matchingProfiles, matchingStudentUsers] = await Promise.all([
-      candidateArray.length > 0
-        ? this.studentProfileModel
-            .find({ studentCode: { $in: candidateArray } })
-            .select('_id studentCode userId isBlocked department')
-            .lean()
-            .exec()
-        : Promise.resolve([] as any[]),
-      candidateArray.length > 0
-        ? this.userModel
-            .find({
-              role: 'student',
-              $or: [
-                { code: { $in: candidateArray } },
-                { username: { $in: candidateArray } },
-              ],
-            })
-            .select('_id code username')
-            .lean()
-            .exec()
-        : Promise.resolve([] as any[]),
-    ]);
+    const matchingProfiles: Array<
+      Pick<
+        StudentProfile,
+        'studentCode' | 'userId' | 'isBlocked' | 'department' | 'level'
+      > & { _id: Types.ObjectId }
+    > = [];
+    const matchingStudentUsers: Array<
+      Pick<User, 'username'> & { _id: Types.ObjectId; code?: string }
+    > = [];
+    for (let offset = 0; offset < candidateArray.length; offset += 500) {
+      const candidates = candidateArray.slice(offset, offset + 500);
+      const [profiles, users] = await measureDatabaseStage(
+        'enrollment.prefetch',
+        () =>
+          Promise.all([
+            this.studentProfileModel
+              .find({ studentCode: { $in: candidates } })
+              .select('_id studentCode userId isBlocked department level')
+              .lean()
+              .exec(),
+            this.userModel
+              .find({
+                role: 'student',
+                $or: [
+                  { code: { $in: candidates } },
+                  { username: { $in: candidates } },
+                ],
+              })
+              .select('_id code username')
+              .lean()
+              .exec(),
+          ]),
+      );
+      matchingProfiles.push(...profiles);
+      matchingStudentUsers.push(...users);
+    }
 
     const profileByCode = new Map<string, any>();
     matchingProfiles.forEach((p: any) => {
@@ -1609,23 +1627,54 @@ export class CoursesService {
       }
     }
 
-    // 4. Single batch query for existing registrations
-    const existingRegistrations =
-      targetStudentUserIds.length > 0
-        ? await this.courseRegistrationModel
+    // 4. Deduplicate IDs and bound each registration lookup.
+    const uniqueStudentIds = [
+      ...new Map(targetStudentUserIds.map((id) => [String(id), id])).values(),
+    ];
+    const existingRegistrations: Array<
+      Pick<CourseRegistration, 'studentId' | 'courses'> & {
+        _id: Types.ObjectId;
+      }
+    > = [];
+    for (let offset = 0; offset < uniqueStudentIds.length; offset += 100) {
+      const registrations = await measureDatabaseStage(
+        'enrollment.prefetch',
+        () =>
+          this.courseRegistrationModel
             .find({
-              studentId: { $in: targetStudentUserIds },
+              studentId: { $in: uniqueStudentIds.slice(offset, offset + 100) },
               academicYear,
               semester,
             })
             .select('_id studentId courses')
-            .lean()
-        : [];
+            .lean(),
+      );
+      existingRegistrations.push(...registrations);
+    }
 
     const regByStudentId = new Map<string, any>();
     existingRegistrations.forEach((reg) => {
       regByStudentId.set(reg.studentId.toString(), reg);
     });
+
+    const validationIds = [...new Set(targetStudentUserIds.map(String))].filter(
+      (id) =>
+        !(regByStudentId.get(id)?.courses ?? []).some(
+          (code: string) => code.toUpperCase() === course.code.toUpperCase(),
+        ),
+    );
+    const enrollmentContext =
+      this.registrationsService && validationIds.length
+        ? await measureDatabaseStage('enrollment.prefetch', () =>
+            this.registrationsService!.prepareAdministrativeEnrollment(
+              validationIds,
+              [
+                course.code,
+                ...existingRegistrations.flatMap((reg) => reg.courses),
+              ],
+            ),
+          )
+        : undefined;
 
     let enrolledCount = 0;
     let overriddenCount = 0;
@@ -1722,14 +1771,18 @@ export class CoursesService {
         !existingCodes.some((code) => code.toUpperCase() === courseCodeUpper)
       ) {
         try {
-          limitException =
-            await this.registrationsService?.assertAdministrativeCourseAddition(
-              studentUserIdStr,
-              scopedCourse,
-              existingCodes,
-              semester,
-              allowLimitOverride,
-            );
+          limitException = await measureDatabaseStage(
+            'enrollment.rules',
+            async () =>
+              this.registrationsService?.assertAdministrativeCourseAddition(
+                studentUserIdStr,
+                scopedCourse,
+                existingCodes,
+                semester,
+                allowLimitOverride,
+                enrollmentContext,
+              ),
+          );
         } catch (error) {
           if (error instanceof BadRequestException) {
             const response = error.getResponse();
@@ -1857,7 +1910,9 @@ export class CoursesService {
             updateOne: {
               filter: {
                 _id: existingReg._id,
-                courses: { $ne: courseCodeUpper },
+                // Compare the validated snapshot so a concurrent course addition
+                // cannot bypass the credit/course limits checked above.
+                courses: existingReg.courses ?? { $exists: false },
               },
               update: {
                 $addToSet: { courses: courseCodeUpper },
@@ -1895,23 +1950,32 @@ export class CoursesService {
       }
     }
 
-    // 5. Execute bulk writes in parallel
-    const dbPromises: Promise<any>[] = [];
-    if (profileBulkOps.length > 0) {
-      dbPromises.push(
-        this.studentProfileModel.bulkWrite(profileBulkOps, { ordered: false }),
+    // Profile synchronization is intentionally separate, as in the existing import
+    // contract. Finish it before starting registrations so no writes outlive an error.
+    await measureDatabaseStage('enrollment.bulkWrite', async () => {
+      await writeEnrollmentBatches(
+        profileBulkOps,
+        (batch) =>
+          this.measureEnrollmentWrite('student_profiles', () =>
+            this.studentProfileModel.bulkWrite(batch, {
+              ordered: false,
+              throwOnValidationError: true,
+            }),
+          ),
+        'profiles',
       );
-    }
-    if (registrationBulkOps.length > 0) {
-      dbPromises.push(
-        this.courseRegistrationModel.bulkWrite(registrationBulkOps, {
-          ordered: false,
-        }),
+      await writeEnrollmentBatches(
+        registrationBulkOps,
+        (batch) =>
+          this.measureEnrollmentWrite('course_registrations', () =>
+            this.courseRegistrationModel.bulkWrite(batch, {
+              ordered: false,
+              throwOnValidationError: true,
+            }),
+          ),
+        'registrations',
       );
-    }
-    if (dbPromises.length > 0) {
-      await Promise.all(dbPromises);
-    }
+    });
 
     return {
       courseId: course._id.toString(),
@@ -1935,6 +1999,23 @@ export class CoursesService {
       }),
       errors: errors.slice(0, 20),
     };
+  }
+
+  private async measureEnrollmentWrite<T>(
+    collection: string,
+    write: () => Promise<T>,
+  ): Promise<T> {
+    const start = process.hrtime.bigint();
+    try {
+      return await write();
+    } finally {
+      // bulkWrite bypasses Mongoose query/save middleware; record it once here.
+      this.metricsService?.recordDbQuery(
+        collection,
+        'bulkWrite',
+        Number(process.hrtime.bigint() - start) / 1e9,
+      );
+    }
   }
 
   private cleanFieldValue(val: any): string {

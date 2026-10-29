@@ -120,7 +120,9 @@ export function createMongooseMetricsPlugin(
             ? 1
             : 0;
 
-        const captureDetails = durationMs >= METRICS_SLOW_QUERY_THRESHOLD_MS;
+        const captureDetails =
+          durationMs >= METRICS_SLOW_QUERY_THRESHOLD_MS ||
+          getRequestQueryContext()?.stage?.startsWith('enrollment.') === true;
         let filter: string | undefined;
         let options: string | undefined;
         if (captureDetails) {

@@ -128,14 +128,26 @@ export class AcademicWarningImporter implements Importer {
 
     let successCount = 0;
     if (profileOps.length) {
-      const result = await this.studentModel.bulkWrite(profileOps, {
-        ordered: false,
-      });
-      successCount = result.matchedCount;
-      if (academicOps.length) {
-        await this.academicProfileModel.bulkWrite(academicOps, {
+      try {
+        const result = await this.studentModel.bulkWrite(profileOps, {
           ordered: false,
         });
+        successCount = result.matchedCount;
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'خطأ أثناء تحديث الإنذارات الأكاديمية';
+        errors.push(`فشل تحديث ملفات الطلاب: ${message}`);
+      }
+      if (academicOps.length) {
+        try {
+          await this.academicProfileModel.bulkWrite(academicOps, {
+            ordered: false,
+          });
+        } catch {
+          // Non-fatal secondary sync
+        }
       }
     }
 

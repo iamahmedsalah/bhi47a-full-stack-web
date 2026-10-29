@@ -458,6 +458,11 @@ export class ComplaintsService {
       measureDatabaseStage('complaints.page', () =>
         this.complaintModel
           .find(filter)
+          .select(
+            query.view === 'summary'
+              ? '-description -screenshotUrl -replies -internalNotes -statusHistory'
+              : '',
+          )
           .sort({ createdAt: -1, _id: -1 })
           .skip(skip)
           .limit(limit)

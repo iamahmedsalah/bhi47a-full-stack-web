@@ -1,4 +1,10 @@
 {
+  "complaintDetails": {
+    "loading": "Loading ticket details…",
+    "failed": "Could not load ticket details.",
+    "retry": "Retry",
+    "cancel": "Cancel"
+  },
   "authSecurity": {
     "title": "Account security",
     "verifyTitle": "Verify your identity",

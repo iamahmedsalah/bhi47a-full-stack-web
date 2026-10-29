@@ -335,7 +335,7 @@ function AdminExamSchedulesManagerContent() {
                   <div className="space-y-1">
                     <p className="text-lg font-bold text-foreground">{currentSchedule.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {currentSchedule.academicYear} • {semesterLabel(locale, currentSchedule.semester)}
+                      <bdi dir="ltr">{currentSchedule.academicYear}</bdi> • {semesterLabel(locale, currentSchedule.semester)}
                     </p>
                   </div>
                   {canWriteSchedules && (
@@ -399,7 +399,7 @@ function AdminExamSchedulesManagerContent() {
                 <p className="mt-4 text-lg font-bold text-foreground">
                   {locale === 'ar'
                     ? selectedType === 'final'
-                      ? 'لا يوجد جدول ميد ترم متاح حالياً'
+                      ? 'لا يوجد جدول امتحانات نهائية متاح حالياً'
                       : 'لا يوجد جدول ميد ترم متاح حالياً'
                     : selectedType === 'final'
                       ? 'No final schedule available yet'
@@ -465,7 +465,7 @@ function AdminExamSchedulesManagerContent() {
                   <>
                     <ImageIcon className="h-7 w-7 text-muted-foreground" />
                     <p className="mt-2 text-sm font-semibold text-foreground">
-                      {locale === 'ar' ? 'No file chosen' : 'No file chosen'}
+                      {locale === 'ar' ? 'اضغط لاختيار ملف الجدول' : 'No file chosen'}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {locale === 'ar' ? 'PNG / JPG / WEBP / PDF' : 'PNG / JPG / WEBP / PDF'}
@@ -486,7 +486,7 @@ function AdminExamSchedulesManagerContent() {
                 <label className="text-sm font-semibold text-foreground">
                   {locale === 'ar' ? 'السنة الدراسية' : 'Academic year'}
                 </label>
-                <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} />
+                <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} dir="ltr" className="text-left" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">{locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}</label>
@@ -494,7 +494,7 @@ function AdminExamSchedulesManagerContent() {
                   <SelectTrigger className="border-border bg-card/70">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                     {SEMESTER_VALUES.map((value) => (
                       <SelectItem key={value} value={value}>
                         {semesterLabel(locale, value)}
@@ -505,8 +505,11 @@ function AdminExamSchedulesManagerContent() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-2xl border border-border bg-surface/35 px-4 py-3">
-              <div>
+            <div
+              onClick={() => setIsPublished((value) => !value)}
+              className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border bg-surface/35 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-surface/50"
+            >
+              <div className="space-y-0.5 text-start">
                 <p className="text-sm font-semibold text-foreground">
                   {locale === 'ar' ? 'منشور للطلاب' : 'Published to students'}
                 </p>
@@ -516,11 +519,23 @@ function AdminExamSchedulesManagerContent() {
               </div>
               <button
                 type="button"
-                onClick={() => setIsPublished((value) => !value)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${isPublished ? 'bg-primary' : 'bg-border'}`}
+                role="switch"
+                aria-checked={isPublished}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsPublished((value) => !value);
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                  isPublished ? 'bg-primary' : 'bg-muted-foreground/30'
+                }`}
               >
                 <span
-                  className={`inline-block h-5 w-5 rounded-full bg-white transition ${isPublished ? 'translate-x-5' : 'translate-x-1'}`}
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    isPublished
+                      ? 'translate-x-5 rtl:-translate-x-5'
+                      : 'translate-x-0'
+                  }`}
                 />
               </button>
             </div>

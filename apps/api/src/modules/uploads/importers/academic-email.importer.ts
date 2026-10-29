@@ -55,7 +55,10 @@ export class AcademicEmailImporter implements Importer {
     const studentMap = new Map(students.map((s) => [s.studentCode, s]));
 
     const ops: Parameters<typeof this.emailModel.bulkWrite>[0] = [];
-    const adminObjId = new Types.ObjectId(actorId);
+    const adminObjId =
+      actorId && Types.ObjectId.isValid(actorId)
+        ? new Types.ObjectId(actorId)
+        : undefined;
 
     for (const { row, rowNum } of validRows) {
       const studentCode = String(row.studentCode).trim();
@@ -67,13 +70,14 @@ export class AcademicEmailImporter implements Importer {
         continue;
       }
 
-      const emailData = {
+      const emailData: Record<string, unknown> = {
         studentId: student._id,
         studentCode,
         studentName: student.name,
-        academicEmail: row.academicEmail as string,
-        status: (row.status as string) || 'active',
-        lastUpdatedBy: adminObjId,
+        academicEmail: String(row.academicEmail).trim().toLowerCase(),
+        status:
+          typeof row.status === 'string' && row.status ? row.status : 'active',
+        ...(adminObjId ? { lastUpdatedBy: adminObjId } : {}),
       };
 
       ops.push({
@@ -88,7 +92,31 @@ export class AcademicEmailImporter implements Importer {
     }
 
     if (ops.length > 0) {
-      await this.emailModel.bulkWrite(ops, { ordered: false });
+      try {
+        await this.emailModel.bulkWrite(ops, { ordered: false });
+      } catch (err: unknown) {
+        const bulkError = err as {
+          writeErrors?: Array<{ errmsg?: string; message?: string }>;
+        };
+        if (bulkError?.writeErrors?.length) {
+          successCount = Math.max(
+            0,
+            successCount - bulkError.writeErrors.length,
+          );
+          for (const we of bulkError.writeErrors) {
+            errors.push(
+              `خطأ أثناء حفظ البريد الأكاديمي: ${we.errmsg || we.message || 'تكرار البريد الأكاديمي'}`,
+            );
+          }
+        } else {
+          successCount = 0;
+          const message =
+            err instanceof Error
+              ? err.message
+              : 'خطأ أثناء حفظ البريد الأكاديمي';
+          errors.push(`فشل حفظ البريد الأكاديمي: ${message}`);
+        }
+      }
     }
 
     return { successCount, errors };

@@ -105,7 +105,29 @@ export class AttendanceImporter implements Importer {
     }
 
     if (ops.length > 0) {
-      await this.attendanceModel.bulkWrite(ops, { ordered: false });
+      try {
+        await this.attendanceModel.bulkWrite(ops, { ordered: false });
+      } catch (err: unknown) {
+        const bulkError = err as {
+          writeErrors?: Array<{ errmsg?: string; message?: string }>;
+        };
+        if (bulkError?.writeErrors?.length) {
+          successCount = Math.max(
+            0,
+            successCount - bulkError.writeErrors.length,
+          );
+          for (const we of bulkError.writeErrors) {
+            errors.push(
+              `خطأ أثناء حفظ سجل الحضور: ${we.errmsg || we.message || 'خطأ غير معروف'}`,
+            );
+          }
+        } else {
+          successCount = 0;
+          const message =
+            err instanceof Error ? err.message : 'خطأ أثناء حفظ الحضور';
+          errors.push(`فشل حفظ الحضور: ${message}`);
+        }
+      }
     }
 
     return { successCount, errors };

@@ -255,6 +255,11 @@ export class UpdateSystemSettingsDto {
 }
 
 export class QueryComplaintDto {
+  @ApiPropertyOptional({ enum: ['full', 'summary'], default: 'full' })
+  @IsOptional()
+  @IsEnum(['full', 'summary'])
+  view?: 'full' | 'summary';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

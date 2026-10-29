@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import * as ExcelJS from 'exceljs';
@@ -6,7 +6,7 @@ import * as JSZipLib from 'jszip';
 const JSZip = (JSZipLib as any).default || JSZipLib;
 import { AppLoggerService } from '../../core/logger/logger.service';
 import type { Importer } from './importer.interface';
-import { normalizeRowKeys } from './upload-utils';
+import { normalizeRowKeys, unwrapExcelCellValue } from './upload-utils';
 import { StudentImporter } from './importers/student.importer';
 import { CourseImporter } from './importers/course.importer';
 import { GradeImporter } from './importers/grade.importer';
@@ -65,23 +65,41 @@ export class UploadsService {
     );
 
     const rows = await this.parseWorkbook(fileBuffer);
-    const { validRows, errors: validationErrors } = importer.validate(rows);
-    const commitResult = await importer.commit(validRows, adminId);
+    try {
+      const { validRows, errors: validationErrors } = importer.validate(rows);
+      const commitResult = await importer.commit(validRows, adminId);
 
-    const errors = [...validationErrors, ...commitResult.errors];
-    const { successCount } = commitResult;
+      const errors = [...validationErrors, ...commitResult.errors];
+      const { successCount } = commitResult;
 
-    this.logger.log(
-      `Upload process finished: ${successCount} succeeded, ${errors.length} failed`,
-      'UploadsService',
-    );
+      this.logger.log(
+        `Upload process finished: ${successCount} succeeded, ${errors.length} failed`,
+        'UploadsService',
+      );
 
-    return {
-      success: true,
-      successCount,
-      failedCount: errors.length,
-      errors,
-    };
+      return {
+        success: true,
+        successCount,
+        failedCount: errors.length,
+        errors,
+      };
+    } catch (err: unknown) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      const message =
+        err instanceof Error ? err.message : 'حدث خطأ أثناء معالجة البيانات';
+      this.logger.warn(
+        `Unhandled error in processUpload(${type}): ${message}`,
+        'UploadsService',
+      );
+      return {
+        success: false,
+        successCount: 0,
+        failedCount: rows.length || 1,
+        errors: [`فشل معالجة الملف: ${message}`],
+      };
+    }
   }
 
   async processBatchUpload(
@@ -115,24 +133,44 @@ export class UploadsService {
       'UploadsService',
     );
 
-    // Normalize keys on incoming rows in case of Arabic/English variations
-    const normalizedRows = dto.rows.map((row) => normalizeRowKeys(row));
+    try {
+      // Normalize keys on incoming rows in case of Arabic/English variations
+      const normalizedRows = dto.rows.map((row) => normalizeRowKeys(row));
 
-    const { validRows, errors: validationErrors } =
-      importer.validate(normalizedRows);
-    const commitResult = await importer.commit(validRows, adminId);
+      const { validRows, errors: validationErrors } =
+        importer.validate(normalizedRows);
+      const commitResult = await importer.commit(validRows, adminId);
 
-    const errors = [...validationErrors, ...commitResult.errors];
-    const { successCount } = commitResult;
+      const errors = [...validationErrors, ...commitResult.errors];
+      const { successCount } = commitResult;
 
-    return {
-      success: true,
-      batchIndex: dto.batchIndex ?? 0,
-      totalBatches: dto.totalBatches ?? 1,
-      successCount,
-      failedCount: errors.length,
-      errors,
-    };
+      return {
+        success: true,
+        batchIndex: dto.batchIndex ?? 0,
+        totalBatches: dto.totalBatches ?? 1,
+        successCount,
+        failedCount: errors.length,
+        errors,
+      };
+    } catch (err: unknown) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+      const message =
+        err instanceof Error ? err.message : 'حدث خطأ أثناء معالجة الدفعة';
+      this.logger.warn(
+        `Unhandled error in processBatchUpload(${dto.type}): ${message}`,
+        'UploadsService',
+      );
+      return {
+        success: false,
+        batchIndex: dto.batchIndex ?? 0,
+        totalBatches: dto.totalBatches ?? 1,
+        successCount: 0,
+        failedCount: dto.rows.length,
+        errors: [`فشل معالجة الدفعة: ${message}`],
+      };
+    }
   }
 
   async getWipeSummary() {
@@ -593,18 +631,16 @@ export class UploadsService {
 
           worksheet.eachRow((row, rowNumber) => {
             if (rowNumber === 1) {
-              const values = row.values as (string | number | undefined)[];
+              const values = row.values as unknown[];
               headers = (Array.isArray(values) ? values.slice(1) : []).map(
-                (v) => (v !== null && v !== undefined ? String(v).trim() : ''),
+                (v) => String(unwrapExcelCellValue(v) ?? '').trim(),
               );
               return;
             }
 
             if (rows.length >= MAX_UPLOAD_ROWS) return;
 
-            const values = row.values as (
-              string | number | boolean | Date | undefined
-            )[];
+            const values = row.values as unknown[];
             if (!Array.isArray(values)) return;
 
             const rowData: Record<string, unknown> = {};
@@ -612,25 +648,15 @@ export class UploadsService {
 
             headers.forEach((header, index) => {
               if (!header) return;
-              const cellVal = values[index + 1];
+              const unwrapped = unwrapExcelCellValue(values[index + 1]);
               if (
-                cellVal !== null &&
-                cellVal !== undefined &&
-                String(cellVal).trim() !== ''
+                unwrapped !== null &&
+                unwrapped !== undefined &&
+                String(unwrapped).trim() !== ''
               ) {
                 hasData = true;
-                if (cellVal instanceof Date) {
-                  rowData[header] = cellVal.toISOString().split('T')[0];
-                } else if (
-                  typeof cellVal === 'object' &&
-                  cellVal !== null &&
-                  'text' in (cellVal as any)
-                ) {
-                  rowData[header] = String((cellVal as any).text).trim();
-                } else {
-                  rowData[header] =
-                    typeof cellVal === 'string' ? cellVal.trim() : cellVal;
-                }
+                rowData[header] =
+                  typeof unwrapped === 'string' ? unwrapped.trim() : unwrapped;
               } else {
                 rowData[header] = '';
               }
@@ -657,7 +683,7 @@ export class UploadsService {
     }
 
     // 2. XML Spreadsheet 2003 format
-    const text = fileBuffer.toString('utf-8');
+    const text = fileBuffer.toString('utf-8').replace(/^\uFEFF/, '');
     if (text.includes('<Workbook') || text.includes('<?xml')) {
       return this.parseXmlSpreadsheet(text);
     }
