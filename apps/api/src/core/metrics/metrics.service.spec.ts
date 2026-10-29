@@ -11,6 +11,19 @@ describe('metrics summary semantics', () => {
     metrics.getRegistry().clear();
   });
 
+  it('exports bounded event-loop utilization without identifying labels', async () => {
+    for (let scrape = 0; scrape < 2; scrape++) {
+      const values = (await metrics.getRegistry().getMetricsAsJSON()).find(
+        (metric) =>
+          metric.name === 'student_portal_nodejs_eventloop_utilization_ratio',
+      )!.values;
+      expect(values).toHaveLength(1);
+      expect(values[0].labels).toEqual({});
+      expect(values[0].value).toBeGreaterThanOrEqual(0);
+      expect(values[0].value).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('separates rejected requests, server failures, redirects and successes', async () => {
     for (const status of [200, 401, 500, 307])
       metrics.recordHttpRequest('POST', '/api/auth/student/login', status, 0.1);

@@ -1,0 +1,847 @@
+{
+  "environment": "credential-free localhost MongoDB 7; synthetic fixtures; same Node process and pool",
+  "scope": "real controllers/services, Passport JWT signature/expiry, database session/account policy, roles and permissions; no production app rate limits or CSRF middleware",
+  "baseline": "test-only original Passport guard called twice on quizzes; original extra hydrated notification identity lookup; all other code identical",
+  "fixture": {
+    "students": 12,
+    "courses": 2,
+    "complaints": 1200,
+    "retention": "no database deletion or collection dropping; unique fixture collections retained"
+  },
+  "methodology": {
+    "warmupsPerMode": 20,
+    "requestsPerBlock": 240,
+    "rounds": 2,
+    "concurrency": [
+      1,
+      5,
+      10
+    ],
+    "mix": "50% quiz list, 50% notification feed; 12 round-robin student sessions; alternating before/after order"
+  },
+  "quizzesQueryCounts": {
+    "before": {
+      "route": "/api/students/me/quizzes",
+      "queries": 8,
+      "dbMs": 398.63809999999995,
+      "operations": {
+        "sessions.findOne": 2,
+        "users.findOne": 1,
+        "registrations.find": 1,
+        "courses.find": 1,
+        "quizzes.find": 1,
+        "submissions.find": 1,
+        "attempts.find": 1
+      }
+    },
+    "after": {
+      "route": "/api/students/me/quizzes",
+      "queries": 7,
+      "dbMs": 20.1086,
+      "operations": {
+        "sessions.findOne": 1,
+        "users.findOne": 1,
+        "registrations.find": 1,
+        "courses.find": 1,
+        "quizzes.find": 1,
+        "submissions.find": 1,
+        "attempts.find": 1
+      }
+    }
+  },
+  "notificationsQueryCounts": {
+    "before": {
+      "route": "/api/students/me/notifications",
+      "queries": 6,
+      "dbMs": 136.6843,
+      "operations": {
+        "sessions.findOne": 1,
+        "users.findOne": 2,
+        "profiles.findOne": 1,
+        "notifications.countDocuments": 1,
+        "notifications.find": 1
+      }
+    },
+    "after": {
+      "route": "/api/students/me/notifications",
+      "queries": 5,
+      "dbMs": 16.3532,
+      "operations": {
+        "sessions.findOne": 1,
+        "users.findOne": 1,
+        "profiles.findOne": 1,
+        "notifications.countDocuments": 1,
+        "notifications.find": 1
+      }
+    }
+  },
+  "plans": {
+    "session": {
+      "stages": [
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "_id_"
+      ],
+      "docsExamined": 1,
+      "keysExamined": 1,
+      "returned": 1
+    },
+    "user": {
+      "stages": [
+        "PROJECTION_SIMPLE",
+        "IDHACK"
+      ],
+      "indexes": [],
+      "docsExamined": 1,
+      "keysExamined": 1,
+      "returned": 1
+    },
+    "profile": {
+      "stages": [
+        "LIMIT",
+        "PROJECTION_SIMPLE",
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "userId_1"
+      ],
+      "docsExamined": 1,
+      "keysExamined": 1,
+      "returned": 1
+    },
+    "complaintsDefault": {
+      "stages": [
+        "LIMIT",
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "createdAt_-1__id_-1"
+      ],
+      "docsExamined": 20,
+      "keysExamined": 20,
+      "returned": 20
+    },
+    "complaintsOpen": {
+      "stages": [
+        "LIMIT",
+        "FETCH",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "createdAt_-1__id_-1"
+      ],
+      "docsExamined": 40,
+      "keysExamined": 40,
+      "returned": 20
+    },
+    "complaintsDeep": {
+      "stages": [
+        "LIMIT",
+        "FETCH",
+        "SKIP",
+        "IXSCAN"
+      ],
+      "indexes": [
+        "createdAt_-1__id_-1"
+      ],
+      "docsExamined": 20,
+      "keysExamined": 1020,
+      "returned": 20
+    }
+  },
+  "projectionJsonBytes": {
+    "profile": {
+      "before": 32195,
+      "after": 111
+    },
+    "registration": {
+      "before": 16242,
+      "after": 72
+    },
+    "limitation": "Synthetic unused context; JSON serialized document size, not wire bytes or production savings"
+  },
+  "indexes": {
+    "sessions": [
+      {
+        "name": "_id_",
+        "key": {
+          "_id": 1
+        }
+      },
+      {
+        "name": "userId_1",
+        "key": {
+          "userId": 1
+        }
+      },
+      {
+        "name": "expiresAt_1",
+        "key": {
+          "expiresAt": 1
+        },
+        "expireAfterSeconds": 0
+      }
+    ],
+    "complaints": [
+      {
+        "name": "_id_",
+        "key": {
+          "_id": 1
+        }
+      },
+      {
+        "name": "ticketNumber_1",
+        "key": {
+          "ticketNumber": 1
+        }
+      },
+      {
+        "name": "createdAt_-1__id_-1",
+        "key": {
+          "createdAt": -1,
+          "_id": -1
+        }
+      },
+      {
+        "name": "status_1",
+        "key": {
+          "status": 1
+        }
+      },
+      {
+        "name": "status_1_createdAt_-1",
+        "key": {
+          "status": 1,
+          "createdAt": -1
+        }
+      },
+      {
+        "name": "priority_1",
+        "key": {
+          "priority": 1
+        }
+      },
+      {
+        "name": "type_1",
+        "key": {
+          "type": 1
+        }
+      },
+      {
+        "name": "department_1",
+        "key": {
+          "department": 1
+        }
+      },
+      {
+        "name": "studentCode_1",
+        "key": {
+          "studentCode": 1
+        }
+      },
+      {
+        "name": "studentId_1_createdAt_-1",
+        "key": {
+          "studentId": 1,
+          "createdAt": -1
+        }
+      },
+      {
+        "name": "assignedGroup_1",
+        "key": {
+          "assignedGroup": 1
+        }
+      },
+      {
+        "name": "assignedStaffId_1",
+        "key": {
+          "assignedStaffId": 1
+        }
+      },
+      {
+        "name": "assignedStaffId_1_status_1",
+        "key": {
+          "assignedStaffId": 1,
+          "status": 1
+        }
+      }
+    ]
+  },
+  "samples": [
+    {
+      "mode": "before",
+      "round": 1,
+      "concurrency": 1,
+      "requests": 240,
+      "elapsedMs": 4673.225200000001,
+      "p50Ms": 17.03009999999631,
+      "p95Ms": 23.585699999995995,
+      "p99Ms": 85.54409999999916,
+      "requestsPerSecond": 51.35639515082645,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 15.502911666666675,
+      "poolCheckoutMeanMs": 0.013365595238177602,
+      "poolCheckoutP95Ms": 0.02350000000296859,
+      "cpuMs": 3172,
+      "cpuOneCoreRatio": 0.6787603559100895,
+      "eventLoopUtilization": 0.5612797651536254,
+      "eventLoopP99Ms": 14.180351,
+      "eventLoopMaxMs": 18.563071,
+      "memoryBefore": {
+        "rss": 308469760,
+        "heapTotal": 260456448,
+        "heapUsed": 140366584,
+        "external": 54422211,
+        "arrayBuffers": 33473185
+      },
+      "memoryAfter": {
+        "rss": 374730752,
+        "heapTotal": 279400448,
+        "heapUsed": 147124776,
+        "external": 55717119,
+        "arrayBuffers": 34774746
+      },
+      "gc": {
+        "count": 6,
+        "totalPauseMs": 27.954099997878075,
+        "p95PauseMs": 6.8365000039339066,
+        "maxPauseMs": 6.8365000039339066,
+        "kinds": [
+          1,
+          1,
+          1,
+          8,
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 1,
+      "concurrency": 1,
+      "requests": 240,
+      "elapsedMs": 4034.0702999999994,
+      "p50Ms": 14.834400000007008,
+      "p95Ms": 21.429400000000896,
+      "p99Ms": 75.78809999999794,
+      "requestsPerSecond": 59.493261681632085,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 13.93510458333334,
+      "poolCheckoutMeanMs": 0.012063749999939925,
+      "poolCheckoutP95Ms": 0.019200000002456363,
+      "cpuMs": 2328,
+      "cpuOneCoreRatio": 0.5770846383118312,
+      "eventLoopUtilization": 0.5605809432420379,
+      "eventLoopP99Ms": 12.181503,
+      "eventLoopMaxMs": 24.051711,
+      "memoryBefore": {
+        "rss": 375009280,
+        "heapTotal": 279400448,
+        "heapUsed": 147324512,
+        "external": 55717119,
+        "arrayBuffers": 34774746
+      },
+      "memoryAfter": {
+        "rss": 382541824,
+        "heapTotal": 289361920,
+        "heapUsed": 202305152,
+        "external": 57793251,
+        "arrayBuffers": 36850878
+      },
+      "gc": {
+        "count": 3,
+        "totalPauseMs": 19.106799997389317,
+        "p95PauseMs": 7.814699999988079,
+        "maxPauseMs": 7.814699999988079,
+        "kinds": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 2,
+      "concurrency": 1,
+      "requests": 240,
+      "elapsedMs": 3943.6704000000027,
+      "p50Ms": 15.002000000000407,
+      "p95Ms": 22.733800000001793,
+      "p99Ms": 35.70300000000134,
+      "requestsPerSecond": 60.85701279701261,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 13.509277083333341,
+      "poolCheckoutMeanMs": 0.01218743055568565,
+      "poolCheckoutP95Ms": 0.02080000000569271,
+      "cpuMs": 2640,
+      "cpuOneCoreRatio": 0.6694271407671387,
+      "eventLoopUtilization": 0.5784550480100195,
+      "eventLoopP99Ms": 12.566527,
+      "eventLoopMaxMs": 16.383999,
+      "memoryBefore": {
+        "rss": 382644224,
+        "heapTotal": 289361920,
+        "heapUsed": 202463440,
+        "external": 57793251,
+        "arrayBuffers": 36850878
+      },
+      "memoryAfter": {
+        "rss": 416976896,
+        "heapTotal": 321867776,
+        "heapUsed": 214399528,
+        "external": 59684397,
+        "arrayBuffers": 38742024
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 31.818399995565414,
+        "p95PauseMs": 8.104299999773502,
+        "maxPauseMs": 8.104299999773502,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "before",
+      "round": 2,
+      "concurrency": 1,
+      "requests": 240,
+      "elapsedMs": 4507.076400000005,
+      "p50Ms": 17.58740000000398,
+      "p95Ms": 25.91150000000198,
+      "p99Ms": 49.29460000000108,
+      "requestsPerSecond": 53.24959656774394,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 15.076729583333341,
+      "poolCheckoutMeanMs": 0.011408154761985706,
+      "poolCheckoutP95Ms": 0.019099999997706618,
+      "cpuMs": 2704,
+      "cpuOneCoreRatio": 0.5999454546632484,
+      "eventLoopUtilization": 0.5790660135137791,
+      "eventLoopP99Ms": 12.804095,
+      "eventLoopMaxMs": 31.588351,
+      "memoryBefore": {
+        "rss": 417075200,
+        "heapTotal": 321867776,
+        "heapUsed": 214557840,
+        "external": 59684397,
+        "arrayBuffers": 38742024
+      },
+      "memoryAfter": {
+        "rss": 440344576,
+        "heapTotal": 340480000,
+        "heapUsed": 217003728,
+        "external": 61629583,
+        "arrayBuffers": 40687210
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 11.666499994695187,
+        "p95PauseMs": 4.018799997866154,
+        "maxPauseMs": 4.018799997866154,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "before",
+      "round": 1,
+      "concurrency": 5,
+      "requests": 240,
+      "elapsedMs": 3364.4907999999996,
+      "p50Ms": 60.16479999999865,
+      "p95Ms": 112.40489999999409,
+      "p99Ms": 376.64740000000165,
+      "requestsPerSecond": 71.33323116829447,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 59.137781249999954,
+      "poolCheckoutMeanMs": 0.5936707142854045,
+      "poolCheckoutP95Ms": 0.8285000000032596,
+      "cpuMs": 3031,
+      "cpuOneCoreRatio": 0.9008792652962523,
+      "eventLoopUtilization": 0.8577012709194002,
+      "eventLoopP99Ms": 18.874367,
+      "eventLoopMaxMs": 21.397503,
+      "memoryBefore": {
+        "rss": 440446976,
+        "heapTotal": 340480000,
+        "heapUsed": 217162384,
+        "external": 61629583,
+        "arrayBuffers": 40687210
+      },
+      "memoryAfter": {
+        "rss": 458031104,
+        "heapTotal": 354897920,
+        "heapUsed": 271694720,
+        "external": 63991864,
+        "arrayBuffers": 43049491
+      },
+      "gc": {
+        "count": 3,
+        "totalPauseMs": 13.14139999449253,
+        "p95PauseMs": 4.475699998438358,
+        "maxPauseMs": 4.475699998438358,
+        "kinds": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 1,
+      "concurrency": 5,
+      "requests": 240,
+      "elapsedMs": 1855.9791000000114,
+      "p50Ms": 38.02079999999842,
+      "p95Ms": 48.96370000000752,
+      "p99Ms": 52.59750000000349,
+      "requestsPerSecond": 129.31180097879255,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 28.587838333333345,
+      "poolCheckoutMeanMs": 0.10187694444436299,
+      "poolCheckoutP95Ms": 0.703800000002957,
+      "cpuMs": 1875,
+      "cpuOneCoreRatio": 1.010248445146817,
+      "eventLoopUtilization": 0.9988728091503601,
+      "eventLoopP99Ms": 15.286271,
+      "eventLoopMaxMs": 16.687103,
+      "memoryBefore": {
+        "rss": 458162176,
+        "heapTotal": 354897920,
+        "heapUsed": 271852976,
+        "external": 63991864,
+        "arrayBuffers": 43049491
+      },
+      "memoryAfter": {
+        "rss": 481759232,
+        "heapTotal": 375869440,
+        "heapUsed": 257324560,
+        "external": 65767065,
+        "arrayBuffers": 44824692
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 14.738299995660782,
+        "p95PauseMs": 4.338599994778633,
+        "maxPauseMs": 4.338599994778633,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 2,
+      "concurrency": 5,
+      "requests": 240,
+      "elapsedMs": 2202.5592000000033,
+      "p50Ms": 42.89140000000771,
+      "p95Ms": 67.46159999999509,
+      "p99Ms": 115.86089999999967,
+      "requestsPerSecond": 108.96415406223798,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 34.96765333333337,
+      "poolCheckoutMeanMs": 0.1860741666669128,
+      "poolCheckoutP95Ms": 0.8295999999972992,
+      "cpuMs": 2375,
+      "cpuOneCoreRatio": 1.0782911079075632,
+      "eventLoopUtilization": 0.9620436933094475,
+      "eventLoopP99Ms": 16.367615,
+      "eventLoopMaxMs": 17.334271,
+      "memoryBefore": {
+        "rss": 481759232,
+        "heapTotal": 375869440,
+        "heapUsed": 257700520,
+        "external": 65767065,
+        "arrayBuffers": 44824692
+      },
+      "memoryAfter": {
+        "rss": 503635968,
+        "heapTotal": 392646656,
+        "heapUsed": 289046760,
+        "external": 67725162,
+        "arrayBuffers": 46782789
+      },
+      "gc": {
+        "count": 3,
+        "totalPauseMs": 12.80179999768734,
+        "p95PauseMs": 4.870999999344349,
+        "maxPauseMs": 4.870999999344349,
+        "kinds": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "before",
+      "round": 2,
+      "concurrency": 5,
+      "requests": 240,
+      "elapsedMs": 2120.0838000000076,
+      "p50Ms": 42.836999999999534,
+      "p95Ms": 62.533299999995506,
+      "p99Ms": 77.19640000000072,
+      "requestsPerSecond": 113.20307244458881,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 33.78096541666666,
+      "poolCheckoutMeanMs": 0.12123535714267962,
+      "poolCheckoutP95Ms": 0.7831999999907566,
+      "cpuMs": 2093,
+      "cpuOneCoreRatio": 0.9872251276105182,
+      "eventLoopUtilization": 0.971823451387296,
+      "eventLoopP99Ms": 16.171007,
+      "eventLoopMaxMs": 17.022975,
+      "memoryBefore": {
+        "rss": 503635968,
+        "heapTotal": 392646656,
+        "heapUsed": 289205104,
+        "external": 67725162,
+        "arrayBuffers": 46782789
+      },
+      "memoryAfter": {
+        "rss": 529301504,
+        "heapTotal": 415453184,
+        "heapUsed": 298768528,
+        "external": 69913665,
+        "arrayBuffers": 48971292
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 16.21339999139309,
+        "p95PauseMs": 4.626199997961521,
+        "maxPauseMs": 4.626199997961521,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "before",
+      "round": 1,
+      "concurrency": 10,
+      "requests": 240,
+      "elapsedMs": 2152.5109000000084,
+      "p50Ms": 90.3015999999916,
+      "p95Ms": 117.2323000000033,
+      "p99Ms": 124.63850000000093,
+      "requestsPerSecond": 111.49769322887009,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 80.22540083333337,
+      "poolCheckoutMeanMs": 4.955001845238066,
+      "poolCheckoutP95Ms": 8.135399999999208,
+      "cpuMs": 2235,
+      "cpuOneCoreRatio": 1.0383222681938529,
+      "eventLoopUtilization": 0.9884560371105532,
+      "eventLoopP99Ms": 18.890751,
+      "eventLoopMaxMs": 20.398079,
+      "memoryBefore": {
+        "rss": 529305600,
+        "heapTotal": 415453184,
+        "heapUsed": 298928464,
+        "external": 69913665,
+        "arrayBuffers": 48971292
+      },
+      "memoryAfter": {
+        "rss": 554299392,
+        "heapTotal": 438259712,
+        "heapUsed": 309834600,
+        "external": 72126391,
+        "arrayBuffers": 51184018
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 17.50730000436306,
+        "p95PauseMs": 5.216099999845028,
+        "maxPauseMs": 5.216099999845028,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 1,
+      "concurrency": 10,
+      "requests": 240,
+      "elapsedMs": 1909.1137000000017,
+      "p50Ms": 81.41790000000037,
+      "p95Ms": 105.50100000000384,
+      "p99Ms": 117.3582000000024,
+      "requestsPerSecond": 125.7127849430863,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 70.37722416666672,
+      "poolCheckoutMeanMs": 5.003374166666648,
+      "poolCheckoutP95Ms": 7.927400000000489,
+      "cpuMs": 2063,
+      "cpuOneCoreRatio": 1.0806061472399462,
+      "eventLoopUtilization": 0.9992973117829714,
+      "eventLoopP99Ms": 19.546111,
+      "eventLoopMaxMs": 21.086207,
+      "memoryBefore": {
+        "rss": 554541056,
+        "heapTotal": 438259712,
+        "heapUsed": 309999736,
+        "external": 72126391,
+        "arrayBuffers": 51184018
+      },
+      "memoryAfter": {
+        "rss": 574791680,
+        "heapTotal": 456007680,
+        "heapUsed": 341351160,
+        "external": 74088240,
+        "arrayBuffers": 53145867
+      },
+      "gc": {
+        "count": 3,
+        "totalPauseMs": 17.856299996376038,
+        "p95PauseMs": 7.889199994504452,
+        "maxPauseMs": 7.889199994504452,
+        "kinds": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "after",
+      "round": 2,
+      "concurrency": 10,
+      "requests": 240,
+      "elapsedMs": 2150.567299999995,
+      "p50Ms": 89.79159999999683,
+      "p95Ms": 115.1765999999916,
+      "p99Ms": 122.94160000000556,
+      "requestsPerSecond": 111.59846055503613,
+      "errors": 0,
+      "dbOperationsPerRequest": 6,
+      "summedDbMsPerRequest": 79.24913041666666,
+      "poolCheckoutMeanMs": 5.611515208333407,
+      "poolCheckoutP95Ms": 8.823300000003655,
+      "cpuMs": 2218,
+      "cpuOneCoreRatio": 1.0313557729627922,
+      "eventLoopUtilization": 0.9994790874482316,
+      "eventLoopP99Ms": 17.727487,
+      "eventLoopMaxMs": 19.431423,
+      "memoryBefore": {
+        "rss": 575160320,
+        "heapTotal": 456007680,
+        "heapUsed": 341510904,
+        "external": 74088240,
+        "arrayBuffers": 53145867
+      },
+      "memoryAfter": {
+        "rss": 595939328,
+        "heapTotal": 474095616,
+        "heapUsed": 373010504,
+        "external": 76059643,
+        "arrayBuffers": 55117270
+      },
+      "gc": {
+        "count": 3,
+        "totalPauseMs": 15.186599999666214,
+        "p95PauseMs": 6.177699998021126,
+        "maxPauseMs": 6.177699998021126,
+        "kinds": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "mode": "before",
+      "round": 2,
+      "concurrency": 10,
+      "requests": 240,
+      "elapsedMs": 2257.4829000000027,
+      "p50Ms": 93.72809999999299,
+      "p95Ms": 124.99379999999655,
+      "p99Ms": 142.70080000000598,
+      "requestsPerSecond": 106.31309765402861,
+      "errors": 0,
+      "dbOperationsPerRequest": 7,
+      "summedDbMsPerRequest": 83.84361500000004,
+      "poolCheckoutMeanMs": 5.139752023809905,
+      "poolCheckoutP95Ms": 8.446299999995972,
+      "cpuMs": 2422,
+      "cpuOneCoreRatio": 1.0728763438252387,
+      "eventLoopUtilization": 0.9996737570662341,
+      "eventLoopP99Ms": 19.103743,
+      "eventLoopMaxMs": 19.529727,
+      "memoryBefore": {
+        "rss": 596312064,
+        "heapTotal": 474095616,
+        "heapUsed": 373170200,
+        "external": 76059643,
+        "arrayBuffers": 55117270
+      },
+      "memoryAfter": {
+        "rss": 623439872,
+        "heapTotal": 497688576,
+        "heapUsed": 383686832,
+        "external": 78246837,
+        "arrayBuffers": 57304464
+      },
+      "gc": {
+        "count": 4,
+        "totalPauseMs": 19.900499992072582,
+        "p95PauseMs": 7.215400002896786,
+        "maxPauseMs": 7.215400002896786,
+        "kinds": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    }
+  ],
+  "maximumPoolWaiters": 12,
+  "runtime": {
+    "node": "v24.15.0",
+    "platform": "win32",
+    "arch": "x64",
+    "mongodb": "7.0.45",
+    "poolSize": 5,
+    "cpuProfile": "local-benchmark.cpuprofile",
+    "measurements": "client HTTP latency; summed overlapping query time is not wall latency; shared load generator/server process CPU and heap; pool waits matched FIFO; no forced GC"
+  }
+}

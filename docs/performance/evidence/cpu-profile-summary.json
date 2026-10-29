@@ -1,0 +1,107 @@
+{
+  "scope": "local combined HTTP load-generator, Jest and API process; no production workload",
+  "durationMs": 36501.838,
+  "samples": 24861,
+  "topFunctions": [
+    {
+      "function": "(idle)",
+      "samples": 6994,
+      "sharePercent": 28.1324162342625
+    },
+    {
+      "function": "connect",
+      "samples": 4029,
+      "sharePercent": 16.206105949076868
+    },
+    {
+      "function": "writeBuffer",
+      "samples": 763,
+      "sharePercent": 3.069063995816741
+    },
+    {
+      "function": "exec",
+      "samples": 466,
+      "sharePercent": 1.8744217851252967
+    },
+    {
+      "function": "writeLatin1String",
+      "samples": 405,
+      "sharePercent": 1.6290575600337878
+    },
+    {
+      "function": "runMicrotasks",
+      "samples": 343,
+      "sharePercent": 1.3796709705965167
+    },
+    {
+      "function": "(program)",
+      "samples": 299,
+      "sharePercent": 1.2026869393829693
+    },
+    {
+      "function": "cloneCallSite",
+      "samples": 272,
+      "sharePercent": 1.0940831020473833
+    },
+    {
+      "function": "createPublicKey",
+      "samples": 175,
+      "sharePercent": 0.7039137605084268
+    },
+    {
+      "function": "(garbage collector)",
+      "samples": 171,
+      "sharePercent": 0.6878243031253771
+    },
+    {
+      "function": "init",
+      "samples": 152,
+      "sharePercent": 0.6113993805558907
+    },
+    {
+      "function": "wrapCallSite",
+      "samples": 131,
+      "sharePercent": 0.5269297292948796
+    },
+    {
+      "function": "close",
+      "samples": 128,
+      "sharePercent": 0.5148626362575922
+    },
+    {
+      "function": "writev",
+      "samples": 118,
+      "sharePercent": 0.4746389927999678
+    },
+    {
+      "function": "onData",
+      "samples": 101,
+      "sharePercent": 0.40625879892200634
+    },
+    {
+      "function": "clone.<computed>",
+      "samples": 96,
+      "sharePercent": 0.3861469771931942
+    },
+    {
+      "function": "serializeInto",
+      "samples": 79,
+      "sharePercent": 0.31776678331523267
+    },
+    {
+      "function": "",
+      "samples": 78,
+      "sharePercent": 0.31374441896947025
+    },
+    {
+      "function": "prepareCommand",
+      "samples": 66,
+      "sharePercent": 0.265476046820321
+    },
+    {
+      "function": "serializeInto",
+      "samples": 66,
+      "sharePercent": 0.265476046820321
+    }
+  ]
+}

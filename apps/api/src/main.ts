@@ -19,6 +19,7 @@ import { securityHeadersMiddleware } from './common/middleware/security-headers.
 import { AppLoggerService } from './core/logger/logger.service';
 import {
   CORS_BLOCKED_ERROR_PREFIX,
+  CORS_EXPOSED_HEADERS,
   isOriginAllowed,
   parseAllowedOrigins,
 } from './config/cors-origins';
@@ -129,6 +130,7 @@ async function bootstrap() {
       callback(new Error(`${CORS_BLOCKED_ERROR_PREFIX}: ${origin}`));
     },
     credentials: true,
+    exposedHeaders: CORS_EXPOSED_HEADERS,
   });
 
   app.use(compression());

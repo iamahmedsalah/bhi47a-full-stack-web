@@ -1,0 +1,1331 @@
+{
+  "sources": [
+    {
+      "name": "unified-database.csv",
+      "bytes": 26713,
+      "sha256": "6f269229e2e623c2c02a054ab4138fdd8b05c5515a76a3200a57d6663461a413"
+    },
+    {
+      "name": "unified-routes.csv",
+      "bytes": 126439,
+      "sha256": "ed7af2e3d9c05db5f6ef82448387d274547e68f49cdaddbb6e7a6b8057340a84"
+    },
+    {
+      "name": "unified-routes (1).csv",
+      "bytes": 126424,
+      "sha256": "1ab61956f57ad3f44bb9e45bfc160e130489f951d3578bab57d0b730d7e76922"
+    },
+    {
+      "name": "prometheus-metrics-2026-10-29-20-05-11.txt",
+      "bytes": 1478573,
+      "sha256": "0bee14784e6105e0f5e9286e20cf4d98b775062d159e6a502000e425ad6837ac"
+    },
+    {
+      "name": "api_performance_audit_2026-10-29.md",
+      "bytes": 7337,
+      "sha256": "72d62a009bb50c124fc1fa9eccd045e07a16b1af0aa00900710c59e059254ff4"
+    }
+  ],
+  "populations": {
+    "routeRows": 428,
+    "secondRouteRows": 428,
+    "slowDatabaseGroups": 51,
+    "note": "Lifetime HTTP counters, five-minute route histograms, and thresholded slow-query observations are different populations. No rates or before/after production gains can be inferred from one scrape."
+  },
+  "routes": [
+    {
+      "route": "GET /api/students/me/syllabi",
+      "method": "GET",
+      "lifetime": {
+        "calls": 985,
+        "meanMs": 179,
+        "maxMs": 1903,
+        "statuses": {
+          "200": 985
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 3,
+        "p95Ms": 924.9999999999998,
+        "clientErrors": 0,
+        "serverErrors": 0
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 577.2111749999999,
+          "databaseOperations": 7,
+          "summedDatabaseMs": 381.625984,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 2,
+          "stages": {
+            "auth.session": 19.252911,
+            "auth.user": 15.114865,
+            "response.serialization": 0.921036
+          }
+        },
+        {
+          "durationMs": 579.026402,
+          "databaseOperations": 7,
+          "summedDatabaseMs": 523.829891,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 2,
+          "stages": {
+            "auth.session": 20.470214000000002,
+            "auth.user": 15.188588,
+            "response.serialization": 5.961936000000001
+          }
+        },
+        {
+          "durationMs": 592.572261,
+          "databaseOperations": 7,
+          "summedDatabaseMs": 561.966811,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 2,
+          "stages": {
+            "auth.session": 102.043525,
+            "auth.user": 29.950884000000002,
+            "response.serialization": 4.539515
+          }
+        }
+      ]
+    },
+    {
+      "route": "GET /api/students/me/quizzes",
+      "method": "GET",
+      "lifetime": {
+        "calls": 2341,
+        "meanMs": 167,
+        "maxMs": 2310,
+        "statuses": {
+          "200": 2341
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 12,
+        "p95Ms": 849.9999999999997,
+        "clientErrors": 0,
+        "serverErrors": 0
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 639.9751070000001,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 891.489429,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 19.872386,
+            "auth.user": 8.015705,
+            "response.serialization": 0.68916
+          }
+        },
+        {
+          "durationMs": 591.219998,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 616.1534649999999,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 302.363559,
+            "auth.user": 103.564507,
+            "response.serialization": 0.8957839999999999
+          }
+        },
+        {
+          "durationMs": 591.815497,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 489.405035,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 24.634882,
+            "auth.user": 11.680655999999999,
+            "response.serialization": 0.7253109999999999
+          }
+        },
+        {
+          "durationMs": 846.7323719999999,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 843.159759,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 230.153581,
+            "auth.user": 512.0607729999999,
+            "response.serialization": 0.731221
+          }
+        },
+        {
+          "durationMs": 568.806884,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 743.561507,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 129.240674,
+            "auth.user": 41.999426,
+            "response.serialization": 1.239297
+          }
+        },
+        {
+          "durationMs": 917.206257,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 981.92945,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 227.991049,
+            "auth.user": 129.947914,
+            "response.serialization": 0.839185
+          }
+        },
+        {
+          "durationMs": 637.6709149999999,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 703.7078969999999,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 124.009991,
+            "auth.user": 90.73250800000001,
+            "response.serialization": 2.417389
+          }
+        },
+        {
+          "durationMs": 731.891256,
+          "databaseOperations": 8,
+          "summedDatabaseMs": 585.024842,
+          "sessionReads": 2,
+          "userReads": 1,
+          "courseReads": 1,
+          "stages": {
+            "auth.session": 63.631941,
+            "auth.user": 21.255905,
+            "response.serialization": 0.822457
+          }
+        }
+      ]
+    },
+    {
+      "route": "GET /api/registration/eligibility",
+      "method": "GET",
+      "lifetime": {
+        "calls": 985,
+        "meanMs": 177,
+        "maxMs": 2134,
+        "statuses": {
+          "200": 985
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 3,
+        "p95Ms": 238.74999999999997,
+        "clientErrors": 0,
+        "serverErrors": 0
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 601.911989,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 783.137178,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 66.469789,
+            "auth.user": 101.560501,
+            "registration.profile": 297.95659800000004,
+            "registration.period": 111.637632,
+            "registration.rule": 112.108955,
+            "registration.policy": 0.35960000000000003,
+            "registration.existing": 18.798113,
+            "registration.term": 19.519094,
+            "response.serialization": 0.8750760000000001
+          }
+        },
+        {
+          "durationMs": 649.378284,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 992.4272510000001,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 45.971876,
+            "auth.user": 16.844996000000002,
+            "registration.profile": 454.83201,
+            "registration.rule": 17.559957,
+            "registration.period": 19.438053,
+            "registration.policy": 0.701271,
+            "registration.existing": 16.524987000000003,
+            "registration.term": 101.599465,
+            "response.serialization": 2.113402
+          }
+        },
+        {
+          "durationMs": 958.974961,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 1039.4753259999998,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 483.41923799999995,
+            "auth.user": 376.61373999999995,
+            "registration.profile": 30.361141,
+            "registration.rule": 27.918658,
+            "registration.period": 29.212756,
+            "registration.policy": 0.720071,
+            "registration.existing": 27.535797000000002,
+            "registration.term": 28.598798000000002,
+            "response.serialization": 7.708058
+          }
+        },
+        {
+          "durationMs": 661.959932,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 1409.548858,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 25.908813,
+            "auth.user": 24.883573,
+            "registration.profile": 280.249542,
+            "registration.period": 175.369013,
+            "registration.rule": 188.66747,
+            "registration.policy": 0.465903,
+            "registration.existing": 43.074856000000004,
+            "registration.term": 138.461331,
+            "response.serialization": 0.632869
+          }
+        },
+        {
+          "durationMs": 508.217464,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 574.230216,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 382.593549,
+            "auth.user": 14.433186000000001,
+            "registration.profile": 55.651627000000005,
+            "registration.period": 11.035652,
+            "registration.rule": 32.505779,
+            "registration.policy": 0.491285,
+            "registration.term": 19.507298,
+            "registration.existing": 19.688913999999997,
+            "response.serialization": 0.345451
+          }
+        },
+        {
+          "durationMs": 1348.564113,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 2245.157841,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 87.73766099999999,
+            "auth.user": 75.70206,
+            "registration.profile": 324.657783,
+            "registration.rule": 683.7124610000001,
+            "registration.period": 692.509665,
+            "registration.policy": 0.539197,
+            "registration.existing": 157.569834,
+            "registration.term": 158.14044099999998,
+            "response.serialization": 6.141065
+          }
+        },
+        {
+          "durationMs": 1193.862476,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 2112.255361,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 115.76258,
+            "auth.user": 166.54833399999998,
+            "registration.profile": 135.352508,
+            "registration.period": 593.63685,
+            "registration.rule": 597.775043,
+            "registration.policy": 0.6116980000000001,
+            "registration.existing": 99.106232,
+            "registration.term": 173.823261,
+            "response.serialization": 0.757194
+          }
+        },
+        {
+          "durationMs": 696.009266,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 1453.239527,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 85.545053,
+            "auth.user": 83.21677199999999,
+            "registration.profile": 258.417125,
+            "registration.rule": 81.984184,
+            "registration.period": 92.051828,
+            "registration.policy": 0.525076,
+            "registration.existing": 173.608892,
+            "registration.term": 174.22910099999999,
+            "response.serialization": 0.780184
+          }
+        },
+        {
+          "durationMs": 509.73178900000005,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 1045.493075,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 93.839291,
+            "auth.user": 26.928302000000002,
+            "registration.profile": 226.84617200000002,
+            "registration.period": 99.955688,
+            "registration.rule": 95.080401,
+            "registration.policy": 0.536267,
+            "registration.existing": 57.667289,
+            "registration.term": 58.80026599999999,
+            "response.serialization": 0.894108
+          }
+        },
+        {
+          "durationMs": 569.204923,
+          "databaseOperations": 9,
+          "summedDatabaseMs": 809.4673329999999,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 340.52978299999995,
+            "auth.user": 32.616092,
+            "registration.profile": 63.777854,
+            "registration.period": 74.211996,
+            "registration.rule": 74.532366,
+            "registration.policy": 0.402483,
+            "registration.existing": 54.311814,
+            "registration.term": 55.008976000000004,
+            "response.serialization": 0.719874
+          }
+        }
+      ]
+    },
+    {
+      "route": "GET /api/students/me/notifications",
+      "method": "GET",
+      "lifetime": {
+        "calls": 1554,
+        "meanMs": 148,
+        "maxMs": 1482,
+        "statuses": {
+          "200": 1554
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 8,
+        "p95Ms": 229.99999999999997,
+        "clientErrors": 0,
+        "serverErrors": 0
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 638.120565,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 672.014145,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 13.591838000000001,
+            "auth.user": 219.965124,
+            "response.serialization": 0.6864669999999999
+          }
+        },
+        {
+          "durationMs": 767.654502,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 834.9057369999999,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 36.402993,
+            "auth.user": 23.754510999999997,
+            "response.serialization": 0.770492
+          }
+        },
+        {
+          "durationMs": 915.237858,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 1397.5745,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 15.479217,
+            "auth.user": 16.618481,
+            "response.serialization": 4.064741000000001
+          }
+        },
+        {
+          "durationMs": 1091.594375,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 1121.694746,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 54.081423,
+            "auth.user": 63.502274,
+            "response.serialization": 1.252857
+          }
+        },
+        {
+          "durationMs": 512.449217,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 514.5381580000001,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 140.394264,
+            "auth.user": 141.310789,
+            "response.serialization": 0.630428
+          }
+        },
+        {
+          "durationMs": 577.9234650000001,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 526.1283,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 18.326546999999998,
+            "auth.user": 26.530801,
+            "response.serialization": 1.2647680000000001
+          }
+        },
+        {
+          "durationMs": 1482.2407719999999,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 1682.8905379999999,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 37.528594999999996,
+            "auth.user": 71.901935,
+            "response.serialization": 0.597329
+          }
+        },
+        {
+          "durationMs": 1279.5201140000001,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 829.972573,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 15.31913,
+            "auth.user": 114.99914799999999,
+            "response.serialization": 1.0598420000000002
+          }
+        },
+        {
+          "durationMs": 704.5876450000001,
+          "databaseOperations": 6,
+          "summedDatabaseMs": 785.0950109999999,
+          "sessionReads": 1,
+          "userReads": 2,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 62.463996,
+            "auth.user": 12.436716,
+            "response.serialization": 0.823465
+          }
+        }
+      ]
+    },
+    {
+      "route": "POST /api/auth/heartbeat",
+      "method": "POST",
+      "lifetime": {
+        "calls": 3992,
+        "meanMs": 71,
+        "maxMs": 1428,
+        "statuses": {
+          "200": 3990,
+          "403": 2
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 19,
+        "p95Ms": 178.75000000000009,
+        "clientErrors": 0,
+        "serverErrors": 0
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 572.82921,
+          "databaseOperations": 3,
+          "summedDatabaseMs": 195.08705400000002,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 49.092386000000005,
+            "auth.user": 70.567632,
+            "response.serialization": 0.596527
+          }
+        }
+      ]
+    },
+    {
+      "route": "GET /api/auth/me",
+      "method": "GET",
+      "lifetime": {
+        "calls": 2244,
+        "meanMs": 26,
+        "maxMs": 519,
+        "statuses": {
+          "200": 1269,
+          "401": 975
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 6,
+        "p95Ms": 46.99999999999999,
+        "clientErrors": 2,
+        "serverErrors": 0
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "POST /api/auth/google/nonce",
+      "method": "POST",
+      "lifetime": {
+        "calls": 1166,
+        "meanMs": 51,
+        "maxMs": 915,
+        "statuses": {
+          "200": 448,
+          "429": 718
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "POST /api/auth/student/login",
+      "method": "POST",
+      "lifetime": {
+        "calls": 994,
+        "meanMs": 121,
+        "maxMs": 1617,
+        "statuses": {
+          "200": 405,
+          "400": 1,
+          "401": 102,
+          "429": 486
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 507.780046,
+          "databaseOperations": 3,
+          "summedDatabaseMs": 91.52956400000001,
+          "sessionReads": 0,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "response.serialization": 1.00844
+          }
+        },
+        {
+          "durationMs": 660.313751,
+          "databaseOperations": 3,
+          "summedDatabaseMs": 114.28332200000001,
+          "sessionReads": 0,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "response.serialization": 0.5136649999999999
+          }
+        }
+      ]
+    },
+    {
+      "route": "GET /api/admin/complaints",
+      "method": "GET",
+      "lifetime": {
+        "calls": 62,
+        "meanMs": 624,
+        "maxMs": 4461,
+        "statuses": {
+          "200": 26,
+          "403": 36
+        }
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": [
+        {
+          "durationMs": 4461.1527049999995,
+          "databaseOperations": 5,
+          "summedDatabaseMs": 3129.369752,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 14.920679,
+            "auth.user": 9.684625,
+            "complaints.count": 7.5636920000000005,
+            "complaints.page": 3024.5227200000004,
+            "complaints.enrichment": 76.254738,
+            "complaints.transformation": 0.251648,
+            "response.serialization": 266.491164
+          }
+        },
+        {
+          "durationMs": 2547.627881,
+          "databaseOperations": 5,
+          "summedDatabaseMs": 841.097758,
+          "sessionReads": 1,
+          "userReads": 1,
+          "courseReads": 0,
+          "stages": {
+            "auth.session": 14.232608,
+            "auth.user": 16.223468,
+            "complaints.count": 25.981590999999998,
+            "complaints.page": 772.2029160000001,
+            "complaints.enrichment": 15.038442000000002,
+            "complaints.transformation": 0.253228,
+            "response.serialization": 332.27421000000004
+          }
+        }
+      ]
+    },
+    {
+      "route": "HEAD /api/admin/complaints",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "HEAD /api/auth/me",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "HEAD /api/registration/eligibility",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "HEAD /api/students/me/notifications",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "HEAD /api/students/me/quizzes",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    },
+    {
+      "route": "HEAD /api/students/me/syllabi",
+      "method": "HEAD",
+      "lifetime": {
+        "calls": 0,
+        "meanMs": null,
+        "maxMs": null,
+        "statuses": {}
+      },
+      "window": {
+        "duration": "5m",
+        "calls": 0,
+        "p95Ms": null,
+        "clientErrors": null,
+        "serverErrors": null
+      },
+      "sampledTraces": []
+    }
+  ],
+  "routeExportDifferences": [
+    {
+      "route": "POST /api/auth/heartbeat",
+      "fields": {
+        "Lifetime Calls": [
+          "3992",
+          "3993"
+        ],
+        "Window Calls": [
+          "19",
+          "20"
+        ],
+        "P95 Ms": [
+          "178.75000000000009",
+          "175"
+        ],
+        "Statuses": [
+          "{\"200\":3990,\"403\":2}",
+          "{\"200\":3991,\"403\":2}"
+        ]
+      }
+    }
+  ],
+  "slowDatabase": [
+    {
+      "collection": "auth_sessions",
+      "operation": "findOne",
+      "slowCount": 879,
+      "conditionalMeanMs": 192,
+      "maxMs": 1536,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "findOne",
+      "slowCount": 777,
+      "conditionalMeanMs": 190,
+      "maxMs": 873,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "student_profiles",
+      "operation": "findOne",
+      "slowCount": 317,
+      "conditionalMeanMs": 190,
+      "maxMs": 1040,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "courses",
+      "operation": "find",
+      "slowCount": 122,
+      "conditionalMeanMs": 169,
+      "maxMs": 528,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "student_academic_profiles",
+      "operation": "findOne",
+      "slowCount": 99,
+      "conditionalMeanMs": 178,
+      "maxMs": 768,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "grades",
+      "operation": "find",
+      "slowCount": 92,
+      "conditionalMeanMs": 217,
+      "maxMs": 1099,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "notifications",
+      "operation": "find",
+      "slowCount": 87,
+      "conditionalMeanMs": 211,
+      "maxMs": 897,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "updateOne",
+      "slowCount": 72,
+      "conditionalMeanMs": 176,
+      "maxMs": 514,
+      "coldStartCount": 1
+    },
+    {
+      "collection": "course_registrations",
+      "operation": "findOne",
+      "slowCount": 70,
+      "conditionalMeanMs": 186,
+      "maxMs": 520,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "registration_terms",
+      "operation": "find",
+      "slowCount": 67,
+      "conditionalMeanMs": 178,
+      "maxMs": 648,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "course_registrations",
+      "operation": "find",
+      "slowCount": 64,
+      "conditionalMeanMs": 180,
+      "maxMs": 470,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "notifications",
+      "operation": "countDocuments",
+      "slowCount": 61,
+      "conditionalMeanMs": 187,
+      "maxMs": 545,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "system_settings",
+      "operation": "findOne",
+      "slowCount": 61,
+      "conditionalMeanMs": 173,
+      "maxMs": 468,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "passkey_settings",
+      "operation": "findOne",
+      "slowCount": 49,
+      "conditionalMeanMs": 183,
+      "maxMs": 612,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quizzes",
+      "operation": "find",
+      "slowCount": 47,
+      "conditionalMeanMs": 223,
+      "maxMs": 1417,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_attempts",
+      "operation": "find",
+      "slowCount": 47,
+      "conditionalMeanMs": 187,
+      "maxMs": 725,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "attendance_records",
+      "operation": "find",
+      "slowCount": 47,
+      "conditionalMeanMs": 200,
+      "maxMs": 523,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "registration_terms",
+      "operation": "findOne",
+      "slowCount": 45,
+      "conditionalMeanMs": 180,
+      "maxMs": 523,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "attendance_sessions",
+      "operation": "find",
+      "slowCount": 45,
+      "conditionalMeanMs": 176,
+      "maxMs": 484,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "gpa_registration_rules",
+      "operation": "findOne",
+      "slowCount": 43,
+      "conditionalMeanMs": 200,
+      "maxMs": 592,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_submissions",
+      "operation": "find",
+      "slowCount": 41,
+      "conditionalMeanMs": 185,
+      "maxMs": 552,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "ai_settings",
+      "operation": "findOne",
+      "slowCount": 36,
+      "conditionalMeanMs": 174,
+      "maxMs": 787,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "academic_emails",
+      "operation": "findOne",
+      "slowCount": 28,
+      "conditionalMeanMs": 179,
+      "maxMs": 551,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "course_quizzes",
+      "operation": "find",
+      "slowCount": 24,
+      "conditionalMeanMs": 173,
+      "maxMs": 541,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "complaints",
+      "operation": "find",
+      "slowCount": 23,
+      "conditionalMeanMs": 626,
+      "maxMs": 3023,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "document",
+      "operation": "save",
+      "slowCount": 19,
+      "conditionalMeanMs": 219,
+      "maxMs": 1365,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "findOneAndUpdate",
+      "slowCount": 18,
+      "conditionalMeanMs": 164,
+      "maxMs": 331,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "student_profiles",
+      "operation": "find",
+      "slowCount": 12,
+      "conditionalMeanMs": 147,
+      "maxMs": 256,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "save",
+      "slowCount": 9,
+      "conditionalMeanMs": 152,
+      "maxMs": 272,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "auth_actions",
+      "operation": "save",
+      "slowCount": 7,
+      "conditionalMeanMs": 185,
+      "maxMs": 423,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "auth_sessions",
+      "operation": "save",
+      "slowCount": 6,
+      "conditionalMeanMs": 245,
+      "maxMs": 579,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "countDocuments",
+      "slowCount": 6,
+      "conditionalMeanMs": 315,
+      "maxMs": 524,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "users",
+      "operation": "find",
+      "slowCount": 4,
+      "conditionalMeanMs": 183,
+      "maxMs": 261,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "courses",
+      "operation": "countDocuments",
+      "slowCount": 3,
+      "conditionalMeanMs": 348,
+      "maxMs": 720,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "notifications",
+      "operation": "findOne",
+      "slowCount": 3,
+      "conditionalMeanMs": 148,
+      "maxMs": 214,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "exam_schedules",
+      "operation": "find",
+      "slowCount": 2,
+      "conditionalMeanMs": 357,
+      "maxMs": 600,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "course_schedules",
+      "operation": "find",
+      "slowCount": 2,
+      "conditionalMeanMs": 297,
+      "maxMs": 488,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "complaints",
+      "operation": "countDocuments",
+      "slowCount": 2,
+      "conditionalMeanMs": 182,
+      "maxMs": 243,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "student_academic_profiles",
+      "operation": "find",
+      "slowCount": 2,
+      "conditionalMeanMs": 139,
+      "maxMs": 146,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "student_profiles",
+      "operation": "countDocuments",
+      "slowCount": 2,
+      "conditionalMeanMs": 137,
+      "maxMs": 142,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_attempts",
+      "operation": "save",
+      "slowCount": 2,
+      "conditionalMeanMs": 134,
+      "maxMs": 140,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "complaints",
+      "operation": "save",
+      "slowCount": 1,
+      "conditionalMeanMs": 1364,
+      "maxMs": 1364,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quizzes",
+      "operation": "findOne",
+      "slowCount": 1,
+      "conditionalMeanMs": 359,
+      "maxMs": 359,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "notifications",
+      "operation": "findOneAndUpdate",
+      "slowCount": 1,
+      "conditionalMeanMs": 176,
+      "maxMs": 176,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quizzes",
+      "operation": "countDocuments",
+      "slowCount": 1,
+      "conditionalMeanMs": 161,
+      "maxMs": 161,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "passkey_credentials",
+      "operation": "find",
+      "slowCount": 1,
+      "conditionalMeanMs": 156,
+      "maxMs": 156,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "advising_cases",
+      "operation": "aggregate",
+      "slowCount": 1,
+      "conditionalMeanMs": 151,
+      "maxMs": 151,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "advising_cases",
+      "operation": "find",
+      "slowCount": 1,
+      "conditionalMeanMs": 136,
+      "maxMs": 136,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_attempts",
+      "operation": "findOne",
+      "slowCount": 1,
+      "conditionalMeanMs": 128,
+      "maxMs": 128,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_attempts",
+      "operation": "findOneAndUpdate",
+      "slowCount": 1,
+      "conditionalMeanMs": 112,
+      "maxMs": 112,
+      "coldStartCount": 0
+    },
+    {
+      "collection": "quiz_submissions",
+      "operation": "aggregate",
+      "slowCount": 1,
+      "conditionalMeanMs": 101,
+      "maxMs": 101,
+      "coldStartCount": 0
+    }
+  ],
+  "runtime": {
+    "student_portal_process_cpu_seconds_total": 2729.7655839999998,
+    "student_portal_process_start_time_seconds": 1793261972,
+    "student_portal_process_resident_memory_bytes": 249237504,
+    "student_portal_nodejs_eventloop_lag_seconds": 0.068606316,
+    "student_portal_nodejs_eventloop_lag_min_seconds": 0.000029696,
+    "student_portal_nodejs_eventloop_lag_max_seconds": 0.428867583,
+    "student_portal_nodejs_eventloop_lag_mean_seconds": 0.010891119691062625,
+    "student_portal_nodejs_eventloop_lag_stddev_seconds": 0.0045288546682868145,
+    "student_portal_nodejs_eventloop_lag_p50_seconds": 0.010346495,
+    "student_portal_nodejs_eventloop_lag_p90_seconds": 0.011214847,
+    "student_portal_nodejs_eventloop_lag_p99_seconds": 0.023298047,
+    "student_portal_nodejs_heap_size_total_bytes": 137928704,
+    "student_portal_nodejs_heap_size_used_bytes": 123033936,
+    "student_portal_nodejs_external_memory_bytes": 25758455,
+    "student_portal_mongodb_pool_checkout_seconds_sum": 149.40400000002708,
+    "student_portal_mongodb_pool_checkout_seconds_count": 115341,
+    "student_portal_mongodb_pool_checked_out": 0,
+    "student_portal_mongodb_pool_waiters": 0
+  },
+  "gcLifetime": {
+    "minor": {
+      "totalSeconds": 43.94526002258066,
+      "count": 15520
+    },
+    "incremental": {
+      "totalSeconds": 1.0295536977052686,
+      "count": 255
+    },
+    "major": {
+      "totalSeconds": 11.99877244436742,
+      "count": 306
+    }
+  },
+  "meanPoolCheckoutMs": 1.2953242992520186,
+  "limitations": [
+    "No repeated scrape interval for counter rates",
+    "No production query plans, CPU profiles, heap snapshots, or lock-wait evidence",
+    "Trace examples are selected slow samples, not representative traffic"
+  ]
+}

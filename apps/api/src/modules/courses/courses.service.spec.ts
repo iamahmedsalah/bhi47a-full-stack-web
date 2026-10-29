@@ -163,6 +163,7 @@ describe('CoursesService Unit Tests', () => {
   describe('getStudentSyllabi()', () => {
     it('returns student registered course syllabi and available level syllabi', async () => {
       mockStudentProfileModel.findOne.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
         lean: jest.fn().mockResolvedValue({
           level: '2',
           department: 'BIS',
@@ -173,6 +174,7 @@ describe('CoursesService Unit Tests', () => {
 
       mockCourseRegistrationModel.findOne.mockReturnValue({
         sort: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
           lean: jest.fn().mockResolvedValue({
             courses: ['CS101'],
             status: 'approved',
@@ -209,6 +211,13 @@ describe('CoursesService Unit Tests', () => {
         });
 
       const result = await service.getStudentSyllabi(studentUserId);
+
+      expect(
+        mockStudentProfileModel.findOne.mock.results[0].value.select,
+      ).toHaveBeenCalledWith('level department semester academicYear');
+      expect(
+        mockCourseRegistrationModel.findOne.mock.results[0].value.sort().select,
+      ).toHaveBeenCalledWith('courses');
 
       expect(result.studentLevel).toBe('2');
       expect(result.registeredCount).toBe(1);

@@ -21,9 +21,9 @@ describe('request-local JWT validation reuse', () => {
   beforeEach(() => {
     authenticate = jest
       .spyOn(AuthGuard('jwt').prototype, 'canActivate')
-      .mockImplementation(async (ctx) => {
+      .mockImplementation((ctx) => {
         ctx.switchToHttp().getRequest<{ user?: object }>().user = principal;
-        return true;
+        return Promise.resolve(true);
       });
   });
   afterEach(() => {

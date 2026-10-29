@@ -1,4 +1,6 @@
 export const CORS_BLOCKED_ERROR_PREFIX = 'CORS blocked';
+// Browser clients need these response headers for bounded backoff and tracing.
+export const CORS_EXPOSED_HEADERS = ['Retry-After', 'X-Correlation-Id'];
 
 function normalizeOriginPattern(pattern: string) {
   return pattern.trim().replace(/\/+$/, '');

@@ -53,3 +53,4 @@ build_import_files.mjs
 !/scripts/performance-http-benchmark.mjs
 !/scripts/performance-ui.browser.cjs
 !/scripts/performance-evidence.mjs
+!/scripts/performance-evidence.test.mjs
