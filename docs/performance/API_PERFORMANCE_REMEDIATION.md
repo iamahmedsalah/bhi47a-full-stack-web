@@ -134,7 +134,20 @@ CPU ratios include client/server, can exceed one because of native work, and cov
 
 ## Verification and reproduction
 
-Verification results and final build status are recorded below after the checks complete. E2E scope deliberately excludes older suites that delete fixtures, because this task prohibits database deletion.
+| Check | Result |
+|---|---|
+| Workspace lint | Passed; zero errors, 281 existing web warnings |
+| Workspace TypeScript | Passed; all four tasks |
+| API E2E TypeScript | Passed, including the new benchmark harness |
+| API unit suite | Passed; 65 suites / 507 tests |
+| Final guard/notification/CORS regression rerun | Passed; three suites / nine tests |
+| Frontend retry execution and CSV parsing | Passed; four tests |
+| Real JWT/MongoDB HTTP integration and concurrency | Passed; four tests, 2,880 measured requests, zero errors |
+| API production build and runtime artifact | Passed |
+| Web production build and root route manifests | Pending final build completion |
+| Production/staging load validation | **Not measured** |
+
+Logs and the raw local CPU profile are under `outputs/api-performance-review/`. The web build uses Next's supported `--webpack` option. E2E scope deliberately excludes older suites that delete fixtures, because this task prohibits database deletion. No existing destructive cleanup test was executed.
 
 ```powershell
 # Read-only extraction; source files stay outside the repository.
@@ -147,6 +160,8 @@ node test/run-e2e.cjs --runTestsByPath test/performance-remediation.e2e-spec.ts
 ```
 
 The fixture creates unique collection names, inserts synthetic records, exercises account/session updates and closes connections. It does not delete rows, drop collections or remove indexes during teardown. Stop the test containers with `docker compose -p student-portal-e2e -f docker-compose.test.yml stop` to retain their data; do not use a cleanup/drop script. Repeated runs retain separate fixtures intentionally.
+
+After testing, that non-destructive stop command could not connect to the Docker Desktop engine, including outside the sandbox. The engine was unavailable at cleanup time; container state could not be verified. No container removal or database cleanup was attempted.
 
 ## Deployment, rollback and remaining monitoring
 

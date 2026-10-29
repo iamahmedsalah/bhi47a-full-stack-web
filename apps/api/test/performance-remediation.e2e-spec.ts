@@ -33,6 +33,7 @@ import {
   AuthSessionSchema,
   sessionDigest,
   type SessionClaims,
+  type AuthSessionRecord,
 } from '../src/modules/auth/services/auth-session-store.service';
 import { UsersService } from '../src/modules/users/users.service';
 import { UserSchema } from '../src/modules/users/schemas/user.schema';
@@ -171,7 +172,7 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
     const attempts = model('attempts', QuizAttemptSchema);
     const notifications = model('notifications', NotificationSchema);
     complaints = model('complaints', ComplaintSchema);
-    const sessionModel = connection.model(
+    const sessionModel = connection.model<AuthSessionRecord>(
       'sessions',
       AuthSessionSchema.clone(),
       prefix + '_sessions',
@@ -467,7 +468,15 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
     await get('quizzes', 11).expect(200);
   });
   it('records actual query plans and projection sizes without adding indexes', async () => {
-    function summary(plan: mongoose.mongo.Document) {
+    function summary(value: unknown) {
+      const plan = value as {
+        queryPlanner: { winningPlan: unknown };
+        executionStats: {
+          totalDocsExamined: number;
+          totalKeysExamined: number;
+          nReturned: number;
+        };
+      };
       const stages = new Set<string>();
       const indexes = new Set<string>();
       const walk = (value: unknown) => {
@@ -491,7 +500,11 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
     const plans = {
       session: summary(
         await connection
-          .db!.collection(prefix + '_sessions')
+          .db!.collection<{
+            _id: string;
+            expiresAt: Date;
+            revokedAt?: Date | null;
+          }>(prefix + '_sessions')
           .find({
             _id: sessionDigest(claims[0].sid!),
             revokedAt: null,

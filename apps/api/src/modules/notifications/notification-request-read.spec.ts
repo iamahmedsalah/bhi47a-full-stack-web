@@ -59,7 +59,9 @@ describe('notification identity reads', () => {
     await runWithRequestQueryMetrics('fixture', async () => {
       await filter(first);
       expect(
-        getRequestQueryContext()!.request.reads.has('auth-user:' + first.toHexString()),
+        getRequestQueryContext()!.request.reads.has(
+          'auth-user:' + first.toHexString(),
+        ),
       ).toBe(false);
     });
     expect(users.findById.mock.results[0].value.select).toHaveBeenCalledWith(
