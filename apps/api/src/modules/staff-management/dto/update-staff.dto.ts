@@ -21,6 +21,12 @@ export class UpdateStaffDto {
   @Length(2, 160)
   name?: string;
 
+  @ApiPropertyOptional({ example: 'أحمد حسن' })
+  @IsOptional()
+  @IsString()
+  @Length(2, 160)
+  nameAr?: string;
+
   @ApiPropertyOptional({ example: 'staff@institute.edu' })
   @IsOptional()
   @IsEmail()

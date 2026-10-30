@@ -4,6 +4,7 @@ export interface StaffMember {
   _id: string;
   userCode?: string;
   name: string;
+  nameAr?: string;
   username?: string;
   email?: string;
   phone?: string;
@@ -37,6 +38,7 @@ export interface StaffListParams {
 
 export interface StaffProfileInput {
   name: string;
+  nameAr?: string;
   email: string;
   username?: string;
   phone?: string;
@@ -50,6 +52,10 @@ export interface CreateStaffInput extends StaffProfileInput {
 }
 
 export interface StaffAssignedCourse {
+  doctorId?: string;
+  doctorIds?: string[];
+  teachingAssistantIds?: string[];
+  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string }>;
   curricula?: CourseCurriculum[];
   _id: string;
   name: string;

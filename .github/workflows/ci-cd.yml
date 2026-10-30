@@ -84,6 +84,9 @@ jobs:
       - name: Verify Google sign-in nonce refresh and cooldown
         run: node --test apps/web/tests/google-signin-rate-limit.test.mjs
 
+      - name: Verify quiz release deadlines and states
+        run: pnpm --filter @student-portal/web test:quiz-release
+
       - name: Verify isolated E2E database policy
         run: node --test scripts/e2e-runner-safety.test.cjs
 
@@ -134,6 +137,9 @@ jobs:
 
       - name: Test timetable views and PNG downloads in Chromium
         run: pnpm --filter @student-portal/web test:timetable:browser
+
+      - name: Test automatic quiz release in Chromium
+        run: pnpm --filter @student-portal/web test:quiz-release:browser
 
       - name: Test responsive security and settings in Chromium
         run: pnpm --filter @student-portal/web test:security

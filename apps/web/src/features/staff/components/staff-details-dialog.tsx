@@ -85,7 +85,8 @@ export function StaffDetailsDialog({
     }
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
+    if (!name) return 'ST';
     return name
       .trim()
       .split(/\s+/)
@@ -104,6 +105,10 @@ export function StaffDetailsDialog({
         return 'border-teal-500/30 bg-teal-500/10 text-teal-600 dark:text-teal-400';
       case 'teaching_assistant':
         return 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400';
+      case 'assistant_lecturer':
+        return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
+      case 'accountant':
+        return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
       default:
         return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400';
     }
@@ -119,11 +124,21 @@ export function StaffDetailsDialog({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 font-bold text-teal-600 dark:text-teal-400 text-lg border border-teal-500/30 shadow-inner">
-                {getInitials(staff.name)}
+                {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
               </div>
               <div className="space-y-1 text-start">
                 <DialogTitle className="flex flex-wrap items-center gap-2 text-xl font-bold text-foreground">
-                  <span>{staff.name}</span>
+                  <span>{isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr}</span>
+                  {isAr && staff.nameAr && staff.name !== staff.nameAr && (
+                    <span className="text-xs font-normal text-muted-foreground/80 font-sans" dir="ltr">
+                      ({staff.name})
+                    </span>
+                  )}
+                  {!isAr && staff.nameAr && (
+                    <span className="text-xs font-normal text-muted-foreground/80 font-sans" dir="rtl">
+                      ({staff.nameAr})
+                    </span>
+                  )}
                   <span
                     className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getRoleBadgeClasses(
                       staff.staffType,
@@ -372,7 +387,28 @@ export function StaffDetailsDialog({
                               </span>
                             )}
                           </div>
-                          <p className="font-semibold text-xs text-foreground line-clamp-1" title={courseName}>
+                          {(() => {
+                        const staffIdStr = String(staff._id);
+                        const isDoctor =
+                          String(course.doctorId) === staffIdStr ||
+                          course.doctorIds?.some((id) => String(id) === staffIdStr) ||
+                          (course as any).doctors?.some((d: any) => String(d._id) === staffIdStr);
+                        const isTA =
+                          course.teachingAssistantIds?.some((id) => String(id) === staffIdStr) ||
+                          course.teachingAssistants?.some((ta) => String(ta._id) === staffIdStr) ||
+                          String((course as any).teachingAssistantId) === staffIdStr;
+                        const roleBadge = isDoctor
+                          ? (isAr ? 'أستاذ مقرر' : 'Instructor')
+                          : isTA
+                            ? (staff.staffType === 'assistant_lecturer' ? (isAr ? 'مدرس مساعد' : 'Assistant Lecturer') : (isAr ? 'معيد' : 'TA'))
+                            : null;
+                        return roleBadge ? (
+                          <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                            {roleBadge}
+                          </span>
+                        ) : null;
+                      })()}
+                      <p className="font-semibold text-xs text-foreground line-clamp-1" title={courseName}>
                             {courseName}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">

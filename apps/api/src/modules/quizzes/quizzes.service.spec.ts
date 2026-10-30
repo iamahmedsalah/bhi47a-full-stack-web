@@ -471,6 +471,41 @@ describe('QuizzesService Unit Tests', () => {
   });
 
   describe('getQuizReview', () => {
+    it('opens scheduled marks and review exactly at closing using current server time', async () => {
+      const closing = Date.now();
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(closing - 1);
+      mockQuizModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(quizId),
+        isPublished: true,
+        title: 'Scheduled',
+        endsAt: new Date(closing),
+        resultsReleaseMode: 'after_close',
+        reviewReleaseMode: 'after_close',
+        publishResults: false,
+        allowReview: false,
+        questions: [],
+      });
+      mockSubmissionModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ score: 4, answers: [] }),
+      });
+      try {
+        await expect(
+          service.getQuizReview(quizId, studentUserId),
+        ).rejects.toThrow(ForbiddenException);
+        clock.mockReturnValue(closing);
+        expect(
+          (await service.getQuizReview(quizId, studentUserId)).submission.score,
+        ).toBe(4);
+        mockSubmissionModel.findOne.mockReturnValue({
+          lean: jest.fn().mockResolvedValue(null),
+        });
+        await expect(
+          service.getQuizReview(quizId, studentUserId),
+        ).rejects.toThrow(ForbiddenException);
+      } finally {
+        clock.mockRestore();
+      }
+    });
     it('throws ForbiddenException if quiz allowReview is false', async () => {
       mockQuizModel.findById.mockResolvedValue({
         _id: new Types.ObjectId(quizId),
@@ -520,6 +555,7 @@ describe('QuizzesService Unit Tests', () => {
         allowReview: true,
         publishResults: true,
         endsAt: pastDate,
+        isPublished: true,
         totalMarks: 5,
         passingMarks: 3,
         questions: [
@@ -565,6 +601,147 @@ describe('QuizzesService Unit Tests', () => {
       expect(res.questions[0].isCorrect).toBe(true);
       expect(res.questions[0].explanation).toBe('Math basic');
     });
+  });
+
+  describe('automatic release validation and student response masking', () => {
+    it.each(['resultsReleaseMode', 'reviewReleaseMode'] as const)(
+      'requires a closing time when creating or updating %s',
+      async (field) => {
+        mockCourseModel.findById.mockResolvedValue({
+          _id: new Types.ObjectId(courseId),
+          code: 'CS101',
+          name: 'Course',
+        });
+        mockQuizModel.mockImplementation(function (
+          this: Record<string, unknown>,
+          data: Record<string, unknown>,
+        ) {
+          Object.assign(this, data);
+        });
+        await expect(
+          service.create(adminUser, {
+            courseId,
+            title: 'Scheduled',
+            durationMinutes: 15,
+            questions: [],
+            [field]: 'after_close',
+          }),
+        ).rejects.toThrow(BadRequestException);
+        mockQuizModel.findById.mockResolvedValue({
+          _id: new Types.ObjectId(quizId),
+          durationMinutes: 15,
+        });
+        await expect(
+          service.update(quizId, adminUser, { [field]: 'after_close' }),
+        ).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it('creates new quizzes with manual hidden marks and disabled review', async () => {
+      mockCourseModel.findById.mockResolvedValue({
+        _id: new Types.ObjectId(courseId),
+        code: 'CS101',
+        name: 'Course',
+      });
+      mockQuizModel.mockImplementation(function (
+        this: Record<string, unknown>,
+        data: Record<string, unknown>,
+      ) {
+        Object.assign(this, data);
+        this.save = jest.fn().mockResolvedValue(data);
+      });
+      await expect(
+        service.create(adminUser, {
+          courseId,
+          title: 'Manual',
+          durationMinutes: 15,
+          questions: [],
+        }),
+      ).resolves.toMatchObject({
+        publishResults: false,
+        allowReview: false,
+        resultsReleaseMode: 'manual',
+        reviewReleaseMode: 'manual',
+      });
+    });
+
+    it.each(['submit', 'exit'] as const)(
+      '%s filters hidden scores and early correctness details through the same policy',
+      async (operation) => {
+        const closing = Date.now() + 60000;
+        const quiz = {
+          _id: new Types.ObjectId(quizId),
+          courseId: new Types.ObjectId(courseId),
+          isPublished: true,
+          allowResume: false,
+          publishResults: false,
+          allowReview: false,
+          resultsReleaseMode: 'after_close',
+          reviewReleaseMode: 'after_close',
+          endsAt: new Date(closing),
+          totalMarks: 2,
+          questions: [{ id: 'q1', correctOptionIndex: 0, points: 2 }],
+        };
+        mockQuizModel.findById.mockResolvedValue(quiz);
+        mockSubmissionModel.findOne.mockResolvedValue(null);
+        mockSubmissionModel.mockImplementation(function (
+          this: Record<string, unknown>,
+          data: Record<string, unknown>,
+        ) {
+          Object.assign(this, data);
+          this.save = jest.fn().mockResolvedValue(data);
+        });
+        mockAttemptModel.findOne.mockImplementation(() =>
+          Promise.resolve({
+            _id: new Types.ObjectId(),
+            status: 'in_progress',
+            exitCount: 1,
+            draftAnswers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+            save: jest.fn().mockResolvedValue(undefined),
+          }),
+        );
+        const response = async () => {
+          if (operation === 'submit')
+            return service.submitQuiz(quizId, studentUserId, {
+              answers: [{ questionId: 'q1', selectedOptionIndex: 0 }],
+            });
+          const result = await service.recordExit(quizId, studentUserId, {
+            reason: 'force_terminate',
+          });
+          if (!('submission' in result))
+            throw new Error('Expected a forced submission');
+          return result.submission;
+        };
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(closing - 1);
+        try {
+          expect(await response()).toMatchObject({
+            publishResults: false,
+            canReview: false,
+            score: undefined,
+            answers: undefined,
+          });
+          quiz.resultsReleaseMode = 'manual';
+          quiz.publishResults = true;
+          quiz.allowReview = true;
+          expect(await response()).toMatchObject({
+            publishResults: true,
+            score: 2,
+            canReview: false,
+            answers: undefined,
+          });
+          quiz.resultsReleaseMode = 'after_close';
+          clock.mockReturnValue(closing);
+          expect(await response()).toMatchObject({
+            publishResults: true,
+            score: 2,
+            canReview: true,
+            answers: [{ questionId: 'q1', isCorrect: true }],
+          });
+        } finally {
+          clock.mockRestore();
+        }
+      },
+    );
   });
 
   describe('startQuizAttempt & saveDraft - Flexible Resume Mode', () => {

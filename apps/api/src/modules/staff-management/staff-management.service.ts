@@ -29,12 +29,13 @@ import {
 } from '@student-portal/shared';
 
 const STAFF_PUBLIC_PROJECTION =
-  '_id userCode name username email phone role staffType permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
+  '_id userCode name nameAr username email phone role staffType permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
 
 export interface StaffItem {
   _id: string;
   userCode?: string;
   name: string;
+  nameAr?: string;
   username?: string;
   email?: string;
   phone?: string;
@@ -53,6 +54,7 @@ interface StaffRecord {
   _id: Types.ObjectId;
   userCode?: string;
   name: string;
+  nameAr?: string;
   username?: string;
   email?: string;
   phone?: string;
@@ -162,8 +164,7 @@ export class StaffManagementService {
         );
       }
       if (
-        dto.staffType !== 'doctor' &&
-        dto.staffType !== 'teaching_assistant'
+        dto.staffType !== 'doctor' && dto.staffType !== 'teaching_assistant' && dto.staffType !== 'assistant_lecturer'
       ) {
         throw new ForbiddenException(
           'Administrative staff may only create Doctor and Teaching Assistant accounts',
@@ -195,6 +196,7 @@ export class StaffManagementService {
         staffType,
         userCode,
         name: dto.name.trim(),
+        nameAr: dto.nameAr?.trim() || undefined,
         email,
         username,
         phone: dto.phone?.trim() || undefined,
@@ -235,8 +237,7 @@ export class StaffManagementService {
       }
       if (
         dto.staffType &&
-        dto.staffType !== 'doctor' &&
-        dto.staffType !== 'teaching_assistant'
+        dto.staffType !== 'doctor' && dto.staffType !== 'teaching_assistant' && dto.staffType !== 'assistant_lecturer'
       ) {
         throw new ForbiddenException(
           'Administrative staff may only manage Doctor and Teaching Assistant accounts',
@@ -251,6 +252,7 @@ export class StaffManagementService {
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const nextValues = {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+      ...(dto.nameAr !== undefined ? { nameAr: dto.nameAr.trim() || undefined } : {}),
       ...(email !== undefined ? { email } : {}),
       ...(username !== undefined ? { username } : {}),
       ...(dto.phone !== undefined
@@ -465,6 +467,7 @@ export class StaffManagementService {
       _id: record._id.toString(),
       userCode: record.userCode,
       name: record.name,
+      nameAr: record.nameAr,
       username: record.username,
       email: record.email,
       phone: record.phone,

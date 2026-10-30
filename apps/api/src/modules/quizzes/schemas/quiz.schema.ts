@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import {
+  QUIZ_RELEASE_MODES,
+  type QuizReleaseMode,
+} from '@student-portal/shared';
 
 export type QuizDocument = Quiz & Document;
 
@@ -95,6 +99,12 @@ export class Quiz {
 
   @Prop({ default: false })
   publishResults!: boolean;
+
+  @Prop({ type: String, enum: QUIZ_RELEASE_MODES, default: 'after_close' })
+  resultsReleaseMode?: QuizReleaseMode;
+
+  @Prop({ type: String, enum: QUIZ_RELEASE_MODES, default: 'manual' })
+  reviewReleaseMode?: QuizReleaseMode;
 
   @Prop({ type: Array, default: [] })
   questions!: QuizQuestion[];

@@ -87,6 +87,71 @@ export interface StudentSyllabiResponse {
   >;
 }
 
+function buildStaffMatchConditions(idStr: string) {
+  const conds: any[] = [];
+  if (Types.ObjectId.isValid(idStr)) {
+    const objId = new Types.ObjectId(idStr);
+    conds.push(
+      { doctorId: objId },
+      { doctorIds: objId },
+      { 'doctors._id': objId },
+      { teachingAssistantIds: objId },
+      { 'teachingAssistants._id': objId },
+      { teachingAssistantId: objId },
+      { teachingAssistant: objId }
+    );
+  }
+  conds.push(
+    { doctorId: idStr },
+    { doctorIds: idStr },
+    { 'doctors._id': idStr },
+    { teachingAssistantIds: idStr },
+    { 'teachingAssistants._id': idStr },
+    { teachingAssistantId: idStr },
+    { teachingAssistant: idStr }
+  );
+  return conds;
+}
+
+
+function buildTaMatchConditions(idStr: string) {
+  const conds: any[] = [];
+  if (Types.ObjectId.isValid(idStr)) {
+    const objId = new Types.ObjectId(idStr);
+    conds.push(
+      { teachingAssistantIds: objId },
+      { 'teachingAssistants._id': objId },
+      { teachingAssistantId: objId },
+      { teachingAssistant: objId }
+    );
+  }
+  conds.push(
+    { teachingAssistantIds: idStr },
+    { 'teachingAssistants._id': idStr },
+    { teachingAssistantId: idStr },
+    { teachingAssistant: idStr }
+  );
+  return conds;
+}
+
+function buildDoctorMatchConditions(idStr: string) {
+  const conds: any[] = [];
+  if (Types.ObjectId.isValid(idStr)) {
+    const objId = new Types.ObjectId(idStr);
+    conds.push(
+      { doctorId: objId },
+      { doctorIds: objId },
+      { 'doctors._id': objId }
+    );
+  }
+  conds.push(
+    { doctorId: idStr },
+    { doctorIds: idStr },
+    { 'doctors._id': idStr }
+  );
+  return conds;
+}
+
 @Injectable()
 export class CoursesService {
   constructor(
@@ -214,30 +279,31 @@ export class CoursesService {
     const andConditions: any[] = [];
 
     if (caller?.role === 'staff' && caller?._id) {
-      if (Types.ObjectId.isValid(caller._id)) {
-        const callerObjId = new Types.ObjectId(caller._id);
-        if (caller?.staffType === 'doctor') {
-          andConditions.push({
-            $or: [{ doctorId: callerObjId }, { doctorIds: callerObjId }],
-          });
-        } else if (caller?.staffType === 'teaching_assistant') {
-          filter.teachingAssistantIds = callerObjId;
-        }
+      const callerIdStr = String(caller._id);
+      if (caller?.staffType === 'doctor') {
+        andConditions.push({ $or: buildDoctorMatchConditions(callerIdStr) });
+      } else if (
+        caller?.staffType === 'teaching_assistant' ||
+        caller?.staffType === 'assistant_lecturer'
+      ) {
+        andConditions.push({ $or: buildTaMatchConditions(callerIdStr) });
+      } else {
+        andConditions.push({ $or: buildStaffMatchConditions(callerIdStr) });
       }
     } else {
-      if (query.doctorId && Types.ObjectId.isValid(query.doctorId)) {
-        const docObjId = new Types.ObjectId(query.doctorId);
+      if (query.staffId) {
         andConditions.push({
-          $or: [{ doctorId: docObjId }, { doctorIds: docObjId }],
+          $or: buildStaffMatchConditions(String(query.staffId)),
         });
-      }
-      if (
-        query.teachingAssistantId &&
-        Types.ObjectId.isValid(query.teachingAssistantId)
-      ) {
-        filter.teachingAssistantIds = new Types.ObjectId(
-          query.teachingAssistantId,
-        );
+      } else if (query.teachingAssistantId) {
+        andConditions.push({
+          $or: buildTaMatchConditions(String(query.teachingAssistantId)),
+        });
+      } else if (query.doctorId) {
+        // Also support doctorId matching TA if staff was passed as doctorId
+        andConditions.push({
+          $or: buildStaffMatchConditions(String(query.doctorId)),
+        });
       }
     }
 
@@ -264,8 +330,9 @@ export class CoursesService {
       filter.isActive = query.isActive;
     }
 
-    const cacheKey = !query.search
-      ? `courses:list:${caller?._id || 'all'}:${query.doctorId || 'all'}:${query.teachingAssistantId || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
+    const isSpecificStaffQuery = Boolean(query.staffId || query.doctorId || query.teachingAssistantId);
+    const cacheKey = !query.search && !isSpecificStaffQuery
+      ? `courses:list:${caller?._id || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
       : null;
 
     if (cacheKey && this.cacheService) {

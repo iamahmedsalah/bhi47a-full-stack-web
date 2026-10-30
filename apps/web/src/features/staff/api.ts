@@ -57,10 +57,16 @@ export async function deleteStaff(id: string): Promise<{ success: boolean; messa
   return response.data;
 }
 
-export async function getStaffCourses(doctorId: string): Promise<StaffAssignedCourse[]> {
+export async function getStaffCourses(staffId: string): Promise<StaffAssignedCourse[]> {
   try {
     const response = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', {
-      params: { doctorId, limit: 100 },
+      params: {
+        staffId,
+        doctorId: staffId,
+        teachingAssistantId: staffId,
+        limit: 100,
+        _t: Date.now(),
+      },
     });
     return response.data?.items ?? [];
   } catch {

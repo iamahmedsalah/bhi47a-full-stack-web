@@ -68,6 +68,7 @@ export function StaffFormDialog({
     resolver: zodResolver(staffFormSchema),
     defaultValues: {
       name: '',
+      nameAr: '',
       email: '',
       username: '',
       phone: '',
@@ -84,6 +85,7 @@ export function StaffFormDialog({
     if (!open) return;
     form.reset({
       name: staff?.name ?? '',
+      nameAr: staff?.nameAr ?? '',
       email: staff?.email ?? '',
       username: staff?.username ?? '',
       phone: staff?.phone ?? '',
@@ -134,6 +136,29 @@ export function StaffFormDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* Arabic Name */}
+              <FormField
+                control={form.control}
+                name="nameAr"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
+                      <User className="h-3.5 w-3.5 text-primary" />
+                      {t('fields.nameAr')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('placeholders.nameAr')}
+                        className="rounded-squircle border-white/15 bg-background/60 text-sm"
+                        dir="rtl"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               {/* Full Name */}
               <FormField
                 control={form.control}

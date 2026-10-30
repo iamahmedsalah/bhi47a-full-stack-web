@@ -423,6 +423,11 @@ export class QueryCourseDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  staffId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   doctorId?: string;
 
   @ApiPropertyOptional()

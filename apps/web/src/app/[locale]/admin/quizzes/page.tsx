@@ -1,6 +1,14 @@
 'use client';
 
 import React, { useState, useMemo, Suspense } from 'react';
+import { useTranslations } from 'next-intl';
+import type { QuizReleaseMode } from '@student-portal/shared';
+import { Checkbox } from '@/components/ui/checkbox';
+import { toCairoDateTimeLocal as toDateTimeLocal, cairoDateTimeToIso } from '@/lib/cairo-time';
+import { replaceImportedQuestions } from '@/features/quizzes/import-utils';
+import { QuizReleaseControls } from '@/features/quizzes/components/quiz-release-controls';
+import { releaseStatus } from '@/features/quizzes/release-utils';
+import { useQuizReleaseRefresh } from '@/features/quizzes/use-quiz-release-refresh';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
@@ -107,17 +115,13 @@ interface QuizFormDialogProps {
   onSuccess: (savedQuiz?: QuizItem) => void;
 }
 
-function toDateTimeLocal(isoString?: string): string {
-  if (!isoString) return '';
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+
+function getInitialQuizWindow() {
+  const now = Date.now();
+  return {
+    startsAt: toDateTimeLocal(new Date(now + 15 * 60 * 1000).toISOString()),
+    endsAt: toDateTimeLocal(new Date(now + 24 * 60 * 60 * 1000).toISOString()),
+  };
 }
 
 function QuizFormDialog({
@@ -145,11 +149,13 @@ function QuizFormDialog({
   const [title, setTitle] = useState(initialValues.title || '');
   const [description, setDescription] = useState(initialValues.description || '');
   const [durationMinutes, setDurationMinutes] = useState(initialValues.durationMinutes || 15);
-  const [startsAt, setStartsAt] = useState(toDateTimeLocal(initialValues.startsAt));
-  const [endsAt, setEndsAt] = useState(toDateTimeLocal(initialValues.endsAt));
+  const [startsAt, setStartsAt] = useState(() => toDateTimeLocal(initialValues.startsAt) || (mode === 'add' ? getInitialQuizWindow().startsAt : ''));
+  const [endsAt, setEndsAt] = useState(() => toDateTimeLocal(initialValues.endsAt) || (mode === 'add' ? getInitialQuizWindow().endsAt : ''));
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
   const [publishResults, setPublishResults] = useState(initialValues.publishResults ?? false);
-  const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? true);
+  const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? (mode === 'edit'));
+  const [resultsReleaseMode, setResultsReleaseMode] = useState<QuizReleaseMode>(initialValues.resultsReleaseMode ?? 'after_close');
+  const [reviewReleaseMode, setReviewReleaseMode] = useState<QuizReleaseMode>(initialValues.reviewReleaseMode ?? 'manual');
   const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
   const [uploadingExcel, setUploadingExcel] = useState(false);
   const [excelErrors, setExcelErrors] = useState<string[]>([]);
@@ -173,6 +179,11 @@ function QuizFormDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [nowTime] = useState(() => Date.now());
+  const startsAtIso = useMemo(() => startsAt === toDateTimeLocal(initialValues.startsAt)
+    ? initialValues.startsAt : cairoDateTimeToIso(startsAt), [startsAt, initialValues.startsAt]);
+  const endsAtIso = useMemo(() => endsAt === toDateTimeLocal(initialValues.endsAt)
+    ? initialValues.endsAt : cairoDateTimeToIso(endsAt), [endsAt, initialValues.endsAt]);
+
 
   // Reset or initialize on open and sync whenever initialValues updates
   React.useEffect(() => {
@@ -182,11 +193,13 @@ function QuizFormDialog({
     setTitle(initialValues.title || '');
     setDescription(initialValues.description || '');
     setDurationMinutes(initialValues.durationMinutes || 15);
-    setStartsAt(toDateTimeLocal(initialValues.startsAt));
-    setEndsAt(toDateTimeLocal(initialValues.endsAt));
+    setStartsAt(toDateTimeLocal(initialValues.startsAt) || (mode === 'add' ? getInitialQuizWindow().startsAt : ''));
+    setEndsAt(toDateTimeLocal(initialValues.endsAt) || (mode === 'add' ? getInitialQuizWindow().endsAt : ''));
     setIsPublished(initialValues.isPublished ?? true);
     setPublishResults(initialValues.publishResults ?? false);
-    setAllowReview(initialValues.allowReview ?? true);
+    setAllowReview(initialValues.allowReview ?? (mode === 'edit'));
+    setResultsReleaseMode(initialValues.resultsReleaseMode ?? 'after_close');
+    setReviewReleaseMode(initialValues.reviewReleaseMode ?? 'manual');
     setAllowResume(initialValues.allowResume ?? true);
     setUploadingExcel(false);
     setExcelErrors([]);
@@ -224,7 +237,7 @@ function QuizFormDialog({
         },
       ]);
     }
-  }, [open, initialValues, isAr]);
+  }, [open, initialValues, isAr, mode]);
 
   // Check if saved draft exists when opening in 'add' mode
   React.useEffect(() => {
@@ -276,8 +289,11 @@ function QuizFormDialog({
           durationMinutes,
           startsAt,
           endsAt,
+          timeZone: 'Africa/Cairo',
           isPublished,
           publishResults,
+          resultsReleaseMode,
+          reviewReleaseMode,
           allowReview,
           allowResume,
           questions,
@@ -309,6 +325,8 @@ function QuizFormDialog({
     endsAt,
     isPublished,
     publishResults,
+    resultsReleaseMode,
+    reviewReleaseMode,
     allowReview,
     allowResume,
     questions,
@@ -329,6 +347,8 @@ function QuizFormDialog({
       if (parsed.endsAt) setEndsAt(parsed.endsAt);
       if (typeof parsed.isPublished === 'boolean') setIsPublished(parsed.isPublished);
       if (typeof parsed.publishResults === 'boolean') setPublishResults(parsed.publishResults);
+      if (parsed.resultsReleaseMode === 'manual' || parsed.resultsReleaseMode === 'after_close') setResultsReleaseMode(parsed.resultsReleaseMode);
+      if (parsed.reviewReleaseMode === 'manual' || parsed.reviewReleaseMode === 'after_close') setReviewReleaseMode(parsed.reviewReleaseMode);
       if (typeof parsed.allowReview === 'boolean') setAllowReview(parsed.allowReview);
       if (typeof parsed.allowResume === 'boolean') setAllowResume(parsed.allowResume);
       if (Array.isArray(parsed.questions) && parsed.questions.length > 0) {
@@ -377,25 +397,20 @@ function QuizFormDialog({
     setExcelErrors([]);
     try {
       const res = await parseQuestionsExcel(file);
-      if (res.questions.length > 0) {
-        setQuestions((prev) => {
-          if (prev.length === 1 && !prev[0].text.trim()) {
-            return res.questions;
-          }
-          return [...prev, ...res.questions];
-        });
+      if (res.questions.length > 0 && !res.errors?.length) {
+        setQuestions((prev) => replaceImportedQuestions(prev, res.questions));
         toast.success(
           isAr
-            ? `تم استيراد ${res.questions.length} سؤال بنجاح من الملف`
-            : `Imported ${res.questions.length} questions successfully`,
+            ? `تم تحديث مجموعة الأسئلة: ${res.questions.length} سؤال. احفظ الاختبار لتطبيق التغييرات.`
+            : `Replaced question set with ${res.questions.length} questions. Save the quiz to apply changes.`,
         );
       }
       if (res.errors && res.errors.length > 0) {
         setExcelErrors(res.errors);
         toast.warning(
           isAr
-            ? `يوجد ${res.errors.length} أخطاء في تنسيق بعض الصفوف`
-            : `${res.errors.length} rows had formatting errors`,
+            ? `يوجد ${res.errors.length} أخطاء في الصفوف. لم يتم تغيير الأسئلة الحالية`
+            : `${res.errors.length} rows had errors. Existing questions were kept unchanged`,
         );
       }
     } catch (err) {
@@ -462,6 +477,7 @@ function QuizFormDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (uploadingExcel) return;
 
     if (!courseId) {
       setError(isAr ? 'برجاء اختيار المقرر الدراسي' : 'Please select a course');
@@ -506,10 +522,12 @@ function QuizFormDialog({
         title,
         description,
         durationMinutes: Number(durationMinutes),
-        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
-        endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
         isPublished,
         publishResults,
+        resultsReleaseMode,
+        reviewReleaseMode,
         allowReview,
         allowResume,
         questions,
@@ -541,17 +559,20 @@ function QuizFormDialog({
   };
 
   const scheduleValidationError = useMemo(() => {
+    if (!endsAt && (resultsReleaseMode === 'after_close' || reviewReleaseMode === 'after_close')) {
+      return isAr ? 'الإتاحة التلقائية تتطلب تحديد موعد إغلاق الاختبار' : 'Automatic release requires a quiz closing time';
+    }
     const isNew = mode === 'add';
 
     // 1. Check startsAt
     if (startsAt) {
-      const s = new Date(startsAt);
+      const s = new Date(startsAtIso || NaN);
       if (isNaN(s.getTime())) {
         return isAr
-          ? 'صيغة موعد فتح الاختبار غير صالحة'
-          : 'Invalid quiz open time format';
+          ? 'موعد القاهرة غير صالح أو مكرر بسبب التوقيت الصيفي. اختر وقتاً آخر.'
+          : 'Invalid or ambiguous Cairo time (daylight-saving change). Choose another time.';
       }
-      const startsChanged = isNew || startsAt !== initialValues.startsAt;
+      const startsChanged = isNew || startsAt !== toDateTimeLocal(initialValues.startsAt);
       if (startsChanged && s.getTime() < nowTime - 5 * 60 * 1000) {
         return isAr
           ? 'لا يمكن تحديد موعد فتح الاختبار في وقت سابق لتاريخ ولحظة الآن'
@@ -561,13 +582,13 @@ function QuizFormDialog({
 
     // 2. Check endsAt
     if (endsAt) {
-      const e = new Date(endsAt);
+      const e = new Date(endsAtIso || NaN);
       if (isNaN(e.getTime())) {
         return isAr
-          ? 'صيغة موعد إغلاق الاختبار غير صالحة'
-          : 'Invalid quiz close time format';
+          ? 'موعد القاهرة غير صالح أو مكرر بسبب التوقيت الصيفي. اختر وقتاً آخر.'
+          : 'Invalid or ambiguous Cairo time (daylight-saving change). Choose another time.';
       }
-      const endsChanged = isNew || endsAt !== initialValues.endsAt;
+      const endsChanged = isNew || endsAt !== toDateTimeLocal(initialValues.endsAt);
       if (endsChanged && e.getTime() < nowTime) {
         return isAr
           ? 'لا يمكن تحديد موعد إغلاق الاختبار في وقت سابق لتاريخ ولحظة الآن'
@@ -577,8 +598,8 @@ function QuizFormDialog({
 
     // 3. Both startsAt and endsAt provided
     if (startsAt && endsAt) {
-      const s = new Date(startsAt);
-      const e = new Date(endsAt);
+      const s = new Date(startsAtIso || NaN);
+      const e = new Date(endsAtIso || NaN);
       if (e <= s) {
         return isAr
           ? 'موعد إغلاق الاختبار يجب أن يكون بعد موعد فتحه'
@@ -593,8 +614,8 @@ function QuizFormDialog({
     }
 
     // 4. Only endsAt provided without startsAt
-    if (!startsAt && endsAt) {
-      const e = new Date(endsAt);
+    if (!startsAt && endsAt && (isNew || endsAt !== toDateTimeLocal(initialValues.endsAt) || Number(durationMinutes) !== initialValues.durationMinutes)) {
+      const e = new Date(endsAtIso || NaN);
       const remainingMin = (e.getTime() - nowTime) / (60 * 1000);
       if (remainingMin < Number(durationMinutes || 0)) {
         return isAr
@@ -604,12 +625,12 @@ function QuizFormDialog({
     }
 
     return null;
-  }, [startsAt, endsAt, durationMinutes, mode, initialValues.startsAt, initialValues.endsAt, isAr]);
+  }, [startsAt, endsAt, startsAtIso, endsAtIso, durationMinutes, mode, initialValues.startsAt, initialValues.endsAt, initialValues.durationMinutes, isAr, resultsReleaseMode, reviewReleaseMode, nowTime]);
 
   const scheduleWindowSummary = useMemo(() => {
     if (!startsAt || !endsAt || scheduleValidationError) return null;
-    const s = new Date(startsAt);
-    const e = new Date(endsAt);
+    const s = new Date(startsAtIso || NaN);
+    const e = new Date(endsAtIso || NaN);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= s) return null;
     const windowMin = Math.round((e.getTime() - s.getTime()) / (60 * 1000));
     const hours = Math.floor(windowMin / 60);
@@ -618,7 +639,7 @@ function QuizFormDialog({
       return isAr ? `${hours} ساعة و ${mins} دقيقة` : `${hours}h ${mins}m`;
     }
     return isAr ? `${mins} دقيقة` : `${mins} mins`;
-  }, [startsAt, endsAt, scheduleValidationError, isAr]);
+  }, [startsAt, endsAt, startsAtIso, endsAtIso, scheduleValidationError, isAr]);
 
   const totalPoints = useMemo(
     () => questions.reduce((acc, q) => acc + (Number(q.points) || 1), 0),
@@ -769,6 +790,7 @@ function QuizFormDialog({
           </div>
 
           {/* Schedule Window (Open and Close Times) with Radix DateTimePicker */}
+          <p className="text-xs text-muted-foreground">{isAr ? 'جميع مواعيد الاختبار بتوقيت القاهرة (Africa/Cairo)، مع مراعاة التوقيت الصيفي تلقائياً.' : 'All quiz times use Cairo (Africa/Cairo), including daylight-saving changes.'}</p>
           <div className="space-y-2.5 rounded-xl border border-border/70 bg-background/50 p-3.5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -788,6 +810,7 @@ function QuizFormDialog({
                   )}
                 </label>
                 <DateTimePicker
+                  timeZone="Africa/Cairo"
                   value={startsAt}
                   onChange={setStartsAt}
                   locale={locale}
@@ -817,10 +840,11 @@ function QuizFormDialog({
                   )}
                 </label>
                 <DateTimePicker
+                  timeZone="Africa/Cairo"
                   value={endsAt}
                   onChange={setEndsAt}
                   locale={locale}
-                  minDate={startsAt ? new Date(startsAt) : new Date()}
+                  minDate={startsAt ? new Date(startsAtIso || NaN) : new Date()}
                   isError={Boolean(scheduleValidationError)}
                   placeholder={isAr ? 'اختر تاريخ ووقت الإغلاق...' : 'Select close date & time...'}
                 />
@@ -848,42 +872,19 @@ function QuizFormDialog({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 rounded-xl border border-border/70 bg-background/50 p-3.5">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
-              <input
-                type="checkbox"
-                checked={isPublished}
-                onChange={(e) => setIsPublished(e.target.checked)}
-                className="h-4 w-4 rounded-full border-input-border text-primary focus:ring-primary"
-              />
-              <span>{isAr ? 'نشر الاختبار فوراً للطلاب' : 'Publish Quiz for Students'}</span>
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/70 p-3.5">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <Checkbox checked={isPublished} onCheckedChange={(value) => setIsPublished(value === true)} />
+              {isAr ? 'نشر الاختبار للطلاب' : 'Publish Quiz for Students'}
             </label>
-
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
-              <input
-                type="checkbox"
-                checked={allowReview}
-                onChange={(e) => setAllowReview(e.target.checked)}
-                className="h-4 w-4 rounded-full border-input-border text-primary focus:ring-primary"
-              />
-              <span>{isAr ? 'إتاحة مراجعة الإجابات بعد التسليم' : 'Allow Review after Submission'}</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
-              <input
-                type="checkbox"
-                checked={publishResults}
-                onChange={(e) => setPublishResults(e.target.checked)}
-                className="h-4 w-4 rounded-full border-input-border text-primary focus:ring-primary"
-              />
-              <span>{isAr ? 'إعلان وإظهار نتيجة الاختبار للطلاب' : 'Publish & Show Quiz Results to Students'}</span>
-            </label>
-
-            <div className="ms-auto flex items-center gap-2 text-xs font-bold text-primary">
-              <span>{isAr ? 'إجمالي الدرجات:' : 'Total Marks:'}</span>
-              <span className="font-mono text-sm">{totalPoints}</span>
-            </div>
+            <span className="text-xs font-bold text-primary">{isAr ? 'إجمالي الدرجات:' : 'Total marks:'} {totalPoints}</span>
           </div>
+          <QuizReleaseControls
+            resultsReleaseMode={resultsReleaseMode} reviewReleaseMode={reviewReleaseMode}
+            publishResults={publishResults} allowReview={allowReview} endsAt={endsAtIso}
+            onResultsMode={setResultsReleaseMode} onReviewMode={setReviewReleaseMode}
+            onPublishResults={setPublishResults} onAllowReview={setAllowReview}
+          />
 
           {/* Anti-Cheat Session Control Toggle */}
           <div className="rounded-xl border border-border/80 bg-secondary/20 p-4 space-y-2">
@@ -980,6 +981,7 @@ function QuizFormDialog({
                   )}
                   <span>{isAr ? 'رفع ملف الأسئلة' : 'Upload Questions File'}</span>
                 </Button>
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -989,6 +991,7 @@ function QuizFormDialog({
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">{isAr ? 'رفع ملف صالح يستبدل جميع الأسئلة الحالية ولا يضيف إليها. احفظ الاختبار لتطبيق التحديث. اقرأ ورقة Instructions: النوع MCQ وإجابته A/B/C/D (B = الخيار الثاني)، أو النوع TF وإجابته T للصح وF للخطأ.' : 'A valid upload replaces all current questions. Save the quiz to apply changes. Read the Instructions sheet: use type MCQ with answers A/B/C/D (B = second option), or type TF with T for true and F for false.'}</p>
             {excelErrors.length > 0 && (
               <div className="rounded-lg border border-danger/30 bg-danger/10 p-2.5 text-xs text-danger space-y-1 max-h-28 overflow-y-auto">
                 <p className="font-bold flex items-center gap-1">
@@ -1130,7 +1133,7 @@ function QuizFormDialog({
                               onChange={(e) =>
                                 handleOptionChange(qIndex, optIndex, e.target.value)
                               }
-                              placeholder={`${isAr ? 'خيار' : 'Option'} ${optIndex + 1}`}
+                              placeholder={`${isAr ? 'اختيار' : 'Option'} ${optIndex + 1}`}
                               className="h-7 border-none bg-transparent p-0 text-xs shadow-none focus-visible:ring-0"
                             />
                           </div>
@@ -1179,7 +1182,7 @@ function QuizFormDialog({
             </Button>
             <Button
               type="submit"
-              disabled={loading || Boolean(scheduleValidationError)}
+              disabled={loading || uploadingExcel || Boolean(scheduleValidationError)}
               className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle disabled:opacity-50 cursor-pointer"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -2168,6 +2171,7 @@ function SubmissionsModal({
 
 /* ─── Main Admin Quizzes Page ──────────────────────────── */
 function AdminQuizzesContent() {
+  const tRelease = useTranslations('quizRelease');
   const params = useParams();
   const searchParams = useSearchParams();
   const locale = (params.locale as string) || 'ar';
@@ -2237,6 +2241,8 @@ function AdminQuizzesContent() {
         courseId: courseFilter !== 'ALL' ? courseFilter : undefined,
       }),
   });
+
+  useQuizReleaseRefresh(quizzesQuery.data, quizzesQuery.refetch);
 
   // Fetch courses list for selectors
   const coursesQuery = useQuery({
@@ -2312,9 +2318,9 @@ function AdminQuizzesContent() {
 
   const handleTogglePublishResults = async (quiz: QuizItem) => {
     try {
-      await updateQuiz(quiz._id, { publishResults: !quiz.publishResults });
+      await updateQuiz(quiz._id, { resultsReleaseMode: 'manual', publishResults: !quiz.resultsAvailable });
       toast.success(
-        quiz.publishResults
+        quiz.resultsAvailable
           ? isAr
             ? 'تم حجب نتائج ودرجات الاختبار عن الطلاب'
             : 'Quiz results hidden from students'
@@ -2330,8 +2336,8 @@ function AdminQuizzesContent() {
 
   const handleToggleAllowReview = async (quiz: QuizItem) => {
     try {
-      const nextReview = quiz.allowReview === false ? true : false;
-      await updateQuiz(quiz._id, { allowReview: nextReview });
+      const nextReview = quiz.reviewReleaseMode === 'after_close' ? false : quiz.allowReview === false;
+      await updateQuiz(quiz._id, { reviewReleaseMode: 'manual', allowReview: nextReview });
       toast.success(
         nextReview
           ? isAr
@@ -2412,7 +2418,7 @@ function AdminQuizzesContent() {
                 <div className="flex items-center gap-1 text-muted-foreground">
                   <span className="text-[10px] font-bold text-primary">{isAr ? 'فتح:' : 'Open:'}</span>
                   <span>
-                    {new Date(quiz.startsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', {
+                    {new Date(quiz.startsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', { timeZone: 'Africa/Cairo',
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -2425,7 +2431,7 @@ function AdminQuizzesContent() {
                 <div className="flex items-center gap-1 text-muted-foreground">
                   <span className="text-[10px] font-bold text-rose-400">{isAr ? 'إغلاق:' : 'Close:'}</span>
                   <span>
-                    {new Date(quiz.endsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', {
+                    {new Date(quiz.endsAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', { timeZone: 'Africa/Cairo',
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -2480,72 +2486,11 @@ function AdminQuizzesContent() {
             <StatusBadge
               label={quiz.isPublished ? (isAr ? 'منشور' : 'Published') : (isAr ? 'مسودة' : 'Draft')}
               variant={quiz.isPublished ? 'success' : 'neutral'}
-              onClick={canWrite ? () => handleTogglePublish(quiz) : undefined}
             />
-            {canWrite ? (
-              <button
-                type="button"
-                onClick={() => handleTogglePublishResults(quiz)}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border transition-all cursor-pointer select-none ${
-                  quiz.publishResults
-                    ? 'bg-teal-500/15 text-teal-400 border-teal-500/30 hover:bg-teal-500/25'
-                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
-                }`}
-                title={
-                  isAr
-                    ? (quiz.publishResults ? 'انقر لحجب النتيجة عن الطلاب' : 'انقر لإعلان النتيجة للطلاب')
-                    : (quiz.publishResults ? 'Click to hide results' : 'Click to publish results')
-                }
-              >
-                {quiz.publishResults
-                  ? (isAr ? 'النتائج معلنة' : 'Results Live')
-                  : (isAr ? 'النتائج محجوبة' : 'Results Hidden')}
-              </button>
-            ) : (
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border ${
-                  quiz.publishResults
-                    ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
-                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                }`}
-              >
-                {quiz.publishResults
-                  ? (isAr ? 'النتائج معلنة' : 'Results Live')
-                  : (isAr ? 'النتائج محجوبة' : 'Results Hidden')}
-              </span>
-            )}
-            {canWrite ? (
-              <button
-                type="button"
-                onClick={() => handleToggleAllowReview(quiz)}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border transition-all cursor-pointer select-none ${
-                  quiz.allowReview !== false
-                    ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/25'
-                    : 'bg-rose-500/15 text-rose-400 border-rose-500/30 hover:bg-rose-500/25'
-                }`}
-                title={
-                  isAr
-                    ? (quiz.allowReview !== false ? 'انقر لتعطيل مراجعة الإجابات النموذجية' : 'انقر لإتاحة مراجعة الإجابات النموذجية')
-                    : (quiz.allowReview !== false ? 'Click to disable answer review' : 'Click to allow answer review')
-                }
-              >
-                {quiz.allowReview !== false
-                  ? (isAr ? 'المراجعة متاحة' : 'Review Open')
-                  : (isAr ? 'المراجعة معطلة' : 'Review Disabled')}
-              </button>
-            ) : (
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-squircle border ${
-                  quiz.allowReview !== false
-                    ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
-                    : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                }`}
-              >
-                {quiz.allowReview !== false
-                  ? (isAr ? 'المراجعة متاحة' : 'Review Open')
-                  : (isAr ? 'المراجعة معطلة' : 'Review Disabled')}
-              </span>
-            )}
+            {(['results', 'review'] as const).map((kind) => {
+              const status = releaseStatus(quiz, kind);
+              return <StatusBadge key={kind} label={`${tRelease(kind)}: ${tRelease(status)}`} variant={status === 'available' ? 'success' : status === 'hidden' ? 'neutral' : 'warning'} />;
+            })}
           </div>
         </TableCell>
       ),
@@ -2627,9 +2572,9 @@ function AdminQuizzesContent() {
                       onClick={() => handleTogglePublishResults(quiz)}
                       className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
                     >
-                      <Award className={`h-3.5 w-3.5 ${quiz.publishResults ? 'text-amber-400' : 'text-teal-400'}`} />
+                      <Award className={`h-3.5 w-3.5 ${quiz.resultsAvailable ? 'text-amber-400' : 'text-teal-400'}`} />
                       <span>
-                        {quiz.publishResults
+                        {quiz.resultsAvailable
                           ? (isAr ? 'حجب نتائج ودرجات الاختبار' : 'Hide Results from Students')
                           : (isAr ? 'إعلان ونشر نتائج الاختبار للطلاب' : 'Publish Results to Students')}
                       </span>
@@ -2638,9 +2583,9 @@ function AdminQuizzesContent() {
                       onClick={() => handleToggleAllowReview(quiz)}
                       className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-secondary/60 transition-colors"
                     >
-                      <ListChecks className={`h-3.5 w-3.5 ${quiz.allowReview !== false ? 'text-rose-400' : 'text-cyan-400'}`} />
+                      <ListChecks className={`h-3.5 w-3.5 ${(quiz.reviewReleaseMode === 'after_close' || quiz.allowReview !== false) ? 'text-rose-400' : 'text-cyan-400'}`} />
                       <span>
-                        {quiz.allowReview !== false
+                        {(quiz.reviewReleaseMode === 'after_close' || quiz.allowReview !== false)
                           ? (isAr ? 'تعطيل مراجعة الإجابات النموذجية' : 'Disable Answer Review')
                           : (isAr ? 'إتاحة مراجعة الإجابات النموذجية' : 'Allow Answer Review')}
                       </span>

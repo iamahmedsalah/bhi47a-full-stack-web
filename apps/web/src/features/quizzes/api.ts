@@ -1,4 +1,6 @@
 import api from '@/lib/api';
+import type { ApiEnvelope } from '@/lib/api';
+import type { QuizReleaseMode } from '@student-portal/shared';
 import {
   downloadFileBlob,
   EXCEL_MIME_TYPE,
@@ -40,6 +42,11 @@ export interface QuizItem {
   close_at?: string;
   isPublished: boolean;
   publishResults?: boolean;
+  resultsReleaseMode?: QuizReleaseMode;
+  reviewReleaseMode?: QuizReleaseMode;
+  resultsAvailable?: boolean;
+  reviewAvailable?: boolean;
+  isEnded?: boolean;
   allowReview: boolean;
   allowResume?: boolean;
   questions?: QuizQuestion[];
@@ -92,6 +99,9 @@ export interface StudentQuizViewItem {
   allowResume?: boolean;
   allowReview?: boolean;
   publishResults?: boolean;
+  resultsReleaseMode?: QuizReleaseMode;
+  reviewReleaseMode?: QuizReleaseMode;
+  canReview?: boolean;
   isOpen: boolean;
   isEnded: boolean;
   isSubmitted: boolean;
@@ -160,6 +170,7 @@ export interface SubmitQuizResult {
   percentage?: number;
   isPassed?: boolean;
   publishResults?: boolean;
+  canReview?: boolean;
   submittedAt: string;
   answers?: Array<{
     questionId: string;
@@ -185,14 +196,15 @@ export async function listQuizzes(params?: {
   courseId?: string;
   isPublished?: boolean;
 }) {
-  const res = await api.get<{
+  type QuizPage = {
     items: QuizItem[];
     total: number;
     page: number;
     limit: number;
     totalPages: number;
-  }>('/admin/quizzes', { params });
-  return res.data;
+  };
+  const res = await api.get<QuizPage, ApiEnvelope<QuizPage>>('/admin/quizzes', { params });
+  return { ...res.data, quizzes: res.data.items, serverTime: res.timestamp, receivedAt: performance.now() };
 }
 
 export async function getQuiz(id: string) {
@@ -262,8 +274,12 @@ export async function exportQuizAnalysis(quizId: string, quizTitle: string) {
 // ─── Student API Calls ───────────────────────────────────────────────
 
 export async function getStudentQuizzes() {
-  const res = await api.get<StudentQuizViewItem[]>('/students/me/quizzes');
-  return res.data;
+  return (await getStudentQuizzesWithTiming()).quizzes;
+}
+
+export async function getStudentQuizzesWithTiming() {
+  const res = await api.get<StudentQuizViewItem[], ApiEnvelope<StudentQuizViewItem[]>>('/students/me/quizzes');
+  return { quizzes: res.data, serverTime: res.timestamp, receivedAt: performance.now() };
 }
 
 export async function getQuizForTaking(quizId: string) {

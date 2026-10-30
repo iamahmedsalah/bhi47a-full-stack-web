@@ -41,10 +41,14 @@ import {
   PaginatedResult,
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
-import { PERMISSIONS } from '@student-portal/shared';
+import { PERMISSIONS, type QuizReleaseMode } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { NotificationsService } from '../notifications/notifications.service';
 import { QuizQuestionExcelService } from './services/quiz-question-excel.service';
+import {
+  getQuizReleaseState,
+  type QuizReleaseSettings,
+} from './quiz-release.policy';
 
 export interface QuizListItem extends Record<string, unknown> {
   _id: any;
@@ -63,6 +67,11 @@ export interface QuizListItem extends Record<string, unknown> {
   endsAt?: Date;
   allowResume?: boolean;
   publishResults?: boolean;
+  resultsReleaseMode?: QuizReleaseMode;
+  reviewReleaseMode?: QuizReleaseMode;
+  resultsAvailable?: boolean;
+  reviewAvailable?: boolean;
+  isEnded?: boolean;
   isPublished: boolean;
   submissionsCount: number;
   createdAt?: Date;
@@ -257,7 +266,12 @@ export class QuizzesService implements OnModuleInit {
       allowResume:
         dto.allowResume !== undefined ? Boolean(dto.allowResume) : true,
       publishResults: Boolean(dto.publishResults ?? false),
+      allowReview: dto.allowReview ?? false,
+      resultsReleaseMode: dto.resultsReleaseMode ?? (endsAtVal ? 'after_close' : 'manual'),
+      reviewReleaseMode: dto.reviewReleaseMode ?? 'manual',
     });
+
+    this.validateReleaseSettings(quiz);
 
     const saved = await quiz.save();
 
@@ -327,7 +341,7 @@ export class QuizzesService implements OnModuleInit {
       this.quizModel
         .find(filter)
         .select(
-          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume publishResults questions createdAt updatedAt',
+          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume publishResults resultsReleaseMode reviewReleaseMode questions createdAt updatedAt',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -361,6 +375,9 @@ export class QuizzesService implements OnModuleInit {
         : undefined;
       return {
         ...q,
+        ...getQuizReleaseState(q),
+        resultsReleaseMode: q.resultsReleaseMode ?? 'manual',
+        reviewReleaseMode: q.reviewReleaseMode ?? 'manual',
         courseNameAr: q.courseNameAr || course?.nameAr || q.courseName,
         courseNameEn:
           q.courseNameEn ||
@@ -383,6 +400,32 @@ export class QuizzesService implements OnModuleInit {
       throw new NotFoundException('الاختبار غير موجود');
     }
     return quiz;
+  }
+
+  managementView(quiz: QuizDocument) {
+    return {
+      ...quiz.toObject(),
+      ...getQuizReleaseState(quiz),
+      resultsReleaseMode: quiz.resultsReleaseMode ?? 'manual',
+      reviewReleaseMode: quiz.reviewReleaseMode ?? 'manual',
+    };
+  }
+
+  private validateReleaseSettings(
+    quiz: Pick<
+      QuizReleaseSettings,
+      'endsAt' | 'resultsReleaseMode' | 'reviewReleaseMode'
+    >,
+  ): void {
+    if (
+      (quiz.resultsReleaseMode === 'after_close' ||
+        quiz.reviewReleaseMode === 'after_close') &&
+      (!quiz.endsAt || !Number.isFinite(new Date(quiz.endsAt).getTime()))
+    ) {
+      throw new BadRequestException(
+        'Automatic release requires a valid quiz closing time / الإتاحة التلقائية تتطلب موعد إغلاق صالحاً للاختبار',
+      );
+    }
   }
 
   async update(
@@ -484,11 +527,21 @@ export class QuizzesService implements OnModuleInit {
         ? updatePayload.startsAt
         : quiz.startsAt;
     const effectiveEndsAt =
-      updatePayload.endsAt !== undefined ? updatePayload.endsAt : quiz.endsAt;
+      endsAtVal !== undefined
+        ? endsAtVal
+          ? new Date(endsAtVal)
+          : undefined
+        : quiz.endsAt;
     const effectiveDuration =
       updatePayload.durationMinutes !== undefined
         ? Number(updatePayload.durationMinutes)
         : quiz.durationMinutes;
+
+    this.validateReleaseSettings({
+      endsAt: effectiveEndsAt,
+      resultsReleaseMode: dto.resultsReleaseMode ?? quiz.resultsReleaseMode,
+      reviewReleaseMode: dto.reviewReleaseMode ?? quiz.reviewReleaseMode,
+    });
 
     if (effectiveStartsAt && effectiveEndsAt) {
       const s = new Date(effectiveStartsAt);
@@ -781,7 +834,7 @@ export class QuizzesService implements OnModuleInit {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults resultsReleaseMode reviewReleaseMode questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -821,9 +874,9 @@ export class QuizzesService implements OnModuleInit {
       const submission = submissionsMap.get(qIdStr);
       const attempt = attemptsMap.get(qIdStr);
       const startsAtMs = quiz.startsAt ? new Date(quiz.startsAt).getTime() : 0;
-      const endsAtMs = quiz.endsAt ? new Date(quiz.endsAt).getTime() : 0;
       const isStarted = !startsAtMs || startsAtMs <= nowMs;
-      const isEnded = Boolean(endsAtMs && endsAtMs < nowMs);
+      const { isEnded, resultsAvailable, reviewAvailable } =
+        getQuizReleaseState(quiz, nowMs);
       const isOpen = isStarted && !isEnded;
 
       return {
@@ -845,19 +898,20 @@ export class QuizzesService implements OnModuleInit {
         endsAt: quiz.endsAt,
         allowResume: quiz.allowResume !== false,
         allowReview: Boolean(quiz.allowReview ?? true),
-        publishResults: Boolean(quiz.publishResults ?? false),
+        resultsReleaseMode: quiz.resultsReleaseMode ?? 'manual',
+        reviewReleaseMode: quiz.reviewReleaseMode ?? 'manual',
+        publishResults: resultsAvailable,
+        canReview: reviewAvailable && Boolean(submission),
         isOpen,
         isEnded,
         isSubmitted: Boolean(submission),
         attemptStatus: attempt?.status,
         submission: submission
           ? {
-              score: quiz.publishResults ? submission.score : undefined,
+              score: resultsAvailable ? submission.score : undefined,
               totalMarks: submission.totalMarks,
-              percentage: quiz.publishResults
-                ? submission.percentage
-                : undefined,
-              isPassed: quiz.publishResults ? submission.isPassed : undefined,
+              percentage: resultsAvailable ? submission.percentage : undefined,
+              isPassed: resultsAvailable ? submission.isPassed : undefined,
               submittedAt: submission.submittedAt,
               durationSeconds: submission.durationSeconds,
             }
@@ -895,7 +949,7 @@ export class QuizzesService implements OnModuleInit {
     if (quiz.startsAt && new Date(quiz.startsAt) > now) {
       throw new ForbiddenException('لم يبدأ موعد الاختبار بعد');
     }
-    if (quiz.endsAt && new Date(quiz.endsAt) < now) {
+    if (quiz.endsAt && new Date(quiz.endsAt) <= now) {
       throw new ForbiddenException('انتهى موعد تقديم الاختبار');
     }
 
@@ -1234,7 +1288,7 @@ export class QuizzesService implements OnModuleInit {
           maxAllowedExits: 1,
           message:
             'تم إنهاء الاختبار وتسليمه تلقائياً بسبب تكرار مغادرة الصفحة أو تبديل التبويب (الوضع المشدد)',
-          submission,
+          submission: this.studentSubmissionView(quiz, submission),
         };
       }
 
@@ -1414,18 +1468,42 @@ export class QuizzesService implements OnModuleInit {
       throw err;
     }
 
-    const showScore = Boolean(quiz.publishResults);
+    return this.studentSubmissionView(quiz, {
+      score: totalScore,
+      totalMarks,
+      percentage,
+      isPassed,
+      submittedAt,
+      answers: gradedAnswers,
+    });
+  }
+
+  private studentSubmissionView(
+    quiz: QuizDocument,
+    submission: Pick<
+      QuizSubmission,
+      | 'score'
+      | 'totalMarks'
+      | 'percentage'
+      | 'isPassed'
+      | 'submittedAt'
+      | 'answers'
+    >,
+  ) {
+    const { resultsAvailable: showScore, reviewAvailable } =
+      getQuizReleaseState(quiz);
     return {
       message: showScore
         ? 'تم تسليم الاختبار وتصحيحه بنجاح'
         : 'تم تسليم إجابات الاختبار بنجاح، وستظهر النتيجة فور إعلانها من أستاذ المقرر',
-      score: showScore ? totalScore : undefined,
-      totalMarks: showScore ? totalMarks : quiz.totalMarks,
-      percentage: showScore ? percentage : undefined,
-      isPassed: showScore ? isPassed : undefined,
+      score: showScore ? submission.score : undefined,
+      totalMarks: submission.totalMarks,
+      percentage: showScore ? submission.percentage : undefined,
+      isPassed: showScore ? submission.isPassed : undefined,
       publishResults: showScore,
-      submittedAt,
-      answers: showScore && quiz.allowReview ? gradedAnswers : undefined,
+      canReview: reviewAvailable,
+      submittedAt: submission.submittedAt,
+      answers: reviewAvailable ? submission.answers : undefined,
     };
   }
 
@@ -1566,22 +1644,10 @@ export class QuizzesService implements OnModuleInit {
       throw new NotFoundException('الاختبار غير موجود');
     }
 
-    if (quiz.allowReview === false) {
+    const { reviewAvailable } = getQuizReleaseState(quiz);
+    if (!reviewAvailable) {
       throw new ForbiddenException(
         'مراجعة أسئلة وإجابات هذا الاختبار غير مفعلة من قِبل المدرس',
-      );
-    }
-
-    if (quiz.publishResults === false) {
-      throw new ForbiddenException(
-        'نتائج وإجابات هذا الاختبار لم يتم إعلانها ونشرها للطلاب بعد من قِبل أستاذ المقرر',
-      );
-    }
-
-    const now = new Date();
-    if (quiz.endsAt && new Date(quiz.endsAt) > now) {
-      throw new ForbiddenException(
-        'لا يمكن مراجعة الإجابات النموذجية قبل انتهاء الفترة الزمنية المحددة للاختبار',
       );
     }
 

@@ -213,7 +213,9 @@ export class QuizzesController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateQuizDto,
   ) {
-    return this.quizzesService.create(user, dto);
+    return this.quizzesService.managementView(
+      await this.quizzesService.create(user, dto),
+    );
   }
 
   @Get('admin/quizzes/:id')
@@ -221,7 +223,9 @@ export class QuizzesController {
   @RequirePermissions(PERMISSIONS.QUIZZES_READ)
   @ApiOperation({ summary: 'Get quiz details by ID' })
   async findOne(@Param('id') id: string) {
-    return this.quizzesService.findOne(id);
+    return this.quizzesService.managementView(
+      await this.quizzesService.findOne(id),
+    );
   }
 
   @Patch('admin/quizzes/:id')
@@ -233,7 +237,9 @@ export class QuizzesController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateQuizDto,
   ) {
-    return this.quizzesService.update(id, user, dto);
+    return this.quizzesService.managementView(
+      await this.quizzesService.update(id, user, dto),
+    );
   }
 
   @Delete('admin/quizzes/:id')

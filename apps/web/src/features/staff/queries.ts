@@ -30,12 +30,12 @@ export function useStaffList(params: StaffListParams) {
   });
 }
 
-export function useStaffCourses(doctorId: string | null | undefined) {
+export function useStaffCourses(staffId: string | null | undefined) {
   return useQuery({
-    queryKey: staffKeys.courses(doctorId ?? ''),
-    queryFn: () => (doctorId ? getStaffCourses(doctorId) : Promise.resolve([])),
-    enabled: Boolean(doctorId),
-    staleTime: 60 * 1000,
+    queryKey: staffKeys.courses(staffId ?? ''),
+    queryFn: () => (staffId ? getStaffCourses(staffId) : Promise.resolve([])),
+    enabled: Boolean(staffId),
+    staleTime: 0,
   });
 }
 

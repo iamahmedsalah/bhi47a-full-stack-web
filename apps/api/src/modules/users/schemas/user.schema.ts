@@ -39,6 +39,9 @@ export class User {
   @Prop({ required: true, trim: true, minlength: 2, maxlength: 160 })
   name!: string;
 
+  @Prop({ trim: true, minlength: 2, maxlength: 160 })
+  nameAr?: string;
+
   @Prop({ trim: true, lowercase: true, unique: true, sparse: true })
   email?: string;
 

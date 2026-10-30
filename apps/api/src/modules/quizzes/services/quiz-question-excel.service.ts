@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
+import { Readable } from 'node:stream';
 import { QuizQuestion, QuestionType } from '../schemas/quiz.schema';
 
 export interface ParsedQuestionRow {
@@ -32,7 +33,7 @@ export class QuizQuestionExcelService {
 
     let rows: Record<string, any>[] = [];
     if (ext === 'csv') {
-      rows = this.parseCsv(fileBuffer);
+      rows = await this.parseCsv(fileBuffer);
     } else {
       rows = await this.parseExcel(fileBuffer);
     }
@@ -83,12 +84,12 @@ export class QuizQuestionExcelService {
         return;
       }
 
-      const optA = this.cleanString(row.option_a || row['الخيار أ'] || row.a);
-      const optB = this.cleanString(row.option_b || row['الخيار ب'] || row.b);
-      const optC = this.cleanString(row.option_c || row['الخيار ج'] || row.c);
-      const optD = this.cleanString(row.option_d || row['الخيار د'] || row.d);
+      const optA = this.cleanString(row.option_a ?? row['الخيار أ'] ?? row.a);
+      const optB = this.cleanString(row.option_b ?? row['الخيار ب'] ?? row.b);
+      const optC = this.cleanString(row.option_c ?? row['الخيار ج'] ?? row.c);
+      const optD = this.cleanString(row.option_d ?? row['الخيار د'] ?? row.d);
       const rawAnswer = this.cleanString(
-        row.correct_answer || row['الإجابة الصحيحة'] || row.answer,
+        row.correct_answer ?? row['الإجابة الصحيحة'] ?? row.answer,
       );
 
       if (!rawAnswer) {
@@ -98,13 +99,16 @@ export class QuizQuestionExcelService {
         return;
       }
 
-      const pointsRaw = row.points || row['الدرجات'] || row['الدرجة'];
-      const points =
-        pointsRaw !== undefined &&
-        !isNaN(Number(pointsRaw)) &&
-        Number(pointsRaw) > 0
-          ? Number(pointsRaw)
-          : 1;
+      const pointsRaw = this.cleanString(
+        row.points ?? row['الدرجات'] ?? row['الدرجة'],
+      );
+      const points = pointsRaw === '' ? 1 : Number(pointsRaw);
+      if (!Number.isFinite(points) || points < 0.5) {
+        errors.push(
+          `Row / السطر ${rowNum}: points must be at least 0.5 / الدرجة لا تقل عن 0.5.`,
+        );
+        return;
+      }
 
       if (questionType === 'true_false') {
         const optionA = optA || 'صح';
@@ -205,129 +209,145 @@ export class QuizQuestionExcelService {
   async generateSampleTemplate(
     format: 'xlsx' | 'csv' = 'xlsx',
   ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
+    const headers = [
+      'question_text',
+      'type',
+      'option_a',
+      'option_b',
+      'option_c',
+      'option_d',
+      'correct_answer',
+      'points',
+      'instructions',
+    ];
+    const instructions = [
+      [
+        'Start / البداية',
+        'Edit only Quiz Questions Template. Keep headers and delete sample questions. One question per row.',
+        'عدّل ورقة Quiz Questions Template فقط. احتفظ بالعناوين واحذف الأسئلة النموذجية. سؤال واحد في كل صف.',
+      ],
+      [
+        'MCQ',
+        'Set type=MCQ. Fill all four options. correct_answer is A/B/C/D. B means option_b (the second option).',
+        'اكتب MCQ في type وأدخل الخيارات الأربعة. الإجابة A/B/C/D؛ الحرف B يعني option_b أي الخيار الثاني.',
+      ],
+      [
+        'TF: T',
+        'Set type=TF, option_a=True, option_b=False; leave option_c/d blank. correct_answer=T or True means true (option_a).',
+        'اكتب TF في type وTrue في option_a وFalse في option_b واترك الخيارين الآخرين فارغين. T أو True في correct_answer تعني صح (الخيار الأول).',
+      ],
+      [
+        'TF: F',
+        'For type=TF, correct_answer=F or False means false (option_b). T/F belong in correct_answer, not type.',
+        'للسؤال TF اكتب F أو False في correct_answer للإجابة خطأ (الخيار الثاني). T وF للإجابة وليسا لنوع السؤال.',
+      ],
+      [
+        'Points / الدرجات',
+        'Use a positive points value (at least 0.5). A blank points cell defaults to 1.',
+        'أدخل درجة موجبة لا تقل عن 0.5؛ الخانة الفارغة درجتها 1.',
+      ],
+      [
+        'Upload / الرفع',
+        'A valid file replaces ALL questions in the editor. Re-uploading does not append. Save the quiz to apply. Files with row errors leave existing questions unchanged.',
+        'الملف الصالح يستبدل جميع أسئلة المحرر ولا يضيف إليها عند إعادة الرفع. احفظ الاختبار لتطبيق التحديث. عند وجود أخطاء لا تتغير الأسئلة الحالية.',
+      ],
+      [
+        'CSV',
+        'Keep the header first. The instructions column is guidance only and is ignored during import. Quoted commas and multiline text are supported.',
+        'احتفظ بالعناوين في الصف الأول. عمود instructions للإرشاد ولا يتم استيراده. يمكن استخدام الفواصل والنص متعدد الأسطر داخل علامات الاقتباس.',
+      ],
+    ];
+    const rows = [
+      [
+        'ما هو بروتوكول تصفح الويب الآمن؟',
+        'MCQ',
+        'HTTP',
+        'HTTPS',
+        'FTP',
+        'SMTP',
+        'B',
+        2,
+        instructions[1].slice(1).join(' / '),
+      ],
+      [
+        'JavaScript can run in a browser and on a server.',
+        'TF',
+        'True',
+        'False',
+        '',
+        '',
+        'T',
+        1,
+        instructions[2].slice(1).join(' / '),
+      ],
+      [
+        'The number 2 is greater than 5.',
+        'TF',
+        'True',
+        'False',
+        '',
+        '',
+        'F',
+        1,
+        instructions[3].slice(1).join(' / '),
+      ],
+    ];
+
     if (format === 'csv') {
-      const headers = [
-        'question_text',
-        'type',
-        'option_a',
-        'option_b',
-        'option_c',
-        'option_d',
-        'correct_answer',
-        'points',
-      ];
-      const escapeCsv = (val: any) => {
-        const str = String(val ?? '');
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
+      const escapeCsv = (value: string | number) => {
+        const text = String(value ?? '');
+        return /[,"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
       };
-      const rows = [
-        [
-          'ما هو البروتوكول المستخدم لتصفح صفحات الويب الآمنة؟',
-          'MCQ',
-          'HTTP',
-          'HTTPS',
-          'FTP',
-          'SMTP',
-          'B',
-          '2',
-        ],
-        [
-          'لغة JavaScript تعمل في متصفح الويب وعلى الخادم بواسطة Node.js.',
-          'TF',
-          'True',
-          'False',
-          '',
-          '',
-          'True',
-          '1',
-        ],
-        [
-          'أي من العناصر التالية ليس نوع بيانات أولي في TypeScript؟',
-          'MCQ',
-          'string',
-          'number',
-          'Interface',
-          'boolean',
-          'C',
-          '2',
-        ],
-      ];
-      const headerLine = headers.map(escapeCsv).join(',');
-      const rowLines = rows.map((r) => r.map(escapeCsv).join(','));
-      // UTF-8 BOM (\uFEFF) ensures Excel on Windows correctly detects UTF-8 Arabic text
-      const csvContent = '\uFEFF' + [headerLine, ...rowLines].join('\r\n');
+      // Instructions remain in columns, never prose rows that could be mistaken for questions.
+      const csv = [headers, ...rows]
+        .map((row) => row.map(escapeCsv).join(','))
+        .join('\r\n');
       return {
-        buffer: Buffer.from(csvContent, 'utf-8'),
+        buffer: Buffer.from('\uFEFF' + csv, 'utf-8'),
         contentType: 'text/csv; charset=utf-8',
         filename: 'quiz-questions-template.csv',
       };
     }
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Quiz Questions Template');
-
-    sheet.columns = [
-      { header: 'question_text', key: 'question_text', width: 45 },
-      { header: 'type', key: 'type', width: 12 },
-      { header: 'option_a', key: 'option_a', width: 25 },
-      { header: 'option_b', key: 'option_b', width: 25 },
-      { header: 'option_c', key: 'option_c', width: 25 },
-      { header: 'option_d', key: 'option_d', width: 25 },
-      { header: 'correct_answer', key: 'correct_answer', width: 16 },
-      { header: 'points', key: 'points', width: 10 },
+    const sheet = workbook.addWorksheet('Quiz Questions Template', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+    sheet.columns = headers.map((header, index) => ({
+      header,
+      key: header,
+      width: index === 0 ? 50 : index === 8 ? 85 : 22,
+    }));
+    rows.forEach((row) => sheet.addRow(row));
+    sheet.getCell('B1').note =
+      'MCQ = multiple choice / اختيار متعدد. TF = true or false / صح أو خطأ.';
+    sheet.getCell('G1').note =
+      'MCQ: A/B/C/D (B = option_b). TF: T=True=option_a; F=False=option_b.';
+    const help = workbook.addWorksheet('Instructions');
+    help.columns = [
+      { header: 'Topic / الموضوع', width: 25 },
+      { header: 'English instructions', width: 85 },
+      { header: 'التعليمات بالعربية', width: 85 },
     ];
-
-    // Style header row
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF0D9488' }, // Teal
-    };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-
-    // Sample rows
-    sheet.addRow({
-      question_text: 'ما هو البروتوكول المستخدم لتصفح صفحات الويب الآمنة؟',
-      type: 'MCQ',
-      option_a: 'HTTP',
-      option_b: 'HTTPS',
-      option_c: 'FTP',
-      option_d: 'SMTP',
-      correct_answer: 'B',
-      points: 2,
+    instructions.forEach((row) => {
+      const added = help.addRow(row);
+      added.height = 75;
+      added.alignment = { wrapText: true, vertical: 'middle' };
     });
-
-    sheet.addRow({
-      question_text:
-        'لغة JavaScript تعمل في متصفح الويب وعلى الخادم بواسطة Node.js.',
-      type: 'TF',
-      option_a: 'True',
-      option_b: 'False',
-      option_c: '',
-      option_d: '',
-      correct_answer: 'True',
-      points: 1,
-    });
-
-    sheet.addRow({
-      question_text: 'أي من العناصر التالية ليس نوع بيانات أولي في TypeScript؟',
-      type: 'MCQ',
-      option_a: 'string',
-      option_b: 'number',
-      option_c: 'Interface',
-      option_d: 'boolean',
-      correct_answer: 'C',
-      points: 2,
-    });
-
-    const uint8Array = await workbook.xlsx.writeBuffer();
+    for (const tab of [sheet, help]) {
+      const header = tab.getRow(1);
+      header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      header.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+      header.alignment = { vertical: 'middle', horizontal: 'center' };
+      header.height = 28;
+    }
+    const buffer = await workbook.xlsx.writeBuffer();
     return {
-      buffer: Buffer.from(uint8Array),
+      buffer: Buffer.from(buffer),
       contentType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       filename: 'quiz-questions-template.xlsx',
@@ -342,7 +362,9 @@ export class QuizQuestionExcelService {
   private async parseExcel(buffer: Buffer): Promise<Record<string, any>[]> {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
-    const sheet = workbook.worksheets[0];
+    const sheet =
+      workbook.getWorksheet('Quiz Questions Template') ||
+      workbook.worksheets.find((tab) => tab.name !== 'Instructions');
     if (!sheet || sheet.rowCount <= 1) return [];
 
     const rows: Record<string, any>[] = [];
@@ -379,34 +401,38 @@ export class QuizQuestionExcelService {
     return rows;
   }
 
-  private parseCsv(buffer: Buffer): Record<string, any>[] {
-    const text = buffer.toString('utf-8');
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-
-    if (lines.length <= 1) return [];
-
-    const headers = lines[0].split(/[,;\t]/).map((h) =>
-      this.cleanString(h)
-        .replace(/^["']|["']$/g, '')
-        .toLowerCase(),
-    );
-
-    const rows: Record<string, any>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i]
-        .split(/[,;\t]/)
-        .map((p) => this.cleanString(p).replace(/^["']|["']$/g, ''));
-      if (parts.some((p) => p.length > 0)) {
-        const rowData: Record<string, any> = {};
-        headers.forEach((h, idx) => {
-          if (h) rowData[h] = parts[idx] ?? '';
-        });
-        rows.push(rowData);
-      }
+  private async parseCsv(buffer: Buffer): Promise<Record<string, unknown>[]> {
+    const text = buffer.toString('utf-8').replace(/^\uFEFF/, '');
+    const header = text.split(/\r?\n/, 1)[0];
+    const delimiter = header.includes('\t')
+      ? '\t'
+      : header.includes(';')
+        ? ';'
+        : ',';
+    const workbook = new ExcelJS.Workbook();
+    let sheet: ExcelJS.Worksheet;
+    try {
+      sheet = await workbook.csv.read(Readable.from([text]), {
+        map: (value: string) => value,
+        parserOptions: { delimiter, ignoreEmpty: true, trim: true },
+      });
+    } catch {
+      throw new BadRequestException(
+        'Invalid CSV quoting or columns / تنسيق CSV غير صالح',
+      );
     }
+    const headers = (sheet.getRow(1).values as ExcelJS.CellValue[])
+      .slice(1)
+      .map((value) => this.cleanString(value).toLowerCase());
+    const rows: Record<string, unknown>[] = [];
+    sheet.eachRow((row, index) => {
+      if (index === 1) return;
+      const record: Record<string, unknown> = {};
+      headers.forEach((key, column) => {
+        if (key) record[key] = row.getCell(column + 1).value ?? '';
+      });
+      rows.push(record);
+    });
     return rows;
   }
 

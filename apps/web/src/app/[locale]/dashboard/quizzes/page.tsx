@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations, useLocale } from 'next-intl';
 import api, { getApiErrorMessage } from '@/lib/api';
+import { useQuizReleaseRefresh } from '@/features/quizzes/use-quiz-release-refresh';
 import { cn } from '@/lib/cn';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,7 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
-  getStudentQuizzes,
+  getStudentQuizzesWithTiming,
   getQuizForTaking,
   startQuizAttempt,
   saveQuizDraft,
@@ -1425,7 +1426,7 @@ function StudentQuizResultModal({
 }: StudentQuizResultModalProps) {
   if (!quiz) return null;
   const sub = quiz.submission;
-  const canReview = quiz.allowReview !== false && (quiz.isEnded || !quiz.endsAt);
+  const canReview = quiz.canReview === true;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1562,12 +1563,15 @@ export default function StudentQuizzesPage() {
   const [takingQuizId, setTakingQuizId] = useState<string | null>(null);
   const [confirmStartQuiz, setConfirmStartQuiz] = useState<StudentQuizViewItem | null>(null);
   const [reviewQuizId, setReviewQuizId] = useState<string | null>(null);
-  const [resultModalQuiz, setResultModalQuiz] = useState<StudentQuizViewItem | null>(null);
+  const [resultModalQuizId, setResultModalQuizId] = useState<string | null>(null);
+  const tRelease = useTranslations('quizRelease');
 
   // 1. Fetch Online Quizzes from Quizzes module
   const onlineQuizzesQuery = useQuery({
     queryKey: ['student-online-quizzes'],
-    queryFn: () => getStudentQuizzes(),
+    queryFn: () => getStudentQuizzesWithTiming(),
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
   });
 
   // 2. Fetch past uploaded excel quiz scores
@@ -1579,8 +1583,22 @@ export default function StudentQuizzesPage() {
     },
   });
 
-  const onlineQuizzes = onlineQuizzesQuery.data || [];
+  useQuizReleaseRefresh(onlineQuizzesQuery.data, onlineQuizzesQuery.refetch);
+  const onlineQuizzes = onlineQuizzesQuery.data?.quizzes || [];
+  const resultModalQuiz = onlineQuizzes.find((quiz) => quiz._id === resultModalQuizId) ?? null;
   const historyItems = historyQuery.data || [];
+
+  // Close a revoked review before rendering another frame with stale answers.
+  if (reviewQuizId && onlineQuizzesQuery.data && !onlineQuizzes.some((quiz) => quiz._id === reviewQuizId && quiz.canReview)) {
+    setReviewQuizId(null);
+  }
+  useEffect(() => {
+    if (!onlineQuizzesQuery.data) return;
+    const allowed = onlineQuizzesQuery.data.quizzes;
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] === 'student-quiz-review' && !allowed.some((quiz) => quiz._id === query.queryKey[1] && quiz.canReview),
+    });
+  }, [onlineQuizzesQuery.data, queryClient]);
 
   const toggleExpand = (courseId: string) => {
     setExpandedCourses((prev) => ({
@@ -1860,6 +1878,14 @@ export default function StudentQuizzesPage() {
                         </div>
                       </div>
 
+                      {quiz.endsAt && ((quiz.resultsReleaseMode === 'after_close' && !quiz.publishResults) || (quiz.reviewReleaseMode === 'after_close' && !quiz.canReview)) && (
+                        <p className="text-xs text-muted-foreground" data-testid="quiz-release-schedule">
+                          {quiz.isEnded && !quiz.publishResults && quiz.reviewReleaseMode === 'after_close'
+                            ? tRelease('waiting')
+                            : tRelease('scheduledAt', { time: new Date(quiz.endsAt).toLocaleString(isAr ? 'ar-EG' : 'en-GB', { timeZone: 'Africa/Cairo', dateStyle: 'medium', timeStyle: 'short' }) })}
+                        </p>
+                      )}
+
                       {/* Bottom Action / Score Info */}
                       <div className="pt-4 border-t border-border/70 mt-4 flex flex-col gap-3">
                         {quiz.isSubmitted ? (
@@ -1878,15 +1904,15 @@ export default function StudentQuizzesPage() {
                           ) : (
                             <div className="flex flex-col gap-2.5 w-full">
                               <Button
-                                onClick={() => setResultModalQuiz(quiz)}
+                                onClick={() => setResultModalQuizId(quiz._id)}
                                 className="w-full rounded-squircle gap-2 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs h-9 shadow-md shadow-teal-600/20"
                               >
                                 <Eye className="h-4 w-4" />
                                 <span>{isAr ? 'عرض نتيجة ودرجة الاختبار' : 'See Quiz Result'}</span>
                               </Button>
 
-                              {quiz.allowReview !== false && (
-                                quiz.isEnded || !quiz.endsAt ? (
+                              {(quiz.allowReview !== false || quiz.reviewReleaseMode === 'after_close') && (
+                                quiz.canReview === true ? (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1926,7 +1952,7 @@ export default function StudentQuizzesPage() {
                             </div>
 
                             {/* Review Button if completed/ended */}
-                            {quiz.allowReview !== false && (quiz.isEnded || !quiz.endsAt) && (
+                            {quiz.canReview === true && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -2148,7 +2174,7 @@ export default function StudentQuizzesPage() {
                                           {course.onlineQuizzes.map((q) => {
                                             const sub = q.submission;
                                             const canReview =
-                                              q.allowReview !== false && (q.isEnded || !q.endsAt);
+                                              q.canReview === true;
 
                                             return (
                                               <div
@@ -2201,7 +2227,7 @@ export default function StudentQuizzesPage() {
                                                         size="sm"
                                                         onClick={(e) => {
                                                           e.stopPropagation();
-                                                          setResultModalQuiz(q);
+                                                          setResultModalQuizId(q._id);
                                                         }}
                                                         className="rounded-squircle gap-1 border border-border/80 text-foreground hover:bg-secondary/60 font-semibold text-xs h-7.5 px-2.5"
                                                       >
@@ -2367,7 +2393,7 @@ export default function StudentQuizzesPage() {
         quiz={resultModalQuiz}
         open={Boolean(resultModalQuiz)}
         onOpenChange={(op) => {
-          if (!op) setResultModalQuiz(null);
+          if (!op) setResultModalQuizId(null);
         }}
         onOpenReview={(id) => setReviewQuizId(id)}
         isAr={isAr}

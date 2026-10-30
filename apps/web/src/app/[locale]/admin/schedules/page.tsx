@@ -464,7 +464,7 @@ function SchedulesManagementContent() {
 
   const teachingAssistantsList = useMemo(() => {
     return staffMembers.filter(
-      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant',
+      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant' || s.staffType === 'assistant_lecturer',
     );
   }, [staffMembers]);
 

@@ -199,7 +199,7 @@ function CourseFormDialog({
 
   const teachingAssistantsList = React.useMemo(() => {
     const tas = staffMembers.filter(
-      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant',
+      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant' || s.staffType === 'assistant_lecturer',
     );
     return tas.length > 0 ? tas : staffMembers;
   }, [staffMembers]);

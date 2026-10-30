@@ -1,6 +1,8 @@
 export const STAFF_TYPES = {
   DOCTOR: 'doctor',
+  ASSISTANT_LECTURER: 'assistant_lecturer',
   TEACHING_ASSISTANT: 'teaching_assistant',
+  ACCOUNTANT: 'accountant',
   ADMINISTRATIVE: 'administrative',
 } as const;
 

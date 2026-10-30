@@ -1,4 +1,20 @@
 {
+  "quizRelease": {
+    "results": "Marks release",
+    "review": "Answer review",
+    "manual": "Manual control",
+    "afterClose": "Release automatically after closing",
+    "showMarks": "Show marks now",
+    "enableReview": "Enable answer review",
+    "reviewGate": "Review requires visible marks, a saved submission, and the quiz closing time to have passed.",
+    "closingRequired": "Choose a closing date and time for automatic release.",
+    "releaseAt": "Automatic release: {time} (Cairo time)",
+    "scheduledAt": "Scheduled after closing: {time} (Cairo time)",
+    "hidden": "Hidden",
+    "scheduled": "Scheduled",
+    "available": "Available",
+    "waiting": "Waiting for marks"
+  },
   "complaintDetails": {
     "loading": "Loading ticket details…",
     "failed": "Could not load ticket details.",
@@ -17,8 +33,20 @@
     "level": "Level {level}",
     "general": "General department",
     "unknownSemester": "Semester not specified",
-    "semesters": { "first": "First semester", "second": "Second semester", "summer": "Summer semester" },
-    "days": { "saturday": "Saturday", "sunday": "Sunday", "monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday", "thursday": "Thursday", "friday": "Friday" },
+    "semesters": {
+      "first": "First semester",
+      "second": "Second semester",
+      "summer": "Summer semester"
+    },
+    "days": {
+      "saturday": "Saturday",
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday"
+    },
     "am": "AM",
     "pm": "PM",
     "until": "to",
@@ -655,7 +683,9 @@
     "types": {
       "doctor": "Doctor / Lecturer",
       "teaching_assistant": "Teaching Assistant",
-      "administrative": "Administrative Staff"
+      "administrative": "Administrative Staff",
+      "assistant_lecturer": "Assistant Lecturer",
+      "accountant": "Accountant (Finance)"
     },
     "filters": {
       "all": "All statuses",
@@ -676,13 +706,15 @@
       "primaryLoginHint": "(Primary login identifier)",
       "usernameHelp": "Used as the primary username identifier to sign in to the portal",
       "generatePassword": "Auto generate",
-      "passwordHelp": "Must be at least 12 characters. The staff member will be required to change it upon first login."
+      "passwordHelp": "Must be at least 12 characters. The staff member will be required to change it upon first login.",
+      "nameAr": "Full Name (Arabic)"
     },
     "placeholders": {
       "name": "e.g. Dr. Jane Doe / Alex Smith",
       "email": "e.g. staff@institute.edu",
       "username": "e.g. j.doe",
-      "phone": "e.g. 01012345678"
+      "phone": "e.g. 01012345678",
+      "nameAr": "e.g. Ibrahim Hussien"
     },
     "table": {
       "staff": "Staff member",
@@ -720,7 +752,7 @@
       "copy": "Copy",
       "copied": "Copied to clipboard",
       "assignedCoursesTitle": "Courses & Academic Responsibilities",
-      "assignedCoursesDescription": "Courses where this staff member is assigned as doctor / lecturer.",
+      "assignedCoursesDescription": "Courses and academic responsibilities assigned to this member (lectures / sections).",
       "noCourses": "No courses are currently assigned to this staff member.",
       "level": "Level {level}",
       "semester": "Semester {semester}",

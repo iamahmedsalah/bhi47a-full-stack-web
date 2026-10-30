@@ -172,7 +172,8 @@ export function StaffManagementPage() {
     }
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name?: string) => {
+    if (!name) return 'ST';
     return name
       .trim()
       .split(/\s+/)
@@ -191,6 +192,10 @@ export function StaffManagementPage() {
         return 'border-teal-500/30 bg-teal-500/10 text-teal-600 dark:text-teal-400';
       case 'teaching_assistant':
         return 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400';
+      case 'assistant_lecturer':
+        return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
+      case 'accountant':
+        return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
       default:
         return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400';
     }
@@ -317,7 +322,7 @@ export function StaffManagementPage() {
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
               title={t('actions.viewDetails')}
             >
-              {getInitials(staff.name)}
+              {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
             </button>
             <div className="space-y-1 text-start">
               <div className="flex flex-wrap items-center gap-2">
@@ -326,7 +331,7 @@ export function StaffManagementPage() {
                   onClick={() => setDetailsTarget(staff)}
                   className="font-bold text-foreground hover:text-primary transition-colors text-sm flex items-center gap-1 group cursor-pointer"
                 >
-                  <span>{staff.name}</span>
+                  <span>{isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr}</span>
                   <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
                 </button>
                 <span
@@ -613,7 +618,7 @@ export function StaffManagementPage() {
                         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-sm shadow-inner group-hover:scale-105 transition-transform cursor-pointer"
                         title={t('actions.viewDetails')}
                       >
-                        {getInitials(staff.name)}
+                        {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
                       </button>
                       <div className="min-w-0 space-y-1">
                         <button

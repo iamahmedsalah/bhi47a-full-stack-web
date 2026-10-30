@@ -6,6 +6,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { toCairoDateTimeLocal } from '@/lib/cairo-time';
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ interface DateTimePickerProps {
   isError?: boolean;
   disabled?: boolean;
   minDate?: Date;
+  timeZone?: 'Africa/Cairo';
 }
 
 export function DateTimePicker({
@@ -34,6 +36,7 @@ export function DateTimePicker({
   isError = false,
   disabled = false,
   minDate,
+  timeZone,
 }: DateTimePickerProps) {
   const isAr = locale === 'ar';
   const [open, setOpen] = React.useState(false);
@@ -43,13 +46,16 @@ export function DateTimePicker({
     if (!value) {
       return { date: undefined, hour: '12', minute: '00', ampm: 'PM' };
     }
-    const d = new Date(value);
+    const [day, time] = value.split('T');
+    // Calendar dates use noon; hours remain plain wall-clock fields so a browser's
+    // own DST transition cannot shift a Cairo selection.
+    const d = new Date(`${day}T12:00:00`);
     if (isNaN(d.getTime())) {
       return { date: undefined, hour: '12', minute: '00', ampm: 'PM' };
     }
 
-    let h = d.getHours();
-    const m = String(Math.round(d.getMinutes() / 5) * 5 % 60).padStart(2, '0');
+    let h = Number(time?.split(':')[0] || 0);
+    const m = time?.split(':')[1] || '00';
     const am = h >= 12 ? 'PM' : 'AM';
     h = h % 12;
     h = h ? h : 12; // 0 should be 12
@@ -65,24 +71,24 @@ export function DateTimePicker({
     newMinute: string,
     newAmpm: string,
   ) => {
-    const baseDate = newDate || date || new Date();
+    const today = timeZone ? new Date(`${toCairoDateTimeLocal(new Date()).split('T')[0]}T12:00:00`) : new Date();
+    const baseDate = newDate || date || today;
     const updated = new Date(baseDate);
     let h = parseInt(newHour, 10);
     if (newAmpm === 'PM' && h < 12) h += 12;
     if (newAmpm === 'AM' && h === 12) h = 0;
 
-    updated.setHours(h);
-    updated.setMinutes(parseInt(newMinute, 10));
-    updated.setSeconds(0);
-    updated.setMilliseconds(0);
-
     // Format to YYYY-MM-DDTHH:mm in local time
     const pad = (num: number) => String(num).padStart(2, '0');
-    const isoString = `${updated.getFullYear()}-${pad(updated.getMonth() + 1)}-${pad(updated.getDate())}T${pad(updated.getHours())}:${pad(updated.getMinutes())}`;
+    const isoString = `${updated.getFullYear()}-${pad(updated.getMonth() + 1)}-${pad(updated.getDate())}T${pad(h)}:${newMinute}`;
     onChange(isoString);
   };
 
   const handleSetNow = () => {
+    if (timeZone) {
+      onChange(toCairoDateTimeLocal(new Date()));
+      return;
+    }
     const now = new Date();
     const pad = (num: number) => String(num).padStart(2, '0');
     const isoString = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -165,7 +171,7 @@ export function DateTimePicker({
                     ? (d) =>
                         d <
                         new Date(
-                          new Date(minDate).setHours(0, 0, 0, 0),
+                          (timeZone ? new Date(`${toCairoDateTimeLocal(minDate).split('T')[0]}T12:00:00`) : new Date(minDate)).setHours(0, 0, 0, 0),
                         )
                     : undefined
                 }
@@ -216,8 +222,8 @@ export function DateTimePicker({
                     <SelectValue placeholder="MM" />
                   </SelectTrigger>
                   <SelectContent className="border-border bg-card">
-                    {Array.from({ length: 12 }, (_, i) =>
-                      String(i * 5).padStart(2, '0'),
+                    {Array.from({ length: 60 }, (_, i) =>
+                      String(i).padStart(2, '0'),
                     ).map((m) => (
                       <SelectItem
                         key={m}

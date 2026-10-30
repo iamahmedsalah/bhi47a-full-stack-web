@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import type { Model } from 'mongoose';
+import { Types, type Model } from 'mongoose';
 import { createHash, randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import cookieParser from 'cookie-parser';
@@ -22,6 +22,9 @@ import type {
 } from '../src/modules/auth/passkeys/passkey.schemas';
 import { securityHeadersMiddleware } from '../src/common/middleware/security-headers.middleware';
 import { definePasskeyBrowserAcceptance } from './passkey-browser-acceptance';
+import { QuizzesService } from '../src/modules/quizzes/quizzes.service';
+import { NotificationsService } from '../src/modules/notifications/notifications.service';
+import { QuizQuestionExcelService } from '../src/modules/quizzes/services/quiz-question-excel.service';
 
 describe('API authentication and session boundaries (isolated MongoDB)', () => {
   let app: INestApplication | undefined;
@@ -189,6 +192,203 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
         expect(res.body.status).toBe('ok');
       });
   });
+
+  it('persists separate release settings and opens saved results without a publishing worker', async () => {
+    const db = users.db.db!;
+    const courseId = new Types.ObjectId();
+    const profileId = new Types.ObjectId();
+    const registrationId = new Types.ObjectId();
+    const studentId = new Types.ObjectId(accounts.get('student')!.userId);
+    const courseCode = `QR${randomBytes(5).toString('hex').toUpperCase()}`;
+    let createdQuizId: Types.ObjectId | undefined;
+    try {
+      await db.collection('courses').insertOne({
+        _id: courseId,
+        code: courseCode,
+        name: 'Synthetic release course',
+        isActive: true,
+      });
+      await db.collection('student_profiles').insertOne({
+        _id: profileId,
+        userId: studentId,
+        studentCode,
+        fullName: 'Synthetic release student',
+        level: '1',
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+      await db.collection('course_registrations').insertOne({
+        _id: registrationId,
+        studentId,
+        courses: [courseCode],
+        status: 'approved',
+        academicYear: '2026-2027',
+        semester: 'first',
+      });
+      const account = accounts.get('admin')!;
+      const signedIn = await request(app!.getHttpServer())
+        .post('/api/auth/admin/login')
+        .set('Origin', origin)
+        .send({ email: account.identifier, password })
+        .expect(200);
+      const admin = {
+        cookie: (signedIn.headers['set-cookie'] as unknown as string[])
+          .map((value) => value.split(';')[0])
+          .join('; '),
+        csrf: signedIn.body.csrfToken as string,
+      };
+      const payload = {
+        courseId: String(courseId),
+        title: 'Scheduled release fixture',
+        durationMinutes: 1,
+        isPublished: false,
+        resultsReleaseMode: 'after_close',
+        reviewReleaseMode: 'after_close',
+        endsAt: new Date(Date.now() + 180000).toISOString(),
+        questions: [
+          {
+            id: 'q1',
+            text: 'Two plus two?',
+            type: 'mcq',
+            options: ['4', '5'],
+            correctOptionIndex: 0,
+            points: 2,
+          },
+        ],
+      };
+      await authenticatedPost('/api/admin/quizzes', admin)
+        .send({ ...payload, resultsReleaseMode: 'timer' })
+        .expect(400);
+      const { endsAt: _endsAt, ...missingClose } = payload;
+      await authenticatedPost('/api/admin/quizzes', admin)
+        .send(missingClose)
+        .expect(400);
+      const created = await authenticatedPost('/api/admin/quizzes', admin)
+        .send(payload)
+        .expect(201);
+      createdQuizId = new Types.ObjectId(created.body._id as string);
+      expect(created.body).toMatchObject({
+        resultsReleaseMode: 'after_close',
+        reviewReleaseMode: 'after_close',
+        publishResults: false,
+        allowReview: false,
+      });
+      await db
+        .collection('quizzes')
+        .updateOne({ _id: createdQuizId }, { $set: { isPublished: true } });
+      await db.collection('quiz_submissions').insertOne({
+        quizId: createdQuizId,
+        courseId,
+        studentId,
+        studentCode,
+        score: 2,
+        totalMarks: 2,
+        percentage: 100,
+        isPassed: true,
+        submittedAt: new Date(),
+        durationSeconds: 10,
+        answers: [
+          {
+            questionId: 'q1',
+            selectedOptionIndex: 0,
+            isCorrect: true,
+            pointsAwarded: 2,
+          },
+        ],
+      });
+      const student = await login();
+      const list = () =>
+        request(app!.getHttpServer())
+          .get('/api/students/me/quizzes')
+          .set('Cookie', student.cookie);
+      const review = () =>
+        request(app!.getHttpServer())
+          .get(`/api/students/me/quizzes/${String(createdQuizId)}/review`)
+          .set('Cookie', student.cookie);
+      const hidden = await list().expect(200);
+      expect(
+        hidden.body.find(
+          (item: { _id: string }) => item._id === String(createdQuizId),
+        ),
+      ).toMatchObject({ publishResults: false, canReview: false });
+      expect(JSON.stringify(hidden.body)).not.toContain('"score"');
+      await review().expect(403);
+      await request(app!.getHttpServer())
+        .get(`/api/students/me/quizzes/${String(createdQuizId)}/review`)
+        .expect(401);
+      await request(app!.getHttpServer())
+        .patch(`/api/admin/quizzes/${String(createdQuizId)}`)
+        .set('Cookie', admin.cookie)
+        .send({ publishResults: true })
+        .expect(403);
+      await request(app!.getHttpServer())
+        .patch(`/api/admin/quizzes/${String(createdQuizId)}`)
+        .set('Cookie', student.cookie)
+        .set('x-csrf-token', student.csrf)
+        .send({ publishResults: true })
+        .expect(403);
+      await db
+        .collection('quizzes')
+        .updateOne(
+          { _id: createdQuizId },
+          { $set: { endsAt: new Date(Date.now() - 1) } },
+        );
+      const released = await list().expect(200);
+      expect(
+        released.body.find(
+          (item: { _id: string }) => item._id === String(createdQuizId),
+        ),
+      ).toMatchObject({
+        publishResults: true,
+        canReview: true,
+        isEnded: true,
+        submission: { score: 2 },
+      });
+      const answers = await review().expect(200);
+      expect(answers.body.questions[0].correctOptionIndex).toBe(0);
+      // A fresh service with no cache or queue worker reads the persisted modes.
+      const restarted = new QuizzesService(
+        app!.get(getModelToken('Quiz')),
+        app!.get(getModelToken('QuizSubmission')),
+        app!.get(getModelToken('QuizAttempt')),
+        app!.get(getModelToken('Course')),
+        app!.get(getModelToken('CourseRegistration')),
+        app!.get(getModelToken('StudentProfile')),
+        app!.get(NotificationsService),
+        app!.get(QuizQuestionExcelService),
+      );
+      expect(
+        (
+          await restarted.getQuizReview(
+            String(createdQuizId),
+            String(studentId),
+          )
+        ).submission.score,
+      ).toBe(2);
+      expect(
+        await db.collection('quizzes').findOne({ _id: createdQuizId }),
+      ).toMatchObject({ publishResults: false, allowReview: false });
+      await request(app!.getHttpServer())
+        .patch(`/api/admin/quizzes/${String(createdQuizId)}`)
+        .set('Cookie', admin.cookie)
+        .set('x-csrf-token', admin.csrf)
+        .send({ resultsReleaseMode: 'manual', publishResults: false })
+        .expect(200);
+      await review().expect(403);
+    } finally {
+      if (createdQuizId) {
+        await db
+          .collection('quiz_submissions')
+          .deleteMany({ quizId: createdQuizId });
+        await db.collection('quizzes').deleteOne({ _id: createdQuizId });
+      }
+      await db
+        .collection('course_registrations')
+        .deleteOne({ _id: registrationId });
+      await db.collection('student_profiles').deleteOne({ _id: profileId });
+      await db.collection('courses').deleteOne({ _id: courseId });
+    }
+  }, 30000);
   it('preserves the existing bcrypt password and rejects a copied token after logout', async () => {
     const original = await users
       .findById(ids[0])

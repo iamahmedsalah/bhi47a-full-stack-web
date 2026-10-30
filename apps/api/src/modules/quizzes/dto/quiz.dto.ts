@@ -7,12 +7,17 @@ import {
   IsNumber,
   IsBoolean,
   IsEnum,
+  IsIn,
   Min,
   Max,
   ValidateNested,
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  QUIZ_RELEASE_MODES,
+  type QuizReleaseMode,
+} from '@student-portal/shared';
 
 export class QuizQuestionDto {
   @ApiProperty({ example: 'q1' })
@@ -106,7 +111,7 @@ export class CreateQuizDto {
   @IsBoolean()
   isPublished?: boolean;
 
-  @ApiPropertyOptional({ default: true })
+  @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
   allowReview?: boolean;
@@ -120,6 +125,16 @@ export class CreateQuizDto {
   @IsOptional()
   @IsBoolean()
   publishResults?: boolean;
+
+  @ApiPropertyOptional({ enum: QUIZ_RELEASE_MODES, default: 'after_close' })
+  @IsOptional()
+  @IsIn(QUIZ_RELEASE_MODES)
+  resultsReleaseMode?: QuizReleaseMode;
+
+  @ApiPropertyOptional({ enum: QUIZ_RELEASE_MODES, default: 'manual' })
+  @IsOptional()
+  @IsIn(QUIZ_RELEASE_MODES)
+  reviewReleaseMode?: QuizReleaseMode;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -197,6 +212,16 @@ export class UpdateQuizDto {
   @IsOptional()
   @IsBoolean()
   publishResults?: boolean;
+
+  @ApiPropertyOptional({ enum: QUIZ_RELEASE_MODES })
+  @IsOptional()
+  @IsIn(QUIZ_RELEASE_MODES)
+  resultsReleaseMode?: QuizReleaseMode;
+
+  @ApiPropertyOptional({ enum: QUIZ_RELEASE_MODES })
+  @IsOptional()
+  @IsIn(QUIZ_RELEASE_MODES)
+  reviewReleaseMode?: QuizReleaseMode;
 
   @ApiPropertyOptional()
   @IsOptional()

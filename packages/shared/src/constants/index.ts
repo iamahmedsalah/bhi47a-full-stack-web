@@ -15,3 +15,4 @@ export * from "./grading";
 export * from "./staff";
 export * from "./materials";
 export * from "./tuition-audit";
+export * from "./quiz-release";
