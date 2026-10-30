@@ -98,7 +98,7 @@ function buildStaffMatchConditions(idStr: string) {
       { teachingAssistantIds: objId },
       { 'teachingAssistants._id': objId },
       { teachingAssistantId: objId },
-      { teachingAssistant: objId }
+      { teachingAssistant: objId },
     );
   }
   conds.push(
@@ -108,11 +108,10 @@ function buildStaffMatchConditions(idStr: string) {
     { teachingAssistantIds: idStr },
     { 'teachingAssistants._id': idStr },
     { teachingAssistantId: idStr },
-    { teachingAssistant: idStr }
+    { teachingAssistant: idStr },
   );
   return conds;
 }
-
 
 function buildTaMatchConditions(idStr: string) {
   const conds: any[] = [];
@@ -122,14 +121,14 @@ function buildTaMatchConditions(idStr: string) {
       { teachingAssistantIds: objId },
       { 'teachingAssistants._id': objId },
       { teachingAssistantId: objId },
-      { teachingAssistant: objId }
+      { teachingAssistant: objId },
     );
   }
   conds.push(
     { teachingAssistantIds: idStr },
     { 'teachingAssistants._id': idStr },
     { teachingAssistantId: idStr },
-    { teachingAssistant: idStr }
+    { teachingAssistant: idStr },
   );
   return conds;
 }
@@ -141,13 +140,13 @@ function buildDoctorMatchConditions(idStr: string) {
     conds.push(
       { doctorId: objId },
       { doctorIds: objId },
-      { 'doctors._id': objId }
+      { 'doctors._id': objId },
     );
   }
   conds.push(
     { doctorId: idStr },
     { doctorIds: idStr },
-    { 'doctors._id': idStr }
+    { 'doctors._id': idStr },
   );
   return conds;
 }
@@ -330,10 +329,13 @@ export class CoursesService {
       filter.isActive = query.isActive;
     }
 
-    const isSpecificStaffQuery = Boolean(query.staffId || query.doctorId || query.teachingAssistantId);
-    const cacheKey = !query.search && !isSpecificStaffQuery
-      ? `courses:list:${caller?._id || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
-      : null;
+    const isSpecificStaffQuery = Boolean(
+      query.staffId || query.doctorId || query.teachingAssistantId,
+    );
+    const cacheKey =
+      !query.search && !isSpecificStaffQuery
+        ? `courses:list:${caller?._id || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
+        : null;
 
     if (cacheKey && this.cacheService) {
       return this.cacheService.wrap(

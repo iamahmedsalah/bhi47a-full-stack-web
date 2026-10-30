@@ -164,7 +164,9 @@ export class StaffManagementService {
         );
       }
       if (
-        dto.staffType !== 'doctor' && dto.staffType !== 'teaching_assistant' && dto.staffType !== 'assistant_lecturer'
+        dto.staffType !== 'doctor' &&
+        dto.staffType !== 'teaching_assistant' &&
+        dto.staffType !== 'assistant_lecturer'
       ) {
         throw new ForbiddenException(
           'Administrative staff may only create Doctor and Teaching Assistant accounts',
@@ -237,7 +239,9 @@ export class StaffManagementService {
       }
       if (
         dto.staffType &&
-        dto.staffType !== 'doctor' && dto.staffType !== 'teaching_assistant' && dto.staffType !== 'assistant_lecturer'
+        dto.staffType !== 'doctor' &&
+        dto.staffType !== 'teaching_assistant' &&
+        dto.staffType !== 'assistant_lecturer'
       ) {
         throw new ForbiddenException(
           'Administrative staff may only manage Doctor and Teaching Assistant accounts',
@@ -252,7 +256,9 @@ export class StaffManagementService {
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const nextValues = {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-      ...(dto.nameAr !== undefined ? { nameAr: dto.nameAr.trim() || undefined } : {}),
+      ...(dto.nameAr !== undefined
+        ? { nameAr: dto.nameAr.trim() || undefined }
+        : {}),
       ...(email !== undefined ? { email } : {}),
       ...(username !== undefined ? { username } : {}),
       ...(dto.phone !== undefined

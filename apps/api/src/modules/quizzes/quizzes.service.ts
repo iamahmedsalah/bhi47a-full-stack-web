@@ -267,7 +267,8 @@ export class QuizzesService implements OnModuleInit {
         dto.allowResume !== undefined ? Boolean(dto.allowResume) : true,
       publishResults: Boolean(dto.publishResults ?? false),
       allowReview: dto.allowReview ?? false,
-      resultsReleaseMode: dto.resultsReleaseMode ?? (endsAtVal ? 'after_close' : 'manual'),
+      resultsReleaseMode:
+        dto.resultsReleaseMode ?? (endsAtVal ? 'after_close' : 'manual'),
       reviewReleaseMode: dto.reviewReleaseMode ?? 'manual',
     });
 
