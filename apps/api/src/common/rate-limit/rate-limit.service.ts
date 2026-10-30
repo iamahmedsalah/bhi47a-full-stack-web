@@ -1,4 +1,10 @@
-import { Injectable, Optional, type OnModuleInit } from '@nestjs/common';
+import {
+  HttpException,
+  Injectable,
+  Optional,
+  UnauthorizedException,
+  type OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
@@ -8,6 +14,7 @@ import { MemoryRateLimiterStore } from './memory-rate-limiter.store';
 import { MongoRateLimiterStore } from './mongo-rate-limiter.store';
 import { findRateLimitRules, getClientIp } from './rate-limit.rules';
 import { createHash } from 'node:crypto';
+import type { AuthenticatedRequest } from '../../modules/auth/types/authenticated-request';
 import type {
   RateLimitHit,
   RateLimitRule,
@@ -15,6 +22,18 @@ import type {
 } from './rate-limit.types';
 
 const MESSAGES: Record<string, { ar: string; en: string }> = {
+  'auth-ip': {
+    en: 'Too many authentication requests. Please retry shortly.',
+    ar: 'طلبات تسجيل دخول كثيرة من هذه الشبكة. يرجى الانتظار قليلاً.',
+  },
+  'google-nonce': {
+    en: 'Too many Google sign-in preparations. Please retry shortly.',
+    ar: 'طلبات تجهيز تسجيل الدخول بجوجل كثيرة. يرجى الانتظار قليلاً.',
+  },
+  'quiz-draft': {
+    en: 'Too many quiz saves. Please wait a moment.',
+    ar: 'طلبات حفظ الاختبار كثيرة. يرجى الانتظار قليلاً.',
+  },
   'student-login': {
     en: 'Too many student login attempts. Please try again later.',
     ar: 'محاولات تسجيل دخول متكررة للطالب. يرجى المحاولة مرة أخرى لاحقاً.',
@@ -140,9 +159,37 @@ export class RateLimiterService implements OnModuleInit {
   }
 
   async apply(req: Request, res: Response, next: NextFunction): Promise<void> {
-    const rules = findRateLimitRules(req);
-    if (!rules.length) {
+    const rules = findRateLimitRules(req).filter((rule) => !rule.scope);
+    try {
+      await this.enforceRules(req, res, rules);
       next();
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      res.status(error.getStatus()).json(error.getResponse());
+    }
+  }
+
+  async enforceAuthenticated(
+    req: AuthenticatedRequest,
+    res: Response,
+  ): Promise<void> {
+    const rules = findRateLimitRules(req).filter(
+      (rule) => rule.scope === 'authenticated',
+    );
+    if (!rules.length) return;
+    // Called only after JwtAuthGuard verifies the session and loads the user.
+    // Never use a body/header identifier or an unverified decoded JWT here.
+    if (!req.user?._id) throw new UnauthorizedException();
+    await this.enforceRules(req, res, rules, String(req.user._id));
+  }
+
+  private async enforceRules(
+    req: Request,
+    res: Response,
+    rules: RateLimitRule[],
+    userId?: string,
+  ): Promise<void> {
+    if (!rules.length) {
       return;
     }
 
@@ -154,8 +201,9 @@ export class RateLimiterService implements OnModuleInit {
 
     try {
       for (const rule of rules) {
-        const identity = rule.keyGenerator?.(req) || getClientIp(req);
-        const key = `${rule.name}:${createHash('sha256').update(identity).digest('hex')}`;
+        const identity = userId || rule.keyGenerator?.(req) || getClientIp(req);
+        // New windows/scopes must not inherit the old 15-minute IP buckets.
+        const key = `${rule.name}:v2:${createHash('sha256').update(identity).digest('hex')}`;
         const hit = await this.store.increment(key, rule.windowMs, rule.max);
 
         this.setRateLimitHeaders(res, rule, hit);
@@ -164,32 +212,37 @@ export class RateLimiterService implements OnModuleInit {
           this.metricsService?.recordRateLimitBlock(rule.name);
           const ruleMessage = MESSAGES[rule.name]?.[lang] || rule.message;
           res.setHeader('Retry-After', String(hit.retryAfterSeconds));
-          res.status(429).json({
-            success: false,
-            statusCode: 429,
-            message: ruleMessage,
-            code: 'RATE_LIMIT_EXCEEDED',
-            reason: ruleMessage,
-            timestamp: new Date().toISOString(),
-            path: req.originalUrl,
-          });
-          return;
+          throw new HttpException(
+            {
+              success: false,
+              statusCode: 429,
+              message: ruleMessage,
+              code: 'RATE_LIMIT_EXCEEDED',
+              retryAfterSeconds: hit.retryAfterSeconds,
+              reason: ruleMessage,
+              timestamp: new Date().toISOString(),
+              path: req.originalUrl,
+            },
+            429,
+          );
         }
       }
-
-      next();
-    } catch {
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.warn('Rate limiter unavailable', 'RateLimiterService');
       const unavailableMessage = MESSAGES['unavailable'][lang];
-      res.status(503).json({
-        success: false,
-        statusCode: 503,
-        message: unavailableMessage,
-        code: 'RATE_LIMIT_UNAVAILABLE',
-        reason: unavailableMessage,
-        timestamp: new Date().toISOString(),
-        path: req.originalUrl,
-      });
+      throw new HttpException(
+        {
+          success: false,
+          statusCode: 503,
+          message: unavailableMessage,
+          code: 'RATE_LIMIT_UNAVAILABLE',
+          reason: unavailableMessage,
+          timestamp: new Date().toISOString(),
+          path: req.originalUrl,
+        },
+        503,
+      );
     }
   }
 }

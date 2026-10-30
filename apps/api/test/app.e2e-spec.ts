@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
@@ -122,6 +122,26 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
       accounts.set(role, { userId: user._id.toString(), identifier });
     }
   }, 30000);
+
+  beforeEach(async () => {
+    // Browser acceptance cases reuse these synthetic accounts. Each case needs
+    // its own action budget now that the production rate-limit guard is active.
+    // Delete only counters belonging to this suite's generated fixture IDs.
+    const keys = ids.flatMap((id) =>
+      [
+        'auth-security',
+        'passkey-security',
+        'google-link',
+        'google-verify-otp',
+        'change-password',
+      ].map(
+        (rule) => `${rule}:v2:${createHash('sha256').update(id).digest('hex')}`,
+      ),
+    );
+    await users.db
+      .collection<{ _id: string }>('rate_limits')
+      .deleteMany({ _id: { $in: keys } });
+  });
 
   afterAll(async () => {
     if (users) await users.deleteMany({ _id: { $in: ids } });

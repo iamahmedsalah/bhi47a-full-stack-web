@@ -4,6 +4,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { RateLimiterModule } from '../../common/rate-limit/rate-limit.module';
+import { AuthenticatedRateLimitGuard } from '../../common/rate-limit/authenticated-rate-limit.guard';
 import { AuthService } from './auth.service';
 import { AuthLoginService } from './services/auth-login.service';
 import { AuthPasswordService } from './services/auth-password.service';
@@ -47,6 +49,7 @@ import {
 
 @Module({
   imports: [
+    RateLimiterModule,
     UsersModule,
     EmailsModule,
     MongooseModule.forFeature([
@@ -103,6 +106,7 @@ import {
       useClass: PermissionsGuard,
     },
     { provide: APP_GUARD, useClass: AuthOriginGuard },
+    { provide: APP_GUARD, useClass: AuthenticatedRateLimitGuard },
     { provide: APP_GUARD, useClass: RecentAuthGuard },
   ],
   exports: [

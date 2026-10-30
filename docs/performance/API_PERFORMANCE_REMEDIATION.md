@@ -144,7 +144,7 @@ CPU ratios include client/server, can exceed one because of native work, and cov
 | Frontend retry execution and CSV parsing | Passed; four tests |
 | Real JWT/MongoDB HTTP integration and concurrency | Passed; four tests, 2,880 measured requests, zero errors |
 | API production build and runtime artifact | Passed |
-| Web production build and root route manifests | Pending final build completion |
+| Web production build and root route manifests | Passed; Webpack production build, TypeScript, page generation and root route manifest audit |
 | Production/staging load validation | **Not measured** |
 
 Logs and the raw local CPU profile are under `outputs/api-performance-review/`. The web build uses Next's supported `--webpack` option. E2E scope deliberately excludes older suites that delete fixtures, because this task prohibits database deletion. No existing destructive cleanup test was executed.

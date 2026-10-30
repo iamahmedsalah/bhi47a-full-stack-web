@@ -109,10 +109,16 @@ async function bootstrap() {
   );
 
   app.useLogger(logger);
-  app.set(
-    'trust proxy',
-    trustedProxySources(configService.get<string>('TRUST_PROXY_CIDRS')),
+  const trustedProxies = trustedProxySources(
+    configService.get<string>('TRUST_PROXY_CIDRS'),
   );
+  app.set('trust proxy', trustedProxies);
+  if (isProduction && !trustedProxies) {
+    logger.warn(
+      'TRUST_PROXY_CIDRS is empty. Behind Nginx/Docker, all visitors may share the proxy IP and authentication rate limits. Configure the exact proxy source addresses.',
+      'Bootstrap',
+    );
+  }
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
   app.use(createHttpMetricsMiddleware(app.get(MetricsService)));

@@ -19,6 +19,7 @@ type GoogleIdentityState = {
   credentialHandler?: GoogleCredentialHandler;
   flow?: { flowId: string; proof: string; nonce: string; expiresAt: number };
   preparing?: Promise<void>;
+  retryAfterAt?: number;
 };
 
 type GoogleIdConfiguration = {
@@ -64,8 +65,12 @@ async function prepareGoogleIdentity(clientId: string): Promise<void> {
   const state = getGoogleIdentityState();
   if (state.initializedClientId === clientId && state.flow && state.flow.expiresAt > Date.now() + 60000) return;
   if (state.preparing) return state.preparing;
+  if (state.retryAfterAt && state.retryAfterAt > Date.now()) {
+    throw new Error('Google sign-in preparation is cooling down');
+  }
   state.preparing = (async () => {
     const response = await api.post<{ flowId: string; proof: string; nonce: string }>('/auth/google/nonce', {}, { timeout: 15000 });
+    state.retryAfterAt = undefined;
     state.flow = { ...response.data, expiresAt: Date.now() + 5 * 60000 };
     window.google?.accounts.id.initialize({ client_id: clientId, nonce: state.flow.nonce, ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: true, itp_support: true, use_fedcm_for_button: true, button_auto_select: false,
       callback: (result) => {
@@ -75,7 +80,13 @@ async function prepareGoogleIdentity(clientId: string): Promise<void> {
       },
     });
     state.initializedClientId = clientId;
-  })().finally(() => { state.preparing = undefined; });
+  })().catch((error: unknown) => {
+    const deadline = error && typeof error === 'object' && 'retryAfterAt' in error
+      ? error.retryAfterAt : undefined;
+    state.retryAfterAt = typeof deadline === 'number' && Number.isFinite(deadline)
+      ? Math.max(Date.now() + 30000, deadline) : Date.now() + 60000;
+    throw error;
+  }).finally(() => { state.preparing = undefined; });
   return state.preparing;
 }
 
@@ -180,10 +191,21 @@ export function useGoogleSignIn({
     }
 
     let active = true;
-    const prepare = () => void prepareGoogleIdentity(clientId).then(() => { if (active) setIsInitialized(true); }).catch(() => { if (active) setIsInitialized(false); });
+    const prepare = () => {
+      if (document.visibilityState === 'hidden') return;
+      void prepareGoogleIdentity(clientId)
+        .then(() => { if (active) setIsInitialized(true); })
+        .catch(() => { if (active) setIsInitialized(false); });
+    };
     prepare();
-    const interval = window.setInterval(prepare, 3 * 60000);
-    return () => { active = false; window.clearInterval(interval); };
+    // Check before the five-minute flow expires; preparation reuses a fresh flow.
+    const interval = window.setInterval(prepare, 60000);
+    document.addEventListener('visibilitychange', prepare);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', prepare);
+    };
   }, [clientId, scriptLoaded]);
 
   const renderButton = useCallback(

@@ -28,15 +28,33 @@ function identityKey(...parts: Array<string | undefined>): string | undefined {
 
 export const rateLimitRules: RateLimitRule[] = [
   {
+    name: 'google-nonce',
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/google\/nonce$/,
+    windowMs: minute,
+    max: readLimit('GOOGLE_NONCE_RATE_LIMIT', 1200),
+    message: 'Too many Google sign-in preparations. Please retry shortly.',
+  },
+  {
     name: 'google-auth',
-    methods: ['POST', 'DELETE'],
-    pattern: /^\/api\/auth\/google(?:\/.*)?$/,
-    windowMs: 15 * minute,
-    max: readLimit('GOOGLE_AUTH_RATE_LIMIT', 12),
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/google\/login$/,
+    windowMs: minute,
+    max: readLimit('GOOGLE_AUTH_RATE_LIMIT', 1200),
     message: 'Too many Google authentication attempts. Please retry later.',
   },
   {
+    name: 'google-link',
+    scope: 'authenticated',
+    methods: ['POST', 'DELETE'],
+    pattern: /^\/api\/auth\/google\/link(?:\/.*)?$/,
+    windowMs: 15 * minute,
+    max: readLimit('GOOGLE_LINK_RATE_LIMIT', 12),
+    message: 'Too many Google linking attempts. Please retry later.',
+  },
+  {
     name: 'auth-security',
+    scope: 'authenticated',
     methods: ['POST', 'DELETE'],
     pattern: /^\/api\/auth\/(reauthenticate|sessions(?:\/.*)?|logout-all)$/,
     windowMs: 5 * minute,
@@ -45,13 +63,21 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'passkeys',
+    methods: ['POST'],
+    pattern: /^\/api\/auth\/passkeys\/login\/(options|verify)$/,
+    windowMs: minute,
+    max: readLimit('PASSKEY_LOGIN_RATE_LIMIT', 1800),
+    message: 'Too many passkey login attempts. Please retry shortly.',
+    keyGenerator: getClientIp,
+  },
+  {
+    name: 'passkey-security',
+    scope: 'authenticated',
     methods: ['POST', 'PATCH', 'DELETE'],
-    pattern: /^\/api\/auth\/passkeys(?:\/.*)?$/,
+    pattern: /^\/api\/auth\/passkeys(?:\/(?!login\/).*)?$/,
     windowMs: 5 * minute,
     max: readLimit('PASSKEY_RATE_LIMIT', 20),
     message: 'Too many passkey attempts. Please try again later.',
-    // Never trust caller-supplied forwarded-for. Configure trusted proxy at the edge.
-    keyGenerator: (req) => req.ip || req.socket.remoteAddress || 'unknown',
   },
   {
     name: 'student-login',
@@ -75,6 +101,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'change-password',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/auth\/change-password$/,
     windowMs: 15 * minute,
@@ -83,6 +110,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'student-complaint-create',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/students\/complaints$/,
     windowMs: day,
@@ -92,6 +120,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'student-complaint-reply',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/students\/complaints\/[^/]+\/reply$/,
     windowMs: day,
@@ -125,6 +154,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'admin-uploads',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/admin\/uploads$/,
     windowMs: hour,
@@ -133,6 +163,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'admin-messaging',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/admin\/(emails|notifications)$/,
     windowMs: hour,
@@ -171,6 +202,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'google-verify-otp',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/auth\/google\/link\/verify-otp$/,
     windowMs: 15 * minute,
@@ -179,6 +211,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'student-ai-chat',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern: /^\/api\/student\/chat\/messages?$/,
     windowMs: 10 * minute,
@@ -187,6 +220,7 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'admin-exports',
+    scope: 'authenticated',
     methods: ['GET'],
     pattern: /^\/api\/admin\/.+\/export(\/excel)?$/,
     windowMs: 10 * minute,
@@ -195,12 +229,22 @@ export const rateLimitRules: RateLimitRule[] = [
   },
   {
     name: 'quiz-submit',
+    scope: 'authenticated',
     methods: ['POST'],
     pattern:
-      /^\/api\/(courses\/[^/]+\/quizzes\/[^/]+\/submit|students\/me\/quizzes\/[^/]+\/(submit|start|save-draft|exit))$/,
+      /^\/api\/(courses\/[^/]+\/quizzes\/[^/]+\/submit|students\/me\/quizzes\/[^/]+\/(submit|start|exit))$/,
     windowMs: minute,
     max: readLimit('QUIZ_SUBMIT_RATE_LIMIT', 30),
     message: 'Too many quiz requests. Please wait a moment.',
+  },
+  {
+    name: 'quiz-draft',
+    scope: 'authenticated',
+    methods: ['POST'],
+    pattern: /^\/api\/students\/me\/quizzes\/[^/]+\/save-draft$/,
+    windowMs: minute,
+    max: readLimit('QUIZ_DRAFT_RATE_LIMIT', 60),
+    message: 'Too many quiz saves. Please wait a moment.',
   },
 ];
 
@@ -218,14 +262,20 @@ export function findRateLimitRules(req: Request): RateLimitRule[] {
   const rules = rateLimitRules.filter(
     (rule) => rule.methods.includes(method) && rule.pattern.test(path),
   );
-  if (!rules.length || !/^\/api\/auth\//.test(path)) return rules;
+  // Anonymous preparation must not spend the password/credential budget.
+  // Authenticated rules run after JWT verification and have a per-user budget.
+  if (
+    !rules.some((rule) => !rule.scope && rule.name !== 'google-nonce') ||
+    !/^\/api\/auth\//.test(path)
+  )
+    return rules;
   return [
     {
       name: 'auth-ip',
       methods: ['POST', 'PATCH', 'DELETE'],
       pattern: /^\/api\/auth\//,
-      windowMs: 15 * minute,
-      max: readLimit('AUTH_IP_RATE_LIMIT', 60),
+      windowMs: minute,
+      max: readLimit('AUTH_IP_RATE_LIMIT', 2400),
       message: 'Too many authentication requests. Please retry later.',
       keyGenerator: getClientIp,
     },

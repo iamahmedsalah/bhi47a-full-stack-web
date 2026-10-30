@@ -7,6 +7,7 @@ export type RateLimitRule = {
   windowMs: number;
   max: number;
   message: string;
+  scope?: 'authenticated';
   keyGenerator?: (req: Request) => string | undefined;
 };
 

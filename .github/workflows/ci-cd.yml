@@ -81,6 +81,9 @@ jobs:
       - name: Verify authentication admission boundaries
         run: node --test scripts/auth-admission.test.mjs
 
+      - name: Verify Google sign-in nonce refresh and cooldown
+        run: node --test apps/web/tests/google-signin-rate-limit.test.mjs
+
       - name: Verify isolated E2E database policy
         run: node --test scripts/e2e-runner-safety.test.cjs
 

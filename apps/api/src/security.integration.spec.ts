@@ -24,6 +24,7 @@ import { MetricsController } from './core/metrics/metrics.controller';
 import { MetricsService } from './core/metrics/metrics.service';
 import { HealthController } from './health.controller';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
+import { RateLimiterService } from './common/rate-limit/rate-limit.service';
 import { securityHeadersMiddleware } from './common/middleware/security-headers.middleware';
 
 const secret = 'security-regression-test-secret-at-least-32-bytes';
@@ -31,6 +32,7 @@ const userId = '507f1f77bcf86cd799439011';
 
 describe('HTTP security boundaries (real controllers, guards and JWT strategy)', () => {
   let app: INestApplication;
+  let rateLimiter: RateLimiterService;
   const originalConnection = ConnectionHolder.connection;
   const originalNodeEnv = process.env.NODE_ENV;
   const jwt = new JwtService({ secret, signOptions: { expiresIn: '7d' } });
@@ -76,6 +78,14 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
         HealthController,
       ],
       providers: [
+        {
+          provide: RateLimiterService,
+          useValue: {
+            enforceAuthenticated: (
+              ...args: Parameters<RateLimiterService['enforceAuthenticated']>
+            ) => rateLimiter.enforceAuthenticated(...args),
+          },
+        },
         {
           provide: RecentAuthService,
           useValue: { require: jest.fn().mockResolvedValue(undefined) },
@@ -136,6 +146,10 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
 
   beforeEach(() => {
     jest.clearAllMocks();
+    rateLimiter = new RateLimiterService(
+      new ConfigService({ NODE_ENV: 'test', RATE_LIMIT_STORE: 'memory' }),
+      { log: jest.fn(), warn: jest.fn() } as never,
+    );
     account = {
       _id: userId,
       role: 'admin',
@@ -209,6 +223,25 @@ describe('HTTP security boundaries (real controllers, guards and JWT strategy)',
         .expect(401);
     }
     expect(findByIdForAuth).not.toHaveBeenCalled();
+  });
+
+  it('enforces protected quotas after JWT verification and isolates users sharing a network', async () => {
+    const path = '/api/auth/passkeys/register/options';
+    const post = (session = cookie()) =>
+      request(app.getHttpServer())
+        .post(path)
+        .set('Cookie', `${session}; csrf_token=test-csrf`)
+        .set('x-csrf-token', 'test-csrf');
+    for (let attempt = 0; attempt < 20; attempt++) await post().expect(200);
+    const blocked = await post()
+      .set('x-forwarded-for', '203.0.113.99')
+      .send({ userId: 'forged-user' })
+      .expect(429);
+    expect(blocked.headers['retry-after']).toBeDefined();
+    expect(blocked.body.code).toBe('RATE_LIMIT_EXCEEDED');
+    await post('access_token=invalid').expect(401);
+    account._id = '507f1f77bcf86cd799439012';
+    await post(cookie({ sub: account._id })).expect(200);
   });
 
   it('uses the database role even when a signed token claims admin', async () => {
