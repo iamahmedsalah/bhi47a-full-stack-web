@@ -41,3 +41,10 @@ test('duplicate text rows do not reuse a question ID twice', () => {
   const result = replaceImportedQuestions([question('saved', 'Same')], [question('a', 'Same'), question('b', 'Same')]);
   assert.deepEqual(result.map((q) => q.id), ['saved', 'b']);
 });
+
+test('empty assignment arrays retain legacy IDs when editing courses', async () => {
+  const { getCourseStaffIds } = await import('../src/features/courses/assignment-utils.ts');
+  const course = { doctorIds: [], doctorId: 'doctor', doctors: [{ _id: 'second' }], teachingAssistantIds: [], teachingAssistants: [{ _id: 'ta' }] };
+  assert.deepEqual(getCourseStaffIds(course), { doctorIds: ['doctor', 'second'], teachingAssistantIds: ['ta'] });
+  assert.deepEqual(getCourseStaffIds({ doctorIds: ['doctor'], doctorId: 'doctor' }).doctorIds, ['doctor']);
+});

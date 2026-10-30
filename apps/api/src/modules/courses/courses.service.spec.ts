@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { courseStaffFilter } from './utils/course-staff.util';
 import { CoursesService } from './courses.service';
 
 describe('CoursesService Unit Tests', () => {
@@ -117,18 +118,17 @@ describe('CoursesService Unit Tests', () => {
 
   describe('findDoctorCourses()', () => {
     it('returns active courses assigned to the specified doctor ID', async () => {
-      const doctorObjectId = new Types.ObjectId(doctorId);
       const assignedCourses = [
         {
           _id: new Types.ObjectId(),
           code: 'CS101',
-          doctorId: doctorObjectId,
+          doctorId: new Types.ObjectId(doctorId),
           isActive: true,
         },
         {
           _id: new Types.ObjectId(),
           code: 'CS102',
-          doctorId: doctorObjectId,
+          doctorId: new Types.ObjectId(doctorId),
           isActive: true,
         },
       ];
@@ -150,11 +150,7 @@ describe('CoursesService Unit Tests', () => {
         { ...assignedCourses[1], enrolledStudentsCount: 0 },
       ]);
       expect(mockCourseModel.find).toHaveBeenCalledWith({
-        $or: [
-          { doctorId: doctorObjectId },
-          { doctorIds: doctorObjectId },
-          { teachingAssistantIds: doctorObjectId },
-        ],
+        ...courseStaffFilter(doctorId),
         isActive: true,
       });
     });

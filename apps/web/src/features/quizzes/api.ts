@@ -380,3 +380,24 @@ export async function getQuizReview(quizId: string) {
   return res.data;
 }
 
+
+export interface QuizCourseOption { _id: string; code: string; name: string; nameAr?: string }
+
+export async function getQuizCourseOptions(role?: string): Promise<QuizCourseOption[]> {
+  if (role === 'staff') {
+    const res = await api.get<QuizCourseOption[]>('/staff/me/assigned-courses');
+    return res.data;
+  }
+  const courses: QuizCourseOption[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const res = await api.get<{ items: QuizCourseOption[]; totalPages: number }>('/admin/courses', {
+      params: { page, limit: 100, isActive: true },
+    });
+    courses.push(...res.data.items);
+    totalPages = res.data.totalPages;
+    page++;
+  } while (page <= totalPages);
+  return courses;
+}

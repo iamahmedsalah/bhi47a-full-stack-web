@@ -10,6 +10,7 @@ import { CacheService } from '../../core/cache/cache.service';
 import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import { MetricsService } from '../../core/metrics/metrics.service';
 import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
+import { courseStaffFilter } from './utils/course-staff.util';
 import { courseCurriculumFilter } from './utils/course-filter.util';
 import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
 import {
@@ -85,70 +86,6 @@ export interface StudentSyllabiResponse {
   availableLevelCourses: Array<
     Record<string, unknown> & { isRegistered: boolean }
   >;
-}
-
-function buildStaffMatchConditions(idStr: string) {
-  const conds: any[] = [];
-  if (Types.ObjectId.isValid(idStr)) {
-    const objId = new Types.ObjectId(idStr);
-    conds.push(
-      { doctorId: objId },
-      { doctorIds: objId },
-      { 'doctors._id': objId },
-      { teachingAssistantIds: objId },
-      { 'teachingAssistants._id': objId },
-      { teachingAssistantId: objId },
-      { teachingAssistant: objId },
-    );
-  }
-  conds.push(
-    { doctorId: idStr },
-    { doctorIds: idStr },
-    { 'doctors._id': idStr },
-    { teachingAssistantIds: idStr },
-    { 'teachingAssistants._id': idStr },
-    { teachingAssistantId: idStr },
-    { teachingAssistant: idStr },
-  );
-  return conds;
-}
-
-function buildTaMatchConditions(idStr: string) {
-  const conds: any[] = [];
-  if (Types.ObjectId.isValid(idStr)) {
-    const objId = new Types.ObjectId(idStr);
-    conds.push(
-      { teachingAssistantIds: objId },
-      { 'teachingAssistants._id': objId },
-      { teachingAssistantId: objId },
-      { teachingAssistant: objId },
-    );
-  }
-  conds.push(
-    { teachingAssistantIds: idStr },
-    { 'teachingAssistants._id': idStr },
-    { teachingAssistantId: idStr },
-    { teachingAssistant: idStr },
-  );
-  return conds;
-}
-
-function buildDoctorMatchConditions(idStr: string) {
-  const conds: any[] = [];
-  if (Types.ObjectId.isValid(idStr)) {
-    const objId = new Types.ObjectId(idStr);
-    conds.push(
-      { doctorId: objId },
-      { doctorIds: objId },
-      { 'doctors._id': objId },
-    );
-  }
-  conds.push(
-    { doctorId: idStr },
-    { doctorIds: idStr },
-    { 'doctors._id': idStr },
-  );
-  return conds;
 }
 
 @Injectable()
@@ -267,7 +204,7 @@ export class CoursesService {
       teachingAssistants,
     });
     const saved = await course.save();
-    void this.cacheService?.delPattern('courses:*');
+    await this.cacheService?.delPattern('courses:*');
     return saved;
   }
 
@@ -279,29 +216,20 @@ export class CoursesService {
 
     if (caller?.role === 'staff' && caller?._id) {
       const callerIdStr = String(caller._id);
-      if (caller?.staffType === 'doctor') {
-        andConditions.push({ $or: buildDoctorMatchConditions(callerIdStr) });
-      } else if (
-        caller?.staffType === 'teaching_assistant' ||
-        caller?.staffType === 'assistant_lecturer'
-      ) {
-        andConditions.push({ $or: buildTaMatchConditions(callerIdStr) });
-      } else {
-        andConditions.push({ $or: buildStaffMatchConditions(callerIdStr) });
-      }
+      andConditions.push(courseStaffFilter(callerIdStr));
     } else {
       if (query.staffId) {
         andConditions.push({
-          $or: buildStaffMatchConditions(String(query.staffId)),
+          ...courseStaffFilter(String(query.staffId)),
         });
       } else if (query.teachingAssistantId) {
         andConditions.push({
-          $or: buildTaMatchConditions(String(query.teachingAssistantId)),
+          ...courseStaffFilter(String(query.teachingAssistantId), 'ta'),
         });
       } else if (query.doctorId) {
         // Also support doctorId matching TA if staff was passed as doctorId
         andConditions.push({
-          $or: buildStaffMatchConditions(String(query.doctorId)),
+          ...courseStaffFilter(String(query.doctorId)),
         });
       }
     }
@@ -598,13 +526,18 @@ export class CoursesService {
 
     const updated = await this.courseModel.findByIdAndUpdate(
       id,
-      { $set: updatePayload },
+      {
+        $set: updatePayload,
+        ...(dto.teachingAssistantIds !== undefined
+          ? { $unset: { teachingAssistantId: 1, teachingAssistant: 1 } }
+          : {}),
+      },
       { new: true },
     );
     if (!updated) {
       throw new NotFoundException('المادة غير موجودة');
     }
-    void this.cacheService?.delPattern('courses:*');
+    await this.cacheService?.delPattern('courses:*');
     return updated;
   }
 
@@ -614,14 +547,9 @@ export class CoursesService {
     Array<Record<string, unknown> & { enrolledStudentsCount: number }>
   > {
     if (!Types.ObjectId.isValid(staffId)) return [];
-    const staffObjectId = new Types.ObjectId(staffId);
     const courses = (await this.courseModel
       .find({
-        $or: [
-          { doctorId: staffObjectId },
-          { doctorIds: staffObjectId },
-          { teachingAssistantIds: staffObjectId },
-        ],
+        ...courseStaffFilter(staffId),
         isActive: true,
       })
       .lean()) as unknown as Array<
@@ -668,7 +596,7 @@ export class CoursesService {
   async remove(id: string): Promise<{ message: string }> {
     await this.findOne(id);
     await this.courseModel.findByIdAndDelete(id);
-    void this.cacheService?.delPattern('courses:*');
+    await this.cacheService?.delPattern('courses:*');
     return { message: 'تم حذف المادة بنجاح' }; // Course deleted successfully
   }
 
@@ -2320,7 +2248,7 @@ export class CoursesService {
     }
 
     // Clear caches
-    void this.cacheService?.delPattern('courses:*');
+    await this.cacheService?.delPattern('courses:*');
     void this.cacheService?.delPattern('registrations:*');
 
     return {

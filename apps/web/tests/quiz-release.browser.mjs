@@ -23,6 +23,10 @@ const base = {
 };
 let settings;
 let importResult;
+let staffOnly = false;
+let denyAssignedCourses = false;
+let denyStaffCourses = false;
+const staffCourseRequests = [];
 let studentCalls = 0;
 const mutations = [];
 const reset = (delay = 120000) => {
@@ -32,22 +36,25 @@ const reset = (delay = 120000) => {
 reset();
 await fs.mkdir(output, { recursive: true });
 await fs.writeFile(path.join(output, 'loader.cjs'), `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
-await fs.writeFile(path.join(output, 'auth.ts'), `export const useAuth=()=>({user:{_id:'fixture-admin',role:location.pathname.includes('/admin/')?'admin':'student',permissions:[],mustChangePassword:false}});`);
+await fs.writeFile(path.join(output, 'auth.ts'), `export const useAuth=()=>({user:{_id:'fixture-admin',role:new URLSearchParams(location.search).get('as')==='staff'?'staff':location.pathname.includes('/admin/')?'admin':'student',staffType:new URLSearchParams(location.search).get('staffType')||undefined,permissions:['quizzes.read','quizzes.write'],mustChangePassword:false}});`);
 await fs.writeFile(path.join(output, 'navigation.ts'), `export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useRouter=()=>({push:()=>{},replace:()=>{}});`);
 await fs.writeFile(path.join(output, 'api.ts'), `
   const call=async(method,url,body)=>{const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();if(!response.ok)throw result;return {data:result,timestamp:new Date().toISOString()};};
   export const getApiErrorMessage=(error,fallback)=>error.message||fallback;export const getApiErrorDetails=error=>error;export const apiBaseUrl='';
-  export default {get:url=>call('GET',url),post:(url,body)=>call('POST',url,body),patch:(url,body)=>call('PATCH',url,body),delete:url=>call('DELETE',url)};
+  export default {get:(url,config)=>call('GET',url+(config?.params?'?'+new URLSearchParams(config.params):'')),post:(url,body)=>call('POST',url,body),patch:(url,body)=>call('PATCH',url,body),delete:url=>call('DELETE',url)};
 `);
 await fs.writeFile(path.join(output, 'entry.tsx'), `
   import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';
   import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';
   import Admin from '${path.join(web, 'src/app/[locale]/admin/quizzes/page.tsx').replaceAll('\\', '/')}';
   import Student from '${path.join(web, 'src/app/[locale]/dashboard/quizzes/page.tsx').replaceAll('\\', '/')}';
+  import {StaffDetailsDialog} from '${path.join(web, 'src/features/staff/components/staff-details-dialog.tsx').replaceAll('\\', '/')}';
   import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';
   Math.random=()=>0;const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';
   const client=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:0},mutations:{retry:false}}});window.quizQueryClient=client;
-  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/')?<Admin/>:<Student/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);
+  const staffType=new URLSearchParams(location.search).get('staffType')||'doctor';
+  function StaffFixture(){const [open,setOpen]=React.useState(true);return <><button onClick={()=>setOpen(true)}>Open staff details</button><StaffDetailsDialog staff={open?{_id:'${fixtureId}',name:'Synthetic teaching staff',role:'staff',staffType,isActive:true,permissions:[]}:null} open={open} onOpenChange={setOpen}/></>}
+  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/staff')?<StaffFixture/>:location.pathname.includes('/admin/')?<Admin/>:<Student/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);
 `);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
@@ -68,9 +75,24 @@ const state = () => {
 };
 const server = http.createServer(async (req, res) => {
   try {
-    const pathname = new URL(req.url, 'http://localhost').pathname;
-    if (pathname.startsWith('/admin/') || pathname.startsWith('/students/') || pathname === '/courses') {
+    const url = new URL(req.url, 'http://localhost');
+    const pathname = url.pathname;
+    if (pathname.startsWith('/admin/') || pathname.startsWith('/students/') || pathname.startsWith('/staff/') || pathname === '/courses') {
       res.setHeader('Content-Type', 'application/json');
+      if (pathname === '/admin/courses' && url.searchParams.has('staffId')) {
+        staffCourseRequests.push(Object.fromEntries(url.searchParams));
+        const invalid = [...url.searchParams.keys()].some((key) => !['staffId', 'page', 'limit'].includes(key));
+        if (invalid || denyStaffCourses) {
+          res.statusCode = invalid ? 400 : 503;res.end(JSON.stringify({ message: 'Assigned courses unavailable' }));return;
+        }
+        const second = url.searchParams.get('page') === '2';
+        res.end(JSON.stringify({ items: [{ _id: second ? courseId+'2' : courseId, code: second ? 'AS102' : 'AS101',
+          name: second ? 'Second assigned course' : 'Assigned teaching course', nameAr: second ? 'المقرر الثاني' : 'مقرر عضو هيئة التدريس',
+          teachingAssistantIds: [fixtureId] }], totalPages: 2 }));return;
+      }
+      if ((staffOnly && pathname === '/admin/courses') || (denyAssignedCourses && pathname === '/staff/me/assigned-courses')) {
+        res.statusCode = 403; res.end(JSON.stringify({ message: 'Course request failed' })); return;
+      }
       if (pathname === '/admin/quizzes/parse-questions-file') {
         res.end(JSON.stringify(importResult)); return;
       }
@@ -82,7 +104,8 @@ const server = http.createServer(async (req, res) => {
       const student = { ...current, publishResults: current.resultsAvailable, canReview: current.reviewAvailable,
         isSubmitted: true, questionsCount: 1, isOpen: !current.isEnded, submission: { ...(current.resultsAvailable ? { score: 2, percentage: 100, isPassed: true } : {}), totalMarks: 2, submittedAt: new Date().toISOString(), durationSeconds: 10 } };
       let data = [];
-      if (pathname === '/admin/courses' || pathname === '/courses') data = { items: [{ _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' }] };
+      if (pathname === '/staff/me/assigned-courses') data = [{ _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' }];
+      if (pathname === '/admin/courses' || pathname === '/courses') data = { items: [{ _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' }], totalPages: 1 };
       else if (pathname === '/admin/quizzes') data = req.method === 'GET' ? { items: [current], total: 1, page: 1, limit: 15, totalPages: 1 } : current;
       else if (pathname.startsWith('/admin/quizzes/')) data = current;
       else if (pathname === '/students/me/quizzes') { studentCalls++; data = [student]; }
@@ -103,11 +126,37 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, timezoneId: 'UTC' });
   const errors = [];page.on('pageerror', (error) => errors.push(error.message));
   for (const locale of ['en', 'ar']) {
+    for (const staffType of ['doctor', 'teaching_assistant', 'assistant_lecturer']) {
+      await page.goto(`${address}/${locale}/admin/staff?staffType=${staffType}`);
+      await page.getByRole('button', { name: locale === 'ar' ? /^المقررات المسندة/ : /^Assigned Courses/ }).click();
+      await page.getByText('AS101', { exact: true }).waitFor();
+      await page.getByText('AS102', { exact: true }).waitFor();
+    }
+    denyStaffCourses = true;
+    await page.goto(`${address}/${locale}/admin/staff?staffType=teaching_assistant`);
+    await page.getByRole('button', { name: locale === 'ar' ? /^المقررات المسندة/ : /^Assigned Courses/ }).click();
+    await page.getByRole('alert').getByText(locale === 'ar' ? 'تعذر تحميل المقررات المسندة. أعد المحاولة.' : 'Could not load assigned courses. Please retry.', { exact: true }).waitFor();
+    denyStaffCourses = false;
+    await page.getByRole('button', { name: locale === 'ar' ? 'إعادة المحاولة' : 'Retry', exact: true }).click();
+    await page.getByText('AS101', { exact: true }).waitFor();
+    await page.getByText('AS102', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(output, `staff-assigned-courses-${locale}.png`), fullPage: true });
+    await page.getByRole('button', { name: locale === 'ar' ? 'إغلاق' : 'Close', exact: true }).last().click();
+    const beforeReopen = staffCourseRequests.length;
+    const reopened = page.waitForResponse((response) => response.url().includes('staffId=') && response.url().includes('page=2'));
+    await page.getByRole('button', { name: 'Open staff details', exact: true }).click();
+    await reopened;
+    assert.ok(staffCourseRequests.length > beforeReopen, 'reopening staff details refreshes assigned courses');
+  }
+  assert.ok(staffCourseRequests.every((params) => params.staffId === fixtureId && !('_t' in params)));
+  console.log('Staff management dialog passed: Arabic/English doctor, TA and assistant lecturer courses, pagination, retry, reopening and validated query parameters.');
+  if (!process.argv.includes('--staff-only')) {
+  for (const locale of ['en', 'ar']) {
     reset();
     await page.goto(`${address}/${locale}/admin/quizzes?create=true`);
     const marks = page.getByRole('button', { name: locale === 'ar' ? 'إعلان الدرجات' : 'Marks release', exact: true });
     await marks.waitFor();
-    assert.match(await marks.innerText(), new RegExp(locale === 'ar' ? 'تحكم يدوي' : 'Manual control'));
+    assert.match(await marks.innerText(), new RegExp(locale === 'ar' ? 'إتاحة تلقائية بعد إغلاق الاختبار' : 'Release automatically after closing'));
     const reviewCheckbox = page.getByRole('checkbox', { name: locale === 'ar' ? 'تفعيل مراجعة الإجابات' : 'Enable answer review' });
     assert.equal(await reviewCheckbox.isChecked(), false);
     await marks.click();
@@ -115,6 +164,24 @@ try {
     await page.getByText(new RegExp(locale === 'ar' ? 'موعد الإتاحة التلقائية:' : 'Automatic release:'), { exact: false }).waitFor();
     await page.screenshot({ path: path.join(output, `create-${locale}.png`), fullPage: true });
   }
+  staffOnly = true;
+  for (const staffType of ['doctor', 'teaching_assistant', 'assistant_lecturer']) {
+    reset();
+    await page.goto(`${address}/en/admin/quizzes?create=true&as=staff&staffType=${staffType}`);
+    await page.getByRole('button', { name: 'Marks release', exact: true }).waitFor();
+    assert.match(await page.getByRole('button', { name: 'Marks release', exact: true }).innerText(), /Release automatically after closing/);
+    assert.match(await page.getByRole('button', { name: 'Answer review', exact: true }).innerText(), /Manual control/);
+    await page.getByRole('button', { name: 'Select course...', exact: true }).click();
+    await page.getByRole('option', { name: /QR101/ }).waitFor();
+  }
+  denyAssignedCourses = true;
+  await page.goto(`${address}/en/admin/quizzes?create=true&as=staff&staffType=doctor`);
+  await page.getByText('Could not load assigned courses. Please retry.', { exact: true }).waitFor();
+  denyAssignedCourses = false;
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByRole('button', { name: 'Select course...', exact: true }).click();
+  await page.getByRole('option', { name: /QR101/ }).waitFor();
+  staffOnly = false;
   // Edit a closed quiz without altering its original timestamp; both settings round-trip.
   reset(-60000);settings.resultsReleaseMode = 'manual';settings.reviewReleaseMode = 'manual';
   const oldDeadline = settings.endsAt;
@@ -192,13 +259,18 @@ try {
   assert.ok(studentCalls > hiddenCalls, 'returning to the page refreshes marks');
   const reconnectCalls = studentCalls;
   await page.context().setOffline(true);
+  await page.waitForFunction(() => navigator.onLine === false);
+  await page.waitForFunction(() => window.quizQueryClient.isFetching() === 0);
   settings.resultsReleaseMode = 'manual';settings.publishResults = false;
   await page.context().setOffline(false);
+  await page.waitForFunction(() => navigator.onLine === true);
   await page.waitForFunction(() => !Array.from(document.querySelectorAll('[role="dialog"]')).some((el) => el.textContent.includes('100%')));
   assert.ok(studentCalls > reconnectCalls, 'reconnecting refreshes release policy');
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(output, 'student-result-updated.png'), fullPage: true });
-  console.log('Quiz release browser acceptance passed: Arabic/English controls, manual defaults, closing validation, closed-quiz editing, Cairo inputs in foreign timezones, atomic sheet replacement, deadline refresh and open result updates.');
+  console.log('Quiz release browser acceptance passed: Arabic/English controls, automatic marks/manual review defaults, staff assignment selectors/error recovery, closing validation, closed-quiz editing, Cairo inputs in foreign timezones, atomic sheet replacement, deadline refresh and open result updates.');
+  }
+  assert.deepEqual(errors, []);
 } finally {
   await browser?.close();await new Promise((resolve) => server.close(resolve));
 }

@@ -156,6 +156,13 @@ export class Course {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   teachingAssistantIds!: Types.ObjectId[];
 
+  // Retained for reading/unsetting assignments saved before the array field.
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  teachingAssistantId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  teachingAssistant?: Types.ObjectId;
+
   @Prop({
     type: [
       {

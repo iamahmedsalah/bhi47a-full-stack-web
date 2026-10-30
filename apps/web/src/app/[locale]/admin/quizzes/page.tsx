@@ -6,6 +6,7 @@ import type { QuizReleaseMode } from '@student-portal/shared';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toCairoDateTimeLocal as toDateTimeLocal, cairoDateTimeToIso } from '@/lib/cairo-time';
 import { replaceImportedQuestions } from '@/features/quizzes/import-utils';
+import { getQuizCourseOptions } from '@/features/quizzes/api';
 import { QuizReleaseControls } from '@/features/quizzes/components/quiz-release-controls';
 import { releaseStatus } from '@/features/quizzes/release-utils';
 import { useQuizReleaseRefresh } from '@/features/quizzes/use-quiz-release-refresh';
@@ -111,6 +112,8 @@ interface QuizFormDialogProps {
   initialValues?: Partial<QuizItem>;
   courses: Array<{ _id: string; code: string; name: string; nameAr?: string }>;
   coursesLoading?: boolean;
+  coursesError?: boolean;
+  onRetryCourses?: () => void;
   isAr: boolean;
   onSuccess: (savedQuiz?: QuizItem) => void;
 }
@@ -131,6 +134,8 @@ function QuizFormDialog({
   initialValues = {},
   courses,
   coursesLoading = false,
+  coursesError = false,
+  onRetryCourses,
   isAr,
   onSuccess,
 }: QuizFormDialogProps) {
@@ -155,7 +160,7 @@ function QuizFormDialog({
   const [publishResults, setPublishResults] = useState(initialValues.publishResults ?? false);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? (mode === 'edit'));
   const [resultsReleaseMode, setResultsReleaseMode] = useState<QuizReleaseMode>(
-    initialValues.resultsReleaseMode ?? (mode === 'add' ? 'manual' : 'after_close'),
+    initialValues.resultsReleaseMode ?? (mode === 'add' ? 'after_close' : 'manual'),
   );
   const [reviewReleaseMode, setReviewReleaseMode] = useState<QuizReleaseMode>(initialValues.reviewReleaseMode ?? 'manual');
   const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
@@ -200,7 +205,7 @@ function QuizFormDialog({
     setIsPublished(initialValues.isPublished ?? true);
     setPublishResults(initialValues.publishResults ?? false);
     setAllowReview(initialValues.allowReview ?? (mode === 'edit'));
-    setResultsReleaseMode(initialValues.resultsReleaseMode ?? (mode === 'add' ? 'manual' : 'after_close'));
+    setResultsReleaseMode(initialValues.resultsReleaseMode ?? (mode === 'add' ? 'after_close' : 'manual'));
     setReviewReleaseMode(initialValues.reviewReleaseMode ?? 'manual');
     setAllowResume(initialValues.allowResume ?? true);
     setUploadingExcel(false);
@@ -706,6 +711,12 @@ function QuizFormDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5 pt-3">
+          {coursesError && (
+            <div role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm">
+              <p>{isAr ? 'تعذر تحميل المقررات المسندة. أعد المحاولة.' : 'Could not load assigned courses. Please retry.'}</p>
+              <Button type="button" variant="outline" onClick={onRetryCourses}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button>
+            </div>
+          )}
           {/* Top Metadata */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
@@ -2191,7 +2202,6 @@ function AdminQuizzesContent() {
   const urlCourseId = searchParams?.get('courseId') || 'ALL';
   const autoCreate = searchParams?.get('create') === 'true';
 
-  const isDoctor = user?.role === 'staff' && user?.staffType === 'doctor';
 
   const [page] = useState(1);
   const [search, setSearch] = useState('');
@@ -2234,7 +2244,7 @@ function AdminQuizzesContent() {
 
   // Fetch quizzes
   const quizzesQuery = useQuery({
-    queryKey: ['admin-quizzes', page, search, courseFilter, user?._id, isDoctor],
+    queryKey: ['admin-quizzes', page, search, courseFilter, user?._id, user?.role],
     queryFn: () =>
       listQuizzes({
         page,
@@ -2248,37 +2258,11 @@ function AdminQuizzesContent() {
 
   // Fetch courses list for selectors
   const coursesQuery = useQuery({
-    queryKey: ['active-courses-list', user?._id, isDoctor],
-    queryFn: async () => {
-      try {
-        const res = await api.get<unknown>('/admin/courses', {
-          params: { page: 1, limit: 200, doctorId: isDoctor ? user?._id : undefined },
-        });
-        const payload = (res as { data?: unknown })?.data ?? res;
-        const items = Array.isArray((payload as { items?: unknown[] })?.items)
-          ? (payload as { items: Array<{ _id: string; code: string; name: string; nameAr?: string }> }).items
-          : Array.isArray(payload)
-            ? (payload as Array<{ _id: string; code: string; name: string; nameAr?: string }>)
-            : [];
-        if (items.length > 0) return items;
-      } catch {
-        // Fallback below
-      }
-
-      try {
-        const res2 = await api.get<unknown>('/courses', {
-          params: { page: 1, limit: 200, doctorId: isDoctor ? user?._id : undefined },
-        });
-        const payload2 = (res2 as { data?: unknown })?.data ?? res2;
-        return Array.isArray((payload2 as { items?: unknown[] })?.items)
-          ? (payload2 as { items: Array<{ _id: string; code: string; name: string; nameAr?: string }> }).items
-          : Array.isArray(payload2)
-            ? (payload2 as Array<{ _id: string; code: string; name: string; nameAr?: string }>)
-            : [];
-      } catch {
-        return [];
-      }
-    },
+    queryKey: ['quiz-course-options', user?._id, user?.role],
+    queryFn: () => getQuizCourseOptions(user?.role),
+    enabled: Boolean(user?._id),
+    refetchOnWindowFocus: 'always',
+    refetchOnReconnect: 'always',
   });
 
   const coursesList = coursesQuery.data || [];
@@ -2688,6 +2672,8 @@ function AdminQuizzesContent() {
         }
         courses={coursesList}
         coursesLoading={coursesQuery.isLoading}
+        coursesError={coursesQuery.isError}
+        onRetryCourses={() => { void coursesQuery.refetch(); }}
         isAr={isAr}
         onSuccess={(savedQuiz) => {
           void queryClient.invalidateQueries({ queryKey: ['admin-quizzes'] });

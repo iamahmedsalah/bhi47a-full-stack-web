@@ -1,5 +1,7 @@
 'use client';
 
+import { getCourseStaffIds } from '@/features/courses/assignment-utils';
+
 import React, { useState, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
@@ -169,15 +171,8 @@ function CourseFormDialog({
   const [removeCover, setRemoveCover] = useState(false);
   const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
   const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
-  const [doctorIds, setDoctorIds] = useState<string[]>(() => {
-    if (initialValues.doctorIds && Array.isArray(initialValues.doctorIds)) {
-      return initialValues.doctorIds.slice(0, 2);
-    }
-    return initialValues.doctorId ? [initialValues.doctorId] : [];
-  });
-  const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(
-    initialValues.teachingAssistantIds || [],
-  );
+  const [doctorIds, setDoctorIds] = useState<string[]>(() => getCourseStaffIds(initialValues).doctorIds);
+  const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(() => getCourseStaffIds(initialValues).teachingAssistantIds);
   const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -217,10 +212,10 @@ function CourseFormDialog({
   const [prevIsActive, setPrevIsActive] = useState(initialValues.isActive);
   const [prevSyllabusUrl, setPrevSyllabusUrl] = useState(initialValues.syllabusPdfUrl);
   const [prevDoctorIds, setPrevDoctorIds] = useState<string>(
-    (initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(','),
+    getCourseStaffIds(initialValues).doctorIds.join(','),
   );
   const [prevTeachingAssistantIds, setPrevTeachingAssistantIds] = useState(
-    initialValues.teachingAssistantIds?.join(','),
+    getCourseStaffIds(initialValues).teachingAssistantIds.join(','),
   );
   const [prevCoverImageUrl, setPrevCoverImageUrl] = useState(initialValues.coverImageUrl);
 
@@ -237,8 +232,8 @@ function CourseFormDialog({
     initialValues.type !== prevCourseType ||
     initialValues.isActive !== prevIsActive ||
     initialValues.syllabusPdfUrl !== prevSyllabusUrl ||
-    (initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(',') !== prevDoctorIds ||
-    initialValues.teachingAssistantIds?.join(',') !== prevTeachingAssistantIds ||
+    getCourseStaffIds(initialValues).doctorIds.join(',') !== prevDoctorIds ||
+    getCourseStaffIds(initialValues).teachingAssistantIds.join(',') !== prevTeachingAssistantIds ||
     initialValues.coverImageUrl !== prevCoverImageUrl
   ) {
     setPrevOpen(open);
@@ -253,8 +248,8 @@ function CourseFormDialog({
     setPrevCourseType(initialValues.type);
     setPrevIsActive(initialValues.isActive);
     setPrevSyllabusUrl(initialValues.syllabusPdfUrl);
-    setPrevDoctorIds((initialValues.doctorIds || (initialValues.doctorId ? [initialValues.doctorId] : [])).join(','));
-    setPrevTeachingAssistantIds(initialValues.teachingAssistantIds?.join(','));
+    setPrevDoctorIds(getCourseStaffIds(initialValues).doctorIds.join(','));
+    setPrevTeachingAssistantIds(getCourseStaffIds(initialValues).teachingAssistantIds.join(','));
     setPrevCoverImageUrl(initialValues.coverImageUrl);
 
     if (open) {
@@ -270,11 +265,9 @@ function CourseFormDialog({
       setPrerequisites((initialValues.prerequisites || []).join(', '));
       setCourseType(initialValues.type || 'required');
       setIsActive(initialValues.isActive ?? true);
-      const initialDocs = (initialValues.doctorIds && Array.isArray(initialValues.doctorIds))
-        ? initialValues.doctorIds.slice(0, 2)
-        : (initialValues.doctorId ? [initialValues.doctorId] : []);
-      setDoctorIds(initialDocs);
-      setTeachingAssistantIds(initialValues.teachingAssistantIds || []);
+      const assignments = getCourseStaffIds(initialValues);
+      setDoctorIds(assignments.doctorIds);
+      setTeachingAssistantIds(assignments.teachingAssistantIds);
       setCoverImageUrl(initialValues.coverImageUrl || '');
       setSyllabusFile(null);
       setCoverImageFile(null);
@@ -333,9 +326,10 @@ function CourseFormDialog({
         isActive,
         syllabusFile: removeSyllabus ? null : syllabusFile,
         coverImageFile: removeCover ? null : coverImageFile,
-        doctorId: doctorIds[0] || null,
-        doctorIds: doctorIds.slice(0, 2),
-        teachingAssistantIds,
+        ...(!initialValues._id || doctorIds.join(',') !== getCourseStaffIds(initialValues).doctorIds.join(',')
+          ? { doctorId: doctorIds[0] || null, doctorIds: doctorIds.slice(0, 2) } : {}),
+        ...(!initialValues._id || teachingAssistantIds.join(',') !== getCourseStaffIds(initialValues).teachingAssistantIds.join(',')
+          ? { teachingAssistantIds } : {}),
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
         removeCover,
@@ -1186,6 +1180,9 @@ function CoursesPageContent() {
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
   };
 
   const handleEdit = async (
@@ -1258,6 +1255,9 @@ function CoursesPageContent() {
     void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
   };
 
   const handleBulkDelete = async (ids: string[]) => {
@@ -1269,6 +1269,9 @@ function CoursesPageContent() {
       void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
     } catch (err) {
       toast.error(getApiErrorMessage(err, locale === 'ar' ? 'فشل حذف بعض المواد' : 'Failed to delete some courses'), { id: toastId });
     }
@@ -1289,6 +1292,9 @@ function CoursesPageContent() {
       void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     }
@@ -2023,6 +2029,9 @@ function CoursesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
         }}
       />
 
@@ -2083,6 +2092,9 @@ function CoursesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
         }}
       />
 
@@ -2121,6 +2133,9 @@ function CoursesPageContent() {
           void queryClient.invalidateQueries({ queryKey: ['courses'] });
     void queryClient.invalidateQueries({ queryKey: ['student-syllabi'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-all-courses-for-enrollment'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-assigned-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['quiz-course-options'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff', 'courses'] });
         }}
       />
       <CourseEnrolledStudentsDialog

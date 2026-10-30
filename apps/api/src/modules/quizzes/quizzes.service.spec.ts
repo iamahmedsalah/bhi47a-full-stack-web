@@ -95,6 +95,66 @@ describe('QuizzesService Unit Tests', () => {
   });
 
   describe('create()', () => {
+    it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
+      'defaults assigned %s quizzes to automatic marks and manual review',
+      async (staffType) => {
+        mockCourseModel.findById.mockResolvedValue({
+          _id: new Types.ObjectId(courseId),
+          code: 'CS101',
+          name: 'Course',
+          teachingAssistants: [{ _id: new Types.ObjectId(staffUser._id) }],
+        });
+        mockQuizModel.mockImplementation(function (
+          this: Record<string, unknown>,
+          data: Record<string, unknown>,
+        ) {
+          Object.assign(this, data);
+          this.save = jest.fn().mockResolvedValue(data);
+        });
+        const quiz = await service.create(
+          { ...staffUser, staffType },
+          {
+            courseId,
+            title: 'Defaults',
+            durationMinutes: 15,
+            endsAt: new Date(Date.now() + 3600000).toISOString(),
+            questions: [],
+          },
+        );
+        expect(quiz).toMatchObject({
+          resultsReleaseMode: 'after_close',
+          reviewReleaseMode: 'manual',
+          publishResults: false,
+          allowReview: false,
+        });
+      },
+    );
+
+    it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
+      'rejects unassigned %s even with quiz write permission',
+      async (staffType) => {
+        mockCourseModel.findById.mockResolvedValue({
+          _id: new Types.ObjectId(courseId),
+          doctorIds: [new Types.ObjectId()],
+        });
+        await expect(
+          service.create(
+            {
+              ...staffUser,
+              staffType,
+              permissions: [PERMISSIONS.QUIZZES_WRITE],
+            },
+            {
+              courseId,
+              title: 'Unassigned',
+              durationMinutes: 15,
+              questions: [],
+            },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+      },
+    );
+
     it('throws BadRequestException for invalid courseId', async () => {
       await expect(
         service.create(adminUser, {

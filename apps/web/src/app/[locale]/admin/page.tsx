@@ -851,6 +851,11 @@ export default function AdminDashboard() {
             <div className="flex min-h-32 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
+          ) : assignedCoursesQuery.isError ? (
+            <div role="alert" className="rounded-xl border border-danger/30 p-4 text-sm">
+              <p>{isAr ? 'تعذر تحميل المقررات المسندة. أعد المحاولة.' : 'Could not load assigned courses. Please retry.'}</p>
+              <Button type="button" variant="outline" onClick={() => { void assignedCoursesQuery.refetch(); }}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button>
+            </div>
           ) : assignedCourses.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
               {isAr

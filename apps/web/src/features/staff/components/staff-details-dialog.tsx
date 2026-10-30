@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { getCourseStaffIds } from '@/features/courses/assignment-utils';
 import { courseCurriculumSummary, curriculumDepartmentLabel } from '@student-portal/shared';
 import {
   BookOpen,
@@ -361,7 +362,12 @@ export function StaffDetailsDialog({
                     <Clock className="h-4 w-4 animate-spin mr-2" />
                     <span>{t('loading')}</span>
                   </div>
-                ) : courses.length === 0 ? (
+                ) : coursesQuery.isError ? (
+            <div role="alert" className="rounded-xl border border-danger/30 p-4 text-sm">
+              <p>{isAr ? 'تعذر تحميل المقررات المسندة. أعد المحاولة.' : 'Could not load assigned courses. Please retry.'}</p>
+              <Button type="button" variant="outline" onClick={() => { void coursesQuery.refetch(); }}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button>
+            </div>
+          ) : courses.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/80 p-8 text-center text-xs text-muted-foreground bg-background/30">
                     <BookOpen className="h-8 w-8 mx-auto mb-2 text-muted-foreground/60" />
                     <p>{t('details.noCourses')}</p>
@@ -388,15 +394,9 @@ export function StaffDetailsDialog({
                             )}
                           </div>
                           {(() => {
-                        const staffIdStr = String(staff._id);
-                        const isDoctor =
-                          String(course.doctorId) === staffIdStr ||
-                          course.doctorIds?.some((id) => String(id) === staffIdStr) ||
-                          (course as any).doctors?.some((d: any) => String(d._id) === staffIdStr);
-                        const isTA =
-                          course.teachingAssistantIds?.some((id) => String(id) === staffIdStr) ||
-                          course.teachingAssistants?.some((ta) => String(ta._id) === staffIdStr) ||
-                          String((course as any).teachingAssistantId) === staffIdStr;
+                        const assignments = getCourseStaffIds(course);
+                        const isDoctor = assignments.doctorIds.includes(staff._id);
+                        const isTA = assignments.teachingAssistantIds.includes(staff._id);
                         const roleBadge = isDoctor
                           ? (isAr ? 'أستاذ مقرر' : 'Instructor')
                           : isTA

@@ -58,20 +58,15 @@ export async function deleteStaff(id: string): Promise<{ success: boolean; messa
 }
 
 export async function getStaffCourses(staffId: string): Promise<StaffAssignedCourse[]> {
-  try {
-    const response = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', {
-      params: {
-        staffId,
-        doctorId: staffId,
-        teachingAssistantId: staffId,
-        limit: 100,
-        _t: Date.now(),
-      },
-    });
-    return response.data?.items ?? [];
-  } catch {
-    return [];
+  const response = await api.get<{ items: StaffAssignedCourse[]; totalPages: number }>('/admin/courses', {
+    params: { staffId, page: 1, limit: 100 },
+  });
+  const courses = [...response.data.items];
+  for (let page = 2; page <= response.data.totalPages; page++) {
+    const next = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', { params: { staffId, page, limit: 100 } });
+    courses.push(...next.data.items);
   }
+  return courses;
 }
 
 export async function getStaffSchedules(staffId: string): Promise<StaffScheduleSlot[]> {

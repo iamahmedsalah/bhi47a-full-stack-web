@@ -22,6 +22,7 @@ import type {
 } from '../src/modules/auth/passkeys/passkey.schemas';
 import { securityHeadersMiddleware } from '../src/common/middleware/security-headers.middleware';
 import { definePasskeyBrowserAcceptance } from './passkey-browser-acceptance';
+import { defineCourseAssignmentAcceptance } from './course-assignment-acceptance';
 import { QuizzesService } from '../src/modules/quizzes/quizzes.service';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { QuizQuestionExcelService } from '../src/modules/quizzes/services/quiz-question-excel.service';
@@ -87,6 +88,7 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
+        transformOptions: { enableImplicitConversion: true },
       }),
     );
     await app.init();
@@ -173,6 +175,14 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
       csrf: response.body.csrfToken as string,
     };
   }
+  defineCourseAssignmentAcceptance({
+    app: () => app!,
+    users: () => users,
+    origin: () => origin,
+    accounts,
+    ids,
+    password,
+  });
   function authenticatedPost(
     path: string,
     auth: { cookie: string; csrf: string },
