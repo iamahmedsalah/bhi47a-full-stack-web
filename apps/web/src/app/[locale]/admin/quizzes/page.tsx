@@ -154,7 +154,9 @@ function QuizFormDialog({
   const [isPublished, setIsPublished] = useState(initialValues.isPublished ?? true);
   const [publishResults, setPublishResults] = useState(initialValues.publishResults ?? false);
   const [allowReview, setAllowReview] = useState(initialValues.allowReview ?? (mode === 'edit'));
-  const [resultsReleaseMode, setResultsReleaseMode] = useState<QuizReleaseMode>(initialValues.resultsReleaseMode ?? 'after_close');
+  const [resultsReleaseMode, setResultsReleaseMode] = useState<QuizReleaseMode>(
+    initialValues.resultsReleaseMode ?? (mode === 'add' ? 'manual' : 'after_close'),
+  );
   const [reviewReleaseMode, setReviewReleaseMode] = useState<QuizReleaseMode>(initialValues.reviewReleaseMode ?? 'manual');
   const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
   const [uploadingExcel, setUploadingExcel] = useState(false);
@@ -198,7 +200,7 @@ function QuizFormDialog({
     setIsPublished(initialValues.isPublished ?? true);
     setPublishResults(initialValues.publishResults ?? false);
     setAllowReview(initialValues.allowReview ?? (mode === 'edit'));
-    setResultsReleaseMode(initialValues.resultsReleaseMode ?? 'after_close');
+    setResultsReleaseMode(initialValues.resultsReleaseMode ?? (mode === 'add' ? 'manual' : 'after_close'));
     setReviewReleaseMode(initialValues.reviewReleaseMode ?? 'manual');
     setAllowResume(initialValues.allowResume ?? true);
     setUploadingExcel(false);

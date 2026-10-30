@@ -112,7 +112,7 @@ try {
     assert.equal(await reviewCheckbox.isChecked(), false);
     await marks.click();
     await page.getByRole('menuitemradio', { name: locale === 'ar' ? 'إتاحة تلقائية بعد إغلاق الاختبار' : 'Release automatically after closing', exact: true }).click();
-    await page.getByText(locale === 'ar' ? 'حدد تاريخ ووقت إغلاق الاختبار للإتاحة التلقائية.' : 'Choose a closing date and time for automatic release.', { exact: true }).waitFor();
+    await page.getByText(new RegExp(locale === 'ar' ? 'موعد الإتاحة التلقائية:' : 'Automatic release:'), { exact: false }).waitFor();
     await page.screenshot({ path: path.join(output, `create-${locale}.png`), fullPage: true });
   }
   // Edit a closed quiz without altering its original timestamp; both settings round-trip.
