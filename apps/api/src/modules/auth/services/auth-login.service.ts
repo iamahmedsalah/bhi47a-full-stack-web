@@ -221,6 +221,7 @@ export class AuthLoginService {
       user: {
         _id: user._id,
         name: user.name,
+        nameAr: (user as { nameAr?: string }).nameAr,
         role: user.role,
         staffType: user.staffType,
         email: user.email,

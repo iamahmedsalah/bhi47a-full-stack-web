@@ -116,6 +116,7 @@ export class StaffManagementService {
       const search = new RegExp(escapeRegExp(query.search.trim()), 'i');
       filter.$or = [
         { name: search },
+        { nameAr: search },
         { email: search },
         { username: search },
         { phone: search },

@@ -80,6 +80,7 @@ export class CourseSchedulesService {
     let courseName = dto.courseName;
     let courseNameAr = dto.courseNameAr;
     let staffName = dto.staffName;
+    let staffNameAr: string | undefined;
     let staffType = dto.staffType || 'doctor';
 
     if (Types.ObjectId.isValid(dto.courseId)) {
@@ -94,11 +95,8 @@ export class CourseSchedulesService {
     if (Types.ObjectId.isValid(dto.staffId)) {
       const staffUser = await this.userModel.findById(dto.staffId).lean();
       if (staffUser) {
-        staffName =
-          staffName ||
-          (staffUser as any).nameAr ||
-          staffUser.name ||
-          'Staff Member';
+        staffName = staffUser.name || staffName || 'Staff Member';
+        staffNameAr = (staffUser as any).nameAr || staffName;
         if ((staffUser as any).staffType) {
           staffType = (staffUser as any).staffType;
         }
@@ -113,6 +111,7 @@ export class CourseSchedulesService {
       courseName: courseName || 'Course',
       courseNameAr: courseNameAr || courseName || 'مقرر دراسي',
       staffName: staffName || 'Staff Member',
+      staffNameAr: staffNameAr || staffName,
       staffType,
       isActive: dto.isActive !== undefined ? dto.isActive : true,
     });
@@ -165,8 +164,9 @@ export class CourseSchedulesService {
     }
 
     const items = await this.scheduleModel.find(filter).lean();
+    const hydrated = await this.hydrateScheduleStaff(items as any[]);
 
-    return items.sort((a, b) => {
+    return hydrated.sort((a, b) => {
       const dayDiff =
         (DAY_ORDER[a.dayOfWeek] || 99) - (DAY_ORDER[b.dayOfWeek] || 99);
       if (dayDiff !== 0) return dayDiff;
@@ -183,13 +183,61 @@ export class CourseSchedulesService {
         isActive: true,
       })
       .lean();
+    const hydrated = await this.hydrateScheduleStaff(items as any[]);
 
-    return items.sort((a, b) => {
+    return hydrated.sort((a, b) => {
       const dayDiff =
         (DAY_ORDER[a.dayOfWeek] || 99) - (DAY_ORDER[b.dayOfWeek] || 99);
       if (dayDiff !== 0) return dayDiff;
       return (a.startTime || '').localeCompare(b.startTime || '');
     });
+  }
+
+  private async hydrateScheduleStaff<T extends Record<string, any>>(
+    items: T[],
+  ): Promise<T[]> {
+    if (!items || items.length === 0 || !this.userModel?.find) return items;
+    try {
+      const staffIds = Array.from(
+        new Set(
+          items
+            .map((i) => (i.staffId ? String(i.staffId) : ''))
+            .filter((id) => Types.ObjectId.isValid(id)),
+        ),
+      ).map((id) => new Types.ObjectId(id));
+      if (staffIds.length === 0) return items;
+
+      const users = await this.userModel
+        .find({ _id: { $in: staffIds } })
+        .select('_id name nameAr staffType')
+        .lean();
+      if (!Array.isArray(users) || users.length === 0) return items;
+
+      const userMap = new Map<
+        string,
+        { name: string; nameAr?: string; staffType?: string }
+      >();
+      for (const u of users) {
+        userMap.set(String(u._id), {
+          name: u.name,
+          nameAr: (u as any).nameAr,
+          staffType: (u as any).staffType,
+        });
+      }
+
+      return items.map((item) => {
+        const u = item.staffId ? userMap.get(String(item.staffId)) : undefined;
+        if (!u) return item;
+        return {
+          ...item,
+          staffName: u.name || item.staffName,
+          staffNameAr: u.nameAr || (item as any).staffNameAr || u.name,
+          staffType: u.staffType || item.staffType,
+        };
+      });
+    } catch {
+      return items;
+    }
   }
 
   async findOne(id: string): Promise<CourseScheduleDocument> {
@@ -240,7 +288,8 @@ export class CourseSchedulesService {
       payload.staffId = new Types.ObjectId(dto.staffId);
       const staffUser = await this.userModel.findById(dto.staffId).lean();
       if (staffUser) {
-        payload.staffName =
+        payload.staffName = staffUser.name || 'Staff Member';
+        payload.staffNameAr =
           (staffUser as any).nameAr || staffUser.name || 'Staff Member';
         if ((staffUser as any).staffType) {
           payload.staffType = (staffUser as any).staffType;

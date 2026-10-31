@@ -143,6 +143,7 @@ export class Course {
         _id: { type: Types.ObjectId, ref: 'User' },
         name: { type: String, trim: true },
         nameAr: { type: String, trim: true },
+        staffType: { type: String, trim: true },
       },
     ],
     default: [],
@@ -151,6 +152,7 @@ export class Course {
     _id: Types.ObjectId;
     name: string;
     nameAr?: string;
+    staffType?: string;
   }>;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
@@ -169,6 +171,7 @@ export class Course {
         _id: { type: Types.ObjectId, ref: 'User' },
         name: { type: String, trim: true },
         nameAr: { type: String, trim: true },
+        staffType: { type: String, trim: true },
       },
     ],
     default: [],
@@ -177,6 +180,7 @@ export class Course {
     _id: Types.ObjectId;
     name: string;
     nameAr?: string;
+    staffType?: string;
   }>;
 
   @Prop({ trim: true })

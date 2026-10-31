@@ -50,7 +50,13 @@ export function useStaffSchedules(staffId: string | null | undefined) {
 
 export function useStaffMutations() {
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: staffKeys.all });
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    void queryClient.invalidateQueries({ queryKey: ['staff-options-for-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-staff-list'] });
+    void queryClient.invalidateQueries({ queryKey: ['courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['course-schedules'] });
+  };
 
   return {
     create: useMutation({ mutationFn: (input: CreateStaffInput) => createStaff(input), onSuccess: refresh }),

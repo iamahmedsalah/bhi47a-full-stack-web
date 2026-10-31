@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { CheckSquare, Loader2, Square } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { STAFF_ASSIGNABLE_PERMISSIONS, STAFF_TYPE_VALUES, STAFF_TYPE_DEFAULT_PERMISSIONS, type Permission } from '@student-portal/shared';
+import { useLocale, useTranslations } from 'next-intl';
+import { STAFF_ASSIGNABLE_PERMISSIONS, STAFF_TYPE_VALUES, STAFF_TYPE_DEFAULT_PERMISSIONS, formatStaffDisplayName, type Permission } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { STAFF_PERMISSION_GROUPS } from '../permission-groups';
@@ -18,6 +18,7 @@ interface Props {
 
 export function StaffPermissionsDialog({ staff, pending, onClose, onSave }: Props) {
   const t = useTranslations('staff');
+  const locale = useLocale();
   const [selected, setSelected] = useState<Permission[]>(staff.permissions ?? []);
   const toggle = (permission: Permission) => {
     setSelected((current) => current.includes(permission)
@@ -29,7 +30,7 @@ export function StaffPermissionsDialog({ staff, pending, onClose, onSave }: Prop
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col overflow-hidden border-border bg-card">
         <DialogHeader>
-          <DialogTitle>{t('permissions.title', { name: staff.name })}</DialogTitle>
+          <DialogTitle>{t('permissions.title', { name: formatStaffDisplayName(staff, locale) })}</DialogTitle>
           <DialogDescription>{t('permissions.description')}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">

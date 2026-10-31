@@ -30,12 +30,15 @@ export class CourseSchedule {
   @Prop({ required: true, trim: true })
   staffName!: string;
 
+  @Prop({ trim: true })
+  staffNameAr?: string;
+
   @Prop({
     type: String,
-    enum: ['doctor', 'teaching_assistant'],
+    enum: ['doctor', 'teaching_assistant', 'assistant_lecturer'],
     default: 'doctor',
   })
-  staffType!: 'doctor' | 'teaching_assistant';
+  staffType!: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
 
   @Prop({
     type: String,

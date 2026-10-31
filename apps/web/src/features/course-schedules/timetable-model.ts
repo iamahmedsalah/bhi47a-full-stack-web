@@ -4,6 +4,8 @@ export interface TimetableEntry {
   courseName: string;
   courseNameAr?: string;
   staffName: string;
+  staffNameAr?: string;
+  staffType?: string;
   type: "lecture" | "section" | "lab";
   dayOfWeek: string;
   startTime: string;
@@ -130,6 +132,7 @@ export function filterScheduleEntries<T extends TimetableEntry>(
         entry.courseName,
         entry.courseNameAr,
         entry.staffName,
+        entry.staffNameAr,
         entry.location,
         entry.locationAr,
         entry.group,

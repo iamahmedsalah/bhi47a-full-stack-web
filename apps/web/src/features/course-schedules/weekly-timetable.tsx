@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { formatStaffDisplayName } from "@student-portal/shared";
 import {
   buildTimetable,
   timetableCohorts,
@@ -108,7 +109,18 @@ function ScheduleEntry<T extends TimetableEntry>({
       </div>
       <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground print:text-black">
         <User className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-        <bdi>{entry.staffName}</bdi>
+        <bdi>
+          {formatStaffDisplayName(
+            {
+              name: entry.staffName,
+              nameAr: entry.staffNameAr,
+              staffType:
+                entry.staffType ||
+                (entry.type === "lecture" ? "doctor" : "teaching_assistant"),
+            },
+            ar ? "ar" : "en",
+          )}
+        </bdi>
       </p>
       <p className="flex items-start gap-1.5 text-[11px] font-medium leading-relaxed text-foreground print:text-black">
         <MapPin

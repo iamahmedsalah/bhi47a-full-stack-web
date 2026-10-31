@@ -9,6 +9,7 @@ import {
 } from "./timetable-model";
 import { paginateTimetableDay } from "./timetable-export-pagination";
 import { downloadFileBlob } from "@/lib/export-utils";
+import { formatStaffDisplayName } from "@student-portal/shared";
 
 export interface ScheduleExportItem extends TimetableEntry {
   courseNameAr?: string;
@@ -277,7 +278,20 @@ function buildScheduleMarkup(
                           [ ${escapeHtml(entry.courseCode)} ] · ${typeBadge}
                         </div>
                         <div style="font-size: 11px; font-weight: 600; color: #111111; margin-top: 3px;">
-                          ${escapeHtml(entry.staffName)}
+                          ${escapeHtml(
+                            formatStaffDisplayName(
+                              {
+                                name: entry.staffName,
+                                nameAr: entry.staffNameAr,
+                                staffType:
+                                  entry.staffType ||
+                                  (entry.type === "lecture"
+                                    ? "doctor"
+                                    : "teaching_assistant"),
+                              },
+                              isAr ? "ar" : "en",
+                            ),
+                          )}
                         </div>
                         <div style="font-size: 11px; font-weight: 700; color: #000000; margin-top: 2px;">
                           ${escapeHtml(loc)}
@@ -358,7 +372,18 @@ function buildScheduleMarkup(
             <td style="border: 1px solid #000000; padding: 8px; font-weight: 700; text-align: center;">${escapeHtml(dayName)}</td>
             <td style="border: 1px solid #000000; padding: 8px; font-family: monospace; text-align: center;">${escapeHtml(item.startTime)} - ${escapeHtml(item.endTime)}</td>
             <td style="border: 1px solid #000000; padding: 8px; font-weight: 800;">${escapeHtml(cName)} (${escapeHtml(item.courseCode)})</td>
-            <td style="border: 1px solid #000000; padding: 8px;">${escapeHtml(item.staffName)}</td>
+            <td style="border: 1px solid #000000; padding: 8px;">${escapeHtml(
+              formatStaffDisplayName(
+                {
+                  name: item.staffName,
+                  nameAr: item.staffNameAr,
+                  staffType:
+                    item.staffType ||
+                    (item.type === "lecture" ? "doctor" : "teaching_assistant"),
+                },
+                isAr ? "ar" : "en",
+              ),
+            )}</td>
             <td style="border: 1px solid #000000; padding: 8px; text-align: center;">${escapeHtml(loc)}</td>
             <td style="border: 1px solid #000000; padding: 8px; text-align: center;">${escapeHtml(grp)}</td>
             <td style="border: 1px solid #000000; padding: 8px; text-align: center; font-weight: 700;">${typeBadge}</td>

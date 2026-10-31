@@ -59,6 +59,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { downloadFileBlob, EXCEL_MIME_TYPE, CSV_MIME_TYPE } from '@/lib/export-utils';
 import { exportScheduleAsLandscapeImage, exportScheduleAsLandscapePdf, type ScheduleExportFormat } from '@/features/course-schedules/export-schedule-image';
 import { ScheduleExportButtons } from '@/features/course-schedules/schedule-export-buttons';
+import { formatStaffDisplayName } from '@student-portal/shared';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
@@ -71,7 +72,8 @@ export interface CourseScheduleItem {
   courseNameAr?: string;
   staffId: string;
   staffName: string;
-  staffType: 'doctor' | 'teaching_assistant';
+  staffNameAr?: string;
+  staffType: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
   type: 'lecture' | 'section' | 'lab';
   dayOfWeek:
     | 'saturday'
@@ -1128,7 +1130,12 @@ function SchedulesManagementContent() {
               {doctorsList.map((s: any) => (
                 <SelectItem key={s._id} value={s._id}>
                   <div className="flex items-center justify-between w-full gap-2">
-                    <span>{s.name}</span>
+                    <span>
+                      {formatStaffDisplayName(
+                        { ...s, staffType: 'doctor' },
+                        isAr ? 'ar' : 'en',
+                      )}
+                    </span>
                     <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-300">
                       {isAr ? 'دكتور' : 'Doctor'}
                     </span>
@@ -1144,9 +1151,23 @@ function SchedulesManagementContent() {
               {teachingAssistantsList.map((s: any) => (
                 <SelectItem key={s._id} value={s._id}>
                   <div className="flex items-center justify-between w-full gap-2">
-                    <span>{s.name}</span>
+                    <span>
+                      {formatStaffDisplayName(
+                        {
+                          ...s,
+                          staffType: s.staffType || 'teaching_assistant',
+                        },
+                        isAr ? 'ar' : 'en',
+                      )}
+                    </span>
                     <span className="rounded px-1.5 py-0.2 text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 text-purple-300">
-                      {isAr ? 'معيد' : 'TA'}
+                      {s.staffType === 'assistant_lecturer'
+                        ? isAr
+                          ? 'مدرس مساعد'
+                          : 'A.L.'
+                        : isAr
+                          ? 'معيد'
+                          : 'TA'}
                     </span>
                   </div>
                 </SelectItem>
@@ -1291,7 +1312,16 @@ function SchedulesManagementContent() {
                       <td className="px-4 py-3.5 text-foreground font-medium">
                         <div className="flex items-center gap-1.5">
                           <User className="h-3.5 w-3.5 text-primary/80 shrink-0" />
-                          <span className="font-semibold">{item.staffName}</span>
+                          <span className="font-semibold">
+                            {formatStaffDisplayName(
+                              {
+                                name: item.staffName,
+                                nameAr: item.staffNameAr,
+                                staffType: item.staffType,
+                              },
+                              isAr ? 'ar' : 'en',
+                            )}
+                          </span>
                           {isMySlot && (
                             <span className="rounded-full bg-teal-500/20 px-1.5 py-0.2 text-[9px] font-bold text-teal-400">
                               {isAr ? 'أنت' : 'You'}
@@ -1299,7 +1329,12 @@ function SchedulesManagementContent() {
                           )}
                         </div>
                         <div className="text-[11px] ms-5 mt-0.5">
-                          {item.staffType === 'teaching_assistant' ? (
+                          {item.staffType === 'assistant_lecturer' ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-cyan-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                              {isAr ? 'هيئة معاونة (مدرس مساعد)' : 'Assistant Lecturer'}
+                            </span>
+                          ) : item.staffType === 'teaching_assistant' ? (
                             <span className="inline-flex items-center gap-1 font-semibold text-purple-400">
                               <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
                               {isAr ? 'هيئة معاونة (معيد)' : 'Teaching Assistant'}
@@ -1495,7 +1530,12 @@ function SchedulesManagementContent() {
                     {doctorsList.map((s: any) => (
                       <SelectItem key={s._id} value={s._id}>
                         <div className="flex items-center justify-between w-full gap-2">
-                          <span className="font-medium">{s.name}</span>
+                          <span className="font-medium">
+                            {formatStaffDisplayName(
+                              { ...s, staffType: 'doctor' },
+                              isAr ? 'ar' : 'en',
+                            )}
+                          </span>
                           <span className="rounded px-1.5 py-0.2 text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-300">
                             {isAr ? 'دكتور' : 'Doctor'}
                           </span>
@@ -1511,9 +1551,23 @@ function SchedulesManagementContent() {
                     {teachingAssistantsList.map((s: any) => (
                       <SelectItem key={s._id} value={s._id}>
                         <div className="flex items-center justify-between w-full gap-2">
-                          <span className="font-medium">{s.name}</span>
+                          <span className="font-medium">
+                            {formatStaffDisplayName(
+                              {
+                                ...s,
+                                staffType: s.staffType || 'teaching_assistant',
+                              },
+                              isAr ? 'ar' : 'en',
+                            )}
+                          </span>
                           <span className="rounded px-1.5 py-0.2 text-[10px] font-bold border border-purple-500/30 bg-purple-500/10 text-purple-300">
-                            {isAr ? 'معيد' : 'TA'}
+                            {s.staffType === 'assistant_lecturer'
+                              ? isAr
+                                ? 'مدرس مساعد'
+                                : 'A.L.'
+                              : isAr
+                                ? 'معيد'
+                                : 'TA'}
                           </span>
                         </div>
                       </SelectItem>

@@ -33,6 +33,7 @@ import {
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/auth-provider';
+import { formatStaffDisplayName, getStaffRoleLabel } from '@student-portal/shared';
 import {
   Area,
   AreaChart,
@@ -832,8 +833,8 @@ export default function AdminDashboard() {
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   {isAr
-                    ? `مرحباً ${user?.name} · الدور الأكاديمي: ${user?.staffType === 'doctor' ? 'أستاذ مقرر (دكتور)' : user?.staffType === 'teaching_assistant' ? 'معيد (هيئة تدريس)' : 'موظف إداري'}`
-                    : `Welcome ${user?.name} · Role: ${user?.staffType === 'doctor' ? 'Doctor / Lecturer' : user?.staffType === 'teaching_assistant' ? 'Teaching Assistant' : 'Administrative Staff'}`}
+                    ? `مرحباً ${formatStaffDisplayName(user, locale)} · الدور الأكاديمي: ${getStaffRoleLabel(user?.staffType, user?.role, locale)}`
+                    : `Welcome ${formatStaffDisplayName(user, locale)} · Role: ${getStaffRoleLabel(user?.staffType, user?.role, locale)}`}
                 </p>
               </div>
             </div>

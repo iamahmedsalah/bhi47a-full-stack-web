@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { LoadingState, EmptyState } from '@/components/ui/feedback';
+import { formatStaffDisplayName } from '@student-portal/shared';
 
 export interface StudentScheduleItem {
   _id: string;
@@ -45,7 +46,8 @@ export interface StudentScheduleItem {
   courseNameAr?: string;
   staffId: string;
   staffName: string;
-  staffType: 'doctor' | 'teaching_assistant';
+  staffNameAr?: string;
+  staffType: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
   type: 'lecture' | 'section' | 'lab';
   dayOfWeek: 'saturday' | 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday';
   startTime: string;
@@ -520,15 +522,28 @@ function StudentSchedulesContent() {
                             <div className="flex items-center gap-2 rounded-lg bg-secondary/40 p-2 text-xs mb-2.5">
                               <User className="h-3.5 w-3.5 text-primary shrink-0" />
                               <div className="truncate">
-                                <span className="font-semibold text-foreground">{item.staffName}</span>
+                                <span className="font-semibold text-foreground">
+                                  {formatStaffDisplayName(
+                                    {
+                                      name: item.staffName,
+                                      nameAr: item.staffNameAr,
+                                      staffType: item.staffType,
+                                    },
+                                    isAr ? 'ar' : 'en',
+                                  )}
+                                </span>
                                 <span className="text-[10px] text-muted-foreground block">
-                                  {item.staffType === 'teaching_assistant'
+                                  {item.staffType === 'assistant_lecturer'
                                     ? isAr
-                                      ? 'معيد / هيئة معاونة'
-                                      : 'Teaching Assistant'
-                                    : isAr
-                                      ? 'أستاذ المادة (دكتور)'
-                                      : 'Course Doctor'}
+                                      ? 'مدرس مساعد / هيئة معاونة'
+                                      : 'Assistant Lecturer'
+                                    : item.staffType === 'teaching_assistant'
+                                      ? isAr
+                                        ? 'معيد / هيئة معاونة'
+                                        : 'Teaching Assistant'
+                                      : isAr
+                                        ? 'أستاذ المادة (دكتور)'
+                                        : 'Course Doctor'}
                                 </span>
                               </div>
                             </div>
@@ -596,15 +611,28 @@ function StudentSchedulesContent() {
                   <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-secondary/30 p-2.5 text-xs mb-3">
                     <User className="h-4 w-4 text-primary shrink-0" />
                     <div>
-                      <span className="font-semibold text-foreground block">{item.staffName}</span>
+                      <span className="font-semibold text-foreground block">
+                        {formatStaffDisplayName(
+                          {
+                            name: item.staffName,
+                            nameAr: item.staffNameAr,
+                            staffType: item.staffType,
+                          },
+                          isAr ? 'ar' : 'en',
+                        )}
+                      </span>
                       <span className="text-[10px] text-muted-foreground">
-                        {item.staffType === 'teaching_assistant'
+                        {item.staffType === 'assistant_lecturer'
                           ? isAr
-                            ? 'هيئة معاونة (معيد)'
-                            : 'Teaching Assistant'
-                          : isAr
-                            ? 'أستاذ مقرر (دكتور)'
-                            : 'Doctor'}
+                            ? 'هيئة معاونة (مدرس مساعد)'
+                            : 'Assistant Lecturer'
+                          : item.staffType === 'teaching_assistant'
+                            ? isAr
+                              ? 'هيئة معاونة (معيد)'
+                              : 'Teaching Assistant'
+                            : isAr
+                              ? 'أستاذ مقرر (دكتور)'
+                              : 'Doctor'}
                       </span>
                     </div>
                   </div>
@@ -670,16 +698,29 @@ function StudentSchedulesContent() {
                       <td className="px-4 py-3.5 text-foreground font-medium">
                         <div className="flex items-center gap-1.5 font-semibold">
                           <User className="h-3.5 w-3.5 text-primary/80 shrink-0" />
-                          <span>{item.staffName}</span>
+                          <span>
+                            {formatStaffDisplayName(
+                              {
+                                name: item.staffName,
+                                nameAr: item.staffNameAr,
+                                staffType: item.staffType,
+                              },
+                              isAr ? 'ar' : 'en',
+                            )}
+                          </span>
                         </div>
                         <div className="text-[10px] text-muted-foreground ms-5">
-                          {item.staffType === 'teaching_assistant'
+                          {item.staffType === 'assistant_lecturer'
                             ? isAr
-                              ? 'هيئة معاونة (معيد)'
-                              : 'Teaching Assistant'
-                            : isAr
-                              ? 'أستاذ مقرر (دكتور)'
-                              : 'Doctor'}
+                              ? 'هيئة معاونة (مدرس مساعد)'
+                              : 'Assistant Lecturer'
+                            : item.staffType === 'teaching_assistant'
+                              ? isAr
+                                ? 'هيئة معاونة (معيد)'
+                                : 'Teaching Assistant'
+                              : isAr
+                                ? 'أستاذ مقرر (دكتور)'
+                                : 'Doctor'}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-center">

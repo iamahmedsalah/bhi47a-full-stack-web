@@ -28,7 +28,15 @@ import {
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
-import { COURSE_LEVEL_VALUES, getCourseCurricula, courseCurriculumSummary, type CourseCurriculum } from '@student-portal/shared';
+import {
+  COURSE_LEVEL_VALUES,
+  getCourseCurricula,
+  courseCurriculumSummary,
+  formatStaffDisplayName,
+  getCleanStaffName,
+  getStaffPrefix,
+  type CourseCurriculum,
+} from '@student-portal/shared';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
@@ -448,7 +456,10 @@ function CourseFormDialog({
                       .filter((doc) => !doctorIds.includes(doc._id))
                       .map((staff) => (
                         <SelectItem key={staff._id} value={staff._id}>
-                          {locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name}
+                          {formatStaffDisplayName(
+                            { ...staff, staffType: 'doctor' },
+                            locale,
+                          )}
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -458,18 +469,23 @@ function CourseFormDialog({
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {doctorIds.map((id) => {
                       const staff = staffMembers.find((s) => s._id === id);
-                      const displayName = staff
-                        ? (locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name)
-                        : (initialValues.doctors?.find((d) => d._id === id)?.name || id);
+                      const fallbackDoc = initialValues.doctors?.find(
+                        (d) => d._id === id,
+                      );
+                      const cleanName = staff
+                        ? getCleanStaffName(staff, locale)
+                        : fallbackDoc
+                          ? getCleanStaffName(fallbackDoc, locale)
+                          : id;
                       return (
                         <span
                           key={id}
                           className="inline-flex items-center gap-1.5 rounded-squircle border border-teal-500/40 bg-teal-500/10 px-2.5 py-1 text-xs font-medium text-foreground"
                         >
                           <span className="font-semibold text-teal-600 dark:text-teal-400">
-                            {locale === 'ar' ? 'د.' : 'Dr.'}
+                            {getStaffPrefix('doctor', locale)}
                           </span>
-                          <span>{displayName}</span>
+                          <span>{cleanName}</span>
                           <button
                             type="button"
                             onClick={() =>
@@ -510,7 +526,14 @@ function CourseFormDialog({
                       .filter((ta) => !teachingAssistantIds.includes(ta._id))
                       .map((ta) => (
                         <SelectItem key={ta._id} value={ta._id}>
-                          {locale === 'ar' ? (ta as any).nameAr || ta.name : ta.name}
+                          {formatStaffDisplayName(
+                            {
+                              ...ta,
+                              staffType:
+                                (ta as any).staffType || 'teaching_assistant',
+                            },
+                            locale,
+                          )}
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -520,15 +543,30 @@ function CourseFormDialog({
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {teachingAssistantIds.map((id) => {
                       const staff = staffMembers.find((s) => s._id === id);
-                      const displayName = staff
-                        ? (locale === 'ar' ? (staff as any).nameAr || staff.name : staff.name)
-                        : (initialValues.teachingAssistants?.find((t) => t._id === id)?.name || id);
+                      const fallbackTa = initialValues.teachingAssistants?.find(
+                        (t) => t._id === id,
+                      );
+                      const taType =
+                        (staff as any)?.staffType ||
+                        (fallbackTa as any)?.staffType ||
+                        'teaching_assistant';
+                      const cleanName = staff
+                        ? getCleanStaffName(staff, locale)
+                        : fallbackTa
+                          ? getCleanStaffName(fallbackTa, locale)
+                          : id;
+                      const prefix = getStaffPrefix(taType, locale);
                       return (
                         <span
                           key={id}
                           className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground"
                         >
-                          <span>{displayName}</span>
+                          {prefix && (
+                            <span className="font-semibold text-primary">
+                              {prefix}
+                            </span>
+                          )}
+                          <span>{cleanName}</span>
                           <button
                             type="button"
                             onClick={() =>
@@ -1439,7 +1477,10 @@ function CoursesPageContent() {
                   >
                     <UserCheck className="h-3.5 w-3.5 text-teal-500" />
                     <span>
-                      {locale === 'ar' ? doc.nameAr || doc.name : doc.name}
+                      {formatStaffDisplayName(
+                        { ...doc, staffType: 'doctor' },
+                        locale,
+                      )}
                     </span>
                   </span>
                 ))}
@@ -1448,9 +1489,14 @@ function CoursesPageContent() {
               <span className="inline-flex w-fit items-center gap-1.5 rounded-squircle border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground">
                 <UserCheck className="h-3.5 w-3.5 text-primary" />
                 <span>
-                  {locale === 'ar'
-                    ? course.doctorNameAr || course.doctorName
-                    : course.doctorName || course.doctorNameAr}
+                  {formatStaffDisplayName(
+                    {
+                      name: course.doctorName,
+                      nameAr: course.doctorNameAr,
+                      staffType: 'doctor',
+                    },
+                    locale,
+                  )}
                 </span>
               </span>
             ) : (
@@ -1464,10 +1510,27 @@ function CoursesPageContent() {
                   <span
                     key={ta._id}
                     className="inline-flex items-center gap-1 rounded-squircle border border-border/70 bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground"
-                    title={locale === 'ar' ? 'معيد' : 'Teaching Assistant'}
+                    title={
+                      (ta as any).staffType === 'assistant_lecturer'
+                        ? locale === 'ar'
+                          ? 'مدرس مساعد'
+                          : 'Assistant Lecturer'
+                        : locale === 'ar'
+                          ? 'معيد'
+                          : 'Teaching Assistant'
+                    }
                   >
                     <Users className="h-3 w-3 text-muted-foreground" />
-                    <span>{locale === 'ar' ? ta.nameAr || ta.name : ta.name}</span>
+                    <span>
+                      {formatStaffDisplayName(
+                        {
+                          ...ta,
+                          staffType:
+                            (ta as any).staffType || 'teaching_assistant',
+                        },
+                        locale,
+                      )}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -1943,16 +2006,53 @@ function CoursesPageContent() {
 
                     {/* Staff details */}
                     <div className="rounded-xl border border-border/50 bg-secondary/30 p-2.5 space-y-1.5 text-[11px]">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">{locale === 'ar' ? 'أستاذ المقرر:' : 'Doctor:'}</span>
-                        <span className="font-medium text-foreground truncate max-w-37.5">
-                          {(course as any).doctor?.name || (course as any).doctorName || (locale === 'ar' ? 'لم يُحدد' : 'Unassigned')}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground shrink-0">{locale === 'ar' ? 'أستاذ المقرر:' : 'Doctor:'}</span>
+                        <span className="font-medium text-foreground truncate max-w-44">
+                          {course.doctors && course.doctors.length > 0
+                            ? course.doctors
+                                .map((d) =>
+                                  formatStaffDisplayName(
+                                    { ...d, staffType: 'doctor' },
+                                    locale,
+                                  ),
+                                )
+                                .join(' ، ')
+                            : course.doctorName || course.doctorNameAr
+                              ? formatStaffDisplayName(
+                                  {
+                                    name: course.doctorName,
+                                    nameAr: course.doctorNameAr,
+                                    staffType: 'doctor',
+                                  },
+                                  locale,
+                                )
+                              : locale === 'ar'
+                                ? 'لم يُحدد'
+                                : 'Unassigned'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">{locale === 'ar' ? 'المعيد:' : 'TA:'}</span>
-                        <span className="font-medium text-foreground truncate max-w-37.5">
-                          {(course as any).teachingAssistant?.name || (course as any).teachingAssistantName || (locale === 'ar' ? 'لم يُحدد' : 'Unassigned')}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground shrink-0">{locale === 'ar' ? 'الهيئة المعاونة:' : 'TA:'}</span>
+                        <span className="font-medium text-foreground truncate max-w-44">
+                          {course.teachingAssistants &&
+                          course.teachingAssistants.length > 0
+                            ? course.teachingAssistants
+                                .map((ta) =>
+                                  formatStaffDisplayName(
+                                    {
+                                      ...ta,
+                                      staffType:
+                                        (ta as any).staffType ||
+                                        'teaching_assistant',
+                                    },
+                                    locale,
+                                  ),
+                                )
+                                .join(' ، ')
+                            : locale === 'ar'
+                              ? 'لم يُحدد'
+                              : 'Unassigned'}
                         </span>
                       </div>
                     </div>

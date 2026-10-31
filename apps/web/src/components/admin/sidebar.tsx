@@ -34,7 +34,12 @@ import { useUIStore } from "@/store/ui-store";
 import Themes from "@/components/ui/Themes";
 import LangToggle from "@/components/ui/LangToggle";
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { PERMISSIONS, type Permission } from "@student-portal/shared";
+import {
+  PERMISSIONS,
+  formatStaffDisplayName,
+  getStaffRoleLabel,
+  type Permission,
+} from "@student-portal/shared";
 
 interface NavItem {
   key: string;
@@ -113,6 +118,12 @@ export default function AdminSidebar() {
       permission: PERMISSIONS.GRADES_READ,
     },
     {
+      key: "admissions",
+      href: `/${locale}/admin/admissions`,
+      icon: <CalendarDays className="h-5 w-5" />,
+      permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE],
+    },
+    {
       key: "academicEmails",
       href: `/${locale}/admin/academic-emails`,
       icon: <Mail className="h-5 w-5" />,
@@ -188,7 +199,13 @@ export default function AdminSidebar() {
     const staffType = (user as any)?.staffType;
     const isAcademicOrFinanceStaff =
       user?.role === "staff" &&
-      ["doctor", "teaching_assistant", "ta", "accountant"].includes(staffType || "");
+      [
+        "doctor",
+        "teaching_assistant",
+        "assistant_lecturer",
+        "ta",
+        "accountant",
+      ].includes(staffType || "");
     if (isAcademicOrFinanceStaff && item.key === "examSchedules") {
       return false;
     }
@@ -242,17 +259,15 @@ export default function AdminSidebar() {
               <div className="min-w-0 text-start">
                 <h2 className="truncate text-xs font-bold leading-tight text-white/95">
                   {locale === "ar" ? "مرحباً، " : "Welcome, "}
-                  {user?.name || (locale === "ar" ? "مدير النظام" : "Admin")}
+                  {user
+                    ? formatStaffDisplayName(user, locale)
+                    : locale === "ar"
+                      ? "مدير النظام"
+                      : "Admin"}
                 </h2>
                 <p className="text-[10px] text-muted-foreground">
-                  {user?.role === "admin"
-                    ? locale === "ar"
-                      ? "مدير النظام"
-                      : "Admin"
-                    : locale === "ar"
-                      ? "موظف دعم"
-                      : "Support Staff"}{" "}
-                  · {locale === "ar" ? "متصل الآن" : "Online"}
+                  {getStaffRoleLabel(user?.staffType, user?.role, locale)} ·{" "}
+                  {locale === "ar" ? "متصل الآن" : "Online"}
                 </p>
               </div>
             </Link>

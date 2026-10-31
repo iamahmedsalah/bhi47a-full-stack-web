@@ -26,6 +26,8 @@ import { toast } from 'sonner';
 import {
   STAFF_ASSIGNABLE_PERMISSIONS,
   STAFF_TYPE_VALUES,
+  formatStaffDisplayName,
+  getCleanStaffName,
   type Permission,
   type StaffType,
 } from '@student-portal/shared';
@@ -319,7 +321,7 @@ export function StaffManagementPage() {
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
               title={t('actions.viewDetails')}
             >
-              {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
+              {getInitials(getCleanStaffName(staff, locale))}
             </button>
             <div className="space-y-1 text-start">
               <div className="flex flex-wrap items-center gap-2">
@@ -328,7 +330,7 @@ export function StaffManagementPage() {
                   onClick={() => setDetailsTarget(staff)}
                   className="font-bold text-foreground hover:text-primary transition-colors text-sm flex items-center gap-1 group cursor-pointer"
                 >
-                  <span>{isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr}</span>
+                  <span>{formatStaffDisplayName(staff, locale)}</span>
                   <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
                 </button>
                 <span
@@ -615,16 +617,16 @@ export function StaffManagementPage() {
                         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-sm shadow-inner group-hover:scale-105 transition-transform cursor-pointer"
                         title={t('actions.viewDetails')}
                       >
-                        {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
+                        {getInitials(getCleanStaffName(staff, locale))}
                       </button>
                       <div className="min-w-0 space-y-1">
                         <button
                           type="button"
                           onClick={() => setDetailsTarget(staff)}
                           className="font-bold text-foreground hover:text-primary transition-colors text-base truncate block text-start cursor-pointer"
-                          title={staff.name}
+                          title={formatStaffDisplayName(staff, locale)}
                         >
-                          {staff.name}
+                          {formatStaffDisplayName(staff, locale)}
                         </button>
                         <span
                           className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getRoleBadgeClasses(

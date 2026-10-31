@@ -10,6 +10,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import {
   STAFF_ASSIGNABLE_PERMISSIONS,
@@ -34,6 +35,7 @@ export class CreateStaffDto {
 
   @ApiPropertyOptional({ example: 'أحمد حسن' })
   @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
   @IsString()
   @Length(2, 160)
   nameAr?: string;

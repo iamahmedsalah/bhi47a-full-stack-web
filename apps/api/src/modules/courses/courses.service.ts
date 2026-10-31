@@ -123,6 +123,7 @@ export class CoursesService {
       _id: Types.ObjectId;
       name: string;
       nameAr?: string;
+      staffType?: string;
     }> = [];
     const validDoctorObjectIds: Types.ObjectId[] = [];
 
@@ -142,7 +143,7 @@ export class CoursesService {
     if (validDoctorObjectIds.length > 0) {
       const docUsers = await this.userModel
         .find({ _id: { $in: validDoctorObjectIds } })
-        .select('_id name nameAr')
+        .select('_id name nameAr staffType')
         .lean();
       for (const dId of validDoctorObjectIds) {
         const u = docUsers.find((doc) => doc._id.toString() === dId.toString());
@@ -151,6 +152,7 @@ export class CoursesService {
             _id: u._id,
             name: u.name,
             nameAr: (u as any).nameAr || u.name,
+            staffType: (u as any).staffType || 'doctor',
           });
         }
       }
@@ -165,6 +167,7 @@ export class CoursesService {
       _id: Types.ObjectId;
       name: string;
       nameAr?: string;
+      staffType?: string;
     }> = [];
     const validTaObjectIds: Types.ObjectId[] = [];
     if (dto.teachingAssistantIds && Array.isArray(dto.teachingAssistantIds)) {
@@ -176,13 +179,14 @@ export class CoursesService {
       if (validTaObjectIds.length > 0) {
         const taUsers = await this.userModel
           .find({ _id: { $in: validTaObjectIds } })
-          .select('_id name nameAr')
+          .select('_id name nameAr staffType')
           .lean();
         for (const user of taUsers) {
           teachingAssistants.push({
             _id: user._id,
             name: user.name,
             nameAr: (user as any).nameAr || user.name,
+            staffType: (user as any).staffType || 'teaching_assistant',
           });
         }
       }
@@ -266,7 +270,7 @@ export class CoursesService {
         : null;
 
     if (cacheKey && this.cacheService) {
-      return this.cacheService.wrap(
+      const cached = await this.cacheService.wrap(
         cacheKey,
         async () => {
           const [items, total] = await Promise.all([
@@ -282,6 +286,10 @@ export class CoursesService {
         },
         120,
       );
+      return {
+        ...cached,
+        items: await this.hydrateCoursesStaff(cached.items as any[]),
+      };
     }
 
     const [items, total] = await Promise.all([
@@ -294,7 +302,131 @@ export class CoursesService {
       this.courseModel.countDocuments(filter),
     ]);
 
-    return createPaginatedResult(items, total, page, limit);
+    const hydratedItems = await this.hydrateCoursesStaff(items as any[]);
+    return createPaginatedResult(hydratedItems, total, page, limit);
+  }
+
+  private async hydrateCoursesStaff<T extends Record<string, any>>(
+    items: T[],
+  ): Promise<T[]> {
+    if (!items || items.length === 0 || !this.userModel?.find) return items;
+    try {
+      const staffIdSet = new Set<string>();
+      for (const c of items) {
+        if (c.doctorId && Types.ObjectId.isValid(String(c.doctorId))) {
+          staffIdSet.add(String(c.doctorId));
+        }
+        if (Array.isArray(c.doctorIds)) {
+          for (const id of c.doctorIds) {
+            if (id && Types.ObjectId.isValid(String(id))) {
+              staffIdSet.add(String(id));
+            }
+          }
+        }
+        if (Array.isArray(c.doctors)) {
+          for (const d of c.doctors) {
+            if (d?._id && Types.ObjectId.isValid(String(d._id))) {
+              staffIdSet.add(String(d._id));
+            }
+          }
+        }
+        if (Array.isArray(c.teachingAssistantIds)) {
+          for (const id of c.teachingAssistantIds) {
+            if (id && Types.ObjectId.isValid(String(id))) {
+              staffIdSet.add(String(id));
+            }
+          }
+        }
+        if (Array.isArray(c.teachingAssistants)) {
+          for (const ta of c.teachingAssistants) {
+            if (ta?._id && Types.ObjectId.isValid(String(ta._id))) {
+              staffIdSet.add(String(ta._id));
+            }
+          }
+        }
+      }
+
+      if (staffIdSet.size === 0) return items;
+
+      const objIds = Array.from(staffIdSet).map((id) => new Types.ObjectId(id));
+      const users = await this.userModel
+        .find({ _id: { $in: objIds } })
+        .select('_id name nameAr staffType')
+        .lean();
+      if (!Array.isArray(users) || users.length === 0) return items;
+
+      const userMap = new Map<
+        string,
+        { name: string; nameAr?: string; staffType?: string }
+      >();
+      for (const u of users) {
+        userMap.set(String(u._id), {
+          name: u.name,
+          nameAr: (u as any).nameAr,
+          staffType: (u as any).staffType,
+        });
+      }
+
+      return items.map((c) => {
+        const next: Record<string, any> = { ...c };
+        if (Array.isArray(c.doctors) && c.doctors.length > 0) {
+          next.doctors = c.doctors.map((d: any) => {
+            const u = d?._id ? userMap.get(String(d._id)) : undefined;
+            if (!u) return d;
+            return {
+              ...d,
+              name: u.name || d.name,
+              nameAr: u.nameAr || d.nameAr || u.name || d.name,
+              staffType: u.staffType || d.staffType || 'doctor',
+            };
+          });
+          next.doctorName = next.doctors.map((d: any) => d.name).join(' / ');
+          next.doctorNameAr = next.doctors
+            .map((d: any) => d.nameAr || d.name)
+            .join(' / ');
+        } else if (c.doctorId && userMap.has(String(c.doctorId))) {
+          const u = userMap.get(String(c.doctorId))!;
+          next.doctorName = u.name || c.doctorName;
+          next.doctorNameAr = u.nameAr || c.doctorNameAr || u.name;
+        }
+
+        if (
+          Array.isArray(c.teachingAssistants) &&
+          c.teachingAssistants.length > 0
+        ) {
+          next.teachingAssistants = c.teachingAssistants.map((ta: any) => {
+            const u = ta?._id ? userMap.get(String(ta._id)) : undefined;
+            if (!u) return ta;
+            return {
+              ...ta,
+              name: u.name || ta.name,
+              nameAr: u.nameAr || ta.nameAr || u.name || ta.name,
+              staffType: u.staffType || ta.staffType || 'teaching_assistant',
+            };
+          });
+        } else if (
+          Array.isArray(c.teachingAssistantIds) &&
+          c.teachingAssistantIds.length > 0
+        ) {
+          next.teachingAssistants = c.teachingAssistantIds
+            .map((id: any) => {
+              const u = userMap.get(String(id));
+              if (!u) return null;
+              return {
+                _id: id,
+                name: u.name,
+                nameAr: u.nameAr || u.name,
+                staffType: u.staffType || 'teaching_assistant',
+              };
+            })
+            .filter(Boolean);
+        }
+
+        return next as T;
+      });
+    } catch {
+      return items;
+    }
   }
 
   async findStudentCourses(query: QueryCourseDto, studentId: string) {
@@ -460,13 +592,14 @@ export class CoursesService {
 
         const docUsers = await this.userModel
           .find({ _id: { $in: validDoctorObjectIds } })
-          .select('_id name nameAr')
+          .select('_id name nameAr staffType')
           .lean();
 
         const doctors: Array<{
           _id: Types.ObjectId;
           name: string;
           nameAr?: string;
+          staffType?: string;
         }> = [];
         for (const dId of validDoctorObjectIds) {
           const u = docUsers.find(
@@ -477,6 +610,7 @@ export class CoursesService {
               _id: u._id,
               name: u.name,
               nameAr: (u as any).nameAr || u.name,
+              staffType: (u as any).staffType || 'doctor',
             });
           }
         }
@@ -510,13 +644,14 @@ export class CoursesService {
         }
         const taUsers = await this.userModel
           .find({ _id: { $in: validTaObjectIds } })
-          .select('_id name nameAr')
+          .select('_id name nameAr staffType')
           .lean();
         updatePayload.teachingAssistantIds = validTaObjectIds;
         updatePayload.teachingAssistants = taUsers.map((u) => ({
           _id: u._id,
           name: u.name,
           nameAr: (u as any).nameAr || u.name,
+          staffType: (u as any).staffType || 'teaching_assistant',
         }));
       } else {
         updatePayload.teachingAssistantIds = [];
@@ -587,7 +722,8 @@ export class CoursesService {
       }
     }
 
-    return courses.map((c) => ({
+    const hydratedCourses = await this.hydrateCoursesStaff(courses as any[]);
+    return hydratedCourses.map((c) => ({
       ...c,
       enrolledStudentsCount: countMap[c._id.toString()] || 0,
     }));
@@ -989,7 +1125,7 @@ export class CoursesService {
 
     const studentLevel = profile?.level ?? '1';
 
-    const [registeredCourses, levelCourses] = await Promise.all([
+    const [rawRegisteredCourses, rawLevelCourses] = await Promise.all([
       registeredCodes.length > 0
         ? this.courseModel
             .find({
@@ -1010,6 +1146,11 @@ export class CoursesService {
         })
         .sort({ code: 1 })
         .lean(),
+    ]);
+
+    const [registeredCourses, levelCourses] = await Promise.all([
+      this.hydrateCoursesStaff(rawRegisteredCourses as any[]),
+      this.hydrateCoursesStaff(rawLevelCourses as any[]),
     ]);
 
     return {

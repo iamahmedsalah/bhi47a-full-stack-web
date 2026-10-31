@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Loader2, Sparkles, Copy, Check } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import { formatStaffDisplayName } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -83,7 +84,7 @@ export function ResetStaffPasswordDialog({ staff, pending, onClose, onSubmit }: 
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md border-border bg-card">
         <DialogHeader>
-          <DialogTitle>{t('resetPassword.title', { name: staff.name })}</DialogTitle>
+          <DialogTitle>{t('resetPassword.title', { name: formatStaffDisplayName(staff, useLocale()) })}</DialogTitle>
           <DialogDescription>{t('resetPassword.description')}</DialogDescription>
         </DialogHeader>
 

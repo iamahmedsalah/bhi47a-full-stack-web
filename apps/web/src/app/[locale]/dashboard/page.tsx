@@ -35,7 +35,7 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
-import { courseCurriculumSummary } from "@student-portal/shared";
+import { courseCurriculumSummary, formatStaffDisplayName } from "@student-portal/shared";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -1259,13 +1259,18 @@ export default function StudentDashboard() {
                             : course.nameEn || course.name}
                         </p>
                         <p className="text-[11px] text-muted-foreground">{courseCurriculumSummary(course, locale)}</p>
-                        {course.doctorName && (
+                        {(course.doctorName || course.doctorNameAr) && (
                           <p className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
                             <UserCheck className="w-3 h-3 text-primary shrink-0" />
                             <span className="truncate">
-                              {locale === "ar"
-                                ? course.doctorNameAr || course.doctorName
-                                : course.doctorName}
+                              {formatStaffDisplayName(
+                                {
+                                  name: course.doctorName,
+                                  nameAr: course.doctorNameAr,
+                                  staffType: "doctor",
+                                },
+                                locale,
+                              )}
                             </span>
                           </p>
                         )}

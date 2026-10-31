@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { formatStaffDisplayName } from '@student-portal/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -18,12 +19,13 @@ interface Props {
 
 export function DeactivateStaffDialog({ staff, pending, onClose, onConfirm }: Props) {
   const t = useTranslations('staff');
+  const locale = useLocale();
   const [reason, setReason] = useState('');
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md border-border bg-card">
         <DialogHeader>
-          <DialogTitle>{t('deactivate.title', { name: staff.name })}</DialogTitle>
+          <DialogTitle>{t('deactivate.title', { name: formatStaffDisplayName(staff, locale) })}</DialogTitle>
           <DialogDescription>{t('deactivate.description')}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">

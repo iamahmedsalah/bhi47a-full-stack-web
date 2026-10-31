@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import { getCourseStaffIds } from '@/features/courses/assignment-utils';
-import { courseCurriculumSummary, curriculumDepartmentLabel } from '@student-portal/shared';
+import {
+  courseCurriculumSummary,
+  curriculumDepartmentLabel,
+  formatStaffDisplayName,
+  getCleanStaffName,
+} from '@student-portal/shared';
 import {
   BookOpen,
   Calendar,
@@ -125,19 +130,19 @@ export function StaffDetailsDialog({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 font-bold text-teal-600 dark:text-teal-400 text-lg border border-teal-500/30 shadow-inner">
-                {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
+                {getInitials(getCleanStaffName(staff, locale))}
               </div>
               <div className="space-y-1 text-start">
                 <DialogTitle className="flex flex-wrap items-center gap-2 text-xl font-bold text-foreground">
-                  <span>{isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr}</span>
+                  <span>{formatStaffDisplayName(staff, locale)}</span>
                   {isAr && staff.nameAr && staff.name !== staff.nameAr && (
                     <span className="text-xs font-normal text-muted-foreground/80 font-sans" dir="ltr">
-                      ({staff.name})
+                      ({formatStaffDisplayName({ ...staff, nameAr: undefined }, 'en')})
                     </span>
                   )}
                   {!isAr && staff.nameAr && (
                     <span className="text-xs font-normal text-muted-foreground/80 font-sans" dir="rtl">
-                      ({staff.nameAr})
+                      ({formatStaffDisplayName(staff, 'ar')})
                     </span>
                   )}
                   <span

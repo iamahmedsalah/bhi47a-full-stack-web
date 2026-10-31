@@ -54,8 +54,9 @@ export interface CreateStaffInput extends StaffProfileInput {
 export interface StaffAssignedCourse {
   doctorId?: string;
   doctorIds?: string[];
+  doctors?: Array<{ _id: string; name: string; nameAr?: string; staffType?: string }>;
   teachingAssistantIds?: string[];
-  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string }>;
+  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string; staffType?: string }>;
   curricula?: CourseCurriculum[];
   _id: string;
   name: string;
