@@ -6,10 +6,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { StudentCodesService } from './student-codes.service';
 import {
   CodeAuditQueryDto,
+  CodeHistoryQueryDto,
   InitializeCodeYearDto,
   RecoverStudentCodeDto,
 } from './dto/student-code.dto';
-import { QueryAdmissionPeriodDto } from '../admissions/dto/admission-period.dto';
 
 @Controller('admin/student-codes')
 @Roles('admin', 'staff')
@@ -22,10 +22,7 @@ export class StudentCodesController {
   }
   @Get(':code/history')
   @RequirePermissions(PERMISSIONS.STUDENT_CODES_READ)
-  history(
-    @Param('code') code: string,
-    @Query() query: QueryAdmissionPeriodDto,
-  ) {
+  history(@Param('code') code: string, @Query() query: CodeHistoryQueryDto) {
     return this.codes.history(code, query.page, query.limit);
   }
   @Post('years/initialize')

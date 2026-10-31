@@ -90,6 +90,9 @@ jobs:
       - name: Verify isolated E2E database policy
         run: node --test scripts/e2e-runner-safety.test.cjs
 
+      - name: Verify admission replica-set runner isolation
+        run: node --test apps/api/test/admissions/runner-safety.test.cjs
+
       - name: Lint workspace
         run: pnpm run lint
 
@@ -143,6 +146,16 @@ jobs:
 
       - name: Test admission-period management in Chromium
         run: pnpm --filter @student-portal/web test:admissions:browser
+
+      - name: Start isolated admission replica set
+        run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml up -d --wait
+
+      - name: Test student-code transactions and concurrent allocation
+        run: pnpm --filter @student-portal/api test:admissions:e2e
+
+      - name: Stop isolated admission services
+        if: always()
+        run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml down
 
       - name: Test responsive security and settings in Chromium
         run: pnpm --filter @student-portal/web test:security

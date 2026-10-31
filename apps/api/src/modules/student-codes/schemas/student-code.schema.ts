@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types, type HydratedDocument } from 'mongoose';
+import {
+  Schema as MongooseSchema,
+  Types,
+  type HydratedDocument,
+} from 'mongoose';
 import {
   STUDENT_CODE_STATUSES,
   type StudentCodeStatus,
@@ -7,15 +11,16 @@ import {
 
 @Schema({ _id: false })
 export class CodeAssignment {
-  @Prop({ type: Types.ObjectId, required: true, ref: 'User' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true, ref: 'User' })
   studentId!: Types.ObjectId;
-  @Prop({ type: Types.ObjectId }) registrationRequestId?: Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId })
+  registrationRequestId?: Types.ObjectId;
   @Prop() assignedAt?: Date;
   @Prop({ required: true }) observedAt!: Date;
   @Prop({ enum: ['admission', 'legacy'], required: true }) source!: string;
   @Prop() releasedAt?: Date;
   @Prop() releaseReason?: string;
-  @Prop({ type: Types.ObjectId }) releasedBy?: Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId }) releasedBy?: Types.ObjectId;
 }
 const AssignmentSchema = SchemaFactory.createForClass(CodeAssignment);
 
@@ -28,9 +33,10 @@ export class StudentCodeEntry {
   sequence!: number;
   @Prop({ type: String, enum: STUDENT_CODE_STATUSES, required: true })
   status!: StudentCodeStatus;
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User' })
   currentStudentId?: Types.ObjectId;
-  @Prop({ type: Types.ObjectId }) registrationRequestId?: Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId })
+  registrationRequestId?: Types.ObjectId;
   @Prop({ type: [AssignmentSchema], default: [] })
   assignmentHistory!: CodeAssignment[];
 }
@@ -54,6 +60,7 @@ StudentCodeEntrySchema.index(
   },
 );
 StudentCodeEntrySchema.index({ academicYear: 1, status: 1, sequence: 1 });
+StudentCodeEntrySchema.index({ yearPrefix: 1, studentCode: 1 });
 
 /** The counter and immutable year mapping share one document, used as a write fence. */
 @Schema({ collection: 'student_code_years', timestamps: true })
@@ -63,7 +70,11 @@ export class StudentCodeYear {
   @Prop({ required: true, min: 1, max: 10000 }) nextSequence!: number;
   @Prop({ default: 0, min: 0 }) revision!: number;
   @Prop({ required: true, immutable: true }) initializedAt!: Date;
-  @Prop({ type: Types.ObjectId, required: true, immutable: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    required: true,
+    immutable: true,
+  })
   initializedBy!: Types.ObjectId;
   @Prop({ required: true, immutable: true }) initializationReason!: string;
 }
@@ -89,10 +100,16 @@ export class StudentCodeAuditLog {
     immutable: true,
   })
   action!: string;
-  @Prop({ type: Types.ObjectId, required: true, immutable: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    required: true,
+    immutable: true,
+  })
   actorId!: Types.ObjectId;
-  @Prop({ type: Types.ObjectId, immutable: true }) studentId?: Types.ObjectId;
-  @Prop({ type: Types.ObjectId, immutable: true }) requestId?: Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId, immutable: true })
+  studentId?: Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId, immutable: true })
+  requestId?: Types.ObjectId;
   @Prop({ immutable: true }) from?: string;
   @Prop({ required: true, immutable: true }) to!: string;
   @Prop({ required: true, immutable: true }) reason!: string;

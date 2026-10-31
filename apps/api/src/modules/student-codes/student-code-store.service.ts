@@ -6,22 +6,13 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { isAdmissionAcademicYear } from '@student-portal/shared';
 import type { ClientSession, Connection, Model } from 'mongoose';
-import { User, type UserDocument } from '../users/schemas/user.schema';
-import {
-  StudentProfile,
-  type StudentProfileDocument,
-} from '../students/schemas/student-profile.schema';
-import {
-  AdmissionPeriod,
-  type AdmissionPeriodDocument,
-} from '../admissions/schemas/admission-period.schema';
+import { User } from '../users/schemas/user.schema';
+import { StudentProfile } from '../students/schemas/student-profile.schema';
+import { AdmissionPeriod } from '../admissions/schemas/admission-period.schema';
 import {
   StudentCodeEntry,
   StudentCodeYear,
   StudentCodeAuditLog,
-  type StudentCodeEntryDocument,
-  type StudentCodeYearDocument,
-  type StudentCodeAuditLogDocument,
 } from './schemas/student-code.schema';
 import {
   analyzeCodeSnapshot,
@@ -48,16 +39,16 @@ export class StudentCodeStore {
   constructor(
     @InjectConnection() readonly connection: Connection,
     @InjectModel(StudentCodeEntry.name)
-    readonly entries: Model<StudentCodeEntryDocument>,
+    readonly entries: Model<StudentCodeEntry>,
     @InjectModel(StudentCodeYear.name)
-    readonly years: Model<StudentCodeYearDocument>,
+    readonly years: Model<StudentCodeYear>,
     @InjectModel(StudentCodeAuditLog.name)
-    readonly audits: Model<StudentCodeAuditLogDocument>,
-    @InjectModel(User.name) readonly users: Model<UserDocument>,
+    readonly audits: Model<StudentCodeAuditLog>,
+    @InjectModel(User.name) readonly users: Model<User>,
     @InjectModel(StudentProfile.name)
-    readonly profiles: Model<StudentProfileDocument>,
+    readonly profiles: Model<StudentProfile>,
     @InjectModel(AdmissionPeriod.name)
-    readonly periods: Model<AdmissionPeriodDocument>,
+    readonly periods: Model<AdmissionPeriod>,
   ) {}
   validateYear(academicYear: string, prefix: string) {
     if (!isAdmissionAcademicYear(academicYear) || !/^\d{2}$/.test(prefix))
@@ -103,13 +94,14 @@ export class StudentCodeStore {
   ) {
     this.validateYear(academicYear, prefix);
     const regex = new RegExp(`^${prefix}`);
+    const aliasRegex = new RegExp(`^${prefix}[0-9]{4}$`);
     // MongoDB does not support parallel operations within a transaction.
     const users = await this.users
       .find({
         $or: [
           { studentCode: regex },
-          { username: regex },
-          { userCode: new RegExp(`^STD-${prefix}`) },
+          { username: aliasRegex },
+          { userCode: new RegExp(`^STD-${prefix}[0-9]{4}$`) },
         ],
       })
       .select('_id role studentCode username userCode')

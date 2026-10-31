@@ -124,6 +124,12 @@ export default function AdminSidebar() {
       permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE],
     },
     {
+      key: "studentCodes",
+      href: `/${locale}/admin/student-codes`,
+      icon: <ShieldCheck className="h-5 w-5" />,
+      permission: PERMISSIONS.STUDENT_CODES_READ,
+    },
+    {
       key: "academicEmails",
       href: `/${locale}/admin/academic-emails`,
       icon: <Mail className="h-5 w-5" />,

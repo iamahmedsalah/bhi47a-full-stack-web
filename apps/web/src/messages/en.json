@@ -211,7 +211,8 @@
     "settings": "Settings",
     "staff": "Staff",
     "logout": "Logout",
-    "admissions": "Admission periods"
+    "admissions": "Admission periods",
+    "studentCodes": "Student code audit"
   },
   "common": {
     "search": "Search...",
@@ -861,7 +862,8 @@
         "tuition": "Tuition Fees & Blocking",
         "courseMaterials": "Course Materials & Content",
         "staffManagement": "Faculty & Staff Management",
-        "admissions": "Admission periods"
+        "admissions": "Admission periods",
+        "studentCodes": "Student code audit"
       },
       "labels": {
         "students_read": "View students",
@@ -923,7 +925,8 @@
         "admins_manage": "Manage system administrator accounts & access",
         "danger_zone_delete_all": "Delete all platform data (danger zone)",
         "admissions_periods_read": "View admission periods",
-        "admissions_periods_manage": "Create and update admission periods"
+        "admissions_periods_manage": "Create and update admission periods",
+        "student_codes_read": "View student-code audit and history"
       }
     }
   },
@@ -1079,5 +1082,104 @@
       "changed": "Another user changed this period. Close and reopen it to load the latest version before saving.",
       "window": "Closing time must be later than opening time."
     }
+  },
+  "studentCodes": {
+    "title": "Student code audit",
+    "description": "Review code ownership and configure intake prefixes before admission approval.",
+    "scan": "Scan codes",
+    "initialize": "Initialize year registry",
+    "recover": "Recover verified gap",
+    "history": "Assignment history",
+    "actions": "Actions",
+    "actionsFor": "Actions for {code}",
+    "status": "Status",
+    "explanation": "Explanation",
+    "all": "All statuses",
+    "search": "Search numeric code",
+    "previous": "Previous",
+    "next": "Next",
+    "pagination": "Page {page} of {total}",
+    "empty": "No matching codes found.",
+    "loading": "Loading code audit...",
+    "retry": "Try again",
+    "cancel": "Cancel",
+    "confirmAction": "Confirm reviewed action",
+    "saving": "Saving...",
+    "saved": "Student-code registry updated.",
+    "selectAll": "Select all displayed codes",
+    "select": "Select {code}",
+    "selected": "{count} selected",
+    "inspectSelection": "Inspect selection",
+    "clearSelection": "Clear selection",
+    "noHistory": "No recorded assignment events.",
+    "chooseScope": "Enter the admission academic year and its explicit two-digit prefix, then scan.",
+    "safetyHint": "A numeric gap is not proof that a code is reusable. Previously held codes remain blocked from reuse.",
+    "setupHint": "Create an admission period for this year and resolve review findings before initializing. Previewing makes no changes.",
+    "initializeHint": "Confirm the reviewed preview. Matched holders will be recorded; gaps stay unverified. The year-prefix mapping cannot be changed afterward.",
+    "recoverHint": "Recover only a code confirmed never to have been assigned. Accounts, aliases and historical records are checked again before saving.",
+    "confirmed": "I reviewed this snapshot and confirm this action.",
+    "neverAssignedConfirmed": "I verified internal and external records: this code has never been assigned.",
+    "scannedAt": "Snapshot: {value} (Cairo time)",
+    "truncated": "The scan reached its safety limit. Initialization and recovery are blocked; investigate the data first.",
+    "fields": {
+      "academicYear": "Admission academic year",
+      "yearPrefix": "Two-digit intake prefix",
+      "studentCode": "Student code",
+      "currentStudentId": "Current account ID",
+      "reason": "Review reason / evidence"
+    },
+    "statuses": {
+      "AVAILABLE": "Verified available",
+      "RESERVED": "Reserved",
+      "ASSIGNED": "Assigned",
+      "RELEASED": "Released — reuse blocked",
+      "REQUIRES_REVIEW": "Requires review",
+      "MISSING": "Unverified gap"
+    },
+    "reasons": {
+      "MALFORMED_CODE": "The code does not match the confirmed six-digit format.",
+      "OWNER_CONFLICT": "Account/profile ownership conflicts; investigate before changing it.",
+      "ORPHANED_PROFILE": "A profile has this code without a matching student account.",
+      "ORPHANED_USER": "An account has this code without a matching profile.",
+      "ALIAS_CONFLICT": "An existing username or account alias holds this code.",
+      "REGISTRY_CONFLICT": "The registry and student identity disagree, or prior history needs review.",
+      "UNVERIFIED_GAP": "No current holder was observed. Internal and external history still require verification.",
+      "CONFIRMED_AVAILABLE": "An administrator explicitly verified that this code was never assigned.",
+      "CURRENT_OWNER": "The account and profile agree. Inactivity does not release the code.",
+      "PREVIOUS_OWNER_BLOCKED": "A previous holder exists. Reuse is blocked until historical identity references are migrated.",
+      "RESERVATION_HELD": "An operation holds this code; it cannot be recovered or reused."
+    },
+    "validation": {
+      "year": "Use consecutive years, for example 2026-2027.",
+      "prefix": "Enter exactly two digits; do not infer the prefix from today.",
+      "reason": "Provide 10–1000 characters explaining the review and evidence.",
+      "confirm": "Confirm that you reviewed this snapshot.",
+      "attest": "Confirm that this code has never been assigned."
+    },
+    "errors": {
+      "load": "Could not load the audit. Try again.",
+      "save": "Could not save. Your explanation has been kept.",
+      "changed": "The preview changed. Close this dialog and scan again before retrying.",
+      "review": "Resolve ambiguous records and configure an admission period first.",
+      "mapping": "This academic year or prefix is configured differently. Check the saved mapping.",
+      "notReady": "Initialize the admission-year registry first.",
+      "unsafe": "This code cannot be recovered: a holder, history or existing reference needs review.",
+      "replica": "This operation requires MongoDB replica-set transactions. Ask the administrator to verify the database.",
+      "indexes": "Student identity indexes need verification before this operation can proceed."
+    },
+    "events": {
+      "INITIALIZED": "Year initialized",
+      "BACKFILLED": "Existing holder recorded",
+      "ASSIGNED": "Assigned during approval",
+      "RECOVERED": "Never-assigned gap verified",
+      "MARKED_REVIEW": "Blocked for identity review"
+    },
+    "systemReasons": {
+      "assigned": "Assigned during an authorized admission approval.",
+      "references": "Existing identity or academic records reference this code."
+    },
+    "configuredYear": "Configured year",
+    "configuredPrefix": "Intake prefix",
+    "configuredNext": "Next sequence"
   }
 }

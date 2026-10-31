@@ -1,5 +1,4 @@
 const { spawn, spawnSync } = require('node:child_process');
-const { MongoClient } = require('mongodb');
 const path = require('node:path');
 
 function validateUri(uri) {
@@ -9,6 +8,7 @@ function validateUri(uri) {
 }
 async function main() {
   const uri = validateUri(process.env.ADMISSIONS_TEST_MONGODB_URI || 'mongodb://127.0.0.1:27021/student-codes-e2e?replicaSet=admissions-test');
+  const { MongoClient } = require('mongodb');
   const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 1 });
   try {
     await client.connect();

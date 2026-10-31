@@ -42,21 +42,23 @@ export function analyzeCodeSnapshot(
   for (const user of sources.users) {
     const aliases = new Set([
       user.studentCode,
-      user.username,
-      user.userCode?.startsWith('STD-') ? user.userCode.slice(4) : undefined,
+      /^\d{6}$/.test(user.username ?? '') ? user.username : undefined,
+      user.userCode?.match(/^STD-(\d{6})$/)?.[1],
     ]);
     for (const code of aliases)
       if (code?.startsWith(prefix)) {
         allCodes.add(code);
         const matches = userCodes.get(code) ?? [];
-        matches.push(user); userCodes.set(code, matches);
+        matches.push(user);
+        userCodes.set(code, matches);
       }
   }
   for (const profile of sources.profiles)
     if (profile.studentCode?.startsWith(prefix)) {
       allCodes.add(profile.studentCode);
       const matches = profileCodes.get(profile.studentCode) ?? [];
-      matches.push(profile); profileCodes.set(profile.studentCode, matches);
+      matches.push(profile);
+      profileCodes.set(profile.studentCode, matches);
     }
   const registry = new Map(
     sources.entries.map((entry) => [entry.studentCode, entry]),

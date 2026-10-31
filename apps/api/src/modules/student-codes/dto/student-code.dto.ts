@@ -16,9 +16,13 @@ class CodeYearDto {
   @IsString() @Matches(/^\d{4}-\d{4}$/) academicYear!: string;
   @IsString() @Matches(/^\d{2}$/) yearPrefix!: string;
 }
-export class CodeAuditQueryDto extends CodeYearDto {
+export class CodeHistoryQueryDto {
   @Type(() => Number) @IsInt() @Min(1) page = 1;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
+}
+export class CodeAuditQueryDto extends CodeHistoryQueryDto {
+  @IsString() @Matches(/^\d{4}-\d{4}$/) academicYear!: string;
+  @IsString() @Matches(/^\d{2}$/) yearPrefix!: string;
   @ValidateIf((_, value) => value !== undefined)
   @IsIn([...STUDENT_CODE_STATUSES, 'MISSING'])
   status?: string;

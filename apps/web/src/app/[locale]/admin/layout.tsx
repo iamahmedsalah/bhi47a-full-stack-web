@@ -23,6 +23,12 @@ interface AdminRouteRule {
 
 const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
   {
+    pattern: /^\/[^/]+\/admin\/student-codes/,
+    permission: PERMISSIONS.STUDENT_CODES_READ,
+    nameAr: 'تدقيق أكواد الطلاب',
+    nameEn: 'Student code audit',
+  },
+  {
     pattern: /^\/[^/]+\/admin\/admissions/,
     permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE],
     nameAr: 'فترات القبول',

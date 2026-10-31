@@ -35,6 +35,7 @@ export interface StudentCodeAuditResult {
   policy: StudentCodeYearItem | null;
   truncated: boolean;
   canInitialize: boolean;
+  mappingConflict: boolean;
   reuseEnabled: false;
   summary: Record<StudentCodeFindingStatus, number>;
   items: StudentCodeFinding[];
@@ -52,4 +53,9 @@ export interface InitializeStudentCodeYearInput {
 }
 export interface RecoverStudentCodeInput extends InitializeStudentCodeYearInput {
   neverAssignedConfirmed: true;
+}
+export interface StudentCodeHistoryResult {
+  entry: { studentCode: string; status: StudentCodeStatus; currentStudentId?: string } | null;
+  items: Array<{ _id: string; action: string; from?: string; to: string; reason: string; at: string; actorId: string }>;
+  total: number; page: number; limit: number; totalPages: number;
 }

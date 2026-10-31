@@ -43,6 +43,7 @@ export class StudentCodesService {
       fingerprint: snapshot.fingerprint,
       truncated: snapshot.truncated,
       canInitialize: snapshot.canInitialize,
+      mappingConflict: snapshot.mappingConflict,
       reuseEnabled: false,
       policy: snapshot.policy
         ? {
@@ -65,84 +66,106 @@ export class StudentCodesService {
   }
   async initialize(dto: InitializeCodeYearDto, actorId: string) {
     this.store.validateYear(dto.academicYear, dto.yearPrefix);
-    await this.store.prepareWrites();
-    return this.transactions.run(async (session) => {
-      const snapshot = await this.store.snapshot(
-        dto.academicYear,
-        dto.yearPrefix,
-        session,
-      );
-      if (snapshot.policy) {
-        if (snapshot.mappingConflict)
+    return this.transactions.run(
+      async (session) => {
+        const snapshot = await this.store.snapshot(
+          dto.academicYear,
+          dto.yearPrefix,
+          session,
+        );
+        if (snapshot.policy) {
+          if (snapshot.mappingConflict)
+            codeConflict(
+              'CODE_YEAR_CONFLICT',
+              'This year or prefix already belongs to a different mapping.',
+            );
+          return {
+            academicYear: snapshot.policy.academicYear,
+            yearPrefix: snapshot.policy.yearPrefix,
+            nextSequence: snapshot.policy.nextSequence,
+          };
+        }
+        if (snapshot.fingerprint !== dto.fingerprint)
           codeConflict(
-            'CODE_YEAR_CONFLICT',
-            'This year or prefix already belongs to a different mapping.',
+            'CODE_PREVIEW_CHANGED',
+            'The preview is stale. Scan again before confirming.',
           );
+        if (!snapshot.canInitialize)
+          codeConflict(
+            'CODE_LEGACY_REVIEW_REQUIRED',
+            'Resolve ambiguous records and configure an admission period before initialization.',
+          );
+        const at = new Date();
+        const actor = new Types.ObjectId(actorId);
+        await this.store.years.create(
+          [
+            {
+              academicYear: dto.academicYear,
+              yearPrefix: dto.yearPrefix,
+              nextSequence: snapshot.maxSequence + 1,
+              initializedAt: at,
+              initializedBy: actor,
+              initializationReason: dto.reason,
+            },
+          ],
+          { session },
+        );
+        const legacy = snapshot.rows.filter((row) => row.status === 'ASSIGNED');
+        if (legacy.length) {
+          await this.store.entries.insertMany(
+            legacy.map((row) => ({
+              studentCode: row.studentCode,
+              academicYear: dto.academicYear,
+              yearPrefix: dto.yearPrefix,
+              sequence: row.sequence,
+              status: 'ASSIGNED',
+              currentStudentId: new Types.ObjectId(row.currentStudentId),
+              assignmentHistory: [
+                {
+                  studentId: new Types.ObjectId(row.currentStudentId),
+                  observedAt: at,
+                  source: 'legacy',
+                },
+              ],
+            })),
+            { session, ordered: true },
+          );
+          await this.store.audits.insertMany(
+            legacy.map((row) => ({
+              studentCode: row.studentCode,
+              academicYear: dto.academicYear,
+              action: 'BACKFILLED',
+              actorId: actor,
+              studentId: new Types.ObjectId(row.currentStudentId),
+              to: 'ASSIGNED',
+              reason: dto.reason,
+              at,
+            })),
+            { session, ordered: true },
+          );
+        }
+        await this.store.audits.create(
+          [
+            {
+              studentCode: `${dto.yearPrefix}*`,
+              academicYear: dto.academicYear,
+              action: 'INITIALIZED',
+              actorId: actor,
+              to: 'INITIALIZED',
+              reason: dto.reason,
+              at,
+            },
+          ],
+          { session },
+        );
         return {
-          academicYear: snapshot.policy.academicYear,
-          yearPrefix: snapshot.policy.yearPrefix,
-          nextSequence: snapshot.policy.nextSequence,
+          academicYear: dto.academicYear,
+          yearPrefix: dto.yearPrefix,
+          nextSequence: snapshot.maxSequence + 1,
         };
-      }
-      if (snapshot.fingerprint !== dto.fingerprint)
-        codeConflict(
-          'CODE_PREVIEW_CHANGED',
-          'The preview is stale. Scan again before confirming.',
-        );
-      if (!snapshot.canInitialize)
-        codeConflict(
-          'CODE_LEGACY_REVIEW_REQUIRED',
-          'Resolve ambiguous records and configure an admission period before initialization.',
-        );
-      const at = new Date();
-      const actor = new Types.ObjectId(actorId);
-      await this.store.years.create(
-        [
-          {
-            academicYear: dto.academicYear,
-            yearPrefix: dto.yearPrefix,
-            nextSequence: snapshot.maxSequence + 1,
-            initializedAt: at,
-            initializedBy: actor,
-            initializationReason: dto.reason,
-          },
-        ],
-        { session },
-      );
-      const legacy = snapshot.rows.filter((row) => row.status === 'ASSIGNED');
-      if (legacy.length) {
-        await this.store.entries.insertMany(legacy.map((row) => ({
-          studentCode: row.studentCode, academicYear: dto.academicYear,
-          yearPrefix: dto.yearPrefix, sequence: row.sequence, status: 'ASSIGNED',
-          currentStudentId: new Types.ObjectId(row.currentStudentId),
-          assignmentHistory: [{ studentId: new Types.ObjectId(row.currentStudentId), observedAt: at, source: 'legacy' }],
-        })), { session, ordered: true });
-        await this.store.audits.insertMany(legacy.map((row) => ({
-          studentCode: row.studentCode, academicYear: dto.academicYear, action: 'BACKFILLED',
-          actorId: actor, studentId: new Types.ObjectId(row.currentStudentId),
-          to: 'ASSIGNED', reason: dto.reason, at,
-        })), { session, ordered: true });
-      }
-      await this.store.audits.create(
-        [
-          {
-            studentCode: `${dto.yearPrefix}*`,
-            academicYear: dto.academicYear,
-            action: 'INITIALIZED',
-            actorId: actor,
-            to: 'INITIALIZED',
-            reason: dto.reason,
-            at,
-          },
-        ],
-        { session },
-      );
-      return {
-        academicYear: dto.academicYear,
-        yearPrefix: dto.yearPrefix,
-        nextSequence: snapshot.maxSequence + 1,
-      };
-    });
+      },
+      () => this.store.prepareWrites(),
+    );
   }
   async recover(
     studentCode: string,
@@ -156,72 +179,79 @@ export class StudentCodesService {
         code: 'CODE_FORMAT_INVALID',
         message: 'Use the configured two-digit prefix and four-digit sequence.',
       });
-    await this.store.prepareWrites();
-    return this.transactions.run(async (session) => {
-      const snapshot = await this.store.snapshot(
-        dto.academicYear,
-        dto.yearPrefix,
-        session,
-      );
-      if (!snapshot.policy || snapshot.mappingConflict)
-        codeConflict(
-          'CODE_YEAR_NOT_READY',
-          'Initialize the year mapping first.',
+    return this.transactions.run(
+      async (session) => {
+        const snapshot = await this.store.snapshot(
+          dto.academicYear,
+          dto.yearPrefix,
+          session,
         );
-      if (snapshot.fingerprint !== dto.fingerprint)
-        codeConflict(
-          'CODE_PREVIEW_CHANGED',
-          'The preview is stale. Scan again before confirming.',
+        if (!snapshot.policy || snapshot.mappingConflict)
+          codeConflict(
+            'CODE_YEAR_NOT_READY',
+            'Initialize the year mapping first.',
+          );
+        if (snapshot.fingerprint !== dto.fingerprint)
+          codeConflict(
+            'CODE_PREVIEW_CHANGED',
+            'The preview is stale. Scan again before confirming.',
+          );
+        if (snapshot.truncated)
+          codeConflict(
+            'CODE_LEGACY_REVIEW_REQUIRED',
+            'A complete identity scan is required before recovery.',
+          );
+        const row = snapshot.rows.find(
+          (item) => item.studentCode === studentCode,
         );
-      const row = snapshot.rows.find(
-        (item) => item.studentCode === studentCode,
-      );
-      if (!row || row.status !== 'MISSING')
-        codeConflict(
-          'CODE_RECOVERY_UNSAFE',
-          'Only an unassigned gap without assignment history may be recovered.',
+        if (!row || row.status !== 'MISSING')
+          codeConflict(
+            'CODE_RECOVERY_UNSAFE',
+            'Only an unassigned gap without assignment history may be recovered.',
+          );
+        if (await this.store.hasReferences(studentCode, session))
+          codeConflict(
+            'CODE_RECOVERY_UNSAFE',
+            'Existing records still reference this code.',
+          );
+        // Serialize recovery with allocation and other recoveries of this year.
+        await this.store.years.updateOne(
+          { academicYear: dto.academicYear },
+          { $inc: { revision: 1 } },
+          { session },
         );
-      if (await this.store.hasReferences(studentCode, session))
-        codeConflict(
-          'CODE_RECOVERY_UNSAFE',
-          'Existing records still reference this code.',
+        await this.store.entries.create(
+          [
+            {
+              studentCode,
+              academicYear: dto.academicYear,
+              yearPrefix: dto.yearPrefix,
+              sequence,
+              status: 'AVAILABLE',
+              assignmentHistory: [],
+            },
+          ],
+          { session },
         );
-      // Serialize recovery with allocation and other recoveries of this year.
-      await this.store.years.updateOne(
-        { academicYear: dto.academicYear },
-        { $inc: { revision: 1 } },
-        { session },
-      );
-      await this.store.entries.create(
-        [
-          {
-            studentCode,
-            academicYear: dto.academicYear,
-            yearPrefix: dto.yearPrefix,
-            sequence,
-            status: 'AVAILABLE',
-            assignmentHistory: [],
-          },
-        ],
-        { session },
-      );
-      await this.store.audits.create(
-        [
-          {
-            studentCode,
-            academicYear: dto.academicYear,
-            action: 'RECOVERED',
-            actorId: new Types.ObjectId(actorId),
-            from: 'MISSING',
-            to: 'AVAILABLE',
-            reason: dto.reason,
-            at: new Date(),
-          },
-        ],
-        { session },
-      );
-      return { studentCode, status: 'AVAILABLE' as const };
-    });
+        await this.store.audits.create(
+          [
+            {
+              studentCode,
+              academicYear: dto.academicYear,
+              action: 'RECOVERED',
+              actorId: new Types.ObjectId(actorId),
+              from: 'MISSING',
+              to: 'AVAILABLE',
+              reason: dto.reason,
+              at: new Date(),
+            },
+          ],
+          { session },
+        );
+        return { studentCode, status: 'AVAILABLE' as const };
+      },
+      () => this.store.prepareWrites(),
+    );
   }
   async history(studentCode: string, page = 1, limit = 20) {
     if (!/^\d{6}$/.test(studentCode))

@@ -20,13 +20,21 @@ let failure;
 let denyList = false;
 const mutations = [];
 const queries = [];
+let codeReady = false;
+let codeFailure;
+let denyHistory = false;
+let codeVersion = 0;
+const codeWrites = [];
+let codeRows;
+const resetCodes = () => { codeReady=false;codeFailure=undefined;codeVersion=0;codeWrites.length=0;codeRows=[{studentCode:'260001',sequence:1,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'260002',sequence:2,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'260003',sequence:3,status:'ASSIGNED',reason:'CURRENT_OWNER',currentStudentId:'100000000000000000000003'}]; };
+resetCodes();
 await fs.mkdir(output, { recursive: true });
 const write = (name, contents) => fs.writeFile(path.join(output, name), contents);
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
-await write('auth.ts', `export const useAuth=()=>({user:{_id:'fixture',role:'staff',permissions:new URLSearchParams(location.search).get('access')==='none'?[]:[new URLSearchParams(location.search).get('access')==='read'?'admissions.periods.read':'admissions.periods.manage'],mustChangePassword:false}});`);
-await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const router={replace:url=>{history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));},push:()=>{}};export const useSearchParams=()=>{const search=useSyncExternalStore(subscribe,()=>location.search);return new URLSearchParams(search);};export const usePathname=()=>location.pathname;export const useRouter=()=>router;`);
+await write('auth.ts', `export const useAuth=()=>{const access=new URLSearchParams(location.search).get('access');const codes=location.pathname.includes('/student-codes');return {user:{_id:'fixture',role:codes&&!access?'admin':'staff',permissions:access==='none'?[]:codes?['student_codes.read']:[access==='read'?'admissions.periods.read':'admissions.periods.manage'],mustChangePassword:false}};};`);
+await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const router={replace:url=>{history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));},push:()=>{}};export const useSearchParams=()=>{const search=useSyncExternalStore(subscribe,()=>location.search);return new URLSearchParams(search);};export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useRouter=()=>router;`);
 await write('api.ts', `const call=async(method,url,body)=>{const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw data;return {data};};export const getApiErrorDetails=error=>error;export const getApiErrorMessage=(error,fallback)=>error.message||fallback;export default {get:(url,config)=>call('GET',url+'?'+new URLSearchParams(config?.params)),post:(url,body)=>call('POST',url,body),patch:(url,body)=>call('PATCH',url,body)};`);
-await write('entry.tsx', `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';import Page from '${path.join(web, 'src/app/[locale]/admin/admissions/page.tsx').replaceAll('\\', '/')}';import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><Page/><Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
+await write('entry.tsx', `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';import Page from '${path.join(web, 'src/app/[locale]/admin/admissions/page.tsx').replaceAll('\\', '/')}';import Codes from '${path.join(web, 'src/app/[locale]/admin/student-codes/page.tsx').replaceAll('\\', '/')}';import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/student-codes')?<Codes/>:<Page/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
   cache: { type: 'filesystem', cacheDirectory: path.join(output, 'webpack-cache') },
@@ -39,6 +47,23 @@ await write('styles.css', css.css);
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname.startsWith('/admin/student-codes')) {
+      res.setHeader('Content-Type','application/json');
+      if (url.pathname.endsWith('/audit')) {
+        const summary={AVAILABLE:0,RESERVED:0,ASSIGNED:0,RELEASED:0,REQUIRES_REVIEW:0,MISSING:0};for(const row of codeRows)summary[row.status]++;
+        const rows=codeRows.filter(row=>(!url.searchParams.get('status')||row.status===url.searchParams.get('status'))&&(!url.searchParams.get('search')||row.studentCode.includes(url.searchParams.get('search'))));
+        res.end(JSON.stringify({academicYear:'2026-2027',yearPrefix:'26',scannedAt:'2026-11-01T08:00:00Z',fingerprint:String.fromCharCode(97+codeVersion).repeat(64),policy:codeReady?{academicYear:'2026-2027',yearPrefix:'26',nextSequence:4,initializedAt:'2026-11-01T08:00:00Z'}:null,canInitialize:!codeReady,mappingConflict:false,reuseEnabled:false,truncated:false,summary,items:rows,total:rows.length,page:1,limit:20,totalPages:1}));return;
+      }
+      if (url.pathname.endsWith('/history')) {
+        if(denyHistory){res.statusCode=503;res.end(JSON.stringify({message:'unavailable'}));return;}
+        res.end(JSON.stringify({entry:{studentCode:'260003',status:'ASSIGNED'},items:[{_id:'audit-event',action:'BACKFILLED',to:'ASSIGNED',reason:'Reviewed synthetic records.',actorId:fixture._id,at:'2026-11-01T08:00:00Z'}],total:1,page:1,limit:20,totalPages:1}));return;
+      }
+      const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());codeWrites.push({path:url.pathname,body});
+      if(codeFailure||body.fingerprint!==String.fromCharCode(97+codeVersion).repeat(64)){res.statusCode=409;res.end(JSON.stringify({code:codeFailure||'CODE_PREVIEW_CHANGED'}));return;}
+      if(url.pathname.endsWith('/initialize'))codeReady=true;
+      else {const code=url.pathname.split('/').at(-2);codeRows=codeRows.map(row=>row.studentCode===code?{...row,status:'AVAILABLE',reason:'CONFIRMED_AVAILABLE'}:row);}
+      codeVersion++;res.end(JSON.stringify({ok:true}));return;
+    }
     if (url.pathname.startsWith('/admin/admissions/periods')) {
       res.setHeader('Content-Type', 'application/json');
       if (req.method === 'GET') {
@@ -142,7 +167,42 @@ try {
     assert.equal(queries.length - before, 1, 'search sends one debounced request');
     await page.screenshot({ path: path.join(output, `periods-${locale}.png`), fullPage: true });
   }
+  for (const locale of ['en','ar']) {
+    resetCodes();const t=JSON.parse(await fs.readFile(path.join(web,`src/messages/${locale}.json`),'utf8')).studentCodes;
+    await page.goto(`${address}/${locale}/admin/student-codes`);
+    await page.getByText(t.chooseScope,{exact:true}).waitFor();
+    const year=page.getByLabel(t.fields.academicYear,{exact:true});const prefix=page.getByLabel(t.fields.yearPrefix,{exact:true});
+    assert.equal(await prefix.getAttribute('dir'),'ltr');
+    await year.fill('2026-2028');await prefix.fill('2');await page.getByRole('button',{name:t.scan,exact:true}).click();
+    await page.getByText(t.validation.year,{exact:true}).waitFor();await page.getByText(t.validation.prefix,{exact:true}).waitFor();
+    await year.fill('2026-2027');await prefix.fill('26');await page.getByRole('button',{name:t.scan,exact:true}).click();
+    await page.getByText('260001',{exact:true}).waitFor();
+    await page.getByRole('button',{name:t.initialize,exact:true}).click();
+    const dialog=page.getByRole('dialog');const submit=dialog.getByRole('button',{name:t.confirmAction,exact:true});
+    await submit.click();await dialog.getByText(t.validation.reason,{exact:true}).waitFor();await dialog.getByText(t.validation.confirm,{exact:true}).waitFor();assert.equal(codeWrites.length,0);
+    const reason=dialog.getByLabel(t.fields.reason,{exact:true});await reason.fill('Reviewed synthetic identity inventory.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();
+    codeFailure='CODE_PREVIEW_CHANGED';await submit.click();await dialog.getByRole('alert').getByText(t.errors.changed,{exact:true}).waitFor();assert.equal(await reason.inputValue(),'Reviewed synthetic identity inventory.');
+    codeFailure=undefined;await submit.click();await dialog.waitFor({state:'hidden'});assert.equal(codeReady,true);
+    const actions=(code)=>page.getByRole('button',{name:t.actionsFor.replace('{code}',code),exact:true});
+    await actions('260001').click();await page.getByRole('menuitem',{name:t.recover,exact:true}).click();
+    await reason.fill('Verified never assigned in internal and external records.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();await submit.click();
+    await dialog.getByText(t.validation.attest,{exact:true}).waitFor();assert.equal(codeWrites.length,2);
+    await dialog.getByRole('checkbox',{name:t.neverAssignedConfirmed,exact:true}).check();await submit.click();await dialog.waitFor({state:'hidden'});
+    assert.equal(codeWrites.at(-1).body.neverAssignedConfirmed,true);
+    await page.getByRole('row').filter({hasText:'260001'}).getByText(t.statuses.AVAILABLE,{exact:true}).waitFor();
+    await page.getByRole('checkbox',{name:t.selectAll,exact:true}).check();await page.getByRole('button',{name:t.inspectSelection,exact:true}).click();await dialog.getByText('260002',{exact:false}).waitFor();await page.keyboard.press('Escape');
+    denyHistory=true;await actions('260003').click();await page.getByRole('menuitem',{name:t.history,exact:true}).click();await dialog.getByRole('alert').getByText(t.errors.load,{exact:true}).waitFor();
+    denyHistory=false;await dialog.getByRole('button',{name:t.retry,exact:true}).click();await dialog.getByText(t.events.BACKFILLED,{exact:true}).waitFor();await page.keyboard.press('Escape');
+    await page.screenshot({path:path.join(output,`student-codes-${locale}.png`),fullPage:true});
+    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=26&access=read`);await page.getByText('260002',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:t.initialize,exact:true}).count(),0);
+    await actions('260002').click();assert.equal(await page.getByRole('menuitem',{name:t.recover,exact:true}).count(),0);await page.keyboard.press('Escape');
+    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=26&access=none`);
+    assert.equal(await page.getByRole('button',{name:t.scan,exact:true}).count(),0);
+    assert.ok(codeWrites.every(write=>!write.path.includes('allocate')));
+  }
   assert.deepEqual(errors, []);
+  console.log('Student code audit passed: Arabic/English scope validation, reviewed initialization, stale-preview feedback, never-assigned recovery, history retry, bulk inspection and read-only/denied permissions.');
   console.log('Admission periods browser acceptance passed: Arabic/English, Cairo in a US browser, retained-input conflicts, exact timestamp preservation, validation, manual defaults, bulk disable, read-only access, retry and debounced URL search.');
 } finally {
   await browser?.close(); await new Promise((resolve) => server.close(resolve));
