@@ -210,7 +210,8 @@
     "lectureSchedules": "Lecture & Section Schedules",
     "settings": "Settings",
     "staff": "Staff",
-    "logout": "Logout"
+    "logout": "Logout",
+    "admissions": "Admission periods"
   },
   "common": {
     "search": "Search...",
@@ -859,7 +860,8 @@
         "courseSchedules": "Lecture & Section Schedules",
         "tuition": "Tuition Fees & Blocking",
         "courseMaterials": "Course Materials & Content",
-        "staffManagement": "Faculty & Staff Management"
+        "staffManagement": "Faculty & Staff Management",
+        "admissions": "Admission periods"
       },
       "labels": {
         "students_read": "View students",
@@ -919,7 +921,9 @@
         "staff_read": "View faculty and staff directory & profiles",
         "staff_create_academic": "Create and manage doctor & teaching assistant accounts",
         "admins_manage": "Manage system administrator accounts & access",
-        "danger_zone_delete_all": "Delete all platform data (danger zone)"
+        "danger_zone_delete_all": "Delete all platform data (danger zone)",
+        "admissions_periods_read": "View admission periods",
+        "admissions_periods_manage": "Create and update admission periods"
       }
     }
   },
@@ -1016,5 +1020,64 @@
     "maxCreditHoursRequired": "Maximum credit hours is required",
     "creditHoursMin": "Credit hours must be at least 1",
     "minGpaLessThanMaxGpa": "Minimum GPA must be less than or equal to Maximum GPA"
+  },
+  "admissions": {
+    "title": "Admission periods",
+    "periodName": "Period name",
+    "description": "Manage intake academic years and application dates.",
+    "create": "Create period",
+    "edit": "Edit period",
+    "save": "Save period",
+    "saving": "Saving...",
+    "saved": "Admission period saved.",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "actions": "Actions",
+    "search": "Search periods",
+    "retry": "Try again",
+    "empty": "No admission periods found.",
+    "loading": "Loading admission periods...",
+    "previous": "Previous",
+    "next": "Next",
+    "pagination": "Page {page} of {totalPages}",
+    "status": "Status",
+    "selectAll": "Select all periods",
+    "select": "Select {code}",
+    "selected": "{count} selected",
+    "disableSelected": "Disable selected periods",
+    "disableConfirm": "Disable the selected periods? Their saved records and history will be kept.",
+    "bulkFailed": "Could not update {count} periods. Refresh and retry the selected rows.",
+    "cairoHint": "All dates and times use Cairo time (Africa/Cairo).",
+    "immutableHint": "The intake reference and academic year cannot be changed after creation.",
+    "fields": {
+      "code": "Intake reference",
+      "academicYear": "Academic year",
+      "name": "Name (English)",
+      "nameAr": "Name (Arabic)",
+      "opensAt": "Opening date and time",
+      "closesAt": "Closing date and time",
+      "isEnabled": "Enable period"
+    },
+    "statuses": {
+      "disabled": "Disabled",
+      "scheduled": "Scheduled",
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "validation": {
+      "code": "Use 3–64 English letters, digits, hyphens or underscores. Start with a letter or digit.",
+      "academicYear": "Enter consecutive academic years, for example 2026-2027.",
+      "name": "Enter a name between 2 and 160 characters.",
+      "nameAr": "Enter 2–160 characters, or leave the Arabic name blank.",
+      "date": "Choose a valid Cairo date and time. Avoid skipped or repeated daylight-saving minutes.",
+      "window": "Closing time must be later than opening time."
+    },
+    "errors": {
+      "load": "Could not load admission periods. Try again.",
+      "failed": "Could not save this period. Your entries have been kept.",
+      "duplicate": "This intake reference is already in use.",
+      "changed": "Another user changed this period. Close and reopen it to load the latest version before saving.",
+      "window": "Closing time must be later than opening time."
+    }
   }
 }

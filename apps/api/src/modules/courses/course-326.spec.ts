@@ -120,7 +120,7 @@ describe('326 department placements', () => {
       page: 1,
       limit: 100,
       totalPages: 1,
-    } as never);
+    });
     const data = await h.service.exportCourses(
       {},
       { _id: new Types.ObjectId().toHexString(), role: 'admin' },

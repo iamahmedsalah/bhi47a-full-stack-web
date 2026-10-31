@@ -141,6 +141,9 @@ jobs:
       - name: Test automatic quiz release in Chromium
         run: pnpm --filter @student-portal/web test:quiz-release:browser
 
+      - name: Test admission-period management in Chromium
+        run: pnpm --filter @student-portal/web test:admissions:browser
+
       - name: Test responsive security and settings in Chromium
         run: pnpm --filter @student-portal/web test:security
 
@@ -387,10 +390,18 @@ jobs:
               throw new Error("Deployment changed existing data");'
       - name: Container logs on failure
         if: failure()
-        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml logs --tail 100
+        shell: bash
+        run: |
+          if [ -f .env.prod ]; then
+            docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml logs --tail 100
+          fi
       - name: Clean up isolated containers
         if: always()
-        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml down -v
+        shell: bash
+        run: |
+          if [ -f .env.prod ]; then
+            docker compose --env-file .env.prod -f docker-compose.prod.yml -f deploy/compose.ci.yml down -v
+          fi
 
   deploy-vps:
     name: Deploy reviewed commit to VPS

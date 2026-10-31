@@ -1,0 +1,32 @@
+# Dedicated replica set for admissions only. No production mounts or credentials.
+services:
+  mongodb:
+    image: mongo:7.0
+    command: ['mongod', '--replSet', 'admissions-test', '--port', '27021', '--bind_ip_all']
+    ports:
+      - '127.0.0.1:27021:27021'
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27021'
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (error) {
+          if (error.codeName !== 'NotYetInitialized') throw error;
+          rs.initiate({_id:'admissions-test',members:[{_id:0,host:'127.0.0.1:27021'}]}); }
+          if (!db.hello().isWritablePrimary) quit(1);
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:63792:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12

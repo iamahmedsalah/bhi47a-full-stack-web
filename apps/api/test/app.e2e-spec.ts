@@ -27,6 +27,11 @@ import { defineStaffProfileAcceptance } from './staff-profile-acceptance';
 import { QuizzesService } from '../src/modules/quizzes/quizzes.service';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { QuizQuestionExcelService } from '../src/modules/quizzes/services/quiz-question-excel.service';
+import {
+  AdmissionPeriod,
+  type AdmissionPeriodDocument,
+} from '../src/modules/admissions/schemas/admission-period.schema';
+import { PERMISSIONS } from '@student-portal/shared';
 
 describe('API authentication and session boundaries (isolated MongoDB)', () => {
   let app: INestApplication | undefined;
@@ -564,6 +569,133 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
     } finally {
       if (previous) await model.replaceOne({ _id: 'global' }, previous);
       else await model.deleteOne({ _id: 'global' });
+    }
+  });
+
+  it('protects admission configuration, validates windows and atomically rejects concurrent stale edits', async () => {
+    const path = '/api/admin/admissions/periods';
+    const periods = app!.get<Model<AdmissionPeriodDocument>>(
+      getModelToken(AdmissionPeriod.name),
+    );
+    await periods.createIndexes();
+    const code = `E2E-${String(new Types.ObjectId())}`.toUpperCase();
+    const payload = {
+      code,
+      academicYear: '2026-2027',
+      name: 'Synthetic admission intake',
+      opensAt: '2026-10-30T22:00:00Z',
+      closesAt: '2026-10-31T00:00:00Z',
+    };
+    const signIn = async (role: 'admin' | 'staff') => {
+      const response = await request(app!.getHttpServer())
+        .post('/api/auth/admin/login')
+        .set('Origin', origin)
+        .send({ email: accounts.get(role)!.identifier, password })
+        .expect(200);
+      return {
+        cookie: (response.headers['set-cookie'] as unknown as string[])
+          .map((value) => value.split(';')[0])
+          .join('; '),
+        csrf: response.body.csrfToken as string,
+      };
+    };
+    const admin = await signIn('admin');
+    const staff = await signIn('staff');
+    const patch = (id: string, body: object, auth = admin) =>
+      request(app!.getHttpServer())
+        .patch(`${path}/${id}`)
+        .set('Origin', origin)
+        .set('Cookie', auth.cookie)
+        .set('x-csrf-token', auth.csrf)
+        .send(body);
+    const create = (body: object) =>
+      request(app!.getHttpServer())
+        .post(path)
+        .set('Origin', origin)
+        .set('Cookie', admin.cookie)
+        .set('x-csrf-token', admin.csrf)
+        .send(body);
+    const staffId = accounts.get('staff')!.userId;
+    const originalPermissions = (await users.findById(staffId).lean())!
+      .permissions;
+    try {
+      await request(app!.getHttpServer()).get(path).expect(401);
+      const student = await login();
+      await request(app!.getHttpServer())
+        .get(path)
+        .set('Cookie', student.cookie)
+        .expect(403);
+      await request(app!.getHttpServer())
+        .get(path)
+        .set('Cookie', staff.cookie)
+        .expect(403);
+      await users.updateOne(
+        { _id: staffId },
+        { $set: { permissions: [PERMISSIONS.REGISTRATION_WRITE] } },
+      );
+      await request(app!.getHttpServer())
+        .get(path)
+        .set('Cookie', staff.cookie)
+        .expect(403);
+      await create({ ...payload, opensAt: '2026-10-30T22:00' }).expect(400);
+      await create({ ...payload, closesAt: payload.opensAt }).expect(400);
+      await create({ ...payload, isEnabled: 'false' }).expect(400);
+      const before = await users.countDocuments();
+      const created = await create(payload).expect(201);
+      const id = created.body._id as string;
+      expect(created.body).toMatchObject({
+        code,
+        isEnabled: false,
+        status: 'disabled',
+        revision: 0,
+      });
+      expect(created.body.history).toBeUndefined();
+      expect(await users.countDocuments()).toBe(before);
+      await create(payload).expect(409);
+      await patch(id, { revision: 0, academicYear: '2027-2028' }).expect(400);
+      await request(app!.getHttpServer())
+        .patch(`${path}/${id}`)
+        .set('Origin', origin)
+        .set('Cookie', admin.cookie)
+        .send({ revision: 0, isEnabled: true })
+        .expect(403);
+      await users.updateOne(
+        { _id: staffId },
+        { $set: { permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ] } },
+      );
+      await request(app!.getHttpServer())
+        .get(path)
+        .set('Cookie', staff.cookie)
+        .expect(200);
+      await patch(id, { revision: 0, isEnabled: true }, staff).expect(403);
+      await users.updateOne(
+        { _id: staffId },
+        { $set: { permissions: [PERMISSIONS.ADMISSIONS_PERIODS_MANAGE] } },
+      );
+      await request(app!.getHttpServer())
+        .get(path)
+        .set('Cookie', staff.cookie)
+        .expect(200);
+      const raced = await Promise.all([
+        patch(id, { revision: 0, name: 'Concurrent editor A' }, staff),
+        patch(id, { revision: 0, name: 'Concurrent editor B' }),
+      ]);
+      expect(raced.map((response) => response.status).sort()).toEqual([
+        200, 409,
+      ]);
+      const saved = await periods.findById(id).select('+history').lean();
+      expect(saved!.revision).toBe(1);
+      expect(saved!.history).toHaveLength(2);
+      expect(saved!.history[1].revision).toBe(1);
+      await patch(id, { revision: 1, isEnabled: true }, staff).expect(200);
+      await users.updateOne({ _id: staffId }, { $set: { permissions: [] } });
+      await patch(id, { revision: 2, isEnabled: false }, staff).expect(403);
+    } finally {
+      await periods.deleteMany({ code });
+      await users.updateOne(
+        { _id: staffId },
+        { $set: { permissions: originalPermissions } },
+      );
     }
   });
 

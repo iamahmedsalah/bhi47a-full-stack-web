@@ -28,6 +28,8 @@ import { StaffManagementModule } from './modules/staff-management/staff-manageme
 import { QuizzesModule } from './modules/quizzes/quizzes.module';
 import { CourseSchedulesModule } from './modules/course-schedules/course-schedules.module';
 import { HealthController } from './health.controller';
+import { AdmissionsModule } from './modules/admissions/admissions.module';
+import { StudentCodesModule } from './modules/student-codes/student-codes.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { HealthController } from './health.controller';
     StaffManagementModule,
     QuizzesModule,
     CourseSchedulesModule,
+    AdmissionsModule,
+    StudentCodesModule,
   ],
   controllers: [HealthController],
 })

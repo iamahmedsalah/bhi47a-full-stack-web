@@ -10,6 +10,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit --incremental false",
     "test:registration": "node tests/registration-print.browser.mjs",
+    "test:admissions:browser": "node tests/admissions.browser.mjs",
     "test:security": "node tests/security.browser.mjs",
     "test:staff": "node --test tests/staff-profile.test.mjs",
     "test:staff:browser": "node tests/quiz-release.browser.mjs --staff-only",

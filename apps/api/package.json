@@ -21,6 +21,7 @@
     "test:watch": "node --experimental-vm-modules --no-warnings ./node_modules/jest/bin/jest.js --config ./jest.config.cjs --watch",
     "test:cov": "node --experimental-vm-modules --no-warnings ./node_modules/jest/bin/jest.js --config ./jest.config.cjs --coverage",
     "test:e2e": "node ./test/run-e2e.cjs",
+    "test:admissions:e2e": "node ./test/admissions/run.cjs",
     "typecheck:e2e": "tsc --noEmit --incremental false -p tsconfig.e2e.json",
     "clean": "rimraf dist coverage",
     "seed": "ts-node src/database/seed.ts",

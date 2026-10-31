@@ -18,6 +18,8 @@
     "test": "turbo run test",
     "test:e2e": "node apps/api/test/run-e2e.cjs",
     "test:services": "docker compose -p student-portal-e2e -f docker-compose.test.yml up -d --wait",
+    "test:admissions:services": "docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml up -d --wait",
+    "test:admissions:e2e": "node apps/api/test/admissions/run.cjs",
     "test:services:down": "docker compose -p student-portal-e2e -f docker-compose.test.yml down",
     "test:browsers": "pnpm --filter @student-portal/api exec playwright install chromium",
     "test:stress": "node scripts/stress-test.mjs",

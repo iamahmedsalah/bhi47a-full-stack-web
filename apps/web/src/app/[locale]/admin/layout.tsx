@@ -15,12 +15,19 @@ import { LoadingState } from '@/components/ui/feedback';
 interface AdminRouteRule {
   pattern: RegExp;
   permission?: string;
+  permissions?: string[];
   adminOnly?: boolean;
   nameAr: string;
   nameEn: string;
 }
 
 const ADMIN_ROUTE_RULES: AdminRouteRule[] = [
+  {
+    pattern: /^\/[^/]+\/admin\/admissions/,
+    permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE],
+    nameAr: 'فترات القبول',
+    nameEn: 'Admission periods',
+  },
   {
     pattern: /^\/[^/]+\/admin\/academic-advising/,
     permission: PERMISSIONS.ADVISING_READ,
@@ -148,9 +155,10 @@ export default function AdminLayout({
                 : 'This section is strictly reserved for Administrators.',
             };
           }
-          if (rule.permission && !user.permissions?.includes(rule.permission)) {
+          if ((rule.permission && !user.permissions?.includes(rule.permission)) ||
+            (rule.permissions && !rule.permissions.some((permission) => user.permissions?.includes(permission)))) {
             return {
-              permission: rule.permission,
+              permission: rule.permission ?? rule.permissions?.join(' | '),
               featureName: isArabic ? rule.nameAr : rule.nameEn,
             };
           }

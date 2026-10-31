@@ -673,7 +673,7 @@ export function UnifiedPerformanceTables({
         ),
       },
       // Locale is the only dependency of the labels.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
     ],
     [isAr],
   );
@@ -753,7 +753,7 @@ export function UnifiedPerformanceTables({
           </div>
         ),
       },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
     ],
     [isAr],
   );
