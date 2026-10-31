@@ -785,6 +785,23 @@
     },
     "validation": {
       "passwordLength": "Password must contain at least 12 characters.",
+      "passwordMax": "Password must contain no more than 100 characters.",
+      "nameLength": "Enter a full name between 2 and 160 characters.",
+      "nameArLength": "Enter an Arabic name between 2 and 160 characters, or leave it blank.",
+      "emailInvalid": "Enter a valid email address, up to 254 characters.",
+      "usernameFormat": "Use 3–32 English letters, numbers, dots, underscores or hyphens, or leave it blank.",
+      "phoneLength": "Phone number must contain no more than 30 characters.",
+      "staffTypeInvalid": "Choose a valid staff role.",
+      "roleInvalid": "Choose a valid account type.",
+      "identityTaken": "This email address or username is already used by another account.",
+      "emailTaken": "This email address is already used by another account.",
+      "usernameTaken": "This username is already used by another account.",
+      "checkFields": "Please check the highlighted fields and try again.",
+      "saveFailed": "Could not save your changes. Your entries are kept; please try again.",
+      "forbidden": "You do not have permission to save changes to this account.",
+      "sessionExpired": "Your session has expired. Sign in again to save your changes.",
+      "rateLimited": "Too many requests. Wait a moment, then try saving again.",
+      "formOutOfDate": "Could not save these details. Refresh the page, then try again.",
       "passwordMismatch": "Passwords do not match."
     },
     "resetPassword": {

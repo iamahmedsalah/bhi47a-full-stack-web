@@ -1,4 +1,5 @@
 import api from '@/lib/api';
+import { staffProfilePayload } from './profile-payload';
 import type { Permission } from '@student-portal/shared';
 import type {
   CreateStaffInput,
@@ -21,7 +22,7 @@ export async function createStaff(input: CreateStaffInput): Promise<StaffMember>
 }
 
 export async function updateStaff(id: string, input: StaffProfileInput): Promise<StaffMember> {
-  const response = await api.patch<StaffMember>(`/admin/staff/${id}`, input);
+  const response = await api.patch<StaffMember>(`/admin/staff/${id}`, staffProfilePayload(input));
   return response.data;
 }
 

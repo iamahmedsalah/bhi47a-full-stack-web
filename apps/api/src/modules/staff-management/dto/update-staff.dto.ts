@@ -1,8 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsIn,
   IsEmail,
-  IsOptional,
+  ValidateIf,
   IsString,
   Length,
   Matches,
@@ -10,38 +11,46 @@ import {
 } from 'class-validator';
 import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
 
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
+
 export class UpdateStaffDto {
   @ApiPropertyOptional({ enum: STAFF_TYPE_VALUES, example: 'doctor' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
   @IsIn(STAFF_TYPE_VALUES)
   staffType?: StaffType;
   @ApiPropertyOptional({ example: 'Ahmed Hassan' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @Transform(trim)
   @IsString()
   @Length(2, 160)
   name?: string;
 
   @ApiPropertyOptional({ example: 'أحمد حسن' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @Transform(trim)
   @IsString()
   @Length(2, 160)
   nameAr?: string;
 
   @ApiPropertyOptional({ example: 'staff@institute.edu' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @Transform(trim)
   @IsEmail()
   @MaxLength(254)
   email?: string;
 
   @ApiPropertyOptional({ example: 'ahmed.hassan' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @Transform(trim)
   @IsString()
   @Length(3, 32)
   @Matches(/^[a-zA-Z0-9._-]+$/)
   username?: string;
 
   @ApiPropertyOptional({ example: '+201000000000' })
-  @IsOptional()
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @Transform(trim)
   @IsString()
   @MaxLength(30)
   phone?: string;

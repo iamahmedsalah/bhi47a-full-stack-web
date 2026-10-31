@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit --incremental false",
     "test:registration": "node tests/registration-print.browser.mjs",
     "test:security": "node tests/security.browser.mjs",
+    "test:staff": "node --test tests/staff-profile.test.mjs",
+    "test:staff:browser": "node tests/quiz-release.browser.mjs --staff-only",
     "test:quiz-release": "node --test tests/quiz-release.test.mjs tests/quiz-time-import.test.mjs",
     "test:quiz-release:browser": "node tests/quiz-release.browser.mjs",
     "test:timetable": "node --test tests/course-timetable.test.mjs",

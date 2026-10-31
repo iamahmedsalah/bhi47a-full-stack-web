@@ -23,6 +23,7 @@ import type {
 import { securityHeadersMiddleware } from '../src/common/middleware/security-headers.middleware';
 import { definePasskeyBrowserAcceptance } from './passkey-browser-acceptance';
 import { defineCourseAssignmentAcceptance } from './course-assignment-acceptance';
+import { defineStaffProfileAcceptance } from './staff-profile-acceptance';
 import { QuizzesService } from '../src/modules/quizzes/quizzes.service';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { QuizQuestionExcelService } from '../src/modules/quizzes/services/quiz-question-excel.service';
@@ -176,6 +177,14 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
     };
   }
   defineCourseAssignmentAcceptance({
+    app: () => app!,
+    users: () => users,
+    origin: () => origin,
+    accounts,
+    ids,
+    password,
+  });
+  defineStaffProfileAcceptance({
     app: () => app!,
     users: () => users,
     origin: () => origin,

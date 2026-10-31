@@ -89,34 +89,31 @@ export function StaffManagementPage() {
   const fail = (error: unknown) => toast.error(getApiErrorMessage(error, t('toasts.failed')));
 
   const submitForm = async (values: StaffFormValues) => {
-    try {
-      const profile = {
-        name: values.name,
-        email: values.email,
+    const profile = {
+      name: values.name,
+      nameAr: values.nameAr ?? '',
+      email: values.email,
+      username: values.username,
+      phone: values.phone,
+      staffType: values.role === 'admin' ? undefined : (values.staffType as StaffType),
+    };
+    if (editing) {
+      await mutations.update.mutateAsync({ id: editing._id, input: profile });
+      toast.success(t('toasts.updated'), { id: 'staff-profile-save' });
+    } else {
+      await mutations.create.mutateAsync({
+        ...profile,
+        role: values.role,
+        nameAr: values.nameAr || undefined,
         username: values.username || undefined,
         phone: values.phone || undefined,
-        role: values.role,
-        staffType:
-          values.role === 'admin'
-            ? undefined
-            : (values.staffType as StaffType),
-      };
-      if (editing) {
-        await mutations.update.mutateAsync({ id: editing._id, input: profile });
-        toast.success(t('toasts.updated'));
-      } else {
-        await mutations.create.mutateAsync({
-          ...profile,
-          password: values.password,
-          permissions: [],
-        });
-        toast.success(t('toasts.created'));
-      }
-      setFormOpen(false);
-      setEditing(null);
-    } catch (error) {
-      fail(error);
+        password: values.password,
+        permissions: [],
+      });
+      toast.success(t('toasts.created'), { id: 'staff-profile-save' });
     }
+    setFormOpen(false);
+    setEditing(null);
   };
 
   const savePermissions = async (permissions: Permission[]) => {
@@ -319,7 +316,7 @@ export function StaffManagementPage() {
             <button
               type="button"
               onClick={() => setDetailsTarget(staff)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-xs shadow-sm hover:scale-105 transition-transform cursor-pointer"
               title={t('actions.viewDetails')}
             >
               {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}
@@ -352,7 +349,7 @@ export function StaffManagementPage() {
                   <bdi>@{staff.username || '—'}</bdi>
                 </span>
                 {staff.email && (
-                  <span className="flex items-center gap-1 text-[11px] truncate max-w-[220px]">
+                  <span className="flex items-center gap-1 text-[11px] truncate max-w-55">
                     <Mail className="h-3 w-3 text-muted-foreground shrink-0" />
                     <span dir="ltr" className="truncate">
                       {staff.email}
@@ -454,7 +451,7 @@ export function StaffManagementPage() {
         {/* Top Tier: Search Bar + Action Controls */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative min-w-0 flex-1">
-            <Search className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(event) => {
@@ -615,7 +612,7 @@ export function StaffManagementPage() {
                       <button
                         type="button"
                         onClick={() => setDetailsTarget(staff)}
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-sm shadow-inner group-hover:scale-105 transition-transform cursor-pointer"
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-teal-500/20 to-teal-700/30 text-teal-600 dark:text-teal-400 font-bold border border-teal-500/30 text-sm shadow-inner group-hover:scale-105 transition-transform cursor-pointer"
                         title={t('actions.viewDetails')}
                       >
                         {getInitials(isAr ? staff.nameAr || staff.name : staff.name || staff.nameAr)}

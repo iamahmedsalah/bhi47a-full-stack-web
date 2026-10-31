@@ -42,11 +42,11 @@ export interface StaffProfileInput {
   email: string;
   username?: string;
   phone?: string;
-  role?: 'admin' | 'staff';
   staffType?: StaffType;
 }
 
 export interface CreateStaffInput extends StaffProfileInput {
+  role?: 'admin' | 'staff';
   password: string;
   permissions?: Permission[];
 }

@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
 import { useAuth } from '@/providers/auth-provider';
+import { getApiErrorDetails } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -33,7 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { staffFormSchema, type StaffFormValues } from '../schema';
+import { createStaffFormSchema, type StaffFormValues } from '../schema';
+import { staffFormError } from '../form-errors';
 import type { StaffMember } from '../types';
 
 interface Props {
@@ -60,12 +62,13 @@ export function StaffFormDialog({
     () =>
       isAdmin
         ? (STAFF_TYPE_VALUES as unknown as StaffType[])
-        : ['doctor', 'teaching_assistant'],
+        : ['doctor', 'teaching_assistant', 'assistant_lecturer'],
     [isAdmin],
   );
 
+  const schema = useMemo(() => createStaffFormSchema((key) => t(`validation.${key}`)), [t]);
   const form = useForm<StaffFormValues>({
-    resolver: zodResolver(staffFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       nameAr: '',
@@ -96,8 +99,22 @@ export function StaffFormDialog({
     });
   }, [form, open, staff, allowedStaffTypes]);
 
-  const errorText = (message?: string) =>
-    message === 'passwordLength' ? t('validation.passwordLength') : message;
+  const save = async (values: StaffFormValues) => {
+    form.clearErrors('root');
+    try {
+      await onSubmit(values);
+    } catch (error) {
+      const failure = staffFormError(getApiErrorDetails(error));
+      let first = true;
+      for (const [field, key] of Object.entries(failure.fields)) {
+        form.setError(field as keyof StaffFormValues, { type: 'server', message: t(`validation.${key}`) }, { shouldFocus: first });
+        first = false;
+      }
+      const message = t(`validation.${failure.message}`);
+      form.setError('root.server', { type: 'server', message });
+      toast.error(message, { id: 'staff-profile-save' });
+    }
+  };
 
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$';
@@ -111,6 +128,7 @@ export function StaffFormDialog({
   };
 
   const handleEmailBlur = (emailVal: string) => {
+    if (staff) return;
     const currentUsername = form.getValues('username');
     if (!currentUsername && emailVal.includes('@')) {
       const suggested = emailVal
@@ -125,7 +143,7 @@ export function StaffFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-2xl border border-white/10 bg-card/95 p-6 shadow-2xl backdrop-blur-xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-card/95 p-6 shadow-2xl backdrop-blur-xl">
         <DialogHeader className="border-b border-border/70 pb-3 text-start">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
             <User className="h-5 w-5 text-primary" />
@@ -134,7 +152,12 @@ export function StaffFormDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
+          <form noValidate onSubmit={form.handleSubmit(save)} className="space-y-4 pt-2">
+            {form.formState.errors.root?.server?.message && (
+              <div role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+                {form.formState.errors.root.server.message}
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Arabic Name */}
               <FormField
@@ -198,7 +221,7 @@ export function StaffFormDialog({
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
                           <SelectItem value="staff">
                             {isAr ? 'حساب كادر (أكاديمي / إداري)' : 'Staff Account'}
                           </SelectItem>
@@ -230,7 +253,7 @@ export function StaffFormDialog({
                             <SelectValue placeholder={t('fields.selectStaffType')} />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
                           {allowedStaffTypes.map((type) => (
                             <SelectItem key={type} value={type}>
                               {t(`types.${type}`)}
@@ -332,7 +355,7 @@ export function StaffFormDialog({
               <FormField
                 control={form.control}
                 name="password"
-                render={({ field, fieldState }) => (
+                render={({ field }) => (
                   <FormItem className="rounded-xl border border-white/10 bg-secondary/30 p-3.5">
                     <div className="flex items-center justify-between pb-1">
                       <FormLabel className="flex items-center gap-1.5 text-xs font-semibold">
@@ -362,7 +385,7 @@ export function StaffFormDialog({
                     <p className="text-[11px] text-muted-foreground pt-1">
                       {t('fields.passwordHelp')}
                     </p>
-                    <FormMessage>{errorText(fieldState.error?.message)}</FormMessage>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

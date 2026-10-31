@@ -175,7 +175,7 @@ export class StaffManagementService {
     }
 
     const email = dto.email.trim().toLowerCase();
-    const username = dto.username?.trim().toLowerCase();
+    const username = dto.username?.trim().toLowerCase() || undefined;
     await this.assertUniqueIdentity(email, username);
 
     const passwordHash = await this.passwordHasher.hash(dto.password);
@@ -250,7 +250,7 @@ export class StaffManagementService {
     }
 
     const email = dto.email?.trim().toLowerCase();
-    const username = dto.username?.trim().toLowerCase();
+    const username = dto.username?.trim().toLowerCase() || undefined;
     await this.assertUniqueIdentity(email, username, id);
 
     const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -260,7 +260,7 @@ export class StaffManagementService {
         ? { nameAr: dto.nameAr.trim() || undefined }
         : {}),
       ...(email !== undefined ? { email } : {}),
-      ...(username !== undefined ? { username } : {}),
+      ...(dto.username !== undefined ? { username } : {}),
       ...(dto.phone !== undefined
         ? { phone: dto.phone.trim() || undefined }
         : {}),
@@ -500,12 +500,21 @@ export class StaffManagementService {
     const identityFilters: FilterQuery<UserDocument>[] = [];
     if (email) identityFilters.push({ email });
     if (username) identityFilters.push({ username });
-    const existing = await this.users.exists({
-      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
-      $or: identityFilters,
-    });
-    if (existing)
-      throw new ConflictException('Staff email or username already exists');
+    const existing = await this.users
+      .findOne({
+        ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+        $or: identityFilters,
+      })
+      .select('email username')
+      .lean<{ email?: string; username?: string }>();
+    if (existing) {
+      const field = email && existing.email === email ? 'email' : 'username';
+      throw new ConflictException({
+        message: `Staff ${field} already exists`,
+        code: field === 'email' ? 'STAFF_EMAIL_TAKEN' : 'STAFF_USERNAME_TAKEN',
+        errors: { [field]: field === 'email' ? 'emailTaken' : 'usernameTaken' },
+      });
+    }
   }
 
   private async generateStaffCode() {

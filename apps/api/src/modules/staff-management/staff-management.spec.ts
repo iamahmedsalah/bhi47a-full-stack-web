@@ -1,4 +1,6 @@
 import { validate } from 'class-validator';
+import { ValidationPipe } from '@nestjs/common';
+import { UpdateStaffDto } from './dto/update-staff.dto';
 import { PERMISSIONS } from '@student-portal/shared';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { StaffManagementController } from './staff-management.controller';
@@ -7,6 +9,87 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffPermissionsDto } from './dto/update-staff-permissions.dto';
 
 describe('Staff management security contracts', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true },
+  });
+  const updateMetadata = { type: 'body' as const, metatype: UpdateStaffDto };
+  it('accepts profile edits and trims optional fields, while rejecting injected account roles', async () => {
+    await expect(
+      pipe.transform(
+        {
+          name: '  Staff name  ',
+          nameAr: 'اسم عربي',
+          username: '',
+          phone: '',
+          staffType: 'assistant_lecturer',
+        },
+        updateMetadata,
+      ),
+    ).resolves.toMatchObject({
+      name: 'Staff name',
+      nameAr: 'اسم عربي',
+      username: '',
+      phone: '',
+    });
+    await expect(
+      pipe.transform({ name: 'Staff name', role: 'admin' }, updateMetadata),
+    ).rejects.toThrow('Bad Request');
+  });
+  it.each([
+    { nameAr: 'س' },
+    { username: 'a b' },
+    { name: null },
+    { email: null },
+    { username: null },
+    { phone: '1'.repeat(31) },
+  ])('rejects invalid profile fields: %j', async (body) => {
+    await expect(pipe.transform(body, updateMetadata)).rejects.toThrow(
+      'Bad Request',
+    );
+  });
+  it.each(['email', 'username'] as const)(
+    'returns a field-specific %s conflict',
+    async (field) => {
+      const current = { role: 'staff', staffType: 'doctor' };
+      const lookup = {
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            [field]: field === 'email' ? 'taken@example.test' : 'taken_user',
+          }),
+        }),
+      };
+      const users = {
+        findOne: jest
+          .fn()
+          .mockResolvedValueOnce(current)
+          .mockReturnValueOnce(lookup),
+      };
+      const service = new StaffManagementService(users as never, {} as never);
+      try {
+        await service.update(
+          '507f1f77bcf86cd799439011',
+          { [field]: field === 'email' ? 'taken@example.test' : 'taken_user' },
+          '507f1f77bcf86cd799439012',
+          'admin',
+        );
+        throw new Error('Expected a conflict');
+      } catch (error: unknown) {
+        expect(error).toHaveProperty(
+          'response',
+          expect.objectContaining({
+            code:
+              field === 'email' ? 'STAFF_EMAIL_TAKEN' : 'STAFF_USERNAME_TAKEN',
+            errors: {
+              [field]: field === 'email' ? 'emailTaken' : 'usernameTaken',
+            },
+          }),
+        );
+      }
+    },
+  );
   it('protects the complete controller with the admin and staff roles', () => {
     expect(Reflect.getMetadata(ROLES_KEY, StaffManagementController)).toEqual([
       'admin',

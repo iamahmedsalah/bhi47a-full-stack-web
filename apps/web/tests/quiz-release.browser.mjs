@@ -26,6 +26,11 @@ let importResult;
 let staffOnly = false;
 let denyAssignedCourses = false;
 let denyStaffCourses = false;
+let staffSaveFailure;
+let staffProfile;
+const staffProfileMutations = [];
+const resetStaffProfile = () => { staffProfile = { _id: fixtureId, name: 'Synthetic teaching staff', nameAr: 'عضو هيئة تدريس', email: 'staff@example.test', username: 'staff.original', phone: '01281577808', role: 'staff', staffType: 'assistant_lecturer', permissions: [], isActive: true }; };
+resetStaffProfile();
 const staffCourseRequests = [];
 let studentCalls = 0;
 const mutations = [];
@@ -49,12 +54,13 @@ await fs.writeFile(path.join(output, 'entry.tsx'), `
   import Admin from '${path.join(web, 'src/app/[locale]/admin/quizzes/page.tsx').replaceAll('\\', '/')}';
   import Student from '${path.join(web, 'src/app/[locale]/dashboard/quizzes/page.tsx').replaceAll('\\', '/')}';
   import {StaffDetailsDialog} from '${path.join(web, 'src/features/staff/components/staff-details-dialog.tsx').replaceAll('\\', '/')}';
+  import {StaffManagementPage} from '${path.join(web, 'src/features/staff/components/staff-management-page.tsx').replaceAll('\\', '/')}';
   import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';
   Math.random=()=>0;const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';
   const client=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:0},mutations:{retry:false}}});window.quizQueryClient=client;
   const staffType=new URLSearchParams(location.search).get('staffType')||'doctor';
   function StaffFixture(){const [open,setOpen]=React.useState(true);return <><button onClick={()=>setOpen(true)}>Open staff details</button><StaffDetailsDialog staff={open?{_id:'${fixtureId}',name:'Synthetic teaching staff',role:'staff',staffType,isActive:true,permissions:[]}:null} open={open} onOpenChange={setOpen}/></>}
-  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/staff')?<StaffFixture/>:location.pathname.includes('/admin/')?<Admin/>:<Student/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);
+  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/staff')?(location.search.includes('manage=true')?<StaffManagementPage/>:<StaffFixture/>):location.pathname.includes('/admin/')?<Admin/>:<Student/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);
 `);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
@@ -79,6 +85,19 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
     if (pathname.startsWith('/admin/') || pathname.startsWith('/students/') || pathname.startsWith('/staff/') || pathname === '/courses') {
       res.setHeader('Content-Type', 'application/json');
+      if (pathname === '/admin/staff') { res.end(JSON.stringify({ items: [staffProfile], total: 1, totalPages: 1, page: 1, limit: 20 })); return; }
+      if (pathname === `/admin/staff/${fixtureId}` && req.method === 'PATCH') {
+        const chunks = [];for await (const chunk of req) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString());staffProfileMutations.push(body);
+        if ('role' in body || 'password' in body || 'permissions' in body) {
+          res.statusCode=400;res.end(JSON.stringify({statusCode:400,message:'property role should not exist'}));return;
+        }
+        if (staffSaveFailure) {
+          res.statusCode=staffSaveFailure==='email'?409:503;
+          res.end(JSON.stringify(staffSaveFailure==='email'?{statusCode:409,code:'STAFF_EMAIL_TAKEN',message:'Staff email already exists',errors:{email:'emailTaken'}}:{statusCode:503,message:'Internal diagnostic details must not appear'}));return;
+        }
+        staffProfile={...staffProfile,...body};res.end(JSON.stringify(staffProfile));return;
+      }
       if (pathname === '/admin/courses' && url.searchParams.has('staffId')) {
         staffCourseRequests.push(Object.fromEntries(url.searchParams));
         const invalid = [...url.searchParams.keys()].some((key) => !['staffId', 'page', 'limit'].includes(key));
@@ -150,6 +169,44 @@ try {
   }
   assert.ok(staffCourseRequests.every((params) => params.staffId === fixtureId && !('_t' in params)));
   console.log('Staff management dialog passed: Arabic/English doctor, TA and assistant lecturer courses, pagination, retry, reopening and validated query parameters.');
+  for (const locale of ['en', 'ar']) {
+    resetStaffProfile();staffProfileMutations.length=0;
+    const t = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).staff;
+    await page.goto(`${address}/${locale}/admin/staff?manage=true`);
+    await page.getByRole('button', {name:t.table.actions,exact:true}).first().click();
+    await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
+    const dialog=page.getByRole('dialog');
+    const name=dialog.getByLabel(t.fields.name,{exact:true});
+    const nameAr=dialog.getByLabel(t.fields.nameAr,{exact:true});
+    const email=dialog.getByLabel(t.fields.email,{exact:true});
+    const username=dialog.getByLabel(t.fields.username,{exact:false});
+    const save=dialog.getByRole('button',{name:t.save,exact:true});
+    await name.fill('X');await nameAr.fill('س');await email.fill('invalid-email');await username.fill('bad user');await save.click();
+    for (const key of ['nameLength','nameArLength','emailInvalid','usernameFormat']) await dialog.getByText(t.validation[key],{exact:true}).waitFor();
+    assert.equal(staffProfileMutations.length,0,'invalid fields do not send a request');
+    await name.fill('Updated teaching staff');await nameAr.fill('اسم عربي محدث');await email.fill('staff@example.test');await username.fill('staff.updated');
+    staffSaveFailure='email';await save.click();
+    await dialog.getByRole('alert').getByText(t.validation.emailTaken,{exact:true}).waitFor();
+    assert.equal(await email.getAttribute('aria-invalid'),'true');
+    assert.equal(await nameAr.inputValue(),'اسم عربي محدث');
+    staffSaveFailure='server';await save.click();
+    await dialog.getByRole('alert').getByText(t.validation.saveFailed,{exact:true}).waitFor();
+    await page.screenshot({path:path.join(output,`staff-profile-validation-${locale}.png`),fullPage:true});
+    staffSaveFailure=undefined;await save.click();
+    await dialog.waitFor({state:'hidden'});
+    const payload=staffProfileMutations.at(-1);
+    assert.equal(payload.nameAr,'اسم عربي محدث');assert.equal(payload.staffType,'assistant_lecturer');
+    assert.ok(staffProfileMutations.every((item)=>!('role' in item)&&!('password' in item)&&!('permissions' in item)));
+    assert.equal(staffProfile.name,'Updated teaching staff');
+    await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
+    await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
+    await nameAr.fill('');await username.fill('');await dialog.getByLabel(t.fields.phone,{exact:true}).fill('');
+    await email.fill('staff@example.test');await name.click();
+    assert.equal(await username.inputValue(),'','editing email must not recreate a cleared username');
+    await save.click();await dialog.waitFor({state:'hidden'});
+    for(const field of ['nameAr','username','phone'])assert.equal(staffProfileMutations.at(-1)[field],'');
+  }
+  console.log('Staff profile edit passed: Arabic/English field validation, duplicate email, retained input on server failure, Arabic names and successful updates without role changes.');
   if (!process.argv.includes('--staff-only')) {
   for (const locale of ['en', 'ar']) {
     reset();
