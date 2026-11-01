@@ -19,10 +19,17 @@ export default tseslint.config(
       },
       sourceType: 'commonjs',
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ['test/*.ts'],
-        },
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['test/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: './tsconfig.e2e.json',
       },
     },
   },

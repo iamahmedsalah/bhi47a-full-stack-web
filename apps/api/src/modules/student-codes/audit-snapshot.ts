@@ -185,6 +185,7 @@ export function analyzeCodeSnapshot(
       ? [
           sources.policy.academicYear,
           sources.policy.yearPrefix,
+          sources.policy.allocationPrefix,
           sources.policy.nextSequence,
           sources.policy.revision,
         ]
@@ -196,7 +197,8 @@ export function analyzeCodeSnapshot(
   const mappingConflict = Boolean(
     sources.policy &&
     (sources.policy.academicYear !== academicYear ||
-      sources.policy.yearPrefix !== prefix),
+      (sources.policy.allocationPrefix ?? sources.policy.yearPrefix) !==
+        prefix),
   );
   return {
     rows,

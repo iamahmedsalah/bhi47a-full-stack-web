@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  Equals,
   IsDateString,
   IsInt,
   IsString,
@@ -64,6 +65,12 @@ export class UpdateAdmissionPeriodDto extends PeriodFieldsDto {
   @IsInt()
   @Min(0)
   revision!: number;
+}
+export class DeleteAdmissionPeriodDto {
+  @IsInt() @Min(0) revision!: number;
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.confirmed)
+  @Equals(true)
+  confirmed!: true;
 }
 
 export class QueryAdmissionPeriodDto {

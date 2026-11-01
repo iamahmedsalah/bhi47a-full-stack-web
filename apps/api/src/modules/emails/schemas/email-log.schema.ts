@@ -23,6 +23,15 @@ export class EmailLog {
   @Prop({ required: true, default: 'manual' })
   event!: string;
 
+  @Prop()
+  eventKey?: string;
+
+  @Prop()
+  from?: string;
+
+  @Prop()
+  replyTo?: string;
+
   @Prop({
     type: String,
     enum: ['pending', 'queued', 'sent', 'failed', 'skipped'],
@@ -51,3 +60,7 @@ export const EmailLogSchema = SchemaFactory.createForClass(EmailLog);
 EmailLogSchema.index({ event: 1 });
 EmailLogSchema.index({ status: 1 });
 EmailLogSchema.index({ createdAt: -1 });
+EmailLogSchema.index(
+  { eventKey: 1 },
+  { unique: true, partialFilterExpression: { eventKey: { $type: 'string' } } },
+);

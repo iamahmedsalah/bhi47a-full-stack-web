@@ -1,4 +1,4 @@
-import 'reflect-metadata';
+﻿import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { Types, type Connection } from 'mongoose';
 import {
@@ -16,7 +16,7 @@ import {
 import { StudentCodesController } from './student-codes.controller';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 
-const year = '2026-2027';
+const year = '2025-2026';
 const prefix = '26';
 const empty = (): SnapshotSources => ({
   users: [],

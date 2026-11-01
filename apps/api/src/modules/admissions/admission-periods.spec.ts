@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import { ValidationPipe, type ArgumentMetadata } from '@nestjs/common';
-import { Types, type Model } from 'mongoose';
+import { ValidationPipe } from '@nestjs/common';
+import type { ArgumentMetadata } from '@nestjs/common';
+import { Types } from 'mongoose';
+import type { Model } from 'mongoose';
 import {
   admissionPeriodStatus,
   isAdmissionAcademicYear,
@@ -8,6 +10,7 @@ import {
   STAFF_TYPE_DEFAULT_PERMISSIONS,
 } from '@student-portal/shared';
 import { AdmissionPeriodsService } from './admission-periods.service';
+import type { AdmissionTransactions } from '../student-codes/admission-transactions.service';
 import { AdmissionPeriodsController } from './admission-periods.controller';
 import {
   CreateAdmissionPeriodDto,
@@ -112,6 +115,7 @@ describe('Admission period policy and persistence', () => {
   };
   const service = new AdmissionPeriodsService(
     model as unknown as Model<AdmissionPeriodDocument>,
+    {} as AdmissionTransactions,
   );
   beforeEach(() => jest.resetAllMocks());
 
@@ -163,7 +167,11 @@ describe('Admission period policy and persistence', () => {
       actorId,
     );
     const [filter, update] = model.findOneAndUpdate.mock.calls[0];
-    expect(filter).toEqual({ _id: String(id), revision: 2 });
+    expect(filter).toEqual({
+      _id: String(id),
+      revision: 2,
+      deletedAt: { $exists: false },
+    });
     expect(update).toMatchObject({
       $inc: { revision: 1 },
       $set: { opensAt: new Date(opensAt), closesAt: new Date(closesAt) },
@@ -194,6 +202,15 @@ describe('Admission period policy and persistence', () => {
     await expect(
       service.update(String(id), { revision: 0 }, actorId),
     ).rejects.toMatchObject({ status: 404 });
+  });
+  it('cannot re-enable an archived period through an update', async () => {
+    model.findById.mockReturnValue(
+      lean({ ...fixture(), deletedAt: new Date() }),
+    );
+    await expect(
+      service.update(String(id), { revision: 2, isEnabled: true }, actorId),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(model.findOneAndUpdate).not.toHaveBeenCalled();
   });
   it('escapes search metacharacters and paginates a stable sort', async () => {
     const query = {
@@ -238,6 +255,7 @@ describe('Admission period policy and persistence', () => {
     expect(Reflect.getMetadata(ANY_PERMISSIONS_KEY, prototype.list)).toEqual([
       PERMISSIONS.ADMISSIONS_PERIODS_READ,
       PERMISSIONS.ADMISSIONS_PERIODS_MANAGE,
+      PERMISSIONS.ADMISSIONS_ACCESS_MANAGE,
     ]);
     // eslint-disable-next-line @typescript-eslint/unbound-method
     for (const action of [prototype.create, prototype.update])

@@ -1,4 +1,5 @@
 import api from "@/lib/api";
+import { downloadFileBlob } from '@/lib/export-utils';
 import type {
   InitializeStudentCodeYearInput,
   RecoverStudentCodeInput,
@@ -9,6 +10,10 @@ import type {
 export interface CodeAuditScope {
   academicYear: string;
   yearPrefix: string;
+}
+export async function exportCodeAudit(params: CodeAuditScope & { status?: string; search?: string }) {
+  const raw = await api.get('/admin/student-codes/audit/export', { params, responseType: 'blob' });
+  await downloadFileBlob(raw, 'student-code-audit.xlsx');
 }
 export async function getCodeAudit(
   params: CodeAuditScope & {

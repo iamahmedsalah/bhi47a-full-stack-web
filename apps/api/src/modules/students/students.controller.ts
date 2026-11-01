@@ -69,7 +69,7 @@ export class StudentsController {
   @RequirePermissions(PERMISSIONS.STUDENTS_READ)
   @ApiOperation({ summary: 'Get student full profile (admin/staff)' })
   async findOne(
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.studentsService.findById(id, user);
@@ -87,10 +87,7 @@ export class StudentsController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
   @ApiOperation({ summary: 'Update student (admin)' })
-  async update(
-    @Param('id', ParseObjectIdPipe) id: string,
-    @Body() dto: UpdateStudentDto,
-  ) {
+  async update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
     return this.studentsService.update(id, dto);
   }
 
@@ -102,12 +99,26 @@ export class StudentsController {
     return this.studentsService.activate(id);
   }
 
-  @Delete('admin/students/:id')
+  @Post('admin/students/:id/deactivate')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
-  @ApiOperation({ summary: 'Deactivate student (admin)' })
-  async deactivate(@Param('id', ParseObjectIdPipe) id: string) {
+  @ApiOperation({ summary: 'Deactivate student account (admin/staff)' })
+  async deactivatePost(@Param('id', ParseObjectIdPipe) id: string) {
     return this.studentsService.deactivate(id);
+  }
+
+  @Delete('admin/students/:id/deactivate')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
+  async deactivateAlias(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.studentsService.deactivate(id);
+  }
+
+  @Delete('admin/students/:id')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Delete student permanently (admin only)' })
+  async deleteStudent(@Param('id') id: string) {
+    return this.studentsService.deleteStudent(id);
   }
 
   @Post('admin/students/:id/reset-password')
@@ -116,7 +127,7 @@ export class StudentsController {
   @RequirePermissions(PERMISSIONS.STUDENTS_RESET_PASSWORD)
   @ApiOperation({ summary: 'Reset student password (admin)' })
   async resetPassword(
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ResetPasswordDto,
     @CurrentUser() user: AuthenticatedUser,
     @Headers('accept-language') acceptLanguage?: string,

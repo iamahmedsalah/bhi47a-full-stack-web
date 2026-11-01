@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -35,11 +35,12 @@ await write('auth.ts', `export const useAuth=()=>{const access=new URLSearchPara
 await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const router={replace:url=>{history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));},push:()=>{}};export const useSearchParams=()=>{const search=useSyncExternalStore(subscribe,()=>location.search);return new URLSearchParams(search);};export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useRouter=()=>router;`);
 await write('api.ts', `const call=async(method,url,body)=>{const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw data;return {data};};export const getApiErrorDetails=error=>error;export const getApiErrorMessage=(error,fallback)=>error.message||fallback;export default {get:(url,config)=>call('GET',url+'?'+new URLSearchParams(config?.params)),post:(url,body)=>call('POST',url,body),patch:(url,body)=>call('PATCH',url,body)};`);
 await write('entry.tsx', `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';import Page from '${path.join(web, 'src/app/[locale]/admin/admissions/page.tsx').replaceAll('\\', '/')}';import Codes from '${path.join(web, 'src/app/[locale]/admin/student-codes/page.tsx').replaceAll('\\', '/')}';import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/student-codes')?<Codes/>:<Page/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
+await write('api-client.ts', `import api from './api';export const apiGet=async(url,config)=>(await api.get(url,config)).data;export const apiPost=async(url,data,config)=>(await api.post(url,data,config)).data;export const apiPatch=async(url,data,config)=>(await api.patch(url,data,config)).data;export const apiDelete=async(url,config)=>(await api.delete(url,config)).data;`);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
-  cache: { type: 'filesystem', cacheDirectory: path.join(output, 'webpack-cache') },
+  cache: { type: 'filesystem', version: 'admission-fixtures-api-client-v2', cacheDirectory: path.join(output, 'webpack-cache') },
   entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' },
-  resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: { 'next/navigation': path.join(output, 'navigation.ts'), '@/lib/api': path.join(output, 'api.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@': path.join(web, 'src') } },
+  resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: { 'next/navigation': path.join(output, 'navigation.ts'), '@/lib/api': path.join(output, 'api.ts'), '@/lib/api-client': path.join(output, 'api-client.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@': path.join(web, 'src') } },
   module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] },
 }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
 const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({ base: web })]).process(await fs.readFile(path.join(web, 'src/app/globals.css'), 'utf8'), { from: path.join(web, 'src/app/globals.css') });
@@ -84,11 +85,11 @@ const server = http.createServer(async (req, res) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const address = `http://127.0.0.1:${server.address().port}`;
-let browser;
+let browser, page;
 try {
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/New_York' });
-  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/New_York' });
+  const errors = []; page.on('pageerror', (error) => { errors.push(error.message); void write('runtime-error.txt', error.stack ?? error.message); });
   for (const locale of ['en', 'ar']) {
     period = { ...fixture }; mutations.length = 0;
     const t = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).admissions;
@@ -204,6 +205,9 @@ try {
   assert.deepEqual(errors, []);
   console.log('Student code audit passed: Arabic/English scope validation, reviewed initialization, stale-preview feedback, never-assigned recovery, history retry, bulk inspection and read-only/denied permissions.');
   console.log('Admission periods browser acceptance passed: Arabic/English, Cairo in a US browser, retained-input conflicts, exact timestamp preservation, validation, manual defaults, bulk disable, read-only access, retry and debounced URL search.');
+} catch (error) {
+  if (page) { await write('failure-dom.html', await page.content()); await page.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }); }
+  throw error;
 } finally {
   await browser?.close(); await new Promise((resolve) => server.close(resolve));
 }

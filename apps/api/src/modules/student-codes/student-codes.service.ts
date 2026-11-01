@@ -1,11 +1,13 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   Injectable,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import * as ExcelJS from 'exceljs';
 import {
   parseStudentCode,
+  admissionYearPrefix,
   type StudentCodeAuditResult,
 } from '@student-portal/shared';
 import { StudentCodeStore } from './student-code-store.service';
@@ -26,6 +28,66 @@ export class StudentCodesService {
     private readonly store: StudentCodeStore,
     private readonly transactions: AdmissionTransactions,
   ) {}
+  async exportAudit(query: CodeAuditQueryDto) {
+    const snapshot = await this.store.snapshot(
+      query.academicYear,
+      query.yearPrefix,
+    );
+    const workbook = new ExcelJS.Workbook(),
+      sheet = workbook.addWorksheet('Code Audit');
+    sheet.addRow([
+      'AcademicYear',
+      'StudentCode',
+      'Sequence',
+      'Status',
+      'Reason',
+      'CurrentStudentId',
+    ]);
+    for (const row of snapshot.rows.filter(
+      (row) =>
+        (!query.status || row.status === query.status) &&
+        (!query.search || row.studentCode.includes(query.search)),
+    ))
+      sheet.addRow(
+        [
+          query.academicYear,
+          row.studentCode,
+          row.sequence ?? '',
+          row.status,
+          row.reason,
+          row.currentStudentId ?? '',
+        ].map((value) =>
+          typeof value === 'string' && /^[=+\-@\t\r\n]/.test(value)
+            ? `'${value}`
+            : value,
+        ),
+      );
+    sheet.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+    });
+    sheet.columns.forEach((column) => {
+      let width = 12;
+      column.eachCell?.((cell) => {
+        width = Math.max(width, Math.min(50, cell.text.length + 2));
+      });
+      column.width = width;
+    });
+    const summary = workbook.addWorksheet('Scan');
+    summary.addRows([
+      ['ScannedAtUTC', new Date().toISOString()],
+      ['Fingerprint', snapshot.fingerprint],
+      ['Truncated', snapshot.truncated],
+      ['ReuseEnabled', false],
+      ...Object.entries(snapshot.summary),
+    ]);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
   async audit(query: CodeAuditQueryDto): Promise<StudentCodeAuditResult> {
     const snapshot = await this.store.snapshot(
       query.academicYear,
@@ -48,7 +110,8 @@ export class StudentCodesService {
       policy: snapshot.policy
         ? {
             academicYear: snapshot.policy.academicYear,
-            yearPrefix: snapshot.policy.yearPrefix,
+            yearPrefix:
+              snapshot.policy.allocationPrefix ?? snapshot.policy.yearPrefix,
             nextSequence: snapshot.policy.nextSequence,
             initializedAt: snapshot.policy.initializedAt.toISOString(),
           }
@@ -94,6 +157,11 @@ export class StudentCodesService {
           codeConflict(
             'CODE_LEGACY_REVIEW_REQUIRED',
             'Resolve ambiguous records and configure an admission period before initialization.',
+          );
+        if (dto.yearPrefix !== admissionYearPrefix(dto.academicYear))
+          codeConflict(
+            'CODE_YEAR_PREFIX_MISMATCH',
+            'Use the final two digits of the ending academic year for new allocation policies.',
           );
         const at = new Date();
         const actor = new Types.ObjectId(actorId);

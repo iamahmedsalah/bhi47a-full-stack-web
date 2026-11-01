@@ -4,7 +4,11 @@ import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocale, useTranslations } from "next-intl";
-import type { AdmissionPeriodItem } from "@student-portal/shared";
+import {
+  admissionYearPrefix,
+  isAdmissionAcademicYear,
+  type AdmissionPeriodItem,
+} from "@student-portal/shared";
 import {
   Dialog,
   DialogContent,
@@ -112,7 +116,7 @@ export function AdmissionPeriodForm({
               </p>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              {(["code", "academicYear", "name", "nameAr"] as const).map(
+              {(["code", "academicYear", "nameAr", "name"] as const).map(
                 (key) => (
                   <FormField
                     key={key}
@@ -170,6 +174,13 @@ export function AdmissionPeriodForm({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">{t("cairoHint")}</p>
+            {isAdmissionAcademicYear(form.watch("academicYear")) && (
+              <p className="text-xs text-primary">
+                {t("allocationPrefix", {
+                  prefix: admissionYearPrefix(form.watch("academicYear")),
+                })}
+              </p>
+            )}
             {initial && (
               <p className="text-xs text-muted-foreground">
                 {t("immutableHint")}

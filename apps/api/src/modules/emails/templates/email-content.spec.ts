@@ -1,6 +1,7 @@
 import {
   brandedEmailSender,
   buildOtpEmail,
+  buildComplaintReplyEmail,
   getEmailPortalOrigin,
   resolveEmailLanguage,
 } from './email-content';
@@ -39,7 +40,10 @@ describe('localized authentication emails', () => {
         expect(email.html).toContain(
           `/email-code.html#lang=${lang}&amp;code=012345`,
         );
-        expect(email.text).toContain('012345');
+        expect(email.text.split('\n')[0]).toContain('012345');
+        expect(email.html.indexOf('012345')).toBeLessThan(
+          email.html.indexOf('<table'),
+        );
         expect(email.html).not.toMatch(/<script|onclick=|javascript:/i);
       }
     },
@@ -73,5 +77,43 @@ describe('localized authentication emails', () => {
     expect(brandedEmailSender('onboarding@resend.dev', 'بوابة الطالب')).toBe(
       '"بوابة الطالب" <onboarding@resend.dev>',
     );
+  });
+});
+
+describe('complaint reply emails', () => {
+  it.each(['ar', 'en'] as const)(
+    'uses %s and a ticket-only link without a login bypass',
+    (lang) => {
+      const email = buildComplaintReplyEmail({
+        ticketNumber: 'TKT-20261101-1234',
+        lang,
+        portalUrl: 'https://bhi47.app',
+      });
+      expect(email.subject).toContain('TKT-20261101-1234');
+      const link = email.text
+        .split('\n')
+        .find((line) => line.startsWith('https:'))!;
+      const url = new URL(link);
+      expect(url.pathname).toBe(`/${lang}/complaints`);
+      expect([...url.searchParams.keys()]).toEqual(['tab', 'ticket']);
+      expect(email.html).toContain(`dir="${lang === 'ar' ? 'rtl' : 'ltr'}"`);
+      expect(email.html).not.toMatch(/<script|nationalId|studentCode|token=/i);
+    },
+  );
+  it('rejects unsafe portal origins and escapes ticket text', () => {
+    expect(() =>
+      buildComplaintReplyEmail({
+        ticketNumber: 'T',
+        lang: 'en',
+        portalUrl: 'javascript:alert(1)',
+      }),
+    ).toThrow();
+    const email = buildComplaintReplyEmail({
+      ticketNumber: '<img src=x>',
+      lang: 'en',
+      portalUrl: 'https://bhi47.app',
+    });
+    expect(email.html).toContain('&lt;img src=x&gt;');
+    expect(email.html).not.toContain('<img src=x>');
   });
 });

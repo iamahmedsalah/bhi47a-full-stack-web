@@ -37,6 +37,12 @@ export function isAdmissionAcademicYear(value: string): boolean {
   const [start, end] = value.split("-").map(Number);
   return start >= 1000 && end <= 9999 && end === start + 1;
 }
+/** The institute's intake prefix follows the END year, never the server calendar. */
+export function admissionYearPrefix(academicYear: string): string {
+  if (!isAdmissionAcademicYear(academicYear))
+    throw new Error("Invalid academic year");
+  return academicYear.slice(-2);
+}
 
 export function admissionPeriodStatus(
   period: {

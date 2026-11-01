@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { Search, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { GlassCard } from '@/components/ui/glass-card';
-import { cn } from '@/lib/cn';
+import React, { useEffect, useState } from "react";
+import { Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { GlassCard } from "@/components/ui/glass-card";
+import { cn } from "@/lib/cn";
 
 interface FilterBarProps {
   /** Search input value */
@@ -17,14 +17,17 @@ interface FilterBarProps {
   children?: React.ReactNode;
   /** Extra classNames */
   className?: string;
+  /** Let longer feature filters wrap without shrinking their labels. */
+  wrapFilters?: boolean;
 }
 
 export function FilterBar({
   search,
   onSearchChange,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = "Search...",
   children,
   className,
+  wrapFilters = false,
 }: FilterBarProps) {
   const [localSearch, setLocalSearch] = useState(search);
 
@@ -45,14 +48,14 @@ export function FilterBar({
   }, [localSearch, onSearchChange, search]);
 
   const handleClear = () => {
-    setLocalSearch('');
-    onSearchChange('');
+    setLocalSearch("");
+    onSearchChange("");
   };
 
   return (
-    <GlassCard className={cn('p-4', className)}>
+    <GlassCard className={cn("p-4", className)}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1 max-w-sm lg:max-w-xs xl:max-w-sm shrink-0">
           <Search className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <label className="sr-only">{searchPlaceholder}</label>
           <Input
@@ -75,7 +78,12 @@ export function FilterBar({
         </div>
 
         {children && (
-          <div className="flex flex-row flex-wrap items-center gap-2 lg:flex-nowrap lg:justify-end">
+          <div
+            className={cn(
+              "flex flex-row flex-wrap items-center gap-2 lg:justify-end",
+              wrapFilters ? "min-w-0 flex-1" : "lg:flex-nowrap",
+            )}
+          >
             {children}
           </div>
         )}

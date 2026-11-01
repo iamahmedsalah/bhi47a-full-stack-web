@@ -567,6 +567,16 @@ function PublicComplaintsContent() {
 
                       <div className="space-y-2">
                         <Label htmlFor="contactEmail">{isAr ? 'البريد الإلكتروني (اختياري)' : 'Email (optional)'}</Label>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {isAr
+                            ? 'سنرسل إشعاراً عند رد فريق الدعم إلى هذا البريد، أو إلى بريدك المرتبط بالبوابة إذا تركته فارغاً. الاطلاع على الرد يتطلب التحقق من هويتك.'
+                            : 'We will email you when support replies, using this address or your linked portal email if left blank. Reading the reply requires identity verification.'}
+                        </p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {isAr
+                            ? 'سنرسل إشعاراً عند رد فريق الدعم إلى هذا البريد، أو إلى بريدك المرتبط بالبوابة إذا تركته فارغاً. الاطلاع على الرد يتطلب التحقق من هويتك.'
+                            : 'We will email you when support replies, using this address or your linked portal email if left blank. Reading the reply requires identity verification.'}
+                        </p>
                         <Input
                           id="contactEmail"
                           type="email"

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Types, type ClientSession } from 'mongoose';
-import { formatStudentCode } from '@student-portal/shared';
+import {
+  admissionYearPrefix,
+  formatStudentCode,
+  parseStudentCode,
+} from '@student-portal/shared';
 import { StudentCodeStore } from './student-code-store.service';
 import { AdmissionTransactions } from './admission-transactions.service';
 import { codeConflict } from './student-codes.service';
@@ -59,17 +63,127 @@ export class StudentCodeAllocator {
           };
         }
         await beforeAllocation?.(session);
-        const policy = await this.store.years
+        let policy = await this.store.years
           .findOneAndUpdate(
             { academicYear },
             { $inc: { revision: 1 } },
             { new: true, session },
           )
           .lean();
-        if (!policy)
+        if (!policy) {
+          const yearPrefix = admissionYearPrefix(academicYear);
+          const snapshot = await this.store.snapshot(
+            academicYear,
+            yearPrefix,
+            session,
+          );
+          const nextSequence = Math.max(1, (snapshot.maxSequence ?? 0) + 1);
+          if (
+            !snapshot.canInitialize ||
+            snapshot.mappingConflict ||
+            snapshot.truncated
+          )
+            codeConflict(
+              'CODE_YEAR_NOT_READY',
+              'Review and initialize the end-year prefix before approval. Existing codes will not be changed.',
+            );
+          const [created] = await this.store.years.create(
+            [
+              {
+                academicYear,
+                yearPrefix,
+                nextSequence,
+                initializedAt: new Date(),
+                initializedBy: new Types.ObjectId(actorId),
+                initializationReason: 'Auto-initialized on admission approval',
+              },
+            ],
+            { session },
+          );
+          policy = created.toObject();
+
+          const legacy = snapshot.rows.filter(
+            (row) => row.status === 'ASSIGNED',
+          );
+          if (legacy.length) {
+            const at = new Date();
+            await this.store.entries.insertMany(
+              legacy.map((row) => ({
+                studentCode: row.studentCode,
+                academicYear,
+                yearPrefix,
+                sequence: row.sequence,
+                status: 'ASSIGNED',
+                currentStudentId: new Types.ObjectId(row.currentStudentId),
+                assignmentHistory: [
+                  {
+                    studentId: new Types.ObjectId(row.currentStudentId),
+                    observedAt: at,
+                    source: 'legacy',
+                  },
+                ],
+              })),
+              { session, ordered: true },
+            );
+          }
+          await this.store.audits.create(
+            [
+              {
+                studentCode: `${yearPrefix}0000`,
+                academicYear,
+                actorId: new Types.ObjectId(actorId),
+                action: 'INITIALIZED',
+                to: 'INITIALIZED',
+                reason:
+                  'Validated end-year mapping on authorized admission approval.',
+                at: new Date(),
+              },
+            ],
+            { session },
+          );
+        }
+        const prefix = policy.allocationPrefix ?? policy.yearPrefix;
+        if (prefix !== admissionYearPrefix(academicYear))
           codeConflict(
-            'CODE_YEAR_NOT_READY',
-            'Initialize this admission year before approval.',
+            'CODE_YEAR_PREFIX_MISMATCH',
+            'This year has an older prefix mapping. An administrator must review its correction before issuing further codes.',
+          );
+        // Imports may add a legacy code after a counter was initialized. Continue
+        // beyond the actual high-water mark; numerical holes need explicit recovery.
+        const exactPrefix = new RegExp(`^${prefix}[0-9]{4}$`);
+        const latestUser = await this.store.users
+          .findOne({ studentCode: exactPrefix })
+          .select('studentCode')
+          .sort({ studentCode: -1 })
+          .session(session)
+          .lean();
+        const latestProfile = await this.store.profiles
+          .findOne({ studentCode: exactPrefix })
+          .select('studentCode')
+          .sort({ studentCode: -1 })
+          .session(session)
+          .lean();
+        const latestEntry = await this.store.entries
+          .findOne({ studentCode: exactPrefix })
+          .select('studentCode')
+          .sort({ studentCode: -1 })
+          .session(session)
+          .lean();
+        const observedNext =
+          1 +
+          Math.max(
+            0,
+            ...[latestUser, latestProfile, latestEntry].map((item) =>
+              item?.studentCode
+                ? (parseStudentCode(item.studentCode, prefix) ?? 0)
+                : 0,
+            ),
+          );
+        if (observedNext > policy.nextSequence)
+          await this.store.years.updateOne(
+            { academicYear },
+            { $max: { nextSequence: observedNext } },
+            { session },
           );
         // Consume explicitly recovered, NEVER previously held codes first. Released
         // codes stay blocked until historic readers/importers have been migrated.
@@ -79,6 +193,7 @@ export class StudentCodeAllocator {
           const reusable = await this.store.entries
             .findOne({
               academicYear,
+              yearPrefix: prefix,
               status: 'AVAILABLE',
               currentStudentId: { $exists: false },
               'assignmentHistory.0': { $exists: false },
@@ -105,10 +220,12 @@ export class StudentCodeAllocator {
                 'The four-digit sequence is exhausted. No previous holder will be reused.',
               );
             sequence = counter.nextSequence;
-            code = formatStudentCode(policy.yearPrefix, sequence);
+            code = formatStudentCode(prefix, sequence);
             if (
               await this.store.entries
-                .exists({ studentCode: code })
+                .exists({
+                  $or: [{ studentCode: code }, { academicYear, sequence }],
+                })
                 .session(session)
             )
               continue;
@@ -126,7 +243,7 @@ export class StudentCodeAllocator {
                   {
                     studentCode: code,
                     academicYear,
-                    yearPrefix: policy.yearPrefix,
+                    yearPrefix: prefix,
                     sequence,
                     status: 'REQUIRES_REVIEW',
                     assignmentHistory: [],
@@ -165,7 +282,7 @@ export class StudentCodeAllocator {
                 {
                   studentCode: code,
                   academicYear,
-                  yearPrefix: policy.yearPrefix,
+                  yearPrefix: prefix,
                   sequence,
                   status: 'RESERVED',
                   registrationRequestId: request,

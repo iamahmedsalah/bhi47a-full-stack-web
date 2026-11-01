@@ -18,3 +18,4 @@ export * from "./tuition-audit";
 export * from "./quiz-release";
 export * from "./admissions";
 export * from "./student-codes";
+export * from "./admission-workflow";

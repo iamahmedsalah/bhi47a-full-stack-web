@@ -22,6 +22,7 @@ import { StudentCodeAllocator } from './student-code-allocator.service';
 import { AdmissionTransactions } from './admission-transactions.service';
 import { StudentCodesService } from './student-codes.service';
 import { StudentCodesController } from './student-codes.controller';
+import { StudentCodeMappingsService } from './student-code-mappings.service';
 
 @Module({
   imports: [
@@ -40,7 +41,8 @@ import { StudentCodesController } from './student-codes.controller';
     StudentCodeAllocator,
     AdmissionTransactions,
     StudentCodesService,
+    StudentCodeMappingsService,
   ],
-  exports: [StudentCodeAllocator],
+  exports: [StudentCodeAllocator, StudentCodeStore, AdmissionTransactions],
 })
 export class StudentCodesModule {}

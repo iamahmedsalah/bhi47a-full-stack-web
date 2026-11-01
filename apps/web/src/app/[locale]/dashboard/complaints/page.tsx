@@ -349,6 +349,11 @@ export default function StudentComplaintsPage() {
               )}
 
               <form onSubmit={handleAddSubmit} className="space-y-4">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {isEnglish
+                    ? 'If you have linked an email to your account, we will notify you when support replies. Open the ticket in the portal to read and respond.'
+                    : 'إذا ربطت بريدك الإلكتروني بحسابك، سنرسل إشعاراً عند رد فريق الدعم. افتح التذكرة في البوابة لقراءة الرد والمتابعة.'}
+                </p>
                 <div className="space-y-1.5 text-start">
                   <label className="text-xs font-bold text-foreground">
                     {isEnglish ? 'Type of Issue *' : 'نوع البلاغ أو الشكوى *'}

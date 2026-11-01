@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -20,6 +21,7 @@ import {
   CreateAdmissionPeriodDto,
   QueryAdmissionPeriodDto,
   UpdateAdmissionPeriodDto,
+  DeleteAdmissionPeriodDto,
 } from './dto/admission-period.dto';
 
 @Controller('admin/admissions/periods')
@@ -31,6 +33,7 @@ export class AdmissionPeriodsController {
   @RequireAnyPermissions(
     PERMISSIONS.ADMISSIONS_PERIODS_READ,
     PERMISSIONS.ADMISSIONS_PERIODS_MANAGE,
+    PERMISSIONS.ADMISSIONS_ACCESS_MANAGE,
   )
   list(@Query() query: QueryAdmissionPeriodDto) {
     return this.periods.list(query);
@@ -53,5 +56,16 @@ export class AdmissionPeriodsController {
     @CurrentUser('_id') actorId: string,
   ) {
     return this.periods.update(id, dto, actorId);
+  }
+
+  @Delete(':id')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.ADMISSIONS_PERIODS_MANAGE)
+  remove(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: DeleteAdmissionPeriodDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.periods.delete(id, dto, actorId);
   }
 }

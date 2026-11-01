@@ -16,6 +16,18 @@ class CodeYearDto {
   @IsString() @Matches(/^\d{4}-\d{4}$/) academicYear!: string;
   @IsString() @Matches(/^\d{2}$/) yearPrefix!: string;
 }
+export class CorrectCodeMappingsDto {
+  @IsString() @Matches(/^[a-f0-9]{64}$/) fingerprint!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @Length(10, 1000)
+  reason!: string;
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.confirmed)
+  @Equals(true)
+  confirmed!: true;
+}
 export class CodeHistoryQueryDto {
   @Type(() => Number) @IsInt() @Min(1) page = 1;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;

@@ -14,6 +14,7 @@ import {
   Loader2,
   Mail,
   MapPin,
+  Phone,
   Search,
   Users,
 } from 'lucide-react';
@@ -52,6 +53,8 @@ export interface Student {
   nationalIdMasked?: string;
   nationalId?: string;
   phone?: string;
+  address?: string;
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -608,6 +611,13 @@ export function StudentDetailDialog({
                   {isAr ? 'البيانات ومقر الامتحان' : 'Personal & Exam'}
                 </TabsTrigger>
                 <TabsTrigger
+                  value="contact"
+                  className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition-all hover:text-foreground cursor-pointer data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/40 data-[state=active]:shadow-xs h-7.5"
+                >
+                  <Phone className="h-3.5 w-3.5 me-1.5 inline" />
+                  {isAr ? 'العنوان وولي الأمر وبيانات الاتصال' : 'Contact & Guardians'}
+                </TabsTrigger>
+                <TabsTrigger
                   value="complaints"
                   className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition-all hover:text-foreground cursor-pointer data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:border data-[state=active]:border-primary/40 data-[state=active]:shadow-xs h-7.5"
                 >
@@ -894,6 +904,106 @@ export function StudentDetailDialog({
                     <InfoItem label={isAr ? 'تاريخ الإنشاء' : 'Created At'} value={formatDate(student.createdAt, locale)} />
                     <InfoItem label={isAr ? 'تاريخ التحديث' : 'Updated At'} value={formatDate(student.updatedAt, locale)} />
                   </div>
+                </section>
+              </TabsContent>
+
+              {/* TAB: CONTACT & GUARDIANS */}
+              <TabsContent value="contact" className="mt-4 space-y-4">
+                <section>
+                  <SectionTitle icon={<Phone className="h-4 w-4" />} title={isAr ? 'بيانات الاتصال والعنوان السكني' : 'Contact & Address Information'} />
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <InfoItem
+                      label={isAr ? 'رقم هاتف الطالب' : 'Student Phone'}
+                      value={
+                        (student.phone || userRef?.phone) ? (
+                          <div className="flex items-center gap-1.5">
+                            <bdi dir="ltr" className="font-mono text-xs font-semibold text-foreground">
+                              {student.phone || userRef?.phone}
+                            </bdi>
+                            <CopyButton
+                              value={student.phone || userRef?.phone || ''}
+                              className="h-6 w-6 p-1 rounded-squircle"
+                              successMessage={isAr ? 'تم نسخ رقم الهاتف' : 'Phone copied'}
+                            />
+                          </div>
+                        ) : '—'
+                      }
+                    />
+                    <InfoItem
+                      label={isAr ? 'البريد الأكاديمي' : 'Academic Email'}
+                      value={
+                        (student.academicEmail || academicEmail?.academicEmail) ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs text-foreground truncate max-w-[200px]">
+                              {student.academicEmail || academicEmail?.academicEmail}
+                            </span>
+                            <CopyButton
+                              value={student.academicEmail || academicEmail?.academicEmail || ''}
+                              className="h-6 w-6 p-1 rounded-squircle"
+                              successMessage={isAr ? 'تم نسخ البريد' : 'Email copied'}
+                            />
+                          </div>
+                        ) : '—'
+                      }
+                    />
+                    <InfoItem
+                      label={isAr ? 'العنوان السكني' : 'Residential Address'}
+                      value={
+                        student.address ? (
+                          <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+                            <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span>{student.address}</span>
+                          </div>
+                        ) : '—'
+                      }
+                    />
+                  </div>
+                </section>
+
+                <section>
+                  <SectionTitle icon={<Users className="h-4 w-4" />} title={isAr ? 'بيانات أولياء الأمور والوصي' : 'Guardians & Emergency Contacts'} />
+                  {student.guardians && student.guardians.length > 0 ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {student.guardians.map((guardian, idx) => (
+                        <div
+                          key={idx}
+                          className="rounded-xl border border-border/60 bg-surface/40 p-3.5 space-y-2 hover:border-border transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-squircle bg-primary/10 text-primary">
+                                <Users className="h-3.5 w-3.5" />
+                              </div>
+                              <span className="font-semibold text-sm text-foreground">
+                                {guardian.name}
+                              </span>
+                            </div>
+                            <span className="rounded-squircle px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                              {guardian.relation}
+                            </span>
+                          </div>
+                          <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{isAr ? 'رقم الهاتف:' : 'Phone:'}</span>
+                            <div className="flex items-center gap-1.5">
+                              <bdi dir="ltr" className="font-mono font-semibold text-foreground">
+                                {guardian.phone}
+                              </bdi>
+                              <CopyButton
+                                value={guardian.phone}
+                                className="h-6 w-6 p-1 rounded-squircle"
+                                successMessage={isAr ? 'تم نسخ رقم ولي الأمر' : 'Guardian phone copied'}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border/50 bg-surface/20 p-6 text-center text-xs text-muted-foreground">
+                      <Users className="h-6 w-6 mx-auto mb-2 text-muted-foreground/60" />
+                      <span>{isAr ? 'لا توجد بيانات مسجلة لأولياء الأمور' : 'No guardian data recorded'}</span>
+                    </div>
+                  )}
                 </section>
               </TabsContent>
 

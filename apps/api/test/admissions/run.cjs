@@ -1,4 +1,4 @@
-const { spawn, spawnSync } = require('node:child_process');
+﻿const { spawn, spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 function validateUri(uri) {
@@ -14,11 +14,14 @@ async function main() {
     await client.connect();
     const hello = await client.db().admin().command({ hello: 1 });
     if (hello.setName !== 'admissions-test') throw new Error('Wrong replica set.');
+    // This fixture is dedicated to this serial runner. Interrupted transactions
+    // must not leave synthetic owners that affect the next high-water scan.
+    await client.db().dropDatabase();
   } finally { await client.close(); }
   const api = path.resolve(__dirname, '../..');
   const shared = spawnSync(process.execPath, [path.join(api, 'node_modules/typescript/bin/tsc'), '-p', path.resolve(api, '../../packages/shared/tsconfig.json')], { stdio: 'inherit' });
   if (shared.status !== 0) throw new Error('Shared build failed.');
-  const env = { ...process.env, NODE_ENV: 'test', MONGODB_URI: uri, REDIS_URL: 'redis://127.0.0.1:63792', CLIENT_URL: 'http://localhost:3000', JWT_SECRET: 'synthetic-admissions-tests-only-at-least-32-bytes', MONGODB_MAX_POOL_SIZE: '30', MONGODB_MIN_POOL_SIZE: '1', QUEUE_WORKERS_ENABLED: 'false', RUN_STARTUP_TASKS: 'false', QUEUE_REQUIRED: 'false', DNS_SERVERS: '', FIREBASE_PROJECT_ID: '', FIREBASE_CLIENT_EMAIL: '', FIREBASE_PRIVATE_KEY: '', RESEND_API_KEY: '', SMTP_USER: '', SMTP_PASS: '', COOKIE_DOMAIN: '', COOKIE_SAME_SITE: 'lax' };
+  const env = { ...process.env, NODE_ENV: 'test', MONGODB_URI: uri, REDIS_URL: 'redis://127.0.0.1:63792', CLIENT_URL: 'http://localhost:3000', JWT_SECRET: 'synthetic-admissions-tests-only-at-least-32-bytes', ADMISSIONS_HMAC_KEY: 'synthetic-admission-hmac-not-for-production', ADMISSIONS_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'), TURNSTILE_SECRET_KEY: '', TURNSTILE_HOSTNAMES: 'localhost', MONGODB_MAX_POOL_SIZE: '30', MONGODB_MIN_POOL_SIZE: '1', QUEUE_WORKERS_ENABLED: 'false', RUN_STARTUP_TASKS: 'false', QUEUE_REQUIRED: 'false', DNS_SERVERS: '', FIREBASE_PROJECT_ID: '', FIREBASE_CLIENT_EMAIL: '', FIREBASE_PRIVATE_KEY: '', RESEND_API_KEY: '', SMTP_USER: '', SMTP_PASS: '', COOKIE_DOMAIN: '', COOKIE_SAME_SITE: 'lax' };
   const child = spawn(process.execPath, ['--experimental-vm-modules', '--no-warnings', path.join(api, 'node_modules/jest/bin/jest.js'), '--config', path.join(__dirname, 'jest.config.cjs'), '--runInBand', ...process.argv.slice(2).filter((arg) => arg !== '--' && arg !== '--runInBand')], { stdio: 'inherit', env });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
   child.on('error', () => { process.exitCode = 1; });

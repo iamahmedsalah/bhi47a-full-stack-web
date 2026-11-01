@@ -36,6 +36,9 @@ import { normalizeSearchTerm } from '../../common/utils/search.util';
 import { AppLoggerService } from '../../core/logger/logger.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { defaultPasswordHasher } from '../../security/password-hasher';
+import { randomUUID } from 'node:crypto';
+import { isEmail } from 'class-validator';
+import { resolveEmailLanguage } from '../emails/templates/email-content';
 
 @Injectable()
 export class ComplaintsService {
@@ -318,7 +321,12 @@ export class ComplaintsService {
       studentName: student.name,
       requesterName: publicContact?.requesterName ?? student.name,
       contactPhone: publicContact?.contactPhone ?? student.phone,
-      contactEmail: publicContact?.contactEmail ?? student.email,
+      contactEmail:
+        publicContact?.contactEmail ||
+        (student.googleId && !student.googleLinkPending
+          ? student.googleEmail
+          : undefined),
+      notificationLocale: resolveEmailLanguage(acceptLanguage),
       nationalId: publicContact?.nationalId ?? student.nationalId,
       nationalIdMasked:
         publicContact?.nationalIdMasked ??
@@ -608,8 +616,14 @@ export class ComplaintsService {
       .lean();
   }
 
-  async findOne(id: string): Promise<ComplaintDocument> {
-    const ticket = await this.complaintModel.findById(id);
+  async findOne(
+    id: string,
+    includeDeliveryState = false,
+  ): Promise<ComplaintDocument> {
+    const query = this.complaintModel.findById(id);
+    const ticket = await (includeDeliveryState
+      ? query.select('+replyEmailEvents')
+      : query);
     if (!ticket) {
       throw new NotFoundException('الشكوى غير موجودة'); // Ticket not found
     }
@@ -737,7 +751,7 @@ export class ComplaintsService {
     senderId: string,
     senderRole: 'admin' | 'staff' | 'student',
   ): Promise<ComplaintDocument> {
-    const ticket = await this.findOne(id);
+    const ticket = await this.findOne(id, true);
 
     // Validate student owns ticket if sender is student
     if (senderRole === 'student' && ticket.studentId.toString() !== senderId) {
@@ -769,6 +783,31 @@ export class ComplaintsService {
       message: dto.message,
       createdAt: new Date(),
     });
+
+    if (
+      senderRole !== 'student' &&
+      process.env.COMPLAINT_REPLY_EMAILS_ENABLED === 'true'
+    ) {
+      let recipient = ticket.contactEmail?.trim().toLowerCase() || '';
+      if (!recipient) {
+        const owner = await this.userModel.findById(ticket.studentId);
+        if (owner?.googleId && !owner.googleLinkPending) {
+          recipient = owner.googleEmail?.trim().toLowerCase() || '';
+        }
+      }
+      if (isEmail(recipient)) {
+        ticket.replyEmailEvents ??= [];
+        ticket.replyEmailEvents.push({
+          eventKey: `complaint-reply-${randomUUID()}`,
+          to: recipient,
+          lang: ticket.notificationLocale ?? 'ar',
+          status: 'pending',
+          attempts: 0,
+          createdAt: new Date(),
+          nextAttemptAt: new Date(),
+        });
+      }
+    }
 
     // Auto-update status to resolved/in-progress if admin replies, optional but premium touch
     if (senderRole !== 'student' && ticket.status === 'open') {
@@ -880,11 +919,11 @@ export class ComplaintsService {
     return { success: true, deletedCount: result.deletedCount };
   }
 
-  async queryPublicTicket(dto: PublicQueryComplaintDto) {
+  private async verifyPublicIdentity(studentCode: string, nationalId: string) {
     const student = await this.userModel
       .findOne({
         role: 'student',
-        studentCode: dto.studentCode.trim(),
+        studentCode: studentCode.trim(),
         isActive: true,
       })
       .select('+nationalIdHash +nationalId');
@@ -892,10 +931,10 @@ export class ComplaintsService {
     const nationalIdMatches = student
       ? student.nationalIdHash
         ? await defaultPasswordHasher.verify(
-            dto.nationalId.trim(),
+            nationalId.trim(),
             student.nationalIdHash,
           )
-        : student.nationalId === dto.nationalId.trim()
+        : student.nationalId === nationalId.trim()
       : false;
 
     if (!student || !nationalIdMatches) {
@@ -903,6 +942,14 @@ export class ComplaintsService {
         'بيانات التحقق غير صحيحة، يرجى التأكد من كود الطالب والرقم القومي / Verification failed',
       );
     }
+    return student;
+  }
+
+  async queryPublicTicket(dto: PublicQueryComplaintDto) {
+    const student = await this.verifyPublicIdentity(
+      dto.studentCode,
+      dto.nationalId,
+    );
 
     const filter: FilterQuery<ComplaintDocument> = {
       studentCode: student.studentCode,
@@ -967,6 +1014,13 @@ export class ComplaintsService {
   }
 
   async publicReply(dto: PublicReplyComplaintDto) {
+    // A ticket reference and student code are not proof of ownership.
+    if (!dto.nationalId)
+      throw new BadRequestException('Identity verification is required');
+    const student = await this.verifyPublicIdentity(
+      dto.studentCode,
+      dto.nationalId,
+    );
     const formattedTicketNumber = dto.ticketNumber.trim().toUpperCase();
     const ticket = await this.complaintModel.findOne({
       ticketNumber: formattedTicketNumber,
@@ -978,7 +1032,10 @@ export class ComplaintsService {
       );
     }
 
-    if (ticket.studentCode !== dto.studentCode.trim()) {
+    if (
+      ticket.studentCode !== student.studentCode ||
+      String(ticket.studentId) !== String(student._id)
+    ) {
       throw new BadRequestException(
         'كود الطالب غير مطابق لبيانات التذكرة / Student code verification failed',
       );

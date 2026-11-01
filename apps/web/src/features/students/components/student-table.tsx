@@ -24,6 +24,9 @@ import { TableCell } from '@/components/ui/table';
 import { CopyButton } from '@/components/ui/copy-button';
 import { CustomDropdown, type CustomDropdownOption } from '@/components/ui/custom-dropdown';
 import { useAuth } from '@/providers/auth-provider';
+import { deleteStudent } from '../api';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/lib/api';
 
 export interface StudentUserRef {
   isActive?: boolean;
@@ -43,6 +46,8 @@ export interface Student {
   nationalIdMasked?: string;
   nationalId?: string;
   phone?: string;
+  address?: string;
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -161,6 +166,8 @@ export function StudentTable({
   const canResetPassword = isAdmin || Boolean(user?.permissions?.includes('students.reset_password'));
   const canAdvising = isAdmin || Boolean(user?.permissions?.includes('advising.read')) || Boolean(user?.permissions?.includes('advising.write'));
   const [studentToDeactivate, setStudentToDeactivate] = React.useState<Student | null>(null);
+  const [studentToDelete, setStudentToDelete] = React.useState<Student | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const columns: ColumnDef<Student>[] = [
     {
@@ -416,6 +423,19 @@ export function StudentTable({
                   },
                 ]
             : []),
+          ...(isAdmin
+            ? [
+                {
+                  value: 'delete',
+                  label: (
+                    <div className="flex items-center gap-2 text-xs py-0.5 text-danger font-medium">
+                      <Trash2 className="h-3.5 w-3.5 text-danger" />
+                      <span>{locale === 'ar' ? 'حذف الطالب نهائياً' : 'Delete Student'}</span>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
         ];
 
         return (
@@ -434,6 +454,7 @@ export function StudentTable({
                   else if (val === 'advising') router.push(`/${locale}/admin/academic-advising?student=${student.studentCode}`);
                   else if (val === 'deactivate') setStudentToDeactivate(student);
                   else if (val === 'activate') onActivateStudent(student);
+                  else if (val === 'delete') setStudentToDelete(student);
                 }}
                 className="h-8 w-8 min-w-8 p-0 justify-center rounded-lg border border-border/60 hover:bg-primary/10 hover:border-primary/40 [&>svg]:hidden cursor-pointer"
                 menuClassName="w-52"
@@ -515,6 +536,47 @@ export function StudentTable({
           if (studentToDeactivate) {
             onDeactivateStudent([studentToDeactivate._id]);
             setStudentToDeactivate(null);
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(studentToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setStudentToDelete(null);
+        }}
+        title={locale === 'ar' ? 'حذف الطالب نهائياً' : 'Delete Student Permanently'}
+        description={
+          locale === 'ar'
+            ? `هل أنت متأكد من حذف الطالب "${studentToDelete?.fullNameAr || studentToDelete?.fullName}" (${studentToDelete?.studentCode}) نهائياً؟ سيتم إزالة حسابه وجميع بياناته وسجلاته الأكاديمية ولا يمكن التراجع عن هذا الإجراء.`
+            : `Are you sure you want to permanently delete student "${studentToDelete?.fullName}" (${studentToDelete?.studentCode})? All academic records and account data will be permanently removed.`
+        }
+        confirmLabel={locale === 'ar' ? 'حذف نهائي' : 'Delete Permanently'}
+        cancelLabel={tCommon('cancel')}
+        destructive
+        disabled={isDeleting}
+        onConfirm={async () => {
+          if (!studentToDelete) return;
+          setIsDeleting(true);
+          try {
+            await deleteStudent(studentToDelete._id);
+            toast.success(
+              locale === 'ar'
+                ? 'تم حذف الطالب بنجاح'
+                : 'Student deleted successfully',
+            );
+            setStudentToDelete(null);
+            onRetry();
+          } catch (e) {
+            toast.error(
+              getApiErrorMessage(
+                e,
+                locale === 'ar'
+                  ? 'تعذر حذف الطالب'
+                  : 'Failed to delete student',
+              ),
+            );
+          } finally {
+            setIsDeleting(false);
           }
         }}
       />

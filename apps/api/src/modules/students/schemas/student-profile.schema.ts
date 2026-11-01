@@ -37,6 +37,18 @@ export class StudentProfile {
   academicEmail?: string;
 
   @Prop({ trim: true })
+  phone?: string;
+
+  @Prop({ trim: true })
+  address?: string;
+
+  @Prop({
+    type: [{ name: String, relation: String, phone: String }],
+    default: [],
+  })
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
+
+  @Prop({ trim: true })
   department?: string;
 
   @Prop({ type: Number, min: 0, default: 0 })

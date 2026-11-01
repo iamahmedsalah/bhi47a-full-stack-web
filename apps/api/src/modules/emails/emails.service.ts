@@ -19,6 +19,16 @@ interface EmailJob {
   subject: string;
   text?: string;
   html?: string;
+  from?: string;
+  replyTo?: string;
+  idempotencyKey?: string;
+}
+
+/** Internal service options, deliberately absent from the public SendEmailDto. */
+export interface TransactionalEmailOptions {
+  from: string;
+  replyTo: string;
+  eventKey: string;
 }
 
 type SmtpCode = 220 | 221 | 235 | 250 | 334 | 354;
@@ -117,6 +127,48 @@ export class EmailsService implements OnModuleInit {
     return createPaginatedResult(items, total, page, limit);
   }
 
+  // Used by the durable complaint dispatcher, outside the HTTP request and
+  // independent of BullMQ being enabled. Never silently simulate these emails.
+  async sendTransactional(
+    dto: SendEmailDto,
+    options: TransactionalEmailOptions,
+  ) {
+    if (!this.resend && !this.isSmtpConfigured()) {
+      throw new Error('Email provider is not configured');
+    }
+    if (/[\r\n]/.test(options.from + options.replyTo)) {
+      throw new Error('Invalid email headers');
+    }
+    const log = await this.emailLogModel.findOneAndUpdate(
+      { eventKey: options.eventKey },
+      {
+        $setOnInsert: {
+          to: dto.to,
+          subject: dto.subject,
+          text: dto.text,
+          html: dto.html,
+          event: dto.event,
+          eventKey: options.eventKey,
+          from: options.from,
+          replyTo: options.replyTo,
+          status: 'pending',
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    if (log.status === 'sent') return;
+    await this.deliverEmail({
+      emailLogId: log._id.toString(),
+      to: log.to,
+      subject: log.subject,
+      text: log.text,
+      html: log.html,
+      from: log.from,
+      replyTo: log.replyTo,
+      idempotencyKey: options.eventKey,
+    });
+  }
+
   private async deliverEmail(data: EmailJob) {
     try {
       const providerId = this.isSmtpConfigured()
@@ -153,20 +205,23 @@ export class EmailsService implements OnModuleInit {
 
     const payload = data.html
       ? {
-          from: this.fromEmail,
+          from: data.from || this.fromEmail,
           to: data.to,
           subject: data.subject,
           html: data.html,
           ...(data.text ? { text: data.text } : {}),
         }
       : {
-          from: this.fromEmail,
+          from: data.from || this.fromEmail,
           to: data.to,
           subject: data.subject,
           text: data.text || '',
         };
 
-    const response = await this.resend.emails.send(payload);
+    const response = await this.resend.emails.send(
+      { ...payload, ...(data.replyTo ? { replyTo: data.replyTo } : {}) },
+      data.idempotencyKey ? { idempotencyKey: data.idempotencyKey } : undefined,
+    );
 
     if (response.error) {
       throw new Error(response.error.message);
@@ -245,7 +300,7 @@ export class EmailsService implements OnModuleInit {
       await sendCommand(Buffer.from(this.smtpUser).toString('base64'), [334]);
       await sendCommand(Buffer.from(this.smtpPass).toString('base64'), [235]);
       await sendCommand(
-        `MAIL FROM:<${this.extractEmailAddress(this.fromEmail)}>`,
+        `MAIL FROM:<${this.extractEmailAddress(data.from || this.fromEmail)}>`,
         [250],
       );
       for (const recipient of data.to) {
@@ -289,7 +344,8 @@ export class EmailsService implements OnModuleInit {
   private buildMimeMessage(data: EmailJob) {
     const boundary = `student-portal-${Date.now()}`;
     const headers = [
-      `From: ${this.fromEmail}`,
+      `From: ${data.from || this.fromEmail}`,
+      ...(data.replyTo ? [`Reply-To: ${data.replyTo}`] : []),
       `To: ${data.to.join(', ')}`,
       `Subject: ${this.encodeHeader(data.subject)}`,
       'MIME-Version: 1.0',

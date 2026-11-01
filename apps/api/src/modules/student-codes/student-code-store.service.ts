@@ -117,17 +117,23 @@ export class StudentCodeStore {
       .session(session ?? null)
       .lean<CodeProfile[]>();
     const entries = await this.entries
-      .find({ $or: [{ yearPrefix: prefix }, { academicYear }] })
+      .find({ yearPrefix: prefix })
       .sort({ studentCode: 1 })
       .limit(SCAN_LIMIT)
       .session(session ?? null)
       .lean();
     const policy = await this.years
-      .findOne({ $or: [{ academicYear }, { yearPrefix: prefix }] })
+      .findOne({
+        $or: [
+          { academicYear },
+          { allocationPrefix: prefix },
+          { allocationPrefix: { $exists: false }, yearPrefix: prefix },
+        ],
+      })
       .session(session ?? null)
       .lean();
     const period = await this.periods
-      .exists({ academicYear })
+      .exists({ academicYear, deletedAt: { $exists: false } })
       .session(session ?? null);
     const truncated = [users, profiles, entries].some(
       (items) => items.length === SCAN_LIMIT,

@@ -46,6 +46,10 @@ export class AdmissionPeriod {
 
   @Prop({ default: 0, min: 0 })
   revision!: number;
+  @Prop({ default: 0 }) accessRevision!: number;
+  @Prop() deletedAt?: Date;
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User' })
+  deletedBy?: Types.ObjectId;
 
   @Prop({ type: [PeriodHistorySchema], select: false, default: [] })
   history!: PeriodHistory[];

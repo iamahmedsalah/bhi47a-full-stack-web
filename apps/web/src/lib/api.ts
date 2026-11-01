@@ -390,6 +390,34 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'بيانات الطلب غير صالحة، يرجى مراجعة المدخلات',
     en: 'Invalid request data. Please check your inputs',
   },
+  'Invitation expiry must fall inside the admission period': {
+    ar: 'تاريخ انتهاء صلاحية الدعوة يجب أن يقع ضمن فترة القبول المحددة',
+    en: 'Invitation expiry must fall inside the admission period',
+  },
+  'Admission encryption must be configured before accepting applications': {
+    ar: 'يجب ضبط مفاتيح تشفير القبول في الخادم قبل إنشاء الدعوات',
+    en: 'Admission encryption must be configured before accepting applications',
+  },
+  'Admission encryption must be configured before accepting applications.': {
+    ar: 'يجب ضبط مفاتيح تشفير القبول في الخادم قبل إنشاء الدعوات',
+    en: 'Admission encryption must be configured before accepting applications',
+  },
+  'Admission security keys must be configured before accepting applications': {
+    ar: 'يجب ضبط مفاتيح أمان القبول في الخادم قبل قبول الطلبات',
+    en: 'Admission security keys must be configured before accepting applications',
+  },
+  'Admission security keys must be configured before accepting applications.': {
+    ar: 'يجب ضبط مفاتيح أمان القبول في الخادم قبل قبول الطلبات',
+    en: 'Admission security keys must be configured before accepting applications',
+  },
+  'An active invitation already uses this PIN. Choose another PIN or generate one automatically': {
+    ar: 'توجد دعوة نشطة تستخدم رمز الدخول (PIN) هذا بالفعل. يرجى اختيار رمز آخر أو تركه فارغاً لإنشائه تلقائياً',
+    en: 'An active invitation already uses this PIN. Choose another PIN or generate one automatically',
+  },
+  'Admission period not found': {
+    ar: 'فترة القبول المحددة غير موجودة',
+    en: 'Admission period not found',
+  },
 };
 
 const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>(

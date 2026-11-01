@@ -355,6 +355,11 @@ export class SearchStudentQuery {
   @IsString()
   department?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by study group' })
+  @IsOptional()
+  @IsString()
+  group?: string;
+
   @ApiPropertyOptional({
     enum: ['active', 'inactive', 'graduated', 'suspended'],
   })

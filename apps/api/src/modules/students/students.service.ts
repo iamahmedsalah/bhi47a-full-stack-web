@@ -401,6 +401,85 @@ export class StudentsService {
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
 
+  async deleteStudent(id: string) {
+    let profile = Types.ObjectId.isValid(id)
+      ? await this.studentProfileModel.findById(id)
+      : null;
+
+    if (!profile) {
+      const orConditions: Record<string, any>[] = [{ studentCode: id }];
+      if (Types.ObjectId.isValid(id)) {
+        orConditions.push({ userId: new Types.ObjectId(id) });
+      }
+      profile = await this.studentProfileModel.findOne({ $or: orConditions });
+    }
+
+    if (!profile) {
+      throw new NotFoundException('الطالب غير موجود');
+    }
+
+    const userId = profile.userId;
+    const studentCode = profile.studentCode;
+
+    if (profile.group) {
+      try {
+        await this.studentProfileModel.db
+          .collection('admission_groups')
+          .updateOne(
+            {
+              $or: [{ name: profile.group }, { nameAr: profile.group }],
+              enrolled: { $gt: 0 },
+            },
+            { $inc: { enrolled: -1 } },
+          );
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      const admissionReq = await this.studentProfileModel.db
+        .collection('admission_requests')
+        .findOne({ studentCode });
+      if (admissionReq?.groupId) {
+        await this.studentProfileModel.db
+          .collection('admission_groups')
+          .updateOne(
+            { _id: admissionReq.groupId, enrolled: { $gt: 0 } },
+            { $inc: { enrolled: -1 } },
+          );
+      }
+      await this.studentProfileModel.db
+        .collection('admission_requests')
+        .deleteMany({ studentCode });
+    } catch {
+      // ignore
+    }
+
+    await this.studentProfileModel.findByIdAndDelete(profile._id);
+
+    if (userId) {
+      await this.studentProfileModel.db
+        .collection('users')
+        .deleteOne({ _id: userId });
+    }
+
+    await Promise.allSettled([
+      this.academicProfileModel.deleteMany({ studentId: userId }),
+      this.registrationModel.deleteMany({ studentId: userId }),
+      this.advisingCaseModel.deleteMany({ studentId: userId }),
+      this.studentProfileModel.db
+        .collection('student_codes')
+        .updateMany(
+          { currentStudentId: userId?.toString() },
+          { $set: { status: 'AVAILABLE', currentStudentId: null } },
+        ),
+    ]);
+
+    this.invalidateStatsCache();
+    return { success: true, message: 'تم حذف الطالب وجميع سجلاته بنجاح' };
+  }
+
   async resetPassword(
     id: string,
     dto: ResetPasswordDto,

@@ -54,3 +54,8 @@ build_import_files.mjs
 !/scripts/performance-ui.browser.cjs
 !/scripts/performance-evidence.mjs
 !/scripts/performance-evidence.test.mjs
+
+# Complaint email rollout and reproducible template previews.
+!/docs/complaint-reply-emails.md
+!/scripts/ensure-complaint-email-indexes.cjs
+!/scripts/preview-transactional-emails.cjs

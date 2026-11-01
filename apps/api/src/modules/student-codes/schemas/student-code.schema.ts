@@ -67,15 +67,17 @@ StudentCodeEntrySchema.index({ yearPrefix: 1, studentCode: 1 });
 export class StudentCodeYear {
   @Prop({ required: true, immutable: true }) academicYear!: string;
   @Prop({ required: true, immutable: true }) yearPrefix!: string;
+  /** Corrected allocation policy; the original mapping remains readable for audits. */
+  @Prop() allocationPrefix?: string;
   @Prop({ required: true, min: 1, max: 10000 }) nextSequence!: number;
   @Prop({ default: 0, min: 0 }) revision!: number;
   @Prop({ required: true, immutable: true }) initializedAt!: Date;
   @Prop({
     type: MongooseSchema.Types.ObjectId,
-    required: true,
+    required: false,
     immutable: true,
   })
-  initializedBy!: Types.ObjectId;
+  initializedBy?: Types.ObjectId;
   @Prop({ required: true, immutable: true }) initializationReason!: string;
 }
 export type StudentCodeYearDocument = HydratedDocument<StudentCodeYear>;
@@ -83,6 +85,10 @@ export const StudentCodeYearSchema =
   SchemaFactory.createForClass(StudentCodeYear);
 StudentCodeYearSchema.index({ academicYear: 1 }, { unique: true });
 StudentCodeYearSchema.index({ yearPrefix: 1 }, { unique: true });
+StudentCodeYearSchema.index(
+  { allocationPrefix: 1 },
+  { unique: true, sparse: true },
+);
 
 @Schema({ collection: 'student_code_audit_logs', timestamps: false })
 export class StudentCodeAuditLog {
@@ -95,6 +101,8 @@ export class StudentCodeAuditLog {
       'ASSIGNED',
       'RECOVERED',
       'MARKED_REVIEW',
+      'CANCELLED_CODE_HELD',
+      'MAPPING_CORRECTED',
     ],
     required: true,
     immutable: true,

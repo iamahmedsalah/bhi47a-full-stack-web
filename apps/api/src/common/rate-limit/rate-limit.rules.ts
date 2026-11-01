@@ -28,6 +28,32 @@ function identityKey(...parts: Array<string | undefined>): string | undefined {
 
 export const rateLimitRules: RateLimitRule[] = [
   {
+    name: 'public-admissions-ip',
+    methods: ['POST'],
+    pattern: /^\/api\/public\/admissions\/(validate|requests|status)$/,
+    windowMs: minute,
+    max: readLimit('ADMISSIONS_IP_RATE_LIMIT', 120),
+    message: 'Too many admission requests. Please wait and retry.',
+  },
+  {
+    name: 'public-admissions-invitation',
+    methods: ['POST'],
+    pattern: /^\/api\/public\/admissions\/validate$/,
+    windowMs: 15 * minute,
+    max: readLimit('ADMISSIONS_ACCESS_RATE_LIMIT', 120),
+    message: 'Too many invitation attempts. Please wait and retry.',
+    keyGenerator: (req) => readBodyString(req, 'accessId'),
+  },
+  {
+    name: 'public-admissions-status',
+    methods: ['POST'],
+    pattern: /^\/api\/public\/admissions\/status$/,
+    windowMs: minute,
+    max: 20,
+    message: 'Too many status checks. Please wait and retry.',
+    keyGenerator: (req) => readBodyString(req, 'publicReference'),
+  },
+  {
     name: 'google-nonce',
     methods: ['POST'],
     pattern: /^\/api\/auth\/google\/nonce$/,

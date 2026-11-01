@@ -9,6 +9,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintsController } from './complaints.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { EmailsModule } from '../emails/emails.module';
+import { ComplaintReplyEmailService } from './complaint-reply-email.service';
 
 @Module({
   imports: [
@@ -18,9 +20,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
       { name: User.name, schema: UserSchema },
     ]),
     NotificationsModule,
+    EmailsModule,
   ],
   controllers: [ComplaintsController],
-  providers: [ComplaintsService],
+  providers: [ComplaintsService, ComplaintReplyEmailService],
   exports: [ComplaintsService],
 })
 export class ComplaintsModule {}

@@ -43,8 +43,11 @@ export function CopyButton({
     <button
       type="button"
       onClick={handleCopy}
+      title={label || 'نسخ'}
+      aria-label={label || 'نسخ'}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all shadow-xs cursor-pointer',
+        'inline-flex items-center justify-center gap-1.5 rounded-squircle border text-xs font-semibold transition-all shadow-xs cursor-pointer',
+        label ? 'px-2.5 py-1.5' : 'p-1.5 h-7 w-7',
         copied
           ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-500'
           : 'border-border/80 bg-background/80 text-foreground hover:border-primary/50 hover:bg-background hover:text-primary',

@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+﻿import { Test } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types, type ClientSession, type Model } from 'mongoose';
@@ -85,7 +85,7 @@ describe('Student-code registry on the isolated replica set', () => {
 
   async function year() {
     const yearPrefix = String(nextPrefix++);
-    const academicYear = `20${yearPrefix}-20${Number(yearPrefix) + 1}`;
+    const academicYear = `20${Number(yearPrefix) - 1}-20${yearPrefix}`;
     ownedYears.push(academicYear);
     await store.periods.create({
       code: `SYNTH-${yearPrefix}`,

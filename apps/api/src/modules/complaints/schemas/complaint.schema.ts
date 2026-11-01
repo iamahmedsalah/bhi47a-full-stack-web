@@ -23,6 +23,34 @@ class ReplyEntry {
 
 const ReplyEntrySchema = SchemaFactory.createForClass(ReplyEntry);
 
+// Persisted with the reply so delivery can recover after a process restart.
+@Schema()
+export class ReplyEmailEvent {
+  @Prop({ required: true })
+  eventKey!: string;
+  @Prop({ required: true })
+  to!: string;
+  @Prop({ type: String, enum: ['ar', 'en'], required: true })
+  lang!: 'ar' | 'en';
+  @Prop({
+    type: String,
+    enum: ['pending', 'processing', 'sent', 'failed'],
+    default: 'pending',
+  })
+  status!: 'pending' | 'processing' | 'sent' | 'failed';
+  @Prop({ default: 0 })
+  attempts!: number;
+  @Prop({ default: Date.now })
+  createdAt!: Date;
+  @Prop({ default: Date.now })
+  nextAttemptAt!: Date;
+  @Prop()
+  leaseId?: string;
+  @Prop()
+  leaseUntil?: Date;
+}
+const ReplyEmailEventSchema = SchemaFactory.createForClass(ReplyEmailEvent);
+
 @Schema()
 class InternalNoteEntry {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
@@ -86,6 +114,12 @@ export class Complaint {
 
   @Prop()
   contactEmail?: string;
+
+  @Prop({ type: String, enum: ['ar', 'en'] })
+  notificationLocale?: 'ar' | 'en';
+
+  @Prop({ type: [ReplyEmailEventSchema], default: [], select: false })
+  replyEmailEvents!: ReplyEmailEvent[];
 
   @Prop()
   nationalId?: string;
@@ -180,6 +214,16 @@ export class Complaint {
 
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);
 
+// Internal delivery state must not be included in complaint API responses.
+for (const output of ['toJSON', 'toObject'] as const) {
+  ComplaintSchema.set(output, {
+    transform: (_document, value) => {
+      Reflect.deleteProperty(value, 'replyEmailEvents');
+      return value;
+    },
+  });
+}
+
 // Supports the default paginated admin list without a blocking in-memory sort.
 ComplaintSchema.index({ createdAt: -1, _id: -1 });
 ComplaintSchema.index({ status: 1 });
@@ -192,3 +236,7 @@ ComplaintSchema.index({ studentId: 1, createdAt: -1 });
 ComplaintSchema.index({ assignedGroup: 1 });
 ComplaintSchema.index({ assignedStaffId: 1 });
 ComplaintSchema.index({ assignedStaffId: 1, status: 1 });
+ComplaintSchema.index({
+  'replyEmailEvents.status': 1,
+  'replyEmailEvents.nextAttemptAt': 1,
+});

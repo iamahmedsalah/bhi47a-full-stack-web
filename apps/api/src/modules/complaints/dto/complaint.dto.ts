@@ -372,11 +372,12 @@ export class PublicReplyComplaintDto {
   @IsNotEmpty({ message: 'كود الطالب مطلوب' })
   studentCode!: string;
 
-  @ApiPropertyOptional({ example: '29100000000000' })
+  @ApiProperty({ example: '29100000000000' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @IsOptional()
-  nationalId?: string;
+  @IsNotEmpty()
+  @Matches(/^\d{14}$/)
+  nationalId!: string;
 
   @ApiProperty({ example: 'أرجو التكرم بالرد ومتابعة المشكلة' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

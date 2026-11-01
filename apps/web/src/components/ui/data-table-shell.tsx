@@ -5,6 +5,7 @@ import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Inbox, Loader2 } from 'lu
 import { getApiErrorDetails } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { GlassCard } from '@/components/ui/glass-card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -214,15 +215,11 @@ export function DataTableShell<T>({
               <TableRow className="hover:bg-transparent">
                 {enableSelection && (
                   <TableHead className="w-12 px-4 py-3 text-center">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label="Select all rows"
-                      checked={isAllSelected}
-                      ref={(element) => {
-                        if (element) element.indeterminate = isSomeSelected;
-                      }}
-                      onChange={toggleAll}
-                      className="h-4 w-4 cursor-pointer appearance-none rounded-full border border-border bg-surface transition-all checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      checked={isAllSelected ? true : isSomeSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleAll}
+                      className="mx-auto"
                     />
                   </TableHead>
                 )}
@@ -286,12 +283,11 @@ export function DataTableShell<T>({
                   >
                     {enableSelection && (
                       <td className="w-12 px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label="Select row"
                           checked={isSelected}
-                          onChange={() => toggleOne(key)}
-                          className="h-4 w-4 cursor-pointer appearance-none rounded-full border border-border bg-surface transition-all checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                          onCheckedChange={() => toggleOne(key)}
+                          className="mx-auto"
                         />
                       </td>
                     )}

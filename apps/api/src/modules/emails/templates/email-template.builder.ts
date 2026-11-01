@@ -8,7 +8,7 @@ function escapeHtml(value: string | undefined | null): string {
     .replace(/'/g, '&#039;');
 }
 
-/** Base Email Wrapper with High-Fidelity Institute Header & Official Footer */
+/** Table-based layout with inline styles for Gmail, Outlook and mobile clients. */
 function renderBaseEmailLayout({
   preheader,
   headerTitle,
@@ -42,11 +42,11 @@ function renderBaseEmailLayout({
   const defaultFooter = isAr
     ? `
       <div style="font-weight:700;color:#334155;">المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47A) &copy; ${new Date().getFullYear()}</div>
-      <div style="margin-top:6px;color:#64748b;font-size:10px;line-height:1.5;">هذه الرسالة إلكترونية رسمية ومعتمدة من نظام البوابة الطلابية، يرجى عدم الرد المباشر على هذا البريد.</div>
+      <div style="margin-top:8px;color:#64748b;font-size:12px;line-height:1.7;">رسالة آلية من بوابة الطالب. للمساعدة: <a href="mailto:support@bhi47.app" style="color:#0f766e;">support@bhi47.app</a></div>
     `
     : `
       <div style="font-weight:700;color:#334155;">Higher Institute for Advanced Administrative Sciences &amp; Computer (BHI47A) &copy; ${new Date().getFullYear()}</div>
-      <div style="margin-top:6px;color:#64748b;font-size:10px;line-height:1.5;">This is an automated official email notification from the Student Portal system. Please do not reply directly.</div>
+      <div style="margin-top:8px;color:#64748b;font-size:12px;line-height:1.7;">An automated Student Portal message. Need help? <a href="mailto:support@bhi47.app" style="color:#0f766e;">support@bhi47.app</a></div>
     `;
 
   return `<!DOCTYPE html>
@@ -67,10 +67,10 @@ function renderBaseEmailLayout({
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="table-layout:fixed;background-color:#f1f5f9;padding:32px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="table-layout:fixed;max-width:580px;background-color:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,118,110,0.08);border:1px solid #e2e8f0;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="table-layout:fixed;max-width:560px;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
           <!-- Institute Header Banner -->
           <tr>
-            <td class="email-header" style="background-color:#0f766e;background-image:linear-gradient(135deg,#115e59,#0d9488);padding:26px 24px;text-align:center;color:#ffffff;">
+            <td class="email-header" style="background-color:#115e59;padding:24px;text-align:center;color:#ffffff;border-top:4px solid #14b8a6;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="center">
@@ -78,7 +78,7 @@ function renderBaseEmailLayout({
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 12px;">
                       <tr>
                         <td align="center">
-                          <img src="${escapeHtml(logoUrl || 'https://bhi47a-support.vercel.app/logo.png')}" alt="BHI47A" width="60" height="60" style="display:block;width:60px;height:60px;border-radius:50%;border:2px solid #ffffff;margin:0 auto;background-color:#0f766e;" />
+                          <img src="${escapeHtml(logoUrl || 'https://bhi47.app/logo.png')}" alt="BHI47A" width="56" height="56" style="display:block;width:56px;height:56px;border:0;margin:0 auto;" />
                         </td>
                       </tr>
                     </table>
@@ -86,7 +86,7 @@ function renderBaseEmailLayout({
                 </tr>
                 <tr>
                   <td align="center">
-                    <div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:#ccfbf1;margin-bottom:6px;">
+                    <div style="font-size:12px;font-weight:600;color:#ccfbf1;margin-bottom:12px;line-height:1.6;">
                       ${instituteName}
                     </div>
                     <h1 style="margin:0 0 6px 0;font-size:20px;font-weight:800;color:#ffffff;line-height:1.4;">
@@ -103,7 +103,7 @@ function renderBaseEmailLayout({
 
           <!-- Email Content Body -->
           <tr>
-            <td class="email-body" style="padding:32px 30px;background-color:#ffffff;color:#0f172a;line-height:1.7;">
+            <td class="email-body" style="padding:28px;background-color:#ffffff;color:#0f172a;line-height:1.8;font-size:15px;">
               ${contentHtml}
             </td>
           </tr>
@@ -177,9 +177,7 @@ export function renderOtpEmailTemplate({
   const safeBodyText = escapeHtml(bodyText);
 
   const otpHeader = isAr ? 'رمز التحقق السريع' : 'VERIFICATION CODE';
-  const otpExpiry = isAr
-    ? '⏱️ صالح للاستخدام لمدة 15 دقيقة فقط'
-    : '⏱️ Valid for 15 minutes only';
+  const otpExpiry = isAr ? 'صالح لمدة 15 دقيقة' : 'Expires in 15 minutes';
   const copyHint = isAr
     ? 'اضغط مطولاً على الرمز أو حدده ثم اختر «نسخ».'
     : 'Press and hold, or select the code, then choose Copy.';
@@ -193,7 +191,7 @@ export function renderOtpEmailTemplate({
       <p style="margin:0 0 12px;font-size:15px;font-weight:700;color:#0f172a;">
         ${isAr ? `مرحباً ${safeName}،` : `Hello ${safeName},`}
       </p>
-      <p style="margin:0;font-size:13px;line-height:1.8;color:#334155;">
+      <p style="margin:0;font-size:15px;line-height:1.8;color:#334155;">
         ${safeBodyText}
       </p>
     </div>
@@ -206,7 +204,7 @@ export function renderOtpEmailTemplate({
             <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#0f766e;text-transform:uppercase;margin-bottom:10px;">
               ${otpHeader}
             </div>
-            <div style="font-family:Consolas,'Courier New',monospace;font-size:32px;font-weight:700;letter-spacing:6px;color:#115e59;margin:8px 0;padding:16px 10px;background-color:#ffffff;border:1px solid #99f6e4;border-radius:10px;display:inline-block;user-select:all;-webkit-user-select:all;" dir="ltr">${cleanOtp}</div>
+            <div style="font-family:Consolas,'Courier New',monospace;font-size:36px;font-weight:700;letter-spacing:5px;color:#115e59;margin:8px 0;padding:12px;background-color:#ffffff;border:1px solid #99f6e4;border-radius:8px;display:inline-block;user-select:all;-webkit-user-select:all;" dir="ltr">${cleanOtp}</div>
             <div style="font-size:10px;color:#64748b;margin-top:6px;">
               ${copyHint}
             </div>
@@ -245,6 +243,37 @@ export function renderOtpEmailTemplate({
     footerHtml: footerNote ? `<div>${escapeHtml(footerNote)}</div>` : undefined,
     lang,
     logoUrl,
+  });
+}
+
+export function renderComplaintReplyEmailTemplate(input: {
+  lang: 'ar' | 'en';
+  title: string;
+  message: string;
+  ticketNumber: string;
+  ticketUrl: string;
+  logoUrl: string;
+}): string {
+  const isAr = input.lang === 'ar';
+  const action = isAr ? 'عرض التذكرة والرد' : 'View ticket and reply';
+  const note = isAr
+    ? 'أرسل ردك داخل التذكرة لضمان تسجيله. مراسلة الدعم بالبريد لا تضيف رداً تلقائياً إلى التذكرة.'
+    : 'Reply inside the ticket to keep your conversation recorded. Emailing support does not automatically update your ticket.';
+  return renderBaseEmailLayout({
+    lang: input.lang,
+    logoUrl: input.logoUrl,
+    headerTitle: input.title,
+    headerSubtitle: isAr ? 'فريق دعم بوابة الطالب' : 'Student Portal Support',
+    preheader: `${input.title} — ${input.ticketNumber}`,
+    contentHtml: `<p style="margin:0 0 20px;font-size:15px;line-height:1.8;">${escapeHtml(input.message)}</p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:20px;background-color:#f0fdfa;border:1px solid #99f6e4;text-align:center;border-radius:8px;">
+        <p style="margin:0 0 8px;font-size:13px;color:#475569;">${isAr ? 'رقم التذكرة' : 'Ticket reference'}</p>
+        <p dir="ltr" style="margin:0;font-family:Consolas,monospace;font-size:20px;font-weight:700;color:#115e59;">${escapeHtml(input.ticketNumber)}</p>
+      </td></tr></table>
+      <p style="text-align:center;margin:28px 0;"><a href="${escapeHtml(input.ticketUrl)}" style="display:inline-block;background-color:#0f766e;color:#ffffff;padding:14px 24px;border-radius:8px;text-decoration:none;font-weight:700;">${action}</a></p>
+      <p style="font-size:13px;line-height:1.8;color:#475569;">${note}</p>
+      <p style="font-size:12px;color:#64748b;">${isAr ? 'إذا لم يعمل الزر، افتح الرابط التالي:' : 'If the button does not work, open this link:'}</p>
+      <p dir="ltr" style="font-size:12px;word-break:break-all;"><a href="${escapeHtml(input.ticketUrl)}" style="color:#0f766e;">${escapeHtml(input.ticketUrl)}</a></p>`,
   });
 }
 

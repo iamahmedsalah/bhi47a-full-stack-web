@@ -16,6 +16,7 @@ import {
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
+import { AdmissionTransactions } from '../student-codes/admission-transactions.service';
 import {
   AdmissionPeriod,
   type AdmissionPeriodDocument,
@@ -24,6 +25,7 @@ import {
   CreateAdmissionPeriodDto,
   QueryAdmissionPeriodDto,
   UpdateAdmissionPeriodDto,
+  DeleteAdmissionPeriodDto,
 } from './dto/admission-period.dto';
 
 function failure(code: string, message: string) {
@@ -35,6 +37,7 @@ export class AdmissionPeriodsService {
   constructor(
     @InjectModel(AdmissionPeriod.name)
     private readonly periods: Model<AdmissionPeriodDocument>,
+    private readonly transactions: AdmissionTransactions,
   ) {}
 
   private view(
@@ -81,7 +84,9 @@ export class AdmissionPeriodsService {
 
   async list(query: QueryAdmissionPeriodDto) {
     const { page, limit, skip } = buildPaginationOptions(query);
-    const filter: FilterQuery<AdmissionPeriodDocument> = {};
+    const filter: FilterQuery<AdmissionPeriodDocument> = {
+      deletedAt: { $exists: false },
+    };
     if (query.search?.trim()) {
       const search = normalizeSearchTerm(query.search);
       filter.$or = ['code', 'name', 'nameAr', 'academicYear'].map((field) => ({
@@ -163,7 +168,7 @@ export class AdmissionPeriodsService {
 
   async update(id: string, dto: UpdateAdmissionPeriodDto, actorId: string) {
     const current = await this.periods.findById(id).lean();
-    if (!current)
+    if (!current || current.deletedAt)
       throw new NotFoundException(
         failure('ADMISSION_PERIOD_NOT_FOUND', 'Admission period not found.'),
       );
@@ -186,7 +191,7 @@ export class AdmissionPeriodsService {
     };
     const updated = await this.periods
       .findOneAndUpdate(
-        { _id: id, revision: dto.revision },
+        { _id: id, revision: dto.revision, deletedAt: { $exists: false } },
         {
           $set: changes,
           $inc: { revision: 1 },
@@ -210,5 +215,69 @@ export class AdmissionPeriodsService {
         ),
       );
     return this.view(updated);
+  }
+
+  async delete(id: string, dto: DeleteAdmissionPeriodDto, actorId: string) {
+    return this.transactions.run(async (session) => {
+      const current = await this.periods.findById(id).session(session).lean();
+      if (!current)
+        throw new NotFoundException(
+          failure('ADMISSION_PERIOD_NOT_FOUND', 'Admission period not found.'),
+        );
+      if (current.deletedAt) return { success: true, deletedId: id };
+      if (current.revision !== dto.revision)
+        throw new ConflictException(
+          failure(
+            'ADMISSION_PERIOD_CHANGED',
+            'The period changed. Refresh before deleting.',
+          ),
+        );
+      const at = new Date(),
+        actor = new Types.ObjectId(actorId);
+      await this.periods.updateOne(
+        { _id: current._id, revision: dto.revision },
+        {
+          $set: { deletedAt: at, deletedBy: actor, isEnabled: false },
+          $inc: { revision: 1 },
+          $push: {
+            history: {
+              actorId: actor,
+              at,
+              revision: dto.revision + 1,
+              changes: { deletedAt: at, isEnabled: false },
+            },
+          },
+        },
+        { session },
+      );
+      await this.periods.db
+        .collection<{
+          admissionPeriodId: Types.ObjectId;
+          status: string;
+          history: Array<{
+            actorId: Types.ObjectId;
+            action: string;
+            at: Date;
+            revision: number;
+          }>;
+        }>('admission_access')
+        .updateMany(
+          { admissionPeriodId: current._id, status: 'ACTIVE' },
+          {
+            $set: { status: 'REVOKED' },
+            $push: {
+              history: {
+                actorId: actor,
+                action: 'PERIOD_DELETED',
+                at,
+                revision: 1,
+              },
+            },
+          },
+          { session },
+        );
+      // Keep the period and invitation audit records for existing applications.
+      return { success: true, deletedId: id };
+    });
   }
 }

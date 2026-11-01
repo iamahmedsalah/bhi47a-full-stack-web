@@ -40,3 +40,12 @@ export async function updateAdmissionPeriod(
     )
   ).data;
 }
+
+export async function deleteAdmissionPeriod(id: string, revision: number) {
+  return (
+    await api.delete<{ success: boolean; deletedId: string }>(
+      `/admin/admissions/periods/${id}`,
+      { data: { revision, confirmed: true } },
+    )
+  ).data;
+}

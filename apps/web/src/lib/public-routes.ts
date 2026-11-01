@@ -11,6 +11,7 @@ const PUBLIC_ROOT_SEGMENTS = new Set([
   'downloads',
   'contact',
   'complaints',
+  'admission',
 ]);
 
 function routeSegments(pathname: string) {

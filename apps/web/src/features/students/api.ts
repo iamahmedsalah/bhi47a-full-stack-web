@@ -8,6 +8,8 @@ export interface StudentUserRef {
   mustChangePassword?: boolean;
   lastLoginAt?: string;
   phone?: string;
+  address?: string;
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
   nationalIdMasked?: string;
   nationalId?: string;
 }
@@ -21,6 +23,8 @@ export interface Student {
   nationalIdMasked?: string;
   nationalId?: string;
   phone?: string;
+  address?: string;
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -97,6 +101,7 @@ export interface StudentListParams {
   search?: string;
   level?: string;
   department?: string;
+  group?: string;
   enrollmentStatus?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
@@ -109,6 +114,8 @@ export interface StudentWritePayload {
   fullNameEn?: string;
   nationalId?: string;
   phone?: string;
+  address?: string;
+  guardians?: Array<{ name: string; relation: string; phone: string }>;
   academicEmail?: string;
   department?: string;
   level: string;
@@ -143,6 +150,10 @@ export function listStudents(params: StudentListParams) {
 
 export function getStudent(id: string) {
   return apiGet<Student>(`/admin/students/${id}`);
+}
+
+export function deleteStudent(id: string) {
+  return apiDelete<{ success: boolean; message: string }>(`/admin/students/${id}`);
 }
 
 export function listStudentGrades(studentCode: string, limit = 100) {

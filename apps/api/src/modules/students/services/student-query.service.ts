@@ -195,6 +195,12 @@ export class StudentQueryService {
       filter.tuitionFeesStatus = query.tuitionFeesStatus;
     }
 
+    if (query.group && query.group !== 'all' && query.group.trim()) {
+      const g = query.group.trim();
+      const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.group = { $regex: new RegExp(`^${escaped}$`, 'i') };
+    }
+
     return filter;
   }
 
@@ -312,14 +318,61 @@ export class StudentQueryService {
       ? 'isActive +nationalId lastLoginAt mustChangePassword phone'
       : 'isActive lastLoginAt mustChangePassword phone';
 
-    const profile = await this.studentProfileModel
-      .findById(id)
-      .select(projection)
-      .populate('userId', userPopulateSelect)
-      .lean();
+    let profile = Types.ObjectId.isValid(id)
+      ? await this.studentProfileModel
+          .findById(id)
+          .select(projection)
+          .populate('userId', userPopulateSelect)
+          .lean()
+      : null;
+
+    if (!profile) {
+      const orConditions: Record<string, any>[] = [{ studentCode: id }];
+      if (Types.ObjectId.isValid(id)) {
+        orConditions.push({ userId: new Types.ObjectId(id) }, { userId: id });
+      }
+      profile = await this.studentProfileModel
+        .findOne({ $or: orConditions })
+        .select(projection)
+        .populate('userId', userPopulateSelect)
+        .lean();
+    }
 
     if (!profile) {
       throw new NotFoundException('الطالب غير موجود');
+    }
+
+    if (
+      (!profile.address ||
+        !profile.guardians ||
+        profile.guardians.length === 0) &&
+      profile.studentCode
+    ) {
+      try {
+        const admissionRequest = await this.studentProfileModel.db
+          .collection('admission_requests')
+          .findOne({ studentCode: profile.studentCode, status: 'APPROVED' });
+        if (admissionRequest) {
+          if (!profile.address && admissionRequest.address) {
+            (profile as any).address = admissionRequest.address;
+          }
+          if (
+            (!profile.guardians || profile.guardians.length === 0) &&
+            Array.isArray(admissionRequest.guardians)
+          ) {
+            (profile as any).guardians = admissionRequest.guardians;
+          }
+          if (!profile.phone && admissionRequest.phone) {
+            (profile as any).phone = admissionRequest.phone;
+          }
+        }
+      } catch {
+        // ignore admission lookup errors
+      }
+    }
+    const userPhone = (profile as any)?.userId?.phone;
+    if (!(profile as any).phone && userPhone) {
+      (profile as any).phone = userPhone;
     }
 
     const [enriched] = await this.attachRegistrationSummaries(

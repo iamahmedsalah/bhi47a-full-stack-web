@@ -72,6 +72,7 @@ async function main() {
     SMTP_USER: '',
     SMTP_PASS: '',
     RESEND_API_KEY: '',
+    COMPLAINT_REPLY_EMAILS_ENABLED: 'false',
   };
   const args = [
     '--experimental-vm-modules',

@@ -310,7 +310,7 @@ export function PublicTicketInquiry({
         {
           ticketNumber: ticket.ticketNumber,
           studentCode: ticket.studentCode,
-          nationalId: nationalId.trim() || undefined,
+          nationalId: nationalId.trim(),
           message: trimmed,
         },
       );

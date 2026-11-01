@@ -121,13 +121,7 @@ export default function AdminSidebar() {
       key: "admissions",
       href: `/${locale}/admin/admissions`,
       icon: <CalendarDays className="h-5 w-5" />,
-      permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE],
-    },
-    {
-      key: "studentCodes",
-      href: `/${locale}/admin/student-codes`,
-      icon: <ShieldCheck className="h-5 w-5" />,
-      permission: PERMISSIONS.STUDENT_CODES_READ,
+      permissions: [PERMISSIONS.ADMISSIONS_PERIODS_READ, PERMISSIONS.ADMISSIONS_PERIODS_MANAGE, PERMISSIONS.STUDENT_CODES_READ, PERMISSIONS.ADMISSIONS_REQUESTS_READ, PERMISSIONS.ADMISSIONS_ACCESS_MANAGE, PERMISSIONS.ADMISSIONS_GROUPS_MANAGE],
     },
     {
       key: "academicEmails",

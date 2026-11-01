@@ -160,9 +160,10 @@ const Select = ({
         onValueChange={handleValueChange}
         placeholder={placeholder}
         ariaLabel={
-          typeof placeholder === 'string'
+          trigger?.props['aria-label'] ??
+          (typeof placeholder === 'string'
             ? placeholder
-            : selectedText || undefined
+            : selectedText || undefined)
         }
         disabled={disabled ?? trigger?.props.disabled}
         className={cn(
