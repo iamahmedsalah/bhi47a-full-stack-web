@@ -462,6 +462,9 @@ jobs:
           flock -n 8
           git diff --quiet
           git diff --cached --quiet
+          # This checkout is managed exclusively by CI. Remove stale
+          # non-ignored artifacts while preserving ignored secrets and state.
+          git clean -fd
           git fetch origin main
           git merge-base --is-ancestor "$release" origin/main
           git checkout --detach "$release"
