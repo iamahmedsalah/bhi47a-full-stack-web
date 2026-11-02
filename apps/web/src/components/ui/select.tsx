@@ -96,13 +96,15 @@ function findSelectPart<TProps>(
   let result: React.ReactElement<TProps> | undefined;
 
   React.Children.forEach(children, (child) => {
-    if (result || !React.isValidElement<TProps>(child)) return;
+    if (result || !React.isValidElement<TProps & { children?: React.ReactNode }>(child)) return;
     if (
       child.type === type ||
       (child.type as { displayName?: string })?.displayName ===
         (type as { displayName?: string })?.displayName
     ) {
       result = child;
+    } else {
+      result = findSelectPart<TProps>(child.props.children, type);
     }
   });
 

@@ -398,7 +398,7 @@ export function StaffFormDialog({
                         }}
                       >
                         <FormControl>
-                          <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
+                          <SelectTrigger aria-label={t("fields.staffType")} className="rounded-squircle border-white/15 bg-background/60 text-sm">
                             <SelectValue
                               placeholder={t("fields.selectStaffType")}
                             />
@@ -437,7 +437,7 @@ export function StaffFormDialog({
                         }}
                       >
                         <FormControl>
-                          <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
+                          <SelectTrigger aria-label={t("fields.titlePrefix")} className="rounded-squircle border-white/15 bg-background/60 text-sm">
                             <SelectValue
                               placeholder={t("fields.selectTitlePrefix")}
                             />

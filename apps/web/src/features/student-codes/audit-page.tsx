@@ -253,7 +253,7 @@ export default function StudentCodesPage({
               ) : (
                 <span dir="ltr">{row.studentCode}</span>
               )}
-              <CopyButton text={row.studentCode} className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+              <CopyButton value={row.studentCode} className="h-5 w-5 text-muted-foreground hover:text-foreground" />
             </div>
           </TableCell>
         ),

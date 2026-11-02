@@ -326,15 +326,13 @@ describe('Staff management security contracts', () => {
     async (titlePrefix) => {
       const session = new AuthSessionService(
         {
-          findByIdForAuth: jest
-            .fn()
-            .mockResolvedValue({
-              _id: new Types.ObjectId(),
-              role: 'staff',
-              staffType: 'doctor',
-              name: 'Doctor Name',
-              titlePrefix,
-            }),
+          findByIdForAuth: jest.fn().mockResolvedValue({
+            _id: new Types.ObjectId(),
+            role: 'staff',
+            staffType: 'doctor',
+            name: 'Doctor Name',
+            titlePrefix,
+          }),
         } as never,
         {} as never,
         {} as never,

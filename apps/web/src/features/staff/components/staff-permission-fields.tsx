@@ -170,7 +170,7 @@ export function StaffPermissionFields({
                   onClick={() => {
                     if (allChecked) {
                       onChange(
-                        value.filter((p) => !group.permissions.includes(p)),
+                        value.filter((p) => !group.permissions.some((permission) => permission === p)),
                       );
                     } else {
                       const next = new Set([...value, ...group.permissions]);

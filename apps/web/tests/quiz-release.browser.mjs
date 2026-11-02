@@ -62,6 +62,7 @@ await fs.writeFile(path.join(output, 'entry.tsx'), `
   function StaffFixture(){const [open,setOpen]=React.useState(true);return <><button onClick={()=>setOpen(true)}>Open staff details</button><StaffDetailsDialog staff={open?{_id:'${fixtureId}',name:'Synthetic teaching staff',role:'staff',staffType,isActive:true,permissions:[]}:null} open={open} onOpenChange={setOpen}/></>}
   createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/staff')?(location.search.includes('manage=true')?<StaffManagementPage/>:<StaffFixture/>):location.pathname.includes('/admin/')?<Admin/>:<Student/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);
 `);
+if (!process.argv.includes('--reuse-build')) {
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
   cache: { type: 'filesystem', cacheDirectory: path.join(output, 'webpack-cache') },
@@ -73,6 +74,7 @@ await new Promise((resolve, reject) => webpack({
 }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
 const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({ base: web })]).process(await fs.readFile(path.join(web, 'src/app/globals.css'), 'utf8'), { from: path.join(web, 'src/app/globals.css') });
 await fs.writeFile(path.join(output, 'styles.css'), css.css);
+}
 const state = () => {
   const isEnded = Date.now() >= Date.parse(settings.endsAt);
   const resultsAvailable = settings.resultsReleaseMode === 'after_close' ? isEnded : settings.publishResults;
@@ -227,7 +229,7 @@ try {
       await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
       await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
       const dialog=page.getByRole('dialog');
-      const title=dialog.getByRole('combobox',{name:t.fields.titlePrefix,exact:true});
+      const title=dialog.getByRole('button',{name:t.fields.titlePrefix,exact:true});
       await title.click();await page.getByRole('option',{name:t.doctorPrefixes[prefix],exact:true}).click();
       await dialog.getByLabel(t.fields.name,{exact:true}).fill('Dr. Updated teaching staff');
       await dialog.getByLabel(t.fields.email,{exact:true}).focus();
@@ -240,24 +242,24 @@ try {
       await page.getByText(`${prefixLabel} Updated teaching staff`,{exact:true}).first().waitFor();
       await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
       await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
-      assert.equal((await page.getByRole('dialog').getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).innerText()).trim(),t.doctorPrefixes[prefix]);
+      assert.equal((await page.getByRole('dialog').getByRole('button',{name:t.fields.titlePrefix,exact:true}).innerText()).trim(),t.doctorPrefixes[prefix]);
       await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
     }
     await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
     await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
     const edit=page.getByRole('dialog');
-    await edit.getByRole('combobox',{name:t.fields.staffType,exact:true}).click();
+    await edit.getByRole('button',{name:t.fields.staffType,exact:true}).click();
     await page.getByRole('option',{name:t.types.teaching_assistant,exact:true}).click();
-    assert.equal(await edit.getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).count(),0);
+    assert.equal(await edit.getByRole('button',{name:t.fields.titlePrefix,exact:true}).count(),0);
     await edit.getByRole('button',{name:t.save,exact:true}).click();await edit.waitFor({state:'hidden'});
     assert.equal(staffProfile.staffType,'teaching_assistant');assert.equal(staffProfile.titlePrefix,undefined);
     for(const prefix of ['prof','assoc_prof','dr']){
-      await page.getByRole('button',{name:t.create,exact:true}).click();
+      await page.getByRole('button',{name:locale === 'ar' ? 'إضافة موظف' : 'Add Staff',exact:true}).click();
       const create=page.getByRole('dialog');
       await create.getByLabel(t.fields.name,{exact:true}).fill('New teaching staff');
       await create.getByLabel(t.fields.email,{exact:true}).fill('new-teaching@example.test');
       await create.getByLabel(t.fields.temporaryPassword,{exact:true}).fill('SyntheticPassword123!');
-      await create.getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).click();
+      await create.getByRole('button',{name:t.fields.titlePrefix,exact:true}).click();
       await page.getByRole('option',{name:t.doctorPrefixes[prefix],exact:true}).click();
       await create.getByRole('button',{name:t.create,exact:true}).click();await create.waitFor({state:'hidden'});
       assert.equal(staffProfileMutations.at(-1).titlePrefix,prefix);
