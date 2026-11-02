@@ -89,20 +89,23 @@ export class StudentCodeMappingsService {
         ...profiles.map((profile) => profile.studentCode),
         ...entries.map((entry) => entry.studentCode),
       ];
-      let nextSequence =
+      const nextSequence = Math.max(
+        policy.nextSequence,
         1 +
-        Math.max(
-          0,
-          ...observed.map((code) =>
-            code ? (parseStudentCode(code, prefix) ?? 0) : 0,
+          Math.max(
+            0,
+            ...entries
+              .filter((entry) => entry.academicYear === policy.academicYear)
+              .map((entry) => entry.sequence),
           ),
-        );
-      const occupied = new Set(
-        entries
-          .filter((entry) => entry.academicYear === policy.academicYear)
-          .map((entry) => entry.sequence),
+        1 +
+          Math.max(
+            0,
+            ...observed.map((code) =>
+              code ? (parseStudentCode(code, prefix) ?? 0) : 0,
+            ),
+          ),
       );
-      while (nextSequence <= 9999 && occupied.has(nextSequence)) nextSequence++;
       items.push({
         academicYear: policy.academicYear,
         currentPrefix,

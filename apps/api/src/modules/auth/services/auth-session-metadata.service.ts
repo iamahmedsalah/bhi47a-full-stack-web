@@ -134,6 +134,7 @@ export class AuthSessionMetadataService {
     };
     if (!isPublicSessionIp(ip)) return metadata;
 
+    let edgeMetadata: Partial<SessionMetadata> = {};
     if (onVercel) {
       const city = header(req, 'x-vercel-ip-city');
       const country = header(req, 'x-vercel-ip-country');
@@ -144,8 +145,7 @@ export class AuthSessionMetadataService {
         } catch {
           /* Keep the encoded name. */
         }
-        return {
-          ...metadata,
+        edgeMetadata = {
           location: decodedCity,
           country,
           ...coordinates(
@@ -157,15 +157,15 @@ export class AuthSessionMetadataService {
       }
     }
     if (this.config.get<string>('SESSION_IP_LOOKUP_ENABLED', 'true') !== 'true')
-      return metadata;
+      return { ...metadata, ...edgeMetadata };
     const cached = this.cache.get(ip);
     if (cached && cached.expires > Date.now())
-      return { ...metadata, ...cached.value };
+      return { ...metadata, ...cached.value, ...edgeMetadata };
     let value: Partial<SessionMetadata> = {};
     try {
       // Fixed HTTPS host and a validated IP: no caller-controlled URLs or private IP lookups.
       const response = await fetch(
-        `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,city,country_code,latitude,longitude,connection.isp`,
+        `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,city,country_code,latitude,longitude,connection.isp,connection.org`,
         {
           signal: AbortSignal.timeout(1500),
           redirect: 'error',
@@ -178,7 +178,7 @@ export class AuthSessionMetadataService {
           country_code?: unknown;
           latitude?: unknown;
           longitude?: unknown;
-          connection?: { isp?: unknown };
+          connection?: { isp?: unknown; org?: unknown };
         };
         if (body.success === true)
           value = {
@@ -191,9 +191,12 @@ export class AuthSessionMetadataService {
                 ? body.country_code.slice(0, 2)
                 : undefined,
             isp:
-              typeof body.connection?.isp === 'string'
-                ? body.connection.isp.slice(0, 160)
-                : undefined,
+              typeof body.connection?.isp === 'string' &&
+              body.connection.isp.trim()
+                ? body.connection.isp.trim().slice(0, 160)
+                : typeof body.connection?.org === 'string'
+                  ? body.connection.org.trim().slice(0, 160) || undefined
+                  : undefined,
             ...coordinates(body.latitude, body.longitude),
             locationSource: 'ipwhois',
           };
@@ -207,6 +210,6 @@ export class AuthSessionMetadataService {
       expires: Date.now() + (value.locationSource ? 3600000 : 60000),
       value,
     });
-    return { ...metadata, ...value };
+    return { ...metadata, ...value, ...edgeMetadata };
   }
 }

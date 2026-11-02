@@ -26,7 +26,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Info,
-  Sparkles,
+  BookOpenCheck,
 } from "lucide-react";
 import { getStudent } from "@/features/students/api";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -233,12 +233,12 @@ export default function StudentCodesPage({
           <TableCell className="min-w-35 py-2.5 px-3">
             <div className="inline-flex items-center gap-1.5 rounded-squircle border border-border/80 bg-card/80 px-2.5 py-1 text-xs font-mono font-bold text-foreground shadow-2xs">
               <Hash className="h-3.5 w-3.5 text-primary shrink-0" />
-              {canViewStudent && row.currentStudentId ? (
+              {canViewStudent && (row.currentStudentId || row.observedStudentId) ? (
                 <button
                   type="button"
                   onClick={() =>
                     setProfileStudentId(
-                      row.studentProfileId || row.currentStudentId!,
+                      row.studentProfileId || row.currentStudentId || row.observedStudentId!,
                     )
                   }
                   className="hover:text-primary transition-colors cursor-pointer select-none"
@@ -263,7 +263,7 @@ export default function StudentCodesPage({
         header: t("linkedStudent"),
         className: "min-w-[200px] text-start",
         render: (row) => {
-          const hasOwner = Boolean(row.currentStudentId);
+          const hasOwner = Boolean(row.currentStudentId || row.observedStudentId);
           const studentName =
             locale === "ar"
               ? row.studentNameAr || row.studentName
@@ -292,7 +292,7 @@ export default function StudentCodesPage({
                         type="button"
                         onClick={() =>
                           setProfileStudentId(
-                            row.studentProfileId || row.currentStudentId!,
+                            row.studentProfileId || row.currentStudentId || row.observedStudentId!,
                           )
                         }
                         className="font-semibold text-foreground hover:text-primary transition-colors text-start block truncate max-w-55 cursor-pointer"
@@ -389,7 +389,10 @@ export default function StudentCodesPage({
         className: "min-w-[200px] text-start",
         render: (row) => (
           <TableCell className="min-w-50 py-2.5 px-3 text-xs text-muted-foreground leading-relaxed">
-            {t(`reasons.${row.reason}`)}
+            <span>{t(`reasons.${row.reason}`)}</span>
+            {row.studentAcademicYear && row.registryAcademicYear && row.studentAcademicYear !== row.registryAcademicYear && (
+              <p className="mt-1">{t("ownerYear")}: <bdi>{row.studentAcademicYear}</bdi> · {t("registryYear")}: <bdi>{row.registryAcademicYear}</bdi></p>
+            )}
           </TableCell>
         ),
       },
@@ -463,12 +466,12 @@ export default function StudentCodesPage({
                   </DropdownMenu.Item>
 
                   {/* View Student Profile */}
-                  {canViewStudent && row.currentStudentId && (
+                  {canViewStudent && (row.currentStudentId || row.observedStudentId) && (
                     <DropdownMenu.Item
                       className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs outline-none hover:bg-secondary focus:bg-secondary transition-colors"
                       onSelect={() =>
                         setProfileStudentId(
-                          row.studentProfileId || row.currentStudentId!,
+                          row.studentProfileId || row.currentStudentId || row.observedStudentId!,
                         )
                       }
                     >
@@ -642,7 +645,7 @@ export default function StudentCodesPage({
       )}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 space-y-3">
         <div className="flex items-center gap-2 font-bold text-foreground">
-          <Sparkles className="h-4 w-4 text-primary" />
+          <BookOpenCheck className="h-4 w-4 text-primary" />
           <span>{dir === "rtl" ? "دليل وملاحظات إدارة وتدقيق أكواد الطلاب" : "Student Code Audit & Management Guide"}</span>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -711,7 +714,7 @@ export default function StudentCodesPage({
           </Button>
         </div>
       )}
-      {canManage && <MappingCorrection />}
+      {canManage && <MappingCorrection academicYear={academicYear} />}
       {!validScope ? (
         <p className="rounded-xl border p-5">{t("chooseScope")}</p>
       ) : (
@@ -772,6 +775,9 @@ export default function StudentCodesPage({
                   <span>
                     {t("configuredPrefix")}:{" "}
                     <bdi>{query.data.policy.yearPrefix}</bdi>
+                  </span>
+                  <span>
+                    {t("expectedPrefix")}: <bdi>{admissionYearPrefix(academicYear)}</bdi>
                   </span>
                   <span>
                     {t("configuredNext")}:{" "}
@@ -1096,11 +1102,11 @@ export default function StudentCodesPage({
                 >
                   {t("history")}
                 </Button>
-                {canViewStudent && finding.currentStudentId && (
+                {canViewStudent && (finding.currentStudentId || finding.observedStudentId) && (
                   <Button
                     onClick={() => {
                       setProfileStudentId(
-                        finding.studentProfileId || finding.currentStudentId!,
+                        finding.studentProfileId || finding.currentStudentId || finding.observedStudentId!,
                       );
                       setFinding(null);
                     }}

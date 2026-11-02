@@ -21,6 +21,24 @@ export const ADMISSION_REJECTION_REASONS = [
   "OTHER",
 ] as const;
 export const ADMISSION_MOBILE = /^01[0125]\d{8}$/;
+// Compact receipts avoid ambiguous I/O/0/1. Keep issued legacy receipts valid.
+export const ADMISSION_TRACKING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const ADMISSION_REFERENCE_PATTERN =
+  /^ADM-(?:[A-HJ-NP-Z2-9]{12}|[A-F0-9]{24})$/;
+export const ADMISSION_TRACKING_SECRET_PATTERN =
+  /^(?:[A-HJ-NP-Z2-9]{16}|[A-Za-z0-9_-]{43})$/;
+export function normalizeAdmissionReference(value: string): string {
+  const reference = value.trim().toUpperCase();
+  return /^ADM[-\s]/.test(reference)
+    ? `ADM-${reference.slice(3).replace(/[-\s]/g, "")}`
+    : reference;
+}
+export function normalizeAdmissionTrackingSecret(value: string): string {
+  const secret = value.trim();
+  if (/^[A-Za-z0-9_-]{43}$/.test(secret)) return secret;
+  const compact = secret.replace(/[-\s]/g, "").toUpperCase();
+  return /^[A-HJ-NP-Z2-9]{16}$/.test(compact) ? compact : secret;
+}
 export function isAdmissionNationalId(
   value: string,
   now = new Date(),

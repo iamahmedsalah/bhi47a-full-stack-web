@@ -27,7 +27,9 @@ describe('AnalyticsController', () => {
   const mockExcelService = {
     generateComprehensiveWorkbook: jest.fn().mockResolvedValue({
       xlsx: {
-        write: jest.fn().mockResolvedValue(undefined),
+        writeBuffer: jest
+          .fn()
+          .mockResolvedValue(Buffer.from('synthetic-workbook')),
       },
     }),
   };
@@ -99,6 +101,29 @@ describe('AnalyticsController', () => {
       'Content-Disposition',
       expect.stringContaining('attachment; filename='),
     );
-    expect(res.end).toHaveBeenCalled();
+    expect(res.end).toHaveBeenCalledWith(Buffer.from('synthetic-workbook'));
+  });
+
+  it('keeps selected worksheet filters and identifies the download in its filename', async () => {
+    const res = { setHeader: jest.fn(), end: jest.fn() };
+    const query = {
+      locale: 'en' as const,
+      sheets: ['students' as const],
+      level: '3',
+      department: 'ACCOUNTING',
+    };
+    await controller.exportComprehensiveReport(
+      query,
+      mockAdminUser,
+      res as never,
+    );
+    expect(
+      mockExcelService.generateComprehensiveWorkbook,
+    ).toHaveBeenLastCalledWith(query, mockAdminUser);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Content-Disposition',
+      expect.stringContaining('academic-analytics-students-'),
+    );
+    expect(res.end).toHaveBeenCalledWith(Buffer.from('synthetic-workbook'));
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useState } from "react";
+import { formatLoginDateTime } from "@/lib/session-presentation";
 import {
   Edit2,
   ExternalLink,
@@ -448,13 +449,7 @@ export function StaffManagementPage() {
       header: t("table.lastLogin"),
       render: (staff) => (
         <TableCell className="px-4 py-3 text-xs text-muted-foreground">
-          {staff.lastLoginAt
-            ? new Intl.DateTimeFormat(isAr ? "ar-EG" : "en-US", {
-                timeZone: "Africa/Cairo",
-                dateStyle: "medium",
-                timeStyle: "short",
-              }).format(new Date(staff.lastLoginAt))
-            : t("never")}
+          {formatLoginDateTime(staff.lastLoginAt, locale, t("loginUnavailable"))}
         </TableCell>
       ),
     },

@@ -6,6 +6,7 @@ import type { Model } from 'mongoose';
 import { createHash } from 'node:crypto';
 import {
   parseSessionDevice,
+  isPublicSessionIp,
   type SessionMetadata,
 } from './auth-session-metadata.service';
 
@@ -26,6 +27,7 @@ export interface AuthSessionRecord {
   tokenVersion: number;
   expiresAt: Date;
   createdAt: Date;
+  lastAuthenticatedAt?: Date;
   revokedAt?: Date;
   ip?: string;
   userAgent?: string;
@@ -48,6 +50,7 @@ export const AuthSessionSchema = new Schema<AuthSessionRecord>(
     tokenVersion: { type: Number, required: true },
     expiresAt: { type: Date, required: true },
     createdAt: { type: Date, default: Date.now },
+    lastAuthenticatedAt: Date,
     revokedAt: Date,
     ip: String,
     userAgent: String,
@@ -105,20 +108,16 @@ export class AuthSessionStore {
       if ((error as { code?: number }).code !== 11000) throw error;
     }
     await this.assertActive(claims, '');
+    // A verified repeat sign-in may reuse the SID. Record its actual time without
+    // extending the original expiry, changing ownership or reviving revocations.
+    await this.refreshMetadata(claims, metadata, new Date());
   }
 
-  async needsMetadata(claims: SessionClaims) {
-    return Boolean(
-      await this.records.exists({
-        _id: this.key(claims, ''),
-        userId: claims.sub,
-        revokedAt: null,
-        metadataVersion: { $ne: 1 },
-      }),
-    );
-  }
-
-  async upgradeMetadata(claims: SessionClaims, metadata: SessionMetadata) {
+  async refreshMetadata(
+    claims: SessionClaims,
+    metadata?: SessionMetadata,
+    authenticatedAt?: Date,
+  ) {
     const fields = [
       'ip',
       'userAgent',
@@ -135,18 +134,24 @@ export class AuthSessionStore {
     ] as const;
     const unset = Object.fromEntries(
       fields
-        .filter((field) => metadata[field] === undefined)
+        .filter((field) => metadata && metadata[field] === undefined)
         .map((field) => [field, '']),
     );
-    const set = Object.fromEntries(
-      Object.entries(metadata).filter(([, value]) => value !== undefined),
-    );
+    const set = {
+      ...Object.fromEntries(
+        Object.entries(metadata ?? {}).filter(
+          ([, value]) => value !== undefined,
+        ),
+      ),
+      ...(authenticatedAt ? { lastAuthenticatedAt: authenticatedAt } : {}),
+    };
     await this.records.updateOne(
       {
         _id: this.key(claims, ''),
         userId: claims.sub,
         revokedAt: null,
-        metadataVersion: { $ne: 1 },
+        tokenVersion: claims.tokenVersion ?? 0,
+        expiresAt: { $gt: new Date() },
       },
       { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
     );
@@ -222,9 +227,9 @@ export class AuthSessionStore {
         expiresAt: { $gt: new Date() },
       })
       .select(
-        '_id createdAt expiresAt ip userAgent metadataVersion device browser os location networkType country latitude longitude isp locationSource',
+        '_id createdAt lastAuthenticatedAt expiresAt ip userAgent metadataVersion device browser os location networkType country latitude longitude isp locationSource',
       )
-      .sort({ createdAt: -1 })
+      .sort({ lastAuthenticatedAt: -1, createdAt: -1 })
       .limit(100)
       .lean();
     return rows.map((row) => {
@@ -235,10 +240,17 @@ export class AuthSessionStore {
       return {
         _id: row._id,
         createdAt: row.createdAt,
+        lastAuthenticatedAt: row.lastAuthenticatedAt ?? row.createdAt,
         expiresAt: row.expiresAt,
         current: row._id === currentId,
         ...device,
-        ip: trustedMetadata ? row.ip : undefined,
+        ip:
+          trustedMetadata && row.ip && isPublicSessionIp(row.ip)
+            ? row.ip
+            : undefined,
+        privateIp: Boolean(
+          trustedMetadata && row.ip && !isPublicSessionIp(row.ip),
+        ),
         location: trustedMetadata ? row.location : undefined,
         country: trustedMetadata ? row.country : undefined,
         latitude: trustedMetadata ? row.latitude : undefined,

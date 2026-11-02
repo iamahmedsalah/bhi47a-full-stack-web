@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ADMISSION_TRACKING_ALPHABET } from '@student-portal/shared';
 import {
   createCipheriv,
   createDecipheriv,
@@ -16,6 +17,21 @@ import {
 
 export const admissionHash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
+function trackingCode(hex: string, length: number): string {
+  let output = '',
+    bits = 0,
+    buffer = 0;
+  for (const byte of Buffer.from(hex, 'hex')) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5 && output.length < length) {
+      bits -= 5;
+      output += ADMISSION_TRACKING_ALPHABET[(buffer >>> bits) & 31];
+    }
+    if (output.length === length) return output;
+  }
+  throw new Error('Insufficient tracking code material');
+}
 export function admissionEqual(a: string, b: string): boolean {
   const x = Buffer.from(a),
     y = Buffer.from(b);
@@ -147,13 +163,17 @@ export class AdmissionSecurity {
       throw new UnauthorizedException('Admission session expired or invalid.');
     }
   }
-  receipt(accessId: string, key: string) {
+  receipt(accessId: string, key: string, legacy = false) {
+    const reference = this.hmac('reference', `${accessId}:${key}`);
+    const secret = this.hmac('receipt', `${accessId}:${key}`);
+    if (!legacy)
+      return {
+        publicReference: `ADM-${trackingCode(reference, 12)}`,
+        secret: trackingCode(secret, 16),
+      };
     return {
-      publicReference: `ADM-${this.hmac('reference', `${accessId}:${key}`).slice(0, 24).toUpperCase()}`,
-      secret: Buffer.from(
-        this.hmac('receipt', `${accessId}:${key}`),
-        'hex',
-      ).toString('base64url'),
+      publicReference: `ADM-${reference.slice(0, 24).toUpperCase()}`,
+      secret: Buffer.from(secret, 'hex').toString('base64url'),
     };
   }
   async captcha(token: string, ip?: string) {

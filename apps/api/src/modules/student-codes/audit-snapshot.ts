@@ -27,6 +27,7 @@ export interface CodeProfile {
   fullNameEn?: string;
   department?: string;
   level?: string;
+  academicYear?: string;
 }
 export interface SnapshotSources {
   users: CodeUser[];
@@ -79,7 +80,10 @@ export function analyzeCodeSnapshot(
     allCodes.add(formatStudentCode(prefix, seq));
   const rows: StudentCodeFinding[] = [...allCodes].sort().map((studentCode) => {
     const sequence = parseStudentCode(studentCode, prefix);
-    const row = { studentCode, sequence };
+    const row: Partial<StudentCodeFinding> & {
+      studentCode: string;
+      sequence: number | undefined;
+    } = { studentCode, sequence };
     if (sequence === undefined)
       return { ...row, status: 'REQUIRES_REVIEW', reason: 'MALFORMED_CODE' };
     const users = userCodes.get(studentCode) ?? [];
@@ -92,6 +96,18 @@ export function analyzeCodeSnapshot(
       profiles.length === 1 &&
       String(profiles[0].userId) === String(owners[0]._id);
     const entry = registry.get(studentCode);
+    if (validOwner && users.length === 1) {
+      Object.assign(row, {
+        observedStudentId: String(owners[0]._id),
+        studentProfileId: String(profiles[0]._id),
+        studentName: profiles[0].fullNameEn || profiles[0].fullName,
+        studentNameAr: profiles[0].fullNameAr || profiles[0].fullName,
+        department: profiles[0].department,
+        level: profiles[0].level,
+        studentAcademicYear: profiles[0].academicYear,
+        registryAcademicYear: entry?.academicYear,
+      });
+    }
     if (
       users.length > 1 ||
       profiles.length > 1 ||
@@ -110,7 +126,14 @@ export function analyzeCodeSnapshot(
         entry.yearPrefix !== prefix ||
         entry.sequence !== sequence)
     )
-      return { ...row, status: 'REQUIRES_REVIEW', reason: 'REGISTRY_CONFLICT' };
+      return {
+        ...row,
+        status: 'REQUIRES_REVIEW',
+        reason:
+          entry.academicYear !== academicYear
+            ? 'REGISTRY_YEAR_MISMATCH'
+            : 'REGISTRY_CONFLICT',
+      };
     if (validOwner) {
       const currentStudentId = String(owners[0]._id);
       if (

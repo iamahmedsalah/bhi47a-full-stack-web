@@ -43,6 +43,7 @@ export type StudentCodeFindingReason =
   | "ORPHANED_USER"
   | "ALIAS_CONFLICT"
   | "REGISTRY_CONFLICT"
+  | "REGISTRY_YEAR_MISMATCH"
   | "UNVERIFIED_GAP"
   | "CONFIRMED_AVAILABLE"
   | "CURRENT_OWNER"
@@ -54,7 +55,11 @@ export interface StudentCodeFinding {
   status: StudentCodeFindingStatus;
   reason: StudentCodeFindingReason;
   currentStudentId?: string;
+  /** Matching account/profile observed even while registry metadata needs review. */
+  observedStudentId?: string;
   studentProfileId?: string;
+  studentAcademicYear?: string;
+  registryAcademicYear?: string;
   studentName?: string;
   studentNameAr?: string;
   department?: string;

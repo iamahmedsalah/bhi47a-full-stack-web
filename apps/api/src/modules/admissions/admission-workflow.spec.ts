@@ -6,12 +6,15 @@ import {
   isAdmissionNationalId,
   ADMISSION_REQUEST_STATUSES,
   STAFF_TYPE_DEFAULT_PERMISSIONS,
+  ADMISSION_REFERENCE_PATTERN,
+  ADMISSION_TRACKING_SECRET_PATTERN,
 } from '@student-portal/shared';
 import { AdmissionSecurity, admissionHash } from './admission-security.service';
 import {
   ApproveApplicantDto,
   DecisionDto,
   PublicApplicantDto,
+  PublicStatusDto,
 } from './dto/admission-workflow.dto';
 import {
   safeAdmissionCell,
@@ -81,7 +84,47 @@ describe('Admission workflow boundaries', () => {
     expect(() => service.readSession(session)).toThrow();
     clock.mockRestore();
     expect(service.receipt(id, 'key')).toEqual(service.receipt(id, 'key'));
-    expect(service.receipt(id, 'key').secret).toHaveLength(43);
+    expect(service.receipt(id, 'key')).toMatchObject({
+      publicReference: expect.stringMatching(ADMISSION_REFERENCE_PATTERN),
+      secret: expect.stringMatching(ADMISSION_TRACKING_SECRET_PATTERN),
+    });
+    expect(service.receipt(id, 'key').publicReference).toHaveLength(16);
+    expect(service.receipt(id, 'key').secret).toHaveLength(16);
+    expect(service.receipt(id, 'key', true).secret).toHaveLength(43);
+    expect(service.receipt(id, 'another-key')).not.toEqual(
+      service.receipt(id, 'key'),
+    );
+  });
+  it('accepts easy-to-type compact tracking details and preserves case-sensitive legacy secrets', async () => {
+    const compact = plainToInstance(PublicStatusDto, {
+      publicReference: ' adm-abcd-efgh-2345 ',
+      secret: 'abcd efgh 2345 6789',
+    });
+    expect(await validate(compact)).toHaveLength(0);
+    expect(compact.publicReference).toBe('ADM-ABCDEFGH2345');
+    expect(compact.secret).toBe('ABCDEFGH23456789');
+    const legacySecret = 'aB0_-'.repeat(8) + 'xYz';
+    const legacy = plainToInstance(PublicStatusDto, {
+      publicReference: 'ADM-' + 'A'.repeat(24),
+      secret: legacySecret,
+    });
+    expect(await validate(legacy)).toHaveLength(0);
+    expect(legacy.secret).toBe(legacySecret);
+    const hyphenatedLegacy = '-'.repeat(27) + 'ABCDEFGH23456789';
+    expect(
+      plainToInstance(PublicStatusDto, {
+        publicReference: legacy.publicReference,
+        secret: hyphenatedLegacy,
+      }).secret,
+    ).toBe(hyphenatedLegacy);
+    expect(
+      await validate(
+        plainToInstance(PublicStatusDto, {
+          publicReference: 'ADM-ABCD',
+          secret: '123456',
+        }),
+      ),
+    ).not.toHaveLength(0);
   });
   it('validates guardians, phone, unknown fields and literal confirmations', async () => {
     const dto = plainToInstance(

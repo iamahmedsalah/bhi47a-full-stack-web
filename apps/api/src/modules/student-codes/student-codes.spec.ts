@@ -27,6 +27,45 @@ const empty = (): SnapshotSources => ({
   truncated: false,
 });
 describe('Student-code format, audit and safety policy', () => {
+  it('keeps a verified 270001 owner visible when a legacy registry entry belongs to 2027-2028', () => {
+    const source = empty(),
+      owner = new Types.ObjectId(),
+      profile = new Types.ObjectId();
+    source.users = [{ _id: owner, role: 'student', studentCode: '270001' }];
+    source.profiles = [
+      {
+        _id: profile,
+        userId: owner,
+        studentCode: '270001',
+        fullName: 'Existing student',
+        academicYear: '2026-2027',
+      },
+    ];
+    source.entries = [
+      {
+        studentCode: '270001',
+        academicYear: '2027-2028',
+        yearPrefix: '27',
+        sequence: 1,
+        status: 'ASSIGNED',
+        currentStudentId: owner,
+        assignmentHistory: [],
+      },
+    ];
+    const result = analyzeCodeSnapshot('2026-2027', '27', source);
+    expect(result.rows[0]).toMatchObject({
+      status: 'REQUIRES_REVIEW',
+      reason: 'REGISTRY_YEAR_MISMATCH',
+      observedStudentId: String(owner),
+      studentProfileId: String(profile),
+      studentName: 'Existing student',
+      studentAcademicYear: '2026-2027',
+      registryAcademicYear: '2027-2028',
+    });
+    expect(result.rows[0].currentStudentId).toBeUndefined();
+    expect(result.canInitialize).toBe(false);
+    expect(source.entries[0].academicYear).toBe('2027-2028');
+  });
   it('returns a verified student profile and bilingual owner name without changing the audit fingerprint', () => {
     const source = empty();
     const owner = new Types.ObjectId();

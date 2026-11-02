@@ -12,7 +12,10 @@ import {
   defaultPasswordHasher,
 } from '../../security/password-hasher';
 import type { Role } from '@student-portal/shared';
-import { reuseRequestRead } from '../../core/metrics/request-query-context';
+import {
+  invalidateRequestRead,
+  reuseRequestRead,
+} from '../../core/metrics/request-query-context';
 
 function maskNationalId(nationalId: string) {
   return nationalId.slice(0, 3) + '****' + nationalId.slice(-3);
@@ -350,6 +353,7 @@ export class UsersService {
       },
       $unset: { lastLogoutAt: 1 },
     });
+    invalidateRequestRead(`auth-user:${userId}`);
   }
 
   async recordUserActivity(
@@ -587,6 +591,7 @@ export class UsersService {
       },
       $unset: { lockUntil: 1, lockedUntil: 1, lastLogoutAt: 1 },
     });
+    invalidateRequestRead(`auth-user:${userId}`);
   }
 
   /** Record user logout to immediately clear active status */
@@ -594,14 +599,13 @@ export class UsersService {
     const now = new Date();
     await this.userModel.findByIdAndUpdate(userId, {
       $set: {
-        lastActiveAt: new Date(0),
-        lastLoginAt: new Date(0),
-        sessionStartedAt: new Date(0),
         lastLogoutAt: now,
         lastAction: 'Logged out',
         lastActionAr: 'تم تسجيل الخروج',
       },
+      $unset: { sessionStartedAt: 1 },
     });
+    invalidateRequestRead(`auth-user:${userId}`);
   }
 
   async updateTheme(

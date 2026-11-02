@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -62,6 +62,9 @@ export function CodeScopeForm({
     resolver: zodResolver(schema),
     defaultValues: initial,
   });
+  useEffect(() => {
+    form.reset({ academicYear: initial.academicYear, yearPrefix: initial.yearPrefix });
+  }, [form, initial.academicYear, initial.yearPrefix]);
   return (
     <Form {...form}>
       <form
@@ -97,10 +100,15 @@ export function CodeScopeForm({
                   <FormControl>
                     <Input
                       {...field}
+                      onChange={(event) => {
+                        field.onChange(event);
+                        if (key === "academicYear" && isAdmissionAcademicYear(event.target.value))
+                          form.setValue("yearPrefix", admissionYearPrefix(event.target.value), { shouldValidate: true });
+                      }}
                       dir="ltr"
                       className="text-left rounded-squircle"
                       maxLength={key === "academicYear" ? 9 : 2}
-                      placeholder={key === "academicYear" ? "2026-2027" : "26"}
+                      placeholder={key === "academicYear" ? "2026-2027" : "27"}
                       disabled={pending}
                     />
                   </FormControl>

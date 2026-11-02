@@ -10,6 +10,7 @@ import {
   ADMISSION_REQUEST_STATUSES,
   ADMISSION_REJECTION_REASONS,
   PERMISSIONS,
+  admissionYearPrefix,
   type AdmissionRequestItem,
   type AdmissionGroupItem,
 } from "@student-portal/shared";
@@ -53,6 +54,8 @@ import {
   History,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getApiErrorDetails } from "@/lib/api";
+import { MappingCorrection } from "@/features/student-codes/mapping-correction";
 import { CopyButton } from "@/components/ui/copy-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -1015,7 +1018,7 @@ function RequestDialog({
                 />
               </div>
             ) : action === "approve" ? (
-              <ApprovalForm item={item} onSaved={onSaved} />
+              <ApprovalForm item={item} onSaved={onSaved} onReload={async () => { await query.refetch(); }} />
             ) : (
               <DecisionForm item={item} action={action} onSaved={onSaved} />
             )}
@@ -1028,12 +1031,15 @@ function RequestDialog({
 function ApprovalForm({
   item,
   onSaved,
+  onReload,
 }: {
   item: AdmissionRequestItem;
   onSaved: () => Promise<void>;
+  onReload: () => Promise<void>;
 }) {
-  const { t, can } = useAdmissionUI(),
+  const { t, can, isAdmin, locale } = useAdmissionUI(),
     [error, setError] = useState(""),
+    [errorCode, setErrorCode] = useState<string | undefined>(),
     [confirmed, setConfirmed] = useState(false);
   const schema = z.object({
     level: z.enum(["1", "2", "3", "4"]),
@@ -1052,6 +1058,7 @@ function ApprovalForm({
       passedCourses: "",
     },
   });
+  useEffect(() => setConfirmed(false), [item.revision]);
   const groups = useQuery({
     queryKey: ["admission-groups", item.academicYear],
     queryFn: () =>
@@ -1068,6 +1075,7 @@ function ApprovalForm({
       onSubmit={form.handleSubmit(async (values) => {
         if (!confirmed) return;
         setError("");
+        setErrorCode(undefined);
         try {
           await admissionAction(item._id, "approve", {
             ...values,
@@ -1082,6 +1090,7 @@ function ApprovalForm({
           await onSaved();
         } catch (e) {
           setError(getAdmissionErrorMessage(e, t));
+          setErrorCode(getApiErrorDetails(e).code);
         }
       })}
     >
@@ -1159,6 +1168,20 @@ function ApprovalForm({
         <p role="alert" className="text-danger">
           {error}
         </p>
+      )}
+      {errorCode === "CODE_YEAR_PREFIX_MISMATCH" && (
+        <div className="space-y-2 rounded-xl border border-warning/30 p-3">
+          <p>{t("expectedCodeStart", { year: item.academicYear, start: admissionYearPrefix(item.academicYear) })}</p>
+          {isAdmin ? <MappingCorrection academicYear={item.academicYear} navigateAfterCorrection={false} onCorrected={() => { setError(""); setErrorCode(undefined); setConfirmed(false); }} /> : <p>{t("mappingContactAdmin")}</p>}
+        </div>
+      )}
+      {(errorCode === "CODE_YEAR_NOT_READY" || errorCode === "CODE_ALLOCATION_REVIEW_REQUIRED") && isAdmin && (
+        <Button type="button" variant="outline" asChild>
+          <a href={`/${locale}/admin/admissions?tab=codes&academicYear=${item.academicYear}&yearPrefix=${admissionYearPrefix(item.academicYear)}`}>{t("reviewCodeSetup")}</a>
+        </Button>
+      )}
+      {errorCode === "ADMISSION_CONFLICT" && (
+        <Button type="button" variant="outline" onClick={async () => { setConfirmed(false); setError(""); setErrorCode(undefined); await onReload(); }}>{t("refreshApplication")}</Button>
       )}
       <DialogFooter className="rtl:sm:justify-start">
         <Button

@@ -13,10 +13,15 @@ import {
   Loader2,
   LogOut,
   MapPin,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import api, { getApiErrorMessage } from "@/lib/api";
+import {
+  formatInternetProvider,
+  formatLoginDateTime,
+} from "@/lib/session-presentation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -33,9 +38,11 @@ import { DeviceIcon, NetworkIcon, PlatformIcon } from "./security-icons";
 export interface Session {
   _id: string;
   createdAt: string;
+  lastAuthenticatedAt?: string;
   expiresAt: string;
   current: boolean;
   ip?: string;
+  privateIp?: boolean;
   device?: "mobile" | "tablet" | "computer" | "unknown";
   browser?: string;
   os?: string;
@@ -57,7 +64,7 @@ export function SessionManager() {
   const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<Session | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const queryKey = ["authSessions", user?._id];
   const query = useQuery({
     queryKey,
@@ -65,15 +72,12 @@ export function SessionManager() {
     enabled: Boolean(user),
     retry: false,
   });
+  const selected = query.data?.find((session) => session._id === selectedId);
 
   if (!user) return null;
 
   const formatDate = (value: string) =>
-    new Intl.DateTimeFormat(isAr ? "ar-EG" : "en-GB", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Africa/Cairo",
-    }).format(new Date(value));
+    formatLoginDateTime(value, locale, t("unavailable"));
   const location = (session: Session) => {
     const country =
       session.country && /^[A-Z]{2}$/.test(session.country)
@@ -152,29 +156,44 @@ export function SessionManager() {
               </p>
             </div>
           </div>
-          {sessions.length > 0 && (
-            <ConfirmDialog
-              dir={isAr ? "rtl" : "ltr"}
-              trigger={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  className="rounded-squircle self-start shrink-0 gap-2 border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive @lg:self-auto"
-                >
-                  <LogOut className="size-4" aria-hidden="true" />
-                  {t("signOutAll")}
-                </Button>
-              }
-              title={t("signOutAll")}
-              description={t("signOutAllDescription")}
-              confirmLabel={t("confirm")}
-              cancelLabel={t("cancel")}
-              destructive
-              onConfirm={() => void revoke()}
-              disabled={busy}
-            />
-          )}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={query.isFetching || busy}
+              onClick={() => void query.refetch()}
+              className="rounded-squircle gap-2"
+            >
+              <RefreshCw
+                className={`size-4 ${query.isFetching ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              {t("refreshSessions")}
+            </Button>
+            {sessions.length > 0 && (
+              <ConfirmDialog
+                dir={isAr ? "rtl" : "ltr"}
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    className="rounded-squircle self-start shrink-0 gap-2 border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive @lg:self-auto"
+                  >
+                    <LogOut className="size-4" aria-hidden="true" />
+                    {t("signOutAll")}
+                  </Button>
+                }
+                title={t("signOutAll")}
+                description={t("signOutAllDescription")}
+                confirmLabel={t("confirm")}
+                cancelLabel={t("cancel")}
+                destructive
+                onConfirm={() => void revoke()}
+                disabled={busy}
+              />
+            )}
+          </div>
         </div>
 
         {query.isPending && (
@@ -290,14 +309,18 @@ export function SessionManager() {
                     aria-hidden="true"
                   />
                   <span>
-                    {t("signedIn", { date: formatDate(session.createdAt) })}
+                    {t("signedIn", {
+                      date: formatDate(
+                        session.lastAuthenticatedAt || session.createdAt,
+                      ),
+                    })}
                   </span>
                 </p>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelected(session)}
+                    onClick={() => setSelectedId(session._id)}
                     className="rounded-squircle gap-1 px-2 text-xs text-primary"
                   >
                     {t("sessionDetails")}
@@ -339,7 +362,7 @@ export function SessionManager() {
         {sessions.length > 0 && (
           <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            {t("locationHint")}
+            {t("locationHint")} {t("sharedIpHint")}
           </p>
         )}
         {error && (
@@ -352,7 +375,7 @@ export function SessionManager() {
       <Dialog
         open={Boolean(selected)}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) setSelectedId(null);
         }}
       >
         <DialogContent
@@ -419,7 +442,8 @@ export function SessionManager() {
                   [
                     t("provider"),
                     <bdi key="provider">
-                      {selected.isp || t("unavailable")}
+                      {formatInternetProvider(selected.isp, selected.country) ||
+                        t("unavailable")}
                     </bdi>,
                   ],
                   [
@@ -434,7 +458,13 @@ export function SessionManager() {
                         : t("unavailable")}
                     </bdi>,
                   ],
-                  [t("signedInLabel"), formatDate(selected.createdAt)],
+                  [
+                    t("signedInLabel"),
+                    formatDate(
+                      selected.lastAuthenticatedAt || selected.createdAt,
+                    ),
+                  ],
+                  [t("sessionStartedLabel"), formatDate(selected.createdAt)],
                   [
                     t("source"),
                     selected.locationSource === "vercel"
@@ -455,10 +485,38 @@ export function SessionManager() {
                   </div>
                 ))}
               </dl>
+              {query.isError && selected.current && (
+                <p role="alert" className="text-xs text-destructive">
+                  {t("loadFailed")}
+                </p>
+              )}
+              {selected.privateIp && (
+                <p
+                  role="status"
+                  className="rounded-xl border border-border bg-secondary/30 p-3 text-xs leading-relaxed text-muted-foreground"
+                >
+                  {t("privateIpHint")}
+                </p>
+              )}
               <p className="rounded-xl bg-secondary/40 p-3 text-xs leading-relaxed text-muted-foreground">
                 {t("networkHint")}
               </p>
               <DialogFooter className="gap-2 rtl:sm:justify-start">
+                {selected.current && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={query.isFetching}
+                    onClick={() => void query.refetch()}
+                    className="rounded-squircle gap-2"
+                  >
+                    <RefreshCw
+                      className={`size-4 ${query.isFetching ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {t("refreshSessions")}
+                  </Button>
+                )}
                 {hasCoordinates(selected) && (
                   <Button asChild size="sm" className="rounded-squircle gap-2">
                     <a
@@ -474,7 +532,7 @@ export function SessionManager() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setSelectedId(null)}
                   className="rounded-squircle"
                 >
                   {t("close")}

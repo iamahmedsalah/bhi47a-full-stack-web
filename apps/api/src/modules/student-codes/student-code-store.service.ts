@@ -112,7 +112,7 @@ export class StudentCodeStore {
     const profiles = await this.profiles
       .find({ studentCode: regex })
       .select(
-        '_id userId studentCode fullName fullNameAr fullNameEn department level',
+        '_id userId studentCode fullName fullNameAr fullNameEn department level academicYear',
       )
       .sort({ _id: 1 })
       .limit(SCAN_LIMIT)
@@ -124,16 +124,23 @@ export class StudentCodeStore {
       .limit(SCAN_LIMIT)
       .session(session ?? null)
       .lean();
-    const policy = await this.years
-      .findOne({
-        $or: [
-          { academicYear },
-          { allocationPrefix: prefix },
-          { allocationPrefix: { $exists: false }, yearPrefix: prefix },
-        ],
-      })
+    // A legacy policy for another year can share this prefix. Prefer the selected
+    // year instead of whichever branch MongoDB happens to match first.
+    const yearPolicy = await this.years
+      .findOne({ academicYear })
       .session(session ?? null)
       .lean();
+    const policy =
+      yearPolicy ??
+      (await this.years
+        .findOne({
+          $or: [
+            { allocationPrefix: prefix },
+            { allocationPrefix: { $exists: false }, yearPrefix: prefix },
+          ],
+        })
+        .session(session ?? null)
+        .lean());
     const period = await this.periods
       .exists({ academicYear, deletedAt: { $exists: false } })
       .session(session ?? null);

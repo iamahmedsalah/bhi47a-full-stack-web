@@ -928,7 +928,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     ).toMatchObject({
       currentPrefix: '96',
       expectedPrefix: '97',
-      nextCode: '970001',
+      nextCode: '970101',
     });
     await mappings.correct(
       {
@@ -963,7 +963,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
           (code, session) => legacyStudent(code, yearB, session),
         )
       ).studentCode,
-    ).toBe('970001');
+    ).toBe('970101');
     await expect(
       mappings.correct(
         {

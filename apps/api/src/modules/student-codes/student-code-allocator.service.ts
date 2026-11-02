@@ -169,10 +169,20 @@ export class StudentCodeAllocator {
           .sort({ studentCode: -1 })
           .session(session)
           .lean();
+        // Registry sequence numbers are unique within an academic year, even
+        // after its allocation prefix is corrected. Keep that high-water mark
+        // to avoid repeatedly walking into old assignments from another prefix.
+        const latestYearEntry = await this.store.entries
+          .findOne({ academicYear })
+          .select('sequence')
+          .sort({ sequence: -1 })
+          .session(session)
+          .lean();
         const observedNext =
           1 +
           Math.max(
             0,
+            latestYearEntry?.sequence ?? 0,
             ...[latestUser, latestProfile, latestEntry].map((item) =>
               item?.studentCode
                 ? (parseStudentCode(item.studentCode, prefix) ?? 0)

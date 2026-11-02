@@ -85,6 +85,11 @@ export function reuseRequestRead<T>(
   return pending;
 }
 
+/** A write in this request must not leave subsequent reads with old auth data. */
+export function invalidateRequestRead(key: string) {
+  storage.getStore()?.request.reads.delete(key);
+}
+
 export function measureSynchronousStage<T>(
   stage: DatabaseStage,
   action: () => T,

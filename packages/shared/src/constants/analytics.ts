@@ -1,9 +1,27 @@
 export const ANALYTICS_LOCALES = {
-  AR: 'ar',
-  EN: 'en',
+  AR: "ar",
+  EN: "en",
 } as const;
 
-export type AnalyticsLocale = (typeof ANALYTICS_LOCALES)[keyof typeof ANALYTICS_LOCALES];
+export type AnalyticsLocale =
+  (typeof ANALYTICS_LOCALES)[keyof typeof ANALYTICS_LOCALES];
+
+/** Stable export identifiers; localized worksheet names are presentation only. */
+export const ANALYTICS_REPORT_SHEETS = [
+  "info",
+  "kpis",
+  "departments",
+  "cohorts",
+  "gpa",
+  "enrollment",
+  "quizzes",
+  "staffQuizzes",
+  "courses",
+  "students",
+  "submissions",
+  "complaints",
+] as const;
+export type AnalyticsReportSheet = (typeof ANALYTICS_REPORT_SHEETS)[number];
 
 export interface StaffQuizStats {
   staffId: string;

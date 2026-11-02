@@ -23,6 +23,10 @@ import {
   ADMISSION_MOBILE,
   ADMISSION_REJECTION_REASONS,
   ADMISSION_REQUEST_STATUSES,
+  ADMISSION_REFERENCE_PATTERN,
+  ADMISSION_TRACKING_SECRET_PATTERN,
+  normalizeAdmissionReference,
+  normalizeAdmissionTrackingSecret,
 } from '@student-portal/shared';
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -79,8 +83,16 @@ export class PublicAccessDto {
   @IsOptional() @Matches(/^[A-Za-z0-9_-]{43}$/) token?: string;
 }
 export class PublicStatusDto {
-  @Matches(/^ADM-[A-F0-9]{24}$/) publicReference!: string;
-  @Matches(/^[A-Za-z0-9_-]{43}$/) secret!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizeAdmissionReference(value) : value,
+  )
+  @Matches(ADMISSION_REFERENCE_PATTERN)
+  publicReference!: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? normalizeAdmissionTrackingSecret(value) : value,
+  )
+  @Matches(ADMISSION_TRACKING_SECRET_PATTERN)
+  secret!: string;
 }
 export class AccessCreateDto {
   @IsMongoId() admissionPeriodId!: string;

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { formatLoginDateTime } from '@/lib/session-presentation';
 import { useRouter } from 'next/navigation';
 import {
   Award,
@@ -155,6 +156,7 @@ function formatDate(value?: string, locale?: string) {
   return new Date(value).toLocaleString(locale === 'ar' ? 'ar-EG' : 'en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: 'Africa/Cairo',
   });
 }
 
@@ -900,7 +902,7 @@ export function StudentDetailDialog({
                   <SectionTitle icon={<Award className="h-4 w-4" />} title={isAr ? 'بيانات النظام والتوثيق' : 'System & Audit'} />
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <InfoItem label={isAr ? 'حالة الحساب' : 'Account Status'} value={userRef?.isActive === false ? (isAr ? 'معطل' : 'Disabled') : (isAr ? 'مفعل' : 'Active')} />
-                    <InfoItem label={isAr ? 'آخر تسجيل دخول' : 'Last Login'} value={formatDate(userRef?.lastLoginAt, locale)} />
+                    <InfoItem label={isAr ? 'آخر تسجيل دخول' : 'Last Login'} value={formatLoginDateTime(userRef?.lastLoginAt, locale, isAr ? 'غير متاح' : 'Unavailable')} />
                     <InfoItem label={isAr ? 'تاريخ الإنشاء' : 'Created At'} value={formatDate(student.createdAt, locale)} />
                     <InfoItem label={isAr ? 'تاريخ التحديث' : 'Updated At'} value={formatDate(student.updatedAt, locale)} />
                   </div>

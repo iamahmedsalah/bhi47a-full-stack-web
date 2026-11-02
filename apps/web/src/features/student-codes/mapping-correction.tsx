@@ -27,7 +27,15 @@ interface MappingPreview {
   truncated: boolean;
   collision: boolean;
 }
-export function MappingCorrection() {
+export function MappingCorrection({
+  academicYear,
+  navigateAfterCorrection = true,
+  onCorrected,
+}: {
+  academicYear?: string;
+  navigateAfterCorrection?: boolean;
+  onCorrected?: () => void;
+} = {}) {
   const { t, userId } = useAdmissionUI(),
     [open, setOpen] = useState(false),
     [confirmed, setConfirmed] = useState(false),
@@ -49,6 +57,7 @@ export function MappingCorrection() {
   return (
     <>
       <Button
+        type="button"
         variant="outline"
         onClick={() => {
           setOpen(true);
@@ -70,12 +79,16 @@ export function MappingCorrection() {
         ) : preview.isError ? (
           <div role="alert">
             <p>{getAdmissionErrorMessage(preview.error, t)}</p>
-            <Button onClick={() => preview.refetch()}>{t("retry")}</Button>
+            <Button type="button" onClick={() => preview.refetch()}>{t("retry")}</Button>
           </div>
         ) : (
           <form
             className="space-y-4"
-            onSubmit={form.handleSubmit(async (values) => {
+            onSubmit={(event) => {
+              // A correction dialog may be opened from the approval form.
+              // Portal submit events must not submit that outer form too.
+              event.stopPropagation();
+              void form.handleSubmit(async (values) => {
               if (!preview.data || !confirmed) return;
               setError("");
               try {
@@ -92,9 +105,9 @@ export function MappingCorrection() {
                 });
                 const item =
                   preview.data.items.find(
-                    (row) => row.academicYear === params.get("academicYear"),
+                    (row) => row.academicYear === (academicYear || params.get("academicYear")),
                   ) ?? preview.data.items[0];
-                if (item) {
+                if (item && navigateAfterCorrection) {
                   const next = new URLSearchParams(params);
                   next.set("academicYear", item.academicYear);
                   next.set("yearPrefix", item.expectedPrefix);
@@ -103,10 +116,12 @@ export function MappingCorrection() {
                 }
                 setOpen(false);
                 form.reset();
+                onCorrected?.();
               } catch (e) {
                 setError(getAdmissionErrorMessage(e, t));
               }
-            })}
+              })(event);
+            }}
           >
             {!preview.data?.items.length && <p>{t("mapping.noChanges")}</p>}
             {preview.data?.items.map((item) => (

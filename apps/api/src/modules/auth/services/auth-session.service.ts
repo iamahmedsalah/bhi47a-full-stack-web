@@ -169,12 +169,10 @@ export class AuthSessionService {
     const claims = this.jwtService.verify<SessionClaims>(token, {
       algorithms: ['HS256'],
     });
-    if (
-      claims.sid &&
-      this.metadata &&
-      (await this.sessionStore.needsMetadata(claims))
-    ) {
-      await this.sessionStore.upgradeMetadata(
+    // Refresh only the requesting device. Historical sessions must never receive
+    // this visitor's IP/network details. Public-IP lookups are cached by resolver.
+    if (claims.sid && this.metadata) {
+      await this.sessionStore.refreshMetadata(
         claims,
         await this.metadata.resolve(req),
       );

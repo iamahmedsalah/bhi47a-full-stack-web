@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { formatLoginDateTime } from '@/lib/session-presentation';
 import { getCourseStaffIds } from '@/features/courses/assignment-utils';
 import {
   courseCurriculumSummary,
@@ -343,7 +344,7 @@ export function StaffDetailsDialog({
                 <div className="grid gap-3 sm:grid-cols-2 text-xs">
                   <div className="rounded-lg border border-border/60 bg-background/50 p-3 space-y-1">
                     <span className="text-muted-foreground">{t('details.lastLogin')}</span>
-                    <p className="font-medium text-foreground">{formatDate(staff.lastLoginAt)}</p>
+                    <p className="font-medium text-foreground">{formatLoginDateTime(staff.lastLoginAt, locale, t('loginUnavailable'))}</p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/50 p-3 space-y-1">
                     <span className="text-muted-foreground">{t('details.createdAt')}</span>

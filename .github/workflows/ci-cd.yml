@@ -83,6 +83,9 @@ jobs:
       - name: Verify Google sign-in nonce refresh and cooldown
         run: node --test apps/web/tests/google-signin-rate-limit.test.mjs
 
+      - name: Verify login history and network presentation
+        run: node --test apps/web/tests/session-presentation.test.mjs
+
       - name: Verify canonical-domain redirects
         run: node --test apps/web/tests/canonical-redirect.test.mjs
 
@@ -147,6 +150,9 @@ jobs:
 
       - name: Test admission-period management in Chromium
         run: pnpm --filter @student-portal/web test:admissions:browser
+
+      - name: Test analytics workbook selection and downloads in Chromium
+        run: pnpm --filter @student-portal/web test:analytics:browser
 
       - name: Start isolated admission replica set
         run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml up -d --wait

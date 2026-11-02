@@ -230,6 +230,33 @@ describe('AnalyticsQueryService', () => {
     expect(overview.kpis.totalStudents).toBe(100);
     expect(overview.kpis.totalCourses).toBe(10);
   });
+  it.each([
+    ['ACCOUNTING', ['ACCOUNTING', 'Accounting', 'ACC', 'المحاسبة']],
+    ['BIS', ['BIS', 'نظم معلومات الأعمال']],
+    ['GENERAL', ['GENERAL', 'GEN', 'الشعبة العامة']],
+  ])(
+    'matches canonical and legacy %s department names within the requested level',
+    async (department, names) => {
+      await service.getStudentsAnalytics({
+        department,
+        level: '3',
+        academicYear: '2027-2028',
+      });
+      const filter = mockStudentProfileModel.find.mock.calls.at(-1)?.[0] as {
+        department: { $in: RegExp[] };
+        level: string;
+        academicYear: string;
+      };
+      expect(filter).toMatchObject({ level: '3', academicYear: '2027-2028' });
+      for (const name of names)
+        expect(
+          filter.department.$in.some((pattern) => pattern.test(name)),
+        ).toBe(true);
+      expect(
+        filter.department.$in.some((pattern) => pattern.test('OTHER')),
+      ).toBe(false);
+    },
+  );
   it('matches both BSON and legacy string quiz references instead of silently returning zero submissions', async () => {
     await service.getQuizzesAnalytics({}, mockAdminUser);
     const pipeline = mockSubmissionModel.aggregate.mock.calls.at(-1)![0] as any;

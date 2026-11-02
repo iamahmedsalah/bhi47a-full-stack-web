@@ -9,6 +9,8 @@ import {
 import { AuthSessionService } from '../modules/auth/services/auth-session.service';
 import { RecentAuthService } from '../modules/auth/services/recent-auth.service';
 import { trustedProxySources } from '../config/trusted-proxy';
+import express from 'express';
+import request from 'supertest';
 
 // Mongo operator shapes are confined to this test double, not production code.
 type Row = Record<string, any>;
@@ -165,17 +167,70 @@ describe('revocable session policy', () => {
       location: undefined,
       networkType: undefined,
     });
-    expect(await store.needsMetadata(token)).toBe(true);
-    await store.upgradeMetadata(token, {
+    await store.refreshMetadata(token, {
       metadataVersion: 1,
       device: 'computer',
       ip: '127.0.0.1',
     });
-    expect(await store.needsMetadata(token)).toBe(false);
     expect(model.rows[0].location).toBeUndefined();
     expect(model.rows[0].networkType).toBeUndefined();
-    expect((await store.list(userId, id))[0].ip).toBe('127.0.0.1');
+    expect((await store.list(userId, id))[0]).toMatchObject({
+      ip: undefined,
+      privateIp: true,
+    });
     expect(await store.list('different-user', id)).toEqual([]);
+  });
+  it('refreshes only the current device after a proxy fix and keeps the latest sign-in separate from creation', async () => {
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const current = claims();
+    const other = claims();
+    await store.register(current, {
+      metadataVersion: 1,
+      device: 'computer',
+      ip: '172.18.0.1',
+    });
+    await store.register(other, {
+      metadataVersion: 1,
+      device: 'mobile',
+      ip: '172.18.0.1',
+    });
+    const createdAt = model.rows[0].createdAt;
+    const expiresAt = model.rows[0].expiresAt;
+    const oldLogin = new Date('2026-01-01T12:00:00Z');
+    model.rows[0].lastAuthenticatedAt = oldLogin;
+    await store.register(current);
+    expect(model.rows[0].createdAt).toBe(createdAt);
+    expect(model.rows[0].expiresAt).toBe(expiresAt);
+    expect(model.rows[0].lastAuthenticatedAt.getTime()).toBeGreaterThan(
+      oldLogin.getTime(),
+    );
+    const lastLogin = model.rows[0].lastAuthenticatedAt;
+    await store.refreshMetadata(current, {
+      metadataVersion: 1,
+      device: 'computer',
+      ip: '8.8.8.8',
+      networkType: 'ethernet',
+      isp: 'Example ISP',
+    });
+    expect(model.rows[0].lastAuthenticatedAt).toBe(lastLogin);
+    expect(
+      (await store.list(userId, sessionDigest(current.sid!)))[0],
+    ).toMatchObject({
+      ip: '8.8.8.8',
+      networkType: 'ethernet',
+      isp: 'Example ISP',
+      privateIp: false,
+    });
+    expect(model.rows[1].ip).toBe('172.18.0.1');
+    expect(model.rows[1].isp).toBeUndefined();
+    await store.revoke(current, 'raw');
+    await store.refreshMetadata(current, {
+      metadataVersion: 1,
+      device: 'computer',
+      ip: '8.8.4.4',
+    });
+    expect(model.rows[0].ip).toBe('8.8.8.8');
   });
   it.each([
     { iss: 'wrong' },
@@ -279,6 +334,51 @@ describe('revocable session policy', () => {
       expect(cookie.mock.calls[0][1]).toBe(next);
     }
     expect(model.rows).toHaveLength(3);
+  });
+  it('refreshes already-versioned metadata on session-list requests without changing login history or other devices', async () => {
+    const jwt = new JwtService({
+      secret: 'synthetic-session-secret-at-least-32-bytes',
+      signOptions: { expiresIn: '1h' },
+    });
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const resolver = {
+      resolve: jest.fn().mockResolvedValue({
+        metadataVersion: 1,
+        device: 'computer',
+        ip: '8.8.8.8',
+        networkType: 'wifi',
+      }),
+    };
+    const service = new AuthSessionService(
+      {} as never,
+      jwt,
+      config,
+      store,
+      resolver as never,
+    );
+    const token = service.generateToken(userId, 'student', 0);
+    const current = jwt.verify<SessionClaims>(token);
+    await store.register(current, {
+      metadataVersion: 1,
+      device: 'computer',
+      ip: '172.18.0.1',
+    });
+    await store.register(claims(), {
+      metadataVersion: 1,
+      device: 'mobile',
+      ip: '172.18.0.1',
+    });
+    const lastLogin = model.rows[0].lastAuthenticatedAt;
+    const req = { ip: '8.8.8.8' };
+    const result = await service.listSessions(userId, token, req as never);
+    expect(resolver.resolve).toHaveBeenCalledWith(req);
+    expect(result.find((session) => session.current)).toMatchObject({
+      ip: '8.8.8.8',
+      networkType: 'wifi',
+    });
+    expect(model.rows[0].lastAuthenticatedAt).toBe(lastLogin);
+    expect(model.rows[1].ip).toBe('172.18.0.1');
   });
 });
 
@@ -384,6 +484,20 @@ describe('single-use recent-auth and OIDC flows', () => {
 });
 
 describe('trusted proxy configuration', () => {
+  it('resolves different public clients behind an allowed proxy and ignores forwarded headers from an untrusted peer', async () => {
+    const app = express();
+    app.set('trust proxy', trustedProxySources('127.0.0.1/32,::1/128'));
+    app.get('/ip', (req, res) => res.json({ ip: req.ip }));
+    for (const ip of ['8.8.8.8', '8.8.4.4']) {
+      const response = await request(app).get('/ip').set('X-Forwarded-For', ip);
+      expect(response.body.ip).toBe(ip);
+    }
+    app.set('trust proxy', trustedProxySources('172.18.0.1/32'));
+    const response = await request(app)
+      .get('/ip')
+      .set('X-Forwarded-For', '8.8.8.8');
+    expect(response.body.ip).not.toBe('8.8.8.8');
+  });
   it('defaults to trusting no proxy', () =>
     expect(trustedProxySources()).toBe(false));
   it.each([

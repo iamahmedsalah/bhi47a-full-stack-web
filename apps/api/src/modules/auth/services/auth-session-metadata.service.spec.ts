@@ -104,7 +104,7 @@ describe('session device and network metadata', () => {
   it('uses Vercel edge metadata only on Vercel, with real session coordinates', async () => {
     const fetchMock = jest.spyOn(globalThis, 'fetch');
     const service = new AuthSessionMetadataService(
-      new ConfigService({ VERCEL: '1' }),
+      new ConfigService({ VERCEL: '1', SESSION_IP_LOOKUP_ENABLED: 'false' }),
     );
     const metadata = await service.resolve(
       request('127.0.0.1', {
@@ -157,6 +157,54 @@ describe('session device and network metadata', () => {
     );
     await service.resolve(request('8.8.8.8'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each(['wifi', 'cellular', 'ethernet'])(
+    'preserves browser-reported %s independently of provider lookup',
+    async (networkType) => {
+      const service = new AuthSessionMetadataService(
+        new ConfigService({ SESSION_IP_LOOKUP_ENABLED: 'false' }),
+      );
+      expect(
+        await service.resolve(
+          request('8.8.8.8', { 'x-client-network-type': networkType }),
+        ),
+      ).toMatchObject({ networkType });
+    },
+  );
+  it('enriches Vercel location with the ISP organization fallback without replacing edge coordinates', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          city: 'Other city',
+          country_code: 'EG',
+          latitude: 30,
+          longitude: 30,
+          connection: { isp: '', org: 'Telecom Egypt' },
+        }),
+      ),
+    );
+    const service = new AuthSessionMetadataService(
+      new ConfigService({ VERCEL: '1' }),
+    );
+    expect(
+      await service.resolve(
+        request('127.0.0.1', {
+          'x-vercel-forwarded-for': '8.8.8.8',
+          'x-vercel-ip-city': 'Alexandria',
+          'x-vercel-ip-country': 'EG',
+          'x-vercel-ip-latitude': '31.2',
+          'x-vercel-ip-longitude': '29.9',
+        }),
+      ),
+    ).toMatchObject({
+      location: 'Alexandria',
+      country: 'EG',
+      latitude: 31.2,
+      longitude: 29.9,
+      isp: 'Telecom Egypt',
+      locationSource: 'vercel',
+    });
   });
   it.each(['timeout', 'rate-limit', 'invalid-data'])(
     'keeps authentication available on location lookup %s',

@@ -83,4 +83,51 @@ describe('request-scoped auth user reads', () => {
       expect.any(Object),
     );
   });
+
+  it('preserves login and activity history on logout and clears only the session start', async () => {
+    const login = new Date('2026-11-02T12:00:00Z');
+    const row = {
+      lastLoginAt: login,
+      lastActiveAt: login,
+      sessionStartedAt: login,
+    };
+    const findByIdAndUpdate = jest.fn(
+      (
+        _id: string,
+        update: {
+          $set: Record<string, unknown>;
+          $unset?: Record<string, number>;
+        },
+      ) => {
+        Object.assign(row, update.$set);
+        for (const key of Object.keys(update.$unset ?? {}))
+          Reflect.deleteProperty(row, key);
+        return Promise.resolve();
+      },
+    );
+    const users = new UsersService({ findByIdAndUpdate } as never);
+    await users.recordLogout(id);
+    expect(row.lastLoginAt).toBe(login);
+    expect(row.lastActiveAt).toBe(login);
+    expect(row.sessionStartedAt).toBeUndefined();
+    expect(row).toMatchObject({ lastLogoutAt: expect.any(Date) });
+  });
+
+  it('returns the new login time even when auth data was already read in this request', async () => {
+    const row = { _id: id, lastLoginAt: new Date(0) };
+    const lean = jest.fn(() => Promise.resolve({ ...row }));
+    const findById = jest.fn(() => ({ select: () => ({ lean }) }));
+    const findByIdAndUpdate = jest.fn(
+      (_id: string, update: { $set: Record<string, unknown> }) =>
+        Promise.resolve(Object.assign(row, update.$set)),
+    );
+    const users = new UsersService({ findById, findByIdAndUpdate } as never);
+    await runWithRequestQueryMetrics('login', async () => {
+      expect((await users.findByIdForAuth(id))?.lastLoginAt?.getTime()).toBe(0);
+      await users.resetAttemptsAndUpdateLastLogin(id);
+      const current = await users.findByIdForAuth(id);
+      expect(current?.lastLoginAt?.getTime()).toBeGreaterThan(0);
+    });
+    expect(lean).toHaveBeenCalledTimes(2);
+  });
 });

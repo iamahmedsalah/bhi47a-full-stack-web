@@ -5,7 +5,14 @@ import Script from "next/script";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { AdmissionReceipt, AdmissionStatus } from "@student-portal/shared";
+import {
+  ADMISSION_REFERENCE_PATTERN,
+  ADMISSION_TRACKING_SECRET_PATTERN,
+  normalizeAdmissionReference,
+  normalizeAdmissionTrackingSecret,
+  type AdmissionReceipt,
+  type AdmissionStatus,
+} from "@student-portal/shared";
 import { Button } from "@/components/ui/button";
 import { LangToggle } from "@/components/ui/LangToggle";
 
@@ -594,12 +601,12 @@ function PublicStatusForm({
   const schema = z.object({
     publicReference: z
       .string()
-      .trim()
-      .regex(/^ADM-[A-F0-9]{24}$/, t("invalid")),
+      .transform(normalizeAdmissionReference)
+      .pipe(z.string().regex(ADMISSION_REFERENCE_PATTERN, t("invalid"))),
     secret: z
       .string()
-      .trim()
-      .regex(/^[A-Za-z0-9_-]{43}$/, t("invalid")),
+      .transform(normalizeAdmissionTrackingSecret)
+      .pipe(z.string().regex(ADMISSION_TRACKING_SECRET_PATTERN, t("invalid"))),
   });
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -662,7 +669,7 @@ function PublicStatusForm({
         <AdmissionInput
           {...form.register("publicReference")}
           dir="ltr"
-          placeholder="ADM-..."
+          placeholder="ADM-ABCD2345EFGH"
           className="text-left font-mono h-11"
           autoComplete="off"
         />
@@ -674,7 +681,7 @@ function PublicStatusForm({
         <AdmissionInput
           {...form.register("secret")}
           dir="ltr"
-          placeholder="•••••••••••••••••••••••••••••••••••••••••••"
+          placeholder="ABCD2345EFGH6789"
           className="text-left font-mono h-11"
           autoComplete="off"
         />

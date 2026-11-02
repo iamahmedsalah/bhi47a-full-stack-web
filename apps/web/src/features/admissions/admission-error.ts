@@ -24,7 +24,14 @@ const codes: Record<string, string> = {
   ADMISSION_PERIOD_IN_USE: "periodInUse",
   CODE_YEAR_NOT_READY: "mappingRequired",
   CODE_YEAR_PREFIX_MISMATCH: "mappingMismatch",
+  CODE_YEAR_CONFLICT: "mappingMismatch",
+  CODE_MAPPING_REVIEW_REQUIRED: "mappingMismatch",
+  CODE_PREVIEW_CHANGED: "changed",
   CODE_WRITE_CONFLICT: "changed",
+  CODE_ALLOCATION_REVIEW_REQUIRED: "codeAllocationReview",
+  CODE_SEQUENCE_EXHAUSTED: "codeSequenceExhausted",
+  CODE_ASSIGNMENT_CONFLICT: "identityReview",
+  CODE_IDENTITY_INDEXES_REQUIRED: "codeSetupIncomplete",
   ADMISSION_TRANSACTIONS_REQUIRED: "transactionsRequired",
 };
 const messages: Record<string, string> = {

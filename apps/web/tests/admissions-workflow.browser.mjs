@@ -27,7 +27,7 @@ const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({ ba
 await write('styles.css', css.css);
 
 const id = '100000000000000000000010', periodId = '100000000000000000000020';
-const reference = 'ADM-1234567890ABCDEF12345678';
+const reference = 'ADM-ABCDEFGH2345';
 let applicant, periodDeleted, accessAvailable, approvalConflict, mappingCorrected;
 let holdSaved = false;
 const writes = [];
@@ -48,19 +48,20 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/admin/admissions/academic-years') return send({ items: ['2026-2027','2027-2028'] });
     if (url.pathname === '/admin/admissions/access') return send(list([{ _id: periodId, admissionPeriodId: periodId, academicYear: '2026-2027', label: 'Synthetic scheduled invitation', method: 'BOTH', status: 'ACTIVE', effectiveStatus: 'PERIOD_SCHEDULED', canOpen: false, expiresAt: '2099-01-01T00:00:00Z', periodOpensAt: '2098-01-01T00:00:00Z', usedCount: 0, maxRegistrations: 10 }]));
     if (url.pathname === '/public/admissions/validate') return accessAvailable ? send({ admissionSession: 'synthetic-session', academicYear: '2026-2027', name: 'Synthetic intake', nameAr: 'دفعة تجريبية' }) : send({ code: 'ADMISSION_ACCESS_UNAVAILABLE', message: 'Admission access is unavailable or has expired.' }, 400);
-    if (url.pathname === '/public/admissions/requests') return send({ publicReference: reference, secret: 's'.repeat(43) });
+    if (url.pathname === '/public/admissions/requests') return send({ publicReference: reference, secret: 'ABCDEFGH23456789' });
     if (url.pathname === '/public/admissions/status') return send({ publicReference: reference, status: 'REJECTED', rejection: { reasonCode: 'CAPACITY', explanation: '' } });
     if (url.pathname === '/admin/admissions/requests') return send(list([applicant]));
     if (url.pathname === `/admin/admissions/requests/${id}`) return send(applicant);
-    if (url.pathname === `/admin/admissions/requests/${id}/approve`) { if (approvalConflict) return send({ code: 'ADMISSION_CONFLICT', message: 'The request changed.' }, 409); applicant = { ...applicant, status: 'APPROVED', revision: 1, studentCode: '270101', studentId: '100000000000000000000030' }; return send(applicant); }
+    if (url.pathname === `/admin/admissions/requests/${id}/approve`) { if (approvalConflict) return send({ code: typeof approvalConflict === 'string' ? approvalConflict : 'ADMISSION_CONFLICT', message: 'The request changed.' }, 409); applicant = { ...applicant, status: 'APPROVED', revision: 1, studentCode: '270101', studentId: '100000000000000000000030' }; return send(applicant); }
     if (url.pathname === '/admin/admissions/groups') return send(list([]));
     if (url.pathname === '/admin/admissions/periods') return send(list(periodDeleted ? [] : [{ _id: periodId, code: 'INTAKE27', academicYear: '2026-2027', name: 'Synthetic intake', nameAr: 'دفعة تجريبية', isEnabled: true, opensAt: '2026-10-01T00:00:00Z', closesAt: '2026-12-01T00:00:00Z', status: 'open', revision: 0 }]));
     if (url.pathname === `/admin/admissions/periods/${periodId}` && req.method === 'DELETE') { periodDeleted = true; return send({ success: true, deletedId: periodId }); }
+    if (url.pathname === '/admin/students/100000000000000000000041') return send({ _id: '100000000000000000000041', studentCode: '270001', fullName: 'Known student', department: 'GENERAL', level: '1', academicYear: '2026-2027', semester: 'first', enrollmentStatus: 'active' });
     if (url.pathname === '/admin/students/100000000000000000000031') return send({ _id: '100000000000000000000031', studentCode: '270101', fullName: 'Synthetic student', department: 'BIS', level: '1', academicYear: '2026-2027', semester: 'first', enrollmentStatus: 'active' });
     if (url.pathname === '/admin/student-codes/mappings/preview') return send({ items: mappingCorrected ? [] : [{ academicYear: '2026-2027', currentPrefix: '26', expectedPrefix: '27', nextSequence: 101, nextCode: '270101' }], fingerprint: 'f'.repeat(64), canApply: !mappingCorrected, collision: false, truncated: false, changesExistingStudentCodes: false });
     if (url.pathname === '/admin/student-codes/mappings/correct') { mappingCorrected = true; return send({ corrected: 1, changesExistingStudentCodes: false }); }
     if (url.pathname === '/admin/student-codes/270102/hold') { holdSaved = true; return send({ studentCode: '270102', status: 'RELEASED', reuseEnabled: false }); }
-    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030', studentProfileId: '100000000000000000000031', studentName: 'Synthetic student', studentNameAr: 'Synthetic student', department: 'BIS', level: '1' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 0 : 1, MISSING: 0 } });
+    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270001', sequence: 1, status: 'REQUIRES_REVIEW', reason: 'REGISTRY_YEAR_MISMATCH', observedStudentId: '100000000000000000000040', studentProfileId: '100000000000000000000041', studentName: 'Known student', studentNameAr: 'Known student', studentAcademicYear: '2026-2027', registryAcademicYear: '2027-2028' }, { studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030', studentProfileId: '100000000000000000000031', studentName: 'Synthetic student', studentNameAr: 'Synthetic student', department: 'BIS', level: '1' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 1 : 2, MISSING: 0 } });
     send({ message: 'Unknown synthetic route' }, 404);
   } catch (error) { res.statusCode = 500; res.end(JSON.stringify({ message: error.message })); }
 });
@@ -121,6 +122,18 @@ try {
     const submitted = writes.find(write => write.path.endsWith('/requests')).body;
     assert.notEqual(submitted.phone, submitted.guardians[0].phone); assert.equal(submitted.studentCode, undefined);
     assert.ok(!page.url().includes('token=') && !page.url().includes('secret='));
+    await page.getByRole('button', { name: locale === 'ar' ? 'متابعة حالة الطلب الآن' : 'Track Status Now', exact: true }).click();
+    await page.getByLabel(t.reference, { exact: true }).fill(' adm-abcd-efgh-2345 ');
+    await page.getByLabel(t.trackingSecret, { exact: true }).fill('abcd efgh 2345 6789');
+    const compactTracking = page.waitForResponse(response => response.url().endsWith('/public/admissions/status'));
+    await page.getByRole('button', { name: t.track, exact: true }).click(); await compactTracking;
+    assert.deepEqual(writes.filter(write => write.path.endsWith('/status')).at(-1).body, { publicReference: reference, secret: 'ABCDEFGH23456789' });
+    await page.getByLabel(t.reference, { exact: true }).fill('ADM-1234567890ABCDEF12345678');
+    await page.getByLabel(t.trackingSecret, { exact: true }).fill('s'.repeat(43));
+    const legacyTracking = page.waitForResponse(response => response.url().endsWith('/public/admissions/status'));
+    await page.getByRole('button', { name: t.track, exact: true }).click(); await legacyTracking;
+    assert.equal(writes.filter(write => write.path.endsWith('/status')).at(-1).body.secret, 's'.repeat(43));
+
     await page.screenshot({ path: path.join(output, `public-${locale}.png`), fullPage: true });
 
     await page.goto(`${address}/${locale}/admin/admissions?tab=requests`);
@@ -145,7 +158,25 @@ try {
     assert.equal(await approve.isDisabled(), true); await dialog.getByRole('checkbox', { name: t.confirmApproval, exact: true }).check();
     approvalConflict = true; await approve.click(); await dialog.getByText(t.errors.changed, { exact: true }).waitFor();
     assert.equal(await dialog.getByLabel(t.fields.department, { exact: true }).inputValue(), 'GENERAL');
-    approvalConflict = false; await approve.click(); await dialog.waitFor({ state: 'hidden' });
+    await dialog.getByRole('button', { name: t.refreshApplication, exact: true }).click();
+    assert.equal(await approve.isDisabled(), true);
+    await dialog.getByRole('checkbox', { name: t.confirmApproval, exact: true }).check();
+    approvalConflict = 'CODE_YEAR_PREFIX_MISMATCH'; await approve.click();
+    await dialog.getByText(t.errors.mappingMismatch, { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: t.mapping.preview, exact: true }).click();
+    const approvalMapping = page.getByRole('dialog').filter({ has: page.getByText(t.mapping.description, { exact: true }) });
+    await approvalMapping.getByText('270101', { exact: true }).waitFor();
+    const approvalAttempts = writes.filter(write => write.path.endsWith('/approve')).length;
+    await approvalMapping.getByLabel(t.reason, { exact: true }).fill('Reviewed end-year setup before approval.');
+    await approvalMapping.getByRole('checkbox', { name: t.mapping.confirm, exact: true }).check();
+    await approvalMapping.getByRole('button', { name: t.mapping.apply, exact: true }).click();
+    await approvalMapping.waitFor({ state: 'hidden' });
+    assert.equal(writes.filter(write => write.path.endsWith('/approve')).length, approvalAttempts, 'Correcting a mapping must not submit the outer approval form');
+    assert.ok(page.url().includes('tab=requests'), 'Correction from approval keeps the application open');
+    assert.equal(await approve.isDisabled(), true);
+    approvalConflict = false; await dialog.getByRole('checkbox', { name: t.confirmApproval, exact: true }).check();
+    await approve.click(); await dialog.waitFor({ state: 'hidden' });
+    mappingCorrected = false;
     await page.getByText('270101', { exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, `admin-${locale}.png`), fullPage: true });
     await page.goto(`${address}/${locale}/admin/admissions?tab=requests&staff=1`); await page.getByText(reference, { exact: true }).waitFor();
@@ -159,6 +190,20 @@ try {
     assert.equal(mappingCorrected, true); await page.getByRole('button', { name: '270101', exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, `mapping-${locale}.png`), fullPage: true });
     const codeMessages = messages.studentCodes;
+    await page.getByRole('button', { name: t.fields.academicYear, exact: true }).click();
+    await page.getByRole('option', { name: '2027-2028', exact: true }).click();
+    assert.equal(await page.getByLabel(codeMessages.fields.yearPrefix, { exact: true }).inputValue(), '28');
+    await page.getByRole('button', { name: t.fields.academicYear, exact: true }).click();
+    await page.getByRole('option', { name: '2026-2027', exact: true }).click();
+    assert.equal(await page.getByLabel(codeMessages.fields.yearPrefix, { exact: true }).inputValue(), '27');
+    await page.getByText(codeMessages.reasons.REGISTRY_YEAR_MISMATCH, { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Known student', exact: true }).click();
+    const observedOwner = page.getByRole('dialog');
+    await observedOwner.getByText('Known student', { exact: true }).waitFor();
+    await observedOwner.getByText('270001', { exact: true }).first().waitFor();
+    await observedOwner.getByRole('button', { name: codeMessages.close, exact: true }).first().click();
+    await observedOwner.waitFor({ state: 'hidden' });
+
     await page.getByText('Synthetic student', { exact: true }).waitFor();
     await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270101'), exact: true }).click();
     await page.getByRole('menuitem', { name: codeMessages.viewAudit, exact: true }).click();

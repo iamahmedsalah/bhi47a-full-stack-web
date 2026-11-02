@@ -6,7 +6,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
-import { AnalyticsQueryDto } from './dto/analytics-query.dto';
+import {
+  AnalyticsQueryDto,
+  AnalyticsExportQueryDto,
+} from './dto/analytics-query.dto';
 import { AnalyticsQueryService } from './services/analytics-query.service';
 import { AnalyticsExcelService } from './services/analytics-excel.service';
 
@@ -77,7 +80,7 @@ export class AnalyticsController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.ANALYTICS_EXPORT)
   @ApiOperation({
-    summary: 'Export multi-sheet comprehensive Excel analytics report (.xlsx)',
+    summary: 'Export selected analyses or the complete Excel workbook (.xlsx)',
   })
   @ApiProduces(
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -87,7 +90,7 @@ export class AnalyticsController {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   )
   async exportComprehensiveReport(
-    @Query() query: AnalyticsQueryDto,
+    @Query() query: AnalyticsExportQueryDto,
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
@@ -97,11 +100,17 @@ export class AnalyticsController {
     );
 
     const nowStr = new Date().toISOString().slice(0, 10);
-    const filenameAscii = `academic-analytics-report-${nowStr}.xlsx`;
+    const scope =
+      query.sheets?.length === 1
+        ? query.sheets[0]
+        : query.sheets
+          ? 'selected'
+          : 'report';
+    const filenameAscii = `academic-analytics-${scope}-${nowStr}.xlsx`;
     const filenameUtf8 = encodeURIComponent(
       query.locale === 'en'
-        ? `Academic-Analytics-Report-${nowStr}.xlsx`
-        : `تقرير-التحليلات-الأكاديمية-الشامل-${nowStr}.xlsx`,
+        ? filenameAscii
+        : `تقرير-التحليلات-الأكاديمية-${query.sheets ? 'مختار' : 'الشامل'}-${nowStr}.xlsx`,
     );
 
     res.setHeader(
@@ -109,7 +118,7 @@ export class AnalyticsController {
       `attachment; filename="${filenameAscii}"; filename*=UTF-8''${filenameUtf8}`,
     );
 
-    await workbook.xlsx.write(res);
-    res.end();
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.end(buffer);
   }
 }

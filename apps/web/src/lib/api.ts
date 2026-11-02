@@ -5,6 +5,7 @@ import axios, {
 } from 'axios';
 import { isPublicRoute } from '@/lib/public-routes';
 import { retryAfterDeadline } from './query-retry-policy';
+import { reportedNetworkType } from './session-presentation';
 
 export interface ApiEnvelope<T> {
   success: boolean;
@@ -166,13 +167,8 @@ api.interceptors.request.use((config) => {
       headers.set('accept-language', locale);
     }
     if (config.url?.startsWith('/auth/')) {
-      const connection = (navigator as Navigator & {
-        connection?: { type?: string };
-      }).connection;
-      // effectiveType is a speed estimate (e.g. 4g), not Wi-Fi vs mobile data.
-      if (connection?.type && ['wifi', 'cellular', 'ethernet', 'bluetooth', 'wimax'].includes(connection.type)) {
-        headers.set('x-client-network-type', connection.type);
-      }
+      const networkType = reportedNetworkType(navigator as Navigator & { connection?: { type?: string } });
+      if (networkType) headers.set('x-client-network-type', networkType);
     }
   }
 

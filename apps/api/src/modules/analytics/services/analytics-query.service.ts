@@ -1,5 +1,9 @@
 import { courseCurriculumFilter } from '../../courses/utils/course-filter.util';
-import { normalizeDepartment, type CourseLevel } from '@student-portal/shared';
+import {
+  normalizeDepartment,
+  departmentAliases,
+  type CourseLevel,
+} from '@student-portal/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model, type FilterQuery } from 'mongoose';
@@ -640,7 +644,27 @@ export class AnalyticsQueryService {
     const profileFilter: FilterQuery<StudentProfileDocument> = {};
     if (query.academicYear) profileFilter.academicYear = query.academicYear;
     if (query.semester) profileFilter.semester = query.semester;
-    if (query.department) profileFilter.department = query.department;
+    if (query.department) {
+      const department = normalizeDepartment(query.department);
+      profileFilter.department = department
+        ? {
+            $in: [
+              ...departmentAliases(department),
+              ...(department === 'GENERAL'
+                ? ['GEN']
+                : department === 'ACCOUNTING'
+                  ? ['ACC']
+                  : []),
+            ].map(
+              (alias) =>
+                new RegExp(
+                  `^${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+                  'i',
+                ),
+            ),
+          }
+        : query.department;
+    }
     if (query.level) profileFilter.level = query.level;
 
     const profiles = await this.studentProfileModel

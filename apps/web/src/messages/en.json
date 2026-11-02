@@ -1,4 +1,50 @@
 {
+  "analyticsExport": {
+    "title": "Export analytics (.xlsx)",
+    "description": "Download the complete workbook or choose one or more analysis worksheets.",
+    "mode": "Export contents",
+    "all": "Complete workbook",
+    "selected": "Selected analysis sheets",
+    "chooseSheets": "Choose worksheets",
+    "selectAtLeastOne": "Select at least one worksheet to download.",
+    "academicYear": "Academic year (optional)",
+    "allYearsHint": "Leave blank to include all academic years.",
+    "invalidYear": "Enter consecutive years, for example 2026-2027.",
+    "semester": "Semester",
+    "allSemesters": "All semesters",
+    "semesters": { "first": "First semester", "second": "Second semester", "summer": "Summer semester" },
+    "level": "Academic level",
+    "levelValue": "Level {level}",
+    "allLevels": "All levels",
+    "department": "Department",
+    "allDepartments": "All specializations",
+    "generalLevels": "Levels 1 and 2 use the General division. Department selection starts at level 3.",
+    "language": "Workbook language",
+    "includeSubmissions": "Include detailed quiz submissions",
+    "submissionsHint": "Add individual scores and submission times. An empty worksheet keeps its column headers.",
+    "included": "Worksheets included: {count, number}",
+    "globalMetricsHint": "Summary KPIs and complaints totals cover the whole institute. Year, semester, level and department filters apply to the student, course and quiz analyses.",
+    "downloadAll": "Download complete workbook",
+    "downloadSelected": "Download selected sheets",
+    "working": "Generating workbook…",
+    "success": "Analytics workbook downloaded.",
+    "failed": "Could not export analytics. Please try again.",
+    "cancel": "Cancel",
+    "sheets": {
+      "info": "Report information and methodology",
+      "kpis": "Institute summary KPIs",
+      "departments": "Departments and student counts",
+      "cohorts": "Cohort retention and probation",
+      "gpa": "GPA distribution",
+      "enrollment": "Enrollment status",
+      "quizzes": "Quiz analysis and pass rates",
+      "staffQuizzes": "Staff quiz performance",
+      "courses": "Course analysis and enrollment",
+      "students": "Student academic data",
+      "submissions": "Detailed quiz submissions",
+      "complaints": "Institute complaints analysis"
+    }
+  },
   "quizRelease": {
     "results": "Marks release",
     "review": "Answer review",
@@ -103,11 +149,15 @@
     "connection": "Connection type",
     "wifi": "Wi-Fi",
     "cellular": "Mobile data",
-    "ethernet": "Ethernet",
+    "ethernet": "Ethernet cable",
     "bluetooth": "Bluetooth",
     "approximateLocation": "Approximate IP location",
-    "signedIn": "Signed in {date}",
-    "signedInLabel": "Signed in",
+    "signedIn": "Last signed in {date} (Cairo time)",
+    "signedInLabel": "Last sign-in (Cairo time)",
+    "sessionStartedLabel": "Session created (Cairo time)",
+    "refreshSessions": "Refresh sessions",
+    "sharedIpHint": "Devices on the same router, mobile network or VPN may share a public IP. Sessions are identified separately for each browser.",
+    "privateIpHint": "The server received a private network address. A portal administrator must check the trusted proxy configuration to restore public IP and provider details. Refresh this session afterward; older devices refresh when they open this page.",
     "sessionDetails": "Session details",
     "signOutDescription": "Sign this device out? It will need to sign in again to access your account.",
     "signOutCurrentDescription": "Sign out of this browser? You will return to the sign-in page.",
@@ -117,7 +167,7 @@
     "coordinates": "Approximate coordinates",
     "source": "Location source",
     "vercelLocation": "Vercel IP geolocation",
-    "networkHint": "Connection type is reported by the signing-in browser when supported. It cannot be reliably inferred from your IP address or connection speed. Details for older sessions may be unavailable.",
+    "networkHint": "Connection type is reported by the browser on this device when supported. It cannot be reliably inferred from your IP address or connection speed. Details for older sessions may be unavailable.",
     "viewMap": "View approximate location",
     "close": "Close",
     "retry": "Try again"
@@ -688,6 +738,7 @@
     "active": "Active",
     "inactive": "Inactive",
     "never": "Never",
+    "loginUnavailable": "Unavailable",
     "loading": "Loading staff accounts...",
     "empty": "No staff accounts match these filters.",
     "loadFailed": "Could not load staff accounts.",
@@ -1193,7 +1244,8 @@
       "CURRENT_OWNER": "The account and profile agree. Inactivity does not release the code.",
       "PREVIOUS_OWNER_BLOCKED": "A previous holder exists. Reuse is blocked until historical identity references are migrated.",
       "RESERVATION_HELD": "An operation holds this code; it cannot be recovered or reused.",
-      "PREVIOUS_OWNER_MISSING": "The original student identity was deleted; previous ownership remains protected."
+      "PREVIOUS_OWNER_MISSING": "The original student identity was deleted; previous ownership remains protected.",
+      "REGISTRY_YEAR_MISMATCH": "The registry records a different year. The displayed student still uses this code; review the registry metadata."
     },
     "validation": {
       "year": "Use consecutive years, for example 2026-2027.",
@@ -1244,7 +1296,10 @@
     "generalDepartment": "General",
     "legacyScope": "You are viewing a legacy prefix. New admissions for this year use {prefix}. Existing student codes stay unchanged.",
     "scanCurrentPrefix": "Scan the current prefix",
-    "manualYear": "Enter a legacy year manually"
+    "manualYear": "Enter a legacy year manually",
+    "expectedPrefix": "Expected starting number",
+    "ownerYear": "Student year",
+    "registryYear": "Registry year"
   },
   "admissionWorkflow": {
     "title": "Admissions and student codes",
@@ -1501,7 +1556,10 @@
       "reasonRequired": "Write an explanation for this decision.",
       "periodDisabled": "This invitation’s admission period is disabled. Contact admissions to enable the period.",
       "periodScheduled": "This invitation’s admission period has not opened yet. Check its Cairo opening date with admissions.",
-      "periodClosed": "This invitation’s admission period has closed. Contact admissions for a current period."
+      "periodClosed": "This invitation’s admission period has closed. Contact admissions for a current period.",
+      "codeAllocationReview": "Review the year setup and code registry before issuing another student code.",
+      "codeSequenceExhausted": "This year has reached the maximum student-code sequence. Review the intake setup.",
+      "codeSetupIncomplete": "Student-code protection setup is incomplete. Contact the portal administrator."
     },
     "mapping": {
       "preview": "Review year-prefix corrections",
@@ -1541,6 +1599,10 @@
       "groups": "Choose a configured academic year and level, then set capacity. Assigning a group during approval is optional.",
       "codes": "Use the audit to understand ownership. A review finding does not mean that a code can be given to someone else.",
       "imports": "Download the template → preview the workbook → confirm valid rows. The preview never changes student records."
-    }
+    },
+    "expectedCodeStart": "New codes for {year} must start with {start}. Review the saved year mapping before approval.",
+    "mappingContactAdmin": "An administrator must review and correct this year mapping.",
+    "reviewCodeSetup": "Review year code setup",
+    "refreshApplication": "Reload latest application"
   }
 }

@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsExcelService } from './analytics-excel.service';
 import { AnalyticsQueryService } from './analytics-query.service';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
+import { ANALYTICS_REPORT_SHEETS } from '@student-portal/shared';
+import { getReportLabels } from '../i18n/report-labels';
+import * as ExcelJS from 'exceljs';
 
 describe('AnalyticsExcelService', () => {
   let service: AnalyticsExcelService;
@@ -144,6 +147,7 @@ describe('AnalyticsExcelService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AnalyticsExcelService,
@@ -187,5 +191,75 @@ describe('AnalyticsExcelService', () => {
     const quizSheet = workbook.getWorksheet('Quiz Analysis');
     expect(quizSheet).toBeDefined();
     expect(quizSheet?.views?.[0]?.rightToLeft).toBe(false);
+  });
+
+  it.each(ANALYTICS_REPORT_SHEETS)(
+    'exports only the selected %s worksheet, including empty datasets',
+    async (sheet) => {
+      const workbook = await service.generateComprehensiveWorkbook(
+        { locale: 'en', sheets: [sheet] },
+        mockAdminUser,
+      );
+      expect(workbook.worksheets.map((item) => item.name)).toEqual([
+        getReportLabels('en').sheets[sheet],
+      ]);
+      expect(workbook.worksheets[0].rowCount).toBeGreaterThanOrEqual(1);
+      if (sheet === 'quizzes') {
+        expect(mockQueryService.getQuizzesAnalytics).toHaveBeenCalledTimes(1);
+        expect(mockQueryService.getOverview).not.toHaveBeenCalled();
+        expect(mockQueryService.getStudentsAnalytics).not.toHaveBeenCalled();
+        expect(mockQueryService.getStaffQuizPerformance).not.toHaveBeenCalled();
+        expect(mockQueryService.getCoursesAnalytics).not.toHaveBeenCalled();
+        expect(mockQueryService.getDetailedSubmissions).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('round-trips a selected Arabic workbook as valid XLSX without adding unselected submissions', async () => {
+    const workbook = await service.generateComprehensiveWorkbook(
+      {
+        locale: 'ar',
+        sheets: ['students', 'enrollment'],
+        includeSubmissions: true,
+      },
+      mockAdminUser,
+    );
+    const read = new ExcelJS.Workbook();
+    await read.xlsx.load(await workbook.xlsx.writeBuffer());
+    const labels = getReportLabels('ar');
+    expect(read.worksheets.map((sheet) => sheet.name)).toEqual([
+      labels.sheets.enrollment,
+      labels.sheets.students,
+    ]);
+    expect(read.worksheets.every((sheet) => sheet.views[0].rightToLeft)).toBe(
+      true,
+    );
+    expect(
+      read.getWorksheet(labels.sheets.enrollment)?.getRow(2).getCell(2).value,
+    ).toBe(1);
+    expect(
+      read.getWorksheet(labels.sheets.students)?.getCell('A1').fill,
+    ).toMatchObject({ type: 'pattern', fgColor: { argb: 'FF0D9488' } });
+    expect(
+      read.getWorksheet(labels.sheets.students)?.getCell('A1').font.bold,
+    ).toBe(true);
+    expect(mockQueryService.getOverview).not.toHaveBeenCalled();
+    expect(mockQueryService.getDetailedSubmissions).not.toHaveBeenCalled();
+  });
+
+  it('keeps the complete workbook default and the optional empty submissions sheet', async () => {
+    const regular = await service.generateComprehensiveWorkbook(
+      {},
+      mockAdminUser,
+    );
+    expect(regular.worksheets).toHaveLength(11);
+    const detailed = await service.generateComprehensiveWorkbook(
+      { includeSubmissions: true },
+      mockAdminUser,
+    );
+    expect(detailed.worksheets).toHaveLength(12);
+    expect(
+      detailed.getWorksheet(getReportLabels('ar').sheets.submissions)?.rowCount,
+    ).toBe(1);
   });
 });

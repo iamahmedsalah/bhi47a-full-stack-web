@@ -29,7 +29,8 @@ const sessions = [
     country: "EG",
     latitude: 31.2,
     longitude: 29.9,
-    isp: "Example ISP",
+    isp: "Telecom Egypt",
+    lastAuthenticatedAt: "2026-11-02T12:00:00Z",
     locationSource: "ipwhois",
   },
   {
@@ -38,7 +39,7 @@ const sessions = [
     os: "iOS",
     browser: "Safari",
     device: "mobile",
-    ip: "192.0.2.2",
+    ip: "192.0.2.1",
     networkType: "cellular",
     location: "London",
     country: "GB",
@@ -52,6 +53,7 @@ const sessions = [
     os: "Android",
     browser: "Google Chrome",
     device: "tablet",
+    privateIp: true,
   },
 ].map((session) => ({
   ...session,
@@ -153,6 +155,7 @@ const css = await requireWeb("postcss")([
 await fs.writeFile(path.join(output, "styles.css"), css.css);
 
 let scenario = "normal";
+let networkRefreshed = false;
 const mutations = [];
 let keys = [];
 let visibility = { registrationVisible: false, syllabiVisible: false };
@@ -265,7 +268,9 @@ const server = http.createServer(async (req, res) => {
         pathname === "/auth/sessions"
           ? scenario === "empty"
             ? []
-            : sessions
+            : sessions.map(session => networkRefreshed && session.current
+              ? {...session, networkType: 'ethernet', isp: 'Vodafone Egypt', latitude: 30.1, longitude: 31.2}
+              : session)
           : pathname === "/auth/passkeys/capabilities"
             ? { enabled: true, studentLoginEnabled: true }
             : pathname === "/auth/passkeys/settings"
@@ -359,6 +364,7 @@ try {
     const ar = locale === "ar";
     keys = keyFixtures();
     mutations.length = 0;
+    networkRefreshed = false;
     await page.goto(`${base}/?locale=${locale}`);
     await page
       .getByRole("heading", { name: ar ? "الجلسات النشطة" : "Active sessions" })
@@ -430,6 +436,21 @@ try {
     const iphone = page.locator("article").filter({ hasText: "Safari" });
     const tablet = page.locator("article").filter({ hasText: "Android" });
     assert.match(await windows.innerText(), /Alexandria/);
+    const loginDate = new Intl.DateTimeFormat(ar ? 'ar-EG' : 'en-GB', {
+      timeZone: 'Africa/Cairo', dateStyle: 'medium', timeStyle: 'short',
+    }).format(new Date('2026-11-02T12:00:00Z'));
+    assert.ok((await windows.innerText()).includes(loginDate), 'Repeated sign-in uses its latest time rather than session creation');
+    await windows.getByRole('button', {name: ar ? 'تفاصيل الجلسة' : 'Session details'}).click();
+    const currentDialog = page.getByRole('dialog');
+    await currentDialog.getByText('WE · Telecom Egypt', {exact:true}).waitFor();
+    networkRefreshed = true;
+    await currentDialog.getByRole('button', {name: ar ? 'تحديث الجلسات' : 'Refresh sessions'}).click();
+    await currentDialog.getByText('Vodafone · Vodafone Egypt', {exact:true}).waitFor();
+    await currentDialog.getByText(ar ? 'كابل الشبكة (Ethernet)' : 'Ethernet cable', {exact:true}).waitFor();
+    assert.equal(await currentDialog.getByRole('link').getAttribute('href'), 'https://www.google.com/maps/search/?api=1&query=30.1,31.2');
+    assert.ok((await currentDialog.innerText()).includes(loginDate), 'A metadata refresh never changes the login time');
+    await page.screenshot({path: path.join(output, `${locale}-ethernet-dialog.png`)});
+    await currentDialog.press('Escape');
     assert.match(
       await iphone.innerText(),
       ar ? /بيانات الهاتف/ : /Mobile data/,
@@ -440,7 +461,7 @@ try {
     const dialog = page.getByRole("dialog");
     await dialog.waitFor();
     assert.equal(await dialog.getAttribute("dir"), ar ? "rtl" : "ltr");
-    assert.match(await dialog.innerText(), /192\.0\.2\.2/);
+    assert.match(await dialog.innerText(), /192\.0\.2\.1/);
     assert.equal(
       await dialog.getByRole("link").getAttribute("href"),
       "https://www.google.com/maps/search/?api=1&query=51.5,-0.12",
@@ -454,6 +475,7 @@ try {
       .getByRole("button", { name: ar ? "تفاصيل الجلسة" : "Session details" })
       .click();
     await dialog.waitFor();
+    await dialog.getByRole('status').waitFor();
     assert.equal(
       await dialog.getByRole("link").count(),
       0,
@@ -461,7 +483,7 @@ try {
     );
     assert.doesNotMatch(
       await dialog.innerText(),
-      /Cairo|القاهرة|156\.204\.18\.92/,
+      /156\.204\.18\.92/,
     );
     await dialog.press("Escape");
     await iphone

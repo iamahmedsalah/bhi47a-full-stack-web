@@ -499,21 +499,39 @@ export class AdmissionWorkflowService {
       });
     const accessId = this.security.readSession(dto.admissionSession);
     const receipt = this.security.receipt(accessId, dto.submissionKey);
+    const receipts = [
+      receipt,
+      this.security.receipt(accessId, dto.submissionKey, true),
+    ];
+    const previousReceipt = async (session?: ClientSession) => {
+      const previous = await this.requests
+        .findOne({
+          publicReference: {
+            $in: receipts.map((item) => item.publicReference),
+          },
+        })
+        .select('+statusSecretHash')
+        .session(session ?? null)
+        .lean();
+      if (!previous) return undefined;
+      const matching = receipts.find(
+        (item) =>
+          item.publicReference === previous.publicReference &&
+          admissionEqual(admissionHash(item.secret), previous.statusSecretHash),
+      );
+      if (!matching)
+        admissionConflict('Please start a fresh application submission.');
+      return matching;
+    };
     // Safe retry after a lost response does not redeem CAPTCHA or consume another use.
-    if (
-      await this.requests.exists({ publicReference: receipt.publicReference })
-    )
-      return receipt;
+    const previous = await previousReceipt();
+    if (previous) return previous;
     await this.security.captcha(dto.captchaToken, ip);
     const encrypted = this.security.encrypt(dto.nationalId),
       lookup = this.security.hmac('national-id', dto.nationalId);
     return this.transactions.run(async (session) => {
-      if (
-        await this.requests
-          .exists({ publicReference: receipt.publicReference })
-          .session(session)
-      )
-        return receipt;
+      const previous = await previousReceipt(session);
+      if (previous) return previous;
       const access = await this.access
         .findOneAndUpdate(
           this.accessFilter(accessId),
@@ -861,6 +879,7 @@ export class AdmissionWorkflowService {
         admissionConflict('The request was approved after this preview.');
       return this.detail(id, actor);
     }
+    if (initial.revision !== dto.revision) admissionConflict();
     if (initial.duplicateReviewRequired)
       throw new ConflictException({
         code: 'ADMISSION_DUPLICATE_REVIEW',
@@ -995,11 +1014,15 @@ export class AdmissionWorkflowService {
         )
           admissionConflict();
         if (
-          await this.store.users
+          (await this.store.users
             .exists({ role: 'student', nationalId })
-            .session(session)
+            .session(session)) ||
+          (await this.store.profiles.exists({ nationalId }).session(session))
         )
-          admissionConflict('An existing student identity requires review.');
+          throw new ConflictException({
+            code: 'ADMISSION_DUPLICATE_REVIEW',
+            message: 'An existing student identity requires review.',
+          });
         if (
           dto.passedCourses.length &&
           (await this.store.connection
