@@ -22,15 +22,15 @@ export async function generateMetadata({
   const siteUrl = getSiteUrl();
 
   const titleDefault = isAr
-    ? `${INSTITUTE_INFO.nameAr} | بوابة الطالب والخدمات الأكاديمية (47 أ)`
+    ? `${INSTITUTE_INFO.nameAr} | بوابة الطالب والخدمات الأكاديمية (47 ك)`
     : `${INSTITUTE_INFO.nameEn} | Student & Academic Portal (BHI47)`;
 
   const titleTemplate = isAr
-    ? `%s | ${INSTITUTE_INFO.nameAr} (47 أ)`
+    ? `%s | ${INSTITUTE_INFO.nameAr} (47 ك)`
     : `%s | ${INSTITUTE_INFO.nameEn} (BHI47)`;
 
   const description = isAr
-    ? 'البوابة الإلكترونية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود التنسيق 47 أ) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، الجداول الدراسية، والبريد الأكاديمي.'
+    ? 'البوابة الإلكترونية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود التنسيق 47 ك) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، الجداول الدراسية، والبريد الأكاديمي.'
     : 'Official Student & Academic Portal for High Institute for Advanced Management Sciences and Computer (BHI47, Coordination Code 47/A) - Student Records, Schedules, Results, and LMS.';
 
   return {

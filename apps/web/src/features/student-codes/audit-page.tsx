@@ -1,4 +1,5 @@
 "use client";
+import { AdmissionSection } from "@/features/admissions/admission-section";
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import {
   PERMISSIONS,
   STUDENT_CODE_STATUSES,
   isAdmissionAcademicYear,
+  admissionYearPrefix,
   type StudentCodeFinding,
 } from "@student-portal/shared";
 import { useAuth } from "@/providers/auth-provider";
@@ -49,6 +51,7 @@ import {
   exportCodeAudit,
   initializeCodeYear,
   recoverStudentCode,
+  holdPreviousStudentCode,
   type CodeAuditScope,
 } from "@/features/student-codes/api";
 import {
@@ -62,7 +65,9 @@ import { MappingCorrection } from "./mapping-correction";
 
 const defaults = { academicYear: "", yearPrefix: "", status: "all" };
 const statuses = [...STUDENT_CODE_STATUSES, "MISSING"] as const;
-export default function StudentCodesPage() {
+export default function StudentCodesPage({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const t = useTranslations("studentCodes");
   const locale = useLocale();
   const dir = locale === "ar" ? "rtl" : "ltr";
@@ -155,7 +160,9 @@ export default function StudentCodesPage() {
     };
     setPending(true);
     try {
-      if (row)
+      if (row && intent.hold)
+        await holdPreviousStudentCode(row.studentCode, input);
+      else if (row)
         await recoverStudentCode(row.studentCode, {
           ...input,
           neverAssignedConfirmed: true,
@@ -252,27 +259,20 @@ export default function StudentCodesPage() {
         ),
       },
       {
-        key: "owner",
-        header: t("fields.currentStudentId"),
+        key: "nextAction",
+        header: t("nextAction"),
         render: (row) => (
-          <TableCell>
-            {row.currentStudentId ||
-            (row.status === "ASSIGNED" && row.studentCode) ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setProfileStudentId(row.studentCode || row.currentStudentId!)
-                }
-                className="inline-flex items-center gap-1.5 font-mono text-xs text-primary hover:underline cursor-pointer"
-                title={
-                  dir === "rtl" ? "عرض ملف الطالب" : "View student profile"
-                }
-              >
-                <User className="h-3 w-3" />
-                <bdi>{row.currentStudentId || row.studentCode}</bdi>
-              </button>
-            ) : (
-              <span className="text-xs text-muted-foreground">—</span>
+          <TableCell className="max-w-xs text-xs text-muted-foreground">
+            {t(
+              row.reason === "PREVIOUS_OWNER_MISSING"
+                ? "holdHint"
+                : row.status === "ASSIGNED"
+                  ? "assignedHelp"
+                  : row.status === "MISSING"
+                    ? "gapHelp"
+                    : row.status === "RELEASED"
+                      ? "heldHelp"
+                      : "reviewHelp",
             )}
           </TableCell>
         ),
@@ -321,6 +321,18 @@ export default function StudentCodesPage() {
                     {t("history")}
                   </DropdownMenu.Item>
                   {canManage &&
+                    row.reason === "PREVIOUS_OWNER_MISSING" &&
+                    !query.data?.truncated && (
+                      <DropdownMenu.Item
+                        className="cursor-pointer rounded-squircle px-3 py-2 text-sm outline-none focus:bg-secondary"
+                        onSelect={() =>
+                          setIntent({ snapshot: query.data!, row, hold: true })
+                        }
+                      >
+                        {t("hold")}
+                      </DropdownMenu.Item>
+                    )}
+                  {canManage &&
                     row.status === "MISSING" &&
                     query.data?.policy &&
                     !query.data.mappingConflict &&
@@ -361,19 +373,99 @@ export default function StudentCodesPage() {
       />
     );
   return (
-    <div className="space-y-5 p-2 md:p-6">
-      <PageTitleBanner
-        title={t("title")}
-        subtitle={t("description")}
-        icon={<Fingerprint className="h-5 w-5" />}
-      />
+    <div className={embedded ? "space-y-5" : "space-y-5 p-2 md:p-6"}>
+      {embedded ? (
+        <AdmissionSection
+          title={t("title")}
+          description={t("description")}
+          icon={<ShieldCheck className="h-5 w-5" />}
+          actions={
+            <>
+              {" "}
+              {(canManage ||
+                user?.permissions?.includes(
+                  PERMISSIONS.STUDENT_CODES_EXPORT,
+                )) && (
+                <Button
+                  variant="outline"
+                  disabled={!validScope || query.isFetching}
+                  onClick={async () => {
+                    try {
+                      await exportCodeAudit({
+                        academicYear,
+                        yearPrefix,
+                        ...(status !== "all" ? { status } : {}),
+                        ...(search ? { search } : {}),
+                      });
+                    } catch {
+                      toast.error(t("exportFailed"));
+                    }
+                  }}
+                >
+                  {t("export")}
+                </Button>
+              )}
+            </>
+          }
+        />
+      ) : (
+        <PageTitleBanner
+          title={t("title")}
+          subtitle={t("description")}
+          icon={<ShieldCheck className="h-5 w-5" />}
+        >
+          {" "}
+          {(canManage ||
+            user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_EXPORT)) && (
+            <Button
+              variant="outline"
+              disabled={!validScope || query.isFetching}
+              onClick={async () => {
+                try {
+                  await exportCodeAudit({
+                    academicYear,
+                    yearPrefix,
+                    ...(status !== "all" ? { status } : {}),
+                    ...(search ? { search } : {}),
+                  });
+                } catch {
+                  toast.error(t("exportFailed"));
+                }
+              }}
+            >
+              {t("export")}
+            </Button>
+          )}
+        </PageTitleBanner>
+      )}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
+        {t("workflowHelp")}
+      </div>
       <CodeScopeForm
+        configuredYears={embedded}
         key={`${academicYear}/${yearPrefix}`}
         initial={{ academicYear, yearPrefix }}
         pending={pending}
         scan={scan}
       />
-      <p className="text-sm text-muted-foreground">{t("safetyHint")}</p>
+      {validScope && yearPrefix !== admissionYearPrefix(academicYear) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/30 p-3 text-sm">
+          <p>
+            {t("legacyScope", { prefix: admissionYearPrefix(academicYear) })}
+          </p>
+          <Button
+            variant="outline"
+            onClick={() =>
+              scan({
+                academicYear,
+                yearPrefix: admissionYearPrefix(academicYear),
+              })
+            }
+          >
+            {t("scanCurrentPrefix")}
+          </Button>
+        </div>
+      )}
       {canManage && <MappingCorrection />}
       {!validScope ? (
         <p className="rounded-xl border p-5">{t("chooseScope")}</p>
@@ -383,7 +475,16 @@ export default function StudentCodesPage() {
             <>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {statuses.map((key) => (
-                  <div key={key} className="rounded-xl border p-3">
+                  <button
+                    type="button"
+                    key={key}
+                    aria-pressed={status === key}
+                    onClick={() => {
+                      setSelectedKeys([]);
+                      state.setFilter("status", key);
+                    }}
+                    className="rounded-xl border border-border/70 bg-card p-4 text-start transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary"
+                  >
                     <p className="text-xs text-muted-foreground">
                       {t(`statuses.${key}`)}
                     </p>
@@ -392,7 +493,7 @@ export default function StudentCodesPage() {
                         locale === "ar" ? "ar-EG" : "en-GB",
                       )}
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -456,29 +557,6 @@ export default function StudentCodesPage() {
             </>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            {(canManage ||
-              user?.permissions?.includes(
-                PERMISSIONS.STUDENT_CODES_EXPORT,
-              )) && (
-              <Button
-                variant="outline"
-                disabled={!validScope || query.isFetching}
-                onClick={async () => {
-                  try {
-                    await exportCodeAudit({
-                      academicYear,
-                      yearPrefix,
-                      ...(status !== "all" ? { status } : {}),
-                      ...(search ? { search } : {}),
-                    });
-                  } catch {
-                    toast.error(t("exportFailed"));
-                  }
-                }}
-              >
-                {t("export")}
-              </Button>
-            )}
             <Input
               className="max-w-xs rounded-squircle text-left"
               dir="ltr"
@@ -644,7 +722,9 @@ export default function StudentCodesPage() {
                           )}
                           <div className="flex items-center gap-2 mt-1">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                              {s.department || "عام"}
+                              {s.department === "GENERAL"
+                                ? t("generalDepartment")
+                                : s.department || "—"}
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary text-secondary-foreground">
                               {dir === "rtl"
@@ -714,6 +794,12 @@ export default function StudentCodesPage() {
                 {dir === "rtl"
                   ? "لم يتم العثور على بيانات الطالب."
                   : "Student profile could not be loaded."}
+                <Button
+                  variant="outline"
+                  onClick={() => studentProfileQuery.refetch()}
+                >
+                  {t("retry")}
+                </Button>
               </div>
             )}
           </DialogContent>

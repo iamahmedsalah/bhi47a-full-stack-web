@@ -78,4 +78,13 @@ export class StudentCodesController {
   ) {
     return this.codes.recover(code, dto, actorId);
   }
+  @Post(':code/hold')
+  @Roles('admin')
+  hold(
+    @Param('code') code: string,
+    @Body() dto: InitializeCodeYearDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.codes.holdPreviousOwner(code, dto, actorId);
+  }
 }

@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: LoginPageProps): Promise<Meta
     : `Sign In - Unified Electronic Portal | ${INSTITUTE_INFO.nameEn}`;
 
   const description = isAr
-    ? 'تسجيل الدخول لبوابة الطالب، نتائج الامتحانات، البريد الأكاديمي، ومنظومة الشكاوى والدعم الأكاديمي بالمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 أ).'
+    ? 'تسجيل الدخول لبوابة الطالب، نتائج الامتحانات، البريد الأكاديمي، ومنظومة الشكاوى والدعم الأكاديمي بالمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 ك).'
     : 'Unified portal login for student records, exam results, academic mail, and technical support at High Institute for Advanced Management Sciences and Computer (BHI47).';
 
   return {

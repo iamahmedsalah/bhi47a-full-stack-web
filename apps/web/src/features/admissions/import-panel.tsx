@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -207,6 +207,19 @@ export function AdmissionImportPanel() {
 
   return (
     <div className="space-y-6">
+      <ol className="grid gap-3 sm:grid-cols-3">
+        {["template", "preview", "applyValid"].map((step, index) => (
+          <li
+            key={step}
+            className="flex items-center gap-3 rounded-xl border border-border/70 bg-card/70 p-4"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle bg-primary/10 font-bold text-primary">
+              {index + 1}
+            </span>
+            <span className="text-sm font-semibold">{t(step)}</span>
+          </li>
+        ))}
+      </ol>
       <GlassCard className="p-5 border border-border/60">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">

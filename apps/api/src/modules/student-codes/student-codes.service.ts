@@ -24,6 +24,91 @@ export function codeConflict(code: string, message: string): never {
 
 @Injectable()
 export class StudentCodesService {
+  async holdPreviousOwner(
+    code: string,
+    dto: InitializeCodeYearDto,
+    actorId: string,
+  ) {
+    this.store.validateYear(dto.academicYear, dto.yearPrefix);
+    return this.transactions.run(
+      async (session) => {
+        const snapshot = await this.store.snapshot(
+          dto.academicYear,
+          dto.yearPrefix,
+          session,
+        );
+        if (snapshot.fingerprint !== dto.fingerprint)
+          codeConflict(
+            'CODE_PREVIEW_CHANGED',
+            'The audit changed. Scan again.',
+          );
+        const row = snapshot.rows.find((item) => item.studentCode === code);
+        if (
+          snapshot.truncated ||
+          !row ||
+          row.reason !== 'PREVIOUS_OWNER_MISSING'
+        )
+          codeConflict(
+            'CODE_RECOVERY_UNSAFE',
+            'Only a verified missing previous owner can be marked held.',
+          );
+        const entry = await this.store.entries
+          .findOne({ studentCode: code, status: 'ASSIGNED' })
+          .session(session)
+          .lean();
+        if (!entry?.currentStudentId || !entry.assignmentHistory.length)
+          codeConflict(
+            'CODE_RECOVERY_UNSAFE',
+            'Ownership history requires review.',
+          );
+        const owner = entry.currentStudentId;
+        const user = await this.store.users
+          .exists({
+            $or: [
+              { _id: owner },
+              { studentCode: code },
+              { username: code },
+              { userCode: `STD-${code}` },
+            ],
+          })
+          .session(session);
+        const profile = await this.store.profiles
+          .exists({ $or: [{ userId: owner }, { studentCode: code }] })
+          .session(session);
+        if (user || profile)
+          codeConflict(
+            'CODE_RECOVERY_UNSAFE',
+            'A student identity still exists.',
+          );
+        await this.store.entries.updateOne(
+          { _id: entry._id, status: 'ASSIGNED', currentStudentId: owner },
+          {
+            $set: { status: 'RELEASED' },
+            $unset: { currentStudentId: 1 },
+          },
+          { session },
+        );
+        await this.store.audits.create(
+          [
+            {
+              studentCode: code,
+              academicYear: entry.academicYear,
+              action: 'PREVIOUS_OWNER_HELD',
+              actorId: new Types.ObjectId(actorId),
+              studentId: owner,
+              from: 'ASSIGNED',
+              to: 'RELEASED',
+              reason: dto.reason,
+              at: new Date(),
+            },
+          ],
+          { session },
+        );
+        return { studentCode: code, status: 'RELEASED', reuseEnabled: false };
+      },
+      () => this.store.prepareWrites(),
+    );
+  }
   constructor(
     private readonly store: StudentCodeStore,
     private readonly transactions: AdmissionTransactions,

@@ -30,6 +30,7 @@ import { CourseSchedulesModule } from './modules/course-schedules/course-schedul
 import { HealthController } from './health.controller';
 import { AdmissionsModule } from './modules/admissions/admissions.module';
 import { StudentCodesModule } from './modules/student-codes/student-codes.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { StudentCodesModule } from './modules/student-codes/student-codes.module
     CourseSchedulesModule,
     AdmissionsModule,
     StudentCodesModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
 })

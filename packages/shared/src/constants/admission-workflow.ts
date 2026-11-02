@@ -104,6 +104,11 @@ export interface AdmissionRequestItem extends AdmissionApplicant {
   }>;
 }
 export interface AdmissionAccessItem {
+  effectiveStatus?: string;
+  canOpen?: boolean;
+  periodOpensAt?: string;
+  periodClosesAt?: string;
+  pinConfigurationIssue?: boolean;
   _id: string;
   admissionPeriodId: string;
   academicYear: string;

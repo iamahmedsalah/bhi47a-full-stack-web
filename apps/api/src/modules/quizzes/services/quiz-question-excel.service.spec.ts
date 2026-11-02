@@ -36,7 +36,7 @@ describe('Quiz question spreadsheets', () => {
         expect(help?.getCell('B3').text).toContain('B means option_b');
         expect(help?.getCell('C3').text).toContain('الخيار الثاني');
         // Excel sheet order is editable: instructions must never become questions.
-        if (help) help.orderNo = 0;
+        if (help) (help as any).orderNo = 0;
         const reordered = await workbook.xlsx.writeBuffer();
         expect(
           (

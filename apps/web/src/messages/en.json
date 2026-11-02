@@ -340,7 +340,20 @@
     "passed": "Passed",
     "failed": "Failed",
     "inProgress": "In Progress",
-    "pending": "Pending"
+    "pending": "Pending",
+    "formValidation": {
+      "studentCodeRequired": "Enter a student code.",
+      "studentCodeFormat": "Use a numeric student code of 4 to 12 digits.",
+      "nationalId": "Enter a 14-digit National ID.",
+      "phone": "Enter a valid Egyptian or international phone number.",
+      "email": "Enter a valid email address.",
+      "level": "Choose an academic level.",
+      "academicYear": "Choose an academic year.",
+      "semester": "Choose a semester.",
+      "enrollmentStatus": "Choose an enrollment status.",
+      "name": "Enter the student’s Arabic or English name.",
+      "admissionGuidance": "For a new or transfer admission, approve the application in Admissions so its code is allocated safely. Manual entry cannot reuse managed or previously held codes."
+    }
   },
   "courses": {
     "title": "Courses Management",
@@ -1164,7 +1177,8 @@
       "CONFIRMED_AVAILABLE": "An administrator explicitly verified that this code was never assigned.",
       "CURRENT_OWNER": "The account and profile agree. Inactivity does not release the code.",
       "PREVIOUS_OWNER_BLOCKED": "A previous holder exists. Reuse is blocked until historical identity references are migrated.",
-      "RESERVATION_HELD": "An operation holds this code; it cannot be recovered or reused."
+      "RESERVATION_HELD": "An operation holds this code; it cannot be recovered or reused.",
+      "PREVIOUS_OWNER_MISSING": "The original student identity was deleted; previous ownership remains protected."
     },
     "validation": {
       "year": "Use consecutive years, for example 2026-2027.",
@@ -1191,17 +1205,31 @@
       "RECOVERED": "Never-assigned gap verified",
       "MARKED_REVIEW": "Blocked for identity review",
       "CANCELLED_CODE_HELD": "Admission cancelled; code held",
-      "MAPPING_CORRECTED": "Future allocation prefix corrected"
+      "MAPPING_CORRECTED": "Future allocation prefix corrected",
+      "PREVIOUS_OWNER_HELD": "Previous owner retained"
     },
     "systemReasons": {
       "assigned": "Assigned during an authorized admission approval.",
       "references": "Existing identity or academic records reference this code."
     },
-    "configuredYear": "Configured year",
+    "configuredYear": "Choose a configured year",
     "configuredPrefix": "Intake prefix",
     "configuredNext": "Next sequence",
     "export": "Export audit XLSX",
-    "exportFailed": "The operation could not be completed. Please retry."
+    "exportFailed": "The operation could not be completed. Please retry.",
+    "close": "Close",
+    "nextAction": "Next action",
+    "hold": "Keep for previous student",
+    "holdHint": "The original account and profile are missing. After checking your records, keep this code held for its previous student. This does not make it available for a new student.",
+    "assignedHelp": "No action needed. Use the student profile to manage enrollment.",
+    "gapHelp": "Recover only after verifying that this code has never belonged to anyone.",
+    "heldHelp": "Keep held. Restore the original identity from a verified backup if needed; never assign it to another student.",
+    "reviewHelp": "Compare the account, profile and ownership history before making changes.",
+    "workflowHelp": "New and transfer students receive a code through admission approval. Assigned codes stay with their original students. Canceling enrollment or deleting an application does not free a code. Numerical gaps require verification; audit review is not an approval step.",
+    "generalDepartment": "General",
+    "legacyScope": "You are viewing a legacy prefix. New admissions for this year use {prefix}. Existing student codes stay unchanged.",
+    "scanCurrentPrefix": "Scan the current prefix",
+    "manualYear": "Enter a legacy year manually"
   },
   "admissionWorkflow": {
     "title": "Admissions and student codes",
@@ -1340,7 +1368,12 @@
       "ACTIVE": "Active",
       "REVOKED": "Revoked",
       "EXPIRED": "Expired",
-      "EXHAUSTED": "Submission limit reached"
+      "EXHAUSTED": "Submission limit reached",
+      "PERIOD_DISABLED": "Period disabled",
+      "PERIOD_SCHEDULED": "Period has not opened",
+      "PERIOD_CLOSED": "Period closed",
+      "PERIOD_UNAVAILABLE": "Period unavailable",
+      "LOCKED": "Temporarily locked"
     },
     "automaticPin": "Leave empty to generate securely",
     "pinHint": "Use 8–12 digits; leave empty for an automatic PIN.",
@@ -1450,7 +1483,10 @@
       "rateLimited": "Too many requests. Please wait briefly before trying again.",
       "invalid": "Check the required fields and their format.",
       "groupInUse": "A group with enrolled students cannot be deleted.",
-      "reasonRequired": "Write an explanation for this decision."
+      "reasonRequired": "Write an explanation for this decision.",
+      "periodDisabled": "This invitation’s admission period is disabled. Contact admissions to enable the period.",
+      "periodScheduled": "This invitation’s admission period has not opened yet. Check its Cairo opening date with admissions.",
+      "periodClosed": "This invitation’s admission period has closed. Contact admissions for a current period."
     },
     "mapping": {
       "preview": "Review year-prefix corrections",
@@ -1477,6 +1513,19 @@
       "notApplied": "{count} applications were not changed. They remain selected for review.",
       "rejectReason": "Rejected after a confirmed administrative batch review.",
       "waitlistReason": "Waitlisted after a confirmed administrative batch review."
+    },
+    "allYears": "All academic years",
+    "chooseYear": "Choose an academic year",
+    "yearsFailed": "Could not load academic years.",
+    "yearSetupHint": "Create an admission period first to make its year available.",
+    "pinConfigurationIssue": "PIN protection has changed. Restore the original admission keys or create a new invitation.",
+    "guides": {
+      "requests": "Review the applicant → confirm academic details → approve. A student account and code are created only after approval.",
+      "access": "Choose an open admission period, create a PIN/QR invitation, then share its poster. The availability badge includes period dates, quota and lockout.",
+      "periods": "Set the academic year and Cairo opening/closing times, then enable the period. Invitations follow this schedule.",
+      "groups": "Choose a configured academic year and level, then set capacity. Assigning a group during approval is optional.",
+      "codes": "Use the audit to understand ownership. A review finding does not mean that a code can be given to someone else.",
+      "imports": "Download the template → preview the workbook → confirm valid rows. The preview never changes student records."
     }
   }
 }

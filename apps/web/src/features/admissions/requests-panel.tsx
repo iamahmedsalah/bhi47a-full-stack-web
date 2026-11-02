@@ -1,4 +1,5 @@
-﻿"use client";
+"use client";
+import { AdmissionSection } from "./admission-section";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -442,7 +443,32 @@ export function AdmissionRequests() {
   );
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t("requestDescription")}</p>
+      <AdmissionSection
+        title={t("tabs.requests")}
+        description={t("requestDescription")}
+        icon={<GraduationCap className="h-5 w-5" />}
+        actions={
+          <>
+            {" "}
+            {can(PERMISSIONS.ADMISSIONS_EXPORT) && (
+              <Button
+                variant="outline"
+                className="h-10 gap-1.5 rounded-squircle shrink-0"
+                onClick={async () => {
+                  try {
+                    await admissionDownload("export", params);
+                  } catch (e) {
+                    setError(getAdmissionErrorMessage(e, t));
+                  }
+                }}
+              >
+                <Download className="h-4 w-4" />
+                <span>{t("export")}</span>
+              </Button>
+            )}
+          </>
+        }
+      />
       <ConfirmDialog
         open={Boolean(deleting)}
         onOpenChange={(open) => {
@@ -477,28 +503,31 @@ export function AdmissionRequests() {
         onSearchChange={setSearch}
         searchPlaceholder={t("search")}
       >
-        <Select
-          value={state.filters.status || "ALL"}
-          onValueChange={(value) => state.setFilter("status", value)}
-        >
-          <SelectTrigger
-            className="h-10 w-[150px] rounded-squircle bg-card"
-            dir={locale === "ar" ? "rtl" : "ltr"}
+        <div className="w-full shrink-0 sm:w-[160px]">
+          <Select
+            value={state.filters.status || "ALL"}
+            onValueChange={(value) => state.setFilter("status", value)}
           >
-            <SelectValue placeholder={t("statusLabel")} />
-          </SelectTrigger>
-          <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
-            <SelectItem value="ALL">
-              {t("status.ALL") ||
-                (locale === "ar" ? "كل الحالات" : "All Statuses")}
-            </SelectItem>
-            {ADMISSION_REQUEST_STATUSES.map((val) => (
-              <SelectItem key={val} value={val}>
-                {t(`status.${val}`)}
+            <SelectTrigger
+              aria-label={t("statusLabel")}
+              className="h-10 w-full rounded-squircle bg-card"
+              dir={locale === "ar" ? "rtl" : "ltr"}
+            >
+              <SelectValue placeholder={t("statusLabel")} />
+            </SelectTrigger>
+            <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+              <SelectItem value="ALL">
+                {t("status.ALL") ||
+                  (locale === "ar" ? "كل الحالات" : "All Statuses")}
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              {ADMISSION_REQUEST_STATUSES.map((val) => (
+                <SelectItem key={val} value={val}>
+                  {t(`status.${val}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <AdmissionInput
           aria-label={t("fields.academicYear")}
@@ -526,23 +555,6 @@ export function AdmissionRequests() {
           placeholder={t("to")}
           className="w-full min-w-[195px] shrink-0 sm:w-[210px]"
         />
-
-        {can(PERMISSIONS.ADMISSIONS_EXPORT) && (
-          <Button
-            variant="outline"
-            className="h-10 gap-1.5 rounded-squircle shrink-0"
-            onClick={async () => {
-              try {
-                await admissionDownload("export", params);
-              } catch (e) {
-                setError(getAdmissionErrorMessage(e, t));
-              }
-            }}
-          >
-            <Download className="h-4 w-4" />
-            <span>{t("export")}</span>
-          </Button>
-        )}
 
         {state.selectedKeys.length > 0 && (
           <Button

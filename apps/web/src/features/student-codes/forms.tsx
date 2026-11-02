@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocale, useTranslations } from "next-intl";
 import {
   isAdmissionAcademicYear,
+  admissionYearPrefix,
   type StudentCodeAuditResult,
   type StudentCodeFinding,
 } from "@student-portal/shared";
@@ -31,17 +32,21 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getApiErrorDetails } from "@/lib/api";
 import type { CodeAuditScope } from "./api";
+import { AcademicYearChoice } from "@/features/admissions/academic-year-choice";
 
 export function CodeScopeForm({
   initial,
   pending,
   scan,
+  configuredYears = false,
 }: {
   initial: CodeAuditScope;
   pending: boolean;
   scan: (scope: CodeAuditScope) => void;
+  configuredYears?: boolean;
 }) {
   const t = useTranslations("studentCodes");
+  const [manualYear, setManualYear] = useState(false);
   const schema = useMemo(
     () =>
       z.object({
@@ -71,17 +76,45 @@ export function CodeScopeForm({
             name={key}
             render={({ field }) => (
               <FormItem className="w-56">
-                <FormLabel>{t(`fields.${key}`)}</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    dir="ltr"
-                    className="text-left rounded-squircle"
-                    maxLength={key === "academicYear" ? 9 : 2}
-                    placeholder={key === "academicYear" ? "2026-2027" : "26"}
+                {!(
+                  key === "academicYear" &&
+                  configuredYears &&
+                  !manualYear
+                ) && <FormLabel>{t(`fields.${key}`)}</FormLabel>}
+                {key === "academicYear" && configuredYears && !manualYear ? (
+                  <AcademicYearChoice
+                    value={field.value}
                     disabled={pending}
+                    onChange={(year) => {
+                      field.onChange(year);
+                      if (isAdmissionAcademicYear(year))
+                        form.setValue("yearPrefix", admissionYearPrefix(year), {
+                          shouldValidate: true,
+                        });
+                    }}
                   />
-                </FormControl>
+                ) : (
+                  <FormControl>
+                    <Input
+                      {...field}
+                      dir="ltr"
+                      className="text-left rounded-squircle"
+                      maxLength={key === "academicYear" ? 9 : 2}
+                      placeholder={key === "academicYear" ? "2026-2027" : "26"}
+                      disabled={pending}
+                    />
+                  </FormControl>
+                )}
+                {key === "academicYear" && configuredYears && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setManualYear((value) => !value)}
+                  >
+                    {t(manualYear ? "configuredYear" : "manualYear")}
+                  </Button>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -96,6 +129,7 @@ export function CodeScopeForm({
 }
 
 export interface CodeWriteIntent {
+  hold?: boolean;
   snapshot: StudentCodeAuditResult;
   row?: StudentCodeFinding;
 }
@@ -128,7 +162,7 @@ export function CodeWriteDialog({
 }) {
   const t = useTranslations("studentCodes");
   const locale = useLocale();
-  const recovery = Boolean(intent.row);
+  const recovery = Boolean(intent.row) && !intent.hold;
   const schema = useMemo(
     () =>
       z.object({
@@ -175,10 +209,20 @@ export function CodeWriteDialog({
         className="max-h-[90vh] overflow-y-auto rounded-2xl"
       >
         <DialogHeader className="text-start">
-          <DialogTitle>{recovery ? t("recover") : t("initialize")}</DialogTitle>
+          <DialogTitle>
+            {intent.hold
+              ? t("hold")
+              : recovery
+                ? t("recover")
+                : t("initialize")}
+          </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {recovery ? t("recoverHint") : t("initializeHint")}
+          {intent.hold
+            ? t("holdHint")
+            : recovery
+              ? t("recoverHint")
+              : t("initializeHint")}
         </p>
         <p className="text-sm">
           <bdi>{intent.snapshot.academicYear}</bdi> /{" "}

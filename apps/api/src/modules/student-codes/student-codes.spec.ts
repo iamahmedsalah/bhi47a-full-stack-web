@@ -147,7 +147,7 @@ describe('Student-code format, audit and safety policy', () => {
           String(permission).startsWith('student_codes.'),
         ),
       ).toBe(false);
-    for (const name of ['initialize', 'recover']) {
+    for (const name of ['initialize', 'recover', 'hold']) {
       const method = Object.getOwnPropertyDescriptor(
         StudentCodesController.prototype,
         name,

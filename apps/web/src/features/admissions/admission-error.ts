@@ -2,6 +2,9 @@ import { getApiErrorDetails } from "@/lib/api";
 
 const codes: Record<string, string> = {
   ADMISSION_ACCESS_UNAVAILABLE: "accessUnavailable",
+  ADMISSION_PERIOD_DISABLED: "periodDisabled",
+  ADMISSION_PERIOD_SCHEDULED: "periodScheduled",
+  ADMISSION_PERIOD_CLOSED: "periodClosed",
   ADMISSION_GUARDIAN_PHONE_MATCH: "guardianPhone",
   ADMISSION_REASON_REQUIRED: "reasonRequired",
   ADMISSION_NATIONAL_ID: "nationalId",

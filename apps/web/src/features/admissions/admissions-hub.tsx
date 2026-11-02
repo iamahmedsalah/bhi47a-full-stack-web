@@ -10,9 +10,9 @@ import {
   GraduationCap,
   Inbox,
   QrCode,
-  CalendarRange,
-  Users,
-  Fingerprint,
+  CalendarClock,
+  UsersRound,
+  BadgeCheck,
   FileSpreadsheet,
 } from "lucide-react";
 import AdmissionPeriodsPage from "./admission-periods-page";
@@ -48,23 +48,23 @@ export function AdmissionsHub({ initialTab }: { initialTab?: string }) {
     },
     {
       id: "periods",
-      icon: <CalendarRange className="h-4 w-4" />,
+      icon: <CalendarClock className="h-4 w-4" />,
       allowed:
         can(PERMISSIONS.ADMISSIONS_PERIODS_READ) ||
         can(PERMISSIONS.ADMISSIONS_PERIODS_MANAGE),
-      content: <AdmissionPeriodsPage />,
+      content: <AdmissionPeriodsPage embedded />,
     },
     {
       id: "groups",
-      icon: <Users className="h-4 w-4" />,
+      icon: <UsersRound className="h-4 w-4" />,
       allowed: can(PERMISSIONS.ADMISSIONS_GROUPS_MANAGE),
       content: <AdmissionGroupsPanel />,
     },
     {
       id: "codes",
-      icon: <Fingerprint className="h-4 w-4" />,
+      icon: <BadgeCheck className="h-4 w-4" />,
       allowed: can(PERMISSIONS.STUDENT_CODES_READ),
-      content: <StudentCodesPage />,
+      content: <StudentCodesPage embedded />,
     },
     {
       id: "imports",
@@ -108,6 +108,9 @@ export function AdmissionsHub({ initialTab }: { initialTab?: string }) {
             </TabsTrigger>
           ))}
         </TabsList>
+        <p className="rounded-xl border border-border/60 bg-surface/40 px-4 py-3 text-sm leading-6 text-muted-foreground">
+          {t(`guides.${active}`)}
+        </p>
         {tabs.map((tab) => (
           <TabsContent
             key={tab.id}

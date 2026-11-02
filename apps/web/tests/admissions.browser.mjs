@@ -26,7 +26,7 @@ let denyHistory = false;
 let codeVersion = 0;
 const codeWrites = [];
 let codeRows;
-const resetCodes = () => { codeReady=false;codeFailure=undefined;codeVersion=0;codeWrites.length=0;codeRows=[{studentCode:'260001',sequence:1,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'260002',sequence:2,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'260003',sequence:3,status:'ASSIGNED',reason:'CURRENT_OWNER',currentStudentId:'100000000000000000000003'}]; };
+const resetCodes = () => { codeReady=false;codeFailure=undefined;codeVersion=0;codeWrites.length=0;codeRows=[{studentCode:'270001',sequence:1,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'270002',sequence:2,status:'MISSING',reason:'UNVERIFIED_GAP'},{studentCode:'270003',sequence:3,status:'ASSIGNED',reason:'CURRENT_OWNER',currentStudentId:'100000000000000000000003'}]; };
 resetCodes();
 await fs.mkdir(output, { recursive: true });
 const write = (name, contents) => fs.writeFile(path.join(output, name), contents);
@@ -48,16 +48,17 @@ await write('styles.css', css.css);
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/admin/admissions/academic-years') { res.setHeader('Content-Type','application/json');res.end(JSON.stringify({items:[fixture.academicYear]}));return; }
     if (url.pathname.startsWith('/admin/student-codes')) {
       res.setHeader('Content-Type','application/json');
       if (url.pathname.endsWith('/audit')) {
         const summary={AVAILABLE:0,RESERVED:0,ASSIGNED:0,RELEASED:0,REQUIRES_REVIEW:0,MISSING:0};for(const row of codeRows)summary[row.status]++;
         const rows=codeRows.filter(row=>(!url.searchParams.get('status')||row.status===url.searchParams.get('status'))&&(!url.searchParams.get('search')||row.studentCode.includes(url.searchParams.get('search'))));
-        res.end(JSON.stringify({academicYear:'2026-2027',yearPrefix:'26',scannedAt:'2026-11-01T08:00:00Z',fingerprint:String.fromCharCode(97+codeVersion).repeat(64),policy:codeReady?{academicYear:'2026-2027',yearPrefix:'26',nextSequence:4,initializedAt:'2026-11-01T08:00:00Z'}:null,canInitialize:!codeReady,mappingConflict:false,reuseEnabled:false,truncated:false,summary,items:rows,total:rows.length,page:1,limit:20,totalPages:1}));return;
+        res.end(JSON.stringify({academicYear:'2026-2027',yearPrefix:'27',scannedAt:'2026-11-01T08:00:00Z',fingerprint:String.fromCharCode(97+codeVersion).repeat(64),policy:codeReady?{academicYear:'2026-2027',yearPrefix:'27',nextSequence:4,initializedAt:'2026-11-01T08:00:00Z'}:null,canInitialize:!codeReady,mappingConflict:false,reuseEnabled:false,truncated:false,summary,items:rows,total:rows.length,page:1,limit:20,totalPages:1}));return;
       }
       if (url.pathname.endsWith('/history')) {
         if(denyHistory){res.statusCode=503;res.end(JSON.stringify({message:'unavailable'}));return;}
-        res.end(JSON.stringify({entry:{studentCode:'260003',status:'ASSIGNED'},items:[{_id:'audit-event',action:'BACKFILLED',to:'ASSIGNED',reason:'Reviewed synthetic records.',actorId:fixture._id,at:'2026-11-01T08:00:00Z'}],total:1,page:1,limit:20,totalPages:1}));return;
+        res.end(JSON.stringify({entry:{studentCode:'270003',status:'ASSIGNED'},items:[{_id:'audit-event',action:'BACKFILLED',to:'ASSIGNED',reason:'Reviewed synthetic records.',actorId:fixture._id,at:'2026-11-01T08:00:00Z'}],total:1,page:1,limit:20,totalPages:1}));return;
       }
       const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());codeWrites.push({path:url.pathname,body});
       if(codeFailure||body.fingerprint!==String.fromCharCode(97+codeVersion).repeat(64)){res.statusCode=409;res.end(JSON.stringify({code:codeFailure||'CODE_PREVIEW_CHANGED'}));return;}
@@ -172,12 +173,13 @@ try {
     resetCodes();const t=JSON.parse(await fs.readFile(path.join(web,`src/messages/${locale}.json`),'utf8')).studentCodes;
     await page.goto(`${address}/${locale}/admin/student-codes`);
     await page.getByText(t.chooseScope,{exact:true}).waitFor();
+    await page.getByRole('button',{name:t.manualYear,exact:true}).click();
     const year=page.getByLabel(t.fields.academicYear,{exact:true});const prefix=page.getByLabel(t.fields.yearPrefix,{exact:true});
     assert.equal(await prefix.getAttribute('dir'),'ltr');
     await year.fill('2026-2028');await prefix.fill('2');await page.getByRole('button',{name:t.scan,exact:true}).click();
     await page.getByText(t.validation.year,{exact:true}).waitFor();await page.getByText(t.validation.prefix,{exact:true}).waitFor();
-    await year.fill('2026-2027');await prefix.fill('26');await page.getByRole('button',{name:t.scan,exact:true}).click();
-    await page.getByText('260001',{exact:true}).waitFor();
+    await year.fill('2026-2027');await prefix.fill('27');await page.getByRole('button',{name:t.scan,exact:true}).click();
+    await page.getByText('270001',{exact:true}).waitFor();
     await page.getByRole('button',{name:t.initialize,exact:true}).click();
     const dialog=page.getByRole('dialog');const submit=dialog.getByRole('button',{name:t.confirmAction,exact:true});
     await submit.click();await dialog.getByText(t.validation.reason,{exact:true}).waitFor();await dialog.getByText(t.validation.confirm,{exact:true}).waitFor();assert.equal(codeWrites.length,0);
@@ -185,20 +187,20 @@ try {
     codeFailure='CODE_PREVIEW_CHANGED';await submit.click();await dialog.getByRole('alert').getByText(t.errors.changed,{exact:true}).waitFor();assert.equal(await reason.inputValue(),'Reviewed synthetic identity inventory.');
     codeFailure=undefined;await submit.click();await dialog.waitFor({state:'hidden'});assert.equal(codeReady,true);
     const actions=(code)=>page.getByRole('button',{name:t.actionsFor.replace('{code}',code),exact:true});
-    await actions('260001').click();await page.getByRole('menuitem',{name:t.recover,exact:true}).click();
+    await actions('270001').click();await page.getByRole('menuitem',{name:t.recover,exact:true}).click();
     await reason.fill('Verified never assigned in internal and external records.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();await submit.click();
     await dialog.getByText(t.validation.attest,{exact:true}).waitFor();assert.equal(codeWrites.length,2);
     await dialog.getByRole('checkbox',{name:t.neverAssignedConfirmed,exact:true}).check();await submit.click();await dialog.waitFor({state:'hidden'});
     assert.equal(codeWrites.at(-1).body.neverAssignedConfirmed,true);
-    await page.getByRole('row').filter({hasText:'260001'}).getByText(t.statuses.AVAILABLE,{exact:true}).waitFor();
-    await page.getByRole('checkbox',{name:t.selectAll,exact:true}).check();await page.getByRole('button',{name:t.inspectSelection,exact:true}).click();await dialog.getByText('260002',{exact:false}).waitFor();await page.keyboard.press('Escape');
-    denyHistory=true;await actions('260003').click();await page.getByRole('menuitem',{name:t.history,exact:true}).click();await dialog.getByRole('alert').getByText(t.errors.load,{exact:true}).waitFor();
+    await page.getByRole('row').filter({hasText:'270001'}).getByText(t.statuses.AVAILABLE,{exact:true}).waitFor();
+    await page.getByRole('checkbox',{name:t.selectAll,exact:true}).check();await page.getByRole('button',{name:t.inspectSelection,exact:true}).click();await dialog.getByText('270002',{exact:false}).waitFor();await page.keyboard.press('Escape');
+    denyHistory=true;await actions('270003').click();await page.getByRole('menuitem',{name:t.history,exact:true}).click();await dialog.getByRole('alert').getByText(t.errors.load,{exact:true}).waitFor();
     denyHistory=false;await dialog.getByRole('button',{name:t.retry,exact:true}).click();await dialog.getByText(t.events.BACKFILLED,{exact:true}).waitFor();await page.keyboard.press('Escape');
     await page.screenshot({path:path.join(output,`student-codes-${locale}.png`),fullPage:true});
-    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=26&access=read`);await page.getByText('260002',{exact:true}).waitFor();
+    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=27&access=read`);await page.getByText('270002',{exact:true}).waitFor();
     assert.equal(await page.getByRole('button',{name:t.initialize,exact:true}).count(),0);
-    await actions('260002').click();assert.equal(await page.getByRole('menuitem',{name:t.recover,exact:true}).count(),0);await page.keyboard.press('Escape');
-    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=26&access=none`);
+    await actions('270002').click();assert.equal(await page.getByRole('menuitem',{name:t.recover,exact:true}).count(),0);await page.keyboard.press('Escape');
+    await page.goto(`${address}/${locale}/admin/student-codes?academicYear=2026-2027&yearPrefix=27&access=none`);
     assert.equal(await page.getByRole('button',{name:t.scan,exact:true}).count(),0);
     assert.ok(codeWrites.every(write=>!write.path.includes('allocate')));
   }

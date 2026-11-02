@@ -18,6 +18,7 @@ import { StudentCodesService } from '../../src/modules/student-codes/student-cod
 import { StudentCodeMappingsService } from '../../src/modules/student-codes/student-code-mappings.service';
 import { StudentCodeAllocator } from '../../src/modules/student-codes/student-code-allocator.service';
 import { AdmissionPeriodsService } from '../../src/modules/admissions/admission-periods.service';
+import { StudentsService } from '../../src/modules/students/students.service';
 import type { AuthenticatedUser } from '../../src/modules/auth/types/authenticated-request';
 
 describe('Complete admission workflow on the isolated replica set', () => {
@@ -29,6 +30,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     mappings: StudentCodeMappingsService,
     allocator: StudentCodeAllocator,
     periods: AdmissionPeriodsService;
+  let students: StudentsService;
   const extraYears = ['2093-2094', '2095-2096', '2096-2097'];
   const academicYear = '2087-2088',
     yearPrefix = '88',
@@ -83,6 +85,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     mappings = module.get(StudentCodeMappingsService);
     allocator = module.get(StudentCodeAllocator);
     periods = module.get(AdmissionPeriodsService);
+    students = module.get(StudentsService);
     await workflow.store.users.createIndexes();
     await workflow.store.profiles.createIndexes();
     await workflow.store.prepareWrites();
@@ -647,6 +650,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     const id = String((await pending())._id),
       base = '/api/admin/admissions';
     const endpoints = [
+      ['get', '/academic-years'],
       ['get', '/requests'],
       ['get', `/requests/${id}`],
       ['patch', `/requests/${id}`],
@@ -1082,6 +1086,115 @@ describe('Complete admission workflow on the isolated replica set', () => {
       ),
     ).rejects.toThrow();
     await expect(workflow.getGroupStudents(id)).rejects.toThrow();
+  });
+  it('protects admission identities and history from the general student delete action', async () => {
+    const item = await pending();
+    const approved = await workflow.approve(
+      String(item._id),
+      approval(),
+      actor,
+    );
+    await expect(
+      students.deleteStudent(String(approved.studentId)),
+    ).rejects.toMatchObject({
+      response: { code: 'STUDENT_ADMISSION_HISTORY_HELD' },
+    });
+    expect(
+      await workflow.requests.exists({ _id: item._id, status: 'APPROVED' }),
+    ).toBeTruthy();
+    expect(
+      await workflow.store.profiles.exists({
+        studentCode: approved.studentCode,
+      }),
+    ).toBeTruthy();
+    await expect(
+      students.create({ studentCode: approved.studentCode } as Parameters<
+        StudentsService['create']
+      >[0]),
+    ).rejects.toMatchObject({
+      response: { code: 'STUDENT_CODE_MANAGED_BY_ADMISSIONS' },
+    });
+  });
+  it('explains inactive periods even when an invitation is marked ACTIVE, without exposing PIN secrets', async () => {
+    for (const [suffix, patch, status, error] of [
+      [
+        'disabled',
+        { isEnabled: false },
+        'PERIOD_DISABLED',
+        'ADMISSION_PERIOD_DISABLED',
+      ],
+      [
+        'scheduled',
+        { opensAt: new Date(Date.now() + 60_000) },
+        'PERIOD_SCHEDULED',
+        'ADMISSION_PERIOD_SCHEDULED',
+      ],
+      [
+        'closed',
+        { closesAt: new Date(Date.now() - 60_000) },
+        'PERIOD_CLOSED',
+        'ADMISSION_PERIOD_CLOSED',
+      ],
+    ] as const) {
+      const period = await workflow.store.periods.create({
+        code: `SYNTH-AVAIL-${suffix}`,
+        academicYear,
+        name: 'Synthetic availability',
+        opensAt: new Date(Date.now() - 120_000),
+        closesAt: new Date(Date.now() + 86400_000),
+        isEnabled: true,
+      });
+      const invitation = await workflow.createAccess(
+        {
+          admissionPeriodId: String(period._id),
+          method: 'PIN',
+          label: `Synthetic ${suffix}`,
+          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          maxRegistrations: 3,
+        },
+        actor,
+      );
+      await workflow.store.periods.updateOne(
+        { _id: period._id },
+        { $set: patch },
+      );
+      const row = (
+        await workflow.listAccess({ page: 1, limit: 100 })
+      ).items.find((value) => String(value._id) === String(invitation._id))!;
+      expect(row.status).toBe('ACTIVE');
+      expect(row.effectiveStatus).toBe(status);
+      expect(row.canOpen).toBe(false);
+      expect(JSON.stringify(row)).not.toMatch(
+        /pinHash|pinCipher|tokenHash|tokenCipher/,
+      );
+      await expect(
+        workflow.validateAccess({ pin: invitation.pin }),
+      ).rejects.toMatchObject({ response: { code: error } });
+    }
+  });
+  it('reports a PIN-key mismatch to managers without attempting an unsafe public PIN fallback', async () => {
+    const invitation = await workflow.createAccess(
+      {
+        admissionPeriodId: periodId,
+        method: 'PIN',
+        label: 'Synthetic key diagnostic',
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        maxRegistrations: 3,
+      },
+      actor,
+    );
+    await workflow.access.updateOne(
+      { _id: invitation._id },
+      { $set: { pinHash: 'synthetic-key-mismatch' } },
+    );
+    const row = (await workflow.listAccess({ page: 1, limit: 100 })).items.find(
+      (value) => String(value._id) === String(invitation._id),
+    )!;
+    expect(row.pinConfigurationIssue).toBe(true);
+    expect(JSON.stringify(row)).not.toContain(invitation.pin);
+    await expect(
+      workflow.validateAccess({ pin: invitation.pin }),
+    ).rejects.toThrow();
   });
 });
 

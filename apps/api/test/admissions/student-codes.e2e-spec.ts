@@ -559,6 +559,8 @@ describe('Student-code registry on the isolated replica set', () => {
     }).expect(400);
     await post('years/initialize', payload).expect(201);
     const code = formatStudentCode(input.yearPrefix, 1);
+    await post(`${code}/hold`, payload, 'staff').expect(403);
+    await post(`${code}/hold`, payload, 'admin', false).expect(403);
     await request(app.getHttpServer())
       .get(`${base}/${code}/history`)
       .expect(401);
@@ -635,5 +637,68 @@ describe('Student-code registry on the isolated replica set', () => {
     await expect(recover(input, 4)).rejects.toMatchObject({
       response: { code: 'CODE_RECOVERY_UNSAFE' },
     });
+  });
+  it('resolves a deleted owner into a historical hold without making the code reusable', async () => {
+    const input = await year();
+    await initialize(input);
+    const assigned = await allocate(input);
+    const old = await preview(input);
+    await expect(
+      service.holdPreviousOwner(
+        assigned.studentCode,
+        {
+          ...input,
+          fingerprint: old.fingerprint,
+          reason: 'Synthetic reviewed owner hold',
+          confirmed: true,
+        },
+        String(actor),
+      ),
+    ).rejects.toThrow();
+    await store.profiles.deleteMany({
+      userId: new Types.ObjectId(assigned.studentId),
+    });
+    await users.deleteOne({ _id: assigned.studentId });
+    const current = await preview(input);
+    expect(
+      current.items.find((row) => row.studentCode === assigned.studentCode)!
+        .reason,
+    ).toBe('PREVIOUS_OWNER_MISSING');
+    await expect(
+      service.holdPreviousOwner(
+        assigned.studentCode,
+        {
+          ...input,
+          fingerprint: old.fingerprint,
+          reason: 'Synthetic reviewed owner hold',
+          confirmed: true,
+        },
+        String(actor),
+      ),
+    ).rejects.toMatchObject({ response: { code: 'CODE_PREVIEW_CHANGED' } });
+    await service.holdPreviousOwner(
+      assigned.studentCode,
+      {
+        ...input,
+        fingerprint: current.fingerprint,
+        reason: 'Synthetic reviewed owner hold',
+        confirmed: true,
+      },
+      String(actor),
+    );
+    const entry = await store.entries
+      .findOne({ studentCode: assigned.studentCode })
+      .lean();
+    expect(entry!.status).toBe('RELEASED');
+    expect(entry!.assignmentHistory).toHaveLength(1);
+    expect(entry!.currentStudentId).toBeUndefined();
+    expect((await allocate(input)).studentCode).not.toBe(assigned.studentCode);
+    await expect(recover(input, 1)).rejects.toThrow();
+    expect(
+      await store.audits.countDocuments({
+        studentCode: assigned.studentCode,
+        action: 'PREVIOUS_OWNER_HELD',
+      }),
+    ).toBe(1);
   });
 });

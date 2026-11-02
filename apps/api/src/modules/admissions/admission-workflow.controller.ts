@@ -67,6 +67,16 @@ export class AdmissionWorkflowController {
     private readonly admissions: AdmissionWorkflowService,
     private readonly sheets: AdmissionSpreadsheets,
   ) {}
+  @Get('academic-years')
+  @RequireAnyPermissions(
+    PERMISSIONS.ADMISSIONS_GROUPS_MANAGE,
+    PERMISSIONS.ADMISSIONS_REQUESTS_READ,
+    PERMISSIONS.ADMISSIONS_ACCESS_MANAGE,
+    PERMISSIONS.STUDENT_CODES_READ,
+  )
+  academicYears() {
+    return this.admissions.academicYears();
+  }
   @Get('requests')
   @RequirePermissions(PERMISSIONS.ADMISSIONS_REQUESTS_READ)
   requests(

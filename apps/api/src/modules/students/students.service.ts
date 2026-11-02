@@ -95,6 +95,31 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto) {
+    const registry = await this.studentProfileModel.db
+      .collection('student_code_registry')
+      .findOne({ studentCode: dto.studentCode }, { projection: { _id: 1 } });
+    const policy = /^\d{6}$/.test(dto.studentCode)
+      ? await this.studentProfileModel.db
+          .collection('student_code_years')
+          .findOne(
+            {
+              $or: [
+                { allocationPrefix: dto.studentCode.slice(0, 2) },
+                {
+                  allocationPrefix: { $exists: false },
+                  yearPrefix: dto.studentCode.slice(0, 2),
+                },
+              ],
+            },
+            { projection: { _id: 1 } },
+          )
+      : null;
+    if (registry || policy)
+      throw new ConflictException({
+        code: 'STUDENT_CODE_MANAGED_BY_ADMISSIONS',
+        message:
+          'This code is managed by Admissions. Approve a new or transfer application to allocate its code safely.',
+      });
     // Check if student code already exists
     const existing = await this.usersService.findByStudentCode(dto.studentCode);
     if (existing) {
@@ -421,40 +446,18 @@ export class StudentsService {
     const userId = profile.userId;
     const studentCode = profile.studentCode;
 
-    if (profile.group) {
-      try {
-        await this.studentProfileModel.db
-          .collection('admission_groups')
-          .updateOne(
-            {
-              $or: [{ name: profile.group }, { nameAr: profile.group }],
-              enrolled: { $gt: 0 },
-            },
-            { $inc: { enrolled: -1 } },
-          );
-      } catch {
-        // ignore
-      }
-    }
-
-    try {
-      const admissionReq = await this.studentProfileModel.db
-        .collection('admission_requests')
-        .findOne({ studentCode });
-      if (admissionReq?.groupId) {
-        await this.studentProfileModel.db
-          .collection('admission_groups')
-          .updateOne(
-            { _id: admissionReq.groupId, enrolled: { $gt: 0 } },
-            { $inc: { enrolled: -1 } },
-          );
-      }
-      await this.studentProfileModel.db
-        .collection('admission_requests')
-        .deleteMany({ studentCode });
-    } catch {
-      // ignore
-    }
+    const registry = await this.studentProfileModel.db
+      .collection('student_code_registry')
+      .findOne({ studentCode }, { projection: { _id: 1 } });
+    const admission = await this.studentProfileModel.db
+      .collection('admission_requests')
+      .findOne({ studentCode }, { projection: { _id: 1 } });
+    if (registry || admission)
+      throw new ConflictException({
+        code: 'STUDENT_ADMISSION_HISTORY_HELD',
+        message:
+          'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held.',
+      });
 
     await this.studentProfileModel.findByIdAndDelete(profile._id);
 
@@ -468,12 +471,6 @@ export class StudentsService {
       this.academicProfileModel.deleteMany({ studentId: userId }),
       this.registrationModel.deleteMany({ studentId: userId }),
       this.advisingCaseModel.deleteMany({ studentId: userId }),
-      this.studentProfileModel.db
-        .collection('student_codes')
-        .updateMany(
-          { currentStudentId: userId?.toString() },
-          { $set: { status: 'AVAILABLE', currentStudentId: null } },
-        ),
     ]);
 
     this.invalidateStatsCache();

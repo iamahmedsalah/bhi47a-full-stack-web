@@ -103,6 +103,7 @@ export class StudentCodeAuditLog {
       'MARKED_REVIEW',
       'CANCELLED_CODE_HELD',
       'MAPPING_CORRECTED',
+      'PREVIOUS_OWNER_HELD',
     ],
     required: true,
     immutable: true,

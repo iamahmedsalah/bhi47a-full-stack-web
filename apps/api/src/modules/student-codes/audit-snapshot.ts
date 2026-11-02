@@ -126,6 +126,12 @@ export function analyzeCodeSnapshot(
       };
     }
     if (!entry) return { ...row, status: 'MISSING', reason: 'UNVERIFIED_GAP' };
+    if (entry.status === 'ASSIGNED' && !users.length && !profiles.length)
+      return {
+        ...row,
+        status: 'REQUIRES_REVIEW',
+        reason: 'PREVIOUS_OWNER_MISSING',
+      };
     if (entry.status === 'RELEASED')
       return { ...row, status: 'RELEASED', reason: 'PREVIOUS_OWNER_BLOCKED' };
     if (entry.status === 'RESERVED')

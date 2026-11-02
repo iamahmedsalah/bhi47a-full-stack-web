@@ -1,0 +1,11 @@
+# Install alongside the primary bhi47.app site, not in place of it.
+# Each legacy HTTPS hostname also needs a valid TLS certificate. Use the existing
+# certificate/certbot policy to add 443 listeners; never disable certificate checks.
+# After installing this block, use certbot --nginx -d portal.169-58-108-189.sslip.io
+# and retain the fixed https://bhi47.app$request_uri return in the HTTPS block.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name portal.169-58-108-189.sslip.io;
+    return 308 https://bhi47.app$request_uri;
+}

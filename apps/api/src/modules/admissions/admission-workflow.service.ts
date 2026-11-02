@@ -158,21 +158,36 @@ export class AdmissionWorkflowService {
   private async requirePeriod(id: Types.ObjectId, session?: ClientSession) {
     const now = new Date();
     const period = await this.store.periods
-      .findOne({
-        _id: id,
-        isEnabled: true,
-        deletedAt: { $exists: false },
-        opensAt: { $lte: now },
-        closesAt: { $gt: now },
-      })
+      .findById(id)
       .session(session ?? null)
       .lean();
-    if (!period)
+    if (!period || period.deletedAt)
       throw new BadRequestException({
         code: 'ADMISSION_ACCESS_UNAVAILABLE',
         message: 'Admission access is unavailable or has expired.',
       });
+    const code = !period.isEnabled
+      ? 'ADMISSION_PERIOD_DISABLED'
+      : period.opensAt > now
+        ? 'ADMISSION_PERIOD_SCHEDULED'
+        : period.closesAt <= now
+          ? 'ADMISSION_PERIOD_CLOSED'
+          : undefined;
+    if (code)
+      throw new BadRequestException({
+        code,
+        message: 'The invitation exists, but its admission period is not open.',
+      });
     return period;
+  }
+  async academicYears() {
+    const rows = await this.store.periods.aggregate<{ _id: string }>([
+      { $match: { deletedAt: { $exists: false } } },
+      { $group: { _id: '$academicYear' } },
+      { $sort: { _id: -1 } },
+      { $limit: 100 },
+    ]);
+    return { items: rows.map((row) => row._id) };
   }
   async listAccess(query: AdmissionListDto) {
     const { page, limit, skip } = buildPaginationOptions(query);
@@ -183,14 +198,66 @@ export class AdmissionWorkflowService {
     const [items, total] = await Promise.all([
       this.access
         .find(filter)
-        .select('-history')
+        .select('-history +pinCipher +pinHash')
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       this.access.countDocuments(filter),
     ]);
-    return createPaginatedResult(items, total, page, limit);
+    const periods = await this.store.periods
+      .find({
+        _id: { $in: items.map((item) => item.admissionPeriodId) },
+      })
+      .select('isEnabled opensAt closesAt deletedAt')
+      .lean();
+    const now = new Date();
+    const visible = items.map((item) => {
+      const period = periods.find(
+        (value) => String(value._id) === String(item.admissionPeriodId),
+      );
+      const effectiveStatus =
+        item.status === 'REVOKED'
+          ? 'REVOKED'
+          : item.expiresAt <= now
+            ? 'EXPIRED'
+            : item.usedCount >= item.maxRegistrations
+              ? 'EXHAUSTED'
+              : item.lockedUntil && item.lockedUntil > now
+                ? 'LOCKED'
+                : !period || period.deletedAt
+                  ? 'PERIOD_UNAVAILABLE'
+                  : !period.isEnabled
+                    ? 'PERIOD_DISABLED'
+                    : period.opensAt > now
+                      ? 'PERIOD_SCHEDULED'
+                      : period.closesAt <= now
+                        ? 'PERIOD_CLOSED'
+                        : 'ACTIVE';
+      let pinConfigurationIssue = false;
+      if (item.pinCipher) {
+        try {
+          pinConfigurationIssue =
+            !item.pinHash ||
+            !admissionEqual(
+              this.security.hmac('pin', this.security.decrypt(item.pinCipher)),
+              item.pinHash,
+            );
+        } catch {
+          pinConfigurationIssue = true;
+        }
+      }
+      const { pinCipher: _cipher, pinHash: _hash, ...publicItem } = item;
+      return {
+        ...publicItem,
+        pinConfigurationIssue,
+        effectiveStatus,
+        canOpen: effectiveStatus === 'ACTIVE',
+        periodOpensAt: period?.opensAt,
+        periodClosesAt: period?.closesAt,
+      };
+    });
+    return createPaginatedResult(visible, total, page, limit);
   }
   async createAccess(dto: AccessCreateDto, actor: AuthenticatedUser) {
     this.security.ready();

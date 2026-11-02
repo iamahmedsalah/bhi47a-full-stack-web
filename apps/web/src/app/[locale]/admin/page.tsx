@@ -55,6 +55,8 @@ import { ComplaintsStatusChart } from '@/components/dashboard/ComplaintsStatusCh
 import { EnrollmentStatusChart } from '@/components/dashboard/EnrollmentStatusChart';
 import { ActiveSessionsDialog } from '@/components/dashboard/ActiveSessionsDialog';
 import { CoursesByLevelChart } from '@/components/dashboard/CoursesByLevelChart';
+import { AnalyticsExportModal } from '@/features/analytics/components/analytics-export-modal';
+import { AnalyticsSummaryWidgets } from '@/features/analytics/components/analytics-summary-widgets';
 import { exportMultiSheetExcel, type ExcelSheet } from '@/lib/export-utils';
 import { StatCard, StatCardRow } from '@/components/ui/stat-card';
 import { StudentFormDialog } from '@/features/students/components/student-form-dialog';
@@ -579,6 +581,7 @@ export default function AdminDashboard() {
 
   const dashboardContainerRef = React.useRef<HTMLDivElement>(null);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isAnalyticsExportModalOpen, setIsAnalyticsExportModalOpen] = useState(false);
 
   const departmentChartData = React.useMemo(() => {
     if (studentsStatsQuery.data?.departments && studentsStatsQuery.data.departments.length > 0) {
@@ -799,19 +802,14 @@ export default function AdminDashboard() {
         subtitle={isAr ? 'لوحة المتابعة التشغيلية والإحصاءات الأكاديمية للمعهد.' : 'Quick operational view for portal activity.'}
       >
         <div data-no-export="true" className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {(isAdmin || hasPerm('analytics.export') || hasPerm('students.export')) && (
             <button
               type="button"
-              onClick={handleExportComprehensiveExcel}
-              disabled={isExportingExcel}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-secondary/40 text-muted-foreground hover:text-foreground border border-border/60 hover:bg-secondary/60 shadow-sm disabled:opacity-50"
+              onClick={() => setIsAnalyticsExportModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-500/20 shadow-sm"
             >
-              {isExportingExcel ? (
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              ) : (
-                <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
-              )}
-              <span>{isAr ? 'تصدير التحليلات (Excel)' : 'Export Analytics (Excel)'}</span>
+              <FileSpreadsheet className="h-4 w-4 text-teal-500" />
+              <span>{isAr ? 'تصدير التحليلات الشاملة (Excel)' : 'Export Full Analytics (Excel)'}</span>
             </button>
           )}
         </div>
@@ -1769,6 +1767,7 @@ export default function AdminDashboard() {
 
             {/* Row 2: Department Seat Capacity & Utilization */}
             <DepartmentCapacityChart data={departmentChartData} isAr={isAr} />
+            <AnalyticsSummaryWidgets isAr={isAr} onOpenExportModal={() => setIsAnalyticsExportModalOpen(true)} />
           </section>
         </div>
       )}
@@ -2070,6 +2069,8 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AnalyticsExportModal open={isAnalyticsExportModalOpen} onOpenChange={setIsAnalyticsExportModalOpen} locale={locale} />
 
       {isAdmin && (
         <ActiveSessionsDialog

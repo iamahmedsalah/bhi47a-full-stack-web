@@ -35,7 +35,7 @@ function records() {
       let row = rows.find((r) => matches(r, filter));
       if (!row && options?.upsert) {
         row = { ...filter, ...update.$setOnInsert };
-        rows.push(row);
+        if (row) rows.push(row);
       }
       if (row) {
         Object.assign(row, update.$set);

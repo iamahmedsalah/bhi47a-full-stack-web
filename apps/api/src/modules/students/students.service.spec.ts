@@ -33,6 +33,11 @@ describe('StudentsService Unit Tests', () => {
     MockProfileConstructor.updateMany = jest.fn();
     MockProfileConstructor.updateOne = jest.fn();
     MockProfileConstructor.findByIdAndUpdate = jest.fn();
+    MockProfileConstructor.db = {
+      collection: jest
+        .fn()
+        .mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) }),
+    };
 
     mockStudentProfileModel = MockProfileConstructor;
 
@@ -386,6 +391,19 @@ describe('StudentsService Unit Tests', () => {
   });
 
   describe('create()', () => {
+    it('rejects managed historical codes before creating another identity', async () => {
+      mockStudentProfileModel.db.collection.mockReturnValueOnce({
+        findOne: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+      });
+      await expect(
+        service.create({ studentCode: '270001' } as Parameters<
+          StudentsService['create']
+        >[0]),
+      ).rejects.toMatchObject({
+        response: { code: 'STUDENT_CODE_MANAGED_BY_ADMISSIONS' },
+      });
+      expect(mockUsersService.createUser).not.toHaveBeenCalled();
+    });
     it('throws ConflictException if studentCode already exists', async () => {
       mockUsersService.findByStudentCode.mockResolvedValue({
         _id: 'existing-id',

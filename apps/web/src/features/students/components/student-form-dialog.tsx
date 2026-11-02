@@ -34,7 +34,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { studentFormSchema, type StudentFormValues } from '../schema';
+import { createStudentFormSchema, type StudentFormValues } from '../schema';
+import { useTranslations } from 'next-intl';
 import { getStudentFullName } from '../student-name';
 
 interface StudentFormDialogProps {
@@ -84,10 +85,11 @@ export function StudentFormDialog({
   locale = 'ar',
 }: StudentFormDialogProps) {
   const isAr = locale === 'ar';
+  const validation = useTranslations('students.formValidation');
   const [activeTab, setActiveTab] = useState<'identity' | 'academic' | 'exams'>('identity');
 
   const form = useForm<StudentFormValues>({
-    resolver: zodResolver(studentFormSchema),
+    resolver: zodResolver(createStudentFormSchema(validation)),
     defaultValues: {
       fullName: '',
       fullNameAr: '',
@@ -191,6 +193,7 @@ export function StudentFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col">
+          {!isEditing && <p className="mx-6 mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">{validation('admissionGuidance')}</p>}
           <Tabs
             value={activeTab}
             onValueChange={(val) => setActiveTab(val as 'identity' | 'academic' | 'exams')}

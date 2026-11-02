@@ -322,6 +322,14 @@ export function getApiErrorDetails(error: unknown, fallback = 'Something went wr
 }
 
 const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
+  'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held': {
+    ar: 'لهذا الطالب سجل قبول وملكية كود. ألغِ القيد من صفحة القبول بدلًا من حذف الهوية. يظل الكود محجوزًا لصاحبه.',
+    en: 'This student has admission history. Cancel the enrollment in Admissions; the original identity and code are retained.',
+  },
+  'This code is managed by Admissions. Approve a new or transfer application to allocate its code safely': {
+    ar: 'تدير منظومة القبول هذا الكود. وافق على طلب طالب جديد أو محول لتخصيص الكود بأمان.',
+    en: 'This code is managed by Admissions. Approve a new or transfer application to allocate it safely.',
+  },
   'Something went wrong': {
     ar: 'حدث خطأ غير متوقع، يرجى المحاولة لاحقاً',
     en: 'Something went wrong, please try again later',

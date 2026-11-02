@@ -13,7 +13,7 @@ export function parseStudentCode(code: string, prefix: string): number | undefin
   const sequence = Number(code.slice(2));
   return sequence >= 1 && sequence <= STUDENT_CODE_SEQUENCE_MAX ? sequence : undefined;
 }
-export type StudentCodeFindingReason = 'MALFORMED_CODE' | 'OWNER_CONFLICT' | 'ORPHANED_PROFILE' | 'ORPHANED_USER' | 'ALIAS_CONFLICT' | 'REGISTRY_CONFLICT' | 'UNVERIFIED_GAP' | 'CONFIRMED_AVAILABLE' | 'CURRENT_OWNER' | 'PREVIOUS_OWNER_BLOCKED' | 'RESERVATION_HELD';
+export type StudentCodeFindingReason = 'PREVIOUS_OWNER_MISSING' | 'MALFORMED_CODE' | 'OWNER_CONFLICT' | 'ORPHANED_PROFILE' | 'ORPHANED_USER' | 'ALIAS_CONFLICT' | 'REGISTRY_CONFLICT' | 'UNVERIFIED_GAP' | 'CONFIRMED_AVAILABLE' | 'CURRENT_OWNER' | 'PREVIOUS_OWNER_BLOCKED' | 'RESERVATION_HELD';
 export interface StudentCodeFinding {
   studentCode: string;
   sequence?: number;

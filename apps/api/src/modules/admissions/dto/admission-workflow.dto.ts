@@ -75,7 +75,7 @@ export class PublicApplicantDto extends ApplicantDto {
 }
 export class PublicAccessDto {
   @IsOptional() @IsMongoId() accessId?: string;
-  @IsOptional() @Matches(/^\d{8,12}$/) pin?: string;
+  @IsOptional() @Transform(trim) @Matches(/^\d{8,12}$/) pin?: string;
   @IsOptional() @Matches(/^[A-Za-z0-9_-]{43}$/) token?: string;
 }
 export class PublicStatusDto {

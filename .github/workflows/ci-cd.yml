@@ -1,4 +1,4 @@
-name: CI/CD - Vercel and VPS
+name: CI/CD - VPS
 
 on:
   push:
@@ -15,13 +15,12 @@ on:
   workflow_dispatch:
     inputs:
       deployment_target:
-        description: Manual deployment target (main pushes also deploy to VPS and Vercel)
+        description: Manual deployment target (main pushes deploy to VPS)
         type: choice
         default: validate
         options:
           - validate
           - vps
-          - vercel
 
 permissions:
   contents: read
@@ -84,6 +83,12 @@ jobs:
       - name: Verify Google sign-in nonce refresh and cooldown
         run: node --test apps/web/tests/google-signin-rate-limit.test.mjs
 
+      - name: Verify canonical-domain redirects
+        run: node --test apps/web/tests/canonical-redirect.test.mjs
+
+      - name: Verify bilingual student form validation
+        run: node --test apps/web/tests/student-form-validation.test.mjs
+
       - name: Verify quiz release deadlines and states
         run: pnpm --filter @student-portal/web test:quiz-release
 
@@ -118,19 +123,15 @@ jobs:
       - name: Build workspace
         run: pnpm run build
 
-      - name: Validate API Vercel runtime compatibility
-        shell: bash
-        run: |
-          configured_node_options="$(node -p "require('./apps/api/vercel.json').env.NODE_OPTIONS")"
-          test "$configured_node_options" = "--experimental-require-module"
-          NODE_OPTIONS="$configured_node_options" node -e "require('@nestjs/core')"
-
       - name: Validate web route manifest
         run: >-
           node -e "const routes=require('./apps/web/.next/routes-manifest.json');
           const appRoutes=require('./apps/web/.next/app-path-routes-manifest.json');
           if (!routes.staticRoutes.some(({page}) => page === '/') || appRoutes['/page'] !== '/')
           throw new Error('The web build does not contain the root route');"
+
+      - name: Verify production canonical-domain routing
+        run: node apps/web/tests/canonical-redirect.production.mjs
 
       - name: Install Chromium for passkey acceptance
         run: pnpm --filter @student-portal/api exec playwright install --with-deps chromium
@@ -169,176 +170,6 @@ jobs:
           JWT_SECRET: testing-secret-must-be-rotated-32-chars
           QUEUE_WORKERS_ENABLED: "false"
           RUN_STARTUP_TASKS: "false"
-
-  deploy-api:
-    name: Deploy API to Vercel
-    needs: validate
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vercel')
-    runs-on: ubuntu-latest
-    environment:
-      name: production-api
-      url: ${{ steps.deploy.outputs.url }}
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@59.23.2
-
-      - name: Reset API Vercel project link
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${VERCEL_TOKEN:?VERCEL_TOKEN is not configured}"
-          : "${VERCEL_ORG_ID:?VERCEL_ORG_ID is not configured}"
-          : "${VERCEL_PROJECT_ID:?VERCEL_API_PROJECT_ID is not configured}"
-          rm -rf -- .vercel
-          mkdir -p -- .vercel
-          node <<'NODE'
-          const fs = require('node:fs');
-          fs.writeFileSync(
-            '.vercel/project.json',
-            `${JSON.stringify({
-              orgId: process.env.VERCEL_ORG_ID,
-              projectId: process.env.VERCEL_PROJECT_ID,
-            }, null, 2)}\n`,
-          );
-          NODE
-
-      - name: Pull API production configuration
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Build API deployment artifacts
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-
-      - name: Deploy API production artifacts
-        id: deploy
-        shell: bash
-        run: |
-          deployment_url="$(vercel deploy --prebuilt --prod \
-            --env NODE_OPTIONS=--experimental-require-module \
-            --token="$VERCEL_TOKEN")"
-          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
-
-      - name: Verify API health
-        shell: bash
-        run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 \
-            "${{ steps.deploy.outputs.url }}/api/health"
-
-  deploy-web:
-    name: Deploy web to Vercel
-    needs:
-      - validate
-      - deploy-api
-    if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vercel')
-    runs-on: ubuntu-latest
-    environment:
-      name: production-web
-      url: ${{ steps.deploy.outputs.url }}
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
-      VERCEL_API_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@59.23.2
-
-      - name: Validate web deployment target
-        shell: bash
-        run: |
-          test -n "$VERCEL_TOKEN"
-          test -n "$VERCEL_ORG_ID"
-          test -n "$VERCEL_PROJECT_ID"
-          test -n "$VERCEL_API_PROJECT_ID"
-          test "$VERCEL_PROJECT_ID" != "$VERCEL_API_PROJECT_ID"
-
-      - name: Reset web Vercel project link
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${VERCEL_TOKEN:?VERCEL_TOKEN is not configured}"
-          : "${VERCEL_ORG_ID:?VERCEL_ORG_ID is not configured}"
-          : "${VERCEL_PROJECT_ID:?VERCEL_WEB_PROJECT_ID is not configured}"
-
-          rm -rf -- .vercel
-          mkdir -p -- .vercel
-          node <<'NODE'
-          const fs = require('node:fs');
-          fs.writeFileSync(
-            '.vercel/project.json',
-            `${JSON.stringify({
-              orgId: process.env.VERCEL_ORG_ID,
-              projectId: process.env.VERCEL_PROJECT_ID,
-            }, null, 2)}\n`,
-          );
-          NODE
-
-      - name: Pull web production configuration
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Build web deployment artifacts
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-
-      - name: Validate Vercel web artifacts
-        run: >-
-          node -e "const fs=require('node:fs');
-          const path='.vercel/output/config.json';
-          if (!fs.existsSync(path)) throw new Error('Vercel did not create output/config.json');
-          const config=JSON.parse(fs.readFileSync(path,'utf8'));
-          if (config.version !== 3 || !Array.isArray(config.routes) || config.routes.length === 0)
-          throw new Error('Vercel produced an empty or invalid web routing artifact');"
-
-      - name: Deploy web production artifacts
-        id: deploy
-        shell: bash
-        run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
-          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
-
-      - name: Verify web deployment
-        shell: bash
-        run: |
-          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
-            "${{ steps.deploy.outputs.url }}" > /dev/null
-          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
-            "${{ steps.deploy.outputs.url }}/ar/login" > /dev/null
 
   docker-validate:
     name: Build and smoke-test VPS containers

@@ -1,4 +1,6 @@
-﻿"use client";
+"use client";
+import { AdmissionSection } from "./admission-section";
+import { AcademicYearChoice } from "./academic-year-choice";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +25,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { TableCell } from "@/components/ui/table";
 import { getApiErrorDetails, getApiErrorMessage } from "@/lib/api";
-import { cairoDateTimeToIso } from "@/lib/cairo-time";
+import { cairoDateTimeToIso, toCairoDateTimeLocal } from "@/lib/cairo-time";
 import { exportElementToPng } from "@/lib/export-utils";
 import { cn } from "@/lib/cn";
 import { Ban, Edit2, Loader2, QrCode, Trash2, Users } from "lucide-react";
@@ -175,13 +177,15 @@ export function AdmissionAccessPanel() {
         const isRevoked = row.status === "REVOKED";
         const isExpired = new Date(row.expiresAt) <= new Date();
         const isExhausted = row.usedCount >= row.maxRegistrations;
-        const statusKey = isRevoked
-          ? "REVOKED"
-          : isExpired
-            ? "EXPIRED"
-            : isExhausted
-              ? "EXHAUSTED"
-              : "ACTIVE";
+        const statusKey =
+          row.effectiveStatus ??
+          (isRevoked
+            ? "REVOKED"
+            : isExpired
+              ? "EXPIRED"
+              : isExhausted
+                ? "EXHAUSTED"
+                : "ACTIVE");
         const variantClass =
           statusKey === "ACTIVE"
             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
@@ -198,6 +202,16 @@ export function AdmissionAccessPanel() {
             >
               {t(`accessStatus.${statusKey}`)}
             </span>
+            {row.pinConfigurationIssue && (
+              <p className="mt-2 max-w-xs text-xs text-warning">
+                {t("pinConfigurationIssue")}
+              </p>
+            )}
+            {statusKey === "PERIOD_SCHEDULED" && row.periodOpensAt && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {date(row.periodOpensAt)}
+              </p>
+            )}
           </TableCell>
         );
       },
@@ -246,9 +260,15 @@ export function AdmissionAccessPanel() {
   ];
   return (
     <div className="space-y-4">
-      <p>{t("accessDescription")}</p>
+      <AdmissionSection
+        title={t("tabs.access")}
+        description={t("accessDescription")}
+        icon={<QrCode className="h-5 w-5" />}
+        actions={
+          <Button onClick={() => setCreating(true)}>{t("createAccess")}</Button>
+        }
+      />
       <div className="flex gap-3">
-        <Button onClick={() => setCreating(true)}>{t("createAccess")}</Button>
         {state.selectedKeys.length > 0 && (
           <Button
             variant="outline"
@@ -285,6 +305,7 @@ export function AdmissionAccessPanel() {
           title={t("createAccess")}
         >
           <AccessForm
+            onCancel={() => setCreating(false)}
             onSave={async (value) => {
               setSecret(value);
               setCreating(false);
@@ -357,8 +378,10 @@ export function AdmissionAccessPanel() {
 }
 function AccessForm({
   onSave,
+  onCancel,
 }: {
   onSave: (value: AdmissionAccessSecret) => Promise<void>;
+  onCancel: () => void;
 }) {
   const { t, locale, date } = useAdmissionUI(),
     [error, setError] = useState("");
@@ -391,7 +414,7 @@ function AccessForm({
   });
   return (
     <form
-      className="space-y-4"
+      className="grid gap-4 sm:grid-cols-2"
       onSubmit={form.handleSubmit(async (value) => {
         setError("");
         try {
@@ -440,11 +463,9 @@ function AccessForm({
           form.setValue("admissionPeriodId", value, { shouldValidate: true });
           const target = periods.data?.items?.find((p) => p._id === value);
           if (target?.closesAt) {
-            form.setValue(
-              "expiresAt",
-              new Date(target.closesAt).toISOString(),
-              { shouldValidate: true },
-            );
+            form.setValue("expiresAt", toCairoDateTimeLocal(target.closesAt), {
+              shouldValidate: true,
+            });
           }
         }}
         options={(periods.data?.items ?? []).map((period) => ({
@@ -535,9 +556,19 @@ function AccessForm({
           {error}
         </p>
       )}
-      <Button disabled={form.formState.isSubmitting}>
-        {t("createAccess")}
-      </Button>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4 sm:col-span-2 rtl:justify-start">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={form.formState.isSubmitting}
+        >
+          {t("close")}
+        </Button>
+        <Button disabled={form.formState.isSubmitting}>
+          {t("createAccess")}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -632,7 +663,7 @@ function AdmissionPoster({
           className="poster-logo mx-auto h-20 w-20 object-contain"
         />
         <h3 className="institute-title text-base font-bold text-slate-800">
-          المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 أ)
+          المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 ك)
         </h3>
         <h2 className="poster-label text-2xl font-extrabold text-slate-950">
           {secret.label}
@@ -864,19 +895,24 @@ export function AdmissionGroupsPanel() {
   ];
   return (
     <div className="space-y-4">
-      <p>{t("groupsDescription")}</p>
+      <AdmissionSection
+        title={t("tabs.groups")}
+        description={t("groupsDescription")}
+        icon={<Users className="h-5 w-5" />}
+        actions={
+          <Button onClick={() => setEditing("create")}>
+            {t("createGroup")}
+          </Button>
+        }
+      />
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => setEditing("create")}>{t("createGroup")}</Button>
-        <AdmissionInput
-          aria-label={t("fields.academicYear")}
-          dir="ltr"
-          className="max-w-52 text-left"
-          placeholder="2026-2027"
-          value={state.filters.academicYear}
-          onChange={(event) =>
-            state.setFilter("academicYear", event.target.value)
-          }
-        />
+        <div className="w-full sm:w-60">
+          <AcademicYearChoice
+            includeAll
+            value={state.filters.academicYear ?? ""}
+            onChange={(value) => state.setFilter("academicYear", value)}
+          />
+        </div>
         {state.selectedKeys.length > 0 && (
           <Button variant="outline" onClick={() => setInspect(true)}>
             {t("inspectSelected", { count: state.selectedKeys.length })}
@@ -905,6 +941,7 @@ export function AdmissionGroupsPanel() {
           title={t(editing === "create" ? "createGroup" : "edit")}
         >
           <GroupForm
+            onCancel={() => setEditing(null)}
             initial={editing === "create" ? undefined : editing}
             onSaved={async () => {
               await client.invalidateQueries({
@@ -1111,9 +1148,11 @@ function GroupStudentsDialog({
 function GroupForm({
   initial,
   onSaved,
+  onCancel,
 }: {
   initial?: AdmissionGroupItem;
   onSaved: () => Promise<void>;
+  onCancel: () => void;
 }) {
   const { t, locale } = useAdmissionUI(),
     [error, setError] = useState("");
@@ -1140,7 +1179,7 @@ function GroupForm({
   });
   return (
     <form
-      className="space-y-4"
+      className="grid gap-4 sm:grid-cols-2"
       onSubmit={form.handleSubmit(async (values) => {
         setError("");
         try {
@@ -1166,7 +1205,10 @@ function GroupForm({
         label={t("fields.name")}
         error={form.formState.errors.name?.message}
       >
-        <AdmissionInput {...form.register("name")} />
+        <AdmissionInput
+          {...form.register("name")}
+          disabled={Boolean(initial)}
+        />
       </Field>
       <Field
         label={t("fields.nameAr")}
@@ -1174,16 +1216,18 @@ function GroupForm({
       >
         <AdmissionInput {...form.register("nameAr")} dir="rtl" />
       </Field>
-      <Field
-        label={t("fields.academicYear")}
-        error={form.formState.errors.academicYear?.message}
-      >
-        <AdmissionInput
-          {...form.register("academicYear")}
-          dir="ltr"
-          disabled={Boolean(initial)}
-        />
-      </Field>
+      <AcademicYearChoice
+        value={form.watch("academicYear")}
+        onChange={(value) =>
+          form.setValue("academicYear", value, { shouldValidate: true })
+        }
+        disabled={Boolean(initial)}
+      />
+      {form.formState.errors.academicYear && (
+        <p role="alert" className="text-danger text-xs">
+          {form.formState.errors.academicYear.message}
+        </p>
+      )}
       <Choice
         label={t("fields.level")}
         value={form.watch("level")}
@@ -1232,7 +1276,17 @@ function GroupForm({
           {error}
         </p>
       )}
-      <Button disabled={form.formState.isSubmitting}>{t("save")}</Button>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-border/60 pt-4 sm:col-span-2 rtl:justify-start">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={form.formState.isSubmitting}
+        >
+          {t("close")}
+        </Button>
+        <Button disabled={form.formState.isSubmitting}>{t("save")}</Button>
+      </div>
     </form>
   );
 }

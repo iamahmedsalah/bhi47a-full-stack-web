@@ -123,7 +123,9 @@ export function AdmissionDialog({
       >
         <DialogHeader className="text-start sm:text-start">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description ?? title}</DialogDescription>
+          <DialogDescription className={description ? undefined : "sr-only"}>
+            {description ?? title}
+          </DialogDescription>
         </DialogHeader>
         {children}
       </DialogContent>

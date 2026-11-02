@@ -1,4 +1,5 @@
 "use client";
+import { AdmissionSection } from "./admission-section";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +34,9 @@ import {
   type AdmissionPeriodFormValues,
 } from "@/features/admissions/period-form";
 
-export default function AdmissionPeriodsPage() {
+export default function AdmissionPeriodsPage({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const t = useTranslations("admissions");
   const workflowT = useTranslations("admissionWorkflow");
   const locale = useLocale();
@@ -321,12 +324,38 @@ export default function AdmissionPeriodsPage() {
       />
     );
   return (
-    <div className="space-y-5 p-2 md:p-6">
-      <PageTitleBanner
-        title={t("title")}
-        subtitle={t("description")}
-        icon={<CalendarDays className="h-5 w-5" />}
-      />
+    <div className={embedded ? "space-y-5" : "space-y-5 p-2 md:p-6"}>
+      {embedded ? (
+        <AdmissionSection
+          title={t("title")}
+          description={t("description")}
+          icon={<CalendarDays className="h-5 w-5" />}
+          actions={
+            <>
+              {canManage && (
+                <Button disabled={pending} onClick={() => setForm("create")}>
+                  <Plus className="h-4 w-4" />
+                  {t("create")}
+                </Button>
+              )}
+            </>
+          }
+        />
+      ) : (
+        <>
+          <PageTitleBanner
+            title={t("title")}
+            subtitle={t("description")}
+            icon={<CalendarDays className="h-5 w-5" />}
+          />
+          {canManage && (
+            <Button disabled={pending} onClick={() => setForm("create")}>
+              <Plus className="h-4 w-4" />
+              {t("create")}
+            </Button>
+          )}
+        </>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Input
           className="max-w-md rounded-squircle"
@@ -339,12 +368,6 @@ export default function AdmissionPeriodsPage() {
             setSearchInput({ value: event.target.value, source: state.search });
           }}
         />
-        {canManage && (
-          <Button disabled={pending} onClick={() => setForm("create")}>
-            <Plus className="h-4 w-4" />
-            {t("create")}
-          </Button>
-        )}
       </div>
       {selected.size > 0 && (
         <div className="flex items-center gap-3 rounded-xl border p-3">

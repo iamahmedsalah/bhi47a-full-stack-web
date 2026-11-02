@@ -1,5 +1,5 @@
 import api from "@/lib/api";
-import { downloadFileBlob } from '@/lib/export-utils';
+import { downloadFileBlob } from "@/lib/export-utils";
 import type {
   InitializeStudentCodeYearInput,
   RecoverStudentCodeInput,
@@ -11,9 +11,14 @@ export interface CodeAuditScope {
   academicYear: string;
   yearPrefix: string;
 }
-export async function exportCodeAudit(params: CodeAuditScope & { status?: string; search?: string }) {
-  const raw = await api.get('/admin/student-codes/audit/export', { params, responseType: 'blob' });
-  await downloadFileBlob(raw, 'student-code-audit.xlsx');
+export async function exportCodeAudit(
+  params: CodeAuditScope & { status?: string; search?: string },
+) {
+  const raw = await api.get("/admin/student-codes/audit/export", {
+    params,
+    responseType: "blob",
+  });
+  await downloadFileBlob(raw, "student-code-audit.xlsx");
 }
 export async function getCodeAudit(
   params: CodeAuditScope & {
@@ -47,4 +52,10 @@ export async function getCodeHistory(code: string, page = 1) {
       { params: { page, limit: 20 } },
     )
   ).data;
+}
+export async function holdPreviousStudentCode(
+  code: string,
+  input: InitializeStudentCodeYearInput,
+) {
+  return (await api.post(`/admin/student-codes/${code}/hold`, input)).data;
 }

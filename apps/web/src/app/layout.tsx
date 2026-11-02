@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: `%s | ${INSTITUTE_INFO.nameAr} (47)`,
   },
   description:
-    'البوابة الإلكترونية الرسمية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود التنسيق 47 أ) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، الجداول الدراسية، المحاضرات، ومنظومة الدعم والتواصل.',
+    'البوابة الإلكترونية الرسمية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود التنسيق 47 ك) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، الجداول الدراسية، المحاضرات، ومنظومة الدعم والتواصل.',
   applicationName: 'بوابة المعهد العالي للعلوم الإدارية والحاسبات (BHI47)',
   authors: [{ name: INSTITUTE_INFO.nameEn, url: siteUrl }],
   creator: INSTITUTE_INFO.nameAr,
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: `${INSTITUTE_INFO.nameAr} | بوابة الطالب الإلكترونية`,
     description:
-      'البوابة الإلكترونية الرسمية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 أ) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، والدعم الجامعي.',
+      'البوابة الإلكترونية الرسمية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 ك) - خدمات الطلاب الأكاديمية، نتائج الامتحانات، والدعم الجامعي.',
     url: siteUrl,
     siteName: INSTITUTE_INFO.nameAr,
     locale: 'ar_EG',
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
         url: '/images/og-preview.png',
         width: 1200,
         height: 630,
-        alt: `${INSTITUTE_INFO.nameAr} - كود 47 أ`,
+        alt: `${INSTITUTE_INFO.nameAr} - كود 47 ك`,
         type: 'image/png',
       },
     ],
@@ -72,7 +72,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: `${INSTITUTE_INFO.nameAr} | Student Portal (BHI47)`,
     description:
-      'البوابة الإلكترونية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 أ).',
+      'البوابة الإلكترونية المعتمدة للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (كود 47 ك).',
     images: ['/images/og-preview.png'],
   },
   icons: {

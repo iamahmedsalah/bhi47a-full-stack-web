@@ -29,3 +29,9 @@ test('VPS deploy policy allows main pushes and manual VPS runs, excluding PRs, t
 test('automatic VPS deployment retains both validation dependencies', () => {
   assert.match(job, /^    needs: \[validate, docker-validate\]$/m);
 });
+
+test('workflow is VPS-only and contains no Vercel deployment or credentials', () => {
+  assert.doesNotMatch(workflow, /vercel/i);
+  const jobs = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/^  ([\w-]+):\n/gm)].map(match => match[1]);
+  assert.deepEqual(jobs, ['validate', 'docker-validate', 'deploy-vps']);
+});

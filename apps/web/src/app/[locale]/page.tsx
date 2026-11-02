@@ -52,7 +52,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       'علوم إدارية ومصرفية',
       'بوابة الطالب الإلكترونية',
       'تنسيق المعاهد العليا',
-      'كود 47 أ',
+      'كود 47 ك',
       'High Institute for Advanced Management Sciences and Computer',
     ],
     robots: {

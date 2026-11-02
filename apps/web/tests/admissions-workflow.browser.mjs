@@ -28,6 +28,7 @@ await write('styles.css', css.css);
 const id = '100000000000000000000010', periodId = '100000000000000000000020';
 const reference = 'ADM-1234567890ABCDEF12345678';
 let applicant, periodDeleted, accessAvailable, approvalConflict, mappingCorrected;
+let holdSaved = false;
 const writes = [];
 const reset = () => { applicant = { _id: id, publicReference: reference, academicYear: '2026-2027', admissionPeriodId: periodId, fullName: 'Synthetic applicant', fullNameAr: 'متقدم تجريبي', address: 'عنوان تجريبي بالقاهرة', phone: '01012345678', nationalIdMasked: '300********001', guardians: [{ name: 'Synthetic guardian', phone: '01112345678', relationship: 'Parent' }], studentType: 'NEW', status: 'PENDING', revision: 0, submittedAt: '2026-11-01T08:00:00Z', history: [{ action: 'SUBMITTED', revision: 0, at: '2026-11-01T08:00:00Z' }] }; periodDeleted = false; accessAvailable = false; approvalConflict = false; mappingCorrected = false; writes.length = 0; };
 const list = items => ({ items, total: items.length, totalPages: 1, page: 1, limit: 20 });
@@ -43,6 +44,8 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     const send = (value, status = 200) => { res.statusCode = status; res.end(JSON.stringify(value)); };
     if (req.method !== 'GET') writes.push({ path: url.pathname, method: req.method, body });
+    if (url.pathname === '/admin/admissions/academic-years') return send({ items: ['2026-2027','2027-2028'] });
+    if (url.pathname === '/admin/admissions/access') return send(list([{ _id: periodId, admissionPeriodId: periodId, academicYear: '2026-2027', label: 'Synthetic scheduled invitation', method: 'BOTH', status: 'ACTIVE', effectiveStatus: 'PERIOD_SCHEDULED', canOpen: false, expiresAt: '2099-01-01T00:00:00Z', periodOpensAt: '2098-01-01T00:00:00Z', usedCount: 0, maxRegistrations: 10 }]));
     if (url.pathname === '/public/admissions/validate') return accessAvailable ? send({ admissionSession: 'synthetic-session', academicYear: '2026-2027', name: 'Synthetic intake', nameAr: 'دفعة تجريبية' }) : send({ code: 'ADMISSION_ACCESS_UNAVAILABLE', message: 'Admission access is unavailable or has expired.' }, 400);
     if (url.pathname === '/public/admissions/requests') return send({ publicReference: reference, secret: 's'.repeat(43) });
     if (url.pathname === '/public/admissions/status') return send({ publicReference: reference, status: 'REJECTED', rejection: { reasonCode: 'CAPACITY', explanation: '' } });
@@ -54,7 +57,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === `/admin/admissions/periods/${periodId}` && req.method === 'DELETE') { periodDeleted = true; return send({ success: true, deletedId: periodId }); }
     if (url.pathname === '/admin/student-codes/mappings/preview') return send({ items: mappingCorrected ? [] : [{ academicYear: '2026-2027', currentPrefix: '26', expectedPrefix: '27', nextSequence: 101, nextCode: '270101' }], fingerprint: 'f'.repeat(64), canApply: !mappingCorrected, collision: false, truncated: false, changesExistingStudentCodes: false });
     if (url.pathname === '/admin/student-codes/mappings/correct') { mappingCorrected = true; return send({ corrected: 1, changesExistingStudentCodes: false }); }
-    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 102, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: 0, REQUIRES_REVIEW: 0, MISSING: 0 } });
+    if (url.pathname === '/admin/student-codes/270102/hold') { holdSaved = true; return send({ studentCode: '270102', status: 'RELEASED', reuseEnabled: false }); }
+    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 0 : 1, MISSING: 0 } });
     send({ message: 'Unknown synthetic route' }, 404);
   } catch (error) { res.statusCode = 500; res.end(JSON.stringify({ message: error.message })); }
 });
@@ -69,10 +73,12 @@ try {
   await page.addInitScript(() => { window.__captchaRenders = 0; window.turnstile = { render: (_element, options) => { window.__captcha = options; window.__captchaRenders++; return 'fixture-widget'; }, remove: () => {}, reset: () => {} }; });
   for (const locale of ['en', 'ar']) {
     reset(); const messages = JSON.parse(await fs.readFile(source(`src/messages/${locale}.json`), 'utf8')), t = messages.admissionWorkflow, p = messages.admissions;
-    await page.goto(`${address}/${locale}/admission`);
+    holdSaved = false;
+    await page.goto(`${address}/${locale}/admission#access=100000000000000000000099`);
     await page.getByLabel(t.fields.pin, { exact: true }).fill('123456789');
     await page.getByRole('button', { name: t.openInvitation, exact: true }).click();
     await page.getByRole('alert').filter({ hasText: t.errors.accessUnavailable }).waitFor();
+    assert.equal(writes.at(-1).body.accessId, undefined, 'a manually entered PIN must not be bound to a stale QR invitation');
     assert.equal(await page.getByText('Admission access is unavailable or has expired.', { exact: true }).count(), 0);
     accessAvailable = true; await page.getByRole('button', { name: t.openInvitation, exact: true }).click();
     await page.getByLabel(t.fields.fullName, { exact: true }).fill('Synthetic applicant');
@@ -136,9 +142,38 @@ try {
     await mapping.getByLabel(t.reason, { exact: true }).fill('Reviewed future code prefix correction.'); await mapping.getByRole('checkbox', { name: t.mapping.confirm, exact: true }).check(); await mapping.getByRole('button', { name: t.mapping.apply, exact: true }).click(); await mapping.waitFor({ state: 'hidden' });
     assert.equal(mappingCorrected, true); await page.getByText('270101', { exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, `mapping-${locale}.png`), fullPage: true });
+    const codeMessages = messages.studentCodes;
+    assert.equal(await page.getByText('100000000000000000000030', {exact:true}).count(), 0, 'internal student IDs must not appear in the audit table');
+    await page.getByRole('button', {name:codeMessages.actionsFor.replace('{code}','270102'),exact:true}).click();
+    await page.getByRole('menuitem', {name:codeMessages.hold,exact:true}).click();
+    const hold = page.getByRole('dialog');
+    await hold.getByLabel(codeMessages.fields.reason,{exact:true}).fill('Reviewed missing original student against historical records.');
+    await hold.getByRole('checkbox', {name:codeMessages.confirmed,exact:true}).check();
+    await hold.getByRole('button',{name:codeMessages.confirmAction,exact:true}).click(); await hold.waitFor({state:'hidden'});
+    assert.equal(holdSaved,true);
+    await page.goto(`${address}/${locale}/admin/admissions?tab=access`);
+    await page.getByText(t.accessStatus.PERIOD_SCHEDULED,{exact:true}).waitFor();
+    await page.screenshot({path:path.join(output,`access-${locale}.png`),fullPage:true});
+    await page.goto(`${address}/${locale}/admin/admissions?tab=groups`);
+    await page.getByRole('button',{name:t.createGroup,exact:true}).click();
+    const group = page.getByRole('dialog');
+    await group.getByRole('button',{name:t.fields.academicYear,exact:true}).click();
+    await page.getByRole('option',{name:'2027-2028',exact:true}).click();
+    await page.screenshot({path:path.join(output,`group-dialog-${locale}.png`),fullPage:true});
+    await group.locator('form').getByRole('button',{name:t.close,exact:true}).click(); await group.waitFor({state:'hidden'});
+    await page.goto(`${address}/${locale}/admin/admissions?tab=imports`);
+    await page.getByRole('heading',{name:t.uploadWorkbook,exact:true}).waitFor();
+    await page.getByRole('button',{name:t.template,exact:true}).waitFor();
+    await page.getByRole('button',{name:t.preview,exact:true}).waitFor();
+    await page.screenshot({path:path.join(output,`imports-${locale}.png`),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    await page.goto(`${address}/${locale}/admin/admissions?tab=requests`); await page.getByText(reference,{exact:true}).waitFor();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth+2),'the admission page must fit a mobile viewport');
+    await page.screenshot({path:path.join(output,`mobile-${locale}.png`),fullPage:true});
+    await page.setViewportSize({width:1440,height:1100});
   }
   assert.deepEqual(errors, []);
-  console.log('Admission workflow browser acceptance passed in Arabic and English: revoked PIN feedback, guardian-phone validation, failed CAPTCHA blocking/retry, receipt, direct approval/conflict, complete date placeholders, admin-only deletion, preserved UI, reviewed prefix correction.');
+  console.log('Admission workflow browser acceptance passed in Arabic and English: manual PIN independent of stale QR identity, revoked access feedback, guardian-phone validation, CAPTCHA retry, direct approval, full date placeholders, admin-only deletion, prefix correction, historical owner hold, hidden internal IDs, period availability, group-year dropdown, desktop/mobile layout.');
 } catch (error) {
   if (page) { await write('failure-dom.html', await page.content()); await page.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }); }
   await write('runtime-errors.json', JSON.stringify(errors)); throw error;

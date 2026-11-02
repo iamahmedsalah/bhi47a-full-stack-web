@@ -48,7 +48,7 @@ describe('confirmed containment regressions', () => {
         ...invalid,
       };
       const verify = jest
-        .spyOn(internal.googleOAuthClient, 'verifyIdToken')
+        .spyOn(internal.googleOAuthClient as any, 'verifyIdToken')
         .mockResolvedValue({ getPayload: () => payload });
       try {
         await expect(
@@ -103,7 +103,7 @@ describe('confirmed containment regressions', () => {
       verifyGoogleCredential: (value: string) => Promise<unknown>;
     };
     const verify = jest
-      .spyOn(internal.googleOAuthClient, 'verifyIdToken')
+      .spyOn(internal.googleOAuthClient as any, 'verifyIdToken')
       .mockRejectedValue(new Error('Invalid audience'));
     const fetch = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

@@ -232,7 +232,7 @@ export function PublicAdmissionPage() {
         <div class="receipt-card">
           <div class="header">
             <img src="/logo.webp" class="logo" alt="Logo" />
-            <h1 class="title">${isAr ? "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 أ)" : "Higher Institute for Advanced Management Sciences & Computers (47A)"}</h1>
+            <h1 class="title">${isAr ? "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 ك)" : "Higher Institute for Advanced Management Sciences & Computers (47A)"}</h1>
             <p class="subtitle">${isAr ? "إيصال استلام طلب الالتحاق الجديد" : "New Admission Application Receipt"}</p>
             <div class="badge">${isAr ? "تم استلام الطلب بنجاح" : "Application Received"}</div>
           </div>
@@ -282,7 +282,7 @@ export function PublicAdmissionPage() {
     }
   }, []);
   const schema = z.object({
-    pin: z.string().regex(/^\d{8,12}$/, t("pinHint")),
+    pin: z.string().trim().regex(/^\d{8,12}$/, t("pinHint")),
   });
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -305,7 +305,7 @@ export function PublicAdmissionPage() {
     try {
       setSession(
         await publicAdmissionValidate({
-          accessId: accessId || undefined,
+          accessId: pin ? undefined : accessId || undefined,
           ...(pin ? { pin } : { token: qrToken }),
         }),
       );
@@ -330,7 +330,7 @@ export function PublicAdmissionPage() {
         <div className="space-y-1">
           <h2 className="text-sm font-semibold text-teal-400/90 tracking-wide">
             {locale === "ar"
-              ? "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 أ)"
+              ? "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (47 ك)"
               : "Higher Institute for Advanced Management Sciences & Computers (47A)"}
           </h2>
           <h1 className="text-3xl font-black text-foreground">
@@ -509,6 +509,9 @@ export function PublicAdmissionPage() {
                     onClick={() => {
                       setSession(null);
                       setCaptcha("");
+                      setAccessId("");
+                      setQrToken("");
+                      form.reset();
                     }}
                   >
                     {t("changeInvitation")}

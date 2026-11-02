@@ -83,9 +83,7 @@ export function CodeHistoryDialog({
                       ? t("systemReasons.references")
                       : event.reason}
                 </p>
-                <bdi className="text-xs text-muted-foreground">
-                  {event.actorId}
-                </bdi>
+
               </article>
             ))}
             <div className="flex justify-between">

@@ -16,6 +16,10 @@ const course = (code: string, prerequisites: string[] = []): Course => ({
   coRequisites: [],
   equivalentCourses: [],
   registrationPriority: 0,
+  doctorIds: [],
+  doctors: [],
+  teachingAssistantIds: [],
+  teachingAssistants: [],
 });
 describe('PlanValidationService', () => {
   const service = new PlanValidationService();
