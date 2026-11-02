@@ -976,7 +976,10 @@ export class AnalyticsExcelService {
         regCourses: s.enrolledCoursesCount,
         quizzes: s.completedQuizzes,
         passedQuizzes: s.passedQuizzes,
-        avgScore: s.avgQuizScorePercentage / 100,
+        avgScore:
+          s.avgQuizScorePercentage == null
+            ? ''
+            : s.avgQuizScorePercentage / 100,
         complaints: s.complaintsCount,
       });
 

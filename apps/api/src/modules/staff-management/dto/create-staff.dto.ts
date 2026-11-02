@@ -1,3 +1,4 @@
+import { ArrayMaxSize, IsMongoId } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayUnique,
@@ -15,10 +16,20 @@ import {
 import {
   STAFF_ASSIGNABLE_PERMISSIONS,
   STAFF_TYPE_VALUES,
+  DOCTOR_PREFIX_VALUES,
   type StaffType,
+  type DoctorPrefix,
 } from '@student-portal/shared';
 
 export class CreateStaffDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsMongoId({ each: true })
+  courseIds?: string[];
+
   @ApiPropertyOptional({ enum: ['admin', 'staff'], example: 'staff' })
   @IsOptional()
   @IsIn(['admin', 'staff'])
@@ -28,6 +39,12 @@ export class CreateStaffDto {
   @IsOptional()
   @IsIn(STAFF_TYPE_VALUES)
   staffType?: StaffType;
+
+  @ApiPropertyOptional({ enum: DOCTOR_PREFIX_VALUES, example: 'dr' })
+  @IsOptional()
+  @IsIn(DOCTOR_PREFIX_VALUES)
+  titlePrefix?: DoctorPrefix;
+
   @ApiProperty({ example: 'Ahmed Hassan' })
   @IsString()
   @Length(2, 160)

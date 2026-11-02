@@ -58,4 +58,5 @@ export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
     ],
   },
   { key: 'staffManagement', permissions: [PERMISSIONS.STAFF_READ, PERMISSIONS.STAFF_CREATE_ACADEMIC] },
+  { key: 'analytics', permissions: [PERMISSIONS.ANALYTICS_READ, PERMISSIONS.ANALYTICS_EXPORT] },
 ];

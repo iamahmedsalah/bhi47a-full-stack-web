@@ -111,7 +111,9 @@ export class StudentCodeStore {
       .lean<CodeUser[]>();
     const profiles = await this.profiles
       .find({ studentCode: regex })
-      .select('_id userId studentCode')
+      .select(
+        '_id userId studentCode fullName fullNameAr fullNameEn department level',
+      )
       .sort({ _id: 1 })
       .limit(SCAN_LIMIT)
       .session(session ?? null)

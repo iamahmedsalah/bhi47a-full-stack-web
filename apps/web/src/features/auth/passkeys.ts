@@ -1,4 +1,4 @@
-import api from "@/lib/api";
+import api, { getApiErrorDetails } from "@/lib/api";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
@@ -63,6 +63,12 @@ export async function passkeyRegisterOptions() {
 }
 
 export function passkeyErrorKey(error: unknown) {
+  const details = getApiErrorDetails(error);
+  if (
+    details.code === "PASSKEY_ORIGIN_NOT_ALLOWED" ||
+    details.message.includes("Passkey origin is not allowed")
+  )
+    return "originNotAllowed";
   const name = error instanceof Error ? error.name : "";
   if (name === "NotAllowedError" || name === "AbortError") return "cancelled";
   if (name === "InvalidStateError") return "duplicate";

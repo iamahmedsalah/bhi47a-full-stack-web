@@ -78,7 +78,7 @@ function renderBaseEmailLayout({
                     <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 12px;">
                       <tr>
                         <td align="center">
-                          <img src="${escapeHtml(logoUrl || 'https://bhi47.app/logo.png')}" alt="BHI47A" width="56" height="56" style="display:block;width:56px;height:56px;border:0;margin:0 auto;" />
+                          <img src="${escapeHtml(logoUrl || 'https://bhi47.app/logo.png')}" alt="BHI47A" width="64" height="64" style="display:block;width:64px;height:64px;border:2px solid #ccfbf1;border-radius:50%;object-fit:contain;background-color:#115e59;padding:3px;margin:0 auto;" />
                         </td>
                       </tr>
                     </table>

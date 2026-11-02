@@ -119,7 +119,10 @@ export class PasskeysService implements OnModuleInit {
   assertOrigin(origin?: string): string {
     if (!this.policy.enabled) throw new NotFoundException();
     if (!origin || !this.policy.origins.includes(origin))
-      throw new ForbiddenException('Passkey origin is not allowed');
+      throw new ForbiddenException({
+        code: 'PASSKEY_ORIGIN_NOT_ALLOWED',
+        message: 'Passkey origin is not allowed',
+      });
     return origin;
   }
 

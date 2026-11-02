@@ -307,6 +307,31 @@ describe('passkey policy', () => {
       ),
     ).toThrow(),
   );
+  it('accepts the explicitly configured canonical origin within the RP after a DNS change', () => {
+    const policy = readPasskeyConfig(
+      new ConfigService({
+        PASSKEYS_ENABLED: 'true',
+        PASSKEY_RP_ID: 'bhi47.app',
+        PASSKEY_ORIGINS: 'https://www.bhi47.app',
+        WEB_BASE_URL: 'https://bhi47.app/',
+      }),
+    );
+    expect(policy.origins).toEqual([
+      'https://www.bhi47.app',
+      'https://bhi47.app',
+    ]);
+  });
+  it('does not grant passkey trust to an unrelated canonical domain', () => {
+    const policy = readPasskeyConfig(
+      new ConfigService({
+        PASSKEYS_ENABLED: 'true',
+        PASSKEY_RP_ID: 'example.com',
+        PASSKEY_ORIGINS: 'https://example.com',
+        WEB_BASE_URL: 'https://attacker.test',
+      }),
+    );
+    expect(policy.origins).toEqual(['https://example.com']);
+  });
   it('declares a unique credential index and TTL cleanup', () => {
     expect(PasskeyCredentialSchema.indexes()).toContainEqual([
       { credentialId: 1 },

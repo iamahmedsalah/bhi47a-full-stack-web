@@ -209,19 +209,25 @@ export class CourseSchedulesService {
 
       const users = await this.userModel
         .find({ _id: { $in: staffIds } })
-        .select('_id name nameAr staffType')
+        .select('_id name nameAr staffType titlePrefix')
         .lean();
       if (!Array.isArray(users) || users.length === 0) return items;
 
       const userMap = new Map<
         string,
-        { name: string; nameAr?: string; staffType?: string }
+        {
+          name: string;
+          nameAr?: string;
+          staffType?: string;
+          titlePrefix?: string;
+        }
       >();
       for (const u of users) {
         userMap.set(String(u._id), {
           name: u.name,
           nameAr: (u as any).nameAr,
           staffType: (u as any).staffType,
+          titlePrefix: (u as any).titlePrefix,
         });
       }
 
@@ -233,6 +239,7 @@ export class CourseSchedulesService {
           staffName: u.name || item.staffName,
           staffNameAr: u.nameAr || (item as any).staffNameAr || u.name,
           staffType: u.staffType || item.staffType,
+          titlePrefix: u.titlePrefix || (item as any).titlePrefix,
         };
       });
     } catch {

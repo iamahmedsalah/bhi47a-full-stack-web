@@ -89,7 +89,7 @@ const server = http.createServer(async (req, res) => {
       if (pathname === `/admin/staff/${fixtureId}` && req.method === 'PATCH') {
         const chunks = [];for await (const chunk of req) chunks.push(chunk);
         const body = JSON.parse(Buffer.concat(chunks).toString());staffProfileMutations.push(body);
-        if ('role' in body || 'password' in body || 'permissions' in body) {
+        if ('role' in body || 'password' in body) {
           res.statusCode=400;res.end(JSON.stringify({statusCode:400,message:'property role should not exist'}));return;
         }
         if (staffSaveFailure) {
@@ -105,7 +105,7 @@ const server = http.createServer(async (req, res) => {
           res.statusCode = invalid ? 400 : 503;res.end(JSON.stringify({ message: 'Assigned courses unavailable' }));return;
         }
         const second = url.searchParams.get('page') === '2';
-        res.end(JSON.stringify({ items: [{ _id: second ? courseId+'2' : courseId, code: second ? 'AS102' : 'AS101',
+        res.end(JSON.stringify({ items: [{ _id: second ? '200000000000000000000002' : courseId, code: second ? 'AS102' : 'AS101',
           name: second ? 'Second assigned course' : 'Assigned teaching course', nameAr: second ? 'المقرر الثاني' : 'مقرر عضو هيئة التدريس',
           teachingAssistantIds: [fixtureId] }], totalPages: 2 }));return;
       }
@@ -181,6 +181,8 @@ try {
     const email=dialog.getByLabel(t.fields.email,{exact:true});
     const username=dialog.getByLabel(t.fields.username,{exact:false});
     const save=dialog.getByRole('button',{name:t.save,exact:true});
+    await save.waitFor({ state: 'visible' });
+    await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.type === 'submit')?.disabled);
     await name.fill('X');await nameAr.fill('س');await email.fill('invalid-email');await username.fill('bad user');await save.click();
     for (const key of ['nameLength','nameArLength','emailInvalid','usernameFormat']) await dialog.getByText(t.validation[key],{exact:true}).waitFor();
     assert.equal(staffProfileMutations.length,0,'invalid fields do not send a request');
@@ -196,7 +198,9 @@ try {
     await dialog.waitFor({state:'hidden'});
     const payload=staffProfileMutations.at(-1);
     assert.equal(payload.nameAr,'اسم عربي محدث');assert.equal(payload.staffType,'assistant_lecturer');
-    assert.ok(staffProfileMutations.every((item)=>!('role' in item)&&!('password' in item)&&!('permissions' in item)));
+    assert.ok(staffProfileMutations.every((item)=>!('role' in item)&&!('password' in item)));
+    assert.deepEqual(payload.courseIds,[courseId,'200000000000000000000002']);
+    assert.deepEqual(payload.permissions,[]);
     assert.equal(staffProfile.name,'Updated teaching staff');
     await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
     await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();

@@ -7,7 +7,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
-  Fingerprint,
+  Eye,
+
   MoreVertical,
   User,
   GraduationCap,
@@ -16,10 +17,19 @@ import {
   Hash,
   CreditCard,
   ShieldCheck,
-  ExternalLink,
+
   Loader2,
+  History,
+  Lock,
+  Unlock,
+  UserCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  Sparkles,
 } from "lucide-react";
 import { getStudent } from "@/features/students/api";
+import { CopyButton } from "@/components/ui/copy-button";
 import { toast } from "sonner";
 import {
   PERMISSIONS,
@@ -76,6 +86,9 @@ export default function StudentCodesPage({
   const canRead =
     canManage ||
     Boolean(user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_READ));
+  const canViewStudent =
+    canManage ||
+    Boolean(user?.permissions?.includes(PERMISSIONS.STUDENTS_READ));
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -123,14 +136,15 @@ export default function StudentCodesPage({
   const selected = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const [intent, setIntent] = useState<CodeWriteIntent | null>(null);
   const [history, setHistory] = useState<string | null>(null);
+  const [finding, setFinding] = useState<StudentCodeFinding | null>(null);
   const [inspect, setInspect] = useState(false);
   const [pending, setPending] = useState(false);
   const [profileStudentId, setProfileStudentId] = useState<string | null>(null);
 
   const studentProfileQuery = useQuery({
-    queryKey: ["student-profile-audit", profileStudentId],
+    queryKey: ["student-profile-audit", user?._id, profileStudentId],
     queryFn: () => getStudent(profileStudentId!),
-    enabled: Boolean(profileStudentId),
+    enabled: Boolean(profileStudentId && canViewStudent),
   });
   const refresh = async () => {
     setSelectedKeys([]);
@@ -214,26 +228,122 @@ export default function StudentCodesPage({
       {
         key: "studentCode",
         header: t("fields.studentCode"),
+        className: "min-w-[140px] text-start",
         render: (row) => (
-          <TableCell>
-            {row.status === "ASSIGNED" || row.currentStudentId ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setProfileStudentId(row.studentCode || row.currentStudentId!)
-                }
-                className="group inline-flex items-center gap-1.5 rounded-squircle border border-border/70 bg-card/60 px-2.5 py-1 text-xs font-mono font-bold text-primary transition-all hover:border-primary/50 hover:bg-primary/10 hover:shadow-xs cursor-pointer select-none"
-                title={
-                  dir === "rtl"
-                    ? "عرض ملف الطالب المرتبط بهذا الكود"
-                    : "View student profile linked to this code"
-                }
-              >
-                <Hash className="h-3 w-3 text-primary/60 group-hover:text-primary transition-colors shrink-0" />
+          <TableCell className="min-w-[140px] py-2.5 px-3">
+            <div className="inline-flex items-center gap-1.5 rounded-squircle border border-border/80 bg-card/80 px-2.5 py-1 text-xs font-mono font-bold text-foreground shadow-2xs">
+              <Hash className="h-3.5 w-3.5 text-primary shrink-0" />
+              {canViewStudent && row.currentStudentId ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setProfileStudentId(
+                      row.studentProfileId || row.currentStudentId!,
+                    )
+                  }
+                  className="hover:text-primary transition-colors cursor-pointer select-none"
+                  title={
+                    dir === "rtl"
+                      ? "عرض ملف الطالب المرتبط بهذا الكود"
+                      : "View student profile"
+                  }
+                >
+                  <span dir="ltr">{row.studentCode}</span>
+                </button>
+              ) : (
                 <span dir="ltr">{row.studentCode}</span>
-              </button>
+              )}
+              <CopyButton text={row.studentCode} className="h-5 w-5 text-muted-foreground hover:text-foreground" />
+            </div>
+          </TableCell>
+        ),
+      },
+      {
+        key: "student",
+        header: t("linkedStudent"),
+        className: "min-w-[200px] text-start",
+        render: (row) => {
+          const hasOwner = Boolean(row.currentStudentId);
+          const studentName =
+            locale === "ar"
+              ? row.studentNameAr || row.studentName
+              : row.studentName || row.studentNameAr;
+
+          return (
+            <TableCell className="min-w-[200px] py-2.5 px-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle border transition-colors ${
+                    hasOwner
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border/60 bg-secondary/40 text-muted-foreground/60"
+                  }`}
+                >
+                  {hasOwner ? (
+                    <GraduationCap className="h-4 w-4" />
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  {hasOwner ? (
+                    canViewStudent ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProfileStudentId(
+                            row.studentProfileId || row.currentStudentId!,
+                          )
+                        }
+                        className="font-semibold text-foreground hover:text-primary transition-colors text-start block truncate max-w-[220px] cursor-pointer"
+                      >
+                        {studentName}
+                      </button>
+                    ) : (
+                      <div className="font-semibold text-foreground truncate max-w-[220px]">
+                        {studentName}
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-xs text-muted-foreground/80 italic">
+                      {dir === "rtl" ? "غير مسند لطالب حالياً" : "Unassigned code"}
+                    </div>
+                  )}
+                  {hasOwner && (
+                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <bdi className="font-mono text-[10px]">{row.studentCode}</bdi>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TableCell>
+          );
+        },
+      },
+      {
+        key: "department",
+        header: t("department"),
+        className: "min-w-[130px] text-start",
+        render: (row) => (
+          <TableCell className="min-w-[130px] py-2.5 px-3 text-xs">
+            <span className="font-medium text-foreground">
+              {row.department || "—"}
+            </span>
+          </TableCell>
+        ),
+      },
+      {
+        key: "level",
+        header: t("level"),
+        className: "w-24 text-center",
+        render: (row) => (
+          <TableCell className="w-24 py-2.5 px-2 text-center text-xs">
+            {row.level ? (
+              <span className="inline-block rounded-squircle border border-border/60 bg-secondary/50 px-2 py-0.5 font-semibold text-foreground text-[11px]">
+                {dir === "rtl" ? `الفرقة ${row.level}` : `Level ${row.level}`}
+              </span>
             ) : (
-              <bdi className="font-mono font-semibold">{row.studentCode}</bdi>
+              <span className="text-muted-foreground">—</span>
             )}
           </TableCell>
         ),
@@ -241,19 +351,44 @@ export default function StudentCodesPage({
       {
         key: "status",
         header: t("status"),
-        render: (row) => (
-          <TableCell>
-            <span className="rounded-squircle border bg-primary/10 px-2 py-1 text-xs">
-              {t(`statuses.${row.status}`)}
-            </span>
-          </TableCell>
-        ),
+        className: "min-w-[160px] text-center",
+        render: (row) => {
+          let badgeColor = "border-border/60 bg-muted/40 text-muted-foreground";
+          let badgeIcon = <Info className="h-3 w-3 shrink-0" />;
+
+          if (row.status === "ASSIGNED") {
+            badgeColor = "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+            badgeIcon = <UserCheck className="h-3 w-3 shrink-0" />;
+          } else if (row.status === "AVAILABLE") {
+            badgeColor = "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400";
+            badgeIcon = <CheckCircle2 className="h-3 w-3 shrink-0" />;
+          } else if (row.status === "RESERVED" || row.status === "RELEASED") {
+            badgeColor = "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400";
+            badgeIcon = <Lock className="h-3 w-3 shrink-0" />;
+          } else if (row.status === "MISSING") {
+            badgeColor = "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400";
+            badgeIcon = <AlertTriangle className="h-3 w-3 shrink-0" />;
+          } else if (row.status === "REQUIRES_REVIEW") {
+            badgeColor = "border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400";
+            badgeIcon = <AlertTriangle className="h-3 w-3 shrink-0" />;
+          }
+
+          return (
+            <TableCell className="min-w-[160px] py-2.5 px-3 text-center">
+              <span className={`inline-flex items-center gap-1.5 rounded-squircle border px-2.5 py-1 text-xs font-semibold select-none ${badgeColor}`}>
+                {badgeIcon}
+                <span>{t(`statuses.${row.status}`)}</span>
+              </span>
+            </TableCell>
+          );
+        },
       },
       {
         key: "reason",
         header: t("explanation"),
+        className: "min-w-[200px] text-start",
         render: (row) => (
-          <TableCell className="max-w-sm text-sm">
+          <TableCell className="min-w-[200px] py-2.5 px-3 text-xs text-muted-foreground leading-relaxed">
             {t(`reasons.${row.reason}`)}
           </TableCell>
         ),
@@ -261,27 +396,46 @@ export default function StudentCodesPage({
       {
         key: "nextAction",
         header: t("nextAction"),
-        render: (row) => (
-          <TableCell className="max-w-xs text-xs text-muted-foreground">
-            {t(
-              row.reason === "PREVIOUS_OWNER_MISSING"
-                ? "holdHint"
-                : row.status === "ASSIGNED"
-                  ? "assignedHelp"
-                  : row.status === "MISSING"
-                    ? "gapHelp"
-                    : row.status === "RELEASED"
-                      ? "heldHelp"
-                      : "reviewHelp",
-            )}
-          </TableCell>
-        ),
+        className: "min-w-[220px] text-start",
+        render: (row) => {
+          let icon = <Info className="h-3.5 w-3.5 text-primary shrink-0" />;
+          let textKey = "reviewHelp";
+          let colorClass = "border-border/60 bg-muted/30 text-muted-foreground";
+
+          if (row.reason === "PREVIOUS_OWNER_MISSING") {
+            icon = <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+            textKey = "holdHint";
+            colorClass = "border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300";
+          } else if (row.status === "ASSIGNED") {
+            icon = <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+            textKey = "assignedHelp";
+            colorClass = "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300";
+          } else if (row.status === "MISSING") {
+            icon = <Unlock className="h-3.5 w-3.5 text-rose-500 shrink-0" />;
+            textKey = "gapHelp";
+            colorClass = "border-rose-500/20 bg-rose-500/5 text-rose-700 dark:text-rose-300";
+          } else if (row.status === "RELEASED") {
+            icon = <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+            textKey = "heldHelp";
+            colorClass = "border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300";
+          }
+
+          return (
+            <TableCell className="min-w-[220px] py-2.5 px-3">
+              <div className={`flex items-start gap-1.5 rounded-lg border p-2 text-xs leading-relaxed ${colorClass}`}>
+                <span className="mt-0.5">{icon}</span>
+                <span>{t(textKey)}</span>
+              </div>
+            </TableCell>
+          );
+        },
       },
       {
         key: "actions",
         header: t("actions"),
+        className: "w-16 text-center",
         render: (row) => (
-          <TableCell>
+          <TableCell className="w-16 py-2.5 px-2 text-center">
             <DropdownMenu.Root dir={dir}>
               <DropdownMenu.Trigger asChild>
                 <Button
@@ -289,6 +443,7 @@ export default function StudentCodesPage({
                   size="sm"
                   aria-label={t("actionsFor", { code: row.studentCode })}
                   disabled={pending}
+                  className="rounded-squircle cursor-pointer"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
@@ -296,16 +451,28 @@ export default function StudentCodesPage({
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
                   {...{ dir }}
-                  className="z-50 rounded-xl border bg-popover p-1 text-start shadow-lg"
+                  className="z-50 min-w-[210px] rounded-xl border bg-popover p-1.5 text-start shadow-xl space-y-0.5"
                 >
-                  {row.currentStudentId && (
+                  {/* View Audit Details */}
+                  <DropdownMenu.Item
+                    className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs outline-none hover:bg-secondary focus:bg-secondary transition-colors"
+                    onSelect={() => setFinding(row)}
+                  >
+                    <Eye className="h-4 w-4 text-primary shrink-0" />
+                    <span>{t("viewAudit")}</span>
+                  </DropdownMenu.Item>
+
+                  {/* View Student Profile */}
+                  {canViewStudent && row.currentStudentId && (
                     <DropdownMenu.Item
-                      className="cursor-pointer rounded-squircle px-3 py-2 text-sm outline-none focus:bg-secondary flex items-center gap-2"
+                      className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs outline-none hover:bg-secondary focus:bg-secondary transition-colors"
                       onSelect={() =>
-                        setProfileStudentId(row.currentStudentId!)
+                        setProfileStudentId(
+                          row.studentProfileId || row.currentStudentId!,
+                        )
                       }
                     >
-                      <User className="h-4 w-4 text-primary" />
+                      <User className="h-4 w-4 text-primary shrink-0" />
                       <span>
                         {dir === "rtl"
                           ? "عرض ملف الطالب"
@@ -313,39 +480,72 @@ export default function StudentCodesPage({
                       </span>
                     </DropdownMenu.Item>
                   )}
+
+                  {/* Allocation & Event History */}
                   <DropdownMenu.Item
-                    className="cursor-pointer rounded-squircle px-3 py-2 text-sm outline-none focus:bg-secondary"
+                    className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs outline-none hover:bg-secondary focus:bg-secondary transition-colors"
                     disabled={!/^\d{6}$/.test(row.studentCode)}
                     onSelect={() => setHistory(row.studentCode)}
                   >
-                    {t("history")}
+                    <History className="h-4 w-4 text-primary shrink-0" />
+                    <span>{t("history")}</span>
                   </DropdownMenu.Item>
-                  {canManage &&
-                    row.reason === "PREVIOUS_OWNER_MISSING" &&
-                    !query.data?.truncated && (
-                      <DropdownMenu.Item
-                        className="cursor-pointer rounded-squircle px-3 py-2 text-sm outline-none focus:bg-secondary"
-                        onSelect={() =>
-                          setIntent({ snapshot: query.data!, row, hold: true })
-                        }
-                      >
-                        {t("hold")}
-                      </DropdownMenu.Item>
-                    )}
+
+                  <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
+
+                  {/* Action: Free / Recover Gap */}
                   {canManage &&
                     row.status === "MISSING" &&
                     query.data?.policy &&
                     !query.data.mappingConflict &&
                     !query.data.truncated && (
                       <DropdownMenu.Item
-                        className="cursor-pointer rounded-squircle px-3 py-2 text-sm outline-none focus:bg-secondary"
+                        className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 outline-none hover:bg-emerald-500/10 focus:bg-emerald-500/10 transition-colors"
                         onSelect={() =>
                           setIntent({ snapshot: query.data!, row })
                         }
                       >
-                        {t("recover")}
+                        <Unlock className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <span>{t("recover")}</span>
                       </DropdownMenu.Item>
                     )}
+
+                  {/* Action: Hold / Reserve Code */}
+                  {canManage &&
+                    row.reason === "PREVIOUS_OWNER_MISSING" &&
+                    !query.data?.truncated && (
+                      <DropdownMenu.Item
+                        className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 outline-none hover:bg-amber-500/10 focus:bg-amber-500/10 transition-colors"
+                        onSelect={() =>
+                          setIntent({ snapshot: query.data!, row, hold: true })
+                        }
+                      >
+                        <Lock className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span>{t("hold")}</span>
+                      </DropdownMenu.Item>
+                    )}
+
+                  {/* Contextual Status Badges */}
+                  {row.status === "RELEASED" && (
+                    <div className="flex items-center gap-2 rounded-squircle px-3 py-1.5 text-[11px] text-muted-foreground bg-muted/40 cursor-default select-none">
+                      <Lock className="h-3.5 w-3.5 text-amber-500/70 shrink-0" />
+                      <span>{dir === "rtl" ? "الكود محجوز ضد إعادة الاستخدام" : "Code held against re-use"}</span>
+                    </div>
+                  )}
+
+                  {row.status === "ASSIGNED" && (
+                    <div className="flex items-center gap-2 rounded-squircle px-3 py-1.5 text-[11px] text-muted-foreground bg-muted/40 cursor-default select-none">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70 shrink-0" />
+                      <span>{dir === "rtl" ? "الكود مخصص ومستقر لطالب" : "Code actively assigned"}</span>
+                    </div>
+                  )}
+
+                  {row.status === "AVAILABLE" && (
+                    <div className="flex items-center gap-2 rounded-squircle px-3 py-1.5 text-[11px] text-teal-600 dark:text-teal-400 bg-teal-500/10 cursor-default select-none">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-teal-500 shrink-0" />
+                      <span>{dir === "rtl" ? "الكود جاهز للتخصيص الآلي" : "Ready for allocation"}</span>
+                    </div>
+                  )}
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
@@ -362,6 +562,8 @@ export default function StudentCodesPage({
       pending,
       dir,
       canManage,
+      canViewStudent,
+      locale,
       query.data,
     ],
   );
@@ -438,8 +640,51 @@ export default function StudentCodesPage({
           )}
         </PageTitleBanner>
       )}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
-        {t("workflowHelp")}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 space-y-3">
+        <div className="flex items-center gap-2 font-bold text-foreground">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span>{dir === "rtl" ? "دليل وملاحظات إدارة وتدقيق أكواد الطلاب" : "Student Code Audit & Management Guide"}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("workflowHelp")}
+        </p>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 pt-1">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs">
+            <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mb-1">
+              <Lock className="h-3.5 w-3.5" />
+              <span>{dir === "rtl" ? "1. حجز الكود (Reserve / Hold)" : "1. Reserve / Hold Code"}</span>
+            </span>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {dir === "rtl"
+                ? "يُستخدم لتجميد الكود وحظر تخصيصه لأي طالب جديد، لحماية السجلات الأكاديمية السابقة ومنع تداخل الهويات."
+                : "Freezes the code and locks it against reassignment to safeguard historical academic records."}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs">
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mb-1">
+              <Unlock className="h-3.5 w-3.5" />
+              <span>{dir === "rtl" ? "2. تحرير الكود (Free / Recover)" : "2. Free / Recover Code"}</span>
+            </span>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {dir === "rtl"
+                ? "يُستخدم لسد الفجوات الترقيمية غير المستخدمة مسبقاً وتجهيز الكود ضمن تسلسل القبول المتاح للدفعة."
+                : "Recovers unassigned gaps in numbering sequence and makes them available for upcoming intake."}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs">
+            <span className="font-semibold text-primary flex items-center gap-1.5 mb-1">
+              <History className="h-3.5 w-3.5" />
+              <span>{dir === "rtl" ? "3. سجل التخصيص (History Log)" : "3. History & Audit Log"}</span>
+            </span>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {dir === "rtl"
+                ? "تتبع تسلسلي لكافة الحركات والعمليات التي تمت على الكود (التخصيص، الحجز، التحرير، وهوية المنفذ)."
+                : "Full chronological timeline of all lifecycle events on this code with actor identity and timestamps."}
+            </p>
+          </div>
+        </div>
       </div>
       <CodeScopeForm
         configuredYears={embedded}
@@ -672,7 +917,7 @@ export default function StudentCodesPage({
           close={() => setHistory(null)}
         />
       )}
-      {profileStudentId && (
+      {profileStudentId && canViewStudent && (
         <Dialog
           open={Boolean(profileStudentId)}
           onOpenChange={(open) => !open && setProfileStudentId(null)}
@@ -702,7 +947,7 @@ export default function StudentCodesPage({
             ) : studentProfileQuery.data ? (
               <div className="space-y-4 pt-2">
                 {(() => {
-                  const s = studentProfileQuery.data as any;
+                  const s = studentProfileQuery.data!;
                   return (
                     <>
                       <div className="flex items-center gap-3 p-3.5 rounded-xl bg-surface/50 border border-border/40">
@@ -721,12 +966,12 @@ export default function StudentCodesPage({
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                            <span className="px-2 py-0.5 rounded-squircle text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
                               {s.department === "GENERAL"
                                 ? t("generalDepartment")
                                 : s.department || "—"}
                             </span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-secondary text-secondary-foreground">
+                            <span className="px-2 py-0.5 rounded-squircle text-[10px] font-semibold bg-secondary text-secondary-foreground">
                               {dir === "rtl"
                                 ? `المستوى ${s.level ?? 1}`
                                 : `Level ${s.level ?? 1}`}
@@ -751,7 +996,7 @@ export default function StudentCodesPage({
                             {dir === "rtl" ? "الرقم القومي" : "National ID"}
                           </span>
                           <bdi className="font-mono font-semibold text-foreground text-sm">
-                            {s.nationalId ?? "—"}
+                            {s.nationalId || s.nationalIdMasked || "—"}
                           </bdi>
                         </div>
                         <div className="p-2.5 rounded-lg border border-border/40 bg-surface/30">
@@ -771,12 +1016,12 @@ export default function StudentCodesPage({
                               : "Academic Email"}
                           </span>
                           <bdi className="font-mono text-foreground truncate block">
-                            {s.academicEmail || s.email || "—"}
+                            {s.academicEmail || "—"}
                           </bdi>
                         </div>
                       </div>
 
-                      <div className="flex justify-end pt-2">
+                      <div className="flex justify-end pt-2 rtl:justify-start">
                         <Button
                           variant="outline"
                           onClick={() => setProfileStudentId(null)}
@@ -805,6 +1050,69 @@ export default function StudentCodesPage({
           </DialogContent>
         </Dialog>
       )}
+      <Dialog
+        open={Boolean(finding)}
+        onOpenChange={(open) => !open && setFinding(null)}
+      >
+        <DialogContent dir={dir} className="max-w-xl rounded-2xl">
+          <DialogHeader className="text-start">
+            <DialogTitle>{t("viewAudit")}</DialogTitle>
+          </DialogHeader>
+          {finding && (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <bdi className="font-mono text-lg font-bold text-primary">
+                  {finding.studentCode}
+                </bdi>
+                <p className="mt-2">{t(`statuses.${finding.status}`)}</p>
+              </div>
+              <dl className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("linkedStudent")}
+                  </dt>
+                  <dd className="font-semibold">
+                    {locale === "ar"
+                      ? finding.studentNameAr || finding.studentName || "—"
+                      : finding.studentName || finding.studentNameAr || "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">{t("department")}</dt>
+                  <dd>
+                    <bdi>{finding.department || "—"}</bdi>
+                  </dd>
+                </div>
+              </dl>
+              <p>{t(`reasons.${finding.reason}`)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!/^\d{6}$/.test(finding.studentCode)}
+                  onClick={() => {
+                    setHistory(finding.studentCode);
+                    setFinding(null);
+                  }}
+                >
+                  {t("history")}
+                </Button>
+                {canViewStudent && finding.currentStudentId && (
+                  <Button
+                    onClick={() => {
+                      setProfileStudentId(
+                        finding.studentProfileId || finding.currentStudentId!,
+                      );
+                      setFinding(null);
+                    }}
+                  >
+                    {t("linkedStudent")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={inspect} onOpenChange={setInspect}>
         <DialogContent
           dir={dir}

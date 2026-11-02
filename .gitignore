@@ -59,3 +59,4 @@ build_import_files.mjs
 !/docs/complaint-reply-emails.md
 !/scripts/ensure-complaint-email-indexes.cjs
 !/scripts/preview-transactional-emails.cjs
+!/docs/portal-fixes-domain-setup.md

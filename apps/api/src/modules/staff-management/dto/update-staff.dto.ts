@@ -1,3 +1,6 @@
+import { ArrayUnique, IsArray, IsOptional } from 'class-validator';
+import { STAFF_ASSIGNABLE_PERMISSIONS } from '@student-portal/shared';
+import { ArrayMaxSize, IsMongoId } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -9,16 +12,42 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { STAFF_TYPE_VALUES, type StaffType } from '@student-portal/shared';
+import {
+  STAFF_TYPE_VALUES,
+  DOCTOR_PREFIX_VALUES,
+  type StaffType,
+  type DoctorPrefix,
+} from '@student-portal/shared';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
 export class UpdateStaffDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsMongoId({ each: true })
+  courseIds?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(STAFF_ASSIGNABLE_PERMISSIONS, { each: true })
+  permissions?: string[];
+
   @ApiPropertyOptional({ enum: STAFF_TYPE_VALUES, example: 'doctor' })
   @ValidateIf((_, value: unknown) => value !== undefined)
   @IsIn(STAFF_TYPE_VALUES)
   staffType?: StaffType;
+
+  @ApiPropertyOptional({ enum: DOCTOR_PREFIX_VALUES, example: 'dr' })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsIn(DOCTOR_PREFIX_VALUES)
+  titlePrefix?: DoctorPrefix;
+
   @ApiPropertyOptional({ example: 'Ahmed Hassan' })
   @ValidateIf((_, value: unknown) => value !== undefined)
   @Transform(trim)

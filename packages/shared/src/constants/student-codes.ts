@@ -1,25 +1,64 @@
-export const STUDENT_CODE_STATUSES = ['AVAILABLE', 'RESERVED', 'ASSIGNED', 'RELEASED', 'REQUIRES_REVIEW'] as const;
+export const STUDENT_CODE_STATUSES = [
+  "AVAILABLE",
+  "RESERVED",
+  "ASSIGNED",
+  "RELEASED",
+  "REQUIRES_REVIEW",
+] as const;
 export type StudentCodeStatus = (typeof STUDENT_CODE_STATUSES)[number];
-export type StudentCodeFindingStatus = StudentCodeStatus | 'MISSING';
+export type StudentCodeFindingStatus = StudentCodeStatus | "MISSING";
 export const STUDENT_CODE_SEQUENCE_MAX = 9999;
 
 /** Institutional format: explicit two-digit intake prefix + sequence 0001..9999. */
 export function formatStudentCode(prefix: string, sequence: number): string {
-  if (!/^\d{2}$/.test(prefix) || !Number.isInteger(sequence) || sequence < 1 || sequence > STUDENT_CODE_SEQUENCE_MAX) throw new Error('Invalid student code format');
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  if (
+    !/^\d{2}$/.test(prefix) ||
+    !Number.isInteger(sequence) ||
+    sequence < 1 ||
+    sequence > STUDENT_CODE_SEQUENCE_MAX
+  )
+    throw new Error("Invalid student code format");
+  return `${prefix}${String(sequence).padStart(4, "0")}`;
 }
-export function parseStudentCode(code: string, prefix: string): number | undefined {
-  if (!/^\d{2}$/.test(prefix) || !/^\d{6}$/.test(code) || !code.startsWith(prefix)) return undefined;
+export function parseStudentCode(
+  code: string,
+  prefix: string,
+): number | undefined {
+  if (
+    !/^\d{2}$/.test(prefix) ||
+    !/^\d{6}$/.test(code) ||
+    !code.startsWith(prefix)
+  )
+    return undefined;
   const sequence = Number(code.slice(2));
-  return sequence >= 1 && sequence <= STUDENT_CODE_SEQUENCE_MAX ? sequence : undefined;
+  return sequence >= 1 && sequence <= STUDENT_CODE_SEQUENCE_MAX
+    ? sequence
+    : undefined;
 }
-export type StudentCodeFindingReason = 'PREVIOUS_OWNER_MISSING' | 'MALFORMED_CODE' | 'OWNER_CONFLICT' | 'ORPHANED_PROFILE' | 'ORPHANED_USER' | 'ALIAS_CONFLICT' | 'REGISTRY_CONFLICT' | 'UNVERIFIED_GAP' | 'CONFIRMED_AVAILABLE' | 'CURRENT_OWNER' | 'PREVIOUS_OWNER_BLOCKED' | 'RESERVATION_HELD';
+export type StudentCodeFindingReason =
+  | "PREVIOUS_OWNER_MISSING"
+  | "MALFORMED_CODE"
+  | "OWNER_CONFLICT"
+  | "ORPHANED_PROFILE"
+  | "ORPHANED_USER"
+  | "ALIAS_CONFLICT"
+  | "REGISTRY_CONFLICT"
+  | "UNVERIFIED_GAP"
+  | "CONFIRMED_AVAILABLE"
+  | "CURRENT_OWNER"
+  | "PREVIOUS_OWNER_BLOCKED"
+  | "RESERVATION_HELD";
 export interface StudentCodeFinding {
   studentCode: string;
   sequence?: number;
   status: StudentCodeFindingStatus;
   reason: StudentCodeFindingReason;
   currentStudentId?: string;
+  studentProfileId?: string;
+  studentName?: string;
+  studentNameAr?: string;
+  department?: string;
+  level?: string;
 }
 export interface StudentCodeYearItem {
   academicYear: string;
@@ -55,7 +94,22 @@ export interface RecoverStudentCodeInput extends InitializeStudentCodeYearInput 
   neverAssignedConfirmed: true;
 }
 export interface StudentCodeHistoryResult {
-  entry: { studentCode: string; status: StudentCodeStatus; currentStudentId?: string } | null;
-  items: Array<{ _id: string; action: string; from?: string; to: string; reason: string; at: string; actorId: string }>;
-  total: number; page: number; limit: number; totalPages: number;
+  entry: {
+    studentCode: string;
+    status: StudentCodeStatus;
+    currentStudentId?: string;
+  } | null;
+  items: Array<{
+    _id: string;
+    action: string;
+    from?: string;
+    to: string;
+    reason: string;
+    at: string;
+    actorId: string;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

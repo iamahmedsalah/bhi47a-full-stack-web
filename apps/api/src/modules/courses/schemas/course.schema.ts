@@ -144,6 +144,7 @@ export class Course {
         name: { type: String, trim: true },
         nameAr: { type: String, trim: true },
         staffType: { type: String, trim: true },
+        titlePrefix: { type: String, trim: true },
       },
     ],
     default: [],
@@ -153,6 +154,7 @@ export class Course {
     name: string;
     nameAr?: string;
     staffType?: string;
+    titlePrefix?: string;
   }>;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
@@ -172,6 +174,7 @@ export class Course {
         name: { type: String, trim: true },
         nameAr: { type: String, trim: true },
         staffType: { type: String, trim: true },
+        titlePrefix: { type: String, trim: true },
       },
     ],
     default: [],
@@ -181,6 +184,7 @@ export class Course {
     name: string;
     nameAr?: string;
     staffType?: string;
+    titlePrefix?: string;
   }>;
 
   @Prop({ trim: true })

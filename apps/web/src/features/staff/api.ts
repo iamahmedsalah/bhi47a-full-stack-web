@@ -1,6 +1,6 @@
-import api from '@/lib/api';
-import { staffProfilePayload } from './profile-payload';
-import type { Permission } from '@student-portal/shared';
+import api from "@/lib/api";
+import { staffProfilePayload } from "./profile-payload";
+import type { Permission } from "@student-portal/shared";
 import type {
   CreateStaffInput,
   StaffAssignedCourse,
@@ -9,20 +9,30 @@ import type {
   StaffMember,
   StaffProfileInput,
   StaffScheduleSlot,
-} from './types';
+} from "./types";
 
-export async function listStaff(params: StaffListParams): Promise<StaffListResponse> {
-  const response = await api.get<StaffListResponse>('/admin/staff', { params });
+export async function listStaff(
+  params: StaffListParams,
+): Promise<StaffListResponse> {
+  const response = await api.get<StaffListResponse>("/admin/staff", { params });
   return response.data;
 }
 
-export async function createStaff(input: CreateStaffInput): Promise<StaffMember> {
-  const response = await api.post<StaffMember>('/admin/staff', input);
+export async function createStaff(
+  input: CreateStaffInput,
+): Promise<StaffMember> {
+  const response = await api.post<StaffMember>("/admin/staff", input);
   return response.data;
 }
 
-export async function updateStaff(id: string, input: StaffProfileInput): Promise<StaffMember> {
-  const response = await api.patch<StaffMember>(`/admin/staff/${id}`, staffProfilePayload(input));
+export async function updateStaff(
+  id: string,
+  input: StaffProfileInput,
+): Promise<StaffMember> {
+  const response = await api.patch<StaffMember>(
+    `/admin/staff/${id}`,
+    staffProfilePayload(input),
+  );
   return response.data;
 }
 
@@ -30,21 +40,33 @@ export async function updateStaffPermissions(
   id: string,
   permissions: Permission[],
 ): Promise<StaffMember> {
-  const response = await api.patch<StaffMember>(`/admin/staff/${id}/permissions`, {
-    permissions,
-  });
+  const response = await api.patch<StaffMember>(
+    `/admin/staff/${id}/permissions`,
+    {
+      permissions,
+    },
+  );
   return response.data;
 }
 
 export async function resetStaffPassword(id: string, newPassword: string) {
-  const response = await api.post<{ message: string }>(`/admin/staff/${id}/reset-password`, {
-    newPassword,
-  });
+  const response = await api.post<{ message: string }>(
+    `/admin/staff/${id}/reset-password`,
+    {
+      newPassword,
+    },
+  );
   return response.data;
 }
 
-export async function deactivateStaff(id: string, reason?: string): Promise<StaffMember> {
-  const response = await api.post<StaffMember>(`/admin/staff/${id}/deactivate`, { reason });
+export async function deactivateStaff(
+  id: string,
+  reason?: string,
+): Promise<StaffMember> {
+  const response = await api.post<StaffMember>(
+    `/admin/staff/${id}/deactivate`,
+    { reason },
+  );
   return response.data;
 }
 
@@ -53,30 +75,63 @@ export async function activateStaff(id: string): Promise<StaffMember> {
   return response.data;
 }
 
-export async function deleteStaff(id: string): Promise<{ success: boolean; message: string }> {
-  const response = await api.delete<{ success: boolean; message: string }>(`/admin/staff/${id}`);
+export async function deleteStaff(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.delete<{ success: boolean; message: string }>(
+    `/admin/staff/${id}`,
+  );
   return response.data;
 }
 
-export async function getStaffCourses(staffId: string): Promise<StaffAssignedCourse[]> {
-  const response = await api.get<{ items: StaffAssignedCourse[]; totalPages: number }>('/admin/courses', {
+export async function getStaffCourses(
+  staffId: string,
+): Promise<StaffAssignedCourse[]> {
+  const response = await api.get<{
+    items: StaffAssignedCourse[];
+    totalPages: number;
+  }>("/admin/courses", {
     params: { staffId, page: 1, limit: 100 },
   });
   const courses = [...response.data.items];
   for (let page = 2; page <= response.data.totalPages; page++) {
-    const next = await api.get<{ items: StaffAssignedCourse[] }>('/admin/courses', { params: { staffId, page, limit: 100 } });
+    const next = await api.get<{ items: StaffAssignedCourse[] }>(
+      "/admin/courses",
+      { params: { staffId, page, limit: 100 } },
+    );
     courses.push(...next.data.items);
   }
   return courses;
 }
 
-export async function getStaffSchedules(staffId: string): Promise<StaffScheduleSlot[]> {
+export async function getStaffSchedules(
+  staffId: string,
+): Promise<StaffScheduleSlot[]> {
   try {
-    const response = await api.get<StaffScheduleSlot[]>('/admin/course-schedules', {
-      params: { staffId },
-    });
+    const response = await api.get<StaffScheduleSlot[]>(
+      "/admin/course-schedules",
+      {
+        params: { staffId },
+      },
+    );
     return Array.isArray(response.data) ? response.data : [];
   } catch {
     return [];
   }
+}
+
+export async function getStaffCourseChoices(): Promise<StaffAssignedCourse[]> {
+  const courses: StaffAssignedCourse[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const response = await api.get<{
+      items: StaffAssignedCourse[];
+      totalPages: number;
+    }>("/admin/courses", { params: { page, limit: 100 } });
+    courses.push(...response.data.items);
+    totalPages = response.data.totalPages;
+    page++;
+  } while (page <= totalPages);
+  return courses;
 }

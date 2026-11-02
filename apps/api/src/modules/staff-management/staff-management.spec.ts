@@ -1,7 +1,13 @@
 import { validate } from 'class-validator';
 import { ValidationPipe } from '@nestjs/common';
 import { UpdateStaffDto } from './dto/update-staff.dto';
-import { PERMISSIONS } from '@student-portal/shared';
+import {
+  PERMISSIONS,
+  getStaffPrefix,
+  inferDoctorPrefix,
+  formatStaffDisplayName,
+  getStaffRoleLabel,
+} from '@student-portal/shared';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { StaffManagementController } from './staff-management.controller';
 import { StaffManagementService } from './staff-management.service';
@@ -90,6 +96,62 @@ describe('Staff management security contracts', () => {
       }
     },
   );
+  it('prevents non-admin actors from changing courses or permissions in a profile update', async () => {
+    const service = new StaffManagementService({} as never, {} as never);
+    for (const dto of [{ courseIds: [] }, { permissions: [] }]) {
+      await expect(
+        service.update(
+          '507f1f77bcf86cd799439011',
+          dto,
+          '507f1f77bcf86cd799439012',
+          'staff',
+        ),
+      ).rejects.toThrow('Only administrators');
+    }
+  });
+  it('validates course IDs and permissions for both create and update', async () => {
+    for (const Model of [CreateStaffDto, UpdateStaffDto]) {
+      const dto = Object.assign(new Model(), {
+        courseIds: ['invalid'],
+        permissions: ['invalid'],
+      });
+      const errors = await validate(dto);
+      expect(errors.map((error) => error.property)).toEqual(
+        expect.arrayContaining(['courseIds', 'permissions']),
+      );
+    }
+  });
+  it('revokes existing sessions only when profile permissions actually change', async () => {
+    const current = {
+      role: 'staff',
+      staffType: 'doctor',
+      permissions: [PERMISSIONS.STUDENTS_READ],
+      tokenVersion: 7,
+      get: (key: string) =>
+        key === 'permissions' ? current.permissions : undefined,
+      set: (values: object) => Object.assign(current, values),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new StaffManagementService(
+      { findOne: jest.fn().mockResolvedValue(current) } as never,
+      { create: jest.fn().mockResolvedValue({}) } as never,
+    );
+    jest.spyOn(service, 'getById').mockResolvedValue({} as never);
+    await service.update(
+      '507f1f77bcf86cd799439011',
+      { permissions: [PERMISSIONS.STUDENTS_READ] },
+      '507f1f77bcf86cd799439012',
+      'admin',
+    );
+    expect(current.tokenVersion).toBe(7);
+    await service.update(
+      '507f1f77bcf86cd799439011',
+      { permissions: [] },
+      '507f1f77bcf86cd799439012',
+      'admin',
+    );
+    expect(current.tokenVersion).toBe(8);
+  });
   it('protects the complete controller with the admin and staff roles', () => {
     expect(Reflect.getMetadata(ROLES_KEY, StaffManagementController)).toEqual([
       'admin',
@@ -253,5 +315,119 @@ describe('Staff management security contracts', () => {
       _id: mockStaff._id,
     });
     expect(result.success).toBe(true);
+  });
+
+  describe('Doctor title prefix handling and academic localization', () => {
+    it('accepts valid doctor prefixes in UpdateStaffDto and CreateStaffDto', async () => {
+      for (const prefix of ['dr', 'prof', 'assoc_prof'] as const) {
+        await expect(
+          pipe.transform(
+            { staffType: 'doctor', titlePrefix: prefix },
+            updateMetadata,
+          ),
+        ).resolves.toMatchObject({
+          staffType: 'doctor',
+          titlePrefix: prefix,
+        });
+
+        const createDto = new CreateStaffDto();
+        createDto.name = 'Doctor Name';
+        createDto.email = 'doc@institute.edu';
+        createDto.password = 'StrongP@ssw0rd123';
+        createDto.staffType = 'doctor';
+        createDto.titlePrefix = prefix;
+        const errors = await validate(createDto);
+        expect(errors).toHaveLength(0);
+      }
+    });
+
+    it('rejects invalid titlePrefix values', async () => {
+      await expect(
+        pipe.transform(
+          { staffType: 'doctor', titlePrefix: 'invalid_title' },
+          updateMetadata,
+        ),
+      ).rejects.toThrow('Bad Request');
+    });
+
+    it('infers doctor prefixes accurately from Arabic and English titles in raw names', () => {
+      expect(inferDoctorPrefix('أ.د. هاني حسين')).toBe('prof');
+      expect(inferDoctorPrefix('أستاذ دكتور أحمد')).toBe('prof');
+      expect(inferDoctorPrefix('Prof. Dr. Hany Hussien')).toBe('prof');
+      expect(inferDoctorPrefix('Prof. Hany')).toBe('prof');
+
+      expect(inferDoctorPrefix('أ.م. هاني حسين')).toBe('assoc_prof');
+      expect(inferDoctorPrefix('أستاذ مساعد دكتور')).toBe('assoc_prof');
+      expect(inferDoctorPrefix('Assoc. Prof. Hany Hussien')).toBe('assoc_prof');
+
+      expect(inferDoctorPrefix('د. هاني حسين')).toBe('dr');
+      expect(inferDoctorPrefix('Dr. Hany Hussien')).toBe('dr');
+      expect(inferDoctorPrefix('أحمد سليمان')).toBeUndefined();
+    });
+
+    it('formats display names with canonical Arabic and English doctor prefixes', () => {
+      const profStaff = {
+        name: 'Hany Hussien',
+        nameAr: 'هاني حسين',
+        staffType: 'doctor',
+        titlePrefix: 'prof',
+      };
+      expect(getStaffPrefix(profStaff, 'ar')).toBe('أ.د.');
+      expect(getStaffPrefix(profStaff, 'en')).toBe('Prof. Dr.');
+      expect(formatStaffDisplayName(profStaff, 'ar')).toBe('أ.د. هاني حسين');
+      expect(formatStaffDisplayName(profStaff, 'en')).toBe(
+        'Prof. Dr. Hany Hussien',
+      );
+
+      const assocProfStaff = {
+        name: 'Hany Hussien',
+        nameAr: 'هاني حسين',
+        staffType: 'doctor',
+        titlePrefix: 'assoc_prof',
+      };
+      expect(getStaffPrefix(assocProfStaff, 'ar')).toBe('أ.م.');
+      expect(getStaffPrefix(assocProfStaff, 'en')).toBe('Assoc. Prof.');
+      expect(formatStaffDisplayName(assocProfStaff, 'ar')).toBe(
+        'أ.م. هاني حسين',
+      );
+      expect(formatStaffDisplayName(assocProfStaff, 'en')).toBe(
+        'Assoc. Prof. Hany Hussien',
+      );
+
+      const drStaff = {
+        name: 'Hany Hussien',
+        nameAr: 'هاني حسين',
+        staffType: 'doctor',
+        titlePrefix: 'dr',
+      };
+      expect(getStaffPrefix(drStaff, 'ar')).toBe('د.');
+      expect(getStaffPrefix(drStaff, 'en')).toBe('Dr.');
+      expect(formatStaffDisplayName(drStaff, 'ar')).toBe('د. هاني حسين');
+      expect(formatStaffDisplayName(drStaff, 'en')).toBe('Dr. Hany Hussien');
+    });
+
+    it('returns localized academic role labels reflecting doctor ranks', () => {
+      expect(getStaffRoleLabel('doctor', 'staff', 'ar', 'prof')).toBe(
+        'أستاذ دكتور',
+      );
+      expect(getStaffRoleLabel('doctor', 'staff', 'en', 'prof')).toBe(
+        'Professor (Doctor)',
+      );
+      expect(getStaffRoleLabel('doctor', 'staff', 'ar', 'assoc_prof')).toBe(
+        'أستاذ مساعد',
+      );
+      expect(getStaffRoleLabel('doctor', 'staff', 'en', 'assoc_prof')).toBe(
+        'Associate Professor',
+      );
+      expect(getStaffRoleLabel('doctor', 'staff', 'ar', 'dr')).toBe(
+        'أستاذ مقرر (دكتور)',
+      );
+      expect(getStaffRoleLabel('teaching_assistant', 'staff', 'ar')).toBe(
+        'معيد (هيئة تدريس)',
+      );
+      expect(getStaffRoleLabel('assistant_lecturer', 'staff', 'ar')).toBe(
+        'مدرس مساعد (هيئة تدريس)',
+      );
+    });
   });
 });

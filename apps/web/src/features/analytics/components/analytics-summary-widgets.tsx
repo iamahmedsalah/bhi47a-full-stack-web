@@ -28,12 +28,14 @@ import {
 
 interface AnalyticsSummaryWidgetsProps {
   isAr: boolean;
-  onOpenExportModal: () => void;
+  onOpenExportModal?: () => void;
+  canExport?: boolean;
 }
 
 export function AnalyticsSummaryWidgets({
   isAr,
   onOpenExportModal,
+  canExport = true,
 }: AnalyticsSummaryWidgetsProps) {
   const overviewQuery = useQuery({
     queryKey: ['admin-comprehensive-analytics-overview'],
@@ -95,14 +97,16 @@ export function AnalyticsSummaryWidgets({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpenExportModal}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-squircle text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          <span>{isAr ? 'تصدير شيت التحليلات الشامل (.xlsx)' : 'Export Full Analytics (.xlsx)'}</span>
-        </button>
+        {canExport && onOpenExportModal && (
+          <button
+            type="button"
+            onClick={onOpenExportModal}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-squircle text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all cursor-pointer self-start sm:self-auto"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>{isAr ? 'تصدير شيت التحليلات الشامل (.xlsx)' : 'Export Full Analytics (.xlsx)'}</span>
+          </button>
+        )}
       </div>
 
       {/* 4 Cards for Quizzes & Courses */}

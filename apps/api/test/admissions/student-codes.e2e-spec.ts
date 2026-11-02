@@ -1,4 +1,9 @@
-﻿import { Test } from '@nestjs/testing';
+import { StaffManagementService } from '../../src/modules/staff-management/staff-management.service';
+import {
+  Course,
+  type CourseDocument,
+} from '../../src/modules/courses/schemas/course.schema';
+import { Test } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types, type ClientSession, type Model } from 'mongoose';
@@ -82,6 +87,108 @@ describe('Student-code registry on the isolated replica set', () => {
     }
     await app?.close();
   }, 30000);
+
+  it('saves staff course selections atomically on create/update and rolls back invalid assignments', async () => {
+    const staffService = app.get(StaffManagementService);
+    const courses = app.get<Model<CourseDocument>>(getModelToken(Course.name));
+    const colleagueId = new Types.ObjectId();
+    ownedIds.push(colleagueId);
+    await users.create({
+      _id: colleagueId,
+      name: 'Existing doctor',
+      role: 'staff',
+      staffType: 'doctor',
+      passwordHash,
+      isActive: true,
+    });
+    const course = await courses.create({
+      code: `TX-${String(new Types.ObjectId())}`,
+      name: 'Transaction test',
+      nameAr: 'Transaction test',
+      nameEn: 'Transaction test',
+      level: '1',
+      academicLevel: '1',
+      semester: 'first',
+      doctorId: colleagueId,
+      doctorIds: [colleagueId],
+      doctors: [{ _id: colleagueId, name: 'Existing doctor' }],
+    });
+    try {
+      const email = `tx-${String(new Types.ObjectId())}@example.test`;
+      const created = await staffService.create(
+        {
+          name: 'New teaching member',
+          email,
+          password,
+          role: 'staff',
+          staffType: 'doctor',
+          permissions: [],
+          courseIds: [String(course._id)],
+        },
+        String(actor),
+        'admin',
+      );
+      ownedIds.push(new Types.ObjectId(created._id));
+      expect(created.permissions).toEqual([]);
+      let assigned = await courses.findById(course._id).lean();
+      expect(assigned!.doctorIds.map(String)).toEqual([
+        String(colleagueId),
+        created._id,
+      ]);
+      await staffService.update(
+        created._id,
+        {
+          name: 'Updated teaching member',
+          staffType: 'teaching_assistant',
+          courseIds: [String(course._id)],
+        },
+        String(actor),
+        'admin',
+      );
+      assigned = await courses.findById(course._id).lean();
+      expect(assigned!.doctorIds.map(String)).toEqual([String(colleagueId)]);
+      expect(assigned!.teachingAssistantIds.map(String)).toEqual([created._id]);
+      await expect(
+        staffService.update(
+          created._id,
+          { name: 'Must roll back', courseIds: [String(new Types.ObjectId())] },
+          String(actor),
+          'admin',
+        ),
+      ).rejects.toThrow('do not exist');
+      expect((await users.findById(created._id).lean())!.name).toBe(
+        'Updated teaching member',
+      );
+      assigned = await courses.findById(course._id).lean();
+      expect(assigned!.teachingAssistantIds.map(String)).toEqual([created._id]);
+      await staffService.update(
+        created._id,
+        { courseIds: [] },
+        String(actor),
+        'admin',
+      );
+      assigned = await courses.findById(course._id).lean();
+      expect(assigned!.teachingAssistantIds).toEqual([]);
+      expect(assigned!.doctorIds.map(String)).toEqual([String(colleagueId)]);
+      const rejectedEmail = `tx-reject-${String(new Types.ObjectId())}@example.test`;
+      await expect(
+        staffService.create(
+          {
+            name: 'Must not exist',
+            email: rejectedEmail,
+            password,
+            staffType: 'doctor',
+            courseIds: [String(new Types.ObjectId())],
+          },
+          String(actor),
+          'admin',
+        ),
+      ).rejects.toThrow('do not exist');
+      expect(await users.exists({ email: rejectedEmail })).toBeNull();
+    } finally {
+      await courses.deleteOne({ _id: course._id });
+    }
+  });
 
   async function year() {
     const yearPrefix = String(nextPrefix++);

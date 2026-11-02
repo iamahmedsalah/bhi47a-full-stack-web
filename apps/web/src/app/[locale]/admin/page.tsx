@@ -802,11 +802,11 @@ export default function AdminDashboard() {
         subtitle={isAr ? 'لوحة المتابعة التشغيلية والإحصاءات الأكاديمية للمعهد.' : 'Quick operational view for portal activity.'}
       >
         <div data-no-export="true" className="flex flex-wrap items-center gap-2">
-          {(isAdmin || hasPerm('analytics.export') || hasPerm('students.export')) && (
+          {hasPerm('analytics.export') && (
             <button
               type="button"
               onClick={() => setIsAnalyticsExportModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-500/20 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 rounded-squircle text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-500/20 shadow-sm"
             >
               <FileSpreadsheet className="h-4 w-4 text-teal-500" />
               <span>{isAr ? 'تصدير التحليلات الشاملة (Excel)' : 'Export Full Analytics (Excel)'}</span>
@@ -1767,7 +1767,7 @@ export default function AdminDashboard() {
 
             {/* Row 2: Department Seat Capacity & Utilization */}
             <DepartmentCapacityChart data={departmentChartData} isAr={isAr} />
-            <AnalyticsSummaryWidgets isAr={isAr} onOpenExportModal={() => setIsAnalyticsExportModalOpen(true)} />
+            <AnalyticsSummaryWidgets isAr={isAr} canExport={hasPerm('analytics.export')} onOpenExportModal={hasPerm('analytics.export') ? () => setIsAnalyticsExportModalOpen(true) : undefined} />
           </section>
         </div>
       )}
@@ -2070,7 +2070,9 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      <AnalyticsExportModal open={isAnalyticsExportModalOpen} onOpenChange={setIsAnalyticsExportModalOpen} locale={locale} />
+      {hasPerm('analytics.export') && (
+        <AnalyticsExportModal open={isAnalyticsExportModalOpen} onOpenChange={setIsAnalyticsExportModalOpen} locale={locale} />
+      )}
 
       {isAdmin && (
         <ActiveSessionsDialog

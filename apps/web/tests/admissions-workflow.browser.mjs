@@ -17,11 +17,12 @@ const source = file => path.join(web, file).replaceAll('\\', '/');
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
 await write('auth.ts', `import {PERMISSIONS} from '@student-portal/shared';export const useAuth=()=>({user:location.pathname.includes('/admin/')?{_id:'100000000000000000000001',role:new URLSearchParams(location.search).get('staff')?'staff':'admin',permissions:Object.values(PERMISSIONS),mustChangePassword:false}:null});`);
 await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const router={replace:url=>{history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));},push:()=>{}};export const useSearchParams=()=>new URLSearchParams(useSyncExternalStore(subscribe,()=>location.search));export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useRouter=()=>router;`);
+await write('image.tsx', `export default function Image({priority,fill,unoptimized,...props}){return <img {...props}/>}`);
 await write('script.tsx', `import {useEffect} from 'react';export default function Script({onReady}){useEffect(()=>{onReady?.();},[]);return null;}`);
 await write('api.ts', `const call=async(method,url,body,config)=>{const query=new URLSearchParams(Object.entries(config?.params??{}).filter(([,value])=>value!==undefined));const response=await fetch(url+(query.size?'?'+query:''),{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw {...data,statusCode:response.status};return {data};};export const getApiErrorDetails=error=>({...error,message:error.message??'Fixture error'});export const getApiErrorMessage=(error,fallback)=>error.message||fallback;export default {get:(url,config)=>call('GET',url,null,config),post:(url,body,config)=>call('POST',url,body,config),patch:(url,body,config)=>call('PATCH',url,body,config),delete:(url,config)=>call('DELETE',url,config?.data,config)};`);
 await write('api-client.ts', `import api from './api';export const apiGet=async(url,config)=>(await api.get(url,config)).data;export const apiPost=async(url,data,config)=>(await api.post(url,data,config)).data;export const apiPatch=async(url,data,config)=>(await api.patch(url,data,config)).data;export const apiDelete=async(url,config)=>(await api.delete(url,config)).data;`);
-await write('entry.tsx', `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';import Hub from '${source('src/app/[locale]/admin/admissions/page.tsx')}';import {PublicAdmissionPage} from '${source('src/features/admissions/public-admission-page.tsx')}';import ar from '${source('src/messages/ar.json')}';import en from '${source('src/messages/en.json')}';const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}>{location.pathname.includes('/admin/')?<Hub/>:<PublicAdmissionPage/>}<Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
-await new Promise((resolve, reject) => webpack({ mode: 'development', devtool: false, context: web, cache: { type: 'filesystem', cacheDirectory: path.join(output, 'webpack-cache') }, entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' }, resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: { 'next/navigation': path.join(output, 'navigation.ts'), 'next/script': path.join(output, 'script.tsx'), '@/lib/api': path.join(output, 'api.ts'), '@/lib/api-client': path.join(output, 'api-client.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@': path.join(web, 'src') } }, plugins: [new DefinePlugin({ 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': JSON.stringify('synthetic-widget-key') })], module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] } }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
+await write('entry.tsx', `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {Toaster} from 'sonner';import Hub from '${source('src/app/[locale]/admin/admissions/page.tsx')}';import {PublicAdmissionPage} from '${source('src/features/admissions/public-admission-page.tsx')}';import {LanguageProvider} from '${source('src/providers/language-provider.tsx')}';import ar from '${source('src/messages/ar.json')}';import en from '${source('src/messages/en.json')}';const locale=location.pathname.split('/')[1];document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});function FixtureApp(){const [locale,setLocale]=React.useState(location.pathname.split('/')[1]);React.useEffect(()=>{const change=()=>setLocale(location.pathname.split('/')[1]);window.addEventListener('popstate',change);return()=>window.removeEventListener('popstate',change);},[]);return <NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><LanguageProvider>{location.pathname.includes('/admin/')?<Hub/>:<PublicAdmissionPage/>}<Toaster/></LanguageProvider></QueryClientProvider></NextIntlClientProvider>;}createRoot(document.getElementById('root')).render(<FixtureApp/>);`);
+await new Promise((resolve, reject) => webpack({ mode: 'development', devtool: false, context: web, cache: { type: 'filesystem', version: 'admission-language-turnstile-v2', cacheDirectory: path.join(output, 'webpack-cache') }, entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' }, resolve: { extensions: ['.tsx', '.ts', '.jsx', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: { 'next/navigation': path.join(output, 'navigation.ts'), 'next/script': path.join(output, 'script.tsx'), 'next/image': path.join(output, 'image.tsx'), '@/lib/api': path.join(output, 'api.ts'), '@/lib/api-client': path.join(output, 'api-client.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@': path.join(web, 'src') } }, plugins: [new DefinePlugin({ 'process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY': JSON.stringify('synthetic-widget-key') })], module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] } }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
 const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({ base: web })]).process(await fs.readFile(source('src/app/globals.css'), 'utf8'), { from: source('src/app/globals.css') });
 await write('styles.css', css.css);
 
@@ -55,10 +56,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/admin/admissions/groups') return send(list([]));
     if (url.pathname === '/admin/admissions/periods') return send(list(periodDeleted ? [] : [{ _id: periodId, code: 'INTAKE27', academicYear: '2026-2027', name: 'Synthetic intake', nameAr: 'دفعة تجريبية', isEnabled: true, opensAt: '2026-10-01T00:00:00Z', closesAt: '2026-12-01T00:00:00Z', status: 'open', revision: 0 }]));
     if (url.pathname === `/admin/admissions/periods/${periodId}` && req.method === 'DELETE') { periodDeleted = true; return send({ success: true, deletedId: periodId }); }
+    if (url.pathname === '/admin/students/100000000000000000000031') return send({ _id: '100000000000000000000031', studentCode: '270101', fullName: 'Synthetic student', department: 'BIS', level: '1', academicYear: '2026-2027', semester: 'first', enrollmentStatus: 'active' });
     if (url.pathname === '/admin/student-codes/mappings/preview') return send({ items: mappingCorrected ? [] : [{ academicYear: '2026-2027', currentPrefix: '26', expectedPrefix: '27', nextSequence: 101, nextCode: '270101' }], fingerprint: 'f'.repeat(64), canApply: !mappingCorrected, collision: false, truncated: false, changesExistingStudentCodes: false });
     if (url.pathname === '/admin/student-codes/mappings/correct') { mappingCorrected = true; return send({ corrected: 1, changesExistingStudentCodes: false }); }
     if (url.pathname === '/admin/student-codes/270102/hold') { holdSaved = true; return send({ studentCode: '270102', status: 'RELEASED', reuseEnabled: false }); }
-    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 0 : 1, MISSING: 0 } });
+    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030', studentProfileId: '100000000000000000000031', studentName: 'Synthetic student', studentNameAr: 'Synthetic student', department: 'BIS', level: '1' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 0 : 1, MISSING: 0 } });
     send({ message: 'Unknown synthetic route' }, 404);
   } catch (error) { res.statusCode = 500; res.end(JSON.stringify({ message: error.message })); }
 });
@@ -70,11 +72,17 @@ try {
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, timezoneId: 'America/New_York' });
   page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(() => { window.__captchaRenders = 0; window.turnstile = { render: (_element, options) => { window.__captcha = options; window.__captchaRenders++; return 'fixture-widget'; }, remove: () => {}, reset: () => {} }; });
+  await page.addInitScript(() => { window.__captchaRenders = 0; window.__captchaRemovals = 0; window.turnstile = { render: (_element, options) => { window.__captcha = options; window.__captchaRenders++; return 'fixture-widget'; }, remove: () => {window.__captchaRemovals++;}, reset: () => {} }; });
   for (const locale of ['en', 'ar']) {
     reset(); const messages = JSON.parse(await fs.readFile(source(`src/messages/${locale}.json`), 'utf8')), t = messages.admissionWorkflow, p = messages.admissions;
     holdSaved = false;
     await page.goto(`${address}/${locale}/admission#access=100000000000000000000099`);
+    await page.getByRole('button', { name: locale === 'en' ? 'Switch to Arabic' : 'Switch to English', exact: true }).waitFor();
+    const other = locale === 'en' ? 'ar' : 'en';
+    await page.getByRole('button', { name: locale === 'en' ? 'Switch to Arabic' : 'Switch to English', exact: true }).click();
+    await page.waitForURL(`**/${other}/admission`);
+    await page.getByRole('button', { name: other === 'en' ? 'Switch to Arabic' : 'Switch to English', exact: true }).click();
+    await page.waitForURL(`**/${locale}/admission`);
     await page.getByLabel(t.fields.pin, { exact: true }).fill('123456789');
     await page.getByRole('button', { name: t.openInvitation, exact: true }).click();
     await page.getByRole('alert').filter({ hasText: t.errors.accessUnavailable }).waitFor();
@@ -94,11 +102,19 @@ try {
     await page.getByText(t.validationMessages.guardianPhone, { exact: true }).waitFor();
     assert.equal(writes.filter(write => write.path.endsWith('/requests')).length, 0);
     await page.locator('input[name="guardians.0.phone"]').fill('01112345678');
-    await page.evaluate(() => window.__captcha['error-callback']());
+    const removals = await page.evaluate(() => window.__captchaRemovals);
+    assert.equal(await page.evaluate(() => window.__captcha.retry), 'never');
+    assert.equal(await page.evaluate(() => window.__captcha['error-callback']('300010')), true);
+    assert.equal(await page.evaluate(() => window.__captchaRemovals), removals, 'Cloudflare owns error handling until the user retries; callbacks must not remove its widget');
     await page.getByText(t.captcha.failed, { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: t.submit, exact: true }).isDisabled(), true);
     const renders = await page.evaluate(() => window.__captchaRenders);
     await page.getByRole('button', { name: t.retry, exact: true }).click(); await page.waitForFunction(count => window.__captchaRenders > count, renders);
+    assert.equal(await page.evaluate(() => window.__captcha['error-callback']('400020')), true);
+    await page.getByText(t.verificationUnavailable, { exact: true }).waitFor();
+    const beforeConfigurationRetry = await page.evaluate(() => window.__captchaRenders);
+    await page.getByRole('button', { name: t.retry, exact: true }).click();
+    await page.waitForFunction(count => window.__captchaRenders > count, beforeConfigurationRetry);
     await page.evaluate(() => window.__captcha.callback('synthetic-fresh-token'));
     await page.getByRole('button', { name: t.submit, exact: true }).click();
     await page.getByText(t.submitted, { exact: true }).waitFor();
@@ -140,9 +156,19 @@ try {
     await page.goto(`${address}/${locale}/admin/admissions?tab=codes`); await page.getByRole('button', { name: t.mapping.preview, exact: true }).click();
     const mapping = page.getByRole('dialog'); await mapping.getByText('270101', { exact: true }).waitFor();
     await mapping.getByLabel(t.reason, { exact: true }).fill('Reviewed future code prefix correction.'); await mapping.getByRole('checkbox', { name: t.mapping.confirm, exact: true }).check(); await mapping.getByRole('button', { name: t.mapping.apply, exact: true }).click(); await mapping.waitFor({ state: 'hidden' });
-    assert.equal(mappingCorrected, true); await page.getByText('270101', { exact: true }).waitFor();
+    assert.equal(mappingCorrected, true); await page.getByRole('button', { name: '270101', exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, `mapping-${locale}.png`), fullPage: true });
     const codeMessages = messages.studentCodes;
+    await page.getByText('Synthetic student', { exact: true }).waitFor();
+    await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270101'), exact: true }).click();
+    await page.getByRole('menuitem', { name: codeMessages.viewAudit, exact: true }).click();
+    const auditDialog = page.getByRole('dialog');
+    await auditDialog.getByText('Synthetic student', { exact: true }).waitFor();
+    await auditDialog.getByRole('button', { name: codeMessages.linkedStudent, exact: true }).click();
+    const linkedStudent = page.getByRole('dialog');
+    await linkedStudent.getByText('Synthetic student', { exact: true }).waitFor();
+    await linkedStudent.getByRole('button', { name: codeMessages.close, exact: true }).first().click();
+    await linkedStudent.waitFor({ state: 'hidden' });
     assert.equal(await page.getByText('100000000000000000000030', {exact:true}).count(), 0, 'internal student IDs must not appear in the audit table');
     await page.getByRole('button', {name:codeMessages.actionsFor.replace('{code}','270102'),exact:true}).click();
     await page.getByRole('menuitem', {name:codeMessages.hold,exact:true}).click();

@@ -3,8 +3,10 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import {
   ROLE_VALUES,
   STAFF_TYPE_VALUES,
+  DOCTOR_PREFIX_VALUES,
   type Role,
   type StaffType,
+  type DoctorPrefix,
 } from '@student-portal/shared';
 
 export type UserDocument = User & Document;
@@ -19,6 +21,9 @@ export class User {
 
   @Prop({ type: String, enum: STAFF_TYPE_VALUES, default: 'administrative' })
   staffType?: StaffType;
+
+  @Prop({ type: String, enum: [...DOCTOR_PREFIX_VALUES, null], trim: true })
+  titlePrefix?: DoctorPrefix;
 
   @Prop({
     trim: true,

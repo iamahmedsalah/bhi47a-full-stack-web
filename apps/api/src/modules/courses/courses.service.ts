@@ -124,6 +124,7 @@ export class CoursesService {
       name: string;
       nameAr?: string;
       staffType?: string;
+      titlePrefix?: string;
     }> = [];
     const validDoctorObjectIds: Types.ObjectId[] = [];
 
@@ -143,7 +144,7 @@ export class CoursesService {
     if (validDoctorObjectIds.length > 0) {
       const docUsers = await this.userModel
         .find({ _id: { $in: validDoctorObjectIds } })
-        .select('_id name nameAr staffType')
+        .select('_id name nameAr staffType titlePrefix')
         .lean();
       for (const dId of validDoctorObjectIds) {
         const u = docUsers.find((doc) => doc._id.toString() === dId.toString());
@@ -153,6 +154,7 @@ export class CoursesService {
             name: u.name,
             nameAr: (u as any).nameAr || u.name,
             staffType: (u as any).staffType || 'doctor',
+            titlePrefix: (u as any).titlePrefix,
           });
         }
       }
@@ -168,6 +170,7 @@ export class CoursesService {
       name: string;
       nameAr?: string;
       staffType?: string;
+      titlePrefix?: string;
     }> = [];
     const validTaObjectIds: Types.ObjectId[] = [];
     if (dto.teachingAssistantIds && Array.isArray(dto.teachingAssistantIds)) {
@@ -179,7 +182,7 @@ export class CoursesService {
       if (validTaObjectIds.length > 0) {
         const taUsers = await this.userModel
           .find({ _id: { $in: validTaObjectIds } })
-          .select('_id name nameAr staffType')
+          .select('_id name nameAr staffType titlePrefix')
           .lean();
         for (const user of taUsers) {
           teachingAssistants.push({
@@ -187,6 +190,7 @@ export class CoursesService {
             name: user.name,
             nameAr: (user as any).nameAr || user.name,
             staffType: (user as any).staffType || 'teaching_assistant',
+            titlePrefix: (user as any).titlePrefix,
           });
         }
       }
@@ -351,19 +355,20 @@ export class CoursesService {
       const objIds = Array.from(staffIdSet).map((id) => new Types.ObjectId(id));
       const users = await this.userModel
         .find({ _id: { $in: objIds } })
-        .select('_id name nameAr staffType')
+        .select('_id name nameAr staffType titlePrefix')
         .lean();
       if (!Array.isArray(users) || users.length === 0) return items;
 
       const userMap = new Map<
         string,
-        { name: string; nameAr?: string; staffType?: string }
+        { name: string; nameAr?: string; staffType?: string; titlePrefix?: string }
       >();
       for (const u of users) {
         userMap.set(String(u._id), {
           name: u.name,
           nameAr: (u as any).nameAr,
           staffType: (u as any).staffType,
+          titlePrefix: (u as any).titlePrefix,
         });
       }
 
@@ -378,6 +383,7 @@ export class CoursesService {
               name: u.name || d.name,
               nameAr: u.nameAr || d.nameAr || u.name || d.name,
               staffType: u.staffType || d.staffType || 'doctor',
+              titlePrefix: u.titlePrefix || d.titlePrefix,
             };
           });
           next.doctorName = next.doctors.map((d: any) => d.name).join(' / ');
@@ -402,6 +408,7 @@ export class CoursesService {
               name: u.name || ta.name,
               nameAr: u.nameAr || ta.nameAr || u.name || ta.name,
               staffType: u.staffType || ta.staffType || 'teaching_assistant',
+              titlePrefix: u.titlePrefix || ta.titlePrefix,
             };
           });
         } else if (
@@ -592,7 +599,7 @@ export class CoursesService {
 
         const docUsers = await this.userModel
           .find({ _id: { $in: validDoctorObjectIds } })
-          .select('_id name nameAr staffType')
+          .select('_id name nameAr staffType titlePrefix')
           .lean();
 
         const doctors: Array<{
@@ -600,6 +607,7 @@ export class CoursesService {
           name: string;
           nameAr?: string;
           staffType?: string;
+          titlePrefix?: string;
         }> = [];
         for (const dId of validDoctorObjectIds) {
           const u = docUsers.find(
@@ -611,6 +619,7 @@ export class CoursesService {
               name: u.name,
               nameAr: (u as any).nameAr || u.name,
               staffType: (u as any).staffType || 'doctor',
+              titlePrefix: (u as any).titlePrefix,
             });
           }
         }
@@ -644,7 +653,7 @@ export class CoursesService {
         }
         const taUsers = await this.userModel
           .find({ _id: { $in: validTaObjectIds } })
-          .select('_id name nameAr staffType')
+          .select('_id name nameAr staffType titlePrefix')
           .lean();
         updatePayload.teachingAssistantIds = validTaObjectIds;
         updatePayload.teachingAssistants = taUsers.map((u) => ({
@@ -652,6 +661,7 @@ export class CoursesService {
           name: u.name,
           nameAr: (u as any).nameAr || u.name,
           staffType: (u as any).staffType || 'teaching_assistant',
+          titlePrefix: (u as any).titlePrefix,
         }));
       } else {
         updatePayload.teachingAssistantIds = [];

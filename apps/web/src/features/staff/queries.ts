@@ -52,6 +52,8 @@ export function useStaffMutations() {
   const queryClient = useQueryClient();
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    void queryClient.invalidateQueries({ queryKey: ['staff-course-choices'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-form-courses'] });
     void queryClient.invalidateQueries({ queryKey: ['staff-options-for-courses'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-staff-list'] });
     void queryClient.invalidateQueries({ queryKey: ['courses'] });

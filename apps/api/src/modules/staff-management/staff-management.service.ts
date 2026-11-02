@@ -1,3 +1,6 @@
+import { CacheService } from '../../core/cache/cache.service';
+import type { ClientSession } from 'mongoose';
+import { StaffCourseAssignmentsService } from './staff-course-assignments.service';
 import {
   ConflictException,
   ForbiddenException,
@@ -25,11 +28,12 @@ import {
 } from './schemas/staff-audit-log.schema';
 import {
   STAFF_TYPE_DEFAULT_PERMISSIONS,
+  inferDoctorPrefix,
   type StaffType,
 } from '@student-portal/shared';
 
 const STAFF_PUBLIC_PROJECTION =
-  '_id userCode name nameAr username email phone role staffType permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
+  '_id userCode name nameAr username email phone role staffType titlePrefix permissions isActive deactivatedAt deactivationReason lastLoginAt createdAt updatedAt';
 
 export interface StaffItem {
   _id: string;
@@ -41,6 +45,7 @@ export interface StaffItem {
   phone?: string;
   role: 'admin' | 'staff';
   staffType?: StaffType;
+  titlePrefix?: string;
   permissions: string[];
   isActive: boolean;
   deactivatedAt?: Date;
@@ -60,6 +65,7 @@ interface StaffRecord {
   phone?: string;
   role?: 'admin' | 'staff';
   staffType?: StaffType;
+  titlePrefix?: string;
   permissions?: string[];
   isActive?: boolean;
   deactivatedAt?: Date;
@@ -90,6 +96,9 @@ export class StaffManagementService {
     private readonly auditLogs: Model<StaffAuditLogDocument>,
     @Optional()
     private readonly passwordHasher: PasswordHasher = defaultPasswordHasher,
+    @Optional()
+    private readonly courseAssignments?: StaffCourseAssignmentsService,
+    @Optional() private readonly cache?: CacheService,
   ) {}
 
   async list(query: QueryStaffDto, actorRole?: string) {
@@ -145,8 +154,8 @@ export class StaffManagementService {
     };
   }
 
-  async getById(id: string): Promise<StaffItem> {
-    const record = await this.findStaffRecord(id);
+  async getById(id: string, session?: ClientSession): Promise<StaffItem> {
+    const record = await this.findStaffRecord(id, session);
     return this.toStaffItem(record);
   }
 
@@ -154,7 +163,19 @@ export class StaffManagementService {
     dto: CreateStaffDto,
     actorId: string,
     actorRole?: string,
+    session?: ClientSession,
   ): Promise<StaffItem> {
+    if (dto.courseIds !== undefined && actorRole !== 'admin')
+      throw new ForbiddenException(
+        'Only administrators can change course assignments',
+      );
+    if (dto.courseIds !== undefined && !session) {
+      const result = await this.users.db.transaction((transaction) =>
+        this.create(dto, actorId, actorRole, transaction),
+      );
+      await this.cache?.delPattern('courses:*');
+      return result;
+    }
     const targetRole =
       actorRole === 'admin' && dto.role === 'admin' ? 'admin' : 'staff';
 
@@ -189,14 +210,21 @@ export class StaffManagementService {
     const permissions =
       targetRole === 'admin'
         ? []
-        : actorRole === 'admin' && dto.permissions && dto.permissions.length > 0
+        : actorRole === 'admin' && dto.permissions !== undefined
           ? dto.permissions
           : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType!] || [])];
 
+    const titlePrefix =
+      dto.titlePrefix ||
+      (staffType === 'doctor'
+        ? inferDoctorPrefix(dto.nameAr) || inferDoctorPrefix(dto.name) || 'dr'
+        : undefined);
+
     try {
-      const created = await this.users.create({
+      const payload = {
         role: targetRole,
         staffType,
+        titlePrefix,
         userCode,
         name: dto.name.trim(),
         nameAr: dto.nameAr?.trim() || undefined,
@@ -207,13 +235,26 @@ export class StaffManagementService {
         mustChangePassword: true,
         permissions,
         isActive: true,
-      });
-      await this.recordAudit(actorId, created._id.toString(), 'created', {
-        role: created.role,
-        staffType: created.staffType,
-        permissions: created.permissions,
-      });
-      return this.getById(created._id.toString());
+      };
+      const created = session
+        ? (await this.users.create([payload], { session }))[0]
+        : await this.users.create(payload);
+      if (dto.courseIds !== undefined && session)
+        await this.courseAssignments!.sync(created, dto.courseIds, session);
+      await this.recordAudit(
+        actorId,
+        created._id.toString(),
+        'created',
+        {
+          role: created.role,
+          staffType: created.staffType,
+          permissions: created.permissions,
+          courseIds: dto.courseIds,
+        },
+        undefined,
+        session,
+      );
+      return this.getById(created._id.toString(), session);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -229,8 +270,27 @@ export class StaffManagementService {
     dto: UpdateStaffDto,
     actorId: string,
     actorRole?: string,
+    session?: ClientSession,
   ): Promise<StaffItem> {
-    const current = await this.findStaffDocument(id);
+    if (
+      (dto.courseIds !== undefined || dto.permissions !== undefined) &&
+      actorRole !== 'admin'
+    )
+      throw new ForbiddenException(
+        'Only administrators can change assignments or permissions',
+      );
+    if (dto.courseIds !== undefined && !session) {
+      const result = await this.users.db.transaction((transaction) =>
+        this.update(id, dto, actorId, actorRole, transaction),
+      );
+      await this.cache?.delPattern('courses:*');
+      return result;
+    }
+    const current = await this.findStaffDocument(id, session);
+    if (dto.permissions !== undefined && current.role === 'admin')
+      throw new ForbiddenException(
+        'Administrator permissions cannot be customized',
+      );
 
     if (actorRole !== 'admin') {
       if (current.role === 'admin' || current.staffType === 'administrative') {
@@ -266,16 +326,34 @@ export class StaffManagementService {
         ? { phone: dto.phone.trim() || undefined }
         : {}),
       ...(dto.staffType !== undefined ? { staffType: dto.staffType } : {}),
+      ...(dto.titlePrefix !== undefined
+        ? { titlePrefix: dto.titlePrefix }
+        : {}),
+      ...(dto.permissions !== undefined
+        ? { permissions: dto.permissions }
+        : {}),
     };
 
     for (const [key, value] of Object.entries(nextValues)) {
+      if (
+        key === 'permissions' &&
+        JSON.stringify([...(current.permissions ?? [])].sort()) ===
+          JSON.stringify([...(dto.permissions ?? [])].sort())
+      )
+        continue;
       const previous = current.get(key);
       if (previous !== value) changes[key] = { from: previous, to: value };
     }
 
     try {
       current.set(nextValues);
-      await current.save();
+      if (dto.permissions !== undefined && changes.permissions)
+        current.tokenVersion = (current.tokenVersion ?? 0) + 1;
+      await current.save(session ? { session } : undefined);
+      if (dto.courseIds !== undefined && session) {
+        await this.courseAssignments!.sync(current, dto.courseIds, session);
+        changes.courseIds = { from: undefined, to: dto.courseIds };
+      }
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException('Email or username already exists');
@@ -284,9 +362,16 @@ export class StaffManagementService {
     }
 
     if (Object.keys(changes).length > 0) {
-      await this.recordAudit(actorId, id, 'profile_updated', changes);
+      await this.recordAudit(
+        actorId,
+        id,
+        'profile_updated',
+        changes,
+        undefined,
+        session,
+      );
     }
-    return this.getById(id);
+    return this.getById(id, session);
   }
 
   async updatePermissions(
@@ -451,20 +536,23 @@ export class StaffManagementService {
       .lean();
   }
 
-  private async findStaffDocument(id: string) {
-    const staff = await this.users.findOne({
+  private async findStaffDocument(id: string, session?: ClientSession) {
+    const query = this.users.findOne({
       _id: id,
       role: { $in: ['staff', 'admin'] },
     });
+    const staff = await (session ? query.session(session) : query);
     if (!staff) throw new NotFoundException('Account not found');
     return staff;
   }
 
-  private async findStaffRecord(id: string) {
-    const staff = await this.users
+  private async findStaffRecord(id: string, session?: ClientSession) {
+    const query = this.users
       .findOne({ _id: id, role: { $in: ['staff', 'admin'] } })
-      .select(STAFF_PUBLIC_PROJECTION)
-      .lean<StaffRecord>();
+      .select(STAFF_PUBLIC_PROJECTION);
+    const staff = await (
+      session ? query.session(session) : query
+    ).lean<StaffRecord>();
     if (!staff) throw new NotFoundException('Account not found');
     return staff;
   }
@@ -544,13 +632,16 @@ export class StaffManagementService {
     action: StaffAuditAction,
     changes?: Record<string, unknown>,
     reason?: string,
+    session?: ClientSession,
   ) {
-    await this.auditLogs.create({
+    const payload = {
       actorId: new Types.ObjectId(actorId),
       targetStaffId: new Types.ObjectId(targetStaffId),
       action,
       changes,
       reason: reason?.trim() || undefined,
-    });
+    };
+    if (session) await this.auditLogs.create([payload], { session });
+    else await this.auditLogs.create(payload);
   }
 }

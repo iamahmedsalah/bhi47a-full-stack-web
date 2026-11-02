@@ -54,19 +54,21 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockSubmissionModel = {
-    aggregate: jest.fn().mockResolvedValue([
-      {
-        _id: quizFixtureId,
-        totalSubmissions: 50,
-        passedCount: 45,
-        failedCount: 5,
-        avgScore: 16.5,
-        avgPercentage: 82.5,
-        highestScore: 20,
-        lowestScore: 8,
-        avgDurationSeconds: 600,
-      },
-    ]),
+    aggregate: jest
+      .fn((_pipeline: unknown[]) => Promise.resolve([] as any[]))
+      .mockResolvedValue([
+        {
+          _id: quizFixtureId,
+          totalSubmissions: 50,
+          passedCount: 45,
+          failedCount: 5,
+          avgScore: 16.5,
+          avgPercentage: 82.5,
+          highestScore: 20,
+          lowestScore: 8,
+          avgDurationSeconds: 600,
+        },
+      ]),
     find: jest.fn().mockReturnValue({
       sort: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
@@ -77,14 +79,16 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockAttemptModel = {
-    aggregate: jest.fn().mockResolvedValue([
-      {
-        _id: quizFixtureId,
-        startedCount: 52,
-        terminatedByExitCount: 1,
-        timedOutCount: 1,
-      },
-    ]),
+    aggregate: jest
+      .fn((_pipeline: unknown[]) => Promise.resolve([] as any[]))
+      .mockResolvedValue([
+        {
+          _id: quizFixtureId,
+          startedCount: 52,
+          terminatedByExitCount: 1,
+          timedOutCount: 1,
+        },
+      ]),
   };
 
   const mockCourseModel = {
@@ -110,7 +114,9 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockRegistrationModel = {
-    aggregate: jest.fn().mockResolvedValue([{ _id: 'CS101', count: 60 }]),
+    aggregate: jest
+      .fn((_pipeline: unknown[]) => Promise.resolve([] as any[]))
+      .mockResolvedValue([{ _id: 'CS101', count: 60 }]),
   };
 
   const mockUserModel = {
@@ -123,19 +129,23 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockGradeModel = {
-    aggregate: jest.fn().mockResolvedValue([
-      {
-        _id: { courseCode: 'CS101', examType: 'final' },
-        totalRecorded: 58,
-        absentCount: 2,
-        passedCount: 52,
-      },
-    ]),
+    aggregate: jest
+      .fn((_pipeline: unknown[]) => Promise.resolve([] as any[]))
+      .mockResolvedValue([
+        {
+          _id: { courseCode: 'CS101', examType: 'final' },
+          totalRecorded: 58,
+          absentCount: 2,
+          passedCount: 52,
+        },
+      ]),
   };
 
   const mockComplaintModel = {
     countDocuments: jest.fn().mockResolvedValue(0),
-    aggregate: jest.fn().mockResolvedValue([]),
+    aggregate: jest
+      .fn((_pipeline: unknown[]) => Promise.resolve([] as any[]))
+      .mockResolvedValue([]),
   };
 
   const mockStudentProfileModel = {
@@ -219,5 +229,83 @@ describe('AnalyticsQueryService', () => {
     expect(overview.kpis).toBeDefined();
     expect(overview.kpis.totalStudents).toBe(100);
     expect(overview.kpis.totalCourses).toBe(10);
+  });
+  it('matches both BSON and legacy string quiz references instead of silently returning zero submissions', async () => {
+    await service.getQuizzesAnalytics({}, mockAdminUser);
+    const pipeline = mockSubmissionModel.aggregate.mock.calls.at(-1)![0] as any;
+    expect(pipeline[0].$match.quizId.$in).toEqual([
+      quizFixtureId,
+      String(quizFixtureId),
+    ]);
+  });
+
+  it('keeps a genuine zero final pass rate instead of replacing it with the midterm rate', async () => {
+    mockGradeModel.aggregate.mockResolvedValueOnce([
+      {
+        _id: { courseCode: 'CS101', examType: 'midterm' },
+        totalRecorded: 10,
+        absentCount: 0,
+        passedCount: 10,
+      },
+      {
+        _id: { courseCode: 'CS101', examType: 'final' },
+        totalRecorded: 10,
+        absentCount: 0,
+        passedCount: 0,
+      },
+    ]);
+    const result = await service.getCoursesAnalytics({}, mockAdminUser);
+    expect(result[0].midtermPassRate).toBe(100);
+    expect(result[0].finalPassRate).toBe(0);
+    expect(result[0].overallPassRate).toBe(0);
+  });
+
+  it('joins string student IDs to academic records, and leaves missing academic metrics unset', async () => {
+    const studentId = new Types.ObjectId();
+    mockStudentProfileModel.find.mockReturnValueOnce({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              userId: String(studentId),
+              studentCode: '260001',
+              fullName: 'Student',
+            },
+          ]),
+        }),
+      }),
+    });
+    mockAcademicProfileModel.find.mockReturnValueOnce({
+      select: jest.fn().mockReturnValue({
+        lean: jest
+          .fn()
+          .mockResolvedValue([
+            { studentId, gpa: 3.25, completedCreditHours: 42 },
+          ]),
+      }),
+    });
+    mockSubmissionModel.aggregate.mockResolvedValueOnce([
+      {
+        _id: String(studentId),
+        completedQuizzes: 2,
+        passedQuizzes: 1,
+        avgScorePercentage: 75,
+      },
+    ]);
+    const [student] = await service.getStudentsAnalytics({
+      academicYear: '2026-2027',
+    });
+    expect(student).toMatchObject({
+      gpa: 3.25,
+      totalEarnedHours: 42,
+      completedQuizzes: 2,
+      passedQuizzes: 1,
+      avgQuizScorePercentage: 75,
+    });
+    const [pipeline] = mockSubmissionModel.aggregate.mock.calls.at(
+      -1,
+    )! as any[];
+    expect(pipeline[0].$match.studentId.$in).toContainEqual(studentId);
+    expect(pipeline[0].$match.studentId.$in).toContain(String(studentId));
   });
 });

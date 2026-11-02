@@ -27,6 +27,35 @@ const empty = (): SnapshotSources => ({
   truncated: false,
 });
 describe('Student-code format, audit and safety policy', () => {
+  it('returns a verified student profile and bilingual owner name without changing the audit fingerprint', () => {
+    const source = empty();
+    const owner = new Types.ObjectId();
+    const profileId = new Types.ObjectId();
+    source.users = [{ _id: owner, role: 'student', studentCode: '260001' }];
+    source.profiles = [
+      {
+        _id: profileId,
+        userId: owner,
+        studentCode: '260001',
+        fullName: 'Student',
+        fullNameAr: 'طالب',
+        department: 'BIS',
+        level: '1',
+      },
+    ];
+    const first = analyzeCodeSnapshot(year, prefix, source);
+    expect(first.rows[0]).toMatchObject({
+      currentStudentId: String(owner),
+      studentProfileId: String(profileId),
+      studentName: 'Student',
+      studentNameAr: 'طالب',
+      department: 'BIS',
+    });
+    source.profiles[0].fullName = 'Updated';
+    expect(analyzeCodeSnapshot(year, prefix, source).fingerprint).toBe(
+      first.fingerprint,
+    );
+  });
   it('ignores text aliases that cannot collide with a six-digit code', () => {
     const input = empty();
     input.users.push({

@@ -1,7 +1,9 @@
-import type { StaffProfileInput } from './types';
+import type { StaffProfileInput } from "./types";
 
-/** Profile updates cannot change account roles or permissions. */
-export function staffProfilePayload(input: StaffProfileInput): StaffProfileInput {
+/** Profile updates whitelist editable fields; sensitive fields remain admin-guarded by the API. */
+export function staffProfilePayload(
+  input: StaffProfileInput,
+): StaffProfileInput {
   return {
     name: input.name,
     nameAr: input.nameAr,
@@ -9,5 +11,12 @@ export function staffProfilePayload(input: StaffProfileInput): StaffProfileInput
     username: input.username,
     phone: input.phone,
     staffType: input.staffType,
+    ...(input.titlePrefix !== undefined
+      ? { titlePrefix: input.titlePrefix }
+      : {}),
+    ...(input.courseIds !== undefined ? { courseIds: input.courseIds } : {}),
+    ...(input.permissions !== undefined
+      ? { permissions: input.permissions }
+      : {}),
   };
 }

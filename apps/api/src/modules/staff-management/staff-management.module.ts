@@ -1,3 +1,5 @@
+import { Course, CourseSchema } from '../courses/schemas/course.schema';
+import { StaffCourseAssignmentsService } from './staff-course-assignments.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../users/schemas/user.schema';
@@ -12,11 +14,12 @@ import {
   imports: [
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
+      { name: Course.name, schema: CourseSchema },
       { name: StaffAuditLog.name, schema: StaffAuditLogSchema },
     ]),
   ],
   controllers: [StaffManagementController],
-  providers: [StaffManagementService],
+  providers: [StaffManagementService, StaffCourseAssignmentsService],
   exports: [StaffManagementService],
 })
 export class StaffManagementModule {}

@@ -1,6 +1,8 @@
+import { courseCurriculumFilter } from '../../courses/utils/course-filter.util';
+import { normalizeDepartment, type CourseLevel } from '@student-portal/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, FilterQuery } from 'mongoose';
+import { Types, type Model, type FilterQuery } from 'mongoose';
 import { Quiz, QuizDocument } from '../../quizzes/schemas/quiz.schema';
 import {
   QuizSubmission,
@@ -67,6 +69,14 @@ export class AnalyticsQueryService {
     private readonly academicProfileModel: Model<StudentAcademicProfileDocument>,
   ) {}
 
+  private courseScope(query: AnalyticsQueryDto): FilterQuery<CourseDocument> {
+    return courseCurriculumFilter({
+      department: normalizeDepartment(query.department),
+      level: query.level as CourseLevel | undefined,
+      semester: query.semester,
+    });
+  }
+
   /**
    * Determine if the caller should be restricted to courses/quizzes they own or are assigned to.
    */
@@ -107,10 +117,13 @@ export class AnalyticsQueryService {
       { $unwind: '$courses' },
       {
         $group: {
-          _id: { $toUpper: '$courses' },
-          count: { $sum: 1 },
+          _id: {
+            course: { $toUpper: { $trim: { input: '$courses' } } },
+            student: { $toString: '$studentId' },
+          },
         },
       },
+      { $group: { _id: '$_id.course', count: { $sum: 1 } } },
     ];
 
     const results = await this.registrationModel.aggregate(pipeline);
@@ -141,6 +154,22 @@ export class AnalyticsQueryService {
     }
     if (query.academicYear) quizFilter.academicYear = query.academicYear;
     if (query.semester) quizFilter.semester = query.semester;
+    if (query.department || query.level) {
+      const courses = await this.courseModel
+        .find(this.courseScope(query))
+        .sort({ code: 1 })
+        .lean();
+      quizFilter.$and = [
+        {
+          $expr: {
+            $in: [
+              { $toString: '$courseId' },
+              courses.map((course) => String(course._id)),
+            ],
+          },
+        },
+      ];
+    }
 
     const quizzes = await this.quizModel
       .find(quizFilter)
@@ -155,12 +184,14 @@ export class AnalyticsQueryService {
     );
 
     // Aggregate submissions per quiz
-    const quizIds = quizzes.map((q) => q._id);
+    // Aggregation pipelines do not apply Mongoose ObjectId casting. Older imports
+    // stored references as strings; include both representations.
+    const quizIds = quizzes.flatMap((q) => [q._id, String(q._id)]);
     const submissionAgg = await this.submissionModel.aggregate([
       { $match: { quizId: { $in: quizIds } } },
       {
         $group: {
-          _id: '$quizId',
+          _id: { $toString: '$quizId' },
           totalSubmissions: { $sum: 1 },
           passedCount: { $sum: { $cond: ['$isPassed', 1, 0] } },
           failedCount: { $sum: { $cond: ['$isPassed', 0, 1] } },
@@ -179,7 +210,7 @@ export class AnalyticsQueryService {
       { $match: { quizId: { $in: quizIds } } },
       {
         $group: {
-          _id: '$quizId',
+          _id: { $toString: '$quizId' },
           startedCount: { $sum: 1 },
           terminatedByExitCount: {
             $sum: { $cond: [{ $eq: ['$status', 'terminated_by_exit'] }, 1, 0] },
@@ -299,7 +330,7 @@ export class AnalyticsQueryService {
 
     const staffUsers = await this.userModel
       .find(staffFilter)
-      .select('_id name nameAr staffType role')
+      .select('_id name nameAr staffType role titlePrefix')
       .lean();
 
     const quizAnalytics = await this.getQuizzesAnalytics(query, user);
@@ -369,6 +400,7 @@ export class AnalyticsQueryService {
         staffName: staff.name,
         staffNameAr: staff.nameAr,
         staffType: staff.staffType || 'doctor',
+        titlePrefix: (staff as any).titlePrefix,
         role: staff.role,
         assignedCoursesCount: assignedCount,
         quizzesCreatedCount: totalQuizzes,
@@ -392,12 +424,10 @@ export class AnalyticsQueryService {
     user: AuthenticatedUser,
   ): Promise<CourseItemAnalytics[]> {
     const staffCourseIds = await this.getStaffAccessibleCourseIds(user);
-    const courseFilter: FilterQuery<CourseDocument> = {};
+    const courseFilter: FilterQuery<CourseDocument> = this.courseScope(query);
     if (staffCourseIds) {
       courseFilter._id = { $in: staffCourseIds };
     }
-    if (query.department) courseFilter.department = query.department;
-    if (query.level) courseFilter.level = query.level;
 
     const courses = await this.courseModel
       .find(courseFilter)
@@ -575,8 +605,7 @@ export class AnalyticsQueryService {
       const finalPassRate =
         finGraded > 0 ? Math.round((finPassed / finGraded) * 1000) / 10 : 0;
 
-      const overallPassRate =
-        finalPassRate > 0 ? finalPassRate : midtermPassRate;
+      const overallPassRate = finGraded > 0 ? finalPassRate : midtermPassRate;
 
       return {
         courseId: String(c._id),
@@ -609,24 +638,32 @@ export class AnalyticsQueryService {
    */
   async getStudentsAnalytics(query: AnalyticsQueryDto): Promise<any[]> {
     const profileFilter: FilterQuery<StudentProfileDocument> = {};
+    if (query.academicYear) profileFilter.academicYear = query.academicYear;
+    if (query.semester) profileFilter.semester = query.semester;
     if (query.department) profileFilter.department = query.department;
     if (query.level) profileFilter.level = query.level;
 
     const profiles = await this.studentProfileModel
       .find(profileFilter)
       .select(
-        'userId studentCode fullName fullNameAr fullNameEn department level enrollmentStatus',
+        'userId studentCode fullName fullNameAr fullNameEn department level enrollmentStatus gpa',
       )
       .sort({ studentCode: 1 })
       .lean();
 
     if (profiles.length === 0) return [];
 
-    const userIds = profiles.map((p) => p.userId).filter(Boolean);
+    const userIds = profiles
+      .map((p) => p.userId)
+      .filter(Boolean)
+      .map(String);
+    const userReferences = userIds.flatMap((id) =>
+      Types.ObjectId.isValid(id) ? [id, new Types.ObjectId(id)] : [id],
+    );
 
     // Fetch Academic Profiles for GPA & Earned Hours
     const academicProfiles = await this.academicProfileModel
-      .find({ studentId: { $in: userIds } })
+      .find({ $expr: { $in: [{ $toString: '$studentId' }, userIds] } })
       .select('studentId gpa completedCreditHours')
       .lean();
     const gpaMap = new Map(
@@ -634,17 +671,22 @@ export class AnalyticsQueryService {
     );
 
     // Get count of registered courses per student
+    const termFilter = {
+      ...(query.academicYear ? { academicYear: query.academicYear } : {}),
+      ...(query.semester ? { semester: query.semester } : {}),
+    };
     const regAgg = await this.registrationModel.aggregate([
       {
         $match: {
-          studentId: { $in: userIds },
+          studentId: { $in: userReferences },
+          ...termFilter,
           status: { $in: ['approved', 'registered', 'confirmed'] },
         },
       },
       { $unwind: '$courses' },
       {
         $group: {
-          _id: '$studentId',
+          _id: { $toString: '$studentId' },
           enrolledCoursesCount: { $sum: 1 },
         },
       },
@@ -653,12 +695,37 @@ export class AnalyticsQueryService {
       regAgg.map((r) => [String(r._id), r.enrolledCoursesCount]),
     );
 
+    // Restrict student quiz metrics to the same term and course scope as the report.
+    const quizFilter: FilterQuery<QuizDocument> = { ...termFilter };
+    if (query.department || query.level) {
+      const courses = await this.courseModel
+        .find(this.courseScope(query))
+        .sort({ code: 1 })
+        .lean();
+      quizFilter.$expr = {
+        $in: [
+          { $toString: '$courseId' },
+          courses.map((course) => String(course._id)),
+        ],
+      };
+    }
+    const scopedQuizzes = await this.quizModel
+      .find(quizFilter)
+      .sort({ createdAt: -1 })
+      .lean();
+    const scopedQuizIds = scopedQuizzes.flatMap((q) => [q._id, String(q._id)]);
+
     // Quiz submissions per student
     const subAgg = await this.submissionModel.aggregate([
-      { $match: { studentId: { $in: userIds } } },
+      {
+        $match: {
+          studentId: { $in: userReferences },
+          quizId: { $in: scopedQuizIds },
+        },
+      },
       {
         $group: {
-          _id: '$studentId',
+          _id: { $toString: '$studentId' },
           completedQuizzes: { $sum: 1 },
           passedQuizzes: { $sum: { $cond: ['$isPassed', 1, 0] } },
           avgScorePercentage: { $avg: '$percentage' },
@@ -669,8 +736,8 @@ export class AnalyticsQueryService {
 
     // Complaints per student
     const compAgg = await this.complaintModel.aggregate([
-      { $match: { studentId: { $in: userIds } } },
-      { $group: { _id: '$studentId', count: { $sum: 1 } } },
+      { $match: { studentId: { $in: userReferences } } },
+      { $group: { _id: { $toString: '$studentId' }, count: { $sum: 1 } } },
     ]);
     const compMap = new Map(compAgg.map((c) => [String(c._id), c.count]));
 
@@ -678,6 +745,8 @@ export class AnalyticsQueryService {
       const uId = String(p.userId);
       const sub = subMap.get(uId);
       const ap = gpaMap.get(uId);
+      const legacyGpa = (p as typeof p & { gpa?: number }).gpa;
+      const gpa = ap?.gpa ?? legacyGpa;
       const enrolledCourses = regMap.get(uId) ?? 0;
       const completed = sub?.completedQuizzes ?? 0;
       const passed = sub?.passedQuizzes ?? 0;
@@ -689,17 +758,17 @@ export class AnalyticsQueryService {
       return {
         studentId: uId,
         studentCode: p.studentCode || '',
-        name: p.fullName || p.fullNameEn || '',
+        name: p.fullNameEn || p.fullName || '',
         nameAr: p.fullNameAr || p.fullName || '',
         department: p.department || '',
         level: p.level || '1',
         enrollmentStatus: p.enrollmentStatus || 'active',
-        gpa: ap?.gpa != null ? Math.round(ap.gpa * 100) / 100 : null,
-        totalEarnedHours: ap?.completedCreditHours ?? 0,
+        gpa: gpa != null ? Math.round(gpa * 100) / 100 : null,
+        totalEarnedHours: ap?.completedCreditHours ?? null,
         enrolledCoursesCount: enrolledCourses,
         completedQuizzes: completed,
         passedQuizzes: passed,
-        avgQuizScorePercentage: avgScore,
+        avgQuizScorePercentage: completed > 0 ? avgScore : null,
         complaintsCount,
       };
     });
@@ -714,10 +783,13 @@ export class AnalyticsQueryService {
   ): Promise<any[]> {
     const quizzes = await this.getQuizzesAnalytics(query, user);
     const quizMap = new Map(quizzes.map((q) => [q.quizId, q]));
-    const quizObjectIds = quizzes.map((q) => new Types.ObjectId(q.quizId));
 
     return this.submissionModel
-      .find({ quizId: { $in: quizObjectIds } })
+      .find({
+        $expr: {
+          $in: [{ $toString: '$quizId' }, quizzes.map((quiz) => quiz.quizId)],
+        },
+      })
       .sort({ submittedAt: -1 })
       .limit(5000)
       .lean()

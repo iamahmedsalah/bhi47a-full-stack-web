@@ -137,6 +137,7 @@
     "retry": "Retry"
   },
   "passkeys": {
+    "originNotAllowed": "Passkeys are not configured for this website domain. Contact the portal administrator; password sign-in remains available.",
     "supportedMethods": "Examples of device verification",
     "editAction": "Edit key",
     "removeAction": "Delete key",
@@ -702,6 +703,11 @@
       "assistant_lecturer": "Assistant Lecturer",
       "accountant": "Accountant (Finance)"
     },
+    "doctorPrefixes": {
+      "dr": "Dr. (Doctor / Lecturer)",
+      "prof": "Prof. Dr. (Professor)",
+      "assoc_prof": "Assoc. Prof. (Associate Professor)"
+    },
     "filters": {
       "all": "All statuses",
       "allTypes": "All staff roles"
@@ -715,6 +721,8 @@
       "email": "Email",
       "staffType": "Staff Role",
       "selectStaffType": "Select staff role",
+      "titlePrefix": "Academic Title (Prefix)",
+      "selectTitlePrefix": "Select academic title",
       "username": "Username (optional)",
       "phone": "Phone (optional)",
       "temporaryPassword": "Temporary password",
@@ -876,7 +884,8 @@
         "courseMaterials": "Course Materials & Content",
         "staffManagement": "Faculty & Staff Management",
         "admissions": "Admissions and student codes",
-        "studentCodes": "Student code audit"
+        "studentCodes": "Student code audit",
+        "analytics": "Analytics & Statistical Reports"
       },
       "labels": {
         "students_read": "View students",
@@ -951,7 +960,9 @@
         "admissions_access_manage": "Create and revoke admission PIN/QR invitations",
         "admissions_export": "Export applicant spreadsheets",
         "admissions_import": "Preview and apply applicant spreadsheets",
-        "student_codes_export": "Export student-code audit findings"
+        "student_codes_export": "Export student-code audit findings",
+        "analytics_read": "View analytics and statistics",
+        "analytics_export": "Export comprehensive analytics (Excel)"
       }
     }
   },
@@ -1114,6 +1125,10 @@
     "allocationPrefix": "New student codes use prefix {prefix}, from the ending academic year. The intake reference is not the prefix."
   },
   "studentCodes": {
+    "linkedStudent": "Linked student",
+    "department": "Department",
+    "level": "Level",
+    "viewAudit": "View code audit",
     "title": "Student code audit",
     "description": "Review code ownership and configure intake prefixes before admission approval.",
     "scan": "Scan codes",

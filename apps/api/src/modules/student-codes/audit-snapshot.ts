@@ -22,6 +22,11 @@ export interface CodeProfile {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
   studentCode?: string;
+  fullName?: string;
+  fullNameAr?: string;
+  fullNameEn?: string;
+  department?: string;
+  level?: string;
 }
 export interface SnapshotSources {
   users: CodeUser[];
@@ -123,6 +128,11 @@ export function analyzeCodeSnapshot(
         status: 'ASSIGNED',
         reason: 'CURRENT_OWNER',
         currentStudentId,
+        studentProfileId: String(profiles[0]._id),
+        studentName: profiles[0].fullNameEn || profiles[0].fullName,
+        studentNameAr: profiles[0].fullNameAr || profiles[0].fullName,
+        department: profiles[0].department,
+        level: profiles[0].level,
       };
     }
     if (!entry) return { ...row, status: 'MISSING', reason: 'UNVERIFIED_GAP' };

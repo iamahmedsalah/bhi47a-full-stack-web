@@ -7,6 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { AdmissionReceipt, AdmissionStatus } from "@student-portal/shared";
 import { Button } from "@/components/ui/button";
+import { LangToggle } from "@/components/ui/LangToggle";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -41,7 +42,8 @@ interface TurnstileAPI {
       theme?: "dark" | "light" | "auto";
       callback: (token: string) => void;
       "expired-callback": () => void;
-      "error-callback": () => void;
+      "error-callback": (code: string) => boolean;
+      retry: "never";
       language: string;
     },
   ) => string;
@@ -60,11 +62,11 @@ function AdmissionCaptcha({
 }) {
   const { t, locale } = useAdmissionUI(),
     element = useRef<HTMLDivElement>(null),
-    widgetIdRef = useRef<string | null>(null),
     [loaded, setLoaded] = useState(false),
     [widgetError, setWidgetError] = useState(false),
+    [configurationError, setConfigurationError] = useState(false),
     [retryCounter, setRetryCounter] = useState(0);
-  const sitekey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const sitekey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
 
   useEffect(() => {
     if (!sitekey && process.env.NODE_ENV !== "production") {
@@ -76,44 +78,45 @@ function AdmissionCaptcha({
     const api = turnstile();
     if (!loaded || !api || !element.current || !sitekey) return;
 
-    if (widgetIdRef.current) {
-      try {
-        api.remove(widgetIdRef.current);
-      } catch {
-        // ignore removal error
-      }
-      widgetIdRef.current = null;
-    }
-
+    let active = true;
+    let widgetId: string | undefined;
     setWidgetError(false);
+    setConfigurationError(false);
+    onToken("");
     try {
-      widgetIdRef.current = api.render(element.current, {
+      widgetId = api.render(element.current, {
         sitekey,
         theme: "dark",
         action: "admission",
         language: locale,
+        retry: "never",
         callback: (token) => {
+          if (!active) return;
           setWidgetError(false);
           onToken(token);
         },
         "expired-callback": () => {
+          if (!active) return;
           onToken("");
           setWidgetError(true);
         },
-        "error-callback": () => {
+        "error-callback": (code) => {
+          if (!active) return true;
           setWidgetError(true);
-          if (widgetIdRef.current && api) {
-            try {
-              api.remove(widgetIdRef.current);
-            } catch {
-              // ignore
-            }
-            widgetIdRef.current = null;
-          }
-          if (element.current) {
-            element.current.innerHTML = "";
-          }
+          setConfigurationError(
+            [
+              "400020",
+              "400021",
+              "400070",
+              "110100",
+              "110110",
+              "110200",
+            ].includes(code),
+          );
+          // Keep the widget alive until effect cleanup. Removing it during this
+          // callback races Cloudflare's own error handling/reset lifecycle.
           onToken("");
+          return true;
         },
       });
     } catch {
@@ -122,13 +125,13 @@ function AdmissionCaptcha({
     }
 
     return () => {
-      if (widgetIdRef.current && api) {
+      active = false;
+      if (widgetId) {
         try {
-          api.remove(widgetIdRef.current);
+          api.remove(widgetId);
         } catch {
           // ignore cleanup error
         }
-        widgetIdRef.current = null;
       }
     };
   }, [loaded, sitekey, locale, onToken, attempt, retryCounter]);
@@ -154,7 +157,11 @@ function AdmissionCaptcha({
           className="flex items-center gap-2 rounded-xl bg-danger/10 border border-danger/20 px-3.5 py-2 text-xs text-danger font-medium"
         >
           <ShieldCheck className="h-4 w-4 shrink-0" />
-          <span>{t("captcha.failed")}</span>
+          <span>
+            {configurationError
+              ? t("verificationUnavailable")
+              : t("captcha.failed")}
+          </span>
           <Button
             type="button"
             variant="outline"
@@ -282,7 +289,10 @@ export function PublicAdmissionPage() {
     }
   }, []);
   const schema = z.object({
-    pin: z.string().trim().regex(/^\d{8,12}$/, t("pinHint")),
+    pin: z
+      .string()
+      .trim()
+      .regex(/^\d{8,12}$/, t("pinHint")),
   });
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -319,6 +329,9 @@ export function PublicAdmissionPage() {
       className="mx-auto min-h-[75vh] max-w-4xl space-y-8 px-4 py-8 md:py-12"
       dir={dir}
     >
+      <div className="flex justify-end">
+        <LangToggle />
+      </div>
       <div className="flex flex-col items-center justify-center text-center space-y-3 pb-2">
         <img
           src="/logo.webp"

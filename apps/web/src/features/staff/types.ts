@@ -1,4 +1,9 @@
-import type { CourseCurriculum, Permission, StaffType } from '@student-portal/shared';
+import type {
+  CourseCurriculum,
+  Permission,
+  StaffType,
+  DoctorPrefix,
+} from "@student-portal/shared";
 
 export interface StaffMember {
   _id: string;
@@ -8,8 +13,9 @@ export interface StaffMember {
   username?: string;
   email?: string;
   phone?: string;
-  role: 'admin' | 'staff';
+  role: "admin" | "staff";
   staffType?: StaffType;
+  titlePrefix?: DoctorPrefix | string;
   permissions: Permission[];
   isActive: boolean;
   deactivatedAt?: string;
@@ -31,22 +37,25 @@ export interface StaffListParams {
   page: number;
   limit: number;
   search?: string;
-  status: 'all' | 'active' | 'inactive';
-  role?: 'all' | 'staff' | 'admin';
-  staffType?: 'all' | StaffType;
+  status: "all" | "active" | "inactive";
+  role?: "all" | "staff" | "admin";
+  staffType?: "all" | StaffType;
 }
 
 export interface StaffProfileInput {
+  courseIds?: string[];
+  permissions?: Permission[];
   name: string;
   nameAr?: string;
   email: string;
   username?: string;
   phone?: string;
   staffType?: StaffType;
+  titlePrefix?: DoctorPrefix | string;
 }
 
 export interface CreateStaffInput extends StaffProfileInput {
-  role?: 'admin' | 'staff';
+  role?: "admin" | "staff";
   password: string;
   permissions?: Permission[];
 }
@@ -54,9 +63,21 @@ export interface CreateStaffInput extends StaffProfileInput {
 export interface StaffAssignedCourse {
   doctorId?: string;
   doctorIds?: string[];
-  doctors?: Array<{ _id: string; name: string; nameAr?: string; staffType?: string }>;
+  doctors?: Array<{
+    _id: string;
+    name: string;
+    nameAr?: string;
+    staffType?: string;
+    titlePrefix?: string;
+  }>;
   teachingAssistantIds?: string[];
-  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string; staffType?: string }>;
+  teachingAssistants?: Array<{
+    _id: string;
+    name: string;
+    nameAr?: string;
+    staffType?: string;
+    titlePrefix?: string;
+  }>;
   curricula?: CourseCurriculum[];
   _id: string;
   name: string;
@@ -79,7 +100,7 @@ export interface StaffScheduleSlot {
   staffId: string;
   staffName?: string;
   staffType?: string;
-  type: 'lecture' | 'section' | 'lab';
+  type: "lecture" | "section" | "lab";
   dayOfWeek: number;
   startTime: string;
   endTime: string;
@@ -88,4 +109,3 @@ export interface StaffScheduleSlot {
   level?: string;
   semester?: string;
 }
-

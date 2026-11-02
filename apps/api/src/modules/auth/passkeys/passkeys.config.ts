@@ -10,6 +10,22 @@ export function readPasskeyConfig(config: ConfigService) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  // WEB_BASE_URL is an explicitly configured trusted origin. Include it when
+  // it is within this RP, so a canonical DNS change does not leave reauth on
+  // an outdated origin list. Never infer trust from request headers.
+  const canonical = config
+    .get<string>('WEB_BASE_URL', '')
+    .trim()
+    .replace(/\/+$/, '');
+  if (canonical) {
+    const url = new URL(canonical);
+    if (
+      url.origin === canonical &&
+      (url.hostname === rpID || url.hostname.endsWith(`.${rpID}`)) &&
+      !origins.includes(canonical)
+    )
+      origins.push(canonical);
+  }
   if (
     !rpID ||
     !origins.length ||
