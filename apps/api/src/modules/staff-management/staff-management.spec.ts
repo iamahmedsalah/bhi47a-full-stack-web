@@ -1,3 +1,4 @@
+import { AuthSessionService } from '../auth/services/auth-session.service';
 import { Types } from 'mongoose';
 import { QueryStaffDto } from './dto/query-staff.dto';
 import { validate } from 'class-validator';
@@ -319,6 +320,30 @@ describe('Staff management security contracts', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it.each(['prof', 'assoc_prof', 'dr'] as const)(
+    'includes the saved %s title in the current account response',
+    async (titlePrefix) => {
+      const session = new AuthSessionService(
+        {
+          findByIdForAuth: jest
+            .fn()
+            .mockResolvedValue({
+              _id: new Types.ObjectId(),
+              role: 'staff',
+              staffType: 'doctor',
+              name: 'Doctor Name',
+              titlePrefix,
+            }),
+        } as never,
+        {} as never,
+        {} as never,
+      );
+      expect(
+        (await session.getMe('507f1f77bcf86cd799439011')).titlePrefix,
+      ).toBe(titlePrefix);
+    },
+  );
 
   describe('doctor title persistence across public staff responses', () => {
     function setup() {

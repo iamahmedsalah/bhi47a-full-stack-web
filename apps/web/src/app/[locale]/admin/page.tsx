@@ -831,8 +831,8 @@ export default function AdminDashboard() {
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   {isAr
-                    ? `مرحباً ${formatStaffDisplayName(user, locale)} · الدور الأكاديمي: ${getStaffRoleLabel(user?.staffType, user?.role, locale)}`
-                    : `Welcome ${formatStaffDisplayName(user, locale)} · Role: ${getStaffRoleLabel(user?.staffType, user?.role, locale)}`}
+                    ? `مرحباً ${formatStaffDisplayName(user, locale)} · الدور الأكاديمي: ${getStaffRoleLabel(user?.staffType, user?.role, locale, user?.titlePrefix)}`
+                    : `Welcome ${formatStaffDisplayName(user, locale)} · Role: ${getStaffRoleLabel(user?.staffType, user?.role, locale, user?.titlePrefix)}`}
                 </p>
               </div>
             </div>

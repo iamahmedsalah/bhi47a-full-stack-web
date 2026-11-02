@@ -18,6 +18,7 @@ interface User {
   nameEn?: string;
   role: 'admin' | 'staff' | 'student';
   staffType?: string;
+  titlePrefix?: string;
   email?: string;
   studentCode?: string;
   permissions?: string[];

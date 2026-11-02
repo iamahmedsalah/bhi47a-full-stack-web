@@ -266,7 +266,7 @@ export default function AdminSidebar() {
                       : "Admin"}
                 </h2>
                 <p className="text-[10px] text-muted-foreground">
-                  {getStaffRoleLabel(user?.staffType, user?.role, locale)} ·{" "}
+                  {getStaffRoleLabel(user?.staffType, user?.role, locale, user?.titlePrefix)} ·{" "}
                   {locale === "ar" ? "متصل الآن" : "Online"}
                 </p>
               </div>

@@ -224,6 +224,7 @@ export class AuthLoginService {
         nameAr: (user as { nameAr?: string }).nameAr,
         role: user.role,
         staffType: user.staffType,
+        titlePrefix: user.titlePrefix,
         email: user.email,
         permissions: user.permissions,
         mustChangePassword: user.mustChangePassword,

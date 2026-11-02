@@ -145,10 +145,12 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const address = `http://127.0.0.1:${server.address().port}`;
 let browser;
+let page;
 try {
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, timezoneId: 'UTC' });
+  page = await browser.newPage({ viewport: { width: 1280, height: 900 }, timezoneId: 'UTC' });
   const errors = [];page.on('pageerror', (error) => errors.push(error.message));
+  if (!process.argv.includes('--prefix-only')) {
   for (const locale of ['en', 'ar']) {
     for (const staffType of ['doctor', 'teaching_assistant', 'assistant_lecturer']) {
       await page.goto(`${address}/${locale}/admin/staff?staffType=${staffType}`);
@@ -216,6 +218,7 @@ try {
     for(const field of ['nameAr','username','phone'])assert.equal(staffProfileMutations.at(-1)[field],'');
   }
   console.log('Staff profile edit passed: Arabic/English field validation, duplicate email, retained input on server failure, Arabic names and successful updates without role changes.');
+  }
   for (const locale of ['en', 'ar']) {
     const t = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).staff;
     resetStaffProfile();staffProfile.staffType='doctor';staffProfile.titlePrefix='dr';staffProfile.nameAr='';
@@ -383,6 +386,9 @@ try {
   console.log('Quiz release browser acceptance passed: Arabic/English controls, automatic marks/manual review defaults, staff assignment selectors/error recovery, closing validation, closed-quiz editing, Cairo inputs in foreign timezones, atomic sheet replacement, deadline refresh and open result updates.');
   }
   assert.deepEqual(errors, []);
+} catch (error) {
+  if(page){await fs.writeFile(path.join(output,'staff-prefix-failure.html'),await page.content());await page.screenshot({path:path.join(output,'staff-prefix-failure.png'),fullPage:true});}
+  throw error;
 } finally {
   await browser?.close();await new Promise((resolve) => server.close(resolve));
 }

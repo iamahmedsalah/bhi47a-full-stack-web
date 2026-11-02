@@ -68,6 +68,7 @@ export class AuthSessionService {
       nameAr: (user as { nameAr?: string }).nameAr,
       role: user.role,
       staffType: user.staffType,
+      titlePrefix: user.titlePrefix,
       email: user.email,
       phone: user.phone,
       studentCode: user.studentCode,

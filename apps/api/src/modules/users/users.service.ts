@@ -51,7 +51,7 @@ export class UsersService {
       this.userModel
         .findById(id)
         .select(
-          '_id role staffType name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt',
+          '_id role staffType titlePrefix name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt',
         )
         .lean(),
     );

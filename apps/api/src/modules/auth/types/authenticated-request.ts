@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
   email?: string;
   studentCode?: string;
   staffType?: string;
+  titlePrefix?: string;
   username?: string;
   permissions: string[];
   mustChangePassword: boolean;
