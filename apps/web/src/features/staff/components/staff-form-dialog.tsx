@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getStaffCourseChoices, getStaffCourses } from "../api";
@@ -109,6 +109,7 @@ export function StaffFormDialog({
     },
   });
 
+  const explicitTitle = useRef(false);
   const selectedRole = form.watch("role");
   const selectedType = form.watch("staffType");
   const selectedCourses = form.watch("courseIds") ?? [];
@@ -139,6 +140,7 @@ export function StaffFormDialog({
       inferDoctorPrefix(staff?.name) ||
       (initialStaffType === "doctor" ? "dr" : undefined);
 
+    explicitTitle.current = Boolean(staff?.titlePrefix);
     form.reset({
       name: staff?.name ?? "",
       nameAr: staff?.nameAr ?? "",
@@ -227,7 +229,11 @@ export function StaffFormDialog({
   const handleNameBlur = (fieldName: "name" | "nameAr", rawValue: string) => {
     if (!rawValue) return;
     const detectedPrefix = inferDoctorPrefix(rawValue);
-    if (detectedPrefix && form.getValues("staffType") === "doctor") {
+    if (
+      detectedPrefix &&
+      !explicitTitle.current &&
+      form.getValues("staffType") === "doctor"
+    ) {
       form.setValue("titlePrefix", detectedPrefix, {
         shouldValidate: true,
         shouldDirty: true,
@@ -377,7 +383,10 @@ export function StaffFormDialog({
                         value={field.value}
                         onValueChange={(value) => {
                           field.onChange(value);
-                          if (value === "doctor" && !form.getValues("titlePrefix")) {
+                          if (
+                            value === "doctor" &&
+                            !form.getValues("titlePrefix")
+                          ) {
                             form.setValue("titlePrefix", "dr");
                           }
                           if (!staff)
@@ -422,7 +431,10 @@ export function StaffFormDialog({
                       </FormLabel>
                       <Select
                         value={field.value || "dr"}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          explicitTitle.current = true;
+                          field.onChange(value);
+                        }}
                       >
                         <FormControl>
                           <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
@@ -605,7 +617,9 @@ export function StaffFormDialog({
                     ) : (
                       <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                         {courseChoices.data?.map((course) => {
-                          const isSelected = selectedCourses.includes(course._id);
+                          const isSelected = selectedCourses.includes(
+                            course._id,
+                          );
                           return (
                             <label
                               key={course._id}

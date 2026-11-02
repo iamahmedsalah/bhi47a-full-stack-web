@@ -31,7 +31,7 @@ export interface StaffDisplayLike {
 }
 
 const LEADING_STAFF_TITLE_REGEX =
-  /^(?:أ\.\s*د\.?\s*|أ\.\s*م\.?\s*د\.?\s*|أ\.\s*م\.?\s*|م\.\s*م\.?\s*|م\s+م\.?\s+|د\.\s*|د\s+|م\.\s*|م\s+|أ\.\s*|أ\s+|(?:أستاذ\s+دكتور|أستاذ\s+مساعد|أستاذ|الدكتور|دكتور|المعيد|معيد|مدرس\s+مساعد|مهندس|باشمهندس)\s+|(?:assoc\.?\s*prof\.?\s*dr\.|assoc\.?\s*prof\.|asst\.?\s*lect\.|prof\.?\s*dr\.|prof\.|dr\.|eng\.|mr\.|mrs\.|ms\.|ta\.|a\.?\s*l\.)\s*|(?:prof|dr|eng|mr|mrs|ms|ta)\s+)/i;
+  /^(?:[اأإآ]\.\s*د\.?\s*|[اأإآ]\.\s*م\.?\s*د\.?\s*|[اأإآ]\.\s*م\.?\s*|م\.\s*م\.?\s*|م\s+م\.?\s+|د\.\s*|د\s+|م\.\s*|م\s+|أ\.\s*|أ\s+|(?:[اأإآ]ست[اأإآ]ذ\s+دكتور|[اأإآ]ست[اأإآ]ذ\s+مساعد|[اأإآ]ست[اأإآ]ذ\s+مشارك|[اأإآ]ست[اأإآ]ذ|الدكتور|دكتور|المعيد|معيد|مدرس\s+مساعد|مهندس|باشمهندس)\s+|(?:assoc\.?\s*prof\.?\s*dr\.|assoc\.?\s*prof\.|asst\.?\s*lect\.|prof\.?\s*dr\.|prof\.|dr\.|eng\.|mr\.|mrs\.|ms\.|ta\.|a\.?\s*l\.)\s*|(?:prof|dr|eng|mr|mrs|ms|ta)\s+)/i;
 
 /**
  * Strips any existing leading academic/honorific prefix from a raw staff name
@@ -58,12 +58,16 @@ export function inferDoctorPrefix(
   if (!rawName) return undefined;
   const trimmed = rawName.trim();
   if (
-    /^(?:أ\.\s*د|أستاذ\s+دكتور|prof(?:\.|\s|$)|full\s+prof)/i.test(trimmed)
+    /^(?:[اأإآ]\.\s*د|[اأإآ]ست[اأإآ]ذ\s+دكتور|prof(?:\.|\s|$)|full\s+prof)/i.test(
+      trimmed,
+    )
   ) {
     return 'prof';
   }
   if (
-    /^(?:أ\.\s*م|أستاذ\s+مساعد|أستاذ\s+مشارك|assoc(?:\.|\s|$))/i.test(trimmed)
+    /^(?:[اأإآ]\.\s*م|[اأإآ]ست[اأإآ]ذ\s+مساعد|[اأإآ]ست[اأإآ]ذ\s+مشارك|assoc(?:\.|\s|$))/i.test(
+      trimmed,
+    )
   ) {
     return 'assoc_prof';
   }

@@ -230,7 +230,7 @@ export default function StudentCodesPage({
         header: t("fields.studentCode"),
         className: "min-w-[140px] text-start",
         render: (row) => (
-          <TableCell className="min-w-[140px] py-2.5 px-3">
+          <TableCell className="min-w-35 py-2.5 px-3">
             <div className="inline-flex items-center gap-1.5 rounded-squircle border border-border/80 bg-card/80 px-2.5 py-1 text-xs font-mono font-bold text-foreground shadow-2xs">
               <Hash className="h-3.5 w-3.5 text-primary shrink-0" />
               {canViewStudent && row.currentStudentId ? (
@@ -270,7 +270,7 @@ export default function StudentCodesPage({
               : row.studentName || row.studentNameAr;
 
           return (
-            <TableCell className="min-w-[200px] py-2.5 px-3">
+            <TableCell className="min-w-50 py-2.5 px-3">
               <div className="flex items-center gap-2.5">
                 <div
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-squircle border transition-colors ${
@@ -295,12 +295,12 @@ export default function StudentCodesPage({
                             row.studentProfileId || row.currentStudentId!,
                           )
                         }
-                        className="font-semibold text-foreground hover:text-primary transition-colors text-start block truncate max-w-[220px] cursor-pointer"
+                        className="font-semibold text-foreground hover:text-primary transition-colors text-start block truncate max-w-55 cursor-pointer"
                       >
                         {studentName}
                       </button>
                     ) : (
-                      <div className="font-semibold text-foreground truncate max-w-[220px]">
+                      <div className="font-semibold text-foreground truncate max-w-55">
                         {studentName}
                       </div>
                     )
@@ -325,7 +325,7 @@ export default function StudentCodesPage({
         header: t("department"),
         className: "min-w-[130px] text-start",
         render: (row) => (
-          <TableCell className="min-w-[130px] py-2.5 px-3 text-xs">
+          <TableCell className="min-w-32.5 py-2.5 px-3 text-xs">
             <span className="font-medium text-foreground">
               {row.department || "—"}
             </span>
@@ -374,7 +374,7 @@ export default function StudentCodesPage({
           }
 
           return (
-            <TableCell className="min-w-[160px] py-2.5 px-3 text-center">
+            <TableCell className="min-w-40 py-2.5 px-3 text-center">
               <span className={`inline-flex items-center gap-1.5 rounded-squircle border px-2.5 py-1 text-xs font-semibold select-none ${badgeColor}`}>
                 {badgeIcon}
                 <span>{t(`statuses.${row.status}`)}</span>
@@ -388,7 +388,7 @@ export default function StudentCodesPage({
         header: t("explanation"),
         className: "min-w-[200px] text-start",
         render: (row) => (
-          <TableCell className="min-w-[200px] py-2.5 px-3 text-xs text-muted-foreground leading-relaxed">
+          <TableCell className="min-w-50 py-2.5 px-3 text-xs text-muted-foreground leading-relaxed">
             {t(`reasons.${row.reason}`)}
           </TableCell>
         ),
@@ -421,7 +421,7 @@ export default function StudentCodesPage({
           }
 
           return (
-            <TableCell className="min-w-[220px] py-2.5 px-3">
+            <TableCell className="min-w-55 py-2.5 px-3">
               <div className={`flex items-start gap-1.5 rounded-lg border p-2 text-xs leading-relaxed ${colorClass}`}>
                 <span className="mt-0.5">{icon}</span>
                 <span>{t(textKey)}</span>
@@ -451,7 +451,7 @@ export default function StudentCodesPage({
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
                   {...{ dir }}
-                  className="z-50 min-w-[210px] rounded-xl border bg-popover p-1.5 text-start shadow-xl space-y-0.5"
+                  className="z-50 min-w-52.5 rounded-xl border bg-popover p-1.5 text-start shadow-xl space-y-0.5"
                 >
                   {/* View Audit Details */}
                   <DropdownMenu.Item

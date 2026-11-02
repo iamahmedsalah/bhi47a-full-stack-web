@@ -85,6 +85,11 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
     if (pathname.startsWith('/admin/') || pathname.startsWith('/students/') || pathname.startsWith('/staff/') || pathname === '/courses') {
       res.setHeader('Content-Type', 'application/json');
+      if (pathname === '/admin/staff' && req.method === 'POST') {
+        const chunks = [];for await (const chunk of req) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString());staffProfileMutations.push(body);
+        staffProfile={...staffProfile,...body,_id:fixtureId,isActive:true};res.end(JSON.stringify(staffProfile));return;
+      }
       if (pathname === '/admin/staff') { res.end(JSON.stringify({ items: [staffProfile], total: 1, totalPages: 1, page: 1, limit: 20 })); return; }
       if (pathname === `/admin/staff/${fixtureId}` && req.method === 'PATCH') {
         const chunks = [];for await (const chunk of req) chunks.push(chunk);
@@ -96,7 +101,7 @@ const server = http.createServer(async (req, res) => {
           res.statusCode=staffSaveFailure==='email'?409:503;
           res.end(JSON.stringify(staffSaveFailure==='email'?{statusCode:409,code:'STAFF_EMAIL_TAKEN',message:'Staff email already exists',errors:{email:'emailTaken'}}:{statusCode:503,message:'Internal diagnostic details must not appear'}));return;
         }
-        staffProfile={...staffProfile,...body};res.end(JSON.stringify(staffProfile));return;
+        staffProfile={...staffProfile,...body};if(staffProfile.staffType!=='doctor')delete staffProfile.titlePrefix;res.end(JSON.stringify(staffProfile));return;
       }
       if (pathname === '/admin/courses' && url.searchParams.has('staffId')) {
         staffCourseRequests.push(Object.fromEntries(url.searchParams));
@@ -211,6 +216,52 @@ try {
     for(const field of ['nameAr','username','phone'])assert.equal(staffProfileMutations.at(-1)[field],'');
   }
   console.log('Staff profile edit passed: Arabic/English field validation, duplicate email, retained input on server failure, Arabic names and successful updates without role changes.');
+  for (const locale of ['en', 'ar']) {
+    const t = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).staff;
+    resetStaffProfile();staffProfile.staffType='doctor';staffProfile.titlePrefix='dr';staffProfile.nameAr='';
+    await page.goto(`${address}/${locale}/admin/staff?manage=true`);
+    for (const prefix of ['prof','assoc_prof','dr']) {
+      await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
+      await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
+      const dialog=page.getByRole('dialog');
+      const title=dialog.getByRole('combobox',{name:t.fields.titlePrefix,exact:true});
+      await title.click();await page.getByRole('option',{name:t.doctorPrefixes[prefix],exact:true}).click();
+      await dialog.getByLabel(t.fields.name,{exact:true}).fill('Dr. Updated teaching staff');
+      await dialog.getByLabel(t.fields.email,{exact:true}).focus();
+      assert.equal((await title.innerText()).trim(),t.doctorPrefixes[prefix]);
+      const save=dialog.getByRole('button',{name:t.save,exact:true});
+      await page.waitForFunction(()=>![...document.querySelectorAll('button')].find(button=>button.type==='submit')?.disabled);
+      await save.click();await dialog.waitFor({state:'hidden'});
+      assert.equal(staffProfileMutations.at(-1).titlePrefix,prefix);
+      const prefixLabel=t.doctorPrefixes[prefix].split(' (')[0];
+      await page.getByText(`${prefixLabel} Updated teaching staff`,{exact:true}).first().waitFor();
+      await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
+      await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
+      assert.equal((await page.getByRole('dialog').getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).innerText()).trim(),t.doctorPrefixes[prefix]);
+      await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
+    }
+    await page.getByRole('button',{name:t.table.actions,exact:true}).first().click();
+    await page.getByRole('menuitem',{name:t.actions.edit,exact:true}).click();
+    const edit=page.getByRole('dialog');
+    await edit.getByRole('combobox',{name:t.fields.staffType,exact:true}).click();
+    await page.getByRole('option',{name:t.types.teaching_assistant,exact:true}).click();
+    assert.equal(await edit.getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).count(),0);
+    await edit.getByRole('button',{name:t.save,exact:true}).click();await edit.waitFor({state:'hidden'});
+    assert.equal(staffProfile.staffType,'teaching_assistant');assert.equal(staffProfile.titlePrefix,undefined);
+    for(const prefix of ['prof','assoc_prof','dr']){
+      await page.getByRole('button',{name:t.create,exact:true}).click();
+      const create=page.getByRole('dialog');
+      await create.getByLabel(t.fields.name,{exact:true}).fill('New teaching staff');
+      await create.getByLabel(t.fields.email,{exact:true}).fill('new-teaching@example.test');
+      await create.getByLabel(t.fields.temporaryPassword,{exact:true}).fill('SyntheticPassword123!');
+      await create.getByRole('combobox',{name:t.fields.titlePrefix,exact:true}).click();
+      await page.getByRole('option',{name:t.doctorPrefixes[prefix],exact:true}).click();
+      await create.getByRole('button',{name:t.create,exact:true}).click();await create.waitFor({state:'hidden'});
+      assert.equal(staffProfileMutations.at(-1).titlePrefix,prefix);
+      await page.getByText(`${t.doctorPrefixes[prefix].split(' (')[0]} New teaching staff`,{exact:true}).first().waitFor();
+    }
+  }
+  console.log('Doctor prefixes passed in Arabic and English: create, update, reopen, explicit selection overriding name inference, and non-doctor role changes.');
   if (!process.argv.includes('--staff-only')) {
   for (const locale of ['en', 'ar']) {
     reset();

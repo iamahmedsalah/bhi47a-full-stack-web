@@ -11,6 +11,7 @@ const staff = {
   nameAr: 'أستاذ',
   role: 'staff',
   staffType: 'doctor',
+  titlePrefix: 'prof',
 };
 function setup(rows: Record<string, unknown>[]) {
   const courses = {
@@ -42,6 +43,9 @@ describe('staff course assignments', () => {
         $set: expect.objectContaining({
           doctorIds: [colleagueId, staffId],
           doctorName: 'Colleague / Doctor',
+          doctors: expect.arrayContaining([
+            expect.objectContaining({ _id: staffId, titlePrefix: 'prof' }),
+          ]),
           teachingAssistantIds: [colleagueId],
         }),
       }),

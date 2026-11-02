@@ -118,6 +118,7 @@ describe('Student-code registry on the isolated replica set', () => {
       const created = await staffService.create(
         {
           name: 'New teaching member',
+          titlePrefix: 'prof',
           email,
           password,
           role: 'staff',
@@ -130,6 +131,25 @@ describe('Student-code registry on the isolated replica set', () => {
       );
       ownedIds.push(new Types.ObjectId(created._id));
       expect(created.permissions).toEqual([]);
+      expect(created.titlePrefix).toBe('prof');
+      for (const titlePrefix of ['assoc_prof', 'dr', 'prof'] as const) {
+        const updated = await staffService.update(
+          created._id,
+          { staffType: 'doctor', titlePrefix, courseIds: [String(course._id)] },
+          String(actor),
+          'admin',
+        );
+        expect(updated.titlePrefix).toBe(titlePrefix);
+        expect((await staffService.getById(created._id)).titlePrefix).toBe(
+          titlePrefix,
+        );
+        const courseSnapshot = await courses.findById(course._id).lean();
+        expect(
+          courseSnapshot!.doctors.find(
+            (member) => String(member._id) === created._id,
+          )!.titlePrefix,
+        ).toBe(titlePrefix);
+      }
       let assigned = await courses.findById(course._id).lean();
       expect(assigned!.doctorIds.map(String)).toEqual([
         String(colleagueId),
@@ -148,6 +168,12 @@ describe('Student-code registry on the isolated replica set', () => {
       assigned = await courses.findById(course._id).lean();
       expect(assigned!.doctorIds.map(String)).toEqual([String(colleagueId)]);
       expect(assigned!.teachingAssistantIds.map(String)).toEqual([created._id]);
+      expect(
+        (await staffService.getById(created._id)).titlePrefix,
+      ).toBeUndefined();
+      expect(
+        (await users.findById(created._id).lean())!.titlePrefix,
+      ).toBeUndefined();
       await expect(
         staffService.update(
           created._id,

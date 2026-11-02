@@ -1,3 +1,5 @@
+import { Types } from 'mongoose';
+import { QueryStaffDto } from './dto/query-staff.dto';
 import { validate } from 'class-validator';
 import { ValidationPipe } from '@nestjs/common';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -5,6 +7,7 @@ import {
   PERMISSIONS,
   getStaffPrefix,
   inferDoctorPrefix,
+  stripStaffTitlePrefix,
   formatStaffDisplayName,
   getStaffRoleLabel,
 } from '@student-portal/shared';
@@ -315,6 +318,142 @@ describe('Staff management security contracts', () => {
       _id: mockStaff._id,
     });
     expect(result.success).toBe(true);
+  });
+
+  describe('doctor title persistence across public staff responses', () => {
+    function setup() {
+      const stored: Record<string, unknown> = {
+        _id: new Types.ObjectId(),
+        role: 'staff',
+        staffType: 'doctor',
+        name: 'Doctor Name',
+        isActive: true,
+      };
+      stored.get = (key: string) => stored[key];
+      stored.set = (values: object) => Object.assign(stored, values);
+      stored.save = jest.fn().mockResolvedValue(stored);
+      const query = (value: unknown) => {
+        const result = Promise.resolve(value);
+        return Object.assign(result, {
+          select: () => result,
+          sort: () => result,
+          skip: () => result,
+          limit: () => result,
+          lean: () => Promise.resolve(value),
+        });
+      };
+      const users = {
+        findOne: jest.fn((filter: Record<string, unknown>) =>
+          query(filter._id && !filter.$or ? stored : null),
+        ),
+        find: jest.fn(() => query([stored])),
+        countDocuments: jest.fn().mockResolvedValue(1),
+        create: jest.fn((payload: Record<string, unknown>) => {
+          Object.assign(stored, payload);
+          return Promise.resolve(stored);
+        }),
+      };
+      const service = new StaffManagementService(
+        users as never,
+        { create: jest.fn().mockResolvedValue({}) } as never,
+        { hash: jest.fn().mockResolvedValue('synthetic-hash') } as never,
+      );
+      return { stored, service };
+    }
+
+    it.each(['prof', 'assoc_prof', 'dr'] as const)(
+      'returns %s after creation, listing, updating and reloading',
+      async (titlePrefix) => {
+        const { stored, service } = setup();
+        const actor = '507f1f77bcf86cd799439012';
+        const created = await service.create(
+          {
+            name: 'Doctor Name',
+            email: 'doctor@example.test',
+            password: 'SyntheticPassword123!',
+            staffType: 'doctor',
+            titlePrefix,
+          },
+          actor,
+          'admin',
+        );
+        expect(created.titlePrefix).toBe(titlePrefix);
+        expect(stored.titlePrefix).toBe(titlePrefix);
+        const listed = await service.list(
+          Object.assign(new QueryStaffDto(), {
+            page: 1,
+            limit: 20,
+            status: 'all',
+          }),
+          'admin',
+        );
+        expect(listed.items[0].titlePrefix).toBe(titlePrefix);
+        const changed = titlePrefix === 'dr' ? 'prof' : 'dr';
+        expect(
+          (
+            await service.update(
+              created._id,
+              { titlePrefix: changed },
+              actor,
+              'admin',
+            )
+          ).titlePrefix,
+        ).toBe(changed);
+        expect((await service.getById(created._id)).titlePrefix).toBe(changed);
+        // Editing a legacy prefixed name cannot override an explicitly saved choice.
+        expect(
+          (
+            await service.update(
+              created._id,
+              { name: 'Prof. Doctor Name' },
+              actor,
+              'admin',
+            )
+          ).titlePrefix,
+        ).toBe(changed);
+        const assistant = await service.update(
+          created._id,
+          { staffType: 'teaching_assistant' },
+          actor,
+          'admin',
+        );
+        expect(assistant.staffType).toBe('teaching_assistant');
+        expect(assistant.titlePrefix).toBeUndefined();
+        expect(stored.titlePrefix).toBeUndefined();
+      },
+    );
+
+    it('never stores a doctor title on an administrator account', async () => {
+      const { stored, service } = setup();
+      const created = await service.create(
+        {
+          name: 'Administrator',
+          email: 'admin@example.test',
+          password: 'SyntheticPassword123!',
+          role: 'admin',
+          staffType: 'doctor',
+          titlePrefix: 'prof',
+        },
+        '507f1f77bcf86cd799439012',
+        'admin',
+      );
+      expect(created.titlePrefix).toBeUndefined();
+      expect(stored.titlePrefix).toBeUndefined();
+    });
+
+    it.each([
+      ['ا.د. أحمد', 'prof'],
+      ['ا.م. أحمد', 'assoc_prof'],
+      ['أ.م.د. أحمد', 'assoc_prof'],
+      ['د. أحمد', 'dr'],
+      ['استاذ مشارك أحمد', 'assoc_prof'],
+    ] as const)(
+      'recognizes and strips the Arabic title in %s',
+      (rawName, prefix) => {
+        expect(inferDoctorPrefix(rawName)).toBe(prefix);
+        expect(stripStaffTitlePrefix(rawName)).toBe('أحمد');
+      },
+    );
   });
 
   describe('Doctor title prefix handling and academic localization', () => {

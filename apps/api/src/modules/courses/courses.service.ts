@@ -361,7 +361,12 @@ export class CoursesService {
 
       const userMap = new Map<
         string,
-        { name: string; nameAr?: string; staffType?: string; titlePrefix?: string }
+        {
+          name: string;
+          nameAr?: string;
+          staffType?: string;
+          titlePrefix?: string;
+        }
       >();
       for (const u of users) {
         userMap.set(String(u._id), {

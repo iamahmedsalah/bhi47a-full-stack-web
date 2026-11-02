@@ -13,12 +13,14 @@ interface Member {
   nameAr?: string;
   role?: string;
   staffType?: string;
+  titlePrefix?: string;
 }
 interface Assignment {
   _id: Types.ObjectId;
   name: string;
   nameAr?: string;
   staffType?: string;
+  titlePrefix?: string;
 }
 
 @Injectable()
@@ -104,6 +106,8 @@ export class StaffCourseAssignmentsService {
           name: staff.name,
           nameAr: staff.nameAr,
           staffType: staff.staffType,
+          titlePrefix:
+            staff.staffType === 'doctor' ? staff.titlePrefix : undefined,
         };
         (staff.staffType === 'doctor' ? doctors : assistants).set(id, member);
       }

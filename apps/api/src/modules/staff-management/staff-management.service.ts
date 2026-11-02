@@ -30,6 +30,7 @@ import {
   STAFF_TYPE_DEFAULT_PERMISSIONS,
   inferDoctorPrefix,
   type StaffType,
+  type DoctorPrefix,
 } from '@student-portal/shared';
 
 const STAFF_PUBLIC_PROJECTION =
@@ -45,7 +46,7 @@ export interface StaffItem {
   phone?: string;
   role: 'admin' | 'staff';
   staffType?: StaffType;
-  titlePrefix?: string;
+  titlePrefix?: DoctorPrefix;
   permissions: string[];
   isActive: boolean;
   deactivatedAt?: Date;
@@ -65,7 +66,7 @@ interface StaffRecord {
   phone?: string;
   role?: 'admin' | 'staff';
   staffType?: StaffType;
-  titlePrefix?: string;
+  titlePrefix?: DoctorPrefix;
   permissions?: string[];
   isActive?: boolean;
   deactivatedAt?: Date;
@@ -215,10 +216,12 @@ export class StaffManagementService {
           : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType!] || [])];
 
     const titlePrefix =
-      dto.titlePrefix ||
-      (staffType === 'doctor'
-        ? inferDoctorPrefix(dto.nameAr) || inferDoctorPrefix(dto.name) || 'dr'
-        : undefined);
+      staffType === 'doctor'
+        ? (dto.titlePrefix ??
+          inferDoctorPrefix(dto.nameAr) ??
+          inferDoctorPrefix(dto.name) ??
+          'dr')
+        : undefined;
 
     try {
       const payload = {
@@ -248,6 +251,7 @@ export class StaffManagementService {
         {
           role: created.role,
           staffType: created.staffType,
+          titlePrefix: created.titlePrefix,
           permissions: created.permissions,
           courseIds: dto.courseIds,
         },
@@ -314,6 +318,16 @@ export class StaffManagementService {
     const username = dto.username?.trim().toLowerCase() || undefined;
     await this.assertUniqueIdentity(email, username, id);
 
+    const effectiveStaffType = dto.staffType ?? current.staffType;
+    const titlePrefix =
+      current.role === 'staff' && effectiveStaffType === 'doctor'
+        ? (dto.titlePrefix ??
+          (current.staffType === 'doctor' ? current.titlePrefix : undefined) ??
+          inferDoctorPrefix(dto.nameAr ?? current.nameAr) ??
+          inferDoctorPrefix(dto.name ?? current.name) ??
+          'dr')
+        : undefined;
+
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const nextValues = {
       ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -326,9 +340,7 @@ export class StaffManagementService {
         ? { phone: dto.phone.trim() || undefined }
         : {}),
       ...(dto.staffType !== undefined ? { staffType: dto.staffType } : {}),
-      ...(dto.titlePrefix !== undefined
-        ? { titlePrefix: dto.titlePrefix }
-        : {}),
+      titlePrefix,
       ...(dto.permissions !== undefined
         ? { permissions: dto.permissions }
         : {}),
@@ -567,6 +579,13 @@ export class StaffManagementService {
       email: record.email,
       phone: record.phone,
       role: record.role || 'staff',
+      titlePrefix:
+        record.role !== 'admin' && record.staffType === 'doctor'
+          ? (record.titlePrefix ??
+            inferDoctorPrefix(record.nameAr) ??
+            inferDoctorPrefix(record.name) ??
+            'dr')
+          : undefined,
       staffType:
         record.staffType ||
         (record.role === 'admin' ? undefined : 'administrative'),
