@@ -67,6 +67,12 @@ export function StatusBadge({
         case 'present': return 'Present';
         case 'absent': return 'Absent';
         case 'banned': return 'Banned';
+        case 'excused': return 'Excused';
+        case 'withheld': return 'Withheld';
+        case 'incomplete': return 'Incomplete';
+        case 'not_entered': return 'Not Entered';
+        case 'locked': return 'Locked';
+        case 'unlocked': return 'Open';
         case 'late': return 'Late';
         case 'active': return 'Active';
         case 'inactive': return 'Inactive';
@@ -91,6 +97,18 @@ export function StatusBadge({
         return 'غائب';
       case 'banned':
         return 'محروم';
+      case 'excused':
+        return 'غائب بعذر';
+      case 'withheld':
+        return 'محجوب النتيجة';
+      case 'incomplete':
+        return 'غير مكتمل';
+      case 'not_entered':
+        return 'لم يُرصد';
+      case 'locked':
+        return 'مقفول';
+      case 'unlocked':
+        return 'مفتوح';
       case 'late':
         return 'متأخر';
       case 'active':

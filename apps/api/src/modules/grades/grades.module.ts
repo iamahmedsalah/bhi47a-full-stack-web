@@ -6,6 +6,10 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { GradesService } from './grades.service';
 import { GradesController } from './grades.controller';
+import {
+  ControlSheet,
+  ControlSheetSchema,
+} from '../control/schemas/control-sheet.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import {
   StudentProfile,
@@ -33,6 +37,7 @@ import {
         schema: StudentAcademicProfileSchema,
       },
       { name: SystemSettings.name, schema: SystemSettingsSchema },
+      { name: ControlSheet.name, schema: ControlSheetSchema },
     ]),
     NotificationsModule,
   ],

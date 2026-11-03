@@ -1,7 +1,16 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Grade, GradeDocument } from './schemas/grade.schema';
+import {
+  ControlSheet,
+  ControlSheetDocument,
+} from '../control/schemas/control-sheet.schema';
 import { CourseQuiz, CourseQuizDocument } from './schemas/course-quiz.schema';
 import {
   SaveGradeDto,
@@ -49,6 +58,8 @@ export class GradesService implements OnModuleInit {
     private studentAcademicProfileModel: Model<StudentAcademicProfileDocument>,
     @InjectModel(SystemSettings.name)
     private systemSettingsModel: Model<SystemSettingsDocument>,
+    @InjectModel(ControlSheet.name)
+    private controlSheetModel: Model<ControlSheetDocument>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -56,6 +67,8 @@ export class GradesService implements OnModuleInit {
     if (!shouldRunStartupTasks()) {
       return;
     }
+
+    await this.dropLegacyGradeUniqueIndex();
 
     // Earlier versions allowed only one quiz record per student/course, which
     // caused a later semester to overwrite or conflict with the previous one.
@@ -95,6 +108,60 @@ export class GradesService implements OnModuleInit {
       // A new database may not have the collection yet; Mongoose will create
       // the schema index when the first record is stored.
       if (error?.codeName !== 'NamespaceNotFound') throw error;
+    }
+  }
+
+  /**
+   * The original unique index `{ studentCode, courseCode, examType }` had no
+   * term, so a retaken course collided with its earlier attempt. The term-aware
+   * unique index declared on the schema replaces it; only that exact legacy
+   * index is dropped and every other index is preserved.
+   */
+  private async dropLegacyGradeUniqueIndex() {
+    try {
+      await this.gradeModel.init();
+      const indexes = await this.gradeModel.collection.indexes();
+      const legacy = indexes.find(
+        (index) =>
+          index.unique === true &&
+          Object.keys(index.key).length === 3 &&
+          index.key.studentCode === 1 &&
+          index.key.courseCode === 1 &&
+          index.key.examType === 1,
+      );
+      if (legacy?.name) {
+        await this.gradeModel.collection.dropIndex(legacy.name);
+      }
+    } catch (error: any) {
+      if (error?.codeName !== 'NamespaceNotFound') {
+        console.error('Failed to drop legacy grades unique index:', error);
+      }
+    }
+  }
+
+  /**
+   * Rejects writes to a component whose Control sheet is locked. Used by every
+   * non-grid write path (manual form, Excel import) so a lock holds everywhere.
+   */
+  async assertSheetEditable(
+    courseId: string | Types.ObjectId,
+    academicYear: string,
+    semester: string,
+    examType: string,
+  ): Promise<void> {
+    const locked = await this.controlSheetModel
+      .exists({
+        courseId: new Types.ObjectId(courseId.toString()),
+        academicYear,
+        semester,
+        component: examType,
+        locked: true,
+      })
+      .lean();
+    if (locked) {
+      throw new ForbiddenException(
+        'كشف الكنترول مقفول ولا يمكن تعديل الدرجات | Control sheet is locked',
+      );
     }
   }
 
@@ -360,10 +427,19 @@ export class GradesService implements OnModuleInit {
       throw new NotFoundException('المادة غير موجودة'); // Course not found
     }
 
+    await this.assertSheetEditable(
+      course._id,
+      dto.academicYear,
+      dto.semester,
+      dto.examType,
+    );
+
     const filter = {
       studentCode: dto.studentCode,
       courseCode: dto.courseCode.toUpperCase(),
       examType: dto.examType,
+      academicYear: dto.academicYear,
+      semester: dto.semester,
     };
 
     const percentage =
@@ -515,6 +591,12 @@ export class GradesService implements OnModuleInit {
     if (!existing) {
       throw new NotFoundException('الدرجة غير موجودة');
     }
+    await this.assertSheetEditable(
+      existing.courseId,
+      existing.academicYear,
+      existing.semester,
+      existing.examType,
+    );
     const finalGrade =
       updateData.grade !== undefined ? updateData.grade : existing.grade;
     const finalMax =
@@ -547,6 +629,15 @@ export class GradesService implements OnModuleInit {
   }
 
   async remove(id: string): Promise<{ message: string }> {
+    const target = await this.gradeModel.findById(id).lean();
+    if (target) {
+      await this.assertSheetEditable(
+        target.courseId,
+        target.academicYear,
+        target.semester,
+        target.examType,
+      );
+    }
     const deleted = await this.gradeModel.findByIdAndDelete(id);
     if (!deleted) {
       throw new NotFoundException('الدرجة غير موجودة');

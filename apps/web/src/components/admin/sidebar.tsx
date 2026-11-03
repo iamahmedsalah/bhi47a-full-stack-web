@@ -27,6 +27,7 @@ import {
   HelpCircle,
   CalendarDays,
   ShieldCheck,
+  TableProperties,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
@@ -116,6 +117,12 @@ export default function AdminSidebar() {
       href: `/${locale}/admin/grades`,
       icon: <Award className="h-5 w-5" />,
       permission: PERMISSIONS.GRADES_READ,
+    },
+    {
+      key: "control",
+      href: `/${locale}/admin/control`,
+      icon: <TableProperties className="h-5 w-5" />,
+      permission: PERMISSIONS.CONTROL_ACCESS,
     },
     {
       key: "admissions",
@@ -212,7 +219,7 @@ export default function AdminSidebar() {
 
     // Doctor specific visibility rules:
     // - Hide grades, academicEmails, and generic uploads
-    // - Keep students, courses, quizzes, attendance, complaints
+    // - Keep students, courses, quizzes, attendance, complaints, control (when granted)
     const isDoctor = user?.role === "staff" && staffType === "doctor";
     if (isDoctor) {
       if (item.key === "grades" || item.key === "academicEmails" || item.key === "uploads") {

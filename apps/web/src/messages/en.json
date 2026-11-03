@@ -263,7 +263,8 @@
     "staff": "Staff",
     "logout": "Logout",
     "admissions": "Admissions and student codes",
-    "studentCodes": "Student code audit"
+    "studentCodes": "Student code audit",
+    "control": "Control (Grade Entry)"
   },
   "common": {
     "search": "Search...",
@@ -936,7 +937,8 @@
         "staffManagement": "Faculty & Staff Management",
         "admissions": "Admissions and student codes",
         "studentCodes": "Student code audit",
-        "analytics": "Analytics & Statistical Reports"
+        "analytics": "Analytics & Statistical Reports",
+        "control": "Control (Grade Entry & Sheets)"
       },
       "labels": {
         "students_read": "View students",
@@ -1013,7 +1015,18 @@
         "admissions_import": "Preview and apply applicant spreadsheets",
         "student_codes_export": "Export student-code audit findings",
         "analytics_read": "View analytics and statistics",
-        "analytics_export": "Export comprehensive analytics (Excel)"
+        "analytics_export": "Export comprehensive analytics (Excel)",
+        "control_access": "Access Control module",
+        "control_sheets_view": "View Control grade sheets",
+        "control_sheets_create": "Open & create Control grade sheets",
+        "control_grades_enter": "Enter and edit grades in Control grid",
+        "control_grades_edit_published": "Edit published grades (with mandatory reason)",
+        "control_states_manage": "Manage special student states (excused, banned, withheld, incomplete)",
+        "control_sheets_lock": "Lock Control grade sheets",
+        "control_sheets_unlock": "Unlock Control grade sheets (with mandatory reason)",
+        "control_schemes_manage": "Configure course maximum marks and step rules",
+        "control_audit_view": "View Control grade audit trail",
+        "control_scope_all": "Access all courses in Control (bypass assigned course restriction)"
       }
     }
   },

@@ -263,7 +263,8 @@
     "staff": "الموظفون",
     "logout": "تسجيل الخروج",
     "admissions": "القبول وأكواد الطلاب",
-    "studentCodes": "تدقيق أكواد الطلاب"
+    "studentCodes": "تدقيق أكواد الطلاب",
+    "control": "الكنترول (رصد الدرجات)"
   },
   "common": {
     "search": "بحث...",
@@ -936,7 +937,8 @@
         "staffManagement": "إدارة أعضاء التدريس والموظفين",
         "admissions": "القبول وأكواد الطلاب",
         "studentCodes": "تدقيق أكواد الطلاب",
-        "analytics": "التحليلات والتقارير الإحصائية"
+        "analytics": "التحليلات والتقارير الإحصائية",
+        "control": "الكنترول (رصد الدرجات والكشوف)"
       },
       "labels": {
         "students_read": "عرض الطلاب",
@@ -1013,7 +1015,18 @@
         "admissions_import": "معاينة وتطبيق ملفات المتقدمين",
         "student_codes_export": "تصدير نتائج تدقيق أكواد الطلاب",
         "analytics_read": "عرض التحليلات والإحصاءات",
-        "analytics_export": "تصدير التحليلات الشاملة (Excel)"
+        "analytics_export": "تصدير التحليلات الشاملة (Excel)",
+        "control_access": "الدخول إلى موديول الكنترول",
+        "control_sheets_view": "عرض كشوف الكنترول",
+        "control_sheets_create": "فتح وإنشاء كشوف رصد جديدة",
+        "control_grades_enter": "إدخال وتعديل الدرجات في شبكة الكنترول",
+        "control_grades_edit_published": "تعديل الدرجات المنشورة (بسبب إجباري)",
+        "control_states_manage": "إدارة الحالات الخاصة (غائب بعذر، محروم، محجوب، غير مكتمل)",
+        "control_sheets_lock": "قفل كشوف الكنترول",
+        "control_sheets_unlock": "فك قفل كشوف الكنترول (بسبب إجباري)",
+        "control_schemes_manage": "ضبط الدرجات العظمى وخطوات الرصد للمقررات",
+        "control_audit_view": "عرض سجل تدقيق تعديلات الكنترول",
+        "control_scope_all": "الوصول لجميع المقررات في الكنترول (تجاوز نطاق المقررات المسندة)"
       }
     }
   },

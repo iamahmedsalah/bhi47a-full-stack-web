@@ -21,3 +21,4 @@ export * from "./student-codes";
 export * from "./admission-workflow";
 
 export * from './analytics';
+export * from './control';

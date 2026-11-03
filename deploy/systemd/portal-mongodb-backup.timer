@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Student Portal MongoDB local export (Cairo)
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00 Africa/Cairo
+Persistent=true
+AccuracySec=1min
+Unit=portal-mongodb-backup.service
+
+[Install]
+WantedBy=timers.target

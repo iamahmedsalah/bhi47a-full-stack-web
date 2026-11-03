@@ -96,6 +96,7 @@ export class GradeImporter implements Importer {
     const courseMap = new Map(courses.map((c) => [c.code, c]));
 
     const gradeOps: Parameters<typeof this.gradeModel.bulkWrite>[0] = [];
+    const lockCache = new Map<string, boolean>();
     const affectedStudentIds = new Set<string>();
 
     for (const { row, rowNum } of validRows) {
@@ -172,7 +173,34 @@ export class GradeImporter implements Importer {
         }
       }
 
+      // A locked Control sheet rejects every write path, including Excel.
+      const editableEntries: ExamEntry[] = [];
       for (const entry of entries) {
+        const lockKey = `${String(course._id)}|${academicYear}|${semester}|${entry.examType}`;
+        let editable = lockCache.get(lockKey);
+        if (editable === undefined) {
+          editable = await this.gradesService
+            .assertSheetEditable(
+              course._id,
+              academicYear,
+              semester,
+              entry.examType,
+            )
+            .then(() => true)
+            .catch(() => false);
+          lockCache.set(lockKey, editable);
+        }
+        if (editable) {
+          editableEntries.push(entry);
+        } else {
+          errors.push(
+            `السطر ${rowNum}: كشف الكنترول (${entry.examType}) للمادة ${course.code} مقفول`,
+          );
+        }
+      }
+      if (editableEntries.length === 0) continue;
+
+      for (const entry of editableEntries) {
         const percentage =
           entry.maxGrade > 0
             ? Math.round((entry.grade / entry.maxGrade) * 10000) / 100
@@ -196,7 +224,6 @@ export class GradeImporter implements Importer {
           status,
           academicYear,
           semester,
-          isPublished: true,
         };
 
         gradeOps.push({
@@ -205,8 +232,17 @@ export class GradeImporter implements Importer {
               studentCode,
               courseCode: course.code,
               examType: entry.examType,
+              academicYear,
+              semester,
             },
-            update: { $set: gradeData },
+            update: {
+              $set: gradeData,
+              // Importing stores marks only; publishing stays in the Grades
+              // module, so new records start hidden from students.
+              $setOnInsert: { isPublished: false },
+              // Bump the revision so Control grids notice an Excel change.
+              $inc: { rev: 1 },
+            },
             upsert: true,
           },
         });

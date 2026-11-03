@@ -74,6 +74,17 @@
   ADMINS_MANAGE: 'admins.manage',
   ANALYTICS_READ: 'analytics.read',
   ANALYTICS_EXPORT: 'analytics.export',
+  CONTROL_ACCESS: 'control.access',
+  CONTROL_SHEETS_VIEW: 'control.sheets.view',
+  CONTROL_SHEETS_CREATE: 'control.sheets.create',
+  CONTROL_GRADES_ENTER: 'control.grades.enter',
+  CONTROL_GRADES_EDIT_PUBLISHED: 'control.grades.edit_published',
+  CONTROL_STATES_MANAGE: 'control.states.manage',
+  CONTROL_SHEETS_LOCK: 'control.sheets.lock',
+  CONTROL_SHEETS_UNLOCK: 'control.sheets.unlock',
+  CONTROL_SCHEMES_MANAGE: 'control.schemes.manage',
+  CONTROL_AUDIT_VIEW: 'control.audit.view',
+  CONTROL_SCOPE_ALL: 'control.scope.all',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -159,6 +170,17 @@ export const STAFF_ASSIGNABLE_PERMISSIONS = [
   PERMISSIONS.STAFF_CREATE_ACADEMIC,
   PERMISSIONS.ANALYTICS_READ,
   PERMISSIONS.ANALYTICS_EXPORT,
+  PERMISSIONS.CONTROL_ACCESS,
+  PERMISSIONS.CONTROL_SHEETS_VIEW,
+  PERMISSIONS.CONTROL_SHEETS_CREATE,
+  PERMISSIONS.CONTROL_GRADES_ENTER,
+  PERMISSIONS.CONTROL_GRADES_EDIT_PUBLISHED,
+  PERMISSIONS.CONTROL_STATES_MANAGE,
+  PERMISSIONS.CONTROL_SHEETS_LOCK,
+  PERMISSIONS.CONTROL_SHEETS_UNLOCK,
+  PERMISSIONS.CONTROL_SCHEMES_MANAGE,
+  PERMISSIONS.CONTROL_AUDIT_VIEW,
+  PERMISSIONS.CONTROL_SCOPE_ALL,
 ] as const satisfies readonly Permission[];
 
 export type StaffAssignablePermission =

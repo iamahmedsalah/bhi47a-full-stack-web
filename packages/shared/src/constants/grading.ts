@@ -57,6 +57,18 @@ export function calculateGradeScale(
       isPass: false,
     };
   }
+  if (normStatus === 'excused' || normStatus === 'incomplete') {
+    const excused = normStatus === 'excused';
+    return {
+      letter: 'F',
+      minPercentage: 0,
+      maxPercentage: 0,
+      points: 0,
+      nameAr: excused ? 'غائب بعذر' : 'غير مكتمل',
+      nameEn: excused ? 'Excused' : 'Incomplete',
+      isPass: false,
+    };
+  }
   const pct = Math.max(0, Math.min(100, Math.round(percentage * 100) / 100));
   for (const item of GRADE_SCALE) {
     if (pct >= item.minPercentage) {

@@ -1,0 +1,15 @@
+[Unit]
+Description=Student Portal MongoDB local logical backup
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=bhi47a
+WorkingDirectory=/home/bhi47a/app
+Environment=HOME=/home/bhi47a
+Environment=BACKUP_DATABASE=student-portal
+ExecStart=/bin/bash /home/bhi47a/app/deploy/backup-mongodb-docker.sh
+UMask=0077
+TimeoutStartSec=70min
+NoNewPrivileges=true

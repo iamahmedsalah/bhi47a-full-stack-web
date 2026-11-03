@@ -71,15 +71,32 @@ export class Grade {
 
   @Prop({ type: String })
   courseNameEn?: string;
+
+  /** Optimistic-concurrency revision, incremented by the Control module. */
+  @Prop({ type: Number, default: 0, min: 0 })
+  rev?: number;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
 }
 
 export const GradeSchema = SchemaFactory.createForClass(Grade);
 
-// Indexes for rapid lookups and filters
+// A student has at most one record per course, term and exam type. The legacy
+// `{ studentCode, courseCode, examType }` unique index had no term, which made a
+// retaken course collide with its earlier attempt; it is dropped on startup by
+// `GradesService.onModuleInit`.
 GradeSchema.index(
-  { studentCode: 1, courseCode: 1, examType: 1 },
+  { studentId: 1, courseId: 1, academicYear: 1, semester: 1, examType: 1 },
   { unique: true },
 );
+GradeSchema.index({
+  studentCode: 1,
+  courseCode: 1,
+  examType: 1,
+  academicYear: 1,
+  semester: 1,
+});
 GradeSchema.index({ studentId: 1 });
 GradeSchema.index({ studentId: 1, isPublished: 1 });
 GradeSchema.index({ courseId: 1 });

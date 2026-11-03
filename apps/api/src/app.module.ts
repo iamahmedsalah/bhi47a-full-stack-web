@@ -13,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
 import { AppLoggerModule } from './core/logger/logger.module';
 import { RateLimiterModule } from './common/rate-limit/rate-limit.module';
 import { GradesModule } from './modules/grades/grades.module';
+import { ControlModule } from './modules/control/control.module';
 import { AcademicEmailsModule } from './modules/academic-emails/academic-emails.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
@@ -51,6 +52,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     StudentsModule,
     CoursesModule,
     GradesModule,
+    ControlModule,
     AcademicEmailsModule,
     AttendanceModule,
     UploadsModule,
