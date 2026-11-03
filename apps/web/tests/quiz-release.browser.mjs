@@ -41,7 +41,7 @@ const reset = (delay = 120000) => {
 reset();
 await fs.mkdir(output, { recursive: true });
 await fs.writeFile(path.join(output, 'loader.cjs'), `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
-await fs.writeFile(path.join(output, 'auth.ts'), `export const useAuth=()=>({user:{_id:'fixture-admin',role:new URLSearchParams(location.search).get('as')==='staff'?'staff':location.pathname.includes('/admin/')?'admin':'student',staffType:new URLSearchParams(location.search).get('staffType')||undefined,permissions:['quizzes.read','quizzes.write'],mustChangePassword:false}});`);
+await fs.writeFile(path.join(output, 'auth.ts'), `export const useAuth=()=>({user:{_id:'fixture-admin',role:new URLSearchParams(location.search).get('as')==='staff'?'staff':location.pathname.includes('/admin/')?'admin':'student',staffType:new URLSearchParams(location.search).get('staffType')||undefined,permissions:['quizzes.read','quizzes.write',...(new URLSearchParams(location.search).has('readOnly')?['staff.read']:['staff.create_academic'])],mustChangePassword:false}});`);
 await fs.writeFile(path.join(output, 'navigation.ts'), `export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);export const useRouter=()=>({push:()=>{},replace:()=>{}});`);
 await fs.writeFile(path.join(output, 'api.ts'), `
   const call=async(method,url,body)=>{const response=await fetch(url,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();if(!response.ok)throw result;return {data:result,timestamp:new Date().toISOString()};};
@@ -87,6 +87,18 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
     if (pathname.startsWith('/admin/') || pathname.startsWith('/students/') || pathname.startsWith('/staff/') || pathname === '/courses') {
       res.setHeader('Content-Type', 'application/json');
+      if (pathname === '/admin/staff/course-choices' || pathname === `/admin/staff/${fixtureId}/courses`) {
+        if (denyStaffCourses) {
+          res.statusCode = 503; res.end(JSON.stringify({message:'Course selector unavailable'})); return;
+        }
+        const all = [
+          { _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' },
+          { _id: '200000000000000000000002', code: 'AS102', name: 'Second course', nameAr: 'المقرر الثاني' },
+        ];
+        const assigned = pathname.endsWith('/courses');
+        const selected = staffProfile.courseIds ?? all.map(course => course._id);
+        res.end(JSON.stringify({items: assigned ? all.filter(course => selected.includes(course._id)) : all, totalPages:1})); return;
+      }
       if (pathname === '/admin/staff' && req.method === 'POST') {
         const chunks = [];for await (const chunk of req) chunks.push(chunk);
         const body = JSON.parse(Buffer.concat(chunks).toString());staffProfileMutations.push(body);
@@ -267,6 +279,54 @@ try {
     }
   }
   console.log('Doctor prefixes passed in Arabic and English: create, update, reopen, explicit selection overriding name inference, and non-doctor role changes.');
+  for (const locale of ['en', 'ar']) {
+    const t = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).staff;
+    const addLabel = locale === 'ar' ? 'إضافة موظف' : 'Add Staff';
+    await page.goto(`${address}/${locale}/admin/staff?manage=true&as=staff&readOnly=true`);
+    assert.equal(await page.getByRole('button', {name:addLabel, exact:true}).isDisabled(), true);
+    await page.getByRole('button', {name:t.table.actions, exact:true}).first().click();
+    assert.equal(await page.getByRole('menuitem', {name:t.actions.edit, exact:true}).count(), 0);
+    for (const staffType of ['doctor', 'teaching_assistant', 'assistant_lecturer']) {
+      resetStaffProfile();staffProfileMutations.length = 0;
+      await page.goto(`${address}/${locale}/admin/staff?manage=true&as=staff`);
+      await page.getByRole('button', {name:addLabel, exact:true}).click();
+      const dialog = page.getByRole('dialog');
+      assert.equal(await dialog.getByText(locale === 'ar' ? 'نوع الحساب' : 'Account Role', {exact:true}).count(), 0);
+      await dialog.getByRole('button', {name:t.fields.staffType, exact:true}).click();
+      assert.equal(await page.getByRole('option', {name:t.types.administrative, exact:true}).count(), 0);
+      await page.getByRole('option', {name:t.types[staffType], exact:true}).click();
+      await dialog.getByLabel(t.fields.name, {exact:true}).fill('Managed teaching staff');
+      await dialog.getByLabel(t.fields.email, {exact:true}).fill('managed@example.test');
+      await dialog.getByLabel(t.fields.temporaryPassword, {exact:true}).fill('SyntheticPassword123!');
+      const permissions = dialog.getByRole('group', {name:t.table.permissions, exact:true});
+      await permissions.getByRole('button', {name:t.permissions.clearAll, exact:true}).first().click();
+      await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).check();
+      const courses = dialog.getByRole('group', {name:t.details.assignedCoursesTitle, exact:true});
+      await courses.getByRole('checkbox', {name:/QR101/}).check();
+      await dialog.getByRole('button', {name:t.create, exact:true}).click();
+      await dialog.waitFor({state:'hidden'});
+      assert.deepEqual(staffProfileMutations.at(-1).courseIds, [courseId]);
+      assert.deepEqual(staffProfileMutations.at(-1).permissions, ['students.read']);
+      assert.equal(staffProfileMutations.at(-1).staffType, staffType);
+      await page.getByRole('button', {name:t.table.actions, exact:true}).first().click();
+      await page.getByRole('menuitem', {name:t.actions.edit, exact:true}).click();
+      await courses.getByRole('checkbox', {name:/QR101/}).waitFor();
+      await page.waitForFunction(() => !document.querySelector('button[type="submit"]')?.disabled);
+      assert.equal(await courses.getByRole('checkbox', {name:/QR101/}).isChecked(), true);
+      assert.equal(await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).isChecked(), true);
+      await courses.getByRole('checkbox', {name:/QR101/}).uncheck();
+      await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).uncheck();
+      await permissions.getByRole('checkbox', {name:t.permissions.labels.grades_read, exact:true}).check();
+      if (staffType === 'doctor') {
+        await page.screenshot({path:path.join(output, `staff-manager-form-${locale}.png`), fullPage:true});
+      }
+      await dialog.getByRole('button', {name:t.save, exact:true}).click();
+      await dialog.waitFor({state:'hidden'});
+      assert.deepEqual(staffProfileMutations.at(-1).courseIds, []);
+      assert.deepEqual(staffProfileMutations.at(-1).permissions, ['grades.read']);
+    }
+  }
+  console.log('Delegated staff forms passed: Arabic/English creation, course and permission persistence, edit/reopen, all academic types and read-only restrictions.');
   if (!process.argv.includes('--staff-only')) {
   for (const locale of ['en', 'ar']) {
     reset();

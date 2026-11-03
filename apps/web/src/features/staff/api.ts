@@ -121,6 +121,14 @@ export async function getStaffSchedules(
 }
 
 export async function getStaffCourseChoices(): Promise<StaffAssignedCourse[]> {
+  return getStaffFormCoursePages("/admin/staff/course-choices");
+}
+
+export async function getStaffFormCourses(staffId: string): Promise<StaffAssignedCourse[]> {
+  return getStaffFormCoursePages(`/admin/staff/${staffId}/courses`);
+}
+
+async function getStaffFormCoursePages(url: string): Promise<StaffAssignedCourse[]> {
   const courses: StaffAssignedCourse[] = [];
   let page = 1;
   let totalPages = 1;
@@ -128,7 +136,7 @@ export async function getStaffCourseChoices(): Promise<StaffAssignedCourse[]> {
     const response = await api.get<{
       items: StaffAssignedCourse[];
       totalPages: number;
-    }>("/admin/courses", { params: { page, limit: 100 } });
+    }>(url, { params: { page, limit: 100 } });
     courses.push(...response.data.items);
     totalPages = response.data.totalPages;
     page++;

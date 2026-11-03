@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getStaffCourseChoices, getStaffCourses } from "../api";
+import { getStaffCourseChoices, getStaffFormCourses } from "../api";
 import { StaffPermissionFields } from "./staff-permission-fields";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -22,6 +22,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   STAFF_TYPE_VALUES,
+  PERMISSIONS,
   STAFF_TYPE_DEFAULT_PERMISSIONS,
   DOCTOR_PREFIX_VALUES,
   inferDoctorPrefix,
@@ -81,6 +82,10 @@ export function StaffFormDialog({
   const isAr = locale === "ar";
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canManageStaff =
+    isAdmin ||
+    (user?.role === "staff" &&
+      user.permissions?.includes(PERMISSIONS.STAFF_CREATE_ACADEMIC) === true);
   const allowedStaffTypes = useMemo<StaffType[]>(
     () =>
       isAdmin
@@ -121,12 +126,12 @@ export function StaffFormDialog({
   const courseChoices = useQuery({
     queryKey: ["staff-course-choices"],
     queryFn: getStaffCourseChoices,
-    enabled: open && isAdmin && selectedRole === "staff",
+    enabled: open && canManageStaff && selectedRole === "staff",
   });
   const assignments = useQuery({
     queryKey: ["staff-form-courses", staff?._id],
-    queryFn: () => getStaffCourses(staff!._id),
-    enabled: open && isAdmin && Boolean(staff && staff.role === "staff"),
+    queryFn: () => getStaffFormCourses(staff!._id),
+    enabled: open && canManageStaff && Boolean(staff && staff.role === "staff"),
     staleTime: 0,
   });
 
@@ -581,7 +586,7 @@ export function StaffFormDialog({
               />
             )}
 
-            {isAdmin && selectedRole === "staff" && (
+            {canManageStaff && selectedRole === "staff" && (
               <>
                 {teaching && (
                   <fieldset className="space-y-3 rounded-xl border border-border/80 bg-card/60 p-4">
@@ -615,7 +620,7 @@ export function StaffFormDialog({
                         </Button>
                       </div>
                     ) : (
-                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                      <div className="max-h-56 space-y-2 overflow-y-auto pe-1">
                         {courseChoices.data?.map((course) => {
                           const isSelected = selectedCourses.includes(
                             course._id,
@@ -690,7 +695,7 @@ export function StaffFormDialog({
                 type="submit"
                 disabled={
                   pending ||
-                  (isAdmin &&
+                  (canManageStaff &&
                     teaching &&
                     (courseChoices.isPending ||
                       courseChoices.isError ||

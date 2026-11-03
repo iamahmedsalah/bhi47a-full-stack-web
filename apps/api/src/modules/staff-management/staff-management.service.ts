@@ -18,6 +18,7 @@ import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { QueryStaffDto } from './dto/query-staff.dto';
+import type { QueryStaffCoursesDto } from './dto/query-staff-courses.dto';
 import { UpdateStaffPermissionsDto } from './dto/update-staff-permissions.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { DeactivateStaffDto } from './dto/deactivate-staff.dto';
@@ -160,16 +161,17 @@ export class StaffManagementService {
     return this.toStaffItem(record);
   }
 
+  async listFormCourses(query: QueryStaffCoursesDto, staffId?: string) {
+    if (staffId) await this.findStaffRecord(staffId);
+    return this.courseAssignments!.list(query, staffId);
+  }
+
   async create(
     dto: CreateStaffDto,
     actorId: string,
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
-    if (dto.courseIds !== undefined && actorRole !== 'admin')
-      throw new ForbiddenException(
-        'Only administrators can change course assignments',
-      );
     if (dto.courseIds !== undefined && !session) {
       const result = await this.users.db.transaction((transaction) =>
         this.create(dto, actorId, actorRole, transaction),
@@ -211,7 +213,7 @@ export class StaffManagementService {
     const permissions =
       targetRole === 'admin'
         ? []
-        : actorRole === 'admin' && dto.permissions !== undefined
+        : dto.permissions !== undefined
           ? dto.permissions
           : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType!] || [])];
 
@@ -276,13 +278,6 @@ export class StaffManagementService {
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
-    if (
-      (dto.courseIds !== undefined || dto.permissions !== undefined) &&
-      actorRole !== 'admin'
-    )
-      throw new ForbiddenException(
-        'Only administrators can change assignments or permissions',
-      );
     if (dto.courseIds !== undefined && !session) {
       const result = await this.users.db.transaction((transaction) =>
         this.update(id, dto, actorId, actorRole, transaction),

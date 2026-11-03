@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type ClientSession, type Model } from 'mongoose';
 import { Course, type CourseDocument } from '../courses/schemas/course.schema';
+import type { QueryStaffCoursesDto } from './dto/query-staff-courses.dto';
 import {
   courseStaffFilter,
   isTeachingStaff,
@@ -28,6 +29,21 @@ export class StaffCourseAssignmentsService {
   constructor(
     @InjectModel(Course.name) private readonly courses: Model<CourseDocument>,
   ) {}
+
+  async list(query: QueryStaffCoursesDto, staffId?: string) {
+    const filter = staffId ? courseStaffFilter(staffId) : {};
+    const [items, total] = await Promise.all([
+      this.courses
+        .find(filter)
+        .select('_id code name nameAr nameEn')
+        .sort({ code: 1, _id: 1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .lean(),
+      this.courses.countDocuments(filter),
+    ]);
+    return { items, totalPages: Math.ceil(total / query.limit) };
+  }
 
   async sync(staff: Member, courseIds: string[], session: ClientSession) {
     if (

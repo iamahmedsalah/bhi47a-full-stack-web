@@ -2,7 +2,10 @@ import { AuthSessionService } from '../auth/services/auth-session.service';
 import { Types } from 'mongoose';
 import { QueryStaffDto } from './dto/query-staff.dto';
 import { validate } from 'class-validator';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { QueryStaffCoursesDto } from './dto/query-staff-courses.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import {
   PERMISSIONS,
@@ -100,17 +103,50 @@ describe('Staff management security contracts', () => {
       }
     },
   );
-  it('prevents non-admin actors from changing courses or permissions in a profile update', async () => {
-    const service = new StaffManagementService({} as never, {} as never);
-    for (const dto of [{ courseIds: [] }, { permissions: [] }]) {
-      await expect(
-        service.update(
-          '507f1f77bcf86cd799439011',
-          dto,
-          '507f1f77bcf86cd799439012',
-          'staff',
-        ),
-      ).rejects.toThrow('Only administrators');
+  it('requires academic staff management permission for forms and course selectors', () => {
+    const guard = new PermissionsGuard(new Reflector());
+    for (const method of [
+      'create',
+      'update',
+      'courseChoices',
+      'assignedCourses',
+    ] as const) {
+      const context = (permissions: string[]) =>
+        ({
+          getHandler: () =>
+            Object.getOwnPropertyDescriptor(
+              StaffManagementController.prototype,
+              method,
+            )!.value as () => void,
+          getClass: () => StaffManagementController,
+          switchToHttp: () => ({
+            getRequest: () => ({ user: { role: 'staff', permissions } }),
+          }),
+        }) as ExecutionContext;
+      expect(() => guard.canActivate(context([]))).toThrow(
+        'Insufficient permissions',
+      );
+      expect(() =>
+        guard.canActivate(context([PERMISSIONS.STAFF_READ])),
+      ).toThrow('Insufficient permissions');
+      expect(
+        guard.canActivate(context([PERMISSIONS.STAFF_CREATE_ACADEMIC])),
+      ).toBe(true);
+    }
+  });
+  it('bounds course selector pagination and rejects injected query fields', async () => {
+    const metadata = { type: 'query' as const, metatype: QueryStaffCoursesDto };
+    await expect(
+      pipe.transform({ page: '2', limit: '100' }, metadata),
+    ).resolves.toMatchObject({ page: 2, limit: 100 });
+    for (const query of [
+      { page: 0 },
+      { limit: 101 },
+      { staffId: 'injected' },
+    ]) {
+      await expect(pipe.transform(query, metadata)).rejects.toThrow(
+        'Bad Request',
+      );
     }
   });
   it('validates course IDs and permissions for both create and update', async () => {
@@ -359,6 +395,7 @@ describe('Staff management security contracts', () => {
         const result = Promise.resolve(value);
         return Object.assign(result, {
           select: () => result,
+          session: () => result,
           sort: () => result,
           skip: () => result,
           limit: () => result,
@@ -371,18 +408,100 @@ describe('Staff management security contracts', () => {
         ),
         find: jest.fn(() => query([stored])),
         countDocuments: jest.fn().mockResolvedValue(1),
-        create: jest.fn((payload: Record<string, unknown>) => {
-          Object.assign(stored, payload);
-          return Promise.resolve(stored);
-        }),
+        create: jest.fn(
+          (payload: Record<string, unknown> | Record<string, unknown>[]) => {
+            Object.assign(
+              stored,
+              Array.isArray(payload) ? payload[0] : payload,
+            );
+            return Promise.resolve(Array.isArray(payload) ? [stored] : stored);
+          },
+        ),
+        db: {
+          transaction: jest.fn((callback: (session: object) => unknown) =>
+            callback({}),
+          ),
+        },
       };
+      const assignments = { sync: jest.fn().mockResolvedValue(undefined) };
       const service = new StaffManagementService(
         users as never,
         { create: jest.fn().mockResolvedValue({}) } as never,
         { hash: jest.fn().mockResolvedValue('synthetic-hash') } as never,
+        assignments as never,
       );
-      return { stored, service };
+      return { stored, service, assignments, users };
     }
+
+    it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
+      'lets a staff manager create and edit %s courses and permissions atomically',
+      async (staffType) => {
+        const { service, stored, assignments, users } = setup();
+        const actor = '507f1f77bcf86cd799439012';
+        const courseIds = ['507f1f77bcf86cd799439013'];
+        const created = await service.create(
+          {
+            name: 'Managed academic',
+            email: 'academic@example.test',
+            password: 'SyntheticPassword123!',
+            staffType,
+            courseIds,
+            permissions: [PERMISSIONS.ATTENDANCE_READ],
+          },
+          actor,
+          'staff',
+        );
+        expect(created.permissions).toEqual([PERMISSIONS.ATTENDANCE_READ]);
+        expect(assignments.sync).toHaveBeenCalledWith(
+          stored,
+          courseIds,
+          expect.any(Object),
+        );
+        const updated = await service.update(
+          created._id,
+          {
+            courseIds: [],
+            permissions: [PERMISSIONS.STUDENTS_READ],
+          },
+          actor,
+          'staff',
+        );
+        expect(updated.permissions).toEqual([PERMISSIONS.STUDENTS_READ]);
+        expect(stored.tokenVersion).toBe(1);
+        expect(assignments.sync).toHaveBeenLastCalledWith(
+          stored,
+          [],
+          expect.any(Object),
+        );
+        expect(users.db.transaction).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each(['admin', 'administrative'] as const)(
+      'keeps %s accounts protected from staff manager form edits',
+      async (type) => {
+        const { service, stored, assignments } = setup();
+        Object.assign(
+          stored,
+          type === 'admin' ? { role: 'admin' } : { staffType: type },
+        );
+        await expect(
+          service.update(
+            String(stored._id),
+            {
+              courseIds: [],
+              permissions: [],
+            },
+            '507f1f77bcf86cd799439012',
+            'staff',
+          ),
+        ).rejects.toThrow(
+          type === 'admin' ? 'cannot be customized' : 'cannot modify',
+        );
+        expect(assignments.sync).not.toHaveBeenCalled();
+        expect(stored.save).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['prof', 'assoc_prof', 'dr'] as const)(
       'returns %s after creation, listing, updating and reloading',

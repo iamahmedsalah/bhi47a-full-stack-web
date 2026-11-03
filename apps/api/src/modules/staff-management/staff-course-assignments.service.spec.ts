@@ -1,5 +1,6 @@
 import { Types, type ClientSession } from 'mongoose';
 import { StaffCourseAssignmentsService } from './staff-course-assignments.service';
+import { courseStaffFilter } from '../courses/utils/course-staff.util';
 
 const session = {} as ClientSession;
 const staffId = new Types.ObjectId();
@@ -27,6 +28,34 @@ function setup(rows: Record<string, unknown>[]) {
 }
 
 describe('staff course assignments', () => {
+  it.each([undefined, String(staffId)])(
+    'paginates minimal form course data for %s',
+    async (target) => {
+      const rows = [{ _id: courseId, code: 'CS101', name: 'Course' }];
+      const query = {
+        select: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(rows),
+      };
+      const courses = {
+        find: jest.fn().mockReturnValue(query),
+        countDocuments: jest.fn().mockResolvedValue(101),
+      };
+      const service = new StaffCourseAssignmentsService(courses as never);
+      expect(await service.list({ page: 2, limit: 100 }, target)).toEqual({
+        items: rows,
+        totalPages: 2,
+      });
+      expect(courses.find).toHaveBeenCalledWith(
+        target ? courseStaffFilter(target) : {},
+      );
+      expect(query.select).toHaveBeenCalledWith('_id code name nameAr nameEn');
+      expect(query.skip).toHaveBeenCalledWith(100);
+      expect(query.limit).toHaveBeenCalledWith(100);
+    },
+  );
   it('adds a doctor and keeps the existing colleague and legacy assistant', async () => {
     const { service, courses } = setup([
       {

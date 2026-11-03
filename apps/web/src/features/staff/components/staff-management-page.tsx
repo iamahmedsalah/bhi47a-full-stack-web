@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import {
   STAFF_ASSIGNABLE_PERMISSIONS,
   STAFF_TYPE_VALUES,
+  PERMISSIONS,
   formatStaffDisplayName,
   getCleanStaffName,
   getStaffRoleLabel,
@@ -66,6 +67,10 @@ export function StaffManagementPage() {
   const isAr = locale === "ar";
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canManageStaff =
+    isAdmin ||
+    (user?.role === "staff" &&
+      user.permissions?.includes(PERMISSIONS.STAFF_CREATE_ACADEMIC) === true);
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -114,7 +119,7 @@ export function StaffManagementPage() {
         values.role === "admin" ? undefined : (values.staffType as StaffType),
       titlePrefix:
         values.staffType === "doctor" ? values.titlePrefix || "dr" : undefined,
-      ...(isAdmin && values.role === "staff"
+      ...(canManageStaff && values.role === "staff"
         ? { courseIds: values.courseIds, permissions: values.permissions }
         : {}),
     };
@@ -130,7 +135,7 @@ export function StaffManagementPage() {
         phone: values.phone || undefined,
         password: values.password,
         permissions:
-          isAdmin && values.role === "staff" ? values.permissions : undefined,
+          canManageStaff && values.role === "staff" ? values.permissions : undefined,
       });
       toast.success(t("toasts.created"), { id: "staff-profile-save" });
     }
@@ -233,7 +238,7 @@ export function StaffManagementPage() {
     const isTargetAdmin = staff.role === "admin";
     const isTargetAdministrative = staff.staffType === "administrative";
     const canModifyTarget =
-      isAdmin || (!isTargetAdmin && !isTargetAdministrative);
+      isAdmin || (canManageStaff && !isTargetAdmin && !isTargetAdministrative);
 
     return (
       <DropdownMenu.Root dir={isAr ? "rtl" : "ltr"}>
@@ -521,6 +526,7 @@ export function StaffManagementPage() {
             </div>
 
             <Button
+              disabled={!canManageStaff}
               onClick={() => {
                 setEditing(null);
                 setFormOpen(true);

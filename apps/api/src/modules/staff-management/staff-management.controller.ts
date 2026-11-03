@@ -17,6 +17,7 @@ import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { QueryStaffDto } from './dto/query-staff.dto';
+import { QueryStaffCoursesDto } from './dto/query-staff-courses.dto';
 import { UpdateStaffPermissionsDto } from './dto/update-staff-permissions.dto';
 import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto';
 import { DeactivateStaffDto } from './dto/deactivate-staff.dto';
@@ -50,6 +51,23 @@ export class StaffManagementController {
     @CurrentUser('role') actorRole: string,
   ) {
     return this.staff.create(dto, actorId, actorRole);
+  }
+
+  @Get('course-choices')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
+  @ApiOperation({ summary: 'List course choices for staff assignment forms' })
+  courseChoices(@Query() query: QueryStaffCoursesDto) {
+    return this.staff.listFormCourses(query);
+  }
+
+  @Get(':id/courses')
+  @RequireAnyPermissions(PERMISSIONS.STAFF_CREATE_ACADEMIC)
+  @ApiOperation({ summary: 'List assigned courses for a staff edit form' })
+  assignedCourses(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query() query: QueryStaffCoursesDto,
+  ) {
+    return this.staff.listFormCourses(query, id);
   }
 
   @Get(':id')
