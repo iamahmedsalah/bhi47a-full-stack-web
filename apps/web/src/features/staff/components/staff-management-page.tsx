@@ -120,7 +120,7 @@ export function StaffManagementPage() {
       titlePrefix:
         values.staffType === "doctor" ? values.titlePrefix || "dr" : undefined,
       ...(canManageStaff && values.role === "staff"
-        ? { courseIds: values.courseIds, permissions: values.permissions }
+        ? { courseIds: values.courseIds, ...(isAdmin ? { permissions: values.permissions } : {}) }
         : {}),
     };
     if (editing) {
@@ -135,7 +135,7 @@ export function StaffManagementPage() {
         phone: values.phone || undefined,
         password: values.password,
         permissions:
-          canManageStaff && values.role === "staff" ? values.permissions : undefined,
+          isAdmin && values.role === "staff" ? values.permissions : undefined,
       });
       toast.success(t("toasts.created"), { id: "staff-profile-save" });
     }

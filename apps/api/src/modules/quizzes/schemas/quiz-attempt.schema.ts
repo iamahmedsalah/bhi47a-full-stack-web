@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import type { QuizQuestion } from './quiz.schema';
 
 export type QuizAttemptDocument = QuizAttempt & Document;
 
@@ -19,6 +20,9 @@ export class DraftAnswer {
   timestamps: true,
 })
 export class QuizAttempt {
+  @Prop({ type: Array, default: undefined })
+  assignedQuestions?: QuizQuestion[];
+
   @Prop({ type: Types.ObjectId, ref: 'Quiz', required: true })
   quizId!: Types.ObjectId;
 

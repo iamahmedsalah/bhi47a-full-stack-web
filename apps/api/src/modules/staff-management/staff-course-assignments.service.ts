@@ -35,7 +35,7 @@ export class StaffCourseAssignmentsService {
     const [items, total] = await Promise.all([
       this.courses
         .find(filter)
-        .select('_id code name nameAr nameEn')
+        .select('_id code name nameAr nameEn level')
         .sort({ code: 1, _id: 1 })
         .skip((query.page - 1) * query.limit)
         .limit(query.limit)

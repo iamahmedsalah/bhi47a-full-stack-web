@@ -1,4 +1,12 @@
 {
+  "quizRandomization": {
+    "title": "Randomized question bank (optional)",
+    "enable": "Give each student a random selection",
+    "hint": "The bank must contain at least three times the number shown. Maximum: 50 questions per student. Choose the mix below. Use equal points within each question type. Each student keeps the same questions when resuming.",
+    "mcq": "MCQ questions shown",
+    "trueFalse": "True / false questions shown",
+    "summary": "Shown: {selected} • Bank: {bank} • Minimum bank: {minimum}"
+  },
   "analyticsExport": {
     "title": "Export analytics (.xlsx)",
     "description": "Download the complete workbook or choose one or more analysis worksheets.",
@@ -50,8 +58,8 @@
     "review": "Answer review",
     "manual": "Manual control",
     "afterClose": "Release automatically after closing",
-    "showMarks": "Show marks now",
-    "enableReview": "Enable answer review",
+    "showMarks": "Show marks immediately after student finishes the quiz",
+    "enableReview": "Enable answer review ",
     "reviewGate": "Review requires visible marks, a saved submission, and the quiz closing time to have passed.",
     "closingRequired": "Choose a closing date and time for automatic release.",
     "releaseAt": "Automatic release: {time} (Cairo time)",

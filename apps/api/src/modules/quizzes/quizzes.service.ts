@@ -85,6 +85,11 @@ export interface QuizListItem extends Record<string, unknown> {
 
 import { MetricsService } from '../../core/metrics/metrics.service';
 import { CacheService } from '../../core/cache/cache.service';
+import {
+  attemptQuestions,
+  selectAttemptQuestions,
+  validateRandomization,
+} from './quiz-randomization.policy';
 import { QueueService } from '../../core/queues/queue.service';
 
 @Injectable()
@@ -178,10 +183,12 @@ export class QuizzesService implements OnModuleInit {
       }
     }
 
-    const totalMarks = (dto.questions || []).reduce(
-      (sum, q) => sum + (Number(q.points) || 1),
-      0,
-    );
+    const totalMarks = validateRandomization({
+      ...dto,
+      questions: dto.questions ?? [],
+      mcqCount: dto.mcqCount ?? 5,
+      trueFalseCount: dto.trueFalseCount ?? 5,
+    });
     const passingMarks = Math.max(1, Math.round(totalMarks * 0.5));
     const durationMinutes = Number(dto.durationMinutes) || 15;
 
@@ -315,7 +322,7 @@ export class QuizzesService implements OnModuleInit {
       this.quizModel
         .find(filter)
         .select(
-          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume publishResults resultsReleaseMode reviewReleaseMode questions createdAt updatedAt',
+          '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorId creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowReview allowResume publishResults resultsReleaseMode reviewReleaseMode randomizeQuestions mcqCount trueFalseCount questions createdAt updatedAt',
         )
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -436,11 +443,28 @@ export class QuizzesService implements OnModuleInit {
 
     const updatePayload: Record<string, any> = { ...dto };
     delete updatePayload.courseId;
-    if (dto.questions) {
-      updatePayload.totalMarks = dto.questions.reduce(
-        (sum, q) => sum + (Number(q.points) || 1),
-        0,
-      );
+    if (
+      dto.questions ||
+      dto.randomizeQuestions !== undefined ||
+      dto.mcqCount !== undefined ||
+      dto.trueFalseCount !== undefined
+    ) {
+      const randomizeQuestions =
+        dto.randomizeQuestions ?? quiz.randomizeQuestions;
+      if (
+        Boolean(randomizeQuestions) !== Boolean(quiz.randomizeQuestions) &&
+        (await this.attemptModel.exists({ quizId: quiz._id }))
+      ) {
+        throw new BadRequestException(
+          'Randomization cannot be changed after students start / لا يمكن تغيير العشوائية بعد بدء الطلاب',
+        );
+      }
+      updatePayload.totalMarks = validateRandomization({
+        questions: dto.questions ?? quiz.questions,
+        randomizeQuestions,
+        mcqCount: dto.mcqCount ?? quiz.mcqCount ?? 5,
+        trueFalseCount: dto.trueFalseCount ?? quiz.trueFalseCount ?? 5,
+      });
       updatePayload.passingMarks = Math.max(
         1,
         Math.round(updatePayload.totalMarks * 0.5),
@@ -619,6 +643,7 @@ export class QuizzesService implements OnModuleInit {
       startedAt?: Date;
       durationSeconds?: number;
       answers?: unknown[];
+      assignedQuestions?: Quiz['questions'];
     }>
   > {
     const quiz = await this.findOne(quizId);
@@ -655,6 +680,18 @@ export class QuizzesService implements OnModuleInit {
       .lean();
     const profileMap = new Map(profiles.map((p) => [p.studentCode, p]));
 
+    const attempts = quiz.randomizeQuestions
+      ? await this.attemptModel
+          .find({ quizId: quiz._id })
+          .select('studentId assignedQuestions')
+          .lean()
+      : [];
+    const questionsByStudent = new Map(
+      attempts.map((attempt) => [
+        String(attempt.studentId),
+        attempt.assignedQuestions,
+      ]),
+    );
     return submissions.map((sub) => {
       const profile = profileMap.get(sub.studentCode);
       const studentNameAr =
@@ -666,6 +703,9 @@ export class QuizzesService implements OnModuleInit {
         profile?.fullNameEn || profile?.fullName || sub.studentName;
       return {
         ...sub,
+        ...(quiz.randomizeQuestions
+          ? { assignedQuestions: questionsByStudent.get(String(sub.studentId)) }
+          : {}),
         studentNameAr,
         studentNameEn,
       };
@@ -775,7 +815,7 @@ export class QuizzesService implements OnModuleInit {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults resultsReleaseMode reviewReleaseMode questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults resultsReleaseMode reviewReleaseMode randomizeQuestions mcqCount trueFalseCount questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -834,7 +874,9 @@ export class QuizzesService implements OnModuleInit {
         durationMinutes: quiz.durationMinutes,
         totalMarks: quiz.totalMarks,
         passingMarks: quiz.passingMarks,
-        questionsCount: quiz.questions?.length || 0,
+        questionsCount: quiz.randomizeQuestions
+          ? (quiz.mcqCount ?? 5) + (quiz.trueFalseCount ?? 5)
+          : quiz.questions?.length || 0,
         startsAt: quiz.startsAt,
         endsAt: quiz.endsAt,
         allowResume: quiz.allowResume !== false,
@@ -899,6 +941,9 @@ export class QuizzesService implements OnModuleInit {
       throw new ConflictException('لقد قمت بتقديم هذا الاختبار بالفعل');
     }
 
+    if (quiz.randomizeQuestions) {
+      return (await this.startQuizAttempt(quizId, studentUserId)).quiz;
+    }
     const quizDurationSeconds = Math.max(60, (quiz.durationMinutes || 30) * 60);
     if (this.cacheService) {
       return this.cacheService.wrap(
@@ -914,7 +959,19 @@ export class QuizzesService implements OnModuleInit {
   /**
    * Start / resume quiz attempt with server-enforced countdown timer and anti-cheat session security.
    */
-  async startQuizAttempt(quizId: string, studentUserId: string) {
+  async startQuizAttempt(
+    quizId: string,
+    studentUserId: string,
+  ): Promise<{
+    quiz: ReturnType<QuizzesService['sanitizeQuiz']>;
+    attemptId: QuizAttemptDocument['_id'];
+    startedAt: Date;
+    expiresAt: Date;
+    remainingSeconds: number;
+    allowResume: boolean;
+    draftAnswers: { questionId: string; selectedOptionIndex: number }[];
+    isResumed: boolean;
+  }> {
     const studentUserObjectId = new Types.ObjectId(studentUserId);
 
     const [quiz, profile] = await Promise.all([
@@ -1054,7 +1111,7 @@ export class QuizzesService implements OnModuleInit {
         }
 
         return {
-          quiz: this.sanitizeQuiz(quiz),
+          quiz: this.sanitizeQuiz(quiz, attempt),
           attemptId: attempt._id,
           startedAt: attempt.startedAt,
           expiresAt: attempt.expiresAt,
@@ -1079,6 +1136,7 @@ export class QuizzesService implements OnModuleInit {
     );
 
     attempt = new this.attemptModel({
+      assignedQuestions: selectAttemptQuestions(quiz),
       quizId: quiz._id,
       courseId: quiz.courseId,
       studentId: studentUserObjectId,
@@ -1091,7 +1149,14 @@ export class QuizzesService implements OnModuleInit {
       lastActiveAt: new Date(now),
     });
 
-    await attempt.save();
+    try {
+      await attempt.save();
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        return this.startQuizAttempt(quizId, studentUserId);
+      }
+      throw error;
+    }
     this.metricsService?.updateActiveQuizAttempts(1);
 
     const initialDelayMs = Math.max(10, remainingSeconds + 15) * 1000;
@@ -1120,7 +1185,7 @@ export class QuizzesService implements OnModuleInit {
     }
 
     return {
-      quiz: this.sanitizeQuiz(quiz),
+      quiz: this.sanitizeQuiz(quiz, attempt),
       attemptId: attempt._id,
       startedAt: attempt.startedAt,
       expiresAt: attempt.expiresAt,
@@ -1330,7 +1395,8 @@ export class QuizzesService implements OnModuleInit {
     );
 
     let totalScore = 0;
-    const gradedAnswers = (quiz.questions || []).map((question) => {
+    const selectedQuestions = attemptQuestions(quiz, lockedAttempt);
+    const gradedAnswers = selectedQuestions.map((question) => {
       const selectedIndex = submittedMap.get(question.id);
       const isCorrect =
         selectedIndex !== undefined &&
@@ -1346,10 +1412,15 @@ export class QuizzesService implements OnModuleInit {
       };
     });
 
-    const totalMarks = quiz.totalMarks || 1;
+    const totalMarks = lockedAttempt.assignedQuestions?.length
+      ? selectedQuestions.reduce((sum, q) => sum + q.points, 0) || 1
+      : quiz.totalMarks || 1;
     const percentage = Math.round((totalScore / totalMarks) * 100);
     const isPassed =
-      totalScore >= (quiz.passingMarks || Math.round(totalMarks * 0.5));
+      totalScore >=
+      (lockedAttempt.assignedQuestions?.length
+        ? Math.max(1, Math.round(totalMarks * 0.5))
+        : quiz.passingMarks || Math.round(totalMarks * 0.5));
 
     // The client-supplied startedAt is untrusted; prefer the server-recorded attempt start.
     const startedAt = lockedAttempt.startedAt
@@ -1448,8 +1519,13 @@ export class QuizzesService implements OnModuleInit {
     };
   }
 
-  private sanitizeQuiz(quiz: Quiz | QuizDocument) {
-    const sanitizedQuestions = (quiz.questions || []).map((q) => ({
+  private sanitizeQuiz(
+    quiz: Quiz | QuizDocument,
+    attempt?: QuizAttemptDocument,
+  ) {
+    const selectedQuestions = attemptQuestions(quiz, attempt);
+    const totalMarks = selectedQuestions.reduce((sum, q) => sum + q.points, 0);
+    const sanitizedQuestions = selectedQuestions.map((q) => ({
       id: q.id,
       text: q.text,
       type: q.type,
@@ -1468,8 +1544,12 @@ export class QuizzesService implements OnModuleInit {
       courseNameAr: quiz.courseNameAr,
       courseNameEn: quiz.courseNameEn,
       durationMinutes: quiz.durationMinutes,
-      totalMarks: quiz.totalMarks,
-      passingMarks: quiz.passingMarks,
+      totalMarks: attempt?.assignedQuestions?.length
+        ? totalMarks
+        : quiz.totalMarks,
+      passingMarks: attempt?.assignedQuestions?.length
+        ? Math.max(1, Math.round(totalMarks * 0.5))
+        : quiz.passingMarks,
       startsAt: quiz.startsAt,
       endsAt: quiz.endsAt,
       allowResume: Boolean(quiz.allowResume),
@@ -1515,7 +1595,8 @@ export class QuizzesService implements OnModuleInit {
     );
 
     let totalScore = 0;
-    const gradedAnswers = (quiz.questions || []).map((question) => {
+    const selectedQuestions = attemptQuestions(quiz, attempt);
+    const gradedAnswers = selectedQuestions.map((question) => {
       const selectedIndex = submittedMap.get(question.id);
       const isCorrect =
         selectedIndex !== undefined &&
@@ -1531,10 +1612,15 @@ export class QuizzesService implements OnModuleInit {
       };
     });
 
-    const totalMarks = quiz.totalMarks || 1;
+    const totalMarks = attempt.assignedQuestions?.length
+      ? selectedQuestions.reduce((sum, q) => sum + q.points, 0) || 1
+      : quiz.totalMarks || 1;
     const percentage = Math.round((totalScore / totalMarks) * 100);
     const isPassed =
-      totalScore >= (quiz.passingMarks || Math.round(totalMarks * 0.5));
+      totalScore >=
+      (attempt.assignedQuestions?.length
+        ? Math.max(1, Math.round(totalMarks * 0.5))
+        : quiz.passingMarks || Math.round(totalMarks * 0.5));
     const startedAt = attempt.startedAt || new Date();
     const submittedAt = new Date();
     const durationSeconds = Math.max(
@@ -1610,26 +1696,40 @@ export class QuizzesService implements OnModuleInit {
       (submission.answers || []).map((a) => [a.questionId, a]),
     );
 
-    const questionsWithReview = (quiz.questions || []).map((q, idx) => {
-      const studentAnswer = studentAnswersMap.get(q.id);
-      const isSelected =
-        studentAnswer !== undefined && studentAnswer.selectedOptionIndex !== -1;
-      return {
-        id: q.id,
-        index: idx + 1,
-        text: q.text,
-        type: q.type,
-        options: q.options || [],
-        correctOptionIndex: q.correctOptionIndex,
-        points: q.points,
-        explanation: q.explanation || null,
-        studentSelectedOptionIndex:
-          studentAnswer !== undefined ? studentAnswer.selectedOptionIndex : -1,
-        isAnswered: isSelected,
-        isCorrect: studentAnswer ? studentAnswer.isCorrect : false,
-        pointsAwarded: studentAnswer ? studentAnswer.pointsAwarded : 0,
-      };
-    });
+    const reviewAttempt = quiz.randomizeQuestions
+      ? await this.attemptModel.findOne({
+          quizId: quiz._id,
+          studentId: studentUserObjectId,
+        })
+      : undefined;
+    const questionsWithReview = attemptQuestions(
+      quiz,
+      reviewAttempt ?? undefined,
+    )
+      .filter((q) => !quiz.randomizeQuestions || studentAnswersMap.has(q.id))
+      .map((q, idx) => {
+        const studentAnswer = studentAnswersMap.get(q.id);
+        const isSelected =
+          studentAnswer !== undefined &&
+          studentAnswer.selectedOptionIndex !== -1;
+        return {
+          id: q.id,
+          index: idx + 1,
+          text: q.text,
+          type: q.type,
+          options: q.options || [],
+          correctOptionIndex: q.correctOptionIndex,
+          points: q.points,
+          explanation: q.explanation || null,
+          studentSelectedOptionIndex:
+            studentAnswer !== undefined
+              ? studentAnswer.selectedOptionIndex
+              : -1,
+          isAnswered: isSelected,
+          isCorrect: studentAnswer ? studentAnswer.isCorrect : false,
+          pointsAwarded: studentAnswer ? studentAnswer.pointsAwarded : 0,
+        };
+      });
 
     return {
       quiz: {

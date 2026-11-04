@@ -172,6 +172,11 @@ export class StaffManagementService {
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
+    if (actorRole !== 'admin' && dto.permissions !== undefined) {
+      throw new ForbiddenException(
+        'Only administrators may assign staff permissions',
+      );
+    }
     if (dto.courseIds !== undefined && !session) {
       const result = await this.users.db.transaction((transaction) =>
         this.create(dto, actorId, actorRole, transaction),
@@ -278,6 +283,11 @@ export class StaffManagementService {
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
+    if (actorRole !== 'admin' && dto.permissions !== undefined) {
+      throw new ForbiddenException(
+        'Only administrators may assign staff permissions',
+      );
+    }
     if (dto.courseIds !== undefined && !session) {
       const result = await this.users.db.transaction((transaction) =>
         this.update(id, dto, actorId, actorRole, transaction),

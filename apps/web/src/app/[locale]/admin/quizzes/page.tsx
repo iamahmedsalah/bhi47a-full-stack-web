@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toCairoDateTimeLocal as toDateTimeLocal, cairoDateTimeToIso } from '@/lib/cairo-time';
 import { replaceImportedQuestions } from '@/features/quizzes/import-utils';
 import { getQuizCourseOptions } from '@/features/quizzes/api';
+import { QuizRandomizationControls } from '@/features/quizzes/components/quiz-randomization-controls';
 import { QuizReleaseControls } from '@/features/quizzes/components/quiz-release-controls';
 import { releaseStatus } from '@/features/quizzes/release-utils';
 import { useQuizReleaseRefresh } from '@/features/quizzes/use-quiz-release-refresh';
@@ -164,6 +165,9 @@ function QuizFormDialog({
   );
   const [reviewReleaseMode, setReviewReleaseMode] = useState<QuizReleaseMode>(initialValues.reviewReleaseMode ?? 'manual');
   const [allowResume, setAllowResume] = useState(initialValues.allowResume ?? true);
+  const [randomizeQuestions, setRandomizeQuestions] = useState(initialValues.randomizeQuestions ?? false);
+  const [mcqCount, setMcqCount] = useState(initialValues.mcqCount ?? 5);
+  const [trueFalseCount, setTrueFalseCount] = useState(initialValues.trueFalseCount ?? 5);
   const [uploadingExcel, setUploadingExcel] = useState(false);
   const [excelErrors, setExcelErrors] = useState<string[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -208,6 +212,9 @@ function QuizFormDialog({
     setResultsReleaseMode(initialValues.resultsReleaseMode ?? (mode === 'add' ? 'after_close' : 'manual'));
     setReviewReleaseMode(initialValues.reviewReleaseMode ?? 'manual');
     setAllowResume(initialValues.allowResume ?? true);
+    setRandomizeQuestions(initialValues.randomizeQuestions ?? false);
+    setMcqCount(initialValues.mcqCount ?? 5);
+    setTrueFalseCount(initialValues.trueFalseCount ?? 5);
     setUploadingExcel(false);
     setExcelErrors([]);
     setError('');
@@ -304,6 +311,7 @@ function QuizFormDialog({
           allowReview,
           allowResume,
           questions,
+          randomizeQuestions, mcqCount, trueFalseCount,
           savedAt: new Date().toISOString(),
         };
         localStorage.setItem(draftStorageKey, JSON.stringify(draft));
@@ -337,6 +345,9 @@ function QuizFormDialog({
     allowReview,
     allowResume,
     questions,
+    randomizeQuestions,
+    mcqCount,
+    trueFalseCount,
     draftStorageKey,
     isAr,
   ]);
@@ -347,6 +358,9 @@ function QuizFormDialog({
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed.courseId) setCourseId(parsed.courseId);
+      setRandomizeQuestions(parsed.randomizeQuestions ?? false);
+      setMcqCount(parsed.mcqCount ?? 5);
+      setTrueFalseCount(parsed.trueFalseCount ?? 5);
       if (parsed.title) setTitle(parsed.title);
       if (parsed.description) setDescription(parsed.description);
       if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
@@ -495,6 +509,20 @@ function QuizFormDialog({
       return;
     }
 
+    if (randomizeQuestions) {
+      const count = mcqCount + trueFalseCount;
+      if (![mcqCount, trueFalseCount].every((n) => Number.isInteger(n) && n >= 0) || count < 1 || count > 50 || questions.length < count * 3) {
+        setError(isAr ? 'اختر من 1 إلى 50 سؤالاً، وأضف للبنك ثلاثة أضعاف عدد الأسئلة المعروضة على الأقل.' : 'Select 1–50 questions and add at least three times that number to the bank.');
+        return;
+      }
+      for (const [type, requested] of [['mcq', mcqCount], ['true_false', trueFalseCount]] as const) {
+        const pool = questions.filter((q) => q.type === type);
+        if (requested > pool.length || (requested > 0 && pool.some((q) => q.points !== pool[0].points))) {
+          setError(isAr ? 'أضف أسئلة كافية لكل نوع واستخدم نفس الدرجة لأسئلة النوع الواحد.' : 'Add enough questions of each type and use equal points within each type.');
+          return;
+        }
+      }
+    }
     // Validate questions
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
@@ -537,6 +565,7 @@ function QuizFormDialog({
         reviewReleaseMode,
         allowReview,
         allowResume,
+        randomizeQuestions, mcqCount, trueFalseCount,
         questions,
       };
 
@@ -649,8 +678,10 @@ function QuizFormDialog({
   }, [startsAt, endsAt, startsAtIso, endsAtIso, scheduleValidationError, isAr]);
 
   const totalPoints = useMemo(
-    () => questions.reduce((acc, q) => acc + (Number(q.points) || 1), 0),
-    [questions],
+    () => randomizeQuestions
+      ? mcqCount * (questions.find((q) => q.type === 'mcq')?.points ?? 0) + trueFalseCount * (questions.find((q) => q.type === 'true_false')?.points ?? 0)
+      : questions.reduce((acc, q) => acc + (Number(q.points) || 1), 0),
+    [questions, randomizeQuestions, mcqCount, trueFalseCount],
   );
 
   return (
@@ -1020,6 +1051,7 @@ function QuizFormDialog({
             )}
           </div>
 
+          <QuizRandomizationControls enabled={randomizeQuestions} mcqCount={mcqCount} trueFalseCount={trueFalseCount} bankSize={questions.length} onEnabledChange={setRandomizeQuestions} onMcqChange={setMcqCount} onTrueFalseChange={setTrueFalseCount} />
           {/* Questions Section */}
           <div className="space-y-4 pt-2">
             <div className="flex items-center justify-between">
@@ -1229,7 +1261,7 @@ function StudentSubmissionDetailDialog({
 
   if (!submission || !quiz) return null;
 
-  const questions = quiz.questions || [];
+  const questions = (submission.assignedQuestions || quiz.questions || []).filter((q) => !quiz.randomizeQuestions || submission.answers?.some((answer) => answer.questionId === q.id));
   const answersMap = new Map(
     (submission.answers || []).map((a) => [a.questionId, a]),
   );

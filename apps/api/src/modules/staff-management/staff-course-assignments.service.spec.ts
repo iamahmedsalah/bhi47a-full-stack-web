@@ -51,7 +51,9 @@ describe('staff course assignments', () => {
       expect(courses.find).toHaveBeenCalledWith(
         target ? courseStaffFilter(target) : {},
       );
-      expect(query.select).toHaveBeenCalledWith('_id code name nameAr nameEn');
+      expect(query.select).toHaveBeenCalledWith(
+        '_id code name nameAr nameEn level',
+      );
       expect(query.skip).toHaveBeenCalledWith(100);
       expect(query.limit).toHaveBeenCalledWith(100);
     },

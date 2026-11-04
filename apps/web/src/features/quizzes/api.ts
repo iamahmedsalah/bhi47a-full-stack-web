@@ -20,6 +20,9 @@ export interface QuizQuestion {
 }
 
 export interface QuizItem {
+  randomizeQuestions?: boolean;
+  mcqCount?: number;
+  trueFalseCount?: number;
   _id: string;
   title: string;
   titleAr?: string;
@@ -56,6 +59,7 @@ export interface QuizItem {
 }
 
 export interface QuizSubmission {
+  assignedQuestions?: QuizQuestion[];
   _id: string;
   quizId: string;
   courseId: string;

@@ -94,6 +94,173 @@ describe('QuizzesService Unit Tests', () => {
     );
   });
 
+  describe('randomized attempts', () => {
+    function setupRandomized() {
+      const questions = Array.from({ length: 30 }, (_, index) => ({
+        id: `r${index}`,
+        text: `Question ${index}`,
+        type: index % 2 ? 'mcq' : 'true_false',
+        options: ['A', 'B'],
+        correctOptionIndex: 0,
+        points: 1,
+      }));
+      const quiz = {
+        _id: new Types.ObjectId(quizId),
+        courseId: new Types.ObjectId(courseId),
+        title: 'Random quiz',
+        isPublished: true,
+        allowResume: true,
+        publishResults: true,
+        allowReview: true,
+        durationMinutes: 15,
+        totalMarks: 10,
+        passingMarks: 5,
+        randomizeQuestions: true,
+        mcqCount: 5,
+        trueFalseCount: 5,
+        questions,
+      };
+      const assignedQuestions = questions.slice(0, 10);
+      const attempt = {
+        _id: new Types.ObjectId(),
+        status: 'in_progress',
+        startedAt: new Date(),
+        expiresAt: new Date(Date.now() + 900000),
+        assignedQuestions,
+        draftAnswers: assignedQuestions.map((q) => ({
+          questionId: q.id,
+          selectedOptionIndex: 0,
+        })),
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      mockQuizModel.findById.mockResolvedValue(quiz);
+      mockSubmissionModel.findOne.mockResolvedValue(null);
+      mockAttemptModel.findOne.mockResolvedValue(attempt);
+      return { quiz, attempt };
+    }
+
+    it('persists a selection on first start and returns the saved version on resume', async () => {
+      const { quiz } = setupRandomized();
+      mockAttemptModel.findOne.mockResolvedValue(null);
+      let savedAttempt: Record<string, unknown> | undefined;
+      mockAttemptModel.mockImplementation(function (
+        this: Record<string, unknown>,
+        data: Record<string, unknown>,
+      ) {
+        Object.assign(this, data);
+        this._id = new Types.ObjectId();
+        this.save = jest.fn().mockImplementation(() => {
+          savedAttempt = { ...this };
+          return Promise.resolve(this);
+        });
+      });
+      const first = await service.startQuizAttempt(quizId, studentUserId);
+      expect(first.quiz.questions).toHaveLength(10);
+      expect(savedAttempt?.assignedQuestions).toHaveLength(10);
+      expect(first.quiz.questions.filter((q) => q.type === 'mcq')).toHaveLength(
+        5,
+      );
+      mockAttemptModel.findOne.mockResolvedValue(savedAttempt);
+      quiz.questions = [];
+      const resumed = await service.startQuizAttempt(quizId, studentUserId);
+      expect(resumed.quiz.questions).toEqual(first.quiz.questions);
+      expect(resumed.isResumed).toBe(true);
+    });
+
+    it('resumes the saved selection, hides answers, and bypasses the public bank', async () => {
+      const { quiz, attempt } = setupRandomized();
+      quiz.questions = [];
+      const result = await service.startQuizAttempt(quizId, studentUserId);
+      expect(result.quiz.questions.map((q) => q.id)).toEqual(
+        attempt.assignedQuestions.map((q) => q.id),
+      );
+      expect(result.quiz.questions).toHaveLength(10);
+      expect(result.quiz.questions[0]).not.toHaveProperty('correctOptionIndex');
+      expect(result.quiz.questions[0]).not.toHaveProperty('explanation');
+      expect(result.quiz.totalMarks).toBe(10);
+      expect(result.isResumed).toBe(true);
+    });
+
+    it('grades only saved questions and ignores injected answers from the bank', async () => {
+      const { attempt } = setupRandomized();
+      mockAttemptModel.findOneAndUpdate.mockResolvedValue(attempt);
+      mockSubmissionModel.mockImplementation(function (
+        this: Record<string, unknown>,
+        data: Record<string, unknown>,
+      ) {
+        Object.assign(this, data);
+        this.save = jest.fn().mockResolvedValue(data);
+      });
+      const result = await service.submitQuiz(quizId, studentUserId, {
+        answers: [
+          ...attempt.draftAnswers,
+          { questionId: 'r29', selectedOptionIndex: 0 },
+        ],
+      });
+      expect(result.score).toBe(10);
+      expect(result.totalMarks).toBe(10);
+      expect(result.percentage).toBe(100);
+      expect(result.answers).toHaveLength(10);
+      expect(
+        result.answers?.some((answer) => answer.questionId === 'r29'),
+      ).toBe(false);
+    });
+
+    it('auto-submits the saved selection on timeout', async () => {
+      const { attempt } = setupRandomized();
+      mockAttemptModel.findById = jest.fn().mockResolvedValue(attempt);
+      const save = jest.fn().mockResolvedValue({});
+      mockSubmissionModel.mockImplementation(function (
+        this: Record<string, unknown>,
+        data: Record<string, unknown>,
+      ) {
+        Object.assign(this, data);
+        this.save = save;
+      });
+      await service.handleAutoSubmitJob(
+        String(attempt._id),
+        quizId,
+        studentUserId,
+      );
+      expect(mockSubmissionModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          score: 10,
+          totalMarks: 10,
+          percentage: 100,
+          answers: expect.arrayContaining([
+            expect.objectContaining({ questionId: 'r0' }),
+          ]),
+        }),
+      );
+      expect(attempt.status).toBe('timed_out');
+      expect(save).toHaveBeenCalled();
+    });
+
+    it('reviews only the saved selection even if the bank has been edited', async () => {
+      const { quiz, attempt } = setupRandomized();
+      Object.assign(quiz, { endsAt: new Date(Date.now() - 1000) });
+      quiz.questions = [];
+      mockSubmissionModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          score: 10,
+          totalMarks: 10,
+          answers: attempt.assignedQuestions.map((q) => ({
+            questionId: q.id,
+            selectedOptionIndex: 0,
+            isCorrect: true,
+            pointsAwarded: 1,
+          })),
+        }),
+      });
+      const result = await service.getQuizReview(quizId, studentUserId);
+      expect(result.questions).toHaveLength(10);
+      expect(result.questions.map((q) => q.id)).toEqual(
+        attempt.assignedQuestions.map((q) => q.id),
+      );
+      expect(result.questions.every((q) => q.isCorrect)).toBe(true);
+    });
+  });
+
   describe('create()', () => {
     it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
       'defaults assigned %s quizzes to automatic marks and manual review',

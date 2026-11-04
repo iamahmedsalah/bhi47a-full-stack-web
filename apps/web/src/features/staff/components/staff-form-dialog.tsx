@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getStaffCourseChoices, getStaffFormCourses } from "../api";
@@ -82,6 +82,8 @@ export function StaffFormDialog({
   const isAr = locale === "ar";
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const [courseSearch, setCourseSearch] = useState("");
+  const [courseLevel, setCourseLevel] = useState("all");
   const canManageStaff =
     isAdmin ||
     (user?.role === "staff" &&
@@ -134,9 +136,17 @@ export function StaffFormDialog({
     enabled: open && canManageStaff && Boolean(staff && staff.role === "staff"),
     staleTime: 0,
   });
+  const visibleCourses = (courseChoices.data ?? []).filter((course) =>
+    (courseLevel === "all" || course.level === courseLevel) &&
+    [course.code, course.name, course.nameAr, course.nameEn].some((value) =>
+      value?.toLocaleLowerCase().includes(courseSearch.trim().toLocaleLowerCase()),
+    ),
+  );
 
   useEffect(() => {
     if (!open) return;
+    setCourseSearch("");
+    setCourseLevel("all");
     const initialStaffType =
       (staff?.staffType as StaffType) ?? allowedStaffTypes[0] ?? "doctor";
     const initialTitlePrefix =
@@ -597,6 +607,16 @@ export function StaffFormDialog({
                     <p className="text-xs text-muted-foreground">
                       {t("details.assignedCoursesDescription")}
                     </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Input aria-label={isAr ? "البحث عن مقرر" : "Search courses"} placeholder={isAr ? "ابحث بالاسم أو الكود" : "Search by name or code"} value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} className="flex-1 rounded-squircle" />
+                      <Select value={courseLevel} onValueChange={setCourseLevel}>
+                        <SelectTrigger aria-label={isAr ? "المستوى" : "Level"} className="w-40 rounded-squircle"><SelectValue /></SelectTrigger>
+                        <SelectContent dir={isAr ? "rtl" : "ltr"}>
+                          <SelectItem value="all">{isAr ? "كل المستويات" : "All levels"}</SelectItem>
+                          {Array.from(new Set((courseChoices.data ?? []).map((course) => course.level).filter((level): level is string => Boolean(level)))).sort().map((level) => <SelectItem key={level} value={level}>{isAr ? `المستوى ${level}` : `Level ${level}`}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {courseChoices.isLoading ||
                     (staff && assignments.isLoading) ? (
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -621,7 +641,7 @@ export function StaffFormDialog({
                       </div>
                     ) : (
                       <div className="max-h-56 space-y-2 overflow-y-auto pe-1">
-                        {courseChoices.data?.map((course) => {
+                        {visibleCourses.map((course) => {
                           const isSelected = selectedCourses.includes(
                             course._id,
                           );
@@ -660,7 +680,7 @@ export function StaffFormDialog({
                             </label>
                           );
                         })}
-                        {courseChoices.data?.length === 0 && (
+                        {visibleCourses.length === 0 && (
                           <p className="text-sm text-muted-foreground">
                             {t("details.noCourses")}
                           </p>
@@ -672,14 +692,14 @@ export function StaffFormDialog({
                     </FormMessage>
                   </fieldset>
                 )}
-                <StaffPermissionFields
+                {isAdmin && <StaffPermissionFields
                   value={(form.watch("permissions") ?? []) as Permission[]}
                   currentStaffType={selectedType as StaffType}
                   onChange={(value) =>
                     form.setValue("permissions", value, { shouldDirty: true })
                   }
                   disabled={pending}
-                />
+                />}
               </>
             )}
             <DialogFooter className="mt-6 gap-2 border-t border-border/70 pt-4 rtl:sm:justify-start">

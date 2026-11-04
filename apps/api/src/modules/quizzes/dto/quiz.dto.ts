@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsArray,
@@ -60,6 +61,25 @@ export class QuizQuestionDto {
 }
 
 export class CreateQuizDto {
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  randomizeQuestions?: boolean;
+
+  @ApiPropertyOptional({ default: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  mcqCount?: number;
+
+  @ApiPropertyOptional({ default: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  trueFalseCount?: number;
+
   @ApiProperty({ example: 'كويز الأسبوع الرابع - البرمجة الشيئية' })
   @IsString()
   @IsNotEmpty()
@@ -154,6 +174,25 @@ export class CreateQuizDto {
 }
 
 export class UpdateQuizDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  randomizeQuestions?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  mcqCount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  trueFalseCount?: number;
+
   @ApiPropertyOptional({
     description: 'Target course ID (immutable after creation)',
   })

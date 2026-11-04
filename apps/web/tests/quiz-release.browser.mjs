@@ -92,8 +92,8 @@ const server = http.createServer(async (req, res) => {
           res.statusCode = 503; res.end(JSON.stringify({message:'Course selector unavailable'})); return;
         }
         const all = [
-          { _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' },
-          { _id: '200000000000000000000002', code: 'AS102', name: 'Second course', nameAr: 'المقرر الثاني' },
+          { _id: courseId, code: 'QR101', level: '1', name: 'Course', nameAr: 'المقرر' },
+          { _id: '200000000000000000000002', code: 'AS102', level: '2', name: 'Second course', nameAr: 'المقرر الثاني' },
         ];
         const assigned = pathname.endsWith('/courses');
         const selected = staffProfile.courseIds ?? all.map(course => course._id);
@@ -142,8 +142,8 @@ const server = http.createServer(async (req, res) => {
       const student = { ...current, publishResults: current.resultsAvailable, canReview: current.reviewAvailable,
         isSubmitted: true, questionsCount: 1, isOpen: !current.isEnded, submission: { ...(current.resultsAvailable ? { score: 2, percentage: 100, isPassed: true } : {}), totalMarks: 2, submittedAt: new Date().toISOString(), durationSeconds: 10 } };
       let data = [];
-      if (pathname === '/staff/me/assigned-courses') data = [{ _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' }];
-      if (pathname === '/admin/courses' || pathname === '/courses') data = { items: [{ _id: courseId, code: 'QR101', name: 'Course', nameAr: 'المقرر' }], totalPages: 1 };
+      if (pathname === '/staff/me/assigned-courses') data = [{ _id: courseId, code: 'QR101', level: '1', name: 'Course', nameAr: 'المقرر' }];
+      if (pathname === '/admin/courses' || pathname === '/courses') data = { items: [{ _id: courseId, code: 'QR101', level: '1', name: 'Course', nameAr: 'المقرر' }], totalPages: 1 };
       else if (pathname === '/admin/quizzes') data = req.method === 'GET' ? { items: [current], total: 1, page: 1, limit: 15, totalPages: 1 } : current;
       else if (pathname.startsWith('/admin/quizzes/')) data = current;
       else if (pathname === '/students/me/quizzes') { studentCalls++; data = [student]; }
@@ -299,34 +299,44 @@ try {
       await dialog.getByLabel(t.fields.email, {exact:true}).fill('managed@example.test');
       await dialog.getByLabel(t.fields.temporaryPassword, {exact:true}).fill('SyntheticPassword123!');
       const permissions = dialog.getByRole('group', {name:t.table.permissions, exact:true});
-      await permissions.getByRole('button', {name:t.permissions.clearAll, exact:true}).first().click();
-      await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).check();
+      assert.equal(await permissions.count(), 0);
       const courses = dialog.getByRole('group', {name:t.details.assignedCoursesTitle, exact:true});
       await courses.getByRole('checkbox', {name:/QR101/}).check();
+      const search = courses.getByRole('textbox', {name:locale === 'ar' ? 'البحث عن مقرر' : 'Search courses', exact:true});
+      await search.fill('AS102');
+      assert.equal(await courses.getByRole('checkbox').count(), 1);
+      await courses.getByRole('checkbox', {name:/AS102/}).waitFor();
+      await search.fill('');
+      await courses.getByRole('button', {name:locale === 'ar' ? 'المستوى' : 'Level', exact:true}).click();
+      await page.getByRole('option', {name:locale === 'ar' ? 'المستوى 2' : 'Level 2', exact:true}).click();
+      assert.equal(await courses.getByRole('checkbox', {name:/QR101/}).count(), 0);
+      await courses.getByRole('checkbox', {name:/AS102/}).waitFor();
+      await courses.getByRole('button', {name:locale === 'ar' ? 'المستوى' : 'Level', exact:true}).click();
+      await page.getByRole('option', {name:locale === 'ar' ? 'كل المستويات' : 'All levels', exact:true}).click();
+      assert.equal(await courses.getByRole('checkbox', {name:/QR101/}).isChecked(), true);
       await dialog.getByRole('button', {name:t.create, exact:true}).click();
       await dialog.waitFor({state:'hidden'});
       assert.deepEqual(staffProfileMutations.at(-1).courseIds, [courseId]);
-      assert.deepEqual(staffProfileMutations.at(-1).permissions, ['students.read']);
+      assert.equal(staffProfileMutations.at(-1).permissions, undefined);
       assert.equal(staffProfileMutations.at(-1).staffType, staffType);
       await page.getByRole('button', {name:t.table.actions, exact:true}).first().click();
       await page.getByRole('menuitem', {name:t.actions.edit, exact:true}).click();
       await courses.getByRole('checkbox', {name:/QR101/}).waitFor();
       await page.waitForFunction(() => !document.querySelector('button[type="submit"]')?.disabled);
       assert.equal(await courses.getByRole('checkbox', {name:/QR101/}).isChecked(), true);
-      assert.equal(await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).isChecked(), true);
+      assert.equal(await permissions.count(), 0);
       await courses.getByRole('checkbox', {name:/QR101/}).uncheck();
-      await permissions.getByRole('checkbox', {name:t.permissions.labels.students_read, exact:true}).uncheck();
-      await permissions.getByRole('checkbox', {name:t.permissions.labels.grades_read, exact:true}).check();
+
       if (staffType === 'doctor') {
         await page.screenshot({path:path.join(output, `staff-manager-form-${locale}.png`), fullPage:true});
       }
       await dialog.getByRole('button', {name:t.save, exact:true}).click();
       await dialog.waitFor({state:'hidden'});
       assert.deepEqual(staffProfileMutations.at(-1).courseIds, []);
-      assert.deepEqual(staffProfileMutations.at(-1).permissions, ['grades.read']);
+      assert.equal(staffProfileMutations.at(-1).permissions, undefined);
     }
   }
-  console.log('Delegated staff forms passed: Arabic/English creation, course and permission persistence, edit/reopen, all academic types and read-only restrictions.');
+  console.log('Delegated staff forms passed: Arabic/English creation, course persistence, admin-only permissions, edit/reopen, all academic types and read-only restrictions.');
   if (!process.argv.includes('--staff-only')) {
   for (const locale of ['en', 'ar']) {
     reset();
@@ -334,8 +344,19 @@ try {
     const marks = page.getByRole('button', { name: locale === 'ar' ? 'إعلان الدرجات' : 'Marks release', exact: true });
     await marks.waitFor();
     assert.match(await marks.innerText(), new RegExp(locale === 'ar' ? 'إتاحة تلقائية بعد إغلاق الاختبار' : 'Release automatically after closing'));
-    const reviewCheckbox = page.getByRole('checkbox', { name: locale === 'ar' ? 'تفعيل مراجعة الإجابات' : 'Enable answer review' });
+    const quizMessages = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8'));
+    const reviewCheckbox = page.getByRole('checkbox', { name: quizMessages.quizRelease.enableReview });
     assert.equal(await reviewCheckbox.isChecked(), false);
+    const randomization = JSON.parse(await fs.readFile(path.join(web, `src/messages/${locale}.json`), 'utf8')).quizRandomization;
+    const randomToggle = page.getByRole('checkbox', {name:randomization.enable, exact:true});
+    assert.equal(await randomToggle.isChecked(), false);
+    await randomToggle.check();
+    await page.getByLabel(randomization.mcq, {exact:true}).fill('10');
+    await page.getByLabel(randomization.trueFalse, {exact:true}).fill('10');
+    const randomSummary = randomization.summary.replace('{selected}', '20').replace('{bank}', '1').replace('{minimum}', '60');
+    await page.getByText(randomSummary, {exact:true}).waitFor();
+    await page.screenshot({path:path.join(output, `randomization-${locale}.png`), fullPage:true});
+    await randomToggle.uncheck();
     await marks.click();
     await page.getByRole('menuitemradio', { name: locale === 'ar' ? 'إتاحة تلقائية بعد إغلاق الاختبار' : 'Release automatically after closing', exact: true }).click();
     await page.getByText(new RegExp(locale === 'ar' ? 'موعد الإتاحة التلقائية:' : 'Automatic release:'), { exact: false }).waitFor();

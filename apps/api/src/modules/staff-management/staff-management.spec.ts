@@ -434,7 +434,7 @@ describe('Staff management security contracts', () => {
     }
 
     it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
-      'lets a staff manager create and edit %s courses and permissions atomically',
+      'lets an administrator create and edit %s courses and permissions atomically',
       async (staffType) => {
         const { service, stored, assignments, users } = setup();
         const actor = '507f1f77bcf86cd799439012';
@@ -449,7 +449,7 @@ describe('Staff management security contracts', () => {
             permissions: [PERMISSIONS.ATTENDANCE_READ],
           },
           actor,
-          'staff',
+          'admin',
         );
         expect(created.permissions).toEqual([PERMISSIONS.ATTENDANCE_READ]);
         expect(assignments.sync).toHaveBeenCalledWith(
@@ -464,7 +464,7 @@ describe('Staff management security contracts', () => {
             permissions: [PERMISSIONS.STUDENTS_READ],
           },
           actor,
-          'staff',
+          'admin',
         );
         expect(updated.permissions).toEqual([PERMISSIONS.STUDENTS_READ]);
         expect(stored.tokenVersion).toBe(1);
@@ -476,6 +476,69 @@ describe('Staff management security contracts', () => {
         expect(users.db.transaction).toHaveBeenCalledTimes(2);
       },
     );
+
+    it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
+      'lets staff managers assign courses to %s with default permissions',
+      async (staffType) => {
+        const { service, stored, assignments } = setup();
+        const created = await service.create(
+          {
+            name: 'Academic',
+            email: 'academic@example.test',
+            password: 'SyntheticPassword123!',
+            staffType,
+            courseIds: ['507f1f77bcf86cd799439013'],
+          },
+          '507f1f77bcf86cd799439012',
+          'staff',
+        );
+        expect(created.permissions).toEqual(expect.any(Array));
+        expect(assignments.sync).toHaveBeenCalledWith(
+          stored,
+          ['507f1f77bcf86cd799439013'],
+          expect.any(Object),
+        );
+        await service.update(
+          created._id,
+          { courseIds: [] },
+          '507f1f77bcf86cd799439012',
+          'staff',
+        );
+        expect(assignments.sync).toHaveBeenLastCalledWith(
+          stored,
+          [],
+          expect.any(Object),
+        );
+      },
+    );
+
+    it('rejects permission escalation through staff create and profile update', async () => {
+      const { service, users, assignments } = setup();
+      await expect(
+        service.create(
+          {
+            name: 'Academic',
+            email: 'academic@example.test',
+            password: 'SyntheticPassword123!',
+            staffType: 'doctor',
+            permissions: [PERMISSIONS.STUDENTS_READ],
+            courseIds: [],
+          },
+          '507f1f77bcf86cd799439012',
+          'staff',
+        ),
+      ).rejects.toThrow('Only administrators');
+      await expect(
+        service.update(
+          '507f1f77bcf86cd799439011',
+          { permissions: [] },
+          '507f1f77bcf86cd799439012',
+          'staff',
+        ),
+      ).rejects.toThrow('Only administrators');
+      expect(users.create).not.toHaveBeenCalled();
+      expect(assignments.sync).not.toHaveBeenCalled();
+    });
 
     it.each(['admin', 'administrative'] as const)(
       'keeps %s accounts protected from staff manager form edits',
@@ -490,14 +553,11 @@ describe('Staff management security contracts', () => {
             String(stored._id),
             {
               courseIds: [],
-              permissions: [],
             },
             '507f1f77bcf86cd799439012',
             'staff',
           ),
-        ).rejects.toThrow(
-          type === 'admin' ? 'cannot be customized' : 'cannot modify',
-        );
+        ).rejects.toThrow('cannot modify');
         expect(assignments.sync).not.toHaveBeenCalled();
         expect(stored.save).not.toHaveBeenCalled();
       },

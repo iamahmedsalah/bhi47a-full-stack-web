@@ -108,6 +108,15 @@ export class Quiz {
 
   @Prop({ type: Array, default: [] })
   questions!: QuizQuestion[];
+
+  @Prop({ type: Boolean, default: false })
+  randomizeQuestions?: boolean;
+
+  @Prop({ type: Number, min: 0, max: 50, default: 5 })
+  mcqCount?: number;
+
+  @Prop({ type: Number, min: 0, max: 50, default: 5 })
+  trueFalseCount?: number;
 }
 
 export const QuizSchema = SchemaFactory.createForClass(Quiz);
