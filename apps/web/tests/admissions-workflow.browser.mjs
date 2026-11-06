@@ -29,7 +29,8 @@ await write('styles.css', css.css);
 const id = '100000000000000000000010', periodId = '100000000000000000000020';
 const reference = 'ADM-ABCDEFGH2345';
 let applicant, periodDeleted, accessAvailable, approvalConflict, mappingCorrected;
-let holdSaved = false;
+let adminState = '', ownerReviewed = false;
+let holdSaved = false, recoverCalls = 0, freeSaved = false, deleteSaved = false;
 const writes = [];
 const reset = () => { applicant = { _id: id, publicReference: reference, academicYear: '2026-2027', admissionPeriodId: periodId, fullName: 'Synthetic applicant', fullNameAr: 'متقدم تجريبي', address: 'عنوان تجريبي بالقاهرة', phone: '01012345678', nationalIdMasked: '300********001', guardians: [{ name: 'Synthetic guardian', phone: '01112345678', relationship: 'Parent' }], studentType: 'NEW', status: 'PENDING', revision: 0, submittedAt: '2026-11-01T08:00:00Z', history: [{ action: 'SUBMITTED', revision: 0, at: '2026-11-01T08:00:00Z' }] }; periodDeleted = false; accessAvailable = false; approvalConflict = false; mappingCorrected = false; writes.length = 0; };
 const list = items => ({ items, total: items.length, totalPages: 1, page: 1, limit: 20 });
@@ -61,7 +62,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/admin/student-codes/mappings/preview') return send({ items: mappingCorrected ? [] : [{ academicYear: '2026-2027', currentPrefix: '26', expectedPrefix: '27', nextSequence: 101, nextCode: '270101' }], fingerprint: 'f'.repeat(64), canApply: !mappingCorrected, collision: false, truncated: false, changesExistingStudentCodes: false });
     if (url.pathname === '/admin/student-codes/mappings/correct') { mappingCorrected = true; return send({ corrected: 1, changesExistingStudentCodes: false }); }
     if (url.pathname === '/admin/student-codes/270102/hold') { holdSaved = true; return send({ studentCode: '270102', status: 'RELEASED', reuseEnabled: false }); }
-    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270001', sequence: 1, status: 'REQUIRES_REVIEW', reason: 'REGISTRY_YEAR_MISMATCH', observedStudentId: '100000000000000000000040', studentProfileId: '100000000000000000000041', studentName: 'Known student', studentNameAr: 'Known student', studentAcademicYear: '2026-2027', registryAcademicYear: '2027-2028' }, { studentCode: '270101', sequence: 101, status: 'ASSIGNED', reason: 'CURRENT_OWNER', currentStudentId: '100000000000000000000030', studentProfileId: '100000000000000000000031', studentName: 'Synthetic student', studentNameAr: 'Synthetic student', department: 'BIS', level: '1' }, { studentCode: '270102', sequence: 102, status: holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW', reason: holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: 'f'.repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 1 : 2, MISSING: 0 } });
+    if (url.pathname === '/admin/student-codes/270001/manage') { ownerReviewed = true; return send({ studentCode: '270001', status: 'ASSIGNED' }); }
+    if (url.pathname === '/admin/student-codes/270102/manage') { adminState = body.action === 'FREE' ? 'AVAILABLE' : 'RELEASED'; return send({ studentCode: '270102', status: adminState }); }
+    if (url.pathname === '/admin/student-codes/270002/recover') { recoverCalls++; if (recoverCalls === 1) return send({ code: 'CODE_PREVIEW_CHANGED' }, 409); freeSaved = true; return send({ studentCode: '270002', status: 'AVAILABLE' }); }
+    if (url.pathname === '/admin/student-codes/270101/delete-student') { deleteSaved = true; return send({ studentCode: '270101', status: 'RELEASED' }); }
+    if (url.pathname === '/admin/student-codes/270101/history') return send({ ...list([{ _id: 'event1', action: 'IMPORTED', to: 'ASSIGNED', reason: 'Spreadsheet row 7', at: '2026-11-01T08:00:00Z', actorId: '100000000000000000000001', actorName: 'Import operator', source: 'import', details: { sourceFile: 'students-legacy.xlsx', batchId: 'upload-session-123', rowNumber: 7 } }]), assignments: [], existingIdentity: true, entry: null });
+    if (url.pathname === '/admin/student-codes/audit') return send({ ...list([{ studentCode: '270002', sequence: 2, status: freeSaved ? 'AVAILABLE' : 'MISSING', reason: freeSaved ? 'CONFIRMED_AVAILABLE' : 'UNVERIFIED_GAP' }, { studentCode: '270001', sequence: 1, status: ownerReviewed ? 'ASSIGNED' : 'REQUIRES_REVIEW', reason: ownerReviewed ? 'CURRENT_OWNER' : 'REGISTRY_YEAR_MISMATCH', observedStudentId: '100000000000000000000040', studentProfileId: '100000000000000000000041', studentName: 'Known student', studentNameAr: 'Known student', studentAcademicYear: '2026-2027', registryAcademicYear: '2027-2028' }, { studentCode: '270101', sequence: 101, status: deleteSaved ? 'RELEASED' : 'ASSIGNED', reason: deleteSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'CURRENT_OWNER', currentStudentId: deleteSaved ? undefined : '100000000000000000000030', studentProfileId: '100000000000000000000031', studentName: 'Synthetic student', studentNameAr: 'Synthetic student', department: 'BIS', level: '1' }, { studentCode: '270102', sequence: 102, status: adminState || (holdSaved ? 'RELEASED' : 'REQUIRES_REVIEW'), reason: adminState === 'AVAILABLE' ? 'CONFIRMED_AVAILABLE' : holdSaved ? 'PREVIOUS_OWNER_BLOCKED' : 'PREVIOUS_OWNER_MISSING' }]), academicYear: '2026-2027', yearPrefix: '27', scannedAt: '2026-11-01T08:00:00Z', fingerprint: (recoverCalls ? 'e' : 'f').repeat(64), canInitialize: false, reuseEnabled: false, truncated: false, mappingConflict: false, policy: { academicYear: '2026-2027', yearPrefix: '27', nextSequence: 103, initializedAt: '2026-11-01T08:00:00Z' }, summary: { AVAILABLE: 0, RESERVED: 0, ASSIGNED: 1, RELEASED: holdSaved ? 1 : 0, REQUIRES_REVIEW: holdSaved ? 1 : 2, MISSING: 0 } });
     send({ message: 'Unknown synthetic route' }, 404);
   } catch (error) { res.statusCode = 500; res.end(JSON.stringify({ message: error.message })); }
 });
@@ -76,7 +82,7 @@ try {
   await page.addInitScript(() => { window.__captchaRenders = 0; window.__captchaRemovals = 0; window.turnstile = { render: (_element, options) => { window.__captcha = options; window.__captchaRenders++; return 'fixture-widget'; }, remove: () => {window.__captchaRemovals++;}, reset: () => {} }; });
   for (const locale of ['en', 'ar']) {
     reset(); const messages = JSON.parse(await fs.readFile(source(`src/messages/${locale}.json`), 'utf8')), t = messages.admissionWorkflow, p = messages.admissions;
-    holdSaved = false;
+    adminState = ''; ownerReviewed = false; holdSaved = false; recoverCalls = 0; freeSaved = false; deleteSaved = false;
     await page.goto(`${address}/${locale}/admission#access=100000000000000000000099`);
     await page.getByRole('button', { name: locale === 'en' ? 'Switch to Arabic' : 'Switch to English', exact: true }).waitFor();
     const other = locale === 'en' ? 'ar' : 'en';
@@ -222,6 +228,69 @@ try {
     await hold.getByRole('checkbox', {name:codeMessages.confirmed,exact:true}).check();
     await hold.getByRole('button',{name:codeMessages.confirmAction,exact:true}).click(); await hold.waitFor({state:'hidden'});
     assert.equal(holdSaved,true);
+    await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270002'), exact: true }).click();
+    await page.getByRole('menuitem', { name: codeMessages.recover, exact: true }).click();
+    const recovery = page.getByRole('dialog');
+    const evidence = 'Reviewed unused gap against all external historical records.';
+    await recovery.getByLabel(codeMessages.fields.reason, { exact: true }).fill(evidence);
+    await recovery.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).check();
+    await recovery.getByRole('checkbox', { name: codeMessages.neverAssignedConfirmed, exact: true }).check();
+    await recovery.getByRole('button', { name: codeMessages.confirmAction, exact: true }).click();
+    await recovery.getByText(codeMessages.errors.changed, { exact: true }).waitFor();
+    await recovery.getByRole('button', { name: codeMessages.refreshPreview, exact: true }).click();
+    await recovery.getByRole('button', { name: codeMessages.refreshPreview, exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(await recovery.getByLabel(codeMessages.fields.reason, { exact: true }).inputValue(), evidence);
+    assert.equal(await recovery.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).isChecked(), false);
+    await recovery.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).check();
+    await recovery.getByRole('checkbox', { name: codeMessages.neverAssignedConfirmed, exact: true }).check();
+    await recovery.getByRole('button', { name: codeMessages.confirmAction, exact: true }).click();
+    await recovery.waitFor({ state: 'hidden' });
+    assert.equal(freeSaved, true);
+    assert.equal(writes.filter(write => write.path === '/admin/student-codes/270002/recover').at(-1)?.body?.fingerprint, 'e'.repeat(64));
+    await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270101'), exact: true }).click();
+    await page.getByRole('menuitem', { name: codeMessages.history, exact: true }).click();
+    const codeHistory = page.getByRole('dialog');
+    await codeHistory.getByText('Import operator', { exact: false }).waitFor();
+    await codeHistory.getByText(codeMessages.importRow.replace('{row}', '7'), { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await codeHistory.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270101'), exact: true }).click();
+    await page.getByRole('menuitem', { name: codeMessages.deleteStudent, exact: true }).click();
+    const deletion = page.getByRole('dialog');
+    await deletion.getByText(codeMessages.deleteStudentHint, { exact: true }).waitFor();
+    await deletion.getByLabel(codeMessages.fields.reason, { exact: true }).fill('Reviewed student deletion with permanent code ownership protection.');
+    await deletion.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).check();
+    await deletion.getByRole('button', { name: codeMessages.confirmAction, exact: true }).click();
+    await deletion.waitFor({ state: 'hidden' });
+    assert.equal(deleteSaved, true);
+    await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270001'), exact: true }).click();
+    await page.getByRole('menuitem', { name: codeMessages.adminActions.CONFIRM_OWNER, exact: true }).click();
+    const ownership = page.getByRole('dialog');
+    await ownership.getByRole('button', { name: codeMessages.reportedOrigin, exact: true }).click();
+    await page.getByRole('option', { name: codeMessages.sources.import, exact: true }).click();
+    await ownership.getByLabel(codeMessages.sourceFileOptional, { exact: true }).fill('historic-cohort.xlsx');
+    await ownership.getByLabel(codeMessages.fields.reason, { exact: true }).fill('Reviewed matching original imported account and corrected intake year.');
+    await ownership.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).check();
+    await ownership.getByRole('button', { name: codeMessages.confirmAction, exact: true }).click();
+    await ownership.waitFor({ state: 'hidden' });
+    assert.equal(ownerReviewed, true);
+    assert.equal(writes.at(-1).body.origin, 'import');
+    assert.equal(writes.at(-1).body.sourceFile, 'historic-cohort.xlsx');
+    for (const action of ['FREE', 'BAN']) {
+      await page.getByRole('button', { name: codeMessages.actionsFor.replace('{code}', '270102'), exact: true }).click();
+      await page.getByRole('menuitem', { name: codeMessages.adminActions[action], exact: true }).click();
+      const administration = page.getByRole('dialog');
+      await administration.getByText(codeMessages.adminHints[action], { exact: true }).waitFor();
+      await administration.getByLabel(codeMessages.fields.reason, { exact: true }).fill('Administrator reviewed previous ownership and historical records.');
+      assert.equal(await administration.getByRole('checkbox').count(), 1, 'reuse must not falsely attest that a previously owned code was never assigned');
+      await administration.getByRole('checkbox', { name: codeMessages.confirmed, exact: true }).check();
+      await page.screenshot({ path: path.join(output, `code-admin-${action}-${locale}.png`), fullPage: true });
+      await administration.getByRole('button', { name: codeMessages.confirmAction, exact: true }).click();
+      await administration.waitFor({ state: 'hidden' });
+      assert.equal(adminState, action === 'FREE' ? 'AVAILABLE' : 'RELEASED');
+    }
+
+
     await page.goto(`${address}/${locale}/admin/admissions?tab=access`);
     await page.getByText(t.accessStatus.PERIOD_SCHEDULED,{exact:true}).waitFor();
     await page.screenshot({path:path.join(output,`access-${locale}.png`),fullPage:true});

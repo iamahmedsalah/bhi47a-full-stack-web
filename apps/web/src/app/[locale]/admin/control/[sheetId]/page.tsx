@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import React, { Suspense, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import React, { Suspense, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,12 +10,13 @@ import {
   Lock,
   TableProperties,
   Unlock,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { PERMISSIONS } from '@student-portal/shared';
-import { getApiErrorMessage } from '@/lib/api';
-import { useTableState } from '@/hooks/use-table-state';
-import { Button } from '@/components/ui/button';
+} from "lucide-react";
+import { toast } from "sonner";
+import { PERMISSIONS } from "@student-portal/shared";
+import { getApiErrorMessage } from "@/lib/api";
+import { useAuth } from "@/providers/auth-provider";
+import { useTableState } from "@/hooks/use-table-state";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -23,43 +24,38 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
-import { PageTitleBanner } from '@/components/ui/page-title-banner';
-import { PermissionGuard } from '@/components/ui/permission-guard';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
+import { PageTitleBanner } from "@/components/ui/page-title-banner";
+import { PermissionGuard } from "@/components/ui/permission-guard";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   controlKeys,
   getControlSheet,
-  listControlEntries,
   lockControlSheet,
   unlockControlSheet,
-} from '@/features/control/api';
-import { ControlAuditDrawer } from '@/features/control/components/control-audit-drawer';
-import {
-  ControlGrid,
-  type GridFilterMode,
-} from '@/features/control/components/control-grid';
-import { GradingSchemeDialog } from '@/features/control/components/grading-scheme-dialog';
-import type { ControlRosterRow } from '@/features/control/types';
+} from "@/features/control/api";
+import { ControlAuditDrawer } from "@/features/control/components/control-audit-drawer";
+import { ControlWorkbookGrid as ControlGrid } from "@/features/control/components/control-workbook-grid";
+import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
+import type { ControlRosterRow } from "@/features/control/types";
 
 function ControlSheetEditorContent() {
+  const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const locale = (params?.locale as string) || 'ar';
-  const sheetId = (params?.sheetId as string) || '';
-  const isAr = locale === 'ar';
+  const locale = (params?.locale as string) || "ar";
+  const sheetId = (params?.sheetId as string) || "";
+  const isAr = locale === "ar";
 
-  const { search, setSearch, filters, setFilter } = useTableState({
+  const { search, setSearch } = useTableState({
     defaultFilters: {
-      filter: 'all',
+      filter: "all",
     },
   });
-
-  const filterMode = (filters.filter || 'all') as GridFilterMode;
 
   const {
     data: sheetDetails,
@@ -73,27 +69,18 @@ function ControlSheetEditorContent() {
     enabled: Boolean(sheetId),
   });
 
-  const {
-    data: entriesData,
-    isLoading: entriesLoading,
-    refetch: refetchEntries,
-  } = useQuery({
-    queryKey: controlKeys.entries(sheetId, search),
-    queryFn: () => listControlEntries(sheetId, { search: search || undefined }),
-    enabled: Boolean(sheetId),
-  });
-
+  const [hasPending, setHasPending] = useState(false);
   const [schemeOpen, setSchemeOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditStudent, setAuditStudent] = useState<ControlRosterRow | null>(
     null,
   );
   const [lockDialogOpen, setLockDialogOpen] = useState(false);
-  const [lockReason, setLockReason] = useState('');
+  const [lockReason, setLockReason] = useState("");
 
   const lockMutation = useMutation({
     mutationFn: () => {
-      if (!sheetDetails) throw new Error('Sheet not loaded');
+      if (!sheetDetails) throw new Error("Sheet not loaded");
       return sheetDetails.sheet.locked
         ? unlockControlSheet(sheetId, lockReason.trim())
         : lockControlSheet(sheetId, lockReason.trim() || undefined);
@@ -102,14 +89,14 @@ function ControlSheetEditorContent() {
       toast.success(
         updated.sheet.locked
           ? isAr
-            ? 'تم قفل كشف الرصد بنجاح'
-            : 'Sheet locked successfully'
+            ? "تم قفل كشف الرصد بنجاح"
+            : "Sheet locked successfully"
           : isAr
-            ? 'تم فك قفل الكشف بنجاح'
-            : 'Sheet unlocked successfully',
+            ? "تم فك قفل الكشف بنجاح"
+            : "Sheet unlocked successfully",
       );
       setLockDialogOpen(false);
-      setLockReason('');
+      setLockReason("");
       queryClient.invalidateQueries({ queryKey: controlKeys.sheet(sheetId) });
       queryClient.invalidateQueries({ queryKey: controlKeys.all });
     },
@@ -118,7 +105,7 @@ function ControlSheetEditorContent() {
     },
   });
 
-  if (sheetLoading || entriesLoading) {
+  if (sheetLoading) {
     return <PageSkeletonLoader />;
   }
 
@@ -134,7 +121,7 @@ function ControlSheetEditorContent() {
           className="rounded-squircle"
           onClick={() => void refetchSheet()}
         >
-          {isAr ? 'إعادة المحاولة' : 'Retry'}
+          {isAr ? "إعادة المحاولة" : "Retry"}
         </Button>
       </div>
     );
@@ -151,7 +138,7 @@ function ControlSheetEditorContent() {
         PERMISSIONS.CONTROL_SHEETS_VIEW,
       ]}
     >
-      <div className="space-y-5" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="space-y-5" dir={isAr ? "rtl" : "ltr"}>
         <PageTitleBanner
           title={`${sheetDetails.course.code} — ${courseTitle}`}
           subtitle={
@@ -159,18 +146,19 @@ function ControlSheetEditorContent() {
               ? `كشف رصد ${sheetDetails.rules.nameAr} · العام الدراسي ${sheetDetails.sheet.academicYear} · الدرجة العظمى ${sheetDetails.rules.max}`
               : `${sheetDetails.rules.nameEn} Sheet · Academic Year ${sheetDetails.sheet.academicYear} · Max ${sheetDetails.rules.max}`
           }
-          eyebrow={isAr ? 'شبكة رصد الكنترول' : 'Control Grade Sheet'}
+          eyebrow={isAr ? "شبكة رصد الكنترول" : "Control Grade Sheet"}
           icon={<TableProperties className="h-4 w-4" />}
         >
           <StatusBadge
-            label={sheetDetails.sheet.locked ? 'locked' : 'unlocked'}
-            variant={sheetDetails.sheet.locked ? 'warning' : 'success'}
+            label={sheetDetails.sheet.locked ? "locked" : "unlocked"}
+            variant={sheetDetails.sheet.locked ? "warning" : "success"}
           />
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="rounded-squircle"
+            disabled={hasPending}
             onClick={() => router.push(`/${locale}/admin/control`)}
           >
             {isAr ? (
@@ -178,18 +166,18 @@ function ControlSheetEditorContent() {
             ) : (
               <ArrowLeft className="h-4 w-4 me-1.5" />
             )}
-            <span>{isAr ? 'العودة لقائمة الكشوف' : 'Back to Sheets'}</span>
+            <span>{isAr ? "العودة لقائمة الكشوف" : "Back to Sheets"}</span>
           </Button>
         </PageTitleBanner>
 
         <ControlGrid
+          key={`${user?._id ?? ""}:${sheetId}`}
+          principalId={user?._id}
           sheetDetails={sheetDetails}
-          initialRows={entriesData?.entries ?? []}
           locale={locale}
+          onPendingChange={setHasPending}
           search={search}
           onSearchChange={setSearch}
-          filterMode={filterMode}
-          onFilterModeChange={(m) => setFilter('filter', m)}
           onOpenScheme={() => setSchemeOpen(true)}
           onOpenSheetAudit={() => {
             setAuditStudent(null);
@@ -200,11 +188,8 @@ function ControlSheetEditorContent() {
             setAuditOpen(true);
           }}
           onLockToggleRequest={() => {
-            setLockReason('');
+            setLockReason("");
             setLockDialogOpen(true);
-          }}
-          onEntriesUpdated={() => {
-            void refetchEntries();
           }}
         />
 
@@ -219,7 +204,6 @@ function ControlSheetEditorContent() {
           locale={locale}
           onSaved={() => {
             void refetchSheet();
-            void refetchEntries();
           }}
         />
 
@@ -239,7 +223,7 @@ function ControlSheetEditorContent() {
         {/* Lock / Unlock Confirmation Dialog */}
         <Dialog open={lockDialogOpen} onOpenChange={setLockDialogOpen}>
           <DialogContent
-            dir={isAr ? 'rtl' : 'ltr'}
+            dir={isAr ? "rtl" : "ltr"}
             className="sm:max-w-md rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl"
           >
             <DialogHeader>
@@ -252,21 +236,21 @@ function ControlSheetEditorContent() {
                 <span>
                   {sheetDetails.sheet.locked
                     ? isAr
-                      ? 'فك قفل كشف الرصد'
-                      : 'Unlock Grade Sheet'
+                      ? "فك قفل كشف الرصد"
+                      : "Unlock Grade Sheet"
                     : isAr
-                      ? 'قفل كشف الرصد'
-                      : 'Lock Grade Sheet'}
+                      ? "قفل كشف الرصد"
+                      : "Lock Grade Sheet"}
                 </span>
               </DialogTitle>
               <DialogDescription>
                 {sheetDetails.sheet.locked
                   ? isAr
-                    ? 'فك القفل يتيح التعديل مرة أخرى لمن يملك الصلاحية. يجب كتابة سبب واضح ليُسجل في التدقيق.'
-                    : 'Unlocking allows edits again. A mandatory reason is recorded in the audit log.'
+                    ? "فك القفل يتيح التعديل مرة أخرى لمن يملك الصلاحية. يجب كتابة سبب واضح ليُسجل في التدقيق."
+                    : "Unlocking allows edits again. A mandatory reason is recorded in the audit log."
                   : isAr
-                    ? 'قفل الكشف يمنع أي تعديل من الشبكة أو من استيراد الإكسيل حتى يتم فك القفل.'
-                    : 'Locking prevents any edits from both the grid and Excel imports until unlocked.'}
+                    ? "قفل الكشف يمنع أي تعديل من الشبكة أو من استيراد الإكسيل حتى يتم فك القفل."
+                    : "Locking prevents any edits from both the grid and Excel imports until unlocked."}
               </DialogDescription>
             </DialogHeader>
 
@@ -274,11 +258,11 @@ function ControlSheetEditorContent() {
               <Label className="text-xs font-semibold">
                 {sheetDetails.sheet.locked
                   ? isAr
-                    ? 'سبب فك القفل (إجباري — ٣ أحرف على الأقل)'
-                    : 'Reason for unlocking (required — min 3 chars)'
+                    ? "سبب فك القفل (إجباري — ٣ أحرف على الأقل)"
+                    : "Reason for unlocking (required — min 3 chars)"
                   : isAr
-                    ? 'ملاحظة أو سبب القفل (اختياري)'
-                    : 'Lock note / reason (optional)'}
+                    ? "ملاحظة أو سبب القفل (اختياري)"
+                    : "Lock note / reason (optional)"}
               </Label>
               <Textarea
                 value={lockReason}
@@ -288,11 +272,11 @@ function ControlSheetEditorContent() {
                 placeholder={
                   sheetDetails.sheet.locked
                     ? isAr
-                      ? 'مثال: تصحيح خطأ مادي في رصد درجة طالب...'
-                      : 'e.g. Correcting a data entry typo...'
+                      ? "مثال: تصحيح خطأ مادي في رصد درجة طالب..."
+                      : "e.g. Correcting a data entry typo..."
                     : isAr
-                      ? 'مثال: تم الانتهاء من رصد ومراجعة درجات الميدتيرم...'
-                      : 'e.g. Midterm marks reviewed and finalized...'
+                      ? "مثال: تم الانتهاء من رصد ومراجعة درجات الميدتيرم..."
+                      : "e.g. Midterm marks reviewed and finalized..."
                 }
               />
             </div>
@@ -304,7 +288,7 @@ function ControlSheetEditorContent() {
                 className="rounded-squircle"
                 onClick={() => setLockDialogOpen(false)}
               >
-                {isAr ? 'إلغاء' : 'Cancel'}
+                {isAr ? "إلغاء" : "Cancel"}
               </Button>
               <Button
                 type="button"
@@ -321,11 +305,11 @@ function ControlSheetEditorContent() {
                 <span>
                   {sheetDetails.sheet.locked
                     ? isAr
-                      ? 'تأكيد فك القفل'
-                      : 'Confirm Unlock'
+                      ? "تأكيد فك القفل"
+                      : "Confirm Unlock"
                     : isAr
-                      ? 'تأكيد قفل الكشف'
-                      : 'Confirm Lock'}
+                      ? "تأكيد قفل الكشف"
+                      : "Confirm Lock"}
                 </span>
               </Button>
             </DialogFooter>

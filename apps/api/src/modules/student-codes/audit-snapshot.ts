@@ -171,10 +171,16 @@ export function analyzeCodeSnapshot(
       return { ...row, status: 'RESERVED', reason: 'RESERVATION_HELD' };
     if (
       entry.status === 'AVAILABLE' &&
-      !entry.assignmentHistory.length &&
+      (!entry.assignmentHistory.length || entry.reuseAuthorized) &&
       !entry.currentStudentId
     )
-      return { ...row, status: 'AVAILABLE', reason: 'CONFIRMED_AVAILABLE' };
+      return {
+        ...row,
+        status: 'AVAILABLE',
+        reason: entry.reuseAuthorized
+          ? 'ADMIN_REUSE_APPROVED'
+          : 'CONFIRMED_AVAILABLE',
+      };
     return { ...row, status: 'REQUIRES_REVIEW', reason: 'REGISTRY_CONFLICT' };
   });
   const summary: Record<StudentCodeFindingStatus, number> = {
@@ -215,6 +221,7 @@ export function analyzeCodeSnapshot(
         entry.yearPrefix,
         entry.sequence,
         entry.status,
+        entry.reuseAuthorized,
         String(entry.currentStudentId ?? ''),
         String(entry.registrationRequestId ?? ''),
         entry.assignmentHistory,

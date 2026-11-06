@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StudentCodesModule } from '../student-codes/student-codes.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UploadsService } from './uploads.service';
 import { UploadsController } from './uploads.controller';
@@ -40,6 +41,7 @@ import { GradesModule } from '../grades/grades.module';
 
 @Module({
   imports: [
+    StudentCodesModule,
     GradesModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },

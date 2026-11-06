@@ -30,6 +30,7 @@ export const CODE_REFERENCE_COLLECTIONS = [
   'attendance_records',
   'complaints',
   'tuition_audit_logs',
+  'admission_requests',
 ] as const;
 const SCAN_LIMIT = 10001;
 
@@ -59,7 +60,8 @@ export class StudentCodeStore {
       });
   }
   async prepareWrites() {
-    // Only additive indexes on new collections; never sync/drop legacy indexes.
+    // Create the replacement constraints before removing obsolete code indexes.
+    // Never synchronize indexes or touch unrelated legacy collections.
     this.ready ??= this.prepare().catch((error: unknown) => {
       this.ready = undefined;
       throw error;
@@ -68,7 +70,54 @@ export class StudentCodeStore {
   }
   private async prepare() {
     await this.entries.createIndexes();
+    // Replace the old year-wide constraint only after the prefix-scoped unique
+    // index exists. Issued codes and ownership records remain unchanged.
+    const registryIndexes = await this.entries.collection.indexes();
+    const oldSequenceIndex = registryIndexes.find(
+      (index) =>
+        index.unique &&
+        Object.keys(index.key).length === 2 &&
+        index.key.academicYear === 1 &&
+        index.key.sequence === 1,
+    );
+    if (oldSequenceIndex?.name) {
+      try {
+        await this.entries.collection.dropIndex(oldSequenceIndex.name);
+      } catch (error: unknown) {
+        // Another application instance may have completed this same upgrade.
+        if (
+          !error ||
+          typeof error !== 'object' ||
+          !('code' in error) ||
+          error.code !== 27
+        )
+          throw error;
+      }
+    }
     await this.years.createIndexes();
+    // The original prefix is historical metadata after a correction. Only the
+    // effective allocationPrefix remains unique, allowing the original prefix
+    // to be configured for its correct intake year.
+    const yearIndexes = await this.years.collection.indexes();
+    const originalPrefixIndex = yearIndexes.find(
+      (index) =>
+        index.unique &&
+        Object.keys(index.key).length === 1 &&
+        index.key.yearPrefix === 1,
+    );
+    if (originalPrefixIndex?.name) {
+      try {
+        await this.years.collection.dropIndex(originalPrefixIndex.name);
+      } catch (error: unknown) {
+        if (
+          !error ||
+          typeof error !== 'object' ||
+          !('code' in error) ||
+          error.code !== 27
+        )
+          throw error;
+      }
+    }
     await this.audits.createIndexes();
     for (const model of [this.users, this.profiles]) {
       const indexes = await model.collection.indexes();
@@ -160,7 +209,11 @@ export class StudentCodeStore {
       truncated,
     };
   }
-  async hasReferences(studentCode: string, session: ClientSession) {
+  async hasReferences(
+    studentCode: string,
+    session: ClientSession,
+    allowHistorical = false,
+  ) {
     const user = await this.users
       .exists({
         $or: [
@@ -171,6 +224,25 @@ export class StudentCodeStore {
       })
       .session(session);
     if (user || (await this.profiles.exists({ studentCode }).session(session)))
+      return true;
+    if (
+      !allowHistorical &&
+      (await this.audits
+        .exists({
+          studentCode,
+          action: {
+            $in: [
+              'ASSIGNED',
+              'BACKFILLED',
+              'IMPORTED',
+              'MANUAL_CREATED',
+              'OWNER_REVIEWED',
+              'STUDENT_DELETED_CODE_HELD',
+            ],
+          },
+        })
+        .session(session))
+    )
       return true;
     for (const name of CODE_REFERENCE_COLLECTIONS) {
       if (

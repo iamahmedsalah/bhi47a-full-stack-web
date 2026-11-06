@@ -125,8 +125,11 @@ export class GradesController {
   @ApiOperation({
     summary: 'Publish or hide midterm/final results in bulk (Admin)',
   })
-  async publishGrades(@Body() dto: PublishGradesDto) {
-    return this.gradesService.publishGrades(dto);
+  async publishGrades(
+    @Body() dto: PublishGradesDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.gradesService.publishGrades(dto, actorId);
   }
 
   @Post('admin/grades/recalculate-progress')

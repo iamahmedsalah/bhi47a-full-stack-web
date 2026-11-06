@@ -2,6 +2,66 @@ import { Types } from 'mongoose';
 import { UploadsService } from './uploads.service';
 
 describe('UploadsService student data wipe', () => {
+  it('requires the current immutable identity when an academic upload contains a reused code', async () => {
+    const owner = new Types.ObjectId();
+    const ownerLookup = jest.fn().mockResolvedValue(null);
+    const connection = {
+      db: {
+        collection: (name: string) =>
+          name === 'student_code_registry'
+            ? {
+                find: () => ({
+                  limit: () => ({
+                    toArray: () =>
+                      Promise.resolve([
+                        { studentCode: '280001', currentStudentId: owner },
+                      ]),
+                  }),
+                }),
+              }
+            : { findOne: ownerLookup },
+      },
+    };
+    const importer = { type: 'grades' };
+    const service = new UploadsService(
+      { log: jest.fn(), warn: jest.fn() } as never,
+      connection as never,
+      importer as never,
+      importer as never,
+      importer as never,
+      importer as never,
+      importer as never,
+      importer as never,
+      importer as never,
+    );
+    await expect(
+      service.assertReusedIdentity(
+        [{ studentCode: '280001', total: 95 }],
+        'grades',
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'CODE_REUSED_IDENTITY_REQUIRED' },
+    });
+    await expect(
+      service.assertReusedIdentity(
+        [{ studentCode: '280001', studentId: String(owner), total: 95 }],
+        'grades',
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.assertReusedIdentity(
+        [{ studentCode: '280001', nationalId: '30001010100001' }],
+        'grades',
+      ),
+    ).rejects.toThrow();
+    ownerLookup.mockResolvedValue({ _id: owner });
+    await expect(
+      service.assertReusedIdentity(
+        [{ studentCode: '280001', nationalId: '30001010100001' }],
+        'grades',
+      ),
+    ).resolves.toBeUndefined();
+  });
   it('deletes advising child records through their persisted foreign key', async () => {
     const studentId = new Types.ObjectId();
     const caseId = new Types.ObjectId();

@@ -13,6 +13,7 @@ export interface ControlEntry {
 
 interface GradeLike {
   studentId: { toString(): string };
+  cleared?: boolean;
   grade?: number;
   status?: string;
   rev?: number;
@@ -24,13 +25,13 @@ export function toControlEntry(
   doc: GradeLike | null | undefined,
 ): ControlEntry | null {
   if (!doc) return null;
-  const status = doc.status ?? 'present';
+  const status = doc.cleared ? null : (doc.status ?? 'present');
   const scoreless = (CONTROL_SCORELESS_STATES as readonly string[]).includes(
-    status,
+    status ?? '',
   );
   return {
     studentId: doc.studentId.toString(),
-    score: scoreless ? null : (doc.grade ?? null),
+    score: doc.cleared || scoreless ? null : (doc.grade ?? null),
     status,
     rev: doc.rev ?? 0,
     isPublished: doc.isPublished ?? null,

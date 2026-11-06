@@ -1,3 +1,8 @@
+import { ConflictException } from '@nestjs/common';
+import {
+  GradeAuditLog,
+  type GradeAuditLogDocument,
+} from '../control/schemas/grade-audit-log.schema';
 import {
   ForbiddenException,
   Injectable,
@@ -61,6 +66,8 @@ export class GradesService implements OnModuleInit {
     @InjectModel(ControlSheet.name)
     private controlSheetModel: Model<ControlSheetDocument>,
     private notificationsService: NotificationsService,
+    @InjectModel(GradeAuditLog.name)
+    private readonly controlAudit: Model<GradeAuditLogDocument>,
   ) {}
 
   async onModuleInit() {
@@ -140,7 +147,7 @@ export class GradesService implements OnModuleInit {
   }
 
   /**
-   * Rejects writes to a component whose Control sheet is locked. Used by every
+   * Rejects writes to a component whose Use the Control workbook to edit marks for this sheet. Used by every
    * non-grid write path (manual form, Excel import) so a lock holds everywhere.
    */
   async assertSheetEditable(
@@ -149,19 +156,26 @@ export class GradesService implements OnModuleInit {
     semester: string,
     examType: string,
   ): Promise<void> {
+    if (['midterm', 'coursework', 'final', 'total'].includes(examType))
+      throw new ConflictException({
+        code: 'CONTROL_WORKBOOK_REQUIRED',
+        message:
+          'Enter coursework, midterm and final marks through Control for validation, review and audit.',
+      });
     const locked = await this.controlSheetModel
       .exists({
         courseId: new Types.ObjectId(courseId.toString()),
         academicYear,
         semester,
         component: examType,
-        locked: true,
       })
       .lean();
     if (locked) {
-      throw new ForbiddenException(
-        'كشف الكنترول مقفول ولا يمكن تعديل الدرجات | Control sheet is locked',
-      );
+      throw new ConflictException({
+        code: 'CONTROL_WORKBOOK_REQUIRED',
+        message:
+          'Use the Control workbook to edit this sheet; review and audit are required.',
+      });
     }
   }
 
@@ -190,7 +204,18 @@ export class GradesService implements OnModuleInit {
       this.studentAcademicProfileModel.find({ studentId: { $in: objectIds } }),
       this.studentProfileModel.find({ userId: { $in: objectIds } }),
       this.gradeModel
-        .find({ studentId: { $in: objectIds }, isPublished: true })
+        .find({
+          studentId: { $in: objectIds },
+          isPublished: true,
+          status: { $ne: 'withheld' },
+          controlManaged: { $ne: true },
+          $or: [
+            { controlManaged: { $ne: true } },
+            {
+              $expr: { $eq: ['$controlApprovedRev', { $ifNull: ['$rev', 0] }] },
+            },
+          ],
+        })
         .lean(),
       this.userModel
         .find({ _id: { $in: objectIds } })
@@ -461,7 +486,7 @@ export class GradesService implements OnModuleInit {
       status: dto.status || 'present',
       academicYear: dto.academicYear,
       semester: dto.semester,
-      isPublished: dto.isPublished !== undefined ? dto.isPublished : true,
+      isPublished: dto.isPublished !== undefined ? dto.isPublished : false,
     };
 
     // Upsert (insert or update)
@@ -501,7 +526,7 @@ export class GradesService implements OnModuleInit {
 
   async findAll(query: QueryGradeDto) {
     const { page, limit, skip } = buildPaginationOptions(query);
-    const filter: any = {};
+    const filter: any = { cleared: { $ne: true } };
 
     if (query.studentCode) {
       filter.studentCode = query.studentCode;
@@ -645,8 +670,11 @@ export class GradesService implements OnModuleInit {
     return { message: 'تم حذف الدرجة بنجاح' }; // Grade deleted successfully
   }
 
-  async publishGrades(dto: PublishGradesDto): Promise<{ count: number }> {
-    const filter: any = {};
+  async publishGrades(
+    dto: PublishGradesDto,
+    actorId?: string,
+  ): Promise<{ count: number }> {
+    const filter: any = { cleared: { $ne: true } };
     if (dto.academicYear) filter.academicYear = dto.academicYear;
     if (dto.semester) filter.semester = dto.semester;
     if (dto.examType) filter.examType = dto.examType;
@@ -679,24 +707,127 @@ export class GradesService implements OnModuleInit {
     const includeGrades = !dto.examType || dto.examType !== 'quiz';
     const includeQuizzes = !dto.examType || dto.examType === 'quiz';
     const affectedGrades = includeGrades
-      ? await this.gradeModel.find(filter).select('studentId').lean()
+      ? await this.gradeModel
+          .find(filter)
+          .select('studentId controlManaged')
+          .lean()
       : [];
-    const [result, quizResult] = await Promise.all([
-      includeGrades
-        ? this.gradeModel.updateMany(filter, {
-            $set: { isPublished: dto.isPublished },
-          })
-        : Promise.resolve({ modifiedCount: 0 }),
-      includeQuizzes
-        ? this.courseQuizModel.updateMany(quizFilter, {
-            $set: { isPublished: dto.isPublished },
-          })
-        : Promise.resolve({ modifiedCount: 0 }),
-    ]);
+    const session = await this.gradeModel.db.startSession();
+    let result = { modifiedCount: 0 };
+    try {
+      await session.withTransaction(async () => {
+        if (!includeGrades) return;
+        const selected = await this.gradeModel
+          .find(filter)
+          .session(session)
+          .lean();
+        const scopeKey = (g: {
+          courseId: { toString(): string };
+          academicYear: string;
+          semester: string;
+          examType?: string;
+          component?: string;
+        }) =>
+          `${g.courseId.toString()}|${g.academicYear}|${g.semester}|${g.examType ?? g.component}`;
+        const scopes = new Map(
+          selected.map((g) => [
+            scopeKey(g),
+            {
+              courseId: g.courseId,
+              academicYear: g.academicYear,
+              semester: g.semester,
+              component: g.examType,
+            },
+          ]),
+        );
+        if (scopes.size > 500)
+          throw new ConflictException(
+            'Choose a narrower course/term scope for publication',
+          );
+        const controlSheets = scopes.size
+          ? await this.controlSheetModel
+              .find({ $or: [...scopes.values()] })
+              .session(session)
+              .lean()
+          : [];
+        const sheetByScope = new Map(
+          controlSheets.map((s) => [scopeKey(s), s]),
+        );
+        const sheetIds = new Set<string>();
+        for (const grade of selected) {
+          const sheet = sheetByScope.get(scopeKey(grade));
+          if (
+            dto.isPublished &&
+            grade.controlManaged &&
+            grade.examType === 'final'
+          )
+            throw new ConflictException(
+              'Final publication requires complete course-result policy. Draft final marks remain hidden.',
+            );
+          if (
+            dto.isPublished &&
+            (grade.controlManaged || sheet) &&
+            (!sheet ||
+              sheet.workflowState !== 'APPROVED' ||
+              grade.controlApprovedRev !== (grade.rev ?? 0))
+          ) {
+            throw new ConflictException(
+              'Approve the selected marks on the Control page before publishing',
+            );
+          }
+          if (sheet) sheetIds.add(String(sheet._id));
+        }
+        result = await this.gradeModel.updateMany(
+          filter,
+          { $set: { isPublished: dto.isPublished } },
+          { session },
+        );
+        if (sheetIds.size && !actorId)
+          throw new ForbiddenException('Publication actor required');
+        for (const id of sheetIds) {
+          const sheet = await this.controlSheetModel
+            .findById(id)
+            .session(session)
+            .lean();
+          if (!sheet) continue;
+          await this.controlSheetModel.updateOne(
+            { _id: sheet._id },
+            { $inc: { revision: 1 } },
+            { session },
+          );
+          await this.controlAudit.create(
+            [
+              {
+                sheetId: sheet._id,
+                courseId: sheet.courseId,
+                academicYear: sheet.academicYear,
+                semester: sheet.semester,
+                component: sheet.component,
+                action: dto.isPublished ? 'PUBLISH' : 'HIDE',
+                source: 'SYSTEM',
+                actorId: new Types.ObjectId(actorId),
+                newValue: { isPublished: dto.isPublished },
+              },
+            ],
+            { session },
+          );
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+    const quizResult = includeQuizzes
+      ? await this.courseQuizModel.updateMany(quizFilter, {
+          $set: { isPublished: dto.isPublished },
+        })
+      : { modifiedCount: 0 };
 
-    if (affectedGrades.length > 0) {
+    const legacyAffected = affectedGrades.filter(
+      (grade) => !grade.controlManaged,
+    );
+    if (legacyAffected.length > 0) {
       await this.syncPublishedAcademicProgress(
-        affectedGrades.map((grade) => grade.studentId),
+        legacyAffected.map((grade) => grade.studentId),
       );
     }
 
@@ -887,13 +1018,17 @@ export class GradesService implements OnModuleInit {
       return [];
     }
 
-    // Self-heal academic profiles created before automatic progression was
-    // introduced. New grade saves/publish operations already trigger this.
-    await this.syncPublishedAcademicProgress([studentId]);
+    // Student reads never mutate GPA/progression. Control midterm/coursework
+    // releases are components, not official full-course outcomes.
     const grades = await this.gradeModel
       .find({
         studentId: new Types.ObjectId(studentId),
         isPublished: true,
+        status: { $ne: 'withheld' },
+        $or: [
+          { controlManaged: { $ne: true } },
+          { $expr: { $eq: ['$controlApprovedRev', { $ifNull: ['$rev', 0] }] } },
+        ],
       })
       .sort({ courseCode: 1, examType: 1 })
       .lean();

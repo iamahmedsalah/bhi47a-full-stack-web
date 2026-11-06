@@ -1,24 +1,25 @@
 import {
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import type { ClientSession } from 'mongoose';
+import { createHash } from 'node:crypto';
 import {
   CONTROL_RESTRICTED_STATES,
   CONTROL_SCORELESS_STATES,
   PERMISSIONS,
   calculateGradeScale,
   validateMark,
+  computeCoursework,
   type ControlSchemeComponent,
   type GradeStatus,
 } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { Grade, GradeDocument } from '../../grades/schemas/grade.schema';
-import { GradesService } from '../../grades/grades.service';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   ControlSheet,
@@ -61,8 +62,6 @@ type GradeLean = Grade & { _id: Types.ObjectId; updatedAt?: Date };
 
 @Injectable()
 export class ControlGradesService {
-  private readonly logger = new Logger(ControlGradesService.name);
-
   constructor(
     @InjectModel(Grade.name) private readonly gradeModel: Model<GradeDocument>,
     @InjectModel(Course.name)
@@ -75,7 +74,6 @@ export class ControlGradesService {
     private readonly access: ControlAccessService,
     private readonly sheets: ControlSheetsService,
     private readonly schemes: GradingSchemeService,
-    private readonly gradesService: GradesService,
   ) {}
 
   /**
@@ -87,11 +85,70 @@ export class ControlGradesService {
     sheetId: string,
     dto: ApplyChangesDto,
     source: 'GRID' | 'XLSX' = 'GRID',
+    importContext?: {
+      batchId: string;
+      revision: number;
+      schemeVersion: number;
+    },
+  ) {
+    const session = await this.gradeModel.db.startSession();
+    try {
+      return await session.withTransaction(async () => {
+        if (importContext) {
+          const sheet = await this.sheetModel
+            .findById(sheetId)
+            .session(session)
+            .lean();
+          const scheme = sheet
+            ? await this.schemes.getScheme(
+                String(sheet.courseId),
+                sheet.academicYear,
+                sheet.semester,
+              )
+            : null;
+          if (
+            !sheet ||
+            (sheet.revision ?? 0) !== importContext.revision ||
+            scheme?.version !== importContext.schemeVersion
+          )
+            throw new ConflictException('PREVIEW_STALE');
+        }
+        const result = await this.applyInTransaction(
+          user,
+          sheetId,
+          dto,
+          source,
+          session,
+        );
+        if (importContext)
+          await this.gradeModel.db
+            .collection('control_import_batches')
+            .updateOne(
+              { _id: new Types.ObjectId(importContext.batchId) },
+              { $set: { result } },
+              { session },
+            );
+        return result;
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  private async applyInTransaction(
+    user: AuthenticatedUser,
+    sheetId: string,
+    dto: ApplyChangesDto,
+    source: 'GRID' | 'XLSX',
+    session: ClientSession,
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     const caps = this.access.getCapabilities(user);
 
-    const sheet = await this.sheetModel.findById(sheetId).lean();
+    const sheet = await this.sheetModel
+      .findById(sheetId)
+      .session(session)
+      .lean();
     if (!sheet) throw new NotFoundException('Sheet not found');
     const course = await this.courseModel.findById(sheet.courseId).lean();
     if (!course) throw new NotFoundException('Course not found');
@@ -101,7 +158,10 @@ export class ControlGradesService {
       sheet.academicYear,
       sheet.semester,
     );
-    if (sheet.locked) {
+    if (
+      sheet.locked ||
+      !['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT')
+    ) {
       throw new ConflictException({
         code: 'SHEET_LOCKED',
         message: 'Sheet is locked and cannot be edited',
@@ -112,6 +172,7 @@ export class ControlGradesService {
       sheet.academicYear,
       sheet.semester,
       sheet.component,
+      session,
     );
 
     const studentObjectIds = [
@@ -124,42 +185,104 @@ export class ControlGradesService {
       examType: sheet.component,
     };
 
-    const [students, existingDocs, rosterIds, priorOps] = await Promise.all([
-      this.userModel
-        .find({ _id: { $in: studentObjectIds }, role: 'student' })
-        .select('studentCode')
-        .lean(),
-      this.gradeModel
-        .find({ ...baseFilter, studentId: { $in: studentObjectIds } })
-        .lean<GradeLean[]>(),
-      this.sheets.getRosterStudentIds(
-        course.code,
-        sheet.academicYear,
-        sheet.semester,
-        studentObjectIds,
-      ),
-      this.auditModel
-        .find({ opId: { $in: dto.changes.map((c) => c.opId) } })
-        .select('opId')
-        .lean(),
-    ]);
+    // A MongoDB session must not execute concurrent operations inside a transaction.
+    const students = await this.userModel
+      .find({ _id: { $in: studentObjectIds }, role: 'student' })
+      .select('studentCode')
+      .lean();
+    const existingDocs = await this.gradeModel
+      .find({ ...baseFilter, studentId: { $in: studentObjectIds } })
+      .session(session)
+      .lean<GradeLean[]>();
+    const rosterIds = await this.sheets.getRosterStudentIds(
+      course.code,
+      sheet.academicYear,
+      sheet.semester,
+      studentObjectIds,
+      session,
+    );
+    const priorOps = await this.auditModel
+      .find({ opId: { $in: dto.changes.map((c) => c.opId) } })
+      .select('opId payloadHash actorId sheetId')
+      .session(session)
+      .lean();
+    const courseworkScheme =
+      sheet.component === 'coursework' ||
+      dto.expectedSchemeVersion !== undefined
+        ? await this.schemes.getScheme(
+            String(sheet.courseId),
+            sheet.academicYear,
+            sheet.semester,
+            session,
+          )
+        : null;
+    if (
+      dto.expectedSchemeVersion !== undefined &&
+      courseworkScheme?.version !== dto.expectedSchemeVersion
+    ) {
+      throw new ConflictException({
+        code: 'SCHEME_CHANGED',
+        message:
+          'The grading scheme changed; refresh and review your draft before retrying',
+      });
+    }
 
     const studentById = new Map(students.map((s) => [String(s._id), s]));
     const docByStudent = new Map(
       existingDocs.map((d) => [String(d.studentId), d]),
     );
-    const appliedOps = new Set(priorOps.map((o) => o.opId));
+    const appliedOps = new Map(priorOps.map((o) => [o.opId, o]));
     const seenStudents = new Set<string>();
+    const seenOperations = new Set<string>();
 
     const results: ChangeResult[] = [];
     const auditRows: Array<Record<string, unknown>> = [];
-    const progressStudentIds = new Set<string>();
-    let createdAny = false;
 
     for (const change of dto.changes) {
       const base = { opId: change.opId, studentId: change.studentId };
+      if (seenOperations.has(change.opId)) {
+        results.push({
+          ...base,
+          result: 'invalid',
+          code: 'duplicate_operation_id',
+          message: 'Operation IDs must be unique within a batch',
+        });
+        continue;
+      }
+      seenOperations.add(change.opId);
 
-      if (appliedOps.has(change.opId)) {
+      const payloadHash = createHash('sha256')
+        .update(
+          JSON.stringify({
+            sheetId,
+            actorId: user._id,
+            source,
+            studentId: change.studentId,
+            score: change.score ?? null,
+            status: change.status ?? null,
+            expectedRev: change.expectedRev,
+            attendanceMark: change.attendanceMark ?? null,
+            quizzesMark: change.quizzesMark ?? null,
+            reason: change.reason ?? dto.reason,
+          }),
+        )
+        .digest('hex');
+      const prior = appliedOps.get(change.opId);
+      if (
+        prior &&
+        (prior.payloadHash !== payloadHash ||
+          String(prior.actorId) !== user._id ||
+          String(prior.sheetId) !== sheetId)
+      ) {
+        results.push({
+          ...base,
+          result: 'invalid',
+          code: 'op_id_reused',
+          message: 'Operation ID belongs to a different request',
+        });
+        continue;
+      }
+      if (prior) {
         results.push({
           ...base,
           result: 'ok',
@@ -181,6 +304,15 @@ export class ControlGradesService {
 
       const student = studentById.get(change.studentId);
       const existing = docByStudent.get(change.studentId);
+      if ((existing?.rev ?? 0) !== change.expectedRev) {
+        results.push({
+          ...base,
+          result: 'conflict',
+          code: 'rev_mismatch',
+          current: toControlEntry(existing),
+        });
+        continue;
+      }
       if (!student) {
         results.push({
           ...base,
@@ -191,6 +323,33 @@ export class ControlGradesService {
         continue;
       }
 
+      if (
+        sheet.component === 'coursework' &&
+        (change.score != null ||
+          change.status === 'present' ||
+          change.status === 'withheld')
+      ) {
+        const total = computeCoursework(
+          change.attendanceMark as number,
+          change.quizzesMark as number,
+        );
+        if (
+          total === null ||
+          total !== change.score ||
+          (change.attendanceMark ?? 0) >
+            courseworkScheme!.courseworkAttendanceMax ||
+          (change.quizzesMark ?? 0) > courseworkScheme!.courseworkQuizzesMax
+        ) {
+          results.push({
+            ...base,
+            result: 'invalid',
+            code: 'coursework_breakdown',
+            message:
+              'Attendance + quizzes must equal the coursework mark, at most 20',
+          });
+          continue;
+        }
+      }
       const plan = this.planChange(change, dto.reason, {
         rules,
         caps,
@@ -220,6 +379,7 @@ export class ControlGradesService {
         rules,
         actorId: user._id,
         hasExisting: Boolean(existing),
+        session,
       });
 
       if (outcome.kind === 'conflict') {
@@ -239,12 +399,7 @@ export class ControlGradesService {
         : existing
           ? 'UPDATE'
           : 'CREATE';
-      if (action === 'CREATE') createdAny = true;
       const after = outcome.doc;
-      if (existing?.isPublished || after?.isPublished) {
-        progressStudentIds.add(change.studentId);
-      }
-
       auditRows.push({
         sheetId: sheet._id,
         gradeId: existing?._id ?? after?._id,
@@ -260,40 +415,37 @@ export class ControlGradesService {
         actorId: new Types.ObjectId(user._id),
         reason: plan.reason,
         opId: change.opId,
+        payloadHash,
         at: new Date(),
       });
       results.push({ ...base, result: 'ok', entry: toControlEntry(after) });
     }
 
     if (auditRows.length > 0) {
-      try {
-        await this.auditModel.insertMany(auditRows, { ordered: false });
-      } catch (error) {
-        // Marks are already stored; surface loudly so the gap can be reconciled.
-        this.logger.error(
-          `Failed to write ${auditRows.length} audit row(s) for sheet ${sheetId}`,
-          error instanceof Error ? error.stack : String(error),
-        );
-      }
+      // Every edit and transition writes the same sheet document. Concurrent
+      // lock/review/entry transactions therefore conflict instead of passing a stale check.
+      const touched = await this.sheetModel.updateOne(
+        {
+          _id: sheet._id,
+          locked: false,
+          $or: [
+            { workflowState: { $in: ['DRAFT', 'RETURNED'] } },
+            { workflowState: { $exists: false } },
+          ],
+        },
+        { $inc: { revision: 1 } },
+        { session },
+      );
+      if (touched.matchedCount !== 1)
+        throw new ConflictException('SHEET_NOT_EDITABLE');
+      await this.auditModel.insertMany(auditRows, { session, ordered: true });
+      await this.schemes.freeze(
+        String(sheet.courseId),
+        sheet.academicYear,
+        sheet.semester,
+        session,
+      );
     }
-    if (createdAny) {
-      await this.schemes
-        .freeze(String(sheet.courseId), sheet.academicYear, sheet.semester)
-        .catch((error: unknown) =>
-          this.logger.error('Failed to freeze grading scheme', String(error)),
-        );
-    }
-    if (progressStudentIds.size > 0) {
-      await this.gradesService
-        .syncPublishedAcademicProgress([...progressStudentIds])
-        .catch((error: unknown) =>
-          this.logger.error(
-            'Failed to sync academic progress',
-            error instanceof Error ? error.stack : String(error),
-          ),
-        );
-    }
-
     const summary = { ok: 0, invalid: 0, conflict: 0, forbidden: 0 };
     for (const r of results) summary[r.result] += 1;
     return { results, summary };
@@ -309,6 +461,8 @@ export class ControlGradesService {
       status: entry.status,
       isPublished: entry.isPublished,
       rev: entry.rev,
+      attendanceMark: doc?.attendanceMark,
+      quizzesMark: doc?.quizzesMark,
     };
   }
 
@@ -383,23 +537,13 @@ export class ControlGradesService {
     }
 
     if (existing?.isPublished) {
-      if (!caps.canEditPublished) {
-        return reject(
-          'forbidden',
-          'published_permission',
-          'Editing a published grade requires control.grades.edit_published',
-        );
-      }
-      if (!reason || reason.length < 3) {
-        return reject(
-          'invalid',
-          'reason_required',
-          'A reason is required to edit a published grade',
-        );
-      }
+      return reject(
+        'forbidden',
+        'unpublish_required',
+        'Hide results on the Grades page and reopen the sheet before editing published marks',
+      );
     }
-
-    if (!existing && status !== null && !ctx.inRoster) {
+    if (status !== null && !ctx.inRoster) {
       return reject(
         'invalid',
         'not_in_roster',
@@ -413,6 +557,7 @@ export class ControlGradesService {
         : null;
     if (
       existing &&
+      !existing.cleared &&
       status !== null &&
       existing.status === status &&
       (SCORELESS.includes(status) || existing.grade === score)
@@ -443,6 +588,7 @@ export class ControlGradesService {
     rules: ControlSchemeComponent;
     actorId: string;
     hasExisting: boolean;
+    session: ClientSession;
   }): Promise<{ kind: 'ok'; doc: GradeLean | null } | { kind: 'conflict' }> {
     const { plan, change, filter, rules } = args;
     const revFilter =
@@ -452,9 +598,26 @@ export class ControlGradesService {
 
     if (plan.clear) {
       const removed = await this.gradeModel
-        .findOneAndDelete({ ...filter, ...revFilter })
+        .findOneAndUpdate(
+          { ...filter, ...revFilter },
+          {
+            $set: {
+              cleared: true,
+              isPublished: false,
+              controlManaged: true,
+              updatedBy: new Types.ObjectId(args.actorId),
+            },
+            $inc: { rev: 1 },
+            $unset: {
+              controlApprovedRev: '',
+              attendanceMark: '',
+              quizzesMark: '',
+            },
+          },
+          { new: true, session: args.session },
+        )
         .lean<GradeLean>();
-      return removed ? { kind: 'ok', doc: null } : { kind: 'conflict' };
+      return removed ? { kind: 'ok', doc: removed } : { kind: 'conflict' };
     }
 
     const status = plan.status as GradeStatus;
@@ -482,6 +645,15 @@ export class ControlGradesService {
       academicYear: filter.academicYear,
       semester: filter.semester,
       updatedBy: new Types.ObjectId(args.actorId),
+      controlManaged: true,
+      cleared: false,
+      isPublished: false,
+      ...(rules.key === 'coursework'
+        ? {
+            attendanceMark: change.attendanceMark,
+            quizzesMark: change.quizzesMark,
+          }
+        : {}),
     };
 
     try {
@@ -493,16 +665,27 @@ export class ControlGradesService {
             $inc: { rev: 1 },
             // Control never publishes: new records stay hidden until the
             // existing Grades module publishes them.
-            $setOnInsert: { isPublished: false },
+            $unset: {
+              controlApprovedRev: '',
+              ...(rules.key === 'coursework' && plan.score === null
+                ? { attendanceMark: '', quizzesMark: '' }
+                : {}),
+            },
           },
-          { upsert: change.expectedRev === 0, new: true },
+          {
+            upsert: !args.hasExisting && change.expectedRev === 0,
+            new: true,
+            session: args.session,
+          },
         )
         .lean<GradeLean>();
       return doc ? { kind: 'ok', doc } : { kind: 'conflict' };
     } catch (error) {
       // Upsert collided with the unique index: a record with a higher rev exists.
       if ((error as { code?: number })?.code === 11000) {
-        return { kind: 'conflict' };
+        throw new ConflictException(
+          'Concurrent entry; refresh the sheet and retry',
+        );
       }
       throw error;
     }

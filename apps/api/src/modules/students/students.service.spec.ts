@@ -114,6 +114,7 @@ describe('StudentsService Unit Tests', () => {
       mockUsersService,
       mockEmailsService,
       mockStudentQueryService,
+      {} as import('../student-codes/student-codes.service').StudentCodesService,
     );
   });
 

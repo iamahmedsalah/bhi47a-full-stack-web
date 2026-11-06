@@ -32,13 +32,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getApiErrorDetails } from "@/lib/api";
 import type { CodeAuditScope } from "./api";
+import { Choice } from "@/features/admissions/workflow-ui";
 import { AcademicYearChoice } from "@/features/admissions/academic-year-choice";
 
 export function CodeScopeForm({
   initial,
   pending,
   scan,
-  configuredYears = false,
+  configuredYears = true,
 }: {
   initial: CodeAuditScope;
   pending: boolean;
@@ -46,7 +47,6 @@ export function CodeScopeForm({
   configuredYears?: boolean;
 }) {
   const t = useTranslations("studentCodes");
-  const [manualYear, setManualYear] = useState(false);
   const schema = useMemo(
     () =>
       z.object({
@@ -63,7 +63,10 @@ export function CodeScopeForm({
     defaultValues: initial,
   });
   useEffect(() => {
-    form.reset({ academicYear: initial.academicYear, yearPrefix: initial.yearPrefix });
+    form.reset({
+      academicYear: initial.academicYear,
+      yearPrefix: initial.yearPrefix,
+    });
   }, [form, initial.academicYear, initial.yearPrefix]);
   return (
     <Form {...form}>
@@ -79,12 +82,10 @@ export function CodeScopeForm({
             name={key}
             render={({ field }) => (
               <FormItem className="w-56">
-                {!(
-                  key === "academicYear" &&
-                  configuredYears &&
-                  !manualYear
-                ) && <FormLabel>{t(`fields.${key}`)}</FormLabel>}
-                {key === "academicYear" && configuredYears && !manualYear ? (
+                {!(key === "academicYear" && configuredYears) && (
+                  <FormLabel>{t(`fields.${key}`)}</FormLabel>
+                )}
+                {key === "academicYear" && configuredYears ? (
                   <AcademicYearChoice
                     value={field.value}
                     disabled={pending}
@@ -102,26 +103,24 @@ export function CodeScopeForm({
                       {...field}
                       onChange={(event) => {
                         field.onChange(event);
-                        if (key === "academicYear" && isAdmissionAcademicYear(event.target.value))
-                          form.setValue("yearPrefix", admissionYearPrefix(event.target.value), { shouldValidate: true });
+                        if (
+                          key === "academicYear" &&
+                          isAdmissionAcademicYear(event.target.value)
+                        )
+                          form.setValue(
+                            "yearPrefix",
+                            admissionYearPrefix(event.target.value),
+                            { shouldValidate: true },
+                          );
                       }}
                       dir="ltr"
+                      readOnly={key === "yearPrefix"}
                       className="text-left rounded-squircle"
                       maxLength={key === "academicYear" ? 9 : 2}
                       placeholder={key === "academicYear" ? "2026-2027" : "27"}
                       disabled={pending}
                     />
                   </FormControl>
-                )}
-                {key === "academicYear" && configuredYears && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setManualYear((value) => !value)}
-                  >
-                    {t(manualYear ? "configuredYear" : "manualYear")}
-                  </Button>
                 )}
                 <FormMessage />
               </FormItem>
@@ -137,11 +136,15 @@ export function CodeScopeForm({
 }
 
 export interface CodeWriteIntent {
+  adminAction?: "FREE" | "BAN" | "CONFIRM_OWNER";
   hold?: boolean;
+  deleteStudent?: boolean;
   snapshot: StudentCodeAuditResult;
   row?: StudentCodeFinding;
 }
 export interface CodeConfirmationValues {
+  origin: "import" | "manual" | "legacy";
+  sourceFile: string;
   reason: string;
   confirmed: boolean;
   neverAssignedConfirmed: boolean;
@@ -152,6 +155,10 @@ const errorKeys: Record<string, string> = {
   CODE_YEAR_CONFLICT: "mapping",
   CODE_YEAR_NOT_READY: "notReady",
   CODE_RECOVERY_UNSAFE: "unsafe",
+  CODE_ACTIVE_OWNER: "activeOwner",
+  CODE_OWNER_REVIEW_UNSAFE: "ownerReview",
+  CODE_ARCHIVE_LIMIT: "archiveLimit",
+  CODE_YEAR_INVALID: "mapping",
   CODE_WRITE_CONFLICT: "changed",
   ADMISSION_TRANSACTIONS_REQUIRED: "replica",
   CODE_IDENTITY_INDEXES_REQUIRED: "indexes",
@@ -162,18 +169,28 @@ export function CodeWriteDialog({
   pending,
   close,
   save,
+  refreshPreview,
 }: {
   intent: CodeWriteIntent;
   pending: boolean;
   close: () => void;
   save: (values: CodeConfirmationValues) => Promise<void>;
+  refreshPreview: () => Promise<void>;
 }) {
   const t = useTranslations("studentCodes");
   const locale = useLocale();
-  const recovery = Boolean(intent.row) && !intent.hold;
+  const [stale, setStale] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const recovery =
+    Boolean(intent.row) &&
+    !intent.hold &&
+    !intent.deleteStudent &&
+    !intent.adminAction;
   const schema = useMemo(
     () =>
       z.object({
+        origin: z.enum(["import", "manual", "legacy"]),
+        sourceFile: z.string().max(200),
         reason: z
           .string()
           .trim()
@@ -189,6 +206,8 @@ export function CodeWriteDialog({
   const form = useForm<CodeConfirmationValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      origin: "legacy",
+      sourceFile: "",
       reason: "",
       confirmed: false,
       neverAssignedConfirmed: false,
@@ -200,6 +219,9 @@ export function CodeWriteDialog({
       await save(values);
     } catch (error) {
       const { code } = getApiErrorDetails(error);
+      setStale(
+        code === "CODE_PREVIEW_CHANGED" || code === "CODE_WRITE_CONFLICT",
+      );
       form.setError("root.server", {
         message: t(`errors.${errorKeys[code ?? ""] ?? "save"}`),
       });
@@ -218,19 +240,27 @@ export function CodeWriteDialog({
       >
         <DialogHeader className="text-start">
           <DialogTitle>
-            {intent.hold
-              ? t("hold")
-              : recovery
-                ? t("recover")
-                : t("initialize")}
+            {intent.adminAction
+              ? t(`adminActions.${intent.adminAction}`)
+              : intent.deleteStudent
+                ? t("deleteStudent")
+                : intent.hold
+                  ? t("hold")
+                  : recovery
+                    ? t("recover")
+                    : t("initialize")}
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {intent.hold
-            ? t("holdHint")
-            : recovery
-              ? t("recoverHint")
-              : t("initializeHint")}
+          {intent.adminAction
+            ? t(`adminHints.${intent.adminAction}`)
+            : intent.deleteStudent
+              ? t("deleteStudentHint")
+              : intent.hold
+                ? t("holdHint")
+                : recovery
+                  ? t("recoverHint")
+                  : t("initializeHint")}
         </p>
         <p className="text-sm">
           <bdi>{intent.snapshot.academicYear}</bdi> /{" "}
@@ -250,6 +280,64 @@ export function CodeWriteDialog({
                 {form.formState.errors.root.server.message}
               </p>
             )}
+            {stale && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || refreshing}
+                onClick={async () => {
+                  setRefreshing(true);
+                  try {
+                    await refreshPreview();
+                    form.setValue("confirmed", false);
+                    form.setValue("neverAssignedConfirmed", false);
+                    form.clearErrors("root");
+                    setStale(false);
+                  } catch {
+                    form.setError("root.server", { message: t("errors.load") });
+                  } finally {
+                    setRefreshing(false);
+                  }
+                }}
+              >
+                {t("refreshPreview")}
+              </Button>
+            )}
+            {intent.adminAction && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="origin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Choice
+                        label={t("reportedOrigin")}
+                        value={field.value}
+                        onChange={field.onChange}
+                        disabled={pending}
+                        options={["legacy", "import", "manual"].map(
+                          (value) => ({ value, label: t(`sources.${value}`) }),
+                        )}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sourceFile"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("sourceFileOptional")}</FormLabel>
+                      <FormControl>
+                        <Input {...field} maxLength={200} disabled={pending} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
             <FormField
               control={form.control}
               name="reason"
@@ -257,7 +345,7 @@ export function CodeWriteDialog({
                 <FormItem>
                   <FormLabel>{t("fields.reason")}</FormLabel>
                   <FormControl>
-                    <Textarea {...field} disabled={pending} maxLength={1000} />
+                    <Textarea {...field} className="rounded-xl [corner-shape:round]" disabled={pending} maxLength={1000} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -303,7 +391,7 @@ export function CodeWriteDialog({
               >
                 {t("cancel")}
               </Button>
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending || stale || refreshing}>
                 {pending ? t("saving") : t("confirmAction")}
               </Button>
             </DialogFooter>

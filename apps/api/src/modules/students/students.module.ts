@@ -1,3 +1,4 @@
+import { StudentCodesModule } from '../student-codes/student-codes.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
@@ -45,6 +46,7 @@ import {
 
 @Module({
   imports: [
+    StudentCodesModule,
     MongooseModule.forFeature([
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: TuitionAuditLog.name, schema: TuitionAuditLogSchema },

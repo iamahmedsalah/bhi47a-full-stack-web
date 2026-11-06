@@ -5,12 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 import {
   CONTROL_COMPONENT_KEYS,
   CONTROL_ENABLED_COMPONENT_KEYS,
   DEFAULT_CONTROL_COMPONENTS,
-  calculateGradeScale,
-  validateMark,
   type ControlComponentKey,
   type ControlSchemeComponent,
 } from '@student-portal/shared';
@@ -30,6 +29,8 @@ export interface ResolvedGradingScheme {
   academicYear: string;
   semester: string;
   version: number;
+  courseworkAttendanceMax: number;
+  courseworkQuizzesMax: number;
   frozenAt: Date | null;
   components: ControlSchemeComponent[];
 }
@@ -51,6 +52,7 @@ export class GradingSchemeService {
     courseId: string,
     academicYear: string,
     semester: string,
+    session?: ClientSession,
   ): Promise<ResolvedGradingScheme> {
     const stored = await this.schemeModel
       .findOne({
@@ -58,6 +60,7 @@ export class GradingSchemeService {
         academicYear,
         semester,
       })
+      .session(session ?? null)
       .lean();
     const byKey = new Map((stored?.components ?? []).map((c) => [c.key, c]));
     const components = DEFAULT_CONTROL_COMPONENTS.map((def) => {
@@ -66,8 +69,11 @@ export class GradingSchemeService {
         ...def,
         ...(saved
           ? {
-              max: saved.max,
-              step: saved.step,
+              max: def.key === 'coursework' ? 20 : saved.max,
+              step:
+                def.key === 'coursework' && saved.step > 20
+                  ? def.step
+                  : saved.step,
               enabled:
                 saved.enabled &&
                 CONTROL_ENABLED_COMPONENT_KEYS.includes(def.key),
@@ -80,6 +86,8 @@ export class GradingSchemeService {
       academicYear,
       semester,
       version: stored?.version ?? 0,
+      courseworkAttendanceMax: stored?.courseworkAttendanceMax ?? 5,
+      courseworkQuizzesMax: 20 - (stored?.courseworkAttendanceMax ?? 5),
       frozenAt: stored?.frozenAt ?? null,
       components,
     };
@@ -91,8 +99,14 @@ export class GradingSchemeService {
     academicYear: string,
     semester: string,
     key: ControlComponentKey,
+    session?: ClientSession,
   ): Promise<ControlSchemeComponent> {
-    const scheme = await this.getScheme(courseId, academicYear, semester);
+    const scheme = await this.getScheme(
+      courseId,
+      academicYear,
+      semester,
+      session,
+    );
     const component = scheme.components.find((c) => c.key === key);
     if (!component || !component.enabled) {
       throw new BadRequestException('Component is not enabled for this course');
@@ -105,6 +119,7 @@ export class GradingSchemeService {
     courseId: string,
     academicYear: string,
     semester: string,
+    session?: ClientSession,
   ): Promise<void> {
     const filter = {
       courseId: new Types.ObjectId(courseId),
@@ -114,16 +129,18 @@ export class GradingSchemeService {
     await this.schemeModel.updateOne(
       filter,
       {
+        $inc: { mutationRevision: 1 },
         $setOnInsert: {
           version: 1,
           components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({ ...c })),
         },
       },
-      { upsert: true },
+      { upsert: true, session },
     );
     await this.schemeModel.updateOne(
       { ...filter, frozenAt: null },
       { $set: { frozenAt: new Date() } },
+      { session },
     );
   }
 
@@ -132,6 +149,39 @@ export class GradingSchemeService {
     courseId: string,
     dto: UpdateGradingSchemeDto,
   ): Promise<ResolvedGradingScheme> {
+    const session = await this.schemeModel.db.startSession();
+    try {
+      return await session.withTransaction(() =>
+        this.updateInTransaction(actorId, courseId, dto, session),
+      );
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  private async updateInTransaction(
+    actorId: string,
+    courseId: string,
+    dto: UpdateGradingSchemeDto,
+    session: ClientSession,
+  ): Promise<ResolvedGradingScheme> {
+    // Mark writes freeze/touch this same document. This prevents a stale
+    // no-marks check from changing rules immediately after the first mark.
+    await this.schemeModel.updateOne(
+      {
+        courseId: new Types.ObjectId(courseId),
+        academicYear: dto.academicYear,
+        semester: dto.semester,
+      },
+      {
+        $inc: { mutationRevision: 1 },
+        $setOnInsert: {
+          version: 0,
+          components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({ ...c })),
+        },
+      },
+      { upsert: true, session },
+    );
     const keys = new Set<string>();
     for (const input of dto.components) {
       if (!CONTROL_COMPONENT_KEYS.includes(input.key)) {
@@ -149,6 +199,8 @@ export class GradingSchemeService {
           `Component ${input.key} is not available yet`,
         );
       }
+      if (input.key === 'coursework' && input.max !== 20)
+        throw new BadRequestException('Coursework maximum must be 20');
       if (input.step > input.max) {
         throw new BadRequestException('Step cannot exceed the maximum mark');
       }
@@ -164,7 +216,24 @@ export class GradingSchemeService {
       courseId,
       dto.academicYear,
       dto.semester,
+      session,
     );
+    if (
+      dto.courseworkAttendanceMax !== undefined &&
+      dto.courseworkAttendanceMax !== before.courseworkAttendanceMax
+    ) {
+      const exists = await this.gradeModel
+        .exists({
+          courseId: new Types.ObjectId(courseId),
+          academicYear: dto.academicYear,
+          semester: dto.semester,
+          examType: 'coursework',
+          cleared: { $ne: true },
+        })
+        .session(session);
+      if (exists)
+        throw new ConflictException('Coursework split is frozen after entry');
+    }
     const next = before.components.map((current) => {
       const input = dto.components.find((c) => c.key === current.key);
       return input
@@ -180,7 +249,10 @@ export class GradingSchemeService {
     // Changing max/step under existing marks silently changes their meaning.
     const changedRules = next.filter((n) => {
       const old = before.components.find((c) => c.key === n.key);
-      return old && (old.max !== n.max || old.step !== n.step);
+      return (
+        old &&
+        (old.max !== n.max || old.step !== n.step || old.enabled !== n.enabled)
+      );
     });
     const reason = dto.reason?.trim();
     const courseObjectId = new Types.ObjectId(courseId);
@@ -198,41 +270,21 @@ export class GradingSchemeService {
           academicYear: dto.academicYear,
           semester: dto.semester,
           examType: component.key,
+          cleared: { $ne: true },
         })
+        .session(session)
         .select('_id grade status studentId')
         .lean();
       if (docs.length > 0) affected.push({ component, docs });
     }
 
     if (affected.length > 0) {
-      if (!dto.force || !reason || reason.length < 3) {
-        throw new ConflictException({
-          code: 'SCHEME_FROZEN',
-          message:
-            'Marks already exist for this component. Changing the maximum or step requires force=true and a reason.',
-          affected: affected.map((a) => ({
-            key: a.component.key,
-            marks: a.docs.length,
-          })),
-        });
-      }
-      for (const { component, docs } of affected) {
-        const conflicts = docs.filter(
-          (d) =>
-            (d.status === 'present' || d.status === 'withheld') &&
-            validateMark(d.grade, component) !== null,
-        );
-        if (conflicts.length > 0) {
-          throw new ConflictException({
-            code: 'SCHEME_CONFLICT',
-            message: `${conflicts.length} existing mark(s) would become invalid under the new maximum/step`,
-            key: component.key,
-            count: conflicts.length,
-          });
-        }
-      }
+      throw new ConflictException({
+        code: 'SCHEME_FROZEN',
+        message:
+          'Marks exist. Create a new term scheme; in-place force changes are disabled.',
+      });
     }
-
     const saved = await this.schemeModel.findOneAndUpdate(
       {
         courseId: courseObjectId,
@@ -243,65 +295,56 @@ export class GradingSchemeService {
         $set: {
           components: next.map((c) => ({ ...c })),
           updatedBy: new Types.ObjectId(actorId),
+          courseworkAttendanceMax:
+            dto.courseworkAttendanceMax ?? before.courseworkAttendanceMax,
         },
         $inc: { version: 1 },
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true, session },
     );
 
-    for (const { component, docs } of affected) {
-      await this.gradeModel.bulkWrite(
-        docs.map((d) => {
-          const percentage =
-            component.max > 0 ? round2((d.grade / component.max) * 100) : 0;
-          const scale = calculateGradeScale(percentage, d.status);
-          return {
-            updateOne: {
-              filter: { _id: d._id },
-              update: {
-                $set: {
-                  maxGrade: component.max,
-                  percentage,
-                  letterGrade: scale.letter,
-                  gradePoints: scale.points,
-                },
-                $inc: { rev: 1 },
-              },
+    if (changedRules.length > 0 || dto.courseworkAttendanceMax !== undefined) {
+      await this.auditModel.create(
+        [
+          {
+            courseId: courseObjectId,
+            academicYear: dto.academicYear,
+            semester: dto.semester,
+            component: changedRules.map((c) => c.key).join(',') || 'coursework',
+            action: 'SCHEME_CHANGE',
+            source: 'GRID',
+            oldValue: {
+              courseworkAttendanceMax: before.courseworkAttendanceMax,
+              courseworkQuizzesMax: before.courseworkQuizzesMax,
+              components: before.components.map(
+                ({ key, max, step, enabled }) => ({
+                  key,
+                  max,
+                  step,
+                  enabled,
+                }),
+              ),
             },
-          };
-        }),
-        { ordered: false },
+            newValue: {
+              courseworkAttendanceMax:
+                dto.courseworkAttendanceMax ?? before.courseworkAttendanceMax,
+              courseworkQuizzesMax:
+                20 -
+                (dto.courseworkAttendanceMax ?? before.courseworkAttendanceMax),
+              components: next.map(({ key, max, step, enabled }) => ({
+                key,
+                max,
+                step,
+                enabled,
+              })),
+              affectedMarks: affected.reduce((n, a) => n + a.docs.length, 0),
+            },
+            actorId: new Types.ObjectId(actorId),
+            reason,
+          },
+        ],
+        { session },
       );
-    }
-
-    if (changedRules.length > 0) {
-      await this.auditModel.create({
-        courseId: courseObjectId,
-        academicYear: dto.academicYear,
-        semester: dto.semester,
-        component: changedRules.map((c) => c.key).join(','),
-        action: 'SCHEME_CHANGE',
-        source: 'GRID',
-        oldValue: {
-          components: before.components.map(({ key, max, step, enabled }) => ({
-            key,
-            max,
-            step,
-            enabled,
-          })),
-        },
-        newValue: {
-          components: next.map(({ key, max, step, enabled }) => ({
-            key,
-            max,
-            step,
-            enabled,
-          })),
-          affectedMarks: affected.reduce((n, a) => n + a.docs.length, 0),
-        },
-        actorId: new Types.ObjectId(actorId),
-        reason,
-      });
     }
 
     return {
@@ -311,6 +354,10 @@ export class GradingSchemeService {
       version: saved?.version ?? before.version + 1,
       frozenAt: saved?.frozenAt ?? null,
       components: next,
+      courseworkAttendanceMax:
+        dto.courseworkAttendanceMax ?? before.courseworkAttendanceMax,
+      courseworkQuizzesMax:
+        20 - (dto.courseworkAttendanceMax ?? before.courseworkAttendanceMax),
     };
   }
 }

@@ -62,6 +62,8 @@ import {
   initializeCodeYear,
   recoverStudentCode,
   holdPreviousStudentCode,
+  deleteCodeStudent,
+  manageStudentCode,
   type CodeAuditScope,
 } from "@/features/student-codes/api";
 import {
@@ -82,12 +84,15 @@ export default function StudentCodesPage({
   const locale = useLocale();
   const dir = locale === "ar" ? "rtl" : "ltr";
   const { user } = useAuth();
-  const canManage = user?.role === "admin";
+  const isAdmin = user?.role === "admin";
+  const canManage = isAdmin || Boolean(user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_MANAGE));
+  const canRecover = isAdmin || Boolean(user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_RECOVER));
+  const canDeleteStudent = isAdmin || Boolean(user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_DELETE_STUDENT));
   const canRead =
-    canManage ||
+    isAdmin ||
     Boolean(user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_READ));
   const canViewStudent =
-    canManage ||
+    isAdmin ||
     Boolean(user?.permissions?.includes(PERMISSIONS.STUDENTS_READ));
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +155,10 @@ export default function StudentCodesPage({
     setSelectedKeys([]);
     await client.invalidateQueries({ queryKey: ["student-code-audit"] });
     await client.invalidateQueries({ queryKey: ["student-code-history"] });
+    await client.invalidateQueries({ queryKey: ["students"] });
+    await client.invalidateQueries({ queryKey: ["admin-students-stats"] });
+    await client.invalidateQueries({ queryKey: ["admission-requests"] });
+    await client.invalidateQueries({ queryKey: ["admission-groups"] });
   };
   const scan = (scope: CodeAuditScope) => {
     const next = new URLSearchParams(params.toString());
@@ -174,7 +183,11 @@ export default function StudentCodesPage({
     };
     setPending(true);
     try {
-      if (row && intent.hold)
+      if (row && intent.adminAction)
+        await manageStudentCode(row.studentCode, { ...input, action: intent.adminAction, origin: values.origin, ...(values.sourceFile.trim() ? { sourceFile: values.sourceFile.trim() } : {}) });
+      else if (row && intent.deleteStudent)
+        await deleteCodeStudent(row.studentCode, input);
+      else if (row && intent.hold)
         await holdPreviousStudentCode(row.studentCode, input);
       else if (row)
         await recoverStudentCode(row.studentCode, {
@@ -383,6 +396,7 @@ export default function StudentCodesPage({
           );
         },
       },
+      { key: "provenance", header: t("lastSource"), className: "min-w-[170px] text-start", render: (row) => <TableCell className="text-xs space-y-1"><p>{t.has(`sources.${row.provenance?.source ?? 'unknown'}`) ? t(`sources.${row.provenance?.source ?? 'unknown'}`) : t("sources.unknown")}</p>{row.provenance?.verification === 'admin_confirmed' && <p className="text-muted-foreground">{t("adminConfirmedOrigin")}</p>}{row.provenance?.sourceFile && <p><bdi>{row.provenance.sourceFile}</bdi></p>}{Boolean(row.provenance?.rowNumber) && <p>{t("importRow", { row: row.provenance!.rowNumber! })}</p>}</TableCell> },
       {
         key: "reason",
         header: t("explanation"),
@@ -496,9 +510,16 @@ export default function StudentCodesPage({
 
                   <DropdownMenu.Separator className="my-1 h-px bg-border/60" />
 
+                  {isAdmin && !query.data?.truncated && /^\d{6}$/.test(row.studentCode) && <>
+                    {(row.observedStudentId || row.currentStudentId) && ["CURRENT_OWNER", "REGISTRY_YEAR_MISMATCH"].includes(row.reason) && <DropdownMenu.Item className="cursor-pointer rounded-squircle px-3 py-2 text-xs outline-none focus:bg-secondary" onSelect={() => setIntent({ snapshot: query.data!, row, adminAction: "CONFIRM_OWNER" })}>{t("adminActions.CONFIRM_OWNER")}</DropdownMenu.Item>}
+                    {!row.observedStudentId && !row.currentStudentId && <>
+                      <DropdownMenu.Item className="cursor-pointer rounded-squircle px-3 py-2 text-xs text-primary outline-none focus:bg-secondary" onSelect={() => setIntent({ snapshot: query.data!, row, adminAction: "FREE" })}>{t("adminActions.FREE")}</DropdownMenu.Item>
+                      <DropdownMenu.Item className="cursor-pointer rounded-squircle px-3 py-2 text-xs text-warning outline-none focus:bg-secondary" onSelect={() => setIntent({ snapshot: query.data!, row, adminAction: "BAN" })}>{t("adminActions.BAN")}</DropdownMenu.Item>
+                    </>}
+                  </>}
                   {/* Action: Free / Recover Gap */}
-                  {canManage &&
-                    row.status === "MISSING" &&
+                  {canRecover &&
+                    ["MISSING", "RESERVED"].includes(row.status) &&
                     query.data?.policy &&
                     !query.data.mappingConflict &&
                     !query.data.truncated && (
@@ -515,7 +536,7 @@ export default function StudentCodesPage({
 
                   {/* Action: Hold / Reserve Code */}
                   {canManage &&
-                    row.reason === "PREVIOUS_OWNER_MISSING" &&
+                    (row.reason === "PREVIOUS_OWNER_MISSING" || ["MISSING", "AVAILABLE"].includes(row.status)) &&
                     !query.data?.truncated && (
                       <DropdownMenu.Item
                         className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 outline-none hover:bg-amber-500/10 focus:bg-amber-500/10 transition-colors"
@@ -528,6 +549,14 @@ export default function StudentCodesPage({
                       </DropdownMenu.Item>
                     )}
 
+                  {canDeleteStudent && row.status === "ASSIGNED" && !query.data?.truncated && (
+                    <DropdownMenu.Item
+                      className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs text-danger outline-none focus:bg-secondary"
+                      onSelect={() => setIntent({ snapshot: query.data!, row, deleteStudent: true })}
+                    >
+                      <Lock className="h-4 w-4" />{t("deleteStudent")}
+                    </DropdownMenu.Item>
+                  )}
                   {/* Contextual Status Badges */}
                   {row.status === "RELEASED" && (
                     <div className="flex items-center gap-2 rounded-squircle px-3 py-1.5 text-[11px] text-muted-foreground bg-muted/40 cursor-default select-none">
@@ -565,6 +594,9 @@ export default function StudentCodesPage({
       pending,
       dir,
       canManage,
+      isAdmin,
+      canRecover,
+      canDeleteStudent,
       canViewStudent,
       locale,
       query.data,
@@ -587,7 +619,7 @@ export default function StudentCodesPage({
           actions={
             <>
               {" "}
-              {(canManage ||
+              {(isAdmin ||
                 user?.permissions?.includes(
                   PERMISSIONS.STUDENT_CODES_EXPORT,
                 )) && (
@@ -620,7 +652,7 @@ export default function StudentCodesPage({
           icon={<ShieldCheck className="h-5 w-5" />}
         >
           {" "}
-          {(canManage ||
+          {(isAdmin ||
             user?.permissions?.includes(PERMISSIONS.STUDENT_CODES_EXPORT)) && (
             <Button
               variant="outline"
@@ -690,7 +722,7 @@ export default function StudentCodesPage({
         </div>
       </div>
       <CodeScopeForm
-        configuredYears={embedded}
+        configuredYears
         key={`${academicYear}/${yearPrefix}`}
         initial={{ academicYear, yearPrefix }}
         pending={pending}
@@ -714,13 +746,14 @@ export default function StudentCodesPage({
           </Button>
         </div>
       )}
-      {canManage && <MappingCorrection academicYear={academicYear} />}
+      {isAdmin && <MappingCorrection academicYear={academicYear} />}
       {!validScope ? (
         <p className="rounded-xl border p-5">{t("chooseScope")}</p>
       ) : (
         <>
           {query.data && (
             <>
+              <p className="rounded-xl border p-3 text-sm">{t("lastScanScope")}: <bdi>{query.data.academicYear}</bdi> / <bdi>{query.data.yearPrefix}</bdi></p>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {statuses.map((key) => (
                   <button
@@ -913,6 +946,10 @@ export default function StudentCodesPage({
           intent={intent}
           pending={pending}
           close={() => setIntent(null)}
+          refreshPreview={async () => {
+            const latest = await getCodeAudit({ academicYear: intent.snapshot.academicYear, yearPrefix: intent.snapshot.yearPrefix, page: 1, limit: 100, ...(intent.row ? { search: intent.row.studentCode } : {}) });
+            setIntent({ ...intent, snapshot: latest, row: intent.row ? latest.items.find((row) => row.studentCode === intent.row?.studentCode) ?? intent.row : undefined });
+          }}
           save={save}
         />
       )}

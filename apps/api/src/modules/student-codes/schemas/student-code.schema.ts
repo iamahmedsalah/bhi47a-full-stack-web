@@ -11,13 +11,16 @@ import {
 
 @Schema({ _id: false })
 export class CodeAssignment {
+  @Prop() studentName?: string;
+  @Prop() studentNameAr?: string;
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true, ref: 'User' })
   studentId!: Types.ObjectId;
   @Prop({ type: MongooseSchema.Types.ObjectId })
   registrationRequestId?: Types.ObjectId;
   @Prop() assignedAt?: Date;
   @Prop({ required: true }) observedAt!: Date;
-  @Prop({ enum: ['admission', 'legacy'], required: true }) source!: string;
+  @Prop({ enum: ['admission', 'legacy', 'import', 'manual'], required: true })
+  source!: string;
   @Prop() releasedAt?: Date;
   @Prop() releaseReason?: string;
   @Prop({ type: MongooseSchema.Types.ObjectId }) releasedBy?: Types.ObjectId;
@@ -26,8 +29,9 @@ const AssignmentSchema = SchemaFactory.createForClass(CodeAssignment);
 
 @Schema({ collection: 'student_code_registry', timestamps: true })
 export class StudentCodeEntry {
+  @Prop({ default: false }) reuseAuthorized?: boolean;
   @Prop({ required: true, immutable: true }) studentCode!: string;
-  @Prop({ required: true, immutable: true }) academicYear!: string;
+  @Prop({ required: true }) academicYear!: string;
   @Prop({ required: true, immutable: true }) yearPrefix!: string;
   @Prop({ min: 1, max: 9999, required: true, immutable: true })
   sequence!: number;
@@ -45,7 +49,7 @@ export const StudentCodeEntrySchema =
   SchemaFactory.createForClass(StudentCodeEntry);
 StudentCodeEntrySchema.index({ studentCode: 1 }, { unique: true });
 StudentCodeEntrySchema.index(
-  { academicYear: 1, sequence: 1 },
+  { academicYear: 1, yearPrefix: 1, sequence: 1 },
   { unique: true },
 );
 StudentCodeEntrySchema.index(
@@ -84,7 +88,6 @@ export type StudentCodeYearDocument = HydratedDocument<StudentCodeYear>;
 export const StudentCodeYearSchema =
   SchemaFactory.createForClass(StudentCodeYear);
 StudentCodeYearSchema.index({ academicYear: 1 }, { unique: true });
-StudentCodeYearSchema.index({ yearPrefix: 1 }, { unique: true });
 StudentCodeYearSchema.index(
   { allocationPrefix: 1 },
   { unique: true, sparse: true },
@@ -92,6 +95,12 @@ StudentCodeYearSchema.index(
 
 @Schema({ collection: 'student_code_audit_logs', timestamps: false })
 export class StudentCodeAuditLog {
+  @Prop({ type: MongooseSchema.Types.Mixed, immutable: true }) details?: Record<
+    string,
+    unknown
+  >;
+  @Prop({ enum: ['admission', 'legacy', 'import', 'manual'], immutable: true })
+  source?: string;
   @Prop({ required: true, immutable: true }) studentCode!: string;
   @Prop({ required: true, immutable: true }) academicYear!: string;
   @Prop({
@@ -104,6 +113,13 @@ export class StudentCodeAuditLog {
       'CANCELLED_CODE_HELD',
       'MAPPING_CORRECTED',
       'PREVIOUS_OWNER_HELD',
+      'STUDENT_DELETED_CODE_HELD',
+      'RESERVED_HELD',
+      'IMPORTED',
+      'ADMIN_FREED',
+      'ADMIN_BANNED',
+      'OWNER_REVIEWED',
+      'MANUAL_CREATED',
     ],
     required: true,
     immutable: true,

@@ -49,7 +49,7 @@ export class StudentCodeMappingsService {
         policy.revision,
       ]);
       const currentPrefix = policy.allocationPrefix ?? policy.yearPrefix;
-      if (currentPrefix === prefix) continue;
+      if (currentPrefix === prefix && policy.yearPrefix === prefix) continue;
       const regex = new RegExp(`^${prefix}[0-9]{4}$`);
       // Bound every source and include numeric login aliases when finding the high-water mark.
       const users = await this.store.users
@@ -90,12 +90,15 @@ export class StudentCodeMappingsService {
         ...entries.map((entry) => entry.studentCode),
       ];
       const nextSequence = Math.max(
-        policy.nextSequence,
         1 +
           Math.max(
             0,
             ...entries
-              .filter((entry) => entry.academicYear === policy.academicYear)
+              .filter(
+                (entry) =>
+                  entry.academicYear === policy.academicYear &&
+                  entry.studentCode.startsWith(prefix),
+              )
               .map((entry) => entry.sequence),
           ),
         1 +
@@ -106,6 +109,8 @@ export class StudentCodeMappingsService {
             ),
           ),
       );
+      if (currentPrefix === prefix && nextSequence === policy.nextSequence)
+        continue;
       items.push({
         academicYear: policy.academicYear,
         currentPrefix,

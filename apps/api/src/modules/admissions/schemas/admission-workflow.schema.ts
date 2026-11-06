@@ -55,6 +55,7 @@ export class AdmissionRequest {
   @Prop() waitlistedAt?: Date;
   @Prop({ type: MongoSchema.Types.ObjectId }) studentId?: Types.ObjectId;
   @Prop() studentCode?: string;
+  @Prop() formerStudentCode?: string;
   @Prop() level?: string;
   @Prop() department?: string;
   @Prop() semester?: string;

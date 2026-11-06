@@ -46,10 +46,12 @@ export type StudentCodeFindingReason =
   | "REGISTRY_YEAR_MISMATCH"
   | "UNVERIFIED_GAP"
   | "CONFIRMED_AVAILABLE"
+  | "ADMIN_REUSE_APPROVED"
   | "CURRENT_OWNER"
   | "PREVIOUS_OWNER_BLOCKED"
   | "RESERVATION_HELD";
 export interface StudentCodeFinding {
+  provenance?: { source: string; sourceFile?: string; rowNumber?: number; verification: string };
   studentCode: string;
   sequence?: number;
   status: StudentCodeFindingStatus;
@@ -80,7 +82,7 @@ export interface StudentCodeAuditResult {
   truncated: boolean;
   canInitialize: boolean;
   mappingConflict: boolean;
-  reuseEnabled: false;
+  reuseEnabled: boolean;
   summary: Record<StudentCodeFindingStatus, number>;
   items: StudentCodeFinding[];
   total: number;
@@ -99,6 +101,8 @@ export interface RecoverStudentCodeInput extends InitializeStudentCodeYearInput 
   neverAssignedConfirmed: true;
 }
 export interface StudentCodeHistoryResult {
+  existingIdentity: boolean;
+  assignments: Array<{ studentId: string; studentName?: string; studentNameAr?: string; source: string; observedAt: string; assignedAt?: string; releasedAt?: string }>;
   entry: {
     studentCode: string;
     status: StudentCodeStatus;
@@ -112,6 +116,10 @@ export interface StudentCodeHistoryResult {
     reason: string;
     at: string;
     actorId: string;
+    actorName?: string;
+    actorNameAr?: string;
+    source?: string;
+    details?: { reportedOrigin?: string; sourceFile?: string; batchId?: string; rowNumber?: number; batchIndex?: number; archivedRecords?: Record<string, number>; previousAcademicYear?: string };
   }>;
   total: number;
   page: number;

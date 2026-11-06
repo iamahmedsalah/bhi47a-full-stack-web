@@ -79,8 +79,11 @@ export class StudentsController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.STUDENTS_WRITE)
   @ApiOperation({ summary: 'Create new student (admin)' })
-  async create(@Body() dto: CreateStudentDto) {
-    return this.studentsService.create(dto);
+  async create(
+    @Body() dto: CreateStudentDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.studentsService.create(dto, actorId);
   }
 
   @Patch('admin/students/:id')
@@ -117,8 +120,11 @@ export class StudentsController {
   @Delete('admin/students/:id')
   @Roles('admin')
   @ApiOperation({ summary: 'Delete student permanently (admin only)' })
-  async deleteStudent(@Param('id') id: string) {
-    return this.studentsService.deleteStudent(id);
+  async deleteStudent(
+    @Param('id') id: string,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.studentsService.deleteStudent(id, actorId);
   }
 
   @Post('admin/students/:id/reset-password')

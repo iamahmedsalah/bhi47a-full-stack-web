@@ -33,6 +33,10 @@ describe('student import credential preservation', () => {
       {} as never,
       {} as never,
       {} as never,
+      {
+        assertImportOwnership: jest.fn().mockResolvedValue(undefined),
+        recordImport: jest.fn(),
+      } as never,
     );
     return { model, importer, select };
   }
@@ -101,6 +105,18 @@ describe('student import credential preservation', () => {
     expect((await importer.commit([{ row, rowNum: 2 }])).errors).toHaveLength(
       1,
     );
+    expect(model.bulkWrite).not.toHaveBeenCalled();
+  });
+  it('never lets an old spreadsheet replace the identity of a new holder of a reused code', async () => {
+    const { model, importer } = fixture();
+    const result = await importer.commit([
+      {
+        row: { ...row, nationalId: '29901010100001', mustChangePassword: true },
+        rowNum: 2,
+      },
+    ]);
+    expect(result.errors).toHaveLength(1);
+    expect(model.updateOne).not.toHaveBeenCalled();
     expect(model.bulkWrite).not.toHaveBeenCalled();
   });
 });

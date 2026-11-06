@@ -21,6 +21,7 @@ import { StudentCodeStore } from './student-code-store.service';
 import { StudentCodeAllocator } from './student-code-allocator.service';
 import { AdmissionTransactions } from './admission-transactions.service';
 import { StudentCodesService } from './student-codes.service';
+import { StudentCodeAdminService } from './student-code-admin.service';
 import { StudentCodesController } from './student-codes.controller';
 import { StudentCodeMappingsService } from './student-code-mappings.service';
 
@@ -41,8 +42,14 @@ import { StudentCodeMappingsService } from './student-code-mappings.service';
     StudentCodeAllocator,
     AdmissionTransactions,
     StudentCodesService,
+    StudentCodeAdminService,
     StudentCodeMappingsService,
   ],
-  exports: [StudentCodeAllocator, StudentCodeStore, AdmissionTransactions],
+  exports: [
+    StudentCodesService,
+    StudentCodeAllocator,
+    StudentCodeStore,
+    AdmissionTransactions,
+  ],
 })
 export class StudentCodesModule {}

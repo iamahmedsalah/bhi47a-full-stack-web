@@ -45,6 +45,12 @@ export class GradingScheme {
   @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
+  @Prop({ type: Number, default: 0 })
+  mutationRevision?: number;
+
+  @Prop({ type: Number, default: 5, min: 0, max: 20 })
+  courseworkAttendanceMax!: number;
+
   @Prop({ required: true, default: 1, min: 1 })
   version!: number;
 

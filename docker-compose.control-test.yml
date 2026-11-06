@@ -1,0 +1,23 @@
+# Isolated Control transaction fixture. No production credentials or mounts.
+services:
+  mongodb:
+    image: mongo:7.0
+    command: ['mongod', '--replSet', 'control-test', '--port', '27023', '--bind_ip_all']
+    ports:
+      - '127.0.0.1:27023:27023'
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27023'
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (error) {
+          if (error.codeName !== 'NotYetInitialized') throw error;
+          rs.initiate({_id:'control-test',members:[{_id:0,host:'127.0.0.1:27023'}]}); }
+          if (!db.hello().isWritablePrimary) quit(1);
+      interval: 5s
+      timeout: 5s
+      retries: 20

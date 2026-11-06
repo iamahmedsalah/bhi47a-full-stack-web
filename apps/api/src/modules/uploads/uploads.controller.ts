@@ -209,7 +209,12 @@ export class UploadsController {
     if (!type) {
       throw new BadRequestException('Please specify file type');
     }
-    return this.uploadsService.processUpload(file.buffer, type, adminId);
+    return this.uploadsService.processUpload(
+      file.buffer,
+      type,
+      adminId,
+      file.originalname,
+    );
   }
 
   @Post('batch')

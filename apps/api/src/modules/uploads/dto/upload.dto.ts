@@ -6,9 +6,12 @@ import {
   IsOptional,
   IsString,
   Min,
+  MaxLength,
 } from 'class-validator';
 
 export class BatchUploadDto {
+  @IsOptional() @IsString() @MaxLength(200) sourceFile?: string;
+  @IsOptional() @IsInt() @Min(0) rowOffset?: number;
   @ApiProperty({
     example: 'students',
     enum: [

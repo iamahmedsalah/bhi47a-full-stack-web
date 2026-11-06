@@ -1,3 +1,10 @@
+export interface ImportContext {
+  sourceFile?: string;
+  batchId?: string;
+  batchIndex?: number;
+  rowOffset?: number;
+}
+
 /** Result of a single row validation. */
 export interface ImportRowError {
   row: number;
@@ -36,6 +43,7 @@ export interface Importer {
   commit(
     validRows: { row: Record<string, unknown>; rowNum: number }[],
     actorId: string,
+    context?: ImportContext,
   ): Promise<ImportResult>;
 }
 

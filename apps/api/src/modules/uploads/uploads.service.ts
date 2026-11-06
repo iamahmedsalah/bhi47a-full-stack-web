@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
@@ -53,7 +54,12 @@ export class UploadsService {
     this.importerMap = new Map(importers.map((imp) => [imp.type, imp]));
   }
 
-  async processUpload(fileBuffer: Buffer, type: string, adminId: string) {
+  async processUpload(
+    fileBuffer: Buffer,
+    type: string,
+    adminId: string,
+    sourceFile?: string,
+  ) {
     const importer = this.importerMap.get(type);
     if (!importer) {
       throw new BadRequestException('Unknown upload type');
@@ -66,8 +72,12 @@ export class UploadsService {
 
     const rows = await this.parseWorkbook(fileBuffer);
     try {
+      await this.assertReusedIdentity(rows, type);
       const { validRows, errors: validationErrors } = importer.validate(rows);
-      const commitResult = await importer.commit(validRows, adminId);
+      const commitResult = await importer.commit(validRows, adminId, {
+        sourceFile,
+        batchId: new Types.ObjectId().toString(),
+      });
 
       const errors = [...validationErrors, ...commitResult.errors];
       const { successCount } = commitResult;
@@ -109,6 +119,8 @@ export class UploadsService {
       batchIndex?: number;
       totalBatches?: number;
       uploadSessionId?: string;
+      sourceFile?: string;
+      rowOffset?: number;
     },
     adminId: string,
   ) {
@@ -136,10 +148,16 @@ export class UploadsService {
     try {
       // Normalize keys on incoming rows in case of Arabic/English variations
       const normalizedRows = dto.rows.map((row) => normalizeRowKeys(row));
+      await this.assertReusedIdentity(normalizedRows, dto.type);
 
       const { validRows, errors: validationErrors } =
         importer.validate(normalizedRows);
-      const commitResult = await importer.commit(validRows, adminId);
+      const commitResult = await importer.commit(validRows, adminId, {
+        sourceFile: dto.sourceFile,
+        batchId: dto.uploadSessionId,
+        batchIndex: dto.batchIndex,
+        rowOffset: dto.rowOffset,
+      });
 
       const errors = [...validationErrors, ...commitResult.errors];
       const { successCount } = commitResult;
@@ -206,6 +224,57 @@ export class UploadsService {
       quizzesCount,
       complaintsCount,
     };
+  }
+
+  /** A code alone no longer identifies a historical person after explicit reuse. */
+  async assertReusedIdentity(rows: Record<string, unknown>[], type: string) {
+    const token = (value: unknown) =>
+      typeof value === 'string' || typeof value === 'number'
+        ? String(value).trim()
+        : '';
+    if (type === 'students' || type === 'courses') return;
+    const codes = [
+      ...new Set(rows.map((row) => token(row.studentCode)).filter(Boolean)),
+    ];
+    if (!codes.length) return;
+    const db = this.connection.db!;
+    const reused = await db
+      .collection('student_code_registry')
+      .find(
+        {
+          studentCode: { $in: codes },
+          'assignmentHistory.1': { $exists: true },
+        },
+        { projection: { studentCode: 1, currentStudentId: 1 } },
+      )
+      .limit(Math.min(codes.length, 10000))
+      .toArray();
+    for (const entry of reused) {
+      for (const row of rows.filter(
+        (item) => token(item.studentCode) === entry.studentCode,
+      )) {
+        const explicitId = row.studentId ?? row.userId;
+        const matches =
+          entry.currentStudentId &&
+          ((explicitId &&
+            token(explicitId) === String(entry.currentStudentId)) ||
+            (row.nationalId &&
+              (await db.collection('users').findOne(
+                {
+                  _id: entry.currentStudentId as Types.ObjectId,
+                  role: 'student',
+                  nationalId: token(row.nationalId),
+                },
+                { projection: { _id: 1 } },
+              ))));
+        if (!matches)
+          throw new BadRequestException({
+            code: 'CODE_REUSED_IDENTITY_REQUIRED',
+            message:
+              'الكود اتعاد استخدامه. أضف معرّف حساب الطالب الحالي أو رقمه القومي بجانب الكود علشان ملف قديم ما يغيّرش بيانات طالب جديد.',
+          });
+      }
+    }
   }
 
   async wipeData(

@@ -83,15 +83,19 @@ const gradeImportColumns = [
 function GradesPageContent() {
   const t = useTranslations("grades");
   const tCommon = useTranslations("common");
+  const tControl = useTranslations("control");
   const params = useParams();
   const locale = params.locale as string;
   const isAr = locale === "ar";
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const canWriteGrades = isAdmin || Boolean(user?.permissions?.includes("grades.write"));
-  const canDeleteGrades = isAdmin || Boolean(user?.permissions?.includes("grades.delete"));
-  const canUploadGrades = isAdmin || Boolean(user?.permissions?.includes("uploads.import"));
+  const canWriteGrades =
+    isAdmin || Boolean(user?.permissions?.includes("grades.write"));
+  const canDeleteGrades =
+    isAdmin || Boolean(user?.permissions?.includes("grades.delete"));
+  const canUploadGrades =
+    isAdmin || Boolean(user?.permissions?.includes("uploads.import"));
 
   const [activeTab, setActiveTab] = useState("midterm");
   const [search, setSearch] = useState("");
@@ -218,7 +222,6 @@ function GradesPageContent() {
       );
     }
   };
-
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -350,15 +353,20 @@ function GradesPageContent() {
 
         let letterBadgeClass = "border-border bg-muted/50 text-foreground";
         if (letter.startsWith("A")) {
-          letterBadgeClass = "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold";
+          letterBadgeClass =
+            "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold";
         } else if (letter.startsWith("B")) {
-          letterBadgeClass = "border-teal-500/30 bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold";
+          letterBadgeClass =
+            "border-teal-500/30 bg-teal-500/15 text-teal-600 dark:text-teal-400 font-bold";
         } else if (letter.startsWith("C")) {
-          letterBadgeClass = "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold";
+          letterBadgeClass =
+            "border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold";
         } else if (letter.startsWith("D")) {
-          letterBadgeClass = "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold";
+          letterBadgeClass =
+            "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold";
         } else if (letter === "F") {
-          letterBadgeClass = "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400 font-bold";
+          letterBadgeClass =
+            "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400 font-bold";
         }
 
         return (
@@ -415,7 +423,7 @@ function GradesPageContent() {
         </TableCell>
       ),
     },
-    ...((canWriteGrades || canDeleteGrades)
+    ...(canWriteGrades || canDeleteGrades
       ? [
           {
             key: "actions",
@@ -475,7 +483,11 @@ function GradesPageContent() {
         }
       >
         {canUploadGrades && (
-          <Button variant="outline" onClick={() => setIsUploadOpen(true)} className="rounded-squircle">
+          <Button
+            variant="outline"
+            onClick={() => setIsUploadOpen(true)}
+            className="rounded-squircle"
+          >
             <UploadCloud className="h-4 w-4" />
             {isAr ? "رفع الدرجات" : "Upload Grades"}
           </Button>
@@ -519,13 +531,19 @@ function GradesPageContent() {
               <CalendarClock className="h-4 w-4 text-cyan-400" />
               {isAr ? "نشر وجدولة النتائج" : "Publish & Schedule Grades"}
             </Button>
-            <Button onClick={() => setIsAddOpen(true)} className="rounded-squircle">
+            <Button
+              onClick={() => setIsAddOpen(true)}
+              className="rounded-squircle"
+            >
               <Plus className="h-4 w-4" />
               {isAr ? "إضافة درجة" : "Add Grade"}
             </Button>
           </>
         )}
       </PageTitleBanner>
+      <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+        {tControl("visibilityNote")}
+      </p>
 
       <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
         {[

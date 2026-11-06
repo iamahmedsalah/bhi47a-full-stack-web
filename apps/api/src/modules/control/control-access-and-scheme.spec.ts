@@ -7,6 +7,7 @@ import { ControlSheetsService } from './services/control-sheets.service';
 
 const chain = <T>(value: T) => {
   const c: Record<string, unknown> = {};
+  c.session = () => c;
   c.select = () => c;
   c.sort = () => c;
   c.skip = () => c;
@@ -136,8 +137,16 @@ describe('GradingSchemeService', () => {
   const courseId = new Types.ObjectId().toString();
   const actorId = new Types.ObjectId().toString();
 
-  it('blocks changing max mark when grades exist unless force=true and reason provided', async () => {
+  it('freezes marked component schemes even when force is requested', async () => {
     const schemeModel = {
+      db: {
+        startSession: () =>
+          Promise.resolve({
+            withTransaction: (fn: () => Promise<unknown>) => fn(),
+            endSession: jest.fn(),
+          }),
+      },
+      updateOne: jest.fn().mockResolvedValue({}),
       findOne: jest.fn(() => chain(null)),
       findOneAndUpdate: jest.fn().mockResolvedValue({ version: 2 }),
     };
@@ -181,16 +190,16 @@ describe('GradingSchemeService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     // Succeeds when force=true, reason given, and existing marks remain valid under new max (25)
-    const updated = await svc.updateScheme(actorId, courseId, {
-      academicYear: '2026-2027',
-      semester: 'first',
-      components: [{ key: 'midterm', max: 25, step: 0.5, enabled: true }],
-      force: true,
-      reason: 'Approved by council',
-    });
-    expect(updated.components.find((c) => c.key === 'midterm')?.max).toBe(25);
-    expect(gradeModel.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(auditModel.create).toHaveBeenCalledTimes(1);
+    await expect(
+      svc.updateScheme(actorId, String(courseId), {
+        academicYear: '2026-2027',
+        semester: 'first',
+        components: [{ key: 'midterm', max: 25, step: 0.5, enabled: true }],
+        force: true,
+        reason: 'Council decision',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(gradeModel.bulkWrite).not.toHaveBeenCalled();
   });
 });
 
@@ -208,7 +217,12 @@ describe('ControlSheetsService lock & unlock', () => {
 
   it('locks and unlocks a sheet with audit entries', async () => {
     let locked = false;
+    const session = {
+      withTransaction: (fn: () => Promise<unknown>) => fn(),
+      endSession: jest.fn(),
+    };
     const sheetModel = {
+      db: { startSession: jest.fn().mockResolvedValue(session) },
       findById: jest.fn(() =>
         chain({
           _id: sheetId,
@@ -279,7 +293,13 @@ describe('ControlSheetsService lock & unlock', () => {
     );
     expect(lockedView.sheet.locked).toBe(true);
     expect(auditModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'LOCK', reason: 'Finalized midterm' }),
+      [
+        expect.objectContaining({
+          action: 'LOCK',
+          reason: 'Finalized midterm',
+        }),
+      ],
+      expect.anything(),
     );
 
     const unlockedView = await svc.unlock(
@@ -289,10 +309,13 @@ describe('ControlSheetsService lock & unlock', () => {
     );
     expect(unlockedView.sheet.locked).toBe(false);
     expect(auditModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'UNLOCK',
-        reason: 'Fix typo on student 27001',
-      }),
+      [
+        expect.objectContaining({
+          action: 'UNLOCK',
+          reason: 'Fix typo on student 27001',
+        }),
+      ],
+      expect.anything(),
     );
   });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftRight,
@@ -159,6 +160,7 @@ export function StudentTable({
   t,
   tCommon,
 }: StudentTableProps) {
+  const tCodes = useTranslations('studentCodes');
   const router = useRouter();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -546,7 +548,9 @@ export function StudentTable({
         }}
         title={locale === 'ar' ? 'حذف الطالب نهائياً' : 'Delete Student Permanently'}
         description={
-          locale === 'ar'
+          /^\d{6}$/.test(studentToDelete?.studentCode ?? '')
+            ? tCodes('deleteStudentHint')
+            : locale === 'ar'
             ? `هل أنت متأكد من حذف الطالب "${studentToDelete?.fullNameAr || studentToDelete?.fullName}" (${studentToDelete?.studentCode}) نهائياً؟ سيتم إزالة حسابه وجميع بياناته وسجلاته الأكاديمية ولا يمكن التراجع عن هذا الإجراء.`
             : `Are you sure you want to permanently delete student "${studentToDelete?.fullName}" (${studentToDelete?.studentCode})? All academic records and account data will be permanently removed.`
         }

@@ -33,6 +33,7 @@ export class StudentCodeAllocator {
       session: ClientSession,
     ) => Promise<{ studentId: string }>,
     beforeAllocation?: (session: ClientSession) => Promise<void>,
+    source: 'admission' | 'import' = 'admission',
   ): Promise<AssignedStudentCode> {
     return this.transactions.run(
       async (session) => {
@@ -92,6 +93,7 @@ export class StudentCodeAllocator {
               {
                 academicYear,
                 yearPrefix,
+                allocationPrefix: yearPrefix,
                 nextSequence,
                 initializedAt: new Date(),
                 initializedBy: new Types.ObjectId(actorId),
@@ -143,6 +145,12 @@ export class StudentCodeAllocator {
           );
         }
         const prefix = policy.allocationPrefix ?? policy.yearPrefix;
+        if (!policy.allocationPrefix)
+          await this.store.years.updateOne(
+            { academicYear },
+            { $set: { allocationPrefix: prefix } },
+            { session },
+          );
         if (prefix !== admissionYearPrefix(academicYear))
           codeConflict(
             'CODE_YEAR_PREFIX_MISMATCH',
@@ -169,11 +177,10 @@ export class StudentCodeAllocator {
           .sort({ studentCode: -1 })
           .session(session)
           .lean();
-        // Registry sequence numbers are unique within an academic year, even
-        // after its allocation prefix is corrected. Keep that high-water mark
-        // to avoid repeatedly walking into old assignments from another prefix.
+        // Each intake prefix has its own sequence. A corrected prefix starts
+        // at 0001 unless that prefix already has issued or protected codes.
         const latestYearEntry = await this.store.entries
-          .findOne({ academicYear })
+          .findOne({ academicYear, yearPrefix: prefix })
           .select('sequence')
           .sort({ sequence: -1 })
           .session(session)
@@ -206,7 +213,10 @@ export class StudentCodeAllocator {
               yearPrefix: prefix,
               status: 'AVAILABLE',
               currentStudentId: { $exists: false },
-              'assignmentHistory.0': { $exists: false },
+              $or: [
+                { 'assignmentHistory.0': { $exists: false } },
+                { reuseAuthorized: true },
+              ],
             })
             .sort({ sequence: 1 })
             .session(session)
@@ -234,13 +244,22 @@ export class StudentCodeAllocator {
             if (
               await this.store.entries
                 .exists({
-                  $or: [{ studentCode: code }, { academicYear, sequence }],
+                  $or: [
+                    { studentCode: code },
+                    { academicYear, yearPrefix: prefix, sequence },
+                  ],
                 })
                 .session(session)
             )
               continue;
           }
-          if (await this.store.hasReferences(code, session)) {
+          if (
+            await this.store.hasReferences(
+              code,
+              session,
+              reusable?.reuseAuthorized === true,
+            )
+          ) {
             if (reusable)
               await this.store.entries.updateOne(
                 { _id: reusable._id },
@@ -319,14 +338,18 @@ export class StudentCodeAllocator {
             registrationRequestId: request,
           },
           {
-            $set: { status: 'ASSIGNED', currentStudentId: student },
+            $set: {
+              status: 'ASSIGNED',
+              currentStudentId: student,
+              reuseAuthorized: false,
+            },
             $push: {
               assignmentHistory: {
                 studentId: student,
                 registrationRequestId: request,
                 assignedAt: at,
                 observedAt: at,
-                source: 'admission',
+                source,
               },
             },
           },
@@ -338,6 +361,7 @@ export class StudentCodeAllocator {
               studentCode: chosen,
               academicYear,
               action: 'ASSIGNED',
+              source,
               actorId: new Types.ObjectId(actorId),
               studentId: student,
               requestId: request,

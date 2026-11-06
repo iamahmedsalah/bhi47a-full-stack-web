@@ -1,9 +1,9 @@
-import api, { type PaginatedResponse } from '@/lib/api';
+import api, { type PaginatedResponse } from "@/lib/api";
 import type {
   ControlComponentKey,
   ControlSchemeComponent,
   Semester,
-} from '@student-portal/shared';
+} from "@student-portal/shared";
 import type {
   ApplyChangesResponse,
   ControlAuditRow,
@@ -13,26 +13,26 @@ import type {
   ControlSheetDetails,
   GradeChangeInput,
   ResolvedGradingScheme,
-} from './types';
+} from "./types";
 
 export const controlKeys = {
-  all: ['control'] as const,
-  me: () => [...controlKeys.all, 'me'] as const,
+  all: ["control"] as const,
+  me: () => [...controlKeys.all, "me"] as const,
   courses: (academicYear: string, semester: Semester) =>
-    [...controlKeys.all, 'courses', academicYear, semester] as const,
-  sheet: (sheetId: string) => [...controlKeys.all, 'sheet', sheetId] as const,
+    [...controlKeys.all, "courses", academicYear, semester] as const,
+  sheet: (sheetId: string) => [...controlKeys.all, "sheet", sheetId] as const,
   entries: (sheetId: string, search?: string) =>
-    [...controlKeys.all, 'entries', sheetId, search ?? ''] as const,
+    [...controlKeys.all, "entries", sheetId, search ?? ""] as const,
   scheme: (courseId: string, academicYear: string, semester: Semester) =>
-    [...controlKeys.all, 'scheme', courseId, academicYear, semester] as const,
+    [...controlKeys.all, "scheme", courseId, academicYear, semester] as const,
   audit: (
     sheetId: string,
     params: { page?: number; limit?: number; studentId?: string },
-  ) => [...controlKeys.all, 'audit', sheetId, params] as const,
+  ) => [...controlKeys.all, "audit", sheetId, params] as const,
 };
 
 export async function getControlCapabilities(): Promise<ControlCapabilities> {
-  const res = await api.get<ControlCapabilities>('/admin/control/me');
+  const res = await api.get<ControlCapabilities>("/admin/control/me");
   return res as unknown as ControlCapabilities;
 }
 
@@ -41,7 +41,7 @@ export async function listControlCourses(params: {
   semester: Semester;
 }): Promise<{ items: ControlCourseSummary[] }> {
   const res = await api.get<{ items: ControlCourseSummary[] }>(
-    '/admin/control/courses',
+    "/admin/control/courses",
     { params },
   );
   return res as unknown as { items: ControlCourseSummary[] };
@@ -53,7 +53,7 @@ export async function openControlSheet(dto: {
   courseId: string;
   component: ControlComponentKey;
 }): Promise<ControlSheetDetails> {
-  const res = await api.post<ControlSheetDetails>('/admin/control/sheets', dto);
+  const res = await api.post<ControlSheetDetails>("/admin/control/sheets", dto);
   return res as unknown as ControlSheetDetails;
 }
 
@@ -79,7 +79,11 @@ export async function listControlEntries(
 
 export async function applyControlChanges(
   sheetId: string,
-  dto: { changes: GradeChangeInput[]; reason?: string },
+  dto: {
+    changes: GradeChangeInput[];
+    reason?: string;
+    expectedSchemeVersion?: number;
+  },
 ): Promise<ApplyChangesResponse> {
   const res = await api.patch<ApplyChangesResponse>(
     `/admin/control/sheets/${sheetId}/entries`,
@@ -137,7 +141,10 @@ export async function updateGradingScheme(
   dto: {
     academicYear: string;
     semester: Semester;
-    components: Array<Pick<ControlSchemeComponent, 'key' | 'max' | 'step' | 'enabled'>>;
+    components: Array<
+      Pick<ControlSchemeComponent, "key" | "max" | "step" | "enabled">
+    >;
+    courseworkAttendanceMax?: number;
     force?: boolean;
     reason?: string;
   },
@@ -147,4 +154,75 @@ export async function updateGradingScheme(
     dto,
   );
   return res as unknown as ResolvedGradingScheme;
+}
+
+export async function getControlWorkbook(sheetId: string) {
+  return (await api.get(
+    `/admin/control/sheets/${sheetId}/workbook`,
+  )) as unknown as import("./types").ControlWorkbook;
+}
+export async function reviewControlSheet(
+  sheetId: string,
+  dto: {
+    action: "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN";
+    expectedRevision: number;
+    reason: string;
+  },
+) {
+  return (await api.post(
+    `/admin/control/sheets/${sheetId}/review`,
+    dto,
+  )) as unknown as ControlSheetDetails;
+}
+export async function exportControlSheet(
+  sheetId: string,
+  mode: "workbook" | "missing" | "exceptions" = "workbook",
+) {
+  const raw = await api.get(`/admin/control/sheets/${sheetId}/export`, {
+    responseType: "blob",
+    params: { mode },
+  });
+  const { downloadFileBlob } = await import("@/lib/export-utils");
+  await downloadFileBlob(
+    raw,
+    `control-${sheetId}.xlsx`,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+}
+export async function previewControlFile(sheetId: string, file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return (await api.post(
+    `/admin/control/sheets/${sheetId}/import/preview`,
+    body,
+  )) as unknown as import("./types").ControlImportPreview;
+}
+export async function previewControlRows(
+  sheetId: string,
+  rows: Record<string, unknown>[],
+) {
+  return (await api.post(`/admin/control/sheets/${sheetId}/import/rows`, {
+    rows,
+  })) as unknown as import("./types").ControlImportPreview;
+}
+export async function commitControlImport(sheetId: string, previewId: string) {
+  return (await api.post(`/admin/control/sheets/${sheetId}/import/commit`, {
+    previewId,
+  })) as unknown as ApplyChangesResponse;
+}
+
+export async function exportControlImportErrors(
+  sheetId: string,
+  previewId: string,
+) {
+  const raw = await api.get(
+    `/admin/control/sheets/${sheetId}/import/${previewId}/errors`,
+    { responseType: "blob" },
+  );
+  const { downloadFileBlob } = await import("@/lib/export-utils");
+  await downloadFileBlob(
+    raw,
+    "control-import-errors.xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
 }

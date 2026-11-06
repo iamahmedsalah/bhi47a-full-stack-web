@@ -54,7 +54,7 @@ export class Grade {
   @Prop({ type: String, required: true, enum: SEMESTER_VALUES })
   semester!: Semester;
 
-  @Prop({ default: true })
+  @Prop({ default: false })
   isPublished!: boolean;
 
   @Prop({ type: Number })
@@ -71,6 +71,21 @@ export class Grade {
 
   @Prop({ type: String })
   courseNameEn?: string;
+
+  @Prop({ type: Number, min: 0, max: 20 })
+  attendanceMark?: number;
+
+  @Prop({ type: Number, min: 0, max: 20 })
+  quizzesMark?: number;
+
+  @Prop({ type: Boolean, default: false })
+  cleared?: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  controlManaged?: boolean;
+
+  @Prop({ type: Number })
+  controlApprovedRev?: number;
 
   /** Optimistic-concurrency revision, incremented by the Control module. */
   @Prop({ type: Number, default: 0, min: 0 })

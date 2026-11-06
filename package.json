@@ -26,7 +26,11 @@
     "test:db-speed": "node scripts/db-query-benchmark.mjs",
     "docker:prod": "docker compose --env-file .env.prod -f docker-compose.prod.yml up --build -d --wait",
     "docker:prod:down": "docker compose --env-file .env.prod -f docker-compose.prod.yml down",
-    "clean": "turbo run clean && rimraf .turbo"
+    "clean": "turbo run clean && rimraf .turbo",
+    "test:control:e2e": "node apps/api/test/control/run.cjs",
+    "test:control:audit": "node --test apps/api/test/control-data-audit.test.cjs",
+    "test:control:browser": "node apps/web/tests/control-workbook.browser.mjs",
+    "test:control:services": "docker compose -p student-portal-control-e2e -f docker-compose.control-test.yml up -d --wait"
   },
   "devDependencies": {
     "rimraf": "6.1.3",

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import type { ClientSession } from 'mongoose';
 import {
   CONTROL_ENABLED_COMPONENT_KEYS,
   PERMISSIONS,
@@ -112,6 +113,7 @@ export class ControlSheetsService {
             academicYear: query.academicYear,
             semester: query.semester,
             examType: { $in: examTypes },
+            cleared: { $ne: true },
           },
         },
         {
@@ -234,6 +236,9 @@ export class ControlSheetsService {
         academicYear: sheet.academicYear,
         semester: sheet.semester,
         component: sheet.component,
+        workflowState: sheet.workflowState ?? 'DRAFT',
+        revision: sheet.revision ?? 0,
+        reviewReason: sheet.reviewReason ?? null,
         locked: sheet.locked,
         lockedAt: sheet.lockedAt ?? null,
         lockReason: sheet.lockReason ?? null,
@@ -254,7 +259,14 @@ export class ControlSheetsService {
         step: rules.step,
       },
       capabilities: {
-        canEdit: caps.canEnter && !sheet.locked,
+        canEdit:
+          caps.canEnter &&
+          !sheet.locked &&
+          ['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT'),
+        canSubmit: caps.canSubmit,
+        canReview: caps.canReview,
+        canImport: caps.canImport,
+        canExport: caps.canExport,
         canEditPublished: caps.canEditPublished,
         canManageStates: caps.canManageStates,
         canLock: caps.canLock && !sheet.locked,
@@ -286,8 +298,10 @@ export class ControlSheetsService {
         semester: sheet.semester,
         examType: sheet.component,
       })
-      .limit(MAX_ROSTER)
+      .limit(MAX_ROSTER + 1)
       .lean();
+    if (grades.length > MAX_ROSTER)
+      throw new ConflictException('ROSTER_LIMIT_EXCEEDED');
     const gradeByStudent = new Map(grades.map((g) => [String(g.studentId), g]));
 
     const allIds = new Set<string>([...rosterIds, ...gradeByStudent.keys()]);
@@ -330,36 +344,52 @@ export class ControlSheetsService {
   async lock(user: AuthenticatedUser, sheetId: string, reason?: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_LOCK);
     const { sheet } = await this.requireSheetInScope(user, sheetId);
-    const updated = await this.sheetModel.findOneAndUpdate(
-      { _id: sheet._id, locked: false },
-      {
-        $set: {
-          locked: true,
-          lockedBy: new Types.ObjectId(user._id),
-          lockedAt: new Date(),
-          lockReason: reason?.trim() || undefined,
-        },
-      },
-      { new: true },
-    );
-    if (!updated) throw new ConflictException('Sheet is already locked');
-    await this.writeSheetAudit(sheet, 'LOCK', user._id, reason);
+    const session = await this.sheetModel.db.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const updated = await this.sheetModel.findOneAndUpdate(
+          { _id: sheet._id, locked: false },
+          {
+            $set: {
+              locked: true,
+              lockedBy: new Types.ObjectId(user._id),
+              lockedAt: new Date(),
+              lockReason: reason?.trim() || undefined,
+            },
+            $inc: { revision: 1 },
+          },
+          { new: true, session },
+        );
+        if (!updated) throw new ConflictException('Sheet is already locked');
+        await this.writeSheetAudit(sheet, 'LOCK', user._id, reason, session);
+      });
+    } finally {
+      await session.endSession();
+    }
     return this.getSheet(user, sheetId);
   }
 
   async unlock(user: AuthenticatedUser, sheetId: string, reason: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_UNLOCK);
     const { sheet } = await this.requireSheetInScope(user, sheetId);
-    const updated = await this.sheetModel.findOneAndUpdate(
-      { _id: sheet._id, locked: true },
-      {
-        $set: { locked: false },
-        $unset: { lockedBy: '', lockedAt: '', lockReason: '' },
-      },
-      { new: true },
-    );
-    if (!updated) throw new ConflictException('Sheet is not locked');
-    await this.writeSheetAudit(sheet, 'UNLOCK', user._id, reason);
+    const session = await this.sheetModel.db.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const updated = await this.sheetModel.findOneAndUpdate(
+          { _id: sheet._id, locked: true },
+          {
+            $set: { locked: false },
+            $inc: { revision: 1 },
+            $unset: { lockedBy: '', lockedAt: '', lockReason: '' },
+          },
+          { new: true, session },
+        );
+        if (!updated) throw new ConflictException('Sheet is not locked');
+        await this.writeSheetAudit(sheet, 'UNLOCK', user._id, reason, session);
+      });
+    } finally {
+      await session.endSession();
+    }
     return this.getSheet(user, sheetId);
   }
 
@@ -432,6 +462,7 @@ export class ControlSheetsService {
     academicYear: string,
     semester: string,
     studentIds?: Types.ObjectId[],
+    session?: ClientSession,
   ): Promise<Set<string>> {
     const code = String(courseCode).toUpperCase();
     const rows = await this.registrationModel
@@ -443,8 +474,11 @@ export class ControlSheetsService {
         ...(studentIds ? { studentId: { $in: studentIds } } : {}),
       })
       .select('studentId')
-      .limit(MAX_ROSTER)
+      .session(session ?? null)
+      .limit(MAX_ROSTER + 1)
       .lean();
+    if (rows.length > MAX_ROSTER)
+      throw new ConflictException('ROSTER_LIMIT_EXCEEDED');
     return new Set(rows.map((r) => String(r.studentId)));
   }
 
@@ -478,17 +512,23 @@ export class ControlSheetsService {
     action: 'LOCK' | 'UNLOCK',
     actorId: string,
     reason?: string,
+    session?: ClientSession,
   ) {
-    await this.auditModel.create({
-      sheetId: sheet._id,
-      courseId: sheet.courseId,
-      academicYear: sheet.academicYear,
-      semester: sheet.semester,
-      component: sheet.component,
-      action,
-      source: 'GRID',
-      actorId: new Types.ObjectId(actorId),
-      reason: reason?.trim() || undefined,
-    });
+    await this.auditModel.create(
+      [
+        {
+          sheetId: sheet._id,
+          courseId: sheet.courseId,
+          academicYear: sheet.academicYear,
+          semester: sheet.semester,
+          component: sheet.component,
+          action,
+          source: 'GRID',
+          actorId: new Types.ObjectId(actorId),
+          reason: reason?.trim() || undefined,
+        },
+      ],
+      { session },
+    );
   }
 }

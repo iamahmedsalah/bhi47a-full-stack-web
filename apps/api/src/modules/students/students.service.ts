@@ -1,3 +1,4 @@
+import { StudentCodesService } from '../student-codes/student-codes.service';
 import {
   Injectable,
   NotFoundException,
@@ -85,6 +86,7 @@ export class StudentsService {
     private usersService: UsersService,
     private emailsService: EmailsService,
     private readonly studentQueryService: StudentQueryService,
+    private readonly studentCodes: StudentCodesService,
   ) {}
 
   private cachedStats: { data: any; expiresAt: number } | null = null;
@@ -94,7 +96,7 @@ export class StudentsService {
     this.cachedStats = null;
   }
 
-  async create(dto: CreateStudentDto) {
+  async create(dto: CreateStudentDto, actorId?: string) {
     const registry = await this.studentProfileModel.db
       .collection('student_code_registry')
       .findOne({ studentCode: dto.studentCode }, { projection: { _id: 1 } });
@@ -187,6 +189,13 @@ export class StudentsService {
     });
 
     await profile.save();
+    if (actorId)
+      await this.studentCodes.recordImport(
+        [{ studentCode: dto.studentCode, rowNum: 0 }],
+        actorId,
+        undefined,
+        'manual',
+      );
 
     const academicEmail =
       dto.academicEmail?.trim() || `${dto.studentCode}.bhi47@bhiasc.org`;
@@ -426,7 +435,7 @@ export class StudentsService {
     return { message: 'تم تعطيل حساب الطالب' }; // Student deactivated
   }
 
-  async deleteStudent(id: string) {
+  async deleteStudent(id: string, actorId: string) {
     let profile = Types.ObjectId.isValid(id)
       ? await this.studentProfileModel.findById(id)
       : null;
@@ -446,18 +455,25 @@ export class StudentsService {
     const userId = profile.userId;
     const studentCode = profile.studentCode;
 
-    const registry = await this.studentProfileModel.db
-      .collection('student_code_registry')
-      .findOne({ studentCode }, { projection: { _id: 1 } });
-    const admission = await this.studentProfileModel.db
-      .collection('admission_requests')
-      .findOne({ studentCode }, { projection: { _id: 1 } });
-    if (registry || admission)
-      throw new ConflictException({
-        code: 'STUDENT_ADMISSION_HISTORY_HELD',
-        message:
-          'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held.',
-      });
+    if (/^\d{6}$/.test(studentCode)) {
+      const snapshot = await this.studentCodes.ownerDeletionPreview(
+        studentCode,
+        String(userId),
+      );
+      const result = await this.studentCodes.deleteStudent(
+        studentCode,
+        {
+          academicYear: snapshot.academicYear,
+          yearPrefix: studentCode.slice(0, 2),
+          fingerprint: snapshot.fingerprint,
+          reason: 'Administrator confirmed deletion from student management.',
+          confirmed: true,
+        },
+        actorId,
+      );
+      this.invalidateStatsCache();
+      return { success: true, ...result };
+    }
 
     await this.studentProfileModel.findByIdAndDelete(profile._id);
 

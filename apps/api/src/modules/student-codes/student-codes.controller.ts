@@ -5,6 +5,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { StudentCodesService } from './student-codes.service';
+import { StudentCodeAdminService } from './student-code-admin.service';
 import { StudentCodeMappingsService } from './student-code-mappings.service';
 import {
   CodeAuditQueryDto,
@@ -12,6 +13,7 @@ import {
   InitializeCodeYearDto,
   RecoverStudentCodeDto,
   CorrectCodeMappingsDto,
+  ManageStudentCodeDto,
 } from './dto/student-code.dto';
 
 @Controller('admin/student-codes')
@@ -20,6 +22,7 @@ export class StudentCodesController {
   constructor(
     private readonly codes: StudentCodesService,
     private readonly mappings: StudentCodeMappingsService,
+    private readonly administration: StudentCodeAdminService,
   ) {}
   @Get('mappings/preview')
   @Roles('admin')
@@ -38,6 +41,15 @@ export class StudentCodesController {
   @RequirePermissions(PERMISSIONS.STUDENT_CODES_READ)
   audit(@Query() query: CodeAuditQueryDto) {
     return this.codes.audit(query);
+  }
+  @Post(':code/manage')
+  @Roles('admin')
+  manage(
+    @Param('code') code: string,
+    @Body() dto: ManageStudentCodeDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.administration.manage(code, dto, actorId);
   }
   @Get('audit/export')
   @RequirePermissions(
@@ -62,7 +74,10 @@ export class StudentCodesController {
     return this.codes.history(code, query.page, query.limit);
   }
   @Post('years/initialize')
-  @Roles('admin')
+  @RequirePermissions(
+    PERMISSIONS.STUDENT_CODES_READ,
+    PERMISSIONS.STUDENT_CODES_MANAGE,
+  )
   initialize(
     @Body() dto: InitializeCodeYearDto,
     @CurrentUser('_id') actorId: string,
@@ -70,7 +85,10 @@ export class StudentCodesController {
     return this.codes.initialize(dto, actorId);
   }
   @Post(':code/recover')
-  @Roles('admin')
+  @RequirePermissions(
+    PERMISSIONS.STUDENT_CODES_READ,
+    PERMISSIONS.STUDENT_CODES_RECOVER,
+  )
   recover(
     @Param('code') code: string,
     @Body() dto: RecoverStudentCodeDto,
@@ -78,8 +96,23 @@ export class StudentCodesController {
   ) {
     return this.codes.recover(code, dto, actorId);
   }
+  @Post(':code/delete-student')
+  @RequirePermissions(
+    PERMISSIONS.STUDENT_CODES_READ,
+    PERMISSIONS.STUDENT_CODES_DELETE_STUDENT,
+  )
+  deleteStudent(
+    @Param('code') code: string,
+    @Body() dto: InitializeCodeYearDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.codes.deleteStudent(code, dto, actorId);
+  }
   @Post(':code/hold')
-  @Roles('admin')
+  @RequirePermissions(
+    PERMISSIONS.STUDENT_CODES_READ,
+    PERMISSIONS.STUDENT_CODES_MANAGE,
+  )
   hold(
     @Param('code') code: string,
     @Body() dto: InitializeCodeYearDto,

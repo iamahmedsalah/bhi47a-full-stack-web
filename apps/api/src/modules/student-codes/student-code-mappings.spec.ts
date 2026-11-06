@@ -26,6 +26,7 @@ describe('End-year mapping correction sequence safety', () => {
     nextSequence: number,
     legacyCount: number,
     newPrefixCode?: string,
+    allocationPrefix?: string,
   ) {
     const store = {
       years: {
@@ -35,6 +36,7 @@ describe('End-year mapping correction sequence safety', () => {
               _id: new Types.ObjectId(),
               academicYear: '2027-2028',
               yearPrefix: '27',
+              allocationPrefix,
               nextSequence,
               revision: 0,
             },
@@ -67,19 +69,28 @@ describe('End-year mapping correction sequence safety', () => {
       {} as AdmissionTransactions,
     ).preview();
   }
-  it('corrects 2027-2028 to 28 without moving its issued sequence backwards', async () => {
+  it('corrects 2027-2028 to 28 with a fresh sequence for its corrected prefix', async () => {
     expect((await preview(2102, 0)).items[0]).toMatchObject({
       currentPrefix: '27',
       expectedPrefix: '28',
-      nextSequence: 2102,
-      nextCode: '282102',
+      nextSequence: 1,
+      nextCode: '280001',
     });
   });
-  it('continues beyond dense legacy assignments and any existing code under the corrected start', async () => {
-    expect((await preview(1, 100)).items[0].nextCode).toBe('280101');
+  it('ignores another prefix but protects codes already issued under the corrected prefix', async () => {
+    expect((await preview(1, 100)).items[0].nextCode).toBe('280001');
     expect((await preview(1, 100, '280250')).items[0].nextCode).toBe('280251');
   });
-  it('allocates beyond old registry sequence numbers after a starting-number correction', async () => {
+  it('repairs counters carried over by an earlier prefix correction without changing issued codes', async () => {
+    expect((await preview(2102, 100, undefined, '28')).items[0].nextCode).toBe(
+      '280001',
+    );
+    expect((await preview(2102, 100, '280250', '28')).items[0].nextCode).toBe(
+      '280251',
+    );
+    expect((await preview(251, 100, '280250', '28')).items).toHaveLength(0);
+  });
+  it('starts at 0001 when only another prefix has issued numbers', async () => {
     let cursor = 1;
     const studentId = String(new Types.ObjectId());
     const session = {} as ClientSession;
@@ -108,7 +119,9 @@ describe('End-year mapping correction sequence safety', () => {
       entries: {
         findOne: (filter: Record<string, unknown>) =>
           query(
-            filter.academicYear && !filter.status ? { sequence: 2101 } : null,
+            filter.academicYear && filter.yearPrefix === '27' && !filter.status
+              ? { sequence: 2101 }
+              : null,
           ),
         exists: () => ({ session: () => Promise.resolve(null) }),
         create: jest.fn().mockResolvedValue([]),
@@ -130,7 +143,7 @@ describe('End-year mapping correction sequence safety', () => {
         work(session),
     };
     const createStudent = jest.fn((code: string) => {
-      expect(code).toBe('282102');
+      expect(code).toBe('280001');
       return Promise.resolve({ studentId });
     });
     const allocator = new StudentCodeAllocator(
@@ -144,7 +157,7 @@ describe('End-year mapping correction sequence safety', () => {
         String(new Types.ObjectId()),
         createStudent,
       ),
-    ).toMatchObject({ studentCode: '282102', studentId });
+    ).toMatchObject({ studentCode: '280001', studentId });
     expect(createStudent).toHaveBeenCalledTimes(1);
   });
 });

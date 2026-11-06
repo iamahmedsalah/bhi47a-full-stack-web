@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { StudentCodesService } from '../../student-codes/student-codes.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { defaultPasswordHasher } from '../../../security/password-hasher';
@@ -20,7 +21,11 @@ import {
   AcademicEmail,
   AcademicEmailDocument,
 } from '../../academic-emails/schemas/academic-email.schema';
-import type { Importer, ImportResult } from '../importer.interface';
+import type {
+  Importer,
+  ImportResult,
+  ImportContext,
+} from '../importer.interface';
 import {
   normalizeStudentLevel,
   normalizeStudentSemester,
@@ -67,6 +72,7 @@ export class StudentImporter implements Importer {
     private readonly courseModel: Model<CourseDocument>,
     @InjectModel(CourseRegistration.name)
     private readonly registrationModel: Model<CourseRegistrationDocument>,
+    private readonly studentCodes: StudentCodesService,
   ) {}
 
   validate(rows: Record<string, unknown>[]) {
@@ -91,9 +97,12 @@ export class StudentImporter implements Importer {
 
   async commit(
     validRows: { row: Record<string, unknown>; rowNum: number }[],
+    actorId = '',
+    context?: ImportContext,
   ): Promise<ImportResult> {
     const errors: string[] = [];
     let successCount = 0;
+    const importedCodes = new Set<string>();
     const currentYear = new Date().getFullYear();
     const defaultAcademicYear = `${currentYear}-${currentYear + 1}`;
 
@@ -116,6 +125,14 @@ export class StudentImporter implements Importer {
         const studentCode = String(row.studentCode).trim();
         const nationalId = String(row.nationalId).trim();
         const existingUser = userMap.get(studentCode);
+        if (existingUser?.nationalId && existingUser.nationalId !== nationalId)
+          throw new Error(
+            'الكود مرتبط بطالب برقم قومي مختلف. راجع هوية الطالب؛ الرفع مش بيغيّر ملكية الكود.',
+          );
+        await this.studentCodes.assertImportOwnership(
+          studentCode,
+          existingUser ? String(existingUser._id) : undefined,
+        );
         const isForcedReset = explicitPasswordReset(row.mustChangePassword);
         if (existingUser && existingUser.role !== 'student')
           throw new Error('Student code belongs to a different account role');
@@ -297,6 +314,9 @@ export class StudentImporter implements Importer {
           const writeRes = await this.studentModel.bulkWrite(safeProfileOps, {
             ordered: false,
           });
+          safeProfileOps.forEach((op) =>
+            importedCodes.add(op.updateOne.filter.studentCode),
+          );
           successCount =
             (writeRes.upsertedCount || 0) +
             (writeRes.modifiedCount || 0) +
@@ -519,6 +539,23 @@ export class StudentImporter implements Importer {
       }
     }
 
+    if (actorId && importedCodes.size) {
+      await this.studentCodes.recordImport(
+        profileOps
+          .filter((op) => importedCodes.has(op.updateOne.filter.studentCode))
+          .map((op) => ({
+            studentCode: op.updateOne.filter.studentCode,
+            rowNum:
+              validRows.find(
+                (item) =>
+                  String(item.row.studentCode).trim() ===
+                  op.updateOne.filter.studentCode,
+              )?.rowNum ?? 0,
+          })),
+        actorId,
+        context,
+      );
+    }
     return { successCount, errors };
   }
 }

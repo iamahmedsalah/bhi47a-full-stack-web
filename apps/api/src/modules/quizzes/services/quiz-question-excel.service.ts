@@ -511,7 +511,7 @@ export class QuizQuestionExcelService {
     summarySheet.mergeCells('A1:F1');
     const titleCell = summarySheet.getCell('A1');
     titleCell.value =
-      'المعهد العالي للعلوم الإدارية والتكنولوجيا - تقرير التحليل الشامل لأداء الاختبار';
+      ' المعهد العالي للعلوم الإدارية المتقدمة والحاسبات - تقرير التحليل الشامل لأداء الاختبار';
     titleCell.font = {
       name: 'Calibri',
       size: 14,

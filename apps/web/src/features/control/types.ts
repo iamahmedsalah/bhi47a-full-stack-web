@@ -3,9 +3,13 @@ import type {
   ControlSchemeComponent,
   GradeStatus,
   Semester,
-} from '@student-portal/shared';
+} from "@student-portal/shared";
 
 export interface ControlCapabilities {
+  canSubmit: boolean;
+  canReview: boolean;
+  canImport: boolean;
+  canExport: boolean;
   canAccess: boolean;
   canView: boolean;
   canCreateSheets: boolean;
@@ -43,6 +47,9 @@ export interface ControlSheetDetails {
     academicYear: string;
     semester: Semester;
     component: ControlComponentKey;
+    workflowState: "DRAFT" | "IN_REVIEW" | "RETURNED" | "APPROVED";
+    revision: number;
+    reviewReason: string | null;
     locked: boolean;
     lockedAt: string | null;
     lockReason: string | null;
@@ -63,6 +70,10 @@ export interface ControlSheetDetails {
     step: number;
   };
   capabilities: {
+    canSubmit: boolean;
+    canReview: boolean;
+    canImport: boolean;
+    canExport: boolean;
     canEdit: boolean;
     canEditPublished: boolean;
     canManageStates: boolean;
@@ -91,6 +102,8 @@ export interface ControlRosterRow extends ControlEntry {
 
 export interface GradeChangeInput {
   studentId: string;
+  attendanceMark?: number;
+  quizzesMark?: number;
   score?: number | null;
   status?: GradeStatus;
   expectedRev: number;
@@ -98,7 +111,7 @@ export interface GradeChangeInput {
   reason?: string;
 }
 
-export type ChangeResultCode = 'ok' | 'invalid' | 'conflict' | 'forbidden';
+export type ChangeResultCode = "ok" | "invalid" | "conflict" | "forbidden";
 
 export interface ChangeResult {
   opId: string;
@@ -126,22 +139,42 @@ export interface ResolvedGradingScheme {
   academicYear: string;
   semester: Semester;
   version: number;
+  courseworkAttendanceMax: number;
+  courseworkQuizzesMax: number;
   frozenAt: string | null;
   components: ControlSchemeComponent[];
 }
 
 export interface ControlAuditRow {
   id: string;
-  action: 'CREATE' | 'UPDATE' | 'CLEAR' | 'LOCK' | 'UNLOCK' | 'SCHEME_CHANGE';
-  source: 'GRID' | 'XLSX' | 'SYSTEM';
+  action:
+    | "CREATE"
+    | "UPDATE"
+    | "CLEAR"
+    | "LOCK"
+    | "UNLOCK"
+    | "SCHEME_CHANGE"
+    | "SUBMIT"
+    | "APPROVE"
+    | "RETURN"
+    | "REOPEN"
+    | "PUBLISH"
+    | "HIDE";
+  source: "GRID" | "XLSX" | "SYSTEM";
   component: string;
   oldValue: {
+    workflowState?: string;
+    attendanceMark?: number | null;
+    quizzesMark?: number | null;
     score?: number | null;
     status?: string | null;
     isPublished?: boolean | null;
     rev?: number | null;
   } | null;
   newValue: {
+    workflowState?: string;
+    attendanceMark?: number | null;
+    quizzesMark?: number | null;
     score?: number | null;
     status?: string | null;
     isPublished?: boolean | null;
@@ -152,4 +185,24 @@ export interface ControlAuditRow {
   actorName: string | null;
   studentCode: string | null;
   studentName: string | null;
+}
+
+export interface WorkbookEntry extends ControlEntry {
+  attendanceMark: number | null;
+  quizzesMark: number | null;
+}
+export interface WorkbookRow extends ControlRosterRow {
+  components: Partial<Record<ControlComponentKey, WorkbookEntry>>;
+  result: { total: number | null; totalMax: number; complete: boolean };
+}
+export interface ControlWorkbook {
+  revision: number;
+  scheme: ResolvedGradingScheme;
+  rows: WorkbookRow[];
+}
+export interface ControlImportPreview {
+  previewId: string;
+  valid: number;
+  errors: string[];
+  changes: GradeChangeInput[];
 }

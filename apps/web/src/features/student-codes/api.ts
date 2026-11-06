@@ -59,3 +59,11 @@ export async function holdPreviousStudentCode(
 ) {
   return (await api.post(`/admin/student-codes/${code}/hold`, input)).data;
 }
+
+export async function deleteCodeStudent(code: string, input: InitializeStudentCodeYearInput) {
+  return (await api.post(`/admin/student-codes/${code}/delete-student`, input)).data;
+}
+
+export async function manageStudentCode(code: string, input: InitializeStudentCodeYearInput & { action: "FREE" | "BAN" | "CONFIRM_OWNER"; origin: "import" | "manual" | "legacy"; sourceFile?: string }) {
+  return (await api.post(`/admin/student-codes/${code}/manage`, input)).data;
+}

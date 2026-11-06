@@ -1,3 +1,7 @@
+import {
+  GradeAuditLog,
+  GradeAuditLogSchema,
+} from '../control/schemas/grade-audit-log.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Grade, GradeSchema } from './schemas/grade.schema';
@@ -27,6 +31,7 @@ import {
 @Module({
   imports: [
     MongooseModule.forFeature([
+      { name: GradeAuditLog.name, schema: GradeAuditLogSchema },
       { name: Grade.name, schema: GradeSchema },
       { name: CourseQuiz.name, schema: CourseQuizSchema },
       { name: User.name, schema: UserSchema },

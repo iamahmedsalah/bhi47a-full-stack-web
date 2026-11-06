@@ -10,6 +10,7 @@ import {
   IsMongoId,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -57,6 +58,18 @@ export class OpenSheetDto extends ControlTermQueryDto {
 }
 
 export class GradeChangeDto {
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(20)
+  attendanceMark?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(20)
+  quizzesMark?: number;
+
   @ApiProperty()
   @IsMongoId()
   studentId!: string;
@@ -93,6 +106,11 @@ export class GradeChangeDto {
 }
 
 export class ApplyChangesDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedSchemeVersion?: number;
+
   @ApiProperty({ type: [GradeChangeDto] })
   @IsArray()
   @ArrayMinSize(1)
@@ -149,6 +167,12 @@ export class SchemeComponentInputDto {
 }
 
 export class UpdateGradingSchemeDto extends ControlTermQueryDto {
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(20)
+  courseworkAttendanceMax?: number;
+
   @ApiProperty({ type: [SchemeComponentInputDto] })
   @IsArray()
   @ArrayMinSize(1)
@@ -198,4 +222,37 @@ export class ControlEntriesQueryDto {
   @IsString()
   @MaxLength(100)
   search?: string;
+}
+
+export class ReviewSheetDto {
+  @IsIn(['SUBMIT', 'APPROVE', 'RETURN', 'REOPEN'])
+  action!: 'SUBMIT' | 'APPROVE' | 'RETURN' | 'REOPEN';
+
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class ImportRowsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsObject({ each: true })
+  rows!: Record<string, unknown>[];
+}
+
+export class CommitImportDto {
+  @IsMongoId()
+  previewId!: string;
+}
+
+export class ExportControlDto {
+  @IsOptional()
+  @IsIn(['workbook', 'missing', 'exceptions'])
+  mode?: 'workbook' | 'missing' | 'exceptions';
 }

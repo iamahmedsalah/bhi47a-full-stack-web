@@ -222,6 +222,8 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                 batchIndex: bIdx,
                 totalBatches,
                 uploadSessionId: sessionId,
+                sourceFile: file.name,
+                rowOffset: batches.slice(0, bIdx).reduce((count, batch) => count + batch.length, 0),
               });
 
               cumulativeSuccess += res.data.successCount;

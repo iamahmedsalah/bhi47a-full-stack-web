@@ -11,6 +11,10 @@ import {
 
 /** What the current user may do in Control. Sent to the UI and re-checked here. */
 export interface ControlCapabilities {
+  canSubmit: boolean;
+  canReview: boolean;
+  canImport: boolean;
+  canExport: boolean;
   canAccess: boolean;
   canView: boolean;
   canCreateSheets: boolean;
@@ -48,6 +52,10 @@ export class ControlAccessService {
     const gated = (permission: string) =>
       canAccess && this.has(user, permission);
     return {
+      canSubmit: gated(PERMISSIONS.CONTROL_SHEETS_SUBMIT),
+      canReview: gated(PERMISSIONS.CONTROL_SHEETS_REVIEW),
+      canImport: gated(PERMISSIONS.CONTROL_IMPORT),
+      canExport: gated(PERMISSIONS.CONTROL_EXPORT),
       canAccess,
       canView: gated(PERMISSIONS.CONTROL_SHEETS_VIEW),
       canCreateSheets: gated(PERMISSIONS.CONTROL_SHEETS_CREATE),
@@ -103,6 +111,20 @@ export class ControlAccessService {
         .lean(),
     ]);
     return Boolean(assignment || owned);
+  }
+
+  async assertCourseIdScope(
+    user: AuthenticatedUser,
+    courseId: string,
+    academicYear: string,
+    semester: string,
+  ) {
+    const course = await this.courseModel
+      .findById(courseId)
+      .select('_id code')
+      .lean();
+    if (!course) throw new ForbiddenException('Course not accessible');
+    await this.assertCourseScope(user, course, academicYear, semester);
   }
 
   async assertCourseScope(

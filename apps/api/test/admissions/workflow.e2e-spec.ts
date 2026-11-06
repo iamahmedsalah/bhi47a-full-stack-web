@@ -1087,7 +1087,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     ).rejects.toThrow();
     await expect(workflow.getGroupStudents(id)).rejects.toThrow();
   });
-  it('protects admission identities and history from the general student delete action', async () => {
+  it('deletes a student through general management while cancelling admission and holding the code', async () => {
     const item = await pending();
     const approved = await workflow.approve(
       String(item._id),
@@ -1095,18 +1095,21 @@ describe('Complete admission workflow on the isolated replica set', () => {
       actor,
     );
     await expect(
-      students.deleteStudent(String(approved.studentId)),
-    ).rejects.toMatchObject({
-      response: { code: 'STUDENT_ADMISSION_HISTORY_HELD' },
-    });
+      students.deleteStudent(String(approved.studentId), actor._id),
+    ).resolves.toMatchObject({ success: true, codeReleased: false });
     expect(
-      await workflow.requests.exists({ _id: item._id, status: 'APPROVED' }),
+      await workflow.requests.exists({ _id: item._id, status: 'CANCELLED' }),
     ).toBeTruthy();
+    expect(
+      await workflow.store.entries
+        .findOne({ studentCode: approved.studentCode })
+        .lean(),
+    ).toMatchObject({ status: 'RELEASED' });
     expect(
       await workflow.store.profiles.exists({
         studentCode: approved.studentCode,
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     await expect(
       students.create({ studentCode: approved.studentCode } as Parameters<
         StudentsService['create']
@@ -1114,6 +1117,40 @@ describe('Complete admission workflow on the isolated replica set', () => {
     ).rejects.toMatchObject({
       response: { code: 'STUDENT_CODE_MANAGED_BY_ADMISSIONS' },
     });
+  });
+  it('stops new and transfer approvals after the admission period closes', async () => {
+    const period = await workflow.store.periods.findById(periodId).lean();
+    try {
+      for (const studentType of ['NEW', 'TRANSFER'] as const) {
+        const item = await pending();
+        await workflow.requests.updateOne(
+          { _id: item._id },
+          { $set: { studentType } },
+        );
+        await workflow.store.periods.updateOne(
+          { _id: periodId },
+          { $set: { closesAt: new Date(Date.now() - 1000) } },
+        );
+        await expect(
+          workflow.approve(String(item._id), approval(), actor),
+        ).rejects.toMatchObject({
+          response: { code: 'ADMISSION_PERIOD_CLOSED' },
+        });
+        expect(
+          await workflow.store.entries.exists({
+            registrationRequestId: item._id,
+          }),
+        ).toBeNull();
+        expect(
+          (await workflow.requests.findById(item._id).lean())!.status,
+        ).toBe('PENDING');
+      }
+    } finally {
+      await workflow.store.periods.updateOne(
+        { _id: periodId },
+        { $set: { closesAt: period!.closesAt } },
+      );
+    }
   });
   it('explains inactive periods even when an invitation is marked ACTIVE, without exposing PIN secrets', async () => {
     for (const [suffix, patch, status, error] of [

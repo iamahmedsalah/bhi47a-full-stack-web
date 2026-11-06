@@ -12,7 +12,9 @@ export type ControlComponentKey = (typeof CONTROL_COMPONENT_KEYS)[number];
 
 /** Components that may be enabled and edited in the current delivery phase. */
 export const CONTROL_ENABLED_COMPONENT_KEYS: readonly ControlComponentKey[] = [
+  'coursework',
   'midterm',
+  'final',
 ];
 
 export interface ControlSchemeComponent {
@@ -33,7 +35,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     nameEn: 'Coursework',
     max: 20,
     step: 0.5,
-    enabled: false,
+    enabled: true,
   },
   {
     key: 'midterm',
@@ -49,7 +51,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     nameEn: 'Final',
     max: 60,
     step: 0.5,
-    enabled: false,
+    enabled: true,
   },
 ];
 
@@ -209,3 +211,14 @@ export function computeCourseResult(
     complete,
   };
 }
+
+/** Awarded attendance and quiz contributions, together out of twenty. */
+export function computeCoursework(attendance: number, quizzes: number): number | null {
+  if (validateMark(attendance, { max: 20, step: 0.01 }) ||
+      validateMark(quizzes, { max: 20, step: 0.01 })) return null;
+  const hundredths = Math.round(attendance * 100) + Math.round(quizzes * 100);
+  return hundredths <= 2000 ? hundredths / 100 : null;
+}
+
+export const CONTROL_WORKFLOW_STATES = ['DRAFT', 'IN_REVIEW', 'RETURNED', 'APPROVED'] as const;
+export type ControlWorkflowState = (typeof CONTROL_WORKFLOW_STATES)[number];

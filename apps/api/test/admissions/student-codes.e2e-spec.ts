@@ -14,6 +14,7 @@ import { PERMISSIONS, formatStudentCode } from '@student-portal/shared';
 import { AppModule } from '../../src/app.module';
 import { StudentCodeStore } from '../../src/modules/student-codes/student-code-store.service';
 import { StudentCodesService } from '../../src/modules/student-codes/student-codes.service';
+import { StudentCodeAdminService } from '../../src/modules/student-codes/student-code-admin.service';
 import { StudentCodeAllocator } from '../../src/modules/student-codes/student-code-allocator.service';
 import {
   User,
@@ -24,6 +25,7 @@ describe('Student-code registry on the isolated replica set', () => {
   let app: INestApplication;
   let store: StudentCodeStore;
   let service: StudentCodesService;
+  let administration: StudentCodeAdminService;
   let allocator: StudentCodeAllocator;
   let users: Model<UserDocument>;
   const ownedIds: Types.ObjectId[] = [];
@@ -58,6 +60,7 @@ describe('Student-code registry on the isolated replica set', () => {
     await app.init();
     store = module.get(StudentCodeStore);
     service = module.get(StudentCodesService);
+    administration = module.get(StudentCodeAdminService);
     allocator = module.get(StudentCodeAllocator);
     users = module.get(getModelToken(User.name));
     await users.createIndexes();
@@ -311,6 +314,127 @@ describe('Student-code registry on the isolated replica set', () => {
       String(actor),
     );
 
+  it('holds an unused gap, explicitly recovers it, and allocates it only once', async () => {
+    const input = await year();
+    await student(formatStudentCode(input.yearPrefix, 3), input.academicYear);
+    await initialize(input);
+    const code = formatStudentCode(input.yearPrefix, 1);
+    await service.holdPreviousOwner(
+      code,
+      {
+        ...input,
+        fingerprint: (await preview(input)).fingerprint,
+        confirmed: true,
+        reason: 'Synthetic hold pending external review.',
+      },
+      String(actor),
+    );
+    expect(
+      (await preview(input)).items.find((row) => row.studentCode === code)!
+        .status,
+    ).toBe('RESERVED');
+    expect((await allocate(input)).studentCode).not.toBe(code);
+    await recover(input, 1);
+    expect((await allocate(input)).studentCode).toBe(code);
+    await expect(recover(input, 1)).rejects.toThrow();
+  });
+  it('deletes an imported identity while preserving code ownership, academic records and import history', async () => {
+    const input = await year();
+    const code = formatStudentCode(input.yearPrefix, 1);
+    const owner = await student(code, input.academicYear);
+    await service.recordImport(
+      [{ studentCode: code, rowNum: 7 }],
+      String(actor),
+    );
+    const grade = new Types.ObjectId();
+    rawGrades.push(grade);
+    await store.connection
+      .collection('grades')
+      .insertOne({ _id: grade, studentCode: code });
+    await initialize(input);
+    const old = await preview(input);
+    await expect(
+      service.deleteStudent(
+        code,
+        {
+          ...input,
+          fingerprint: '0'.repeat(64),
+          confirmed: true,
+          reason: 'Synthetic reviewed deletion.',
+        },
+        String(actor),
+      ),
+    ).rejects.toMatchObject({ response: { code: 'CODE_PREVIEW_CHANGED' } });
+    expect(await users.exists({ _id: owner })).toBeTruthy();
+    await service.deleteStudent(
+      code,
+      {
+        ...input,
+        fingerprint: old.fingerprint,
+        confirmed: true,
+        reason: 'Synthetic reviewed deletion.',
+      },
+      String(actor),
+    );
+    expect(await users.exists({ _id: owner })).toBeNull();
+    expect(await store.profiles.exists({ studentCode: code })).toBeNull();
+    expect(
+      await store.connection.collection('grades').findOne({ _id: grade }),
+    ).toBeTruthy();
+    const held = await store.entries.findOne({ studentCode: code }).lean();
+    expect(held!.status).toBe('RELEASED');
+    expect(held!.assignmentHistory).toHaveLength(1);
+    expect(held!.assignmentHistory[0].releasedBy).toEqual(actor);
+    await expect(recover(input, 1)).rejects.toThrow();
+    await expect(service.assertImportOwnership(code)).rejects.toThrow();
+    expect((await allocate(input)).studentCode).not.toBe(code);
+    const history = await service.history(code);
+    expect(history.items.map((event) => event.action)).toEqual(
+      expect.arrayContaining([
+        'IMPORTED',
+        'BACKFILLED',
+        'STUDENT_DELETED_CODE_HELD',
+      ]),
+    );
+    expect(
+      history.items.find((event) => event.action === 'IMPORTED')!.source,
+    ).toBe('import');
+    await administration.manage(
+      code,
+      {
+        ...input,
+        fingerprint: (await preview(input)).fingerprint,
+        confirmed: true,
+        reason: 'Administrator reviewed reuse and previous owner archive.',
+        origin: 'import',
+        action: 'FREE',
+      },
+      String(actor),
+    );
+    expect(
+      await store.connection.collection('grades').findOne({ _id: grade }),
+    ).toBeNull();
+    expect(
+      await store.connection
+        .collection('student_code_archived_records')
+        .findOne({
+          studentCode: code,
+          collection: 'grades',
+          originalId: grade,
+        }),
+    ).toMatchObject({ record: { _id: grade, studentCode: code } });
+    const newOwner = await allocate(input);
+    expect(newOwner.studentCode).toBe(code);
+    expect(newOwner.studentId).not.toBe(owner);
+    const reused = await store.entries.findOne({ studentCode: code }).lean();
+    expect(reused!.assignmentHistory).toHaveLength(2);
+    expect(reused!.reuseAuthorized).toBe(false);
+    expect(
+      await store.connection
+        .collection('grades')
+        .findOne({ studentCode: code }),
+    ).toBeNull();
+  });
   it('previews without writes, backfills inactive holders and leaves numeric gaps unverified', async () => {
     const input = await year();
     const id = await student(

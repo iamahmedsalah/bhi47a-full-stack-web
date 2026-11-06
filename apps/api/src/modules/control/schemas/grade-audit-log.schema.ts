@@ -10,6 +10,12 @@ export const GRADE_AUDIT_ACTIONS = [
   'LOCK',
   'UNLOCK',
   'SCHEME_CHANGE',
+  'SUBMIT',
+  'APPROVE',
+  'RETURN',
+  'REOPEN',
+  'PUBLISH',
+  'HIDE',
 ] as const;
 export type GradeAuditAction = (typeof GRADE_AUDIT_ACTIONS)[number];
 
@@ -17,6 +23,8 @@ export const GRADE_AUDIT_SOURCES = ['GRID', 'XLSX', 'SYSTEM'] as const;
 export type GradeAuditSource = (typeof GRADE_AUDIT_SOURCES)[number];
 
 export interface GradeAuditSnapshot {
+  attendanceMark?: number | null;
+  quizzesMark?: number | null;
   score: number | null;
   status: string | null;
   isPublished?: boolean | null;
@@ -67,6 +75,9 @@ export class GradeAuditLog {
 
   @Prop({ type: String, maxlength: 500 })
   reason?: string;
+
+  @Prop({ type: String })
+  payloadHash?: string;
 
   /** Client-generated id that makes a retried edit idempotent. */
   @Prop({ type: String })

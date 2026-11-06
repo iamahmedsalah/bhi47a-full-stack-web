@@ -62,3 +62,13 @@ export class RecoverStudentCodeDto extends InitializeCodeYearDto {
   @Equals(true)
   neverAssignedConfirmed!: true;
 }
+
+export class ManageStudentCodeDto extends InitializeCodeYearDto {
+  @IsIn(['FREE', 'BAN', 'CONFIRM_OWNER']) action!:
+    'FREE' | 'BAN' | 'CONFIRM_OWNER';
+  @IsIn(['import', 'manual', 'legacy']) origin!: 'import' | 'manual' | 'legacy';
+  @ValidateIf((_, value) => value !== undefined)
+  @IsString()
+  @Length(1, 200)
+  sourceFile?: string;
+}

@@ -28,6 +28,7 @@ const baseCaps = {
 
 const chain = <T>(value: T) => {
   const c: Record<string, unknown> = {};
+  c.session = () => c;
   c.select = () => c;
   c.lean = () => Promise.resolve(value);
   return c;
@@ -60,7 +61,12 @@ function build(options: {
     ...d,
   }));
 
+  const session = {
+    withTransaction: (fn: () => Promise<unknown>) => fn(),
+    endSession: jest.fn(),
+  };
   const gradeModel = {
+    db: { startSession: jest.fn().mockResolvedValue(session) },
     find: jest.fn(() => chain(existing)),
     findOne: jest.fn(() => chain(existing[0] ?? null)),
     findOneAndUpdate: jest.fn(() => {
@@ -111,7 +117,10 @@ function build(options: {
     gradeModel as never,
     { findById: () => chain(course) } as never,
     { find: () => chain([{ _id: studentId, studentCode: '27001' }]) } as never,
-    { findById: () => chain(sheet) } as never,
+    {
+      findById: () => chain(sheet),
+      updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+    } as never,
     auditModel as never,
     access,
     {
@@ -122,7 +131,6 @@ function build(options: {
         ),
     } as never,
     schemes as never,
-    gradesService as never,
   );
 
   const user = { _id: new Types.ObjectId().toString(), role: 'staff' } as never;
@@ -168,7 +176,8 @@ describe('ControlGradesService.applyChanges', () => {
     const update = (
       gradeModel.findOneAndUpdate.mock.calls[0] as unknown[]
     )[1] as Record<string, any>;
-    expect(update.$setOnInsert).toEqual({ isPublished: false });
+    expect(update.$set.isPublished).toBe(false);
+    expect(update.$set.controlManaged).toBe(true);
     expect(update.$inc).toEqual({ rev: 1 });
     expect(update.$set.grade).toBe(15);
     expect(update.$set.maxGrade).toBe(20);
@@ -296,28 +305,26 @@ describe('ControlGradesService.applyChanges', () => {
     });
     expect(results[0]).toMatchObject({
       result: 'forbidden',
-      code: 'published_permission',
+      code: 'unpublish_required',
     });
     expect(gradeModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it('allows a published edit with permission and reason, then re-syncs progress', async () => {
-    const { service, user, sheetId, change, gradesService } = build({
+  it('requires hiding published grades even with edit permission', async () => {
+    const ctx = build({
       caps: { canEditPublished: true },
       existing: [{ grade: 10, status: 'present', rev: 3, isPublished: true }],
-      updateResult: {
-        _id: new Types.ObjectId(),
-        grade: 12,
-        status: 'present',
-        rev: 4,
-        isPublished: true,
-      },
     });
-    const { results } = await service.applyChanges(user, sheetId, {
-      changes: [change({ score: 12, expectedRev: 3, reason: 'typing error' })],
+    const response = await ctx.service.applyChanges(ctx.user, ctx.sheetId, {
+      changes: [
+        ctx.change({ score: 12, expectedRev: 3, reason: 'typing error' }),
+      ],
     });
-    expect(results[0].result).toBe('ok');
-    expect(gradesService.syncPublishedAcademicProgress).toHaveBeenCalled();
+    expect(response.results[0]).toMatchObject({
+      result: 'forbidden',
+      code: 'unpublish_required',
+    });
+    expect(ctx.gradeModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('returns a conflict with the current value when the rev is stale', async () => {
@@ -333,25 +340,16 @@ describe('ControlGradesService.applyChanges', () => {
     expect(auditModel.insertMany).not.toHaveBeenCalled();
   });
 
-  it('treats a unique-index collision on upsert as a conflict', async () => {
-    const { service, user, sheetId, change } = build({
-      upsertError: { code: 11000 },
+  it('rejects operation IDs belonging to a different actor/scope/payload', async () => {
+    const ctx = build({ priorOps: ['op-repeat-1'] });
+    const result = await ctx.service.applyChanges(ctx.user, ctx.sheetId, {
+      changes: [ctx.change({ opId: 'op-repeat-1' })],
     });
-    const { results } = await service.applyChanges(user, sheetId, {
-      changes: [change()],
+    expect(result.results[0]).toMatchObject({
+      result: 'invalid',
+      code: 'op_id_reused',
     });
-    expect(results[0].result).toBe('conflict');
-  });
-
-  it('applies a repeated opId only once', async () => {
-    const { service, user, sheetId, change, gradeModel } = build({
-      priorOps: ['op-repeat-1'],
-    });
-    const { results } = await service.applyChanges(user, sheetId, {
-      changes: [change({ opId: 'op-repeat-1' })],
-    });
-    expect(results[0]).toMatchObject({ result: 'ok', duplicate: true });
-    expect(gradeModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(ctx.gradeModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects students outside the roster', async () => {

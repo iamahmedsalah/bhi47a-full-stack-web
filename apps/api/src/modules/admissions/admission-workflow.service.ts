@@ -181,14 +181,33 @@ export class AdmissionWorkflowService {
     return period;
   }
   async academicYears() {
-    const rows = await this.store.periods.aggregate<{ _id: string }>([
-      { $match: { deletedAt: { $exists: false } } },
+    const pipeline = [
+      {
+        $match: {
+          deletedAt: { $exists: false },
+          academicYear: { $regex: /^\d{4}-\d{4}$/ },
+        },
+      },
       { $group: { _id: '$academicYear' } },
-      { $sort: { _id: -1 } },
+      { $sort: { _id: -1 as const } },
       { $limit: 100 },
+    ];
+    const sources = await Promise.all([
+      this.store.periods.aggregate<{ _id: string }>(pipeline),
+      this.store.years.aggregate<{ _id: string }>(pipeline),
+      this.store.profiles.aggregate<{ _id: string }>(pipeline),
+      this.store.entries.aggregate<{ _id: string }>(pipeline),
+      this.requests.aggregate<{ _id: string }>(pipeline),
     ]);
-    return { items: rows.map((row) => row._id) };
+    return {
+      items: [...new Set(sources.flat().map((row) => row._id))]
+        .filter(isAdmissionAcademicYear)
+        .sort()
+        .reverse()
+        .slice(0, 100),
+    };
   }
+
   async listAccess(query: AdmissionListDto) {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter = {
@@ -651,7 +670,9 @@ export class AdmissionWorkflowService {
     return {
       publicReference: item.publicReference,
       status: admissionApplicantStatus(item.status, Boolean(item.studentId)),
-      studentCode: item.duplicateReviewRequired ? undefined : item.studentCode,
+      studentCode: item.duplicateReviewRequired
+        ? undefined
+        : (item.studentCode ?? item.formerStudentCode),
       rejection: item.rejection,
       waitlistPosition: item.duplicateReviewRequired
         ? undefined
@@ -1000,6 +1021,27 @@ export class AdmissionWorkflowService {
         return { studentId: String(studentId) };
       },
       async (session) => {
+        const now = new Date();
+        const openPeriod = await this.store.periods
+          .findOneAndUpdate(
+            {
+              _id: initial.admissionPeriodId,
+              academicYear: initial.academicYear,
+              isEnabled: true,
+              deletedAt: { $exists: false },
+              opensAt: { $lte: now },
+              closesAt: { $gt: now },
+            },
+            { $inc: { revision: 1 } },
+            { session, new: true },
+          )
+          .lean();
+        if (!openPeriod)
+          throw new BadRequestException({
+            code: 'ADMISSION_PERIOD_CLOSED',
+            message:
+              'Admission is closed. Reopen the period before approving new or transfer students.',
+          });
         const current = await this.requests
           .findById(requestId)
           .select('+nationalIdEncrypted')
@@ -1059,6 +1101,7 @@ export class AdmissionWorkflowService {
             });
         }
       },
+      context ? 'import' : 'admission',
     );
     return this.detail(id, actor);
   }

@@ -2,6 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import {
   CONTROL_COMPONENT_KEYS,
+  CONTROL_WORKFLOW_STATES,
+  type ControlWorkflowState,
   SEMESTER_VALUES,
   type ControlComponentKey,
   type Semester,
@@ -29,6 +31,30 @@ export class ControlSheet {
 
   @Prop({ type: String, required: true, enum: CONTROL_COMPONENT_KEYS })
   component!: ControlComponentKey;
+
+  @Prop({ type: String, enum: CONTROL_WORKFLOW_STATES, default: 'DRAFT' })
+  workflowState!: ControlWorkflowState;
+
+  @Prop({ type: Number, default: 0 })
+  revision!: number;
+
+  @Prop({ type: Object })
+  submission?: {
+    digest: string;
+    schemeVersion: number;
+    revision: number;
+    submittedBy: string;
+    submittedAt: Date;
+  };
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  approvedBy?: Types.ObjectId;
+
+  @Prop({ type: Date })
+  approvedAt?: Date;
+
+  @Prop({ type: String, maxlength: 500 })
+  reviewReason?: string;
 
   @Prop({ default: false })
   locked!: boolean;

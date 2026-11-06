@@ -5,6 +5,7 @@ import {
   formatStudentCode,
   parseStudentCode,
   STAFF_TYPE_DEFAULT_PERMISSIONS,
+  PERMISSIONS,
 } from '@student-portal/shared';
 import { analyzeCodeSnapshot, type SnapshotSources } from './audit-snapshot';
 import { AdmissionTransactions } from './admission-transactions.service';
@@ -14,7 +15,7 @@ import {
   RecoverStudentCodeDto,
 } from './dto/student-code.dto';
 import { StudentCodesController } from './student-codes.controller';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator';
+import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 
 const year = '2025-2026';
 const prefix = '26';
@@ -208,19 +209,27 @@ describe('Student-code format, audit and safety policy', () => {
         .canInitialize,
     ).toBe(false);
   });
-  it('keeps all staff defaults unprivileged and restricts mutations to admin', () => {
+  it('keeps defaults unprivileged and requires explicit delegated mutation permissions', () => {
     for (const permissions of Object.values(STAFF_TYPE_DEFAULT_PERMISSIONS))
       expect(
         permissions.some((permission) =>
           String(permission).startsWith('student_codes.'),
         ),
       ).toBe(false);
-    for (const name of ['initialize', 'recover', 'hold']) {
+    for (const [name, permission] of [
+      ['initialize', PERMISSIONS.STUDENT_CODES_MANAGE],
+      ['hold', PERMISSIONS.STUDENT_CODES_MANAGE],
+      ['recover', PERMISSIONS.STUDENT_CODES_RECOVER],
+      ['deleteStudent', PERMISSIONS.STUDENT_CODES_DELETE_STUDENT],
+    ]) {
       const method = Object.getOwnPropertyDescriptor(
         StudentCodesController.prototype,
         name,
       )!.value;
-      expect(Reflect.getMetadata(ROLES_KEY, method)).toEqual(['admin']);
+      expect(Reflect.getMetadata(PERMISSIONS_KEY, method)).toEqual([
+        PERMISSIONS.STUDENT_CODES_READ,
+        permission,
+      ]);
     }
   });
 });

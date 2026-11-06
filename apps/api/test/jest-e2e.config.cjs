@@ -6,7 +6,7 @@ module.exports = {
   testEnvironment: 'node',
   testRegex: '.e2e-spec.ts$',
   // Admission transaction tests have their own guarded replica-set runner.
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/admissions/'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/admissions/', '<rootDir>/control/'],
   transform: {
     '^.+\\.ts$': [
       'ts-jest',
