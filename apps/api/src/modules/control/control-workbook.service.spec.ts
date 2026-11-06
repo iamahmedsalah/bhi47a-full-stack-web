@@ -159,6 +159,26 @@ function build(component: 'midterm' | 'coursework' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it.each([{}, [], true, NaN, Infinity, null, undefined])(
+    'rejects a non-scalar or invalid student code: %p',
+    async (studentCode) => {
+      const ctx = build();
+      const result = await ctx.service.preview(ctx.user, ctx.sheetId, [
+        { ...ctx.row, studentCode },
+      ]);
+      expect(result.changes).toHaveLength(0);
+      expect(result.errors).toContain(
+        'Row 2: Student identity/registration mismatch',
+      );
+    },
+  );
+  it('accepts a finite numeric student code from Excel', async () => {
+    const ctx = build();
+    const result = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, studentCode: 260001 },
+    ]);
+    expect(result.valid).toBe(1);
+  });
   it.each(['absent', 'banned', 'excused', 'incomplete'])(
     'allows reviewed scoreless coursework status %s without a numeric breakdown',
     async (status) => {

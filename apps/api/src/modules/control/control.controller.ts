@@ -63,10 +63,7 @@ export class ControlController {
   ) {}
 
   @Get('sheets/:id/workbook')
-  getWorkbook(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-  ) {
+  getWorkbook(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.workbook.workbook(user, id);
   }
 
@@ -178,10 +175,7 @@ export class ControlController {
   }
 
   @Get('sheets/:id')
-  getSheet(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-  ) {
+  getSheet(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.sheets.getSheet(user, id);
   }
 

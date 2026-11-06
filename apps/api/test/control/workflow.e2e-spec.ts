@@ -3,6 +3,7 @@ import { StudentAcademicProfileSchema } from '../../src/modules/registrations/sc
 import mongoose, { Types } from 'mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { ControlSheetSchema } from '../../src/modules/control/schemas/control-sheet.schema';
 import { GradingSchemeSchema } from '../../src/modules/control/schemas/grading-scheme.schema';
@@ -928,7 +929,9 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     expect(preview.sheets[0].students).toBe(count);
     const { mkdir, writeFile } = await import('node:fs/promises');
     const { resolve } = await import('node:path');
-    const output = resolve(__dirname, '../../../../outputs/control-scale');
+    const output = fileURLToPath(
+      new URL('../../../../outputs/control-scale/', import.meta.url),
+    );
     await mkdir(output, { recursive: true });
     await writeFile(
       resolve(output, '3001-students.json'),

@@ -113,9 +113,10 @@ export function parseControlSheetSlug(slug: string): {
   academicYear: string;
   semester: Semester;
 } | null {
-  const match = /^([a-z0-9-]+)-(coursework|midterm|final)-(\d{4}-\d{4})-(first|second|summer)$/i.exec(
-    slug.trim(),
-  );
+  const match =
+    /^([a-z0-9-]+)-(coursework|midterm|final)-(\d{4}-\d{4})-(first|second|summer)$/i.exec(
+      slug.trim(),
+    );
   if (!match) return null;
   return {
     courseCode: match[1].toUpperCase(),

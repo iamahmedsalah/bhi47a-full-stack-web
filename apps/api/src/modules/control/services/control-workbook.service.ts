@@ -71,7 +71,11 @@ function normalizeStatusInput(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   const trimmed = raw.trim();
   if (!trimmed) return '';
-  return STATUS_INPUT_MAP[trimmed.toLowerCase()] ?? STATUS_INPUT_MAP[trimmed] ?? trimmed;
+  return (
+    STATUS_INPUT_MAP[trimmed.toLowerCase()] ??
+    STATUS_INPUT_MAP[trimmed] ??
+    trimmed
+  );
 }
 
 /** Office workflow over the existing grades collection; Grades owns publication. */
@@ -679,10 +683,17 @@ export class ControlWorkbookService {
     ];
     const headersMatch = isLegacyWithStudentId
       ? expectedKeys.every(
-          (key, i) => page.getRow(1).getCell(i + 1).text.trim() === key,
+          (key, i) =>
+            page
+              .getRow(1)
+              .getCell(i + 1)
+              .text.trim() === key,
         )
       : expectedKeys.every((key, i) => {
-          const headerText = page.getRow(1).getCell(i + 1).text.trim();
+          const headerText = page
+            .getRow(1)
+            .getCell(i + 1)
+            .text.trim();
           return headerText === key || headerText === expectedBilingual[i];
         });
     if (!headersMatch)
@@ -732,7 +743,9 @@ export class ControlWorkbookService {
       const rawId =
         typeof row.studentId === 'string' ? row.studentId.trim() : '';
       const rawCode =
-        row.studentCode !== undefined && row.studentCode !== null
+        typeof row.studentCode === 'string' ||
+        (typeof row.studentCode === 'number' &&
+          Number.isFinite(row.studentCode))
           ? String(row.studentCode).trim()
           : '';
       const student = rawId ? byId.get(rawId) : byCode.get(rawCode);

@@ -29,6 +29,10 @@ The identity-only roster projection excludes `_id` so the registration index can
 
 ## Verification
 
+The 6 November CI-fix rerun passed all 13 real Control integration tests. For 3,001 synthetic students / 9,003 marks, the measured workbook requests took 733 ms (coursework), 202 ms (midterm) and 188 ms (final); full final preview took 855 ms. These are single local requests, not production latency guarantees. Evidence: `outputs/control-ci-fix-integration.log` and `outputs/control-scale/3001-students.json`.
+
+The same increment fixes the reported API formatting errors and restricts imported student codes to strings or finite numbers. Objects, arrays, booleans and non-finite numeric values are rejected by identity validation instead of default object stringification. The workbook unit suite passed 21 tests, including these cases. The scale fixture now resolves its report path using `import.meta.url`, which works with the ESM Jest runner. Workspace and E2E TypeScript checks passed.
+
 The regression integration test seeds 3,001 synthetic students and 9,003 marks in isolated localhost fixture collections. It checks all workbook identities and components, independent submission/approval for all three sheets, and the complete final release preview. It records single-request durations in `outputs/control-scale/3001-students.json` after success; those measurements are not production p95 or an SLA. The browser fixture uses 3,001 rows, checks 100 rendered rows, paging and last-student search, alongside the existing saving/retry and bilingual checks.
 
 Verification logs for this increment:
