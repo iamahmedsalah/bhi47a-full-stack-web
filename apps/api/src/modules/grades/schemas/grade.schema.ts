@@ -115,5 +115,12 @@ GradeSchema.index({
 GradeSchema.index({ studentId: 1 });
 GradeSchema.index({ studentId: 1, isPublished: 1 });
 GradeSchema.index({ courseId: 1 });
+GradeSchema.index({
+  courseId: 1,
+  academicYear: 1,
+  semester: 1,
+  examType: 1,
+  studentId: 1,
+});
 GradeSchema.index({ examType: 1 });
 GradeSchema.index({ isPublished: 1 });

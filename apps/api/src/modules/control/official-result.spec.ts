@@ -1,0 +1,125 @@
+import { DEFAULT_CONTROL_COMPONENTS } from '@student-portal/shared';
+import {
+  DEFAULT_RESULT_POLICY,
+  evaluateOfficialResult,
+} from './utils/official-result.util';
+import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
+
+const components = DEFAULT_CONTROL_COMPONENTS.map((c) => ({
+  ...c,
+  enabled: true,
+}));
+const marks = {
+  coursework: { score: 17, status: 'present' },
+  midterm: { score: 15, status: 'present' },
+  final: { score: 48, status: 'present' },
+};
+describe('Official Control course results', () => {
+  it('calculates 17 + 15 + 48 exactly once as 80/100', () => {
+    expect(
+      evaluateOfficialResult(components, marks, DEFAULT_RESULT_POLICY),
+    ).toMatchObject({
+      official: true,
+      total: 80,
+      totalMax: 100,
+      passed: true,
+      percentage: 80,
+    });
+  });
+  it.each(['excused', 'incomplete', 'withheld'])(
+    'does not publish a numeric official result with %s',
+    (status) => {
+      expect(
+        evaluateOfficialResult(
+          components,
+          { ...marks, final: { score: 48, status } },
+          DEFAULT_RESULT_POLICY,
+        ).official,
+      ).toBe(false);
+    },
+  );
+  it('fails an absent final regardless of the other contributions', () => {
+    expect(
+      evaluateOfficialResult(
+        components,
+        { ...marks, final: { score: 0, status: 'absent' } },
+        DEFAULT_RESULT_POLICY,
+      ),
+    ).toMatchObject({ official: true, passed: false, gradePoints: 0 });
+  });
+  it('uses the configured final minimum and pass threshold', () => {
+    expect(
+      evaluateOfficialResult(components, marks, {
+        ...DEFAULT_RESULT_POLICY,
+        finalMinimumPercentage: 85,
+      }).passed,
+    ).toBe(false);
+    expect(
+      evaluateOfficialResult(components, marks, {
+        ...DEFAULT_RESULT_POLICY,
+        passPercentage: 81,
+      }).passed,
+    ).toBe(false);
+  });
+  const attempt = (
+    academicYear: string,
+    grade: number,
+    semester = 'first',
+  ) => ({
+    courseCode: 'CS101',
+    examType: 'final',
+    academicYear,
+    semester,
+    grade,
+    maxGrade: 100,
+    status: 'present',
+  });
+  it('replaces an older passing attempt with the latest failed attempt without combining marks', () => {
+    const result = mergeAcademicCourseProgress({
+      completedCourses: ['CS101'],
+      grades: [attempt('2025-2026', 90), attempt('2026-2027', 20)],
+      courseCredits: { CS101: 3 },
+    });
+    expect(result).toMatchObject({
+      completedCourses: [],
+      failedCourses: ['CS101'],
+      gradedCredits: 3,
+      calculatedGpa: 0,
+    });
+    expect(result.courseResults).toHaveLength(1);
+  });
+  it('selects best when the latest approved policy requests it', () => {
+    expect(
+      mergeAcademicCourseProgress({
+        grades: [
+          attempt('2025-2026', 90),
+          { ...attempt('2026-2027', 20), retakePolicy: 'best' },
+        ],
+      }).completedCourses,
+    ).toEqual(['CS101']);
+  });
+  it('does not let a newer midterm replace a finalized prior attempt', () => {
+    expect(
+      mergeAcademicCourseProgress({
+        grades: [
+          attempt('2025-2026', 90),
+          { ...attempt('2026-2027', 10), examType: 'midterm' },
+        ],
+      }).courseResults[0].percentage,
+    ).toBe(90);
+  });
+  it('uses the official course result instead of summing the components a second time', () => {
+    const result = evaluateOfficialResult(
+      components,
+      marks,
+      DEFAULT_RESULT_POLICY,
+    );
+    const progress = mergeAcademicCourseProgress({
+      grades: [
+        { ...attempt('2026-2027', 80), officialResult: result },
+        { ...attempt('2026-2027', 15), examType: 'midterm', maxGrade: 20 },
+      ],
+    });
+    expect(progress.courseResults[0].percentage).toBe(80);
+  });
+});

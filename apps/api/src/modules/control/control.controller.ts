@@ -65,7 +65,7 @@ export class ControlController {
   @Get('sheets/:id/workbook')
   getWorkbook(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
   ) {
     return this.workbook.workbook(user, id);
   }
@@ -73,7 +73,7 @@ export class ControlController {
   @Post('sheets/:id/review')
   review(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ReviewSheetDto,
   ) {
     return this.workbook.review(user, id, dto);
@@ -82,18 +82,23 @@ export class ControlController {
   @Get('sheets/:id/export')
   async export(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Res() res: Response,
     @Query() query: ExportControlDto,
   ) {
-    const buffer = await this.workbook.export(user, id, query.mode);
+    const [detail, buffer] = await Promise.all([
+      this.sheets.getSheet(user, id),
+      this.workbook.export(user, id, query.mode),
+    ]);
+    const fileSlug = detail.sheet.slug || detail.sheet.id || id;
+    const safeFilename = `control-${fileSlug}.xlsx`;
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="control-${id}.xlsx"; filename*=UTF-8''control-${id}.xlsx`,
+      `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
     );
     res.send(Buffer.from(buffer));
   }
@@ -101,7 +106,7 @@ export class ControlController {
   @Get('sheets/:id/import/:previewId/errors')
   async exportImportErrors(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Param('previewId', ParseObjectIdPipe) previewId: string,
     @Res() res: Response,
   ) {
@@ -125,7 +130,7 @@ export class ControlController {
   )
   previewFile(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @UploadedFile() file?: { buffer: Buffer; originalname: string },
   ) {
     if (!file || !file.originalname.toLowerCase().endsWith('.xlsx'))
@@ -136,7 +141,7 @@ export class ControlController {
   @Post('sheets/:id/import/rows')
   previewRows(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ImportRowsDto,
   ) {
     return this.workbook.preview(user, id, dto.rows);
@@ -145,7 +150,7 @@ export class ControlController {
   @Post('sheets/:id/import/commit')
   commit(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: CommitImportDto,
   ) {
     return this.workbook.commit(user, id, dto.previewId);
@@ -175,7 +180,7 @@ export class ControlController {
   @Get('sheets/:id')
   getSheet(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
   ) {
     return this.sheets.getSheet(user, id);
   }
@@ -183,7 +188,7 @@ export class ControlController {
   @Get('sheets/:id/entries')
   listEntries(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Query() query: ControlEntriesQueryDto,
   ) {
     return this.sheets.listEntries(user, id, query);
@@ -193,7 +198,7 @@ export class ControlController {
   @ApiOperation({ summary: 'Apply a batch of grade changes (grid autosave)' })
   applyChanges(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ApplyChangesDto,
   ) {
     if (dto.expectedSchemeVersion === undefined) {
@@ -207,7 +212,7 @@ export class ControlController {
   @Post('sheets/:id/lock')
   lock(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: LockSheetDto,
   ) {
     return this.sheets.lock(user, id, dto.reason);
@@ -216,7 +221,7 @@ export class ControlController {
   @Post('sheets/:id/unlock')
   unlock(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UnlockSheetDto,
   ) {
     return this.sheets.unlock(user, id, dto.reason);
@@ -225,7 +230,7 @@ export class ControlController {
   @Get('sheets/:id/audit')
   listAudit(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('id') id: string,
     @Query() query: ControlAuditQueryDto,
   ) {
     return this.sheets.listAudit(user, id, query);

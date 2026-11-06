@@ -18,6 +18,7 @@ import {
   RecalculateAcademicProgressDto,
   AuditAcademicWarningsDto,
   UpdateGradeDto,
+  ControlResultPolicyDto,
 } from './dto/grade.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -29,6 +30,42 @@ import { PERMISSIONS } from '@student-portal/shared';
 @Controller()
 export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
+
+  @Post('admin/grades/release-preview')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  previewRelease(@Body() dto: PublishGradesDto) {
+    return this.gradesService.previewControlRelease(dto);
+  }
+
+  @Get('admin/grades/control-release-history/:id')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.GRADES_READ)
+  releaseHistory(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.gradesService.controlReleaseHistory(id);
+  }
+
+  @Post('admin/grades/control-jobs/retry')
+  @Roles('admin')
+  retryControlJobs() {
+    return this.gradesService.processControlReleases();
+  }
+
+  @Get('admin/grades/control-policy/:id')
+  @Roles('admin')
+  resultPolicy(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.gradesService.getControlPolicy(id);
+  }
+
+  @Patch('admin/grades/control-policy/:id')
+  @Roles('admin')
+  updateResultPolicy(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: ControlResultPolicyDto,
+    @CurrentUser('_id') actorId: string,
+  ) {
+    return this.gradesService.updateControlPolicy(id, dto, actorId);
+  }
 
   // ─── Student Self Endpoints ──────────────────────────────────────
 
@@ -129,7 +166,15 @@ export class GradesController {
     @Body() dto: PublishGradesDto,
     @CurrentUser('_id') actorId: string,
   ) {
-    return this.gradesService.publishGrades(dto, actorId);
+    return this.gradesService.publishGrades(
+      {
+        ...dto,
+        ...(dto.isPublished
+          ? { releaseDigests: dto.releaseDigests ?? {} }
+          : {}),
+      },
+      actorId,
+    );
   }
 
   @Post('admin/grades/recalculate-progress')

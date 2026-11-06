@@ -91,6 +91,13 @@ export class ControlGradesService {
       schemeVersion: number;
     },
   ) {
+    if (
+      !Types.ObjectId.isValid(sheetId) ||
+      String(new Types.ObjectId(sheetId)) !== sheetId
+    ) {
+      const { sheet } = await this.sheets.requireSheetInScope(user, sheetId);
+      sheetId = String(sheet._id);
+    }
     const session = await this.gradeModel.db.startSession();
     try {
       return await session.withTransaction(async () => {

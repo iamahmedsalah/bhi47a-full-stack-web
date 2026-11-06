@@ -49,26 +49,52 @@ export class AnalyticsExcelService {
     );
     const wants = (...sheets: AnalyticsReportSheet[]) =>
       sheets.some((sheet) => selected.has(sheet));
+    // Every selected worksheet shares one quiz calculation for this request.
+    const quizData = wants(
+      'kpis',
+      'complaints',
+      'quizzes',
+      'staffQuizzes',
+      'courses',
+      'submissions',
+    )
+      ? this.queryService.getQuizzesAnalytics(query, user)
+      : Promise.resolve([]);
+    const overviewData = wants('kpis', 'complaints')
+      ? quizData.then((data) =>
+          this.queryService.getOverview(query, user, data),
+        )
+      : Promise.resolve(undefined);
     // Load only datasets needed by the requested worksheets.
     const [overview, quizzes, staffPerf, courses, students, detailedSubs] =
       await Promise.all([
-        wants('kpis', 'complaints')
-          ? this.queryService.getOverview(query, user)
-          : Promise.resolve(undefined),
-        wants('quizzes')
-          ? this.queryService.getQuizzesAnalytics(query, user)
-          : Promise.resolve([]),
+        overviewData,
+        wants('quizzes') ? quizData : Promise.resolve([]),
         wants('staffQuizzes')
-          ? this.queryService.getStaffQuizPerformance(query, user)
+          ? overviewData.then(
+              (overview) =>
+                overview?.staffPerformance ??
+                quizData.then((data) =>
+                  this.queryService.getStaffQuizPerformance(query, user, data),
+                ),
+            )
           : Promise.resolve([]),
         wants('courses')
-          ? this.queryService.getCoursesAnalytics(query, user)
+          ? overviewData.then(
+              (overview) =>
+                overview?.coursePerformance ??
+                quizData.then((data) =>
+                  this.queryService.getCoursesAnalytics(query, user, data),
+                ),
+            )
           : Promise.resolve([]),
         wants('departments', 'cohorts', 'gpa', 'enrollment', 'students')
           ? this.queryService.getStudentsAnalytics(query)
           : Promise.resolve([]),
         wants('submissions')
-          ? this.queryService.getDetailedSubmissions(query, user)
+          ? quizData.then((data) =>
+              this.queryService.getDetailedSubmissions(query, user, data),
+            )
           : Promise.resolve([]),
       ]);
 

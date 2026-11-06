@@ -7,6 +7,10 @@ import {
   IsBoolean,
   IsArray,
   Min,
+  Max,
+  IsInt,
+  IsObject,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -113,6 +117,9 @@ export class QueryGradeDto {
 }
 
 export class PublishGradesDto {
+  @IsOptional()
+  @IsObject()
+  releaseDigests?: Record<string, string>;
   @ApiPropertyOptional({
     example: '2026-2027',
     description: 'Omit to affect all academic years',
@@ -156,6 +163,25 @@ export class PublishGradesDto {
   @ApiProperty({ example: true })
   @IsBoolean()
   isPublished!: boolean;
+}
+
+export class ControlResultPolicyDto {
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  passPercentage!: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  finalMinimumPercentage!: number;
+
+  @IsIn(['latest', 'best'])
+  retake!: 'latest' | 'best';
+
+  @IsInt()
+  @Min(0)
+  version!: number;
 }
 
 export class UpdateGradesSettingsDto {

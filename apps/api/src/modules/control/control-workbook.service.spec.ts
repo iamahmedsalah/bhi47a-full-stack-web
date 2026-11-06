@@ -18,6 +18,8 @@ const chain = (value: unknown) => {
     session: (_session: unknown) => query,
     sort: (_sort: unknown) => query,
     limit: (_limit: number) => query,
+    batchSize: (_size: number) => query,
+    select: (_fields: string) => query,
   };
   return query;
 };
@@ -60,7 +62,10 @@ function build(component: 'midterm' | 'coursework' = 'midterm') {
     endSession: jest.fn(),
   };
   const sheets = {
-    db: { startSession: () => Promise.resolve(session) },
+    db: {
+      startSession: () => Promise.resolve(session),
+      collection: () => ({ findOne: () => Promise.resolve(null) }),
+    },
     findById: () => chain(sheet),
     updateOne: jest.fn(
       (_filter: unknown, update: { $set: Partial<typeof sheet> }) => {
@@ -154,6 +159,20 @@ function build(component: 'midterm' | 'coursework' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it.each(['absent', 'banned', 'excused', 'incomplete'])(
+    'allows reviewed scoreless coursework status %s without a numeric breakdown',
+    async (status) => {
+      const ctx = build('coursework');
+      ctx.doc.status = status;
+      ctx.doc.grade = 0;
+      await ctx.service.review(ctx.user, ctx.sheetId, {
+        action: 'SUBMIT',
+        expectedRevision: 0,
+        reason: 'Reviewed scoreless status',
+      });
+      expect(ctx.sheet.workflowState).toBe('IN_REVIEW');
+    },
+  );
   it('normalizes Arabic marks, preserves zero and ignores blank cells', async () => {
     const ctx = build();
     const result = await ctx.service.preview(ctx.user, ctx.sheetId, [ctx.row]);
@@ -240,8 +259,9 @@ describe('Control workbook import and review', () => {
     const bytes = await ctx.service.export(ctx.user, ctx.sheetId);
     const book = new ExcelJS.Workbook();
     await book.xlsx.load(bytes);
-    expect(book.getWorksheet('Marks')?.getCell('B2').text).toBe('260001');
-    book.getWorksheet('Marks')!.getCell('D2').value = 18;
+    expect(book.getWorksheet('Marks')?.getCell('A2').text).toBe('260001');
+    expect(book.getWorksheet('إرشادات الرصد')).toBeDefined();
+    book.getWorksheet('Marks')!.getCell('C2').value = 18;
     const result = await ctx.service.previewFile(
       ctx.user,
       ctx.sheetId,
@@ -249,7 +269,7 @@ describe('Control workbook import and review', () => {
     );
     expect(result.valid).toBe(1);
     expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
-    book.getWorksheet('Marks')!.getCell('D2').value = {
+    book.getWorksheet('Marks')!.getCell('C2').value = {
       formula: '10+10',
       result: 20,
     };

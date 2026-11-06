@@ -148,6 +148,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
                 ? { messageEn: (body as any).messageEn }
                 : {}),
               ...((body as any).errors ? { errors: (body as any).errors } : {}),
+              ...((body as any).details &&
+              typeof (body as any).details === 'object'
+                ? { details: (body as any).details }
+                : {}),
               ...((body as any).locked !== undefined
                 ? { locked: (body as any).locked }
                 : {}),

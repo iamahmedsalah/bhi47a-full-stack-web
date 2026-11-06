@@ -182,7 +182,7 @@ export class AnalyticsQueryService {
 
     if (quizzes.length === 0) return [];
 
-    const enrolledMap = await this.getEnrolledCountsMap(
+    const enrolledWork = this.getEnrolledCountsMap(
       query.academicYear,
       query.semester,
     );
@@ -191,7 +191,7 @@ export class AnalyticsQueryService {
     // Aggregation pipelines do not apply Mongoose ObjectId casting. Older imports
     // stored references as strings; include both representations.
     const quizIds = quizzes.flatMap((q) => [q._id, String(q._id)]);
-    const submissionAgg = await this.submissionModel.aggregate([
+    const submissionWork = this.submissionModel.aggregate([
       { $match: { quizId: { $in: quizIds } } },
       {
         $group: {
@@ -207,10 +207,9 @@ export class AnalyticsQueryService {
         },
       },
     ]);
-    const subMap = new Map(submissionAgg.map((s) => [String(s._id), s]));
 
     // Aggregate attempts (for timeouts and exits)
-    const attemptAgg = await this.attemptModel.aggregate([
+    const attemptWork = this.attemptModel.aggregate([
       { $match: { quizId: { $in: quizIds } } },
       {
         $group: {
@@ -225,16 +224,24 @@ export class AnalyticsQueryService {
         },
       },
     ]);
-    const attemptMap = new Map(attemptAgg.map((a) => [String(a._id), a]));
 
     // Fetch creators staffType and names
     const creatorIds = [
       ...new Set(quizzes.map((q) => q.creatorId).filter(Boolean)),
     ];
-    const creators = await this.userModel
+    const creatorWork = this.userModel
       .find({ _id: { $in: creatorIds } })
       .select('_id name nameAr staffType role')
       .lean();
+    const [enrolledMap, submissionAgg, attemptAgg, creators] =
+      await Promise.all([
+        enrolledWork,
+        submissionWork,
+        attemptWork,
+        creatorWork,
+      ]);
+    const subMap = new Map(submissionAgg.map((s) => [String(s._id), s]));
+    const attemptMap = new Map(attemptAgg.map((a) => [String(a._id), a]));
     const creatorMap = new Map(creators.map((c) => [String(c._id), c]));
 
     return quizzes.map((q) => {
@@ -315,6 +322,7 @@ export class AnalyticsQueryService {
   async getStaffQuizPerformance(
     query: AnalyticsQueryDto,
     user: AuthenticatedUser,
+    sharedQuizzes?: QuizItemAnalytics[],
   ): Promise<StaffQuizStats[]> {
     const isAcademic = user.role === 'staff' && isTeachingStaff(user.staffType);
 
@@ -337,7 +345,8 @@ export class AnalyticsQueryService {
       .select('_id name nameAr staffType role titlePrefix')
       .lean();
 
-    const quizAnalytics = await this.getQuizzesAnalytics(query, user);
+    const quizAnalytics =
+      sharedQuizzes ?? (await this.getQuizzesAnalytics(query, user));
 
     // Group quizzes by creatorId
     const staffQuizMap = new Map<string, QuizItemAnalytics[]>();
@@ -426,6 +435,7 @@ export class AnalyticsQueryService {
   async getCoursesAnalytics(
     query: AnalyticsQueryDto,
     user: AuthenticatedUser,
+    sharedQuizzes?: QuizItemAnalytics[],
   ): Promise<CourseItemAnalytics[]> {
     const staffCourseIds = await this.getStaffAccessibleCourseIds(user);
     const courseFilter: FilterQuery<CourseDocument> = this.courseScope(query);
@@ -444,7 +454,8 @@ export class AnalyticsQueryService {
       query.academicYear,
       query.semester,
     );
-    const quizzes = await this.getQuizzesAnalytics(query, user);
+    const quizzes =
+      sharedQuizzes ?? (await this.getQuizzesAnalytics(query, user));
 
     // Group quizzes by courseId or courseCode
     const quizMap = new Map<string, QuizItemAnalytics[]>();
@@ -804,8 +815,10 @@ export class AnalyticsQueryService {
   async getDetailedSubmissions(
     query: AnalyticsQueryDto,
     user: AuthenticatedUser,
+    sharedQuizzes?: QuizItemAnalytics[],
   ): Promise<any[]> {
-    const quizzes = await this.getQuizzesAnalytics(query, user);
+    const quizzes =
+      sharedQuizzes ?? (await this.getQuizzesAnalytics(query, user));
     const quizMap = new Map(quizzes.map((q) => [q.quizId, q]));
 
     return this.submissionModel
@@ -846,6 +859,7 @@ export class AnalyticsQueryService {
   async getOverview(
     query: AnalyticsQueryDto,
     user: AuthenticatedUser,
+    sharedQuizzes?: QuizItemAnalytics[],
   ): Promise<AcademicAnalyticsOverview> {
     const [
       totalStudents,
@@ -897,10 +911,12 @@ export class AnalyticsQueryService {
         ? Math.round((resolvedComplaints / totalComplaints) * 1000) / 10
         : 0;
 
-    const [quizzes, staffPerf, coursePerf] = await Promise.all([
-      this.getQuizzesAnalytics(query, user),
-      this.getStaffQuizPerformance(query, user),
-      this.getCoursesAnalytics(query, user),
+    // Reuse within this request only: no cross-user or cross-scope result cache.
+    const quizzes =
+      sharedQuizzes ?? (await this.getQuizzesAnalytics(query, user));
+    const [staffPerf, coursePerf] = await Promise.all([
+      this.getStaffQuizPerformance(query, user, quizzes),
+      this.getCoursesAnalytics(query, user, quizzes),
     ]);
 
     const totalQuizzes = quizzes.length;

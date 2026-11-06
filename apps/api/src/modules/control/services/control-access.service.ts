@@ -13,6 +13,8 @@ import {
 export interface ControlCapabilities {
   canSubmit: boolean;
   canReview: boolean;
+  canApprove: boolean;
+  canApproveFinal: boolean;
   canImport: boolean;
   canExport: boolean;
   canAccess: boolean;
@@ -53,7 +55,17 @@ export class ControlAccessService {
       canAccess && this.has(user, permission);
     return {
       canSubmit: gated(PERMISSIONS.CONTROL_SHEETS_SUBMIT),
-      canReview: gated(PERMISSIONS.CONTROL_SHEETS_REVIEW),
+      canReview:
+        gated(PERMISSIONS.CONTROL_SHEETS_REVIEW) ||
+        gated(PERMISSIONS.CONTROL_SHEETS_APPROVE) ||
+        gated(PERMISSIONS.CONTROL_FINAL_APPROVE),
+      canApprove:
+        gated(PERMISSIONS.CONTROL_SHEETS_APPROVE) ||
+        gated(PERMISSIONS.CONTROL_FINAL_APPROVE) ||
+        gated(PERMISSIONS.CONTROL_SHEETS_REVIEW),
+      canApproveFinal:
+        gated(PERMISSIONS.CONTROL_FINAL_APPROVE) ||
+        gated(PERMISSIONS.CONTROL_SHEETS_APPROVE),
       canImport: gated(PERMISSIONS.CONTROL_IMPORT),
       canExport: gated(PERMISSIONS.CONTROL_EXPORT),
       canAccess,

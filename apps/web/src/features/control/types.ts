@@ -8,6 +8,8 @@ import type {
 export interface ControlCapabilities {
   canSubmit: boolean;
   canReview: boolean;
+  canApprove?: boolean;
+  canApproveFinal?: boolean;
   canImport: boolean;
   canExport: boolean;
   canAccess: boolean;
@@ -26,6 +28,7 @@ export interface ControlCapabilities {
 export interface ControlCourseSummaryComponent {
   key: ControlComponentKey;
   sheetId: string | null;
+  slug?: string | null;
   locked: boolean;
   entered: number;
   published: number;
@@ -37,6 +40,7 @@ export interface ControlCourseSummary {
   name: string;
   nameAr: string | null;
   nameEn: string | null;
+  level?: string | null;
   rosterCount: number;
   components: ControlCourseSummaryComponent[];
 }
@@ -44,6 +48,7 @@ export interface ControlCourseSummary {
 export interface ControlSheetDetails {
   sheet: {
     id: string;
+    slug?: string;
     academicYear: string;
     semester: Semester;
     component: ControlComponentKey;
@@ -72,6 +77,8 @@ export interface ControlSheetDetails {
   capabilities: {
     canSubmit: boolean;
     canReview: boolean;
+    canApprove?: boolean;
+    canApproveFinal?: boolean;
     canImport: boolean;
     canExport: boolean;
     canEdit: boolean;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -77,6 +77,13 @@ function ControlSheetEditorContent() {
   );
   const [lockDialogOpen, setLockDialogOpen] = useState(false);
   const [lockReason, setLockReason] = useState("");
+
+  useEffect(() => {
+    const targetSlug = sheetDetails?.sheet.slug;
+    if (targetSlug && sheetId && sheetId !== targetSlug) {
+      router.replace(`/${locale}/admin/control/${targetSlug}`);
+    }
+  }, [sheetDetails?.sheet.slug, sheetId, locale, router]);
 
   const lockMutation = useMutation({
     mutationFn: () => {

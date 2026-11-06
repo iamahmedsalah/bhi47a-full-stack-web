@@ -168,6 +168,7 @@ describe('AnalyticsExcelService', () => {
       mockAdminUser,
     );
     expect(workbook).toBeDefined();
+    expect(mockQueryService.getQuizzesAnalytics).toHaveBeenCalledTimes(1);
     expect(workbook.worksheets.length).toBeGreaterThanOrEqual(10);
 
     const quizSheet = workbook.getWorksheet('تحليل الكويزات');

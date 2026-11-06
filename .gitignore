@@ -64,3 +64,8 @@ build_import_files.mjs
 !/docs/weekly-mongodb-backups.md
 !/docs/admissions-code-lifecycle.md
 !/docs/control-system-plan.md
+!/docs/control-testing.md
+!/docs/control-production-acceptance.md
+!/scripts/seed-control-demo.cjs
+!/scripts/seed-control-demo.test.cjs
+!/scripts/ensure-control-query-indexes.cjs

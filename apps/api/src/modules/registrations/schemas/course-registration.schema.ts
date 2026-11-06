@@ -107,4 +107,13 @@ CourseRegistrationSchema.index(
   { unique: true },
 );
 CourseRegistrationSchema.index({ status: 1 });
+// Control reads approved course rosters by term; include studentId so the
+// identity-only roster query does not fetch every registration document.
+CourseRegistrationSchema.index({
+  academicYear: 1,
+  semester: 1,
+  status: 1,
+  courses: 1,
+  studentId: 1,
+});
 CourseRegistrationSchema.index({ studentId: 1, status: 1, createdAt: -1 });

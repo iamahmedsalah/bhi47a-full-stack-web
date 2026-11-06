@@ -33,6 +33,7 @@ export interface ApiErrorPayload {
   path?: string;
   timestamp?: string;
   errors?: unknown;
+  details?: Record<string, unknown>;
 }
 
 export interface ApiErrorDetails {
@@ -422,6 +423,154 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'فترة القبول المحددة غير موجودة',
     en: 'Admission period not found',
   },
+  'ROSTER_LIMIT_EXCEEDED': {
+    ar: 'تجاوز كشف الطلاب الحد الأقصى المسموح به للرصد في الكشف الواحد',
+    en: 'Student roster exceeds the maximum allowed limit for a single sheet',
+  },
+  'COURSE_LIMIT_EXCEEDED': {
+    ar: 'تجاوز عدد المقررات الحد الأقصى المسموح به للعرض (500 مقرر). يرجى التصفية بحسب الفرقة أو الفصل',
+    en: 'Course count exceeds the maximum limit (500). Please filter by level or semester',
+  },
+  'A mark is required': {
+    ar: 'الدرجة مطلوبة لهذا الطالب ولا يمكن تركها فارغة في حالة الحضور',
+    en: 'A mark is required for this student and cannot be empty when present',
+  },
+  'This state carries no mark': {
+    ar: 'هذه الحالة (غياب / حرمان / معذور) لا تتطلب رصد درجة عددية',
+    en: 'This state carries no numerical mark',
+  },
+  'Setting this state requires control.states.manage': {
+    ar: 'تحديد هذه الحالة الخاصة يتطلب صلاحية إدارة الحالات الاستثنائية بالكنترول',
+    en: 'Setting this special state requires control states management permission',
+  },
+  'A reason is required': {
+    ar: 'يجب إدخال سبب معتمد مكون من 3 أحرف على الأقل لهذه الحالة',
+    en: 'A valid reason of at least 3 characters is required for this state',
+  },
+  'Student has no approved registration for this course and term': {
+    ar: 'الطالب ليس لديه تسجيل أكاديمي معتمد لهذا المقرر في هذا الفصل الدراسي',
+    en: 'Student has no approved registration for this course and term',
+  },
+  'Hide results on the Grades page and reopen the sheet before editing published marks': {
+    ar: 'يجب إخفاء النتائج من صفحة الدرجات وإعادة فتح الكشف قبل تعديل درجات منشورة',
+    en: 'Hide results on the Grades page and reopen the sheet before editing published marks',
+  },
+  'Hide this sheet on the Grades page before reopening': {
+    ar: 'يجب إلغاء نشر هذا الكشف من صفحة الدرجات أولاً قبل إعادة فتحه للتعديل',
+    en: 'Hide this sheet on the Grades page before reopening',
+  },
+  'ROSTER_OR_SCHEME_CHANGED': {
+    ar: 'تم تعديل كشف الطلاب أو لائحة توزيع الدرجات أثناء المراجعة. يرجى إعادة التحميل',
+    en: 'The student roster or grading scheme changed during review. Please refresh',
+  },
+  'COURSEWORK_BREAKDOWN_REQUIRED': {
+    ar: 'يجب إدخال تفصيل درجات أعمال السنة (الحضور والاختبارات) لكافة الطلاب المسجلين',
+    en: 'Coursework breakdown (attendance and quizzes) is required for all registered students',
+  },
+  'The value was changed by someone else': {
+    ar: 'تم تعديل هذه الدرجة بواسطة مستخدم آخر بالتزامن. يرجى تحديث البيانات',
+    en: 'The grade was changed by someone else concurrently. Please refresh',
+  },
+  'RESULT_INCOMPLETE': {
+    ar: 'لا يمكن إرسال الكشف للمراجعة أو الاعتماد قبل استكمال رصد جميع الطلاب المسجلين في المقرر (سواء بدرجة أو بحالة غياب/عذر/حرمان)',
+    en: 'Cannot submit or approve the sheet until all registered students have an entered mark or status (absent/excused/banned)',
+  },
+  'STALE_REVISION': {
+    ar: 'تم تحديث الكشف بواسطة مستخدم آخر. يرجى تحديث الصفحة والمحاولة مجدداً',
+    en: 'The sheet was updated by another user. Please refresh and try again',
+  },
+  'INVALID_WORKFLOW_TRANSITION': {
+    ar: 'لا يمكن تنفيذ هذا الإجراء في المرحلة الحالية للكشف (تأكد من أن الكشف غير مقفل وفي الحالة المناسبة)',
+    en: 'This workflow transition is not allowed in the current sheet state',
+  },
+  'SHEET_LOCKED': {
+    ar: 'هذا الكشف مقفل للقراءة فقط ولا يمكن تعديل درجاته قبل فك القفل',
+    en: 'This sheet is locked (read-only) and cannot be edited until unlocked',
+  },
+  'SHEET_NOT_EDITABLE': {
+    ar: 'الكشف غير متاح للتعديل حالياً (مقفل أو قيد المراجعة/معتمد)',
+    en: 'This sheet is not editable in its current state (locked, in review, or approved)',
+  },
+  'SCHEME_CHANGED': {
+    ar: 'تغيّرت لائحة توزيع الدرجات أثناء عملك. يرجى تحديث الصفحة ومراجعة المسودة',
+    en: 'The grading scheme changed; please refresh and review your draft',
+  },
+  'PREVIEW_STALE': {
+    ar: 'تغيرت بيانات الكشف منذ إنشاء معاينة الاستيراد. يرجى إعادة رفع ومعاينة الملف',
+    en: 'The sheet changed since the import preview was created. Please preview again',
+  },
+  'Preview is stale; preview again': {
+    ar: 'تغيرت بيانات الكشف منذ إنشاء المعاينة. يرجى إعادة رفع ومعاينة الملف من جديد',
+    en: 'Preview is stale; please upload and preview the file again',
+  },
+  'Preview expired or inaccessible': {
+    ar: 'انتهت صلاحية معاينة الاستيراد (٣٠ دقيقة). يرجى إعادة رفع الملف للمعاينة',
+    en: 'Import preview expired or is inaccessible. Please upload the file again',
+  },
+  'Download the template for this sheet': {
+    ar: 'هذا الملف لا يخص هذا الكشف. يرجى تنزيل نموذج الإكسل الخاص بهذا الكشف أولاً',
+    en: 'This workbook does not match this sheet. Please download the template for this sheet first',
+  },
+  'Invalid template headers': {
+    ar: 'عناوين أعمدة ملف الإكسل غير مطابقة للنموذج المعتمد. يرجى استخدام النموذج الرسمي للكشف',
+    en: 'Invalid template headers. Please use the official Excel template downloaded from this sheet',
+  },
+  'Invalid XLSX workbook': {
+    ar: 'ملف الإكسل غير صالح أو تالف. يرجى التأكد من حفظه بصيغة .xlsx',
+    en: 'Invalid XLSX workbook. Please ensure the file is saved as a valid .xlsx document',
+  },
+  'Upload an XLSX file': {
+    ar: 'يرجى رفع ملف إكسل بصيغة .xlsx فقط',
+    en: 'Please upload a valid .xlsx Excel file',
+  },
+  'Maximum 500 rows per import': {
+    ar: 'الحد الأقصى للاستيراد في المرة الواحدة هو ٥٠٠ صف',
+    en: 'Maximum 500 rows allowed per import',
+  },
+  'Import between 1 and 500 rows': {
+    ar: 'يجب أن يحتوي الملف على صف واحد على الأقل وحتى ٥٠٠ صف كحد أقصى',
+    en: 'Please import between 1 and 500 rows',
+  },
+  'No valid rows': {
+    ar: 'لا توجد صفوف صالحة للتطبيق في هذا الملف',
+    en: 'No valid rows found to apply in this file',
+  },
+  'Submitter cannot approve their own sheet': {
+    ar: 'لا يمكن لمن قام بإرسال الكشف للمراجعة أن يعتمده بنفسه؛ يتطلب الاعتماد مراجعاً مختلفاً أو مسؤول الكنترول / عميد المعهد',
+    en: 'The user who submitted the sheet cannot approve it themselves; an independent reviewer or Dean approval is required',
+  },
+  'Approve all required component sheets before releasing the final result': {
+    ar: 'يجب اعتماد كافة كشوف المكونات المطلوبة (أعمال السنة، الميدتيرم، والنهائي) في الكنترول أولاً قبل إصدار النتيجة النهائية للمقرر',
+    en: 'Approve all required component sheets (coursework, midterm, and final) in Control before releasing the final course result',
+  },
+  'Unapproved release': {
+    ar: 'يحتوي الكشف على درجات غير معتمدة في الكنترول؛ يجب اعتماد الكشف أولاً قبل الإصدار',
+    en: 'The sheet contains unapproved marks; approve the sheet in Control before releasing',
+  },
+  'Roster changed; reopen and review the sheet': {
+    ar: 'تغيرت قائمة الطلاب المسجلين في المقرر بعد اعتماد الكشف؛ يرجى إعادة فتح الكشف في الكنترول ومراجعته واعتماده مجدداً',
+    en: 'The course student roster changed after approval; please reopen, review, and approve the sheet again in Control',
+  },
+  'Classify historical totals before official final release': {
+    ar: 'توجد درجات سابقة غير مصنفة ضمن الكنترول لهذا المقرر؛ يرجى مراجعتها أولاً قبل الإصدار النهائي الرسمي',
+    en: 'Legacy unclassified totals exist for this course; please review them before official final release',
+  },
+  'Missing or deferred components block an official final result': {
+    ar: 'توجد مكونات درجات ناقصة أو مؤجلة لبعض الطلاب تمنع إصدار النتيجة النهائية الرسمية',
+    en: 'Missing or deferred grade components for some students block releasing the official final result',
+  },
+  'Release preview changed; preview again': {
+    ar: 'تغيرت بيانات الإصدار منذ المعاينة؛ يرجى الضغط على «معاينة الإصدار» مرة أخرى قبل التفعيل',
+    en: 'Release preview changed; please click Preview Release again before activating',
+  },
+  'POLICY_CHANGED': {
+    ar: 'تم تعديل سياسة النتيجة بواسطة مستخدم آخر؛ يرجى تحديث الصفحة والمحاولة مرة أخرى',
+    en: 'Result policy was modified by another user; please refresh and try again',
+  },
+  'Policy is frozen after the first release; use a new term for a different policy': {
+    ar: 'تم تثبيت سياسة النتيجة بعد أول إصدار رسمي لهذا المقرر في هذا الفصل ولا يمكن تغييرها',
+    en: 'Result policy is frozen after the first official release for this course and term',
+  },
 };
 
 const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>(
@@ -450,7 +599,33 @@ export function getApiErrorMessage(error: unknown, fallback = 'Something went wr
   const payload = getErrorPayload(error);
 
   if (payload) {
-    const message = (payload as ApiErrorPayload).message;
+    const typedPayload = payload as ApiErrorPayload;
+    const message = typedPayload.message;
+    const details = typedPayload.details;
+    if (
+      (typedPayload.code === 'RESULT_INCOMPLETE' ||
+        message === 'RESULT_INCOMPLETE') &&
+      details &&
+      typeof details === 'object' &&
+      typeof details.rosterSize === 'number'
+    ) {
+      const isEn =
+        typeof window !== 'undefined' &&
+        window.location.pathname.startsWith('/en');
+      const rosterSize = details.rosterSize;
+      const enteredCount =
+        typeof details.enteredCount === 'number' ? details.enteredCount : 0;
+      const missingCount =
+        typeof details.missingCount === 'number'
+          ? details.missingCount
+          : Math.max(0, rosterSize - enteredCount);
+      const invalidCount =
+        typeof details.invalidCount === 'number' ? details.invalidCount : 0;
+      if (isEn) {
+        return `Cannot submit or approve an incomplete sheet: ${enteredCount} of ${rosterSize} registered students have marks or statuses entered (${missingCount} still missing${invalidCount > 0 ? `, and ${invalidCount} invalid` : ''}).`;
+      }
+      return `لا يمكن إرسال الكشف للمراجعة أو الاعتماد لعدم اكتمال رصد جميع الطلاب المسجلين: تم رصد ${enteredCount} من أصل ${rosterSize} طالباً (يتبقى ${missingCount} بدون درجة أو حالة غياب/عذر${invalidCount > 0 ? `، ويوجد ${invalidCount} بدرجة غير متوافقة` : ''}).`;
+    }
     if (Array.isArray(message)) {
       return message.map(localizeErrorMessage).join('، ');
     }

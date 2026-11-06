@@ -6,6 +6,7 @@ export interface ResultCertificateCourse {
   name: string;
   midterm: string;
   final: string;
+  coursework?: string;
   total: string;
   status: string;
   creditHours?: number;
@@ -41,10 +42,12 @@ function escapeHtml(value: unknown): string {
 function labels(locale: "ar" | "en") {
   return locale === "ar"
     ? {
-        ministry: "وزارة التعليم العالي والبحث العلمي · إدارة شؤون الطلاب والامتحانات",
+        ministry:
+          "وزارة التعليم العالي والبحث العلمي · إدارة شؤون الطلاب والامتحانات",
         institute: "المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47A)",
         title: "شهادة بيان درجات ونتائج فصلية رسمية",
-        subtitle: "بيان معتمد بتقديرات ودرجات المقررات الدراسية لنظام الساعات المعتمدة",
+        subtitle:
+          "بيان معتمد بتقديرات ودرجات المقررات الدراسية لنظام الساعات المعتمدة",
         officialBadge: "وثيقة أكاديمية رسمية معتمدة",
         docCode: "TRANSCRIPT / RESULT CERTIFICATE",
         studentName: "اسم الطالب الرباعي",
@@ -67,7 +70,8 @@ function labels(locale: "ar" | "en") {
         registrar: "عميد المعهد / مسجل عام المعهد",
         registrarSub: "يعتمد رسمياً خاتم شعار الجمهورية والمعهد",
         sealText: "ختم المعهد الرسمي\nOfficial Stamp",
-        footerNotice: "هذه الشهادة وثيقة رسمية صادرة إلكترونياً من منصة المعهد الأكاديمية، ولا تصبح نافذة ومعتمدة أمام الجهات الخارجية إلا بعد استيفاء الأختام الرسمية والتوقيعات الحية.",
+        footerNotice:
+          "هذه الشهادة وثيقة رسمية صادرة إلكترونياً من منصة المعهد الأكاديمية، ولا تصبح نافذة ومعتمدة أمام الجهات الخارجية إلا بعد استيفاء الأختام الرسمية والتوقيعات الحية.",
         systemText: "بوابة شؤون الطلاب والتعليم الإلكتروني الرسمية",
         issuedOn: "تاريخ الإصدار والطباعة:",
         print: "طباعة الشهادة الرسمية",
@@ -75,10 +79,13 @@ function labels(locale: "ar" | "en") {
         generatingPdf: "جاري تجهيز PDF...",
       }
     : {
-        ministry: "Ministry of Higher Education · Student Affairs & Examination Board",
-        institute: "Higher Institute for Advanced Administrative Sciences & Computer (BHI47A)",
+        ministry:
+          "Ministry of Higher Education · Student Affairs & Examination Board",
+        institute:
+          "Higher Institute for Advanced Administrative Sciences & Computer (BHI47A)",
         title: "Official Academic Transcript & Results Certificate",
-        subtitle: "Official certified semester results statement under the Credit Hour System",
+        subtitle:
+          "Official certified semester results statement under the Credit Hour System",
         officialBadge: "OFFICIAL ACADEMIC TRANSCRIPT",
         docCode: "TRANSCRIPT / RESULT CERTIFICATE",
         studentName: "Student Full Name",
@@ -101,7 +108,8 @@ function labels(locale: "ar" | "en") {
         registrar: "Institute Dean / Registrar",
         registrarSub: "Officially Approved with Official Seal",
         sealText: "Official Institute Seal\nختم المعهد",
-        footerNotice: "This certificate is an official electronic academic record issued by the SIS Portal. It is legally valid upon authorization with the institute physical seal and signatures.",
+        footerNotice:
+          "This certificate is an official electronic academic record issued by the SIS Portal. It is legally valid upon authorization with the institute physical seal and signatures.",
         systemText: "Student Affairs & SIS Portal",
         issuedOn: "Date of Issuance:",
         print: "Print Certificate",
@@ -507,6 +515,7 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
         </td>
         <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.midterm)}</td>
         <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.final)}</td>
+        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.coursework ?? "-")}</td>
         <td style="font-family: monospace; font-weight: 900; color: #092c35;">${escapeHtml(course.total)}</td>
         <td>
           <span class="status-badge ${isPass ? "status-pass" : "status-fail"}">
@@ -590,6 +599,7 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
               <th>${escapeHtml(copy.courseTitle)}</th>
               <th style="width: 80px;">${escapeHtml(copy.midterm)}</th>
               <th style="width: 85px;">${escapeHtml(copy.final)}</th>
+              <th style="width: 70px;">${data.locale === "ar" ? "\u0623\u0639\u0645\u0627\u0644 \u0627\u0644\u0633\u0646\u0629" : "Coursework"}</th>
               <th style="width: 75px;">${escapeHtml(copy.total)}</th>
               <th style="width: 95px;">${escapeHtml(copy.status)}</th>
             </tr>
@@ -628,8 +638,7 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
 
 export function openResultCertificate(data: ResultCertificateData): boolean {
   const printWindow = window.open("about:blank", "_blank") as
-    | (Window & { downloadCertificate?: () => void })
-    | null;
+    (Window & { downloadCertificate?: () => void }) | null;
   if (!printWindow) return false;
 
   printWindow.downloadCertificate = () => {

@@ -224,11 +224,14 @@ describe('AnalyticsQueryService', () => {
   });
 
   it('should compute overview KPIs properly', async () => {
+    const quizzes = jest.spyOn(service, 'getQuizzesAnalytics');
     const overview = await service.getOverview({}, mockAdminUser);
     expect(overview).toBeDefined();
     expect(overview.kpis).toBeDefined();
     expect(overview.kpis.totalStudents).toBe(100);
     expect(overview.kpis.totalCourses).toBe(10);
+    expect(quizzes).toHaveBeenCalledTimes(1);
+    quizzes.mockRestore();
   });
   it.each([
     ['ACCOUNTING', ['ACCOUNTING', 'Accounting', 'ACC', 'المحاسبة']],

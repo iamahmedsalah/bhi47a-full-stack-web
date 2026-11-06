@@ -1,4 +1,5 @@
 "use client";
+import { ControlReleasePanel } from "@/features/grades/components/control-release-panel";
 
 import { Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -541,6 +542,7 @@ function GradesPageContent() {
           </>
         )}
       </PageTitleBanner>
+      <ControlReleasePanel locale={locale} />
       <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
         {tControl("visibilityNote")}
       </p>

@@ -25,6 +25,8 @@ import {
 import {
   ControlSheet,
   ControlSheetDocument,
+  buildControlSheetSlug,
+  parseControlSheetSlug,
 } from '../schemas/control-sheet.schema';
 import {
   GradeAuditLog,
@@ -54,8 +56,6 @@ export interface ControlRosterRow extends Partial<ControlEntry> {
   updatedAt: string | null;
 }
 
-const MAX_ROSTER = 2000;
-
 @Injectable()
 export class ControlSheetsService {
   constructor(
@@ -82,11 +82,17 @@ export class ControlSheetsService {
       query.semester,
     );
     const courses = await this.courseModel
-      .find(scoped ? { _id: { $in: scoped } } : { isActive: true })
-      .select('code name nameAr nameEn')
+      .find({
+        isActive: { $ne: false },
+        ...(scoped ? { _id: { $in: scoped } } : {}),
+        ...(query.level ? { level: query.level } : {}),
+      })
+      .select('code name nameAr nameEn level')
       .sort({ code: 1 })
-      .limit(500)
+      .limit(501)
       .lean();
+    if (courses.length > 500)
+      throw new ConflictException('COURSE_LIMIT_EXCEEDED');
     if (courses.length === 0) return { items: [] };
 
     const courseIds = courses.map((c) => c._id);
@@ -154,6 +160,7 @@ export class ControlSheetsService {
         name: course.name,
         nameAr: course.nameAr ?? null,
         nameEn: course.nameEn ?? null,
+        level: (course as { level?: string }).level ?? null,
         rosterCount: rosterByCode.get(String(course.code).toUpperCase()) ?? 0,
         components: examTypes.map((key) => {
           const sheet = sheetByKey.get(`${String(course._id)}:${key}`);
@@ -161,6 +168,15 @@ export class ControlSheetsService {
           return {
             key,
             sheetId: sheet ? String(sheet._id) : null,
+            slug: sheet
+              ? sheet.slug ||
+                buildControlSheetSlug({
+                  courseCode: course.code,
+                  component: key,
+                  academicYear: query.academicYear,
+                  semester: query.semester,
+                })
+              : null,
             locked: sheet?.locked ?? false,
             entered: count?.entered ?? 0,
             published: count?.published ?? 0,
@@ -192,9 +208,21 @@ export class ControlSheetsService {
       courseId: course._id,
       component: dto.component,
     };
+    const slug = buildControlSheetSlug({
+      courseCode: course.code,
+      component: dto.component,
+      academicYear: dto.academicYear,
+      semester: dto.semester,
+    });
     const existing = await this.sheetModel.findOne(filter).lean();
     if (existing) {
       this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_VIEW);
+      if (!existing.slug) {
+        await this.sheetModel.updateOne(
+          { _id: existing._id },
+          { $set: { slug } },
+        );
+      }
       return this.getSheet(user, String(existing._id));
     }
 
@@ -202,6 +230,7 @@ export class ControlSheetsService {
     const sheet = await this.sheetModel.findOneAndUpdate(
       filter,
       {
+        $set: { slug },
         $setOnInsert: {
           courseCode: String(course.code).toUpperCase(),
           locked: false,
@@ -230,9 +259,19 @@ export class ControlSheetsService {
           .lean()
       : null;
 
+    const slug =
+      sheet.slug ||
+      buildControlSheetSlug({
+        courseCode: course.code,
+        component: sheet.component,
+        academicYear: sheet.academicYear,
+        semester: sheet.semester,
+      });
+
     return {
       sheet: {
         id: String(sheet._id),
+        slug,
         academicYear: sheet.academicYear,
         semester: sheet.semester,
         component: sheet.component,
@@ -265,6 +304,9 @@ export class ControlSheetsService {
           ['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT'),
         canSubmit: caps.canSubmit,
         canReview: caps.canReview,
+        canApprove:
+          sheet.component === 'final' ? caps.canApproveFinal : caps.canApprove,
+        canApproveFinal: caps.canApproveFinal,
         canImport: caps.canImport,
         canExport: caps.canExport,
         canEditPublished: caps.canEditPublished,
@@ -286,28 +328,26 @@ export class ControlSheetsService {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_VIEW);
     const { sheet, course } = await this.requireSheetInScope(user, sheetId);
 
-    const rosterIds = await this.getRosterStudentIds(
-      course.code,
-      sheet.academicYear,
-      sheet.semester,
-    );
-    const grades = await this.gradeModel
-      .find({
-        courseId: sheet.courseId,
-        academicYear: sheet.academicYear,
-        semester: sheet.semester,
-        examType: sheet.component,
-      })
-      .limit(MAX_ROSTER + 1)
-      .lean();
-    if (grades.length > MAX_ROSTER)
-      throw new ConflictException('ROSTER_LIMIT_EXCEEDED');
+    const [rosterIds, grades] = await Promise.all([
+      this.getRosterStudentIds(course.code, sheet.academicYear, sheet.semester),
+      this.gradeModel
+        .find({
+          courseId: sheet.courseId,
+          academicYear: sheet.academicYear,
+          semester: sheet.semester,
+          examType: sheet.component,
+        })
+        .select('studentId grade status rev cleared isPublished updatedAt')
+        .batchSize(500)
+        .lean(),
+    ]);
     const gradeByStudent = new Map(grades.map((g) => [String(g.studentId), g]));
 
     const allIds = new Set<string>([...rosterIds, ...gradeByStudent.keys()]);
     const users = await this.userModel
       .find({ _id: { $in: [...allIds].map((id) => new Types.ObjectId(id)) } })
       .select('name nameAr studentCode')
+      .batchSize(500)
       .lean();
 
     const needle = query.search?.trim().toLowerCase();
@@ -473,17 +513,37 @@ export class ControlSheetsService {
         courses: { $in: [code, courseCode] },
         ...(studentIds ? { studentId: { $in: studentIds } } : {}),
       })
-      .select('studentId')
+      .select('studentId -_id')
       .session(session ?? null)
-      .limit(MAX_ROSTER + 1)
+      .batchSize(500)
       .lean();
-    if (rows.length > MAX_ROSTER)
-      throw new ConflictException('ROSTER_LIMIT_EXCEEDED');
     return new Set(rows.map((r) => String(r.studentId)));
   }
 
-  async requireSheetInScope(user: AuthenticatedUser, sheetId: string) {
-    const sheet = await this.sheetModel.findById(sheetId).lean();
+  async requireSheetInScope(user: AuthenticatedUser, idOrSlug: string) {
+    let sheet = Types.ObjectId.isValid(idOrSlug)
+      ? await this.sheetModel.findById(idOrSlug).lean()
+      : null;
+    if (!sheet) {
+      const parsed = parseControlSheetSlug(idOrSlug);
+      sheet = await this.sheetModel
+        .findOne(
+          parsed
+            ? {
+                $or: [
+                  { slug: idOrSlug.toLowerCase() },
+                  {
+                    courseCode: parsed.courseCode,
+                    component: parsed.component,
+                    academicYear: parsed.academicYear,
+                    semester: parsed.semester,
+                  },
+                ],
+              }
+            : { slug: idOrSlug.toLowerCase() },
+        )
+        .lean();
+    }
     if (!sheet) throw new NotFoundException('Sheet not found');
     const course = await this.requireCourse(String(sheet.courseId));
     await this.access.assertCourseScope(

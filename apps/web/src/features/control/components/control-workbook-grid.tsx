@@ -19,6 +19,10 @@ import {
   Unlock,
   MoreVertical,
   Loader2,
+  Trash2,
+  Send,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -88,6 +92,7 @@ type Draft = GradeChangeInput & {
 };
 // Keep unsaved work across SPA back/forward navigation in this tab. Never share
 // drafts between authenticated principals, or persist grade drafts to disk.
+const EMPTY_ROWS: WorkbookRow[] = [];
 const draftArchive = new Map<string, Record<string, Draft>>();
 interface Props {
   principalId?: string;
@@ -190,38 +195,55 @@ export function ControlWorkbookGrid({
       else draftArchive.delete(archiveKey);
     }
   }, [drafts, archiveKey]);
-  const rows = workbook.data?.rows ?? [];
+  const rows = workbook.data?.rows ?? EMPTY_ROWS;
   const byId = useMemo(
     () => new Map(rows.map((r) => [r.studentId, r])),
     [rows],
   );
-  const filtered = rows
-    .filter((row) => {
-      if (
-        !`${row.studentCode} ${row.name} ${row.nameAr ?? ""}`
-          .toLowerCase()
-          .includes(search.toLowerCase())
-      )
-        return false;
-      if (onlyMissing && row.components[key]?.status) return false;
-      if (filter === "invalid" && !drafts[row.studentId]?.error) return false;
-      if (filter === "dirty" && !drafts[row.studentId]) return false;
-      if (filter === "errors" && !errors[row.studentId]) return false;
-      if (filter === "absent" && row.components[key]?.status !== "absent")
-        return false;
-      return true;
-    })
-    .sort((a, b) => {
-      const value =
-        sort === "mark"
-          ? (a.components[key]?.score ?? -1) - (b.components[key]?.score ?? -1)
-          : sort === "name"
-            ? (rtl ? a.nameAr || a.name : a.name).localeCompare(
-                rtl ? b.nameAr || b.name : b.name,
-              )
-            : a.studentCode.localeCompare(b.studentCode);
-      return descending ? -value : value;
-    });
+  const readiness = useMemo(() => {
+    const registeredRows = rows.filter((r) => !r.notRegistered);
+    const total = registeredRows.length;
+    const entered = registeredRows.filter((r) =>
+      Boolean(r.components[key]?.status),
+    ).length;
+    const missing = Math.max(0, total - entered);
+    return { total, entered, missing, ready: total > 0 && missing === 0 };
+  }, [rows, key]);
+  const sortedRows = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        const value =
+          sort === "mark"
+            ? (a.components[key]?.score ?? -1) -
+              (b.components[key]?.score ?? -1)
+            : sort === "name"
+              ? (rtl ? a.nameAr || a.name : a.name).localeCompare(
+                  rtl ? b.nameAr || b.name : b.name,
+                )
+              : a.studentCode.localeCompare(b.studentCode);
+        return descending ? -value : value;
+      }),
+    [rows, sort, key, rtl, descending],
+  );
+  const filtered = useMemo(
+    () =>
+      sortedRows.filter((row) => {
+        if (
+          !`${row.studentCode} ${row.name} ${row.nameAr ?? ""}`
+            .toLowerCase()
+            .includes(search.toLowerCase())
+        )
+          return false;
+        if (onlyMissing && row.components[key]?.status) return false;
+        if (filter === "invalid" && !drafts[row.studentId]?.error) return false;
+        if (filter === "dirty" && !drafts[row.studentId]) return false;
+        if (filter === "errors" && !errors[row.studentId]) return false;
+        if (filter === "absent" && row.components[key]?.status !== "absent")
+          return false;
+        return true;
+      }),
+    [sortedRows, search, onlyMissing, filter, drafts, errors, key],
+  );
   const pageCount = Math.max(1, Math.ceil(filtered.length / 100));
   const currentPage = Math.max(
     1,
@@ -235,6 +257,47 @@ export function ControlWorkbookGrid({
   const refresh = useCallback(async () => {
     await query.invalidateQueries({ queryKey: controlKeys.all });
   }, [query]);
+
+  const formatControlIssue = useCallback(
+    (r: {
+      result: string;
+      code?: string;
+      message?: string;
+      current?: { score: number | null } | null;
+    }): string => {
+      if (r.result === "conflict") {
+        return t("conflict", { score: r.current?.score ?? "—" });
+      }
+      const code = (r.code || "").toLowerCase();
+      const msg = (r.message || "").toLowerCase();
+      if (code === "score_required" || msg.includes("a mark is required")) {
+        return t("scoreRequired");
+      }
+      if (code === "score_not_allowed" || msg.includes("carries no mark")) {
+        return t("scoreNotAllowed");
+      }
+      if (
+        code === "states_permission" ||
+        msg.includes("requires control.states.manage")
+      ) {
+        return t("statesPermissionDenied");
+      }
+      if (code === "reason_required" || msg.includes("reason is required")) {
+        return t("reasonRequiredValidation");
+      }
+      if (code === "unpublish_required" || msg.includes("unpublish")) {
+        return t("unpublishRequired");
+      }
+      if (code === "not_in_roster" || msg.includes("no approved registration")) {
+        return t("unregistered");
+      }
+      if (code === "coursework_breakdown" || msg.includes("coursework mark")) {
+        return t("invalidCoursework");
+      }
+      return r.message || t("saveFailed");
+    },
+    [t],
+  );
 
   const save = useCallback(async () => {
     if (inFlight.current) return false;
@@ -272,11 +335,7 @@ export function ControlWorkbookGrid({
       });
       const issues: Record<string, string> = {};
       for (const r of result.results)
-        if (r.result !== "ok")
-          issues[r.studentId] =
-            r.result === "conflict"
-              ? t("conflict", { score: r.current?.score ?? "—" })
-              : r.message || t("saveFailed");
+        if (r.result !== "ok") issues[r.studentId] = formatControlIssue(r);
       setConflictRevs((current) => {
         const next = { ...current };
         for (const item of result.results) {
@@ -434,7 +493,7 @@ export function ControlWorkbookGrid({
         courseId: detail.course.id,
         component,
       });
-      router.push(`/${locale}/admin/control/${next.sheet.id}`);
+      router.push(`/${locale}/admin/control/${next.sheet.slug || next.sheet.id}`);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -668,40 +727,173 @@ export function ControlWorkbookGrid({
           {t("reviewNote")}: {sheet.reviewReason}
         </p>
       )}
+      {/* Primary Governance & Workflow Actions Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl border border-border/80 bg-card/75 backdrop-blur-sm shadow-sm">
+        {/* Status chip & Sheet lock control */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">
+              {t("status")}:
+            </span>
+            <div
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1 rounded-squircle text-xs font-bold border",
+                sheet.workflowState === "APPROVED"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                  : sheet.workflowState === "IN_REVIEW"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    : sheet.workflowState === "RETURNED"
+                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                      : "bg-surface text-muted-foreground border-border/70",
+              )}
+            >
+              <span className="size-2 rounded-full animate-pulse bg-current" />
+              <span>{t(`workflow.${sheet.workflowState}`)}</span>
+            </div>
+          </div>
+
+          {(caps.canLock || caps.canUnlock) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={onLockToggleRequest}
+              className={cn(
+                "rounded-squircle text-xs font-semibold border transition-all h-8",
+                sheet.locked
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                  : "border-border/80 hover:bg-surface text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {sheet.locked ? (
+                <Unlock className="size-3.5 me-1.5 text-amber-400" />
+              ) : (
+                <Lock className="size-3.5 me-1.5" />
+              )}
+              <span>{t(sheet.locked ? "unlock" : "lock")}</span>
+            </Button>
+          )}
+        </div>
+
+        {/* Workflow submission & review actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {caps.canSubmit &&
+            ["DRAFT", "RETURNED"].includes(sheet.workflowState) && (
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-squircle text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm gap-1.5 h-8 px-4"
+                disabled={pending || sheet.locked}
+                onClick={() => setAction("SUBMIT")}
+              >
+                <Send className="size-3.5" />
+                <span>{t("SUBMIT")}</span>
+              </Button>
+            )}
+
+          {(caps.canReview || caps.canApprove) &&
+            sheet.workflowState === "IN_REVIEW" && (
+              <>
+                {(caps.canApprove ?? caps.canReview) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-squircle text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm gap-1.5 h-8 px-4"
+                    disabled={pending}
+                    onClick={() => setAction("APPROVE")}
+                  >
+                    <CheckCircle2 className="size-3.5" />
+                    <span>{t("APPROVE")}</span>
+                  </Button>
+                )}
+                {caps.canReview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-squircle text-xs font-semibold border-rose-500/30 text-rose-400 hover:bg-rose-500/10 gap-1.5 h-8 px-3"
+                    disabled={pending}
+                    onClick={() => setAction("RETURN")}
+                  >
+                    <RotateCcw className="size-3.5" />
+                    <span>{t("RETURN")}</span>
+                  </Button>
+                )}
+              </>
+            )}
+
+          {caps.canReview && sheet.workflowState === "APPROVED" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-squircle text-xs font-semibold gap-1.5 h-8 px-3"
+              disabled={pending}
+              onClick={() => setAction("REOPEN")}
+            >
+              <RotateCcw className="size-3.5" />
+              <span>{t("REOPEN")}</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Grid Utilities & Data Tools Strip */}
       <div className="flex flex-wrap gap-2 items-center">
         <Input
           aria-label={t("search")}
           placeholder={t("search")}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="max-w-64"
+          className="max-w-64 h-9 rounded-squircle text-xs"
         />
-        <Button variant="outline" onClick={() => setOnlyMissing(!onlyMissing)}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 rounded-squircle text-xs font-medium"
+          onClick={() => setOnlyMissing(!onlyMissing)}
+        >
           {onlyMissing ? t("all") : t("missing")}
         </Button>
         {caps.canManageSchemes && (
-          <Button variant="outline" disabled={pending} onClick={onOpenScheme}>
-            <SlidersHorizontal className="size-4 me-2" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-squircle text-xs font-medium"
+            disabled={pending}
+            onClick={onOpenScheme}
+          >
+            <SlidersHorizontal className="size-3.5 me-1.5" />
             {t("scheme")}
           </Button>
         )}
         {caps.canViewAudit && (
-          <Button variant="outline" onClick={onOpenSheetAudit}>
-            <History className="size-4 me-2" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-squircle text-xs font-medium"
+            onClick={onOpenSheetAudit}
+          >
+            <History className="size-3.5 me-1.5" />
             {t("audit")}
           </Button>
         )}
         {caps.canExport && (
           <Button
             variant="outline"
+            size="sm"
+            className="h-9 rounded-squircle text-xs font-medium"
             disabled={pending}
             onClick={() =>
-              void exportControlSheet(sheet.id).catch((e) =>
-                toast.error(getApiErrorMessage(e)),
-              )
+              void exportControlSheet(
+                sheet.id,
+                "workbook",
+                sheet.slug || sheet.id,
+              ).catch((e) => toast.error(getApiErrorMessage(e)))
             }
           >
-            <Download className="size-4 me-2" />
+            <Download className="size-3.5 me-1.5" />
             {t("export")}
           </Button>
         )}
@@ -711,11 +903,15 @@ export function ControlWorkbookGrid({
               <Button
                 key={mode}
                 variant="outline"
+                size="sm"
+                className="h-9 rounded-squircle text-xs font-medium"
                 disabled={pending}
                 onClick={() =>
-                  void exportControlSheet(sheet.id, mode).catch((error) =>
-                    toast.error(getApiErrorMessage(error)),
-                  )
+                  void exportControlSheet(
+                    sheet.id,
+                    mode,
+                    `${sheet.slug || sheet.id}-${mode}`,
+                  ).catch((error) => toast.error(getApiErrorMessage(error)))
                 }
               >
                 {t(mode === "missing" ? "missingExport" : "exceptionsExport")}
@@ -727,10 +923,12 @@ export function ControlWorkbookGrid({
           <>
             <Button
               variant="outline"
+              size="sm"
+              className="h-9 rounded-squircle text-xs font-medium"
               disabled={pending || busy}
               onClick={() => fileInput.current?.click()}
             >
-              <Upload className="size-4 me-2" />
+              <Upload className="size-3.5 me-1.5" />
               {t("import")}
             </Button>
             <input
@@ -753,42 +951,6 @@ export function ControlWorkbookGrid({
               }}
             />
           </>
-        )}
-        {(caps.canLock || caps.canUnlock) && (
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={onLockToggleRequest}
-          >
-            {sheet.locked ? (
-              <Unlock className="size-4 me-2" />
-            ) : (
-              <Lock className="size-4 me-2" />
-            )}
-            {t(sheet.locked ? "unlock" : "lock")}
-          </Button>
-        )}
-        {caps.canSubmit &&
-          ["DRAFT", "RETURNED"].includes(sheet.workflowState) && (
-            <Button
-              disabled={pending || sheet.locked}
-              onClick={() => setAction("SUBMIT")}
-            >
-              {t("SUBMIT")}
-            </Button>
-          )}
-        {caps.canReview && sheet.workflowState === "IN_REVIEW" && (
-          <>
-            <Button onClick={() => setAction("APPROVE")}>{t("APPROVE")}</Button>
-            <Button variant="outline" onClick={() => setAction("RETURN")}>
-              {t("RETURN")}
-            </Button>
-          </>
-        )}
-        {caps.canReview && sheet.workflowState === "APPROVED" && (
-          <Button variant="outline" onClick={() => setAction("REOPEN")}>
-            {t("REOPEN")}
-          </Button>
         )}
       </div>
       <div className="flex flex-wrap gap-2 items-center">
@@ -1141,24 +1303,28 @@ export function ControlWorkbookGrid({
                     <DropdownMenuPortal>
                       <DropdownMenuContent asChild>
                         <div
-                          className="z-50 rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg"
+                          className="z-50 min-w-[160px] rounded-squircle border bg-popover p-1.5 text-popover-foreground shadow-lg space-y-0.5"
                           dir={rtl ? "rtl" : "ltr"}
                         >
                           {caps.canViewAudit && (
                             <DropdownMenuItem
+                              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer hover:bg-surface/80 focus:bg-surface/80 outline-none"
                               onSelect={() => onOpenRowAudit(row)}
                             >
-                              {t("audit")}
+                              <History className="size-3.5 text-primary shrink-0" />
+                              <span>{t("audit")}</span>
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
                             disabled={!caps.canEdit || pending}
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-400 outline-none disabled:opacity-50 disabled:pointer-events-none"
                             onSelect={() => {
                               setSelected([row.studentId]);
                               setAction("CLEAR");
                             }}
                           >
-                            {t("CLEAR")}
+                            <Trash2 className="size-3.5 text-rose-500 shrink-0" />
+                            <span>{t("CLEAR")}</span>
                           </DropdownMenuItem>
                         </div>
                       </DropdownMenuContent>
@@ -1221,6 +1387,54 @@ export function ControlWorkbookGrid({
               {t("reviewExplanation")}
             </DialogDescription>
           </DialogHeader>
+          {(action === "SUBMIT" || action === "APPROVE") && (
+            <div
+              className={cn(
+                "rounded-xl border p-3 text-xs space-y-2",
+                readiness.ready
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-300",
+              )}
+            >
+              <div className="font-bold flex items-center justify-between gap-2">
+                <span>{t("readinessTitle")}</span>
+                <span className="font-mono" dir="ltr">
+                  {readiness.entered} / {readiness.total}
+                </span>
+              </div>
+              <p>
+                {t("readinessStats", {
+                  total: readiness.total,
+                  entered: readiness.entered,
+                  missing: readiness.missing,
+                })}
+              </p>
+              <p className="leading-relaxed">
+                {readiness.ready
+                  ? t("readinessReady", { total: readiness.total })
+                  : t("readinessWarning", {
+                      total: readiness.total,
+                      missing: readiness.missing,
+                    })}
+              </p>
+              {!readiness.ready && readiness.missing > 0 && (
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-squircle text-xs border-amber-500/40 text-amber-200 hover:bg-amber-500/20"
+                    onClick={() => {
+                      setOnlyMissing(true);
+                      setAction(null);
+                    }}
+                  >
+                    {t("showMissingRows")}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           <Input
             aria-label={t("reason")}
             value={reason}

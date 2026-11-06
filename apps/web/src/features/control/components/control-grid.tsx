@@ -21,6 +21,7 @@ import {
   MoreVertical,
   RotateCcw,
   SlidersHorizontal,
+  Trash2,
   Unlock,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -1491,9 +1492,16 @@ export function ControlGrid({
                           : []),
                         {
                           value: 'clear',
-                          label: isAr
-                            ? 'مسح الرصد (لم يُرصد —)'
-                            : 'Clear entry (Not entered —)',
+                          label: (
+                            <div className="flex items-center gap-2 text-xs py-0.5 text-rose-400">
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                              <span>
+                                {isAr
+                                  ? 'مسح الرصد (لم يُرصد —)'
+                                  : 'Clear entry (Not entered —)'}
+                              </span>
+                            </div>
+                          ),
                         },
                       ]
                     : []),
@@ -1501,9 +1509,16 @@ export function ControlGrid({
                     ? [
                         {
                           value: 'audit',
-                          label: isAr
-                            ? 'عرض سجل تعديلات الطالب'
-                            : 'View student audit history',
+                          label: (
+                            <div className="flex items-center gap-2 text-xs py-0.5">
+                              <History className="h-3.5 w-3.5 text-primary" />
+                              <span>
+                                {isAr
+                                  ? 'عرض سجل تعديلات الطالب'
+                                  : 'View student audit history'}
+                              </span>
+                            </div>
+                          ),
                         },
                       ]
                     : []),

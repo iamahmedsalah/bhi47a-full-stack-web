@@ -29,6 +29,9 @@ export class ControlSheet {
   @Prop({ required: true, uppercase: true, trim: true })
   courseCode!: string;
 
+  @Prop({ type: String, trim: true, lowercase: true })
+  slug?: string;
+
   @Prop({ type: String, required: true, enum: CONTROL_COMPONENT_KEYS })
   component!: ControlComponentKey;
 
@@ -79,3 +82,45 @@ ControlSheetSchema.index(
   { unique: true },
 );
 ControlSheetSchema.index({ courseId: 1, academicYear: 1, semester: 1 });
+ControlSheetSchema.index({ slug: 1 }, { sparse: true });
+
+export function buildControlSheetSlug(sheet: {
+  courseCode: string;
+  component: string;
+  academicYear: string;
+  semester: string;
+}): string {
+  const code = String(sheet.courseCode || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const comp = String(sheet.component || '')
+    .trim()
+    .toLowerCase();
+  const year = String(sheet.academicYear || '')
+    .trim()
+    .replace(/[/\\]/g, '-');
+  const sem = String(sheet.semester || '')
+    .trim()
+    .toLowerCase();
+  return `${code}-${comp}-${year}-${sem}`;
+}
+
+export function parseControlSheetSlug(slug: string): {
+  courseCode: string;
+  component: ControlComponentKey;
+  academicYear: string;
+  semester: Semester;
+} | null {
+  const match = /^([a-z0-9-]+)-(coursework|midterm|final)-(\d{4}-\d{4})-(first|second|summer)$/i.exec(
+    slug.trim(),
+  );
+  if (!match) return null;
+  return {
+    courseCode: match[1].toUpperCase(),
+    component: match[2].toLowerCase() as ControlComponentKey,
+    academicYear: match[3],
+    semester: match[4].toLowerCase() as Semester,
+  };
+}

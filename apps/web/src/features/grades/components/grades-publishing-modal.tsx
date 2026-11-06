@@ -113,12 +113,6 @@ export function GradesPublishingModal({
         gradesPublishedLevels: newLevels,
       });
 
-      // Synchronize database records for this level
-      await publishGradesBulk({
-        level,
-        isPublished: !isCurrentlyPublished,
-      });
-
       queryClient.invalidateQueries({ queryKey: ['grades'] });
       toast.success(
         isAr

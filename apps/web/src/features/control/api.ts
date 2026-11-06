@@ -18,8 +18,8 @@ import type {
 export const controlKeys = {
   all: ["control"] as const,
   me: () => [...controlKeys.all, "me"] as const,
-  courses: (academicYear: string, semester: Semester) =>
-    [...controlKeys.all, "courses", academicYear, semester] as const,
+  courses: (academicYear: string, semester: Semester, level?: string) =>
+    [...controlKeys.all, "courses", academicYear, semester, level ?? "all"] as const,
   sheet: (sheetId: string) => [...controlKeys.all, "sheet", sheetId] as const,
   entries: (sheetId: string, search?: string) =>
     [...controlKeys.all, "entries", sheetId, search ?? ""] as const,
@@ -33,18 +33,19 @@ export const controlKeys = {
 
 export async function getControlCapabilities(): Promise<ControlCapabilities> {
   const res = await api.get<ControlCapabilities>("/admin/control/me");
-  return res as unknown as ControlCapabilities;
+  return res.data;
 }
 
 export async function listControlCourses(params: {
   academicYear: string;
   semester: Semester;
+  level?: string;
 }): Promise<{ items: ControlCourseSummary[] }> {
   const res = await api.get<{ items: ControlCourseSummary[] }>(
     "/admin/control/courses",
     { params },
   );
-  return res as unknown as { items: ControlCourseSummary[] };
+  return res.data;
 }
 
 export async function openControlSheet(dto: {
@@ -54,7 +55,7 @@ export async function openControlSheet(dto: {
   component: ControlComponentKey;
 }): Promise<ControlSheetDetails> {
   const res = await api.post<ControlSheetDetails>("/admin/control/sheets", dto);
-  return res as unknown as ControlSheetDetails;
+  return res.data;
 }
 
 export async function getControlSheet(
@@ -63,7 +64,7 @@ export async function getControlSheet(
   const res = await api.get<ControlSheetDetails>(
     `/admin/control/sheets/${sheetId}`,
   );
-  return res as unknown as ControlSheetDetails;
+  return res.data;
 }
 
 export async function listControlEntries(
@@ -74,7 +75,7 @@ export async function listControlEntries(
     `/admin/control/sheets/${sheetId}/entries`,
     { params },
   );
-  return res as unknown as { entries: ControlRosterRow[]; total: number };
+  return res.data;
 }
 
 export async function applyControlChanges(
@@ -89,7 +90,7 @@ export async function applyControlChanges(
     `/admin/control/sheets/${sheetId}/entries`,
     dto,
   );
-  return res as unknown as ApplyChangesResponse;
+  return res.data;
 }
 
 export async function lockControlSheet(
@@ -100,7 +101,7 @@ export async function lockControlSheet(
     `/admin/control/sheets/${sheetId}/lock`,
     { reason },
   );
-  return res as unknown as ControlSheetDetails;
+  return res.data;
 }
 
 export async function unlockControlSheet(
@@ -111,7 +112,7 @@ export async function unlockControlSheet(
     `/admin/control/sheets/${sheetId}/unlock`,
     { reason },
   );
-  return res as unknown as ControlSheetDetails;
+  return res.data;
 }
 
 export async function listControlAudit(
@@ -122,7 +123,7 @@ export async function listControlAudit(
     `/admin/control/sheets/${sheetId}/audit`,
     { params },
   );
-  return res as unknown as PaginatedResponse<ControlAuditRow>;
+  return res.data;
 }
 
 export async function getGradingScheme(
@@ -133,7 +134,7 @@ export async function getGradingScheme(
     `/admin/control/schemes/${courseId}`,
     { params },
   );
-  return res as unknown as ResolvedGradingScheme;
+  return res.data;
 }
 
 export async function updateGradingScheme(
@@ -153,13 +154,14 @@ export async function updateGradingScheme(
     `/admin/control/schemes/${courseId}`,
     dto,
   );
-  return res as unknown as ResolvedGradingScheme;
+  return res.data;
 }
 
 export async function getControlWorkbook(sheetId: string) {
-  return (await api.get(
+  const res = await api.get<import("./types").ControlWorkbook>(
     `/admin/control/sheets/${sheetId}/workbook`,
-  )) as unknown as import("./types").ControlWorkbook;
+  );
+  return res.data;
 }
 export async function reviewControlSheet(
   sheetId: string,
@@ -169,46 +171,54 @@ export async function reviewControlSheet(
     reason: string;
   },
 ) {
-  return (await api.post(
+  const res = await api.post<ControlSheetDetails>(
     `/admin/control/sheets/${sheetId}/review`,
     dto,
-  )) as unknown as ControlSheetDetails;
+  );
+  return res.data;
 }
 export async function exportControlSheet(
   sheetId: string,
   mode: "workbook" | "missing" | "exceptions" = "workbook",
+  filenameSlug?: string,
 ) {
   const raw = await api.get(`/admin/control/sheets/${sheetId}/export`, {
     responseType: "blob",
     params: { mode },
   });
   const { downloadFileBlob } = await import("@/lib/export-utils");
+  const fileIdentifier = filenameSlug || sheetId;
   await downloadFileBlob(
     raw,
-    `control-${sheetId}.xlsx`,
+    `control-${fileIdentifier}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 }
 export async function previewControlFile(sheetId: string, file: File) {
   const body = new FormData();
   body.append("file", file);
-  return (await api.post(
+  const res = await api.post<import("./types").ControlImportPreview>(
     `/admin/control/sheets/${sheetId}/import/preview`,
     body,
-  )) as unknown as import("./types").ControlImportPreview;
+  );
+  return res.data;
 }
 export async function previewControlRows(
   sheetId: string,
   rows: Record<string, unknown>[],
 ) {
-  return (await api.post(`/admin/control/sheets/${sheetId}/import/rows`, {
-    rows,
-  })) as unknown as import("./types").ControlImportPreview;
+  const res = await api.post<import("./types").ControlImportPreview>(
+    `/admin/control/sheets/${sheetId}/import/rows`,
+    { rows },
+  );
+  return res.data;
 }
 export async function commitControlImport(sheetId: string, previewId: string) {
-  return (await api.post(`/admin/control/sheets/${sheetId}/import/commit`, {
-    previewId,
-  })) as unknown as ApplyChangesResponse;
+  const res = await api.post<ApplyChangesResponse>(
+    `/admin/control/sheets/${sheetId}/import/commit`,
+    { previewId },
+  );
+  return res.data;
 }
 
 export async function exportControlImportErrors(

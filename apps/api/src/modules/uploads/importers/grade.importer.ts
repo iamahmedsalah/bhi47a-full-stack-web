@@ -194,7 +194,7 @@ export class GradeImporter implements Importer {
           editableEntries.push(entry);
         } else {
           errors.push(
-            `السطر ${rowNum}: كشف الكنترول (${entry.examType}) للمادة ${course.code} مقفول`,
+            `Row ${rowNum}: ${entry.examType} for ${course.code} requires the Control workbook. Open Control, download its Excel template, preview and commit there.`,
           );
         }
       }

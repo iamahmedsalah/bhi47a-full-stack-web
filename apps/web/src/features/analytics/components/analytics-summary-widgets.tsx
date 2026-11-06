@@ -1,10 +1,8 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import {
-  getAcademicAnalyticsOverview,
-} from '../api';
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getAcademicAnalyticsOverview } from "../api";
 import {
   Award,
   Users,
@@ -14,7 +12,7 @@ import {
   BookOpen,
   BarChart3,
   Loader2,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -24,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-} from 'recharts';
+} from "recharts";
 
 interface AnalyticsSummaryWidgetsProps {
   isAr: boolean;
@@ -38,9 +36,11 @@ export function AnalyticsSummaryWidgets({
   canExport = true,
 }: AnalyticsSummaryWidgetsProps) {
   const overviewQuery = useQuery({
-    queryKey: ['admin-comprehensive-analytics-overview'],
+    queryKey: ["admin-comprehensive-analytics-overview"],
     queryFn: () => getAcademicAnalyticsOverview(),
     staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 
   const data = overviewQuery.data;
@@ -75,6 +75,22 @@ export function AnalyticsSummaryWidgets({
     );
   }
 
+  if (overviewQuery.isError)
+    return (
+      <div
+        role="alert"
+        className="rounded-2xl border border-destructive/40 p-4 text-sm"
+      >
+        <p>{isAr ? "تعذر تحميل التحليلات" : "Could not load analytics"}</p>
+        <button
+          type="button"
+          className="mt-2 text-primary"
+          onClick={() => void overviewQuery.refetch()}
+        >
+          {isAr ? "إعادة المحاولة" : "Retry"}
+        </button>
+      </div>
+    );
   if (!kpis) return null;
 
   return (
@@ -86,14 +102,14 @@ export function AnalyticsSummaryWidgets({
             <Award className="h-5 w-5 text-teal-500" />
             <span>
               {isAr
-                ? 'تحليلات الكويزات، هيئة التدريس، ونسب نجاح المواد'
-                : 'Quizzes, Faculty Performance & Course Pass Rates'}
+                ? "تحليلات الكويزات، هيئة التدريس، ونسب نجاح المواد"
+                : "Quizzes, Faculty Performance & Course Pass Rates"}
             </span>
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isAr
-              ? 'متابعة شاملة لنسب دخول ونجاح الطلاب في الكويزات، ومعدلات الأداء لكل دكتور ومعيد، ونسب النجاح بالمقررات.'
-              : 'Live tracking of quiz attendance, pass rates, faculty quiz counts, and course performance.'}
+              ? "متابعة شاملة لنسب دخول ونجاح الطلاب في الكويزات، ومعدلات الأداء لكل دكتور ومعيد، ونسب النجاح بالمقررات."
+              : "Live tracking of quiz attendance, pass rates, faculty quiz counts, and course performance."}
           </p>
         </div>
 
@@ -104,7 +120,11 @@ export function AnalyticsSummaryWidgets({
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-squircle text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-sm transition-all cursor-pointer self-start sm:self-auto"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            <span>{isAr ? 'تصدير شيت التحليلات الشامل (.xlsx)' : 'Export Full Analytics (.xlsx)'}</span>
+            <span>
+              {isAr
+                ? "تصدير شيت التحليلات الشامل (.xlsx)"
+                : "Export Full Analytics (.xlsx)"}
+            </span>
           </button>
         )}
       </div>
@@ -115,7 +135,7 @@ export function AnalyticsSummaryWidgets({
         <div className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? 'إجمالي الكويزات' : 'Total Quizzes'}
+              {isAr ? "إجمالي الكويزات" : "Total Quizzes"}
             </span>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle bg-teal-500/10 text-teal-500">
               <Award className="h-4 w-4" />
@@ -135,7 +155,7 @@ export function AnalyticsSummaryWidgets({
         <div className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? 'متوسط نسبة الدخول للكويزات' : 'Avg Quiz Participation'}
+              {isAr ? "متوسط نسبة الدخول للكويزات" : "Avg Quiz Participation"}
             </span>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle bg-cyan-500/10 text-cyan-400">
               <Users className="h-4 w-4" />
@@ -146,8 +166,8 @@ export function AnalyticsSummaryWidgets({
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {isAr
-              ? 'نسبة الطلاب الذين دخلوا وسلموا الكويزات'
-              : 'Students who started and submitted assigned quizzes'}
+              ? "نسبة الطلاب الذين دخلوا وسلموا الكويزات"
+              : "Students who started and submitted assigned quizzes"}
           </p>
         </div>
 
@@ -155,7 +175,7 @@ export function AnalyticsSummaryWidgets({
         <div className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? 'متوسط نسبة نجاح الكويزات' : 'Avg Quiz Pass Rate'}
+              {isAr ? "متوسط نسبة نجاح الكويزات" : "Avg Quiz Pass Rate"}
             </span>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle bg-emerald-500/10 text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
@@ -166,8 +186,8 @@ export function AnalyticsSummaryWidgets({
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {isAr
-              ? 'نسبة المجتازين لدرجة النجاح المحددة'
-              : 'Students scoring at or above passing threshold'}
+              ? "نسبة المجتازين لدرجة النجاح المحددة"
+              : "Students scoring at or above passing threshold"}
           </p>
         </div>
 
@@ -175,7 +195,7 @@ export function AnalyticsSummaryWidgets({
         <div className="rounded-2xl border border-border/70 bg-card/90 p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? 'هيئة التدريس والمعاونة' : 'Faculty & Staff'}
+              {isAr ? "هيئة التدريس والمعاونة" : "Faculty & Staff"}
             </span>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle bg-purple-500/10 text-purple-400">
               <TrendingUp className="h-4 w-4" />
@@ -200,13 +220,13 @@ export function AnalyticsSummaryWidgets({
             <div>
               <h3 className="text-base font-bold text-foreground">
                 {isAr
-                  ? 'أداء هيئة التدريس في الكويزات'
-                  : 'Faculty & TA Quiz Activity'}
+                  ? "أداء هيئة التدريس في الكويزات"
+                  : "Faculty & TA Quiz Activity"}
               </h3>
               <p className="text-xs text-muted-foreground">
                 {isAr
-                  ? 'عدد الكويزات المنشورة ونسبة نجاح الطلاب لكل عضو هيئة تدريس'
-                  : 'Quizzes created and student pass rates by faculty member'}
+                  ? "عدد الكويزات المنشورة ونسبة نجاح الطلاب لكل عضو هيئة تدريس"
+                  : "Quizzes created and student pass rates by faculty member"}
               </p>
             </div>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-teal-500/30 bg-teal-500/10 text-teal-400">
@@ -216,32 +236,64 @@ export function AnalyticsSummaryWidgets({
 
           {staffChartData.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              {isAr ? 'لا توجد بيانات كويزات لهيئة التدريس حالياً' : 'No quiz activity recorded'}
+              {isAr
+                ? "لا توجد بيانات كويزات لهيئة التدريس حالياً"
+                : "No quiz activity recorded"}
             </div>
           ) : (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={staffChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                  <XAxis dataKey="name" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 10 }} interval={0} angle={-15} textAnchor="end" />
-                  <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <BarChart
+                  data={staffChartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.08)"
+                  />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 10 }}
+                    interval={0}
+                    angle={-15}
+                    textAnchor="end"
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                  />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                      borderColor: 'rgba(51, 65, 85, 0.6)',
-                      borderRadius: '12px',
-                      color: '#f8fafc',
+                      backgroundColor: "rgba(15, 23, 42, 0.95)",
+                      borderColor: "rgba(51, 65, 85, 0.6)",
+                      borderRadius: "12px",
+                      color: "#f8fafc",
                     }}
                     formatter={(val: unknown, name: unknown) => [
                       String(val),
-                      String(name) === 'quizzes'
-                        ? (isAr ? 'عدد الكويزات' : 'Quizzes Created')
-                        : (isAr ? 'نسبة النجاح %' : 'Pass Rate %'),
+                      String(name) === "quizzes"
+                        ? isAr
+                          ? "عدد الكويزات"
+                          : "Quizzes Created"
+                        : isAr
+                          ? "نسبة النجاح %"
+                          : "Pass Rate %",
                     ]}
                   />
                   <Legend />
-                  <Bar dataKey="quizzes" fill="#0d9488" radius={[4, 4, 0, 0]} name={isAr ? 'عدد الكويزات' : 'Quizzes'} />
-                  <Bar dataKey="passRate" fill="#06b6d4" radius={[4, 4, 0, 0]} name={isAr ? 'نسبة النجاح %' : 'Pass Rate %'} />
+                  <Bar
+                    dataKey="quizzes"
+                    fill="#0d9488"
+                    radius={[4, 4, 0, 0]}
+                    name={isAr ? "عدد الكويزات" : "Quizzes"}
+                  />
+                  <Bar
+                    dataKey="passRate"
+                    fill="#06b6d4"
+                    radius={[4, 4, 0, 0]}
+                    name={isAr ? "نسبة النجاح %" : "Pass Rate %"}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -254,13 +306,13 @@ export function AnalyticsSummaryWidgets({
             <div>
               <h3 className="text-base font-bold text-foreground">
                 {isAr
-                  ? 'تسجيل المواد ونسب النجاح'
-                  : 'Course Enrollment & Pass Rates'}
+                  ? "تسجيل المواد ونسب النجاح"
+                  : "Course Enrollment & Pass Rates"}
               </h3>
               <p className="text-xs text-muted-foreground">
                 {isAr
-                  ? 'أعداد الطلاب المسجلين بكل مادة ونسبة النجاح المرصودة'
-                  : 'Enrolled students volume and overall pass percentage per course'}
+                  ? "أعداد الطلاب المسجلين بكل مادة ونسبة النجاح المرصودة"
+                  : "Enrolled students volume and overall pass percentage per course"}
               </p>
             </div>
             <span className="flex h-8 w-8 items-center justify-center rounded-squircle border border-purple-500/30 bg-purple-500/10 text-purple-400">
@@ -270,36 +322,67 @@ export function AnalyticsSummaryWidgets({
 
           {courseChartData.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              {isAr ? 'لا توجد بيانات مقررات حالياً' : 'No course data available'}
+              {isAr
+                ? "لا توجد بيانات مقررات حالياً"
+                : "No course data available"}
             </div>
           ) : (
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={courseChartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                  <XAxis dataKey="code" stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <BarChart
+                  data={courseChartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.08)"
+                  />
+                  <XAxis
+                    dataKey="code"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                  />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                      borderColor: 'rgba(51, 65, 85, 0.6)',
-                      borderRadius: '12px',
-                      color: '#f8fafc',
+                      backgroundColor: "rgba(15, 23, 42, 0.95)",
+                      borderColor: "rgba(51, 65, 85, 0.6)",
+                      borderRadius: "12px",
+                      color: "#f8fafc",
                     }}
                     labelFormatter={(lbl: unknown) => {
-                      const item = courseChartData.find((c) => c.code === String(lbl));
-                      return `${lbl} - ${item?.name || ''}`;
+                      const item = courseChartData.find(
+                        (c) => c.code === String(lbl),
+                      );
+                      return `${lbl} - ${item?.name || ""}`;
                     }}
                     formatter={(val: unknown, name: unknown) => [
                       String(val),
-                      String(name) === 'enrolled'
-                        ? (isAr ? 'الطلاب المسجلون' : 'Enrolled Students')
-                        : (isAr ? 'نسبة النجاح %' : 'Pass Rate %'),
+                      String(name) === "enrolled"
+                        ? isAr
+                          ? "الطلاب المسجلون"
+                          : "Enrolled Students"
+                        : isAr
+                          ? "نسبة النجاح %"
+                          : "Pass Rate %",
                     ]}
                   />
                   <Legend />
-                  <Bar dataKey="enrolled" fill="#8b5cf6" radius={[4, 4, 0, 0]} name={isAr ? 'الطلاب المسجلون' : 'Enrolled'} />
-                  <Bar dataKey="passRate" fill="#10b981" radius={[4, 4, 0, 0]} name={isAr ? 'نسبة النجاح %' : 'Pass Rate %'} />
+                  <Bar
+                    dataKey="enrolled"
+                    fill="#8b5cf6"
+                    radius={[4, 4, 0, 0]}
+                    name={isAr ? "الطلاب المسجلون" : "Enrolled"}
+                  />
+                  <Bar
+                    dataKey="passRate"
+                    fill="#10b981"
+                    radius={[4, 4, 0, 0]}
+                    name={isAr ? "نسبة النجاح %" : "Pass Rate %"}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>

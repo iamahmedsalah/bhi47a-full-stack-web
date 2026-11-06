@@ -1,38 +1,57 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
-import { useParams } from 'next/navigation';
-import api, { getApiErrorMessage } from '@/lib/api';
-import { Card } from '@/components/ui/card';
-import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import { Award, FileSpreadsheet, CheckSquare, Printer, Download, GraduationCap, Calendar, BookOpen, Percent } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { toast } from 'sonner';
-import { useAuth } from '@/providers/auth-provider';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { useParams } from "next/navigation";
+import api, { getApiErrorMessage } from "@/lib/api";
+import { Card } from "@/components/ui/card";
+import { LoadingState, ErrorState, EmptyState } from "@/components/ui/feedback";
+import {
+  Award,
+  FileSpreadsheet,
+  CheckSquare,
+  Printer,
+  Download,
+  GraduationCap,
+  Calendar,
+  BookOpen,
+  Percent,
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { useAuth } from "@/providers/auth-provider";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   downloadResultCertificatePdf,
   openResultCertificate,
   type ResultCertificateData,
-} from '@/lib/result-certificate';
-import { calculateGradeScale, getGpaScale } from '@student-portal/shared';
-import { getStudentResultsStatus } from '@/features/grades/api';
+} from "@/lib/result-certificate";
+import { calculateGradeScale, getGpaScale } from "@student-portal/shared";
+import { getStudentResultsStatus } from "@/features/grades/api";
 
 interface Grade {
   _id: string;
   courseCode: string;
   courseName: string;
-  examType: 'midterm' | 'final';
+  examType: "midterm" | "final" | "coursework";
+  officialResult?: {
+    official: boolean;
+    total: number;
+    totalMax: number;
+    percentage: number;
+    passed: boolean;
+    gradePoints: number;
+    letterGrade: string;
+  };
   grade: number;
   maxGrade: number;
-  status: 'present' | 'absent' | 'banned';
+  status: "present" | "absent" | "banned";
   academicYear: string;
   semester: string;
   isPublished: boolean;
   creditHours?: number;
-  academicLevel: '1' | '2' | '3' | '4';
+  academicLevel: "1" | "2" | "3" | "4";
   courseNameAr?: string;
   courseNameEn?: string;
 }
@@ -43,7 +62,9 @@ interface CourseGradesGroup {
   academicYear: string;
   semester: string;
   creditHours: number;
-  academicLevel: '1' | '2' | '3' | '4';
+  academicLevel: "1" | "2" | "3" | "4";
+  officialResult?: Grade["officialResult"];
+  coursework?: { grade: number; maxGrade: number; status: string };
   midterm?: { grade: number; maxGrade: number; status: string };
   final?: { grade: number; maxGrade: number; status: string };
 }
@@ -63,18 +84,29 @@ function calculateGroupStats(groups: CourseGradesGroup[]) {
   let credits = 0;
 
   for (const group of groups) {
-    const midterm = group.midterm?.status === 'present' ? group.midterm.grade : 0;
-    const final = group.final?.status === 'present' ? group.final.grade : 0;
+    const midterm =
+      group.midterm?.status === "present" ? group.midterm.grade : 0;
+    const final = group.final?.status === "present" ? group.final.grade : 0;
     const maxMidterm = group.midterm?.maxGrade ?? 0;
     const maxFinal = group.final?.maxGrade ?? 0;
-    const maxTotal = maxMidterm + maxFinal;
-    const percentage = maxTotal > 0 ? ((midterm + final) / maxTotal) * 100 : 0;
-    acquired += midterm + final;
+    const maxTotal =
+      group.officialResult?.totalMax ??
+      maxMidterm + maxFinal + (group.coursework?.maxGrade ?? 0);
+    const total =
+      group.officialResult?.total ??
+      midterm + final + (group.coursework?.grade ?? 0);
+    const percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+    acquired += total;
     maximum += maxTotal;
     const scale = calculateGradeScale(percentage, group.final?.status);
-    if (percentage >= 50 && group.final?.status === 'present') passed += 1;
+    if (
+      group.officialResult?.passed ??
+      (percentage >= 50 && group.final?.status === "present")
+    )
+      passed += 1;
     if (group.final) {
-      weightedPoints += scale.points * group.creditHours;
+      weightedPoints +=
+        (group.officialResult?.gradePoints ?? scale.points) * group.creditHours;
       credits += group.creditHours;
     }
   }
@@ -89,61 +121,71 @@ function calculateGroupStats(groups: CourseGradesGroup[]) {
 }
 
 export default function StudentResultsPage() {
-  const t = useTranslations('studentPortal');
-  const tCommon = useTranslations('common');
+  const t = useTranslations("studentPortal");
+  const tCommon = useTranslations("common");
+  const tRelease = useTranslations("controlRelease");
   const params = useParams();
-  const locale = params.locale === 'en' ? 'en' : 'ar';
-  const isEnglish = locale === 'en';
+  const locale = params.locale === "en" ? "en" : "ar";
+  const isEnglish = locale === "en";
   const { user } = useAuth();
   const [isDownloading, setIsDownloading] = React.useState(false);
-  const [selectedLevel, setSelectedLevel] = React.useState('');
+  const [selectedLevel, setSelectedLevel] = React.useState("");
 
   const resultsQuery = useQuery({
-    queryKey: ['student-results'],
+    queryKey: ["student-results"],
     queryFn: async () => {
-      const res = await api.get<Grade[]>('/students/me/results');
+      const res = await api.get<Grade[]>("/students/me/results");
       return res.data;
     },
   });
 
   const profileQuery = useQuery({
-    queryKey: ['student-profile'],
+    queryKey: ["student-profile"],
     queryFn: async () => {
-      const res = await api.get<StudentAcademicSummary>('/students/me/profile');
+      const res = await api.get<StudentAcademicSummary>("/students/me/profile");
       return res.data;
     },
   });
 
   const statusQuery = useQuery({
-    queryKey: ['student-results-status'],
+    queryKey: ["student-results-status"],
     queryFn: getStudentResultsStatus,
   });
 
   const resultLevels = React.useMemo(
     () =>
-      [...new Set((resultsQuery.data ?? []).map((grade) => grade.academicLevel))].sort(
-        (a, b) => Number(a) - Number(b),
-      ),
+      [
+        ...new Set(
+          (resultsQuery.data ?? []).map((grade) => grade.academicLevel),
+        ),
+      ].sort((a, b) => Number(a) - Number(b)),
     [resultsQuery.data],
   );
   const availableLevels = React.useMemo(() => {
     const levels = new Set(resultLevels);
-    if (profileQuery.data?.level) levels.add(profileQuery.data.level as Grade['academicLevel']);
+    if (profileQuery.data?.level)
+      levels.add(profileQuery.data.level as Grade["academicLevel"]);
     return [...levels].sort((a, b) => Number(a) - Number(b));
   }, [profileQuery.data?.level, resultLevels]);
 
   React.useEffect(() => {
-    if (selectedLevel && availableLevels.includes(selectedLevel as Grade['academicLevel'])) return;
+    if (
+      selectedLevel &&
+      availableLevels.includes(selectedLevel as Grade["academicLevel"])
+    )
+      return;
     const current = profileQuery.data?.level;
     const targetLevel =
-      (resultLevels.length > 0 && current && resultLevels.includes(current as Grade['academicLevel']))
+      resultLevels.length > 0 &&
+      current &&
+      resultLevels.includes(current as Grade["academicLevel"])
         ? current
-        : (resultLevels.at(-1) || current || availableLevels.at(-1) || '1');
+        : resultLevels.at(-1) || current || availableLevels.at(-1) || "1";
     setSelectedLevel(targetLevel);
   }, [availableLevels, profileQuery.data?.level, resultLevels, selectedLevel]);
 
   if (resultsQuery.isLoading || statusQuery.isLoading) {
-    return <LoadingState title={tCommon('loading')} />;
+    return <LoadingState title={tCommon("loading")} />;
   }
 
   if (resultsQuery.isError) {
@@ -160,48 +202,60 @@ export default function StudentResultsPage() {
   const statusData = statusQuery.data;
 
   if (grades.length === 0) {
-    let emptyTitle = isEnglish ? 'No published results' : 'النتائج لم تعلن بعد';
+    let emptyTitle = isEnglish ? "No published results" : "النتائج لم تعلن بعد";
     let emptyDesc = isEnglish
-      ? 'Your semester results have not been published by the administration yet.'
-      : 'لم يتم نشر نتائج الفصل الدراسي الخاصة بك من قبل الإدارة بعد.';
+      ? "Your semester results have not been published by the administration yet."
+      : "لم يتم نشر نتائج الفصل الدراسي الخاصة بك من قبل الإدارة بعد.";
 
-    if (statusData?.reason === 'not_started' && statusData.openAt) {
-      const openDate = new Date(statusData.openAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG');
-      emptyTitle = isEnglish ? 'Results Schedule: Opening Soon' : 'إعلان النتائج: سيبدأ قريباً';
+    if (statusData?.reason === "not_started" && statusData.openAt) {
+      const openDate = new Date(statusData.openAt).toLocaleString(
+        isEnglish ? "en-US" : "ar-EG",
+      );
+      emptyTitle = isEnglish
+        ? "Results Schedule: Opening Soon"
+        : "إعلان النتائج: سيبدأ قريباً";
       emptyDesc = isEnglish
         ? `Results portal is scheduled to open on: ${openDate}`
         : `من المقرر فتح بوابة استعلام النتائج في: ${openDate}`;
-    } else if (statusData?.reason === 'ended' && statusData.closeAt) {
-      const closeDate = new Date(statusData.closeAt).toLocaleString(isEnglish ? 'en-US' : 'ar-EG');
-      emptyTitle = isEnglish ? 'Results Inquiry Window Closed' : 'انتهت فترة استعلام النتائج';
+    } else if (statusData?.reason === "ended" && statusData.closeAt) {
+      const closeDate = new Date(statusData.closeAt).toLocaleString(
+        isEnglish ? "en-US" : "ar-EG",
+      );
+      emptyTitle = isEnglish
+        ? "Results Inquiry Window Closed"
+        : "انتهت فترة استعلام النتائج";
       emptyDesc = isEnglish
         ? `The official viewing period concluded on: ${closeDate}`
         : `انتهت الفترة الرسمية المحددة لعرض النتائج في: ${closeDate}`;
-    } else if (statusData?.reason === 'level_not_published') {
-      emptyTitle = isEnglish ? 'Academic Level Results Pending' : 'نتائج هذا المستوى قيد المراجعة';
+    } else if (statusData?.reason === "level_not_published") {
+      emptyTitle = isEnglish
+        ? "Academic Level Results Pending"
+        : "نتائج هذا المستوى قيد المراجعة";
       emptyDesc = isEnglish
         ? `Results for academic level ${statusData.studentLevel} have not been released yet.`
         : `لم يتم اعتماد ونشر نتائج الفرقة الدراسية (${statusData.studentLevel}) حتى الآن.`;
-    } else if (statusData?.reason === 'system_closed') {
-      emptyTitle = isEnglish ? 'Results Portal Offline' : 'نظام النتائج مغلق حالياً';
+    } else if (statusData?.reason === "system_closed") {
+      emptyTitle = isEnglish
+        ? "Results Portal Offline"
+        : "نظام النتائج مغلق حالياً";
       emptyDesc = isEnglish
-        ? 'The academic administration has temporarily closed results inquiry.'
-        : 'تم إيقاف عرض نتائج الطلاب مؤقتاً بقرار من الشؤون الأكاديمية.';
+        ? "The academic administration has temporarily closed results inquiry."
+        : "تم إيقاف عرض نتائج الطلاب مؤقتاً بقرار من الشؤون الأكاديمية.";
     }
 
     return (
-      <div className="mx-auto max-w-4xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
+      <div
+        className="mx-auto max-w-4xl space-y-6"
+        dir={isEnglish ? "ltr" : "rtl"}
+      >
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Award className="h-6 w-6 text-primary" />
-            <span>{t('results')}</span>
+            <span>{t("results")}</span>
           </h2>
         </div>
         <Card className="p-6 bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-          <EmptyState
-            title={emptyTitle}
-            description={emptyDesc}
-          />
+          <EmptyState title={emptyTitle} description={emptyDesc} />
         </Card>
       </div>
     );
@@ -222,10 +276,25 @@ export default function StudentResultsPage() {
         academicLevel: g.academicLevel,
       };
     }
-    if (g.examType === 'midterm') {
-      groups[groupKey].midterm = { grade: g.grade, maxGrade: g.maxGrade, status: g.status };
-    } else if (g.examType === 'final') {
-      groups[groupKey].final = { grade: g.grade, maxGrade: g.maxGrade, status: g.status };
+    if (g.examType === "midterm") {
+      groups[groupKey].midterm = {
+        grade: g.grade,
+        maxGrade: g.maxGrade,
+        status: g.status,
+      };
+    } else if (g.examType === "coursework") {
+      groups[groupKey].coursework = {
+        grade: g.grade,
+        maxGrade: g.maxGrade,
+        status: g.status,
+      };
+    } else if (g.examType === "final") {
+      groups[groupKey].officialResult = g.officialResult;
+      groups[groupKey].final = {
+        grade: g.grade,
+        maxGrade: g.maxGrade,
+        status: g.status,
+      };
     }
   });
 
@@ -238,21 +307,20 @@ export default function StudentResultsPage() {
   const cumulativePercentage = cumulativeStats.percentage;
   const calculatedGpa = cumulativeStats.gpa;
   const officialGpa =
-    typeof profileQuery.data?.gpa === 'number' && profileQuery.data.gpa > 0
+    typeof profileQuery.data?.gpa === "number"
       ? profileQuery.data.gpa
       : calculatedGpa;
   const officialGpaScale = getGpaScale(officialGpa);
   const officialCompletedCredits =
-    typeof profileQuery.data?.completedCreditHours === 'number' &&
-    profileQuery.data.completedCreditHours > 0
+    typeof profileQuery.data?.completedCreditHours === "number"
       ? profileQuery.data.completedCreditHours
-      : (passedCourses * 3);
+      : passedCourses * 3;
   const selectedLevelGroups = groupedList.filter(
     (group) => group.academicLevel === selectedLevel,
   );
   const selectedLevelStats = calculateGroupStats(selectedLevelGroups);
   const selectedLevelScale = calculateGradeScale(selectedLevelStats.percentage);
-  const semesterSections = (['first', 'second', 'summer'] as const)
+  const semesterSections = (["first", "second", "summer"] as const)
     .map((semester) => {
       const semesterGroups = selectedLevelGroups
         .filter((group) => group.semester === semester)
@@ -265,82 +333,120 @@ export default function StudentResultsPage() {
         semester,
         groups: semesterGroups,
         stats: calculateGroupStats(semesterGroups),
-        academicYears: [...new Set(semesterGroups.map((group) => group.academicYear))],
+        academicYears: [
+          ...new Set(semesterGroups.map((group) => group.academicYear)),
+        ],
       };
     })
     .filter((section) => section.groups.length > 0);
 
   const semesterName = (semester: string) => {
     if (isEnglish) {
-      if (semester === 'first') return 'First Semester';
-      if (semester === 'second') return 'Second Semester';
-      return 'Summer Semester';
+      if (semester === "first") return "First Semester";
+      if (semester === "second") return "Second Semester";
+      return "Summer Semester";
     }
-    if (semester === 'first') return 'الفصل الدراسي الأول';
-    if (semester === 'second') return 'الفصل الدراسي الثاني';
-    return 'الفصل الدراسي الصيفي';
+    if (semester === "first") return "الفصل الدراسي الأول";
+    if (semester === "second") return "الفصل الدراسي الثاني";
+    return "الفصل الدراسي الصيفي";
   };
 
-  const semesterValue = groupedList[0]?.semester ?? '';
+  const semesterValue = groupedList[0]?.semester ?? "";
   const semesterLabel = isEnglish
-    ? semesterValue === 'first'
-      ? 'First Semester'
-      : semesterValue === 'second'
-        ? 'Second Semester'
-        : 'Summer Semester'
-    : semesterValue === 'first'
-      ? 'الفصل الدراسي الأول'
-      : semesterValue === 'second'
-        ? 'الفصل الدراسي الثاني'
-        : 'الفصل الدراسي الصيفي';
+    ? semesterValue === "first"
+      ? "First Semester"
+      : semesterValue === "second"
+        ? "Second Semester"
+        : "Summer Semester"
+    : semesterValue === "first"
+      ? "الفصل الدراسي الأول"
+      : semesterValue === "second"
+        ? "الفصل الدراسي الثاني"
+        : "الفصل الدراسي الصيفي";
 
   const certificateData: ResultCertificateData = {
     locale,
-    studentName: user?.name ?? (isEnglish ? 'Student' : 'الطالب'),
-    studentCode: user?.studentCode ?? '—',
-    academicYear: groupedList[0]?.academicYear ?? '—',
+    studentName: user?.name ?? (isEnglish ? "Student" : "الطالب"),
+    studentCode: user?.studentCode ?? "—",
+    academicYear: groupedList[0]?.academicYear ?? "—",
     semester: semesterLabel,
     totalAcquired,
     totalMax,
     percentage: cumulativePercentage,
     gpa: officialGpa,
     overallGradeLetter: officialGpaScale.letter,
-    overallGradeName: isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr,
+    overallGradeName: isEnglish
+      ? officialGpaScale.nameEn
+      : officialGpaScale.nameAr,
     passedCourses,
-    issuedAt: new Intl.DateTimeFormat(locale === 'ar' ? 'ar-EG' : 'en-GB', {
-      dateStyle: 'long',
+    issuedAt: new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
+      dateStyle: "long",
     }).format(new Date()),
     courses: groupedList.map((course) => {
-      const midtermGrade = course.midterm?.status === 'present' ? course.midterm.grade : 0;
-      const finalGrade = course.final?.status === 'present' ? course.final.grade : 0;
+      const midtermGrade =
+        course.midterm?.status === "present" ? course.midterm.grade : 0;
+      const finalGrade =
+        course.final?.status === "present" ? course.final.grade : 0;
       const maxMidterm = course.midterm?.maxGrade ?? 0;
       const maxFinal = course.final?.maxGrade ?? 0;
-      const total = midtermGrade + finalGrade;
-      const maxTotal = maxMidterm + maxFinal;
-      const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
-      const isAbsent = course.final?.status === 'absent' || course.midterm?.status === 'absent';
-      const isPassed = total >= maxTotal / 2 && course.final?.status === 'present';
+      const total =
+        course.officialResult?.total ??
+        midtermGrade + finalGrade + (course.coursework?.grade ?? 0);
+      const maxTotal =
+        course.officialResult?.totalMax ??
+        maxMidterm + maxFinal + (course.coursework?.maxGrade ?? 0);
+      const isBanned =
+        course.final?.status === "banned" ||
+        course.midterm?.status === "banned";
+      const isAbsent =
+        course.final?.status === "absent" ||
+        course.midterm?.status === "absent";
+      const isPassed =
+        course.officialResult?.passed ??
+        (total >= maxTotal / 2 && course.final?.status === "present");
       const coursePct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-      const courseScale = calculateGradeScale(coursePct, course.final?.status);
+      const courseScale = calculateGradeScale(
+        coursePct,
+        course.officialResult && !course.officialResult.passed
+          ? "absent"
+          : course.final?.status,
+      );
       const status = isBanned
-        ? isEnglish ? 'Banned' : 'محروم'
+        ? isEnglish
+          ? "Banned"
+          : "محروم"
         : isAbsent
-          ? isEnglish ? 'Absent' : 'غائب'
+          ? isEnglish
+            ? "Absent"
+            : "غائب"
           : isPassed
-            ? isEnglish ? 'Pass' : 'ناجح'
-            : isEnglish ? 'Fail' : 'راسب';
-      const absent = isEnglish ? 'Absent' : 'غائب';
+            ? isEnglish
+              ? "Pass"
+              : "ناجح"
+            : isEnglish
+              ? "Fail"
+              : "راسب";
+      const absent = isEnglish ? "Absent" : "غائب";
 
       return {
         code: course.courseCode,
         name: course.courseName,
-        midterm: course.midterm?.status === 'present'
-          ? `${course.midterm.grade} / ${course.midterm.maxGrade}`
-          : course.midterm ? absent : '—',
-        final: course.final?.status === 'present'
-          ? `${course.final.grade} / ${course.final.maxGrade}`
-          : course.final ? absent : '—',
-        total: `${total} / ${maxTotal}`,
+        midterm:
+          course.midterm?.status === "present"
+            ? `${course.midterm.grade} / ${course.midterm.maxGrade}`
+            : course.midterm
+              ? absent
+              : "—",
+        final:
+          course.final?.status === "present"
+            ? `${course.final.grade} / ${course.final.maxGrade}`
+            : course.final
+              ? absent
+              : "—",
+        coursework: course.coursework
+          ? `${course.coursework.grade} / ${course.coursework.maxGrade}`
+          : "-",
+        total: course.final ? `${total} / ${maxTotal}` : "-",
         status,
         creditHours: course.creditHours,
         letterGrade: courseScale.letter,
@@ -352,8 +458,8 @@ export default function StudentResultsPage() {
     if (!openResultCertificate(certificateData)) {
       toast.error(
         isEnglish
-          ? 'Allow pop-ups to open the certificate.'
-          : 'يرجى السماح بالنوافذ المنبثقة لفتح الشهادة.',
+          ? "Allow pop-ups to open the certificate."
+          : "يرجى السماح بالنوافذ المنبثقة لفتح الشهادة.",
       );
     }
   };
@@ -362,12 +468,12 @@ export default function StudentResultsPage() {
     setIsDownloading(true);
     try {
       const downloaded = await downloadResultCertificatePdf(certificateData);
-      if (!downloaded) throw new Error('Certificate generation failed');
+      if (!downloaded) throw new Error("Certificate generation failed");
     } catch {
       toast.error(
         isEnglish
-          ? 'The certificate PDF could not be generated.'
-          : 'تعذر إنشاء ملف PDF للشهادة.',
+          ? "The certificate PDF could not be generated."
+          : "تعذر إنشاء ملف PDF للشهادة.",
       );
     } finally {
       setIsDownloading(false);
@@ -375,18 +481,21 @@ export default function StudentResultsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 print:p-0 print:m-0" dir={isEnglish ? 'ltr' : 'rtl'}>
+    <div
+      className="mx-auto max-w-5xl space-y-6 print:p-0 print:m-0"
+      dir={isEnglish ? "ltr" : "rtl"}
+    >
       {/* Title */}
       <div className="flex items-center justify-between gap-4 print:hidden">
         <div className="space-y-1">
           <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Award className="h-6 w-6 text-primary" />
-            <span>{t('results')}</span>
+            <span>{t("results")}</span>
           </h2>
           <p className="text-sm text-muted-foreground">
             {isEnglish
-              ? 'View your midterm and final exam transcripts for the current term'
-              : 'عرض نتائج امتحانات الميدتيرم والنهائي للفصل الدراسي الحالي'}
+              ? "View your midterm and final exam transcripts for the current term"
+              : "عرض نتائج امتحانات الميدتيرم والنهائي للفصل الدراسي الحالي"}
           </p>
         </div>
 
@@ -396,7 +505,7 @@ export default function StudentResultsPage() {
             className="flex items-center gap-2 rounded-xl border border-border bg-card hover:bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground transition-all cursor-pointer"
           >
             <Printer className="h-4 w-4" />
-            <span>{isEnglish ? 'Print certificate' : 'طباعة الشهادة'}</span>
+            <span>{isEnglish ? "Print certificate" : "طباعة الشهادة"}</span>
           </button>
           <button
             onClick={handleDownload}
@@ -406,8 +515,12 @@ export default function StudentResultsPage() {
             <Download className="h-4 w-4" />
             <span>
               {isDownloading
-                ? isEnglish ? 'Preparing PDF...' : 'جارٍ تجهيز PDF...'
-                : isEnglish ? 'Download PDF' : 'تنزيل PDF'}
+                ? isEnglish
+                  ? "Preparing PDF..."
+                  : "جارٍ تجهيز PDF..."
+                : isEnglish
+                  ? "Download PDF"
+                  : "تنزيل PDF"}
             </span>
           </button>
         </div>
@@ -415,11 +528,15 @@ export default function StudentResultsPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5 print:grid-cols-6">
         {/* Total Cumulative Letter Grade Card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/40 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? 'Cumulative Grade' : 'التقدير العام التراكمي'}
+                {isEnglish ? "Cumulative Grade" : "التقدير العام التراكمي"}
               </span>
               <Award className="h-4.5 w-4.5 text-amber-400" />
             </div>
@@ -428,31 +545,42 @@ export default function StudentResultsPage() {
                 {officialGpaScale.letter}
               </span>
               <span className="text-xs font-bold text-muted-foreground">
-                ({isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr})
+                ({isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr}
+                )
               </span>
             </div>
           </Card>
         </motion.div>
 
         {/* Cumulative GPA */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.03 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.03 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? 'Cumulative GPA' : 'المعدل التراكمي'}
+                {isEnglish ? "Cumulative GPA" : "المعدل التراكمي"}
               </span>
               <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
             </div>
-            <span className="text-2xl font-black font-mono text-foreground">{officialGpa.toFixed(2)} / 4.00</span>
+            <span className="text-2xl font-black font-mono text-foreground">
+              {officialGpa.toFixed(2)} / 4.00
+            </span>
           </Card>
         </motion.div>
 
         {/* Completed Credit Hours */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.05 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.05 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? 'Completed Credits' : 'الساعات المكتملة'}
+                {isEnglish ? "Completed Credits" : "الساعات المكتملة"}
               </span>
               <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
             </div>
@@ -461,58 +589,85 @@ export default function StudentResultsPage() {
                 {officialCompletedCredits}
               </span>
               <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? 'credits' : 'ساعة'}
+                {isEnglish ? "credits" : "ساعة"}
               </span>
             </div>
           </Card>
         </motion.div>
 
         {/* Selected Level GPA */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.07 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.07 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? `Level ${selectedLevel} GPA` : `المعدل للمستوى ${selectedLevel}`}
+                {isEnglish
+                  ? `Level ${selectedLevel} GPA`
+                  : `المعدل للمستوى ${selectedLevel}`}
               </span>
               <Award className="h-4.5 w-4.5 text-emerald-500" />
             </div>
-            <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.gpa.toFixed(2)} / 4.00</span>
+            <span className="text-2xl font-black font-mono text-foreground">
+              {selectedLevelStats.gpa.toFixed(2)} / 4.00
+            </span>
           </Card>
         </motion.div>
 
         {/* Total marks / Level percentage */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.09 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.09 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? 'Level Performance' : 'تقدير المستوى'}
+                {isEnglish ? "Level Performance" : "تقدير المستوى"}
               </span>
               <FileSpreadsheet className="h-4.5 w-4.5 text-primary" />
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.percentage}%</span>
-              <span className="text-xs font-bold text-emerald-400">({selectedLevelScale.letter})</span>
+              <span className="text-2xl font-black font-mono text-foreground">
+                {selectedLevelStats.percentage}%
+              </span>
+              <span className="text-xs font-bold text-emerald-400">
+                ({selectedLevelScale.letter})
+              </span>
             </div>
           </Card>
         </motion.div>
 
         {/* Passed courses */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, delay: 0.11 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.11 }}
+        >
           <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
             <div className="flex justify-between items-start">
               <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? 'Passed Courses' : 'المواد الناجح بها'}
+                {isEnglish ? "Passed Courses" : "المواد الناجح بها"}
               </span>
               <Award className="h-4.5 w-4.5 text-primary" />
             </div>
-            <span className="text-2xl font-black font-mono text-foreground">{selectedLevelStats.passed} / {selectedLevelGroups.length}</span>
+            <span className="text-2xl font-black font-mono text-foreground">
+              {selectedLevelStats.passed} / {selectedLevelGroups.length}
+            </span>
           </Card>
         </motion.div>
       </div>
 
-      <Tabs value={selectedLevel} onValueChange={setSelectedLevel} dir={isEnglish ? 'ltr' : 'rtl'} className="print:hidden">
+      <Tabs
+        value={selectedLevel}
+        onValueChange={setSelectedLevel}
+        dir={isEnglish ? "ltr" : "rtl"}
+        className="print:hidden"
+      >
         <TabsList
-          dir={isEnglish ? 'ltr' : 'rtl'}
+          dir={isEnglish ? "ltr" : "rtl"}
           className="h-auto w-full justify-start rtl:justify-start gap-2 overflow-x-auto rounded-2xl border border-border bg-card/45 p-2"
         >
           {availableLevels.map((level) => {
@@ -528,10 +683,16 @@ export default function StudentResultsPage() {
                 <span>{isEnglish ? `Level ${level}` : `المستوى ${level}`}</span>
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-bold text-muted-foreground">
                   {isCurrent
-                    ? isEnglish ? 'Current' : 'الحالي'
+                    ? isEnglish
+                      ? "Current"
+                      : "الحالي"
                     : isPast
-                      ? isEnglish ? 'Past' : 'سابق'
-                      : isEnglish ? 'Upcoming' : 'قادم'}
+                      ? isEnglish
+                        ? "Past"
+                        : "سابق"
+                      : isEnglish
+                        ? "Upcoming"
+                        : "قادم"}
                 </span>
               </TabsTrigger>
             );
@@ -540,16 +701,23 @@ export default function StudentResultsPage() {
       </Tabs>
 
       {/* Transcript Card */}
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.15 }}>
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.15 }}
+      >
         <Card className="bg-card/45 backdrop-blur-sm border-border/70 shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300 overflow-hidden p-0 print:border-none print:shadow-none relative">
           <div className="p-5 border-b border-border flex items-center justify-between">
             <h3 className="font-bold text-foreground text-sm flex items-center gap-1.5">
               <GraduationCap className="w-4 h-4 text-primary" />
-              {isEnglish ? `Level ${selectedLevel} Academic Transcript` : `بيان درجات المستوى ${selectedLevel}`}
+              {isEnglish
+                ? `Level ${selectedLevel} Academic Transcript`
+                : `بيان درجات المستوى ${selectedLevel}`}
             </h3>
             <span className="text-xs text-muted-foreground font-mono font-bold flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
-              {isEnglish ? 'Level GPA' : 'معدل المستوى'}: {selectedLevelStats.gpa.toFixed(2)} / 4.00
+              {isEnglish ? "Level GPA" : "معدل المستوى"}:{" "}
+              {selectedLevelStats.gpa.toFixed(2)} / 4.00
             </span>
           </div>
 
@@ -560,31 +728,34 @@ export default function StudentResultsPage() {
                   <th className="p-4 text-start">
                     <span className="flex items-center gap-1.5">
                       <BookOpen className="w-3.5 h-3.5 text-primary" />
-                      {isEnglish ? 'Course' : 'المادة والمقرر'}
+                      {isEnglish ? "Course" : "المادة والمقرر"}
                     </span>
                   </th>
                   <th className="p-4 text-center">
                     <span className="flex items-center justify-center gap-1.5">
                       <FileSpreadsheet className="w-3.5 h-3.5 text-muted-foreground" />
-                      {isEnglish ? 'Midterm Exam' : 'الميدتيرم'}
+                      {isEnglish ? "Midterm Exam" : "الميدتيرم"}
                     </span>
+                  </th>
+                  <th className="p-4 text-center">
+                    {tRelease("courseworkLabel")}
                   </th>
                   <th className="p-4 text-center">
                     <span className="flex items-center justify-center gap-1.5">
                       <GraduationCap className="w-3.5 h-3.5 text-muted-foreground" />
-                      {isEnglish ? 'Final Exam' : 'الامتحان النهائي'}
+                      {isEnglish ? "Final Exam" : "الامتحان النهائي"}
                     </span>
                   </th>
                   <th className="p-4 text-center">
                     <span className="flex items-center justify-center gap-1.5">
                       <Percent className="w-3.5 h-3.5 text-muted-foreground" />
-                      {isEnglish ? 'Total Grade' : 'المجموع الكلي'}
+                      {isEnglish ? "Total Grade" : "المجموع الكلي"}
                     </span>
                   </th>
                   <th className="p-4 text-end">
                     <span className="flex items-center justify-end gap-1.5">
                       <Award className="w-3.5 h-3.5 text-primary" />
-                      {isEnglish ? 'Grade & Status' : 'التقدير والحالة'}
+                      {isEnglish ? "Grade & Status" : "التقدير والحالة"}
                     </span>
                   </th>
                 </tr>
@@ -592,7 +763,10 @@ export default function StudentResultsPage() {
               <tbody className="divide-y divide-border/60">
                 {semesterSections.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                    <td
+                      colSpan={6}
+                      className="px-6 py-12 text-center text-sm text-muted-foreground"
+                    >
                       {isEnglish
                         ? `No published results are available for Level ${selectedLevel} yet.`
                         : `لا توجد نتائج منشورة للمستوى ${selectedLevel} حتى الآن.`}
@@ -602,7 +776,7 @@ export default function StudentResultsPage() {
                 {semesterSections.map((section) => (
                   <React.Fragment key={section.semester}>
                     <tr className="border-y border-primary/25 bg-primary/5">
-                      <td colSpan={5} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className="h-5 w-1 rounded-full bg-primary" />
@@ -610,68 +784,106 @@ export default function StudentResultsPage() {
                               {semesterName(section.semester)}
                             </span>
                             <span className="font-mono text-[11px] text-muted-foreground">
-                              {section.academicYears.join(', ')}
+                              {section.academicYears.join(", ")}
                             </span>
                           </div>
                           <div className="flex items-center gap-3 font-mono text-xs font-bold">
                             <span className="rounded-squircle border border-primary/30 bg-primary/10 px-3 py-1 text-primary">
-                              {isEnglish ? 'Semester GPA' : 'معدل الفصل'}: {section.stats.gpa.toFixed(2)}
+                              {isEnglish ? "Semester GPA" : "معدل الفصل"}:{" "}
+                              {section.stats.gpa.toFixed(2)}
                             </span>
                             <span className="text-muted-foreground text-[11px]">
-                              {section.stats.passed}/{section.groups.length} {isEnglish ? 'passed' : 'ناجح'}
+                              {section.stats.passed}/{section.groups.length}{" "}
+                              {isEnglish ? "passed" : "ناجح"}
                             </span>
                           </div>
                         </div>
                       </td>
                     </tr>
                     {section.groups.map((course) => {
-                      const midVal = course.midterm?.status === 'present' ? course.midterm.grade : 0;
-                      const finalVal = course.final?.status === 'present' ? course.final.grade : 0;
-                      const total = midVal + finalVal;
+                      const midVal =
+                        course.midterm?.status === "present"
+                          ? course.midterm.grade
+                          : 0;
+                      const finalVal =
+                        course.final?.status === "present"
+                          ? course.final.grade
+                          : 0;
+                      const total =
+                        course.officialResult?.total ??
+                        midVal + finalVal + (course.coursework?.grade ?? 0);
 
                       const maxMid = course.midterm?.maxGrade ?? 0;
                       const maxFin = course.final?.maxGrade ?? 0;
-                      const maxTotal = maxMid + maxFin;
+                      const maxTotal =
+                        course.officialResult?.totalMax ??
+                        maxMid + maxFin + (course.coursework?.maxGrade ?? 0);
 
-                      const isPass = total >= (maxTotal / 2) && course.final?.status === 'present';
-                      const isAbsent = course.final?.status === 'absent' || course.midterm?.status === 'absent';
-                      const isBanned = course.final?.status === 'banned' || course.midterm?.status === 'banned';
+                      const isPass =
+                        course.officialResult?.passed ??
+                        (total >= maxTotal / 2 &&
+                          course.final?.status === "present");
+                      const isAbsent =
+                        course.final?.status === "absent" ||
+                        course.midterm?.status === "absent";
+                      const isBanned =
+                        course.final?.status === "banned" ||
+                        course.midterm?.status === "banned";
 
-                      let statusText = '—';
-                      let statusBadgeClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+                      let statusText = "—";
+                      let statusBadgeClass =
+                        "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
 
-                      if (isBanned) {
-                        statusText = isEnglish ? 'Banned' : 'محجوب/محروم';
-                        statusBadgeClass = 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
+                      if (!course.final) {
+                        statusText = isEnglish
+                          ? "Pending official result"
+                          : tRelease("pendingResult");
+                        statusBadgeClass =
+                          "bg-muted text-muted-foreground border-border";
+                      } else if (isBanned) {
+                        statusText = isEnglish ? "Banned" : "محجوب/محروم";
+                        statusBadgeClass =
+                          "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
                       } else if (isAbsent) {
-                        statusText = isEnglish ? 'Absent' : 'غائب';
-                        statusBadgeClass = 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
+                        statusText = isEnglish ? "Absent" : "غائب";
+                        statusBadgeClass =
+                          "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30";
                       } else if (isPass) {
-                        statusText = isEnglish ? 'Pass' : 'ناجح';
-                        statusBadgeClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+                        statusText = isEnglish ? "Pass" : "ناجح";
+                        statusBadgeClass =
+                          "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
                       } else {
-                        statusText = isEnglish ? 'Fail' : 'راسب';
-                        statusBadgeClass = 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30';
+                        statusText = isEnglish ? "Fail" : "راسب";
+                        statusBadgeClass =
+                          "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30";
                       }
 
                       const percentage =
                         maxTotal > 0 ? (total / maxTotal) * 100 : 0;
                       const scale = calculateGradeScale(
                         percentage,
-                        course.final?.status,
+                        course.officialResult && !course.officialResult.passed
+                          ? "absent"
+                          : course.final?.status,
                       );
 
-                      let letterColor = 'bg-secondary text-foreground border-border';
-                      if (scale.letter.startsWith('A')) {
-                        letterColor = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-black';
-                      } else if (scale.letter.startsWith('B')) {
-                        letterColor = 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30 font-bold';
-                      } else if (scale.letter.startsWith('C')) {
-                        letterColor = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold';
-                      } else if (scale.letter.startsWith('D')) {
-                        letterColor = 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 font-bold';
-                      } else if (scale.letter === 'F') {
-                        letterColor = 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 font-black';
+                      let letterColor =
+                        "bg-secondary text-foreground border-border";
+                      if (scale.letter.startsWith("A")) {
+                        letterColor =
+                          "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-black";
+                      } else if (scale.letter.startsWith("B")) {
+                        letterColor =
+                          "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30 font-bold";
+                      } else if (scale.letter.startsWith("C")) {
+                        letterColor =
+                          "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold";
+                      } else if (scale.letter.startsWith("D")) {
+                        letterColor =
+                          "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30 font-bold";
+                      } else if (scale.letter === "F") {
+                        letterColor =
+                          "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 font-black";
                       }
 
                       return (
@@ -689,52 +901,76 @@ export default function StudentResultsPage() {
                               </bdi>
                               {course.creditHours ? (
                                 <span className="text-[10px] text-muted-foreground">
-                                  {course.creditHours} {isEnglish ? 'hrs' : 'ساعات'}
+                                  {course.creditHours}{" "}
+                                  {isEnglish ? "hrs" : "ساعات"}
                                 </span>
                               ) : null}
                             </div>
                           </td>
                           <td className="p-4 text-center">
                             {course.midterm ? (
-                              course.midterm.status === 'present' ? (
+                              course.midterm.status === "present" ? (
                                 <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
-                                  <bdi>{course.midterm.grade} / {course.midterm.maxGrade}</bdi>
+                                  <bdi>
+                                    {course.midterm.grade} /{" "}
+                                    {course.midterm.maxGrade}
+                                  </bdi>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                  {isEnglish ? 'Absent' : 'غائب'}
+                                  {isEnglish ? "Absent" : "غائب"}
                                 </span>
                               )
                             ) : (
-                              <span className="text-muted-foreground font-mono">—</span>
+                              <span className="text-muted-foreground font-mono">
+                                —
+                              </span>
                             )}
+                          </td>
+                          <td className="p-4 text-center font-mono">
+                            <bdi>
+                              {course.coursework
+                                ? `${course.coursework.grade} / ${course.coursework.maxGrade}`
+                                : "-"}
+                            </bdi>
                           </td>
                           <td className="p-4 text-center">
                             {course.final ? (
-                              course.final.status === 'present' ? (
+                              course.final.status === "present" ? (
                                 <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
-                                  <bdi>{course.final.grade} / {course.final.maxGrade}</bdi>
+                                  <bdi>
+                                    {course.final.grade} /{" "}
+                                    {course.final.maxGrade}
+                                  </bdi>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                  {isEnglish ? 'Absent' : 'غائب'}
+                                  {isEnglish ? "Absent" : "غائب"}
                                 </span>
                               )
                             ) : (
-                              <span className="text-muted-foreground font-mono">—</span>
+                              <span className="text-muted-foreground font-mono">
+                                —
+                              </span>
                             )}
                           </td>
                           <td className="p-4 text-center">
                             <div className="inline-flex flex-col items-center gap-1">
                               <span className="font-mono font-black text-sm text-foreground">
-                                <bdi>{total} / {maxTotal}</bdi>
+                                <bdi>
+                                  {course.final
+                                    ? `${total} / ${maxTotal}`
+                                    : "-"}
+                                </bdi>
                               </span>
                               <div className="w-16 bg-muted rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    isPass ? 'bg-emerald-500' : 'bg-red-500'
+                                    isPass ? "bg-emerald-500" : "bg-red-500"
                                   }`}
-                                  style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, percentage))}%`,
+                                  }}
                                 />
                               </div>
                               <span className="text-[10px] font-mono text-muted-foreground">
@@ -744,7 +980,9 @@ export default function StudentResultsPage() {
                           </td>
                           <td className="p-4 text-end">
                             <div className="flex items-center justify-end gap-2">
-                              <span className={`font-mono text-xs px-2.5 py-1 rounded-squircle border shadow-xs ${letterColor}`}>
+                              <span
+                                className={`font-mono text-xs px-2.5 py-1 rounded-squircle border shadow-xs ${letterColor}`}
+                              >
                                 {scale.letter}
                               </span>
                               <span

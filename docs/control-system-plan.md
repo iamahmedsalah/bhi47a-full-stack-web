@@ -6,16 +6,16 @@ Scope: the existing single-institute Student Portal, Arabic and English.
 
 ## Live phase tracker
 
-Updated: 6 November 2026. Current increment: **A + B + C**. Update this table, the phase checklists, and the verification log together after each increment; code presence alone is not completion.
+Updated: 6 November 2026. Current increment: **D + E + correction workflow in F**. Local test instructions and synthetic accounts: [control-testing.md](control-testing.md). Update this table, the phase checklists, and the verification log together after each increment; code presence alone is not completion.
 
 | Phase | Current status | Delivered work / remaining gate |
 | --- | --- | --- |
 | A — baseline and policy | Implementation reviewed; deployment data audit pending | Existing writers/readers and permissions mapped; coursework policy confirmed below. Historical production totals still need classification before migration. |
-| B — reliable entry and review | Implemented; final verification in progress | Transactional marks/audit, persistent clear revisions, independent review, locks, all-column workbook and coursework breakdown. |
-| C — Excel and reports | Implemented; final verification in progress | Scoped XLSX template, preview, valid-row commit, atomic receipt, stale preview rejection and whole-course context export. |
-| D — publication hardening | Pending; approval bridge implemented | Existing Grades page already enforces Control approval and records publish/hide in Control audit. Release snapshots/outbox and advanced reporting remain later work. |
-| E — official final course results | Pending; draft final entry available | Coursework/final columns and draft entry are available. Official final publication stays blocked until attempt-aware academic policy and GPA reconciliation are implemented. |
-| F — production acceptance | Pending | Pilot, production data reconciliation, rollback rehearsal and office acceptance. |
+| B — reliable entry and review | Locally verified | Transactional marks/audit, persistent clear revisions, independent review, locks, all-column workbook and coursework breakdown. |
+| C — Excel and reports | Locally verified | Scoped XLSX template, preview, valid-row commit, atomic receipt, stale preview rejection and whole-course context export. |
+| D — publication hardening | Implemented and locally tested | Grades preview/digest, immutable releases, atomic active pointers, withdrawal, history and durable in-app notification/reconciliation jobs. |
+| E — official final course results | Implemented and locally tested; historical rollout gate remains | Versioned pass/final-minimum/retake policy, complete approved results, attempt-aware GPA/credits/warnings and student/certificate coursework. Real historical totals still need classification. |
+| F — corrections and acceptance | Correction workflow and local demo delivered; production acceptance pending | Snapshot continuity, replacement releases and reversible academic effects. Staff pilot, production reconciliation and backup/restore rehearsal remain external gates. |
 | G — extensions | Optional / pending | Anonymous marking, practical/oral, multiple sittings and appeals. |
 
 ### Confirmed product decisions for this increment
@@ -24,22 +24,24 @@ Updated: 6 November 2026. Current increment: **A + B + C**. Update this table, t
 - Contributions are awarded marks, not unscaled source values. Example: 80% attendance gives 4/5; 80% in selected quizzes gives 12/15; coursework is 16/20. Review and round awarded contributions to the configured step before entry. Source attendance/quiz changes never silently overwrite marks. Automatic source selection/aggregation remains future work.
 - Start operationally with **midterm**, then prepare coursework/final using the same workbook. All columns remain visible: student, attendance, quizzes, coursework /20, midterm, final, course total, status and actions. Only the selected component is editable/reviewable.
 - **Grades remains the publication and open/close authority.** The flow is `Control entry -> submit -> different reviewer approves -> publish/hide on Grades -> student's Grades window`. An open window alone never reveals a draft. No competing publishing screen is introduced in this increment.
-- Existing historical results are retained. New Control midterm/coursework marks do not drive official GPA, credits or promotion. Student result reads no longer perform academic progression writes. Official final publication is a Phase E gate.
+- Existing historical results are retained. Independent Control midterm/coursework releases do not drive official GPA, credits or promotion; only activated complete official course outcomes do. Student result reads no longer perform academic progression writes. Official final publication now requires complete independently approved components and an explicit release. Confirmed configurable defaults: coursework 20 + midterm 20 + final 60, pass at 50%, no separate final minimum, latest approved attempt counts toward GPA. Policy freezes after the first course/term release.
 - Core component edits, including old manual/import APIs, must use Control. Legacy upload attempts receive an instruction to use the Control template. This intentionally closes the previous unaudited mutation bypass.
 
 ### Verification log
 
+Production acceptance evidence and outstanding gates are tracked in [control-production-acceptance.md](control-production-acceptance.md). On 6 November, the live portal's login/health returned 200 and existing protected routes returned 401, but the new Control policy/history routes returned 404. The explicitly configured database audit found no flagged inconsistencies (its identity as the live database is unconfirmed). A real synthetic backup/restore rehearsal passed across 16 collections. General performance E2E still times out in fixture setup; production acceptance remains pending.
+
 | Check | Evidence so far |
 | --- | --- |
-| Control unit suites | 4 suites, 36 tests passed within the full workspace run. Expanded tests are in `apps/api/src/modules/control/` |
-| Real MongoDB integration | 7 tests passed against the isolated replica set: atomic audit/receipt, concurrent writes, independent review and Grades visibility, XLSX coursework, clear revisions, stale previews/schemes and lock contention. Log: `outputs/control-integration-final.log` |
-| GUI acceptance | Passed: real component/CSS fixture in `apps/web/tests/control-workbook.browser.mjs`, Arabic/English, all columns, autosave/retry, draft restoration, stale-scheme refresh and desktop/mobile screenshots. Transport is mocked; persistence is verified separately. |
+| Control unit suites | 5 suites, 50 tests passed within the full workspace run. Expanded tests are in `apps/api/src/modules/control/` |
+| Real MongoDB integration | 12 tests passed: original transaction/import/review cases plus legacy course discovery and official 80/100 publication, stale activation rejection, correction continuity, GPA/credit/warning reconciliation, withdrawal/reactivation, drained outbox and preserving pre-migration published results, policy version/freeze checks and legacy coursework /20 normalization. Log: `outputs/control-release-integration.log` |
+| GUI acceptance | Workbook and release-panel fixtures passed, including real response envelopes and Arabic/English desktop/mobile. Release screenshots: `outputs/control-release-browser/`. Workbook evidence: real component/CSS fixture in `apps/web/tests/control-workbook.browser.mjs`, Arabic/English, all columns, autosave/retry, draft restoration, stale-scheme refresh and desktop/mobile screenshots. Transport is mocked; persistence is verified separately. |
 | Workspace lint | Passed with existing warnings; no errors |
-| Workspace typecheck | Passed, 4 tasks |
-| Full API unit run | Final run: 90 suites and 845 tests passed. Log: `outputs/control-unit.log` |
-| Production build | Prior Webpack production build passed; final source rerun pending. Default Turbopack stalled locally and is not counted as passed. |
+| Workspace typecheck | Backend, web and E2E fixture compilers passed separately; logs: `outputs/control-release-api-types.log`, `outputs/control-release-web-types.log`, `outputs/control-release-final-e2e-types.log` |
+| Full API unit run | 91 suites and 859 tests passed. Log: `outputs/control-release-unit-final.log` |
+| Production build | Root `pnpm run build` passed all 3 tasks with Turbopack; web TypeScript/route generation passed, and API runtime/root-route manifest audits passed. Final backend compatibility fix is checked separately in `outputs/control-release-final-api-build.log`. Log: `outputs/control-release-build.log` |
 | Read-only audit helper | `node --test apps/api/test/control-data-audit.test.cjs` passed; local inventory: `outputs/control-data-audit.json`. Empty canonical local grade collections do not establish anything about production data. |
-| General API E2E | Incomplete: local performance fixture startup exceeded its 120-second hook timeout. This is not a green full-CI claim. Log: `outputs/control-standard-e2e-final.log` |
+| General API E2E | Incomplete: local performance fixture startup exceeded its 120-second hook timeout; a later localhost MongoDB socket timeout also occurred. The unsuccessful broad run was stopped, with no timeouts weakened. This is not a green full-CI claim. Log: `outputs/control-release-general-e2e.log` |
 
 Local verification uses synthetic data on an isolated localhost MongoDB replica set. Docker failed to start on this machine, so a portable official MongoDB binary and all test data/caches are kept in ignored `outputs/` on D:. C: disk exhaustion affected initial runs; failed/stalled checks are not counted as passes.
 
@@ -49,9 +51,11 @@ Open **Admin -> Control**, select the year/semester and course, then select the 
 
 The workbook paginates 100 students per page. Imports and save batches support at most 500 changes; upload files are capped at 2 MB. Rosters above 2,000 approved registrations produce an explicit overflow error. Unsaved drafts survive navigation within the same tab for the same authenticated user; review and retry restored drafts explicitly. Refreshing or closing the browser requires resolving the unsaved-work warning.
 
-After all students have a mark or reviewed status, submit the sheet. A different user with review permission approves it. Publish it from **Grades** and configure that page's opening/closing window. For corrections, hide the sheet's results in Grades, reopen it in Control with a reason, correct, review and publish again. This increment deliberately hides corrected results until reapproval; continuity through immutable published snapshots belongs to Phase D.
+After all students have a mark or reviewed status, submit the sheet. A different user with review permission approves it. Publish it from **Grades** and configure that page's opening/closing window. For corrections to a snapshot-backed release, reopen it in Control with a reason, correct, review and activate a fresh preview in Grades. The old snapshot stays visible until replacement. Withdraw explicitly from Grades to hide a release. A legacy published sheet without a snapshot must still be hidden before reopening.
 
 Grant new staff capabilities explicitly: `control.sheets.submit`, `control.sheets.review`, `control.import`, and `control.export`, together with existing Control access/view/entry permissions and course assignments. Admins retain the existing role bypass for permissions, but cannot self-approve a submitted sheet.
+
+The live tracker and [test guide](control-testing.md) describe delivered behavior. Detailed design sections below also retain proposed future extensions; they are not a claim that optional Phase G has shipped.
 
 ## 1. Outcome and delivery boundaries
 
@@ -391,29 +395,31 @@ Exit: a stale preview cannot overwrite a newer mark; retry is idempotent; all ro
 
 ### Phase D — Controlled midterm publication
 
-- [ ] Add release preview/activation/withdrawal and status UI.
-- [ ] Serve migrated student midterms from immutable released snapshots; preserve result-window policy.
-- [ ] Add notification outbox/job retry and reconcile delivery separately from release state.
+- [x] Add release preview/activation/withdrawal and status UI, with digest-bound activation and release history.
+- [x] Serve newly activated Control components from immutable release snapshots; preserve result-window policy. Releasing approved historical marks requires explicit review; no automatic historical-total conversion is performed.
+- [x] Add durable reconciliation/in-app notification outbox, deterministic delivery IDs, worker polling, admin retry and pending-job visibility. FCM/email delivery is not claimed.
 
 Exit: only approved scoped marks are visible; no partial release is exposed; repeated activation cannot duplicate releases/notifications; midterm publication does not award credits or change GPA/progression.
 
 ### Phase E — Coursework, final, and complete course results
 
-- [ ] Generalize the grid and API to approved coursework/final schemes; replace current Phase 5 placeholders.
-- [ ] Classify/migrate legacy totals, version schemes, and implement the official-result evaluator.
-- [ ] Add required-component checks, final-status/pass policy, and attempt-aware retake handling.
-- [ ] Publish approved full course results and reconcile GPA, credits, warnings, and progression idempotently.
+- [x] Generalize the grid, overview component selector and API to coursework/final; fix all Control JSON responses to unwrap the production API envelope.
+- [x] Version result policy and implement the official-result evaluator; preserve a historical academic baseline.
+- [ ] Classify and reconcile real historical totals on an approved staging copy before migration.
+- [x] Add required-component, final-status/pass/minimum checks and configurable latest/best approved retake handling, keeping terms distinct.
+- [x] Activate complete approved course results and reconcile GPA, credits, warnings and progression through durable jobs. Repeating reconciliation does not increment credits or warnings; incomplete historical evidence retains baseline GPA.
 
 Exit: 17 + 15 + 48 produces exactly 80/100 under the example scheme; missing/deferred components block official totals; no double counting; repeated reconciliation is a no-op; terms/retakes never merge accidentally.
 
 ### Phase F — Corrections, migration, and production acceptance
 
-- [ ] Support corrected draft -> review -> replacement release, with public old-version continuity.
+- [x] Support corrected draft -> review -> replacement release with previous-version continuity; verify withdrawal reverses academic effects against the retained baseline.
 - [ ] Validate withdrawal effects, audit exports, backup restoration, and rollback compatibility.
 - [ ] Pilot one course/term, reconcile counts and totals with Control staff, then expand by explicit migrated scope.
-- [ ] Confirm browser, integration, performance, and operational release gates below.
+- [x] Verify local bilingual workbook/release browser fixtures and real MongoDB release/correction/reconciliation; provide an isolated, non-destructive interactive demo.
+- [ ] Complete staging-scale performance, backup/restore and operational acceptance gates below.
 
-Exit: end-to-end acceptance from roster to student visibility and corrected academic effects, with signed policy decisions, reconciled migration results, and no unresolved release-blocking failures.
+Exit: end-to-end acceptance from roster to student visibility and corrected academic effects, with signed policy decisions, reconciled migration results, and no unresolved release-blocking failures. Local synthetic acceptance is delivered; production acceptance is not claimed.
 
 ### Phase G — Extensions after core acceptance
 

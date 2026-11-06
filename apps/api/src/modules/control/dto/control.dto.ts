@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -23,9 +23,11 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CONTROL_COMPONENT_KEYS,
+  COURSE_LEVEL_VALUES,
   GRADE_STATUS_VALUES,
   SEMESTER_VALUES,
   type ControlComponentKey,
+  type CourseLevel,
   type GradeStatus,
   type Semester,
 } from '@student-portal/shared';
@@ -45,6 +47,11 @@ export class ControlTermQueryDto {
   @ApiProperty({ enum: SEMESTER_VALUES })
   @IsEnum(SEMESTER_VALUES)
   semester!: Semester;
+
+  @ApiPropertyOptional({ enum: COURSE_LEVEL_VALUES })
+  @IsOptional()
+  @IsEnum(COURSE_LEVEL_VALUES)
+  level?: CourseLevel;
 }
 
 export class OpenSheetDto extends ControlTermQueryDto {

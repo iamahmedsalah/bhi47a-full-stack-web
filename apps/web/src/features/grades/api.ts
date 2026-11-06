@@ -1,4 +1,4 @@
-import api from '@/lib/api';
+import api from "@/lib/api";
 
 export interface GradeItem {
   _id: string;
@@ -29,21 +29,31 @@ export interface ListGradesResponse {
 }
 
 export const gradeKeys = {
-  all: ['admin-grades'] as const,
-  list: (params?: Record<string, unknown>) => [...gradeKeys.all, 'list', params] as const,
+  all: ["admin-grades"] as const,
+  list: (params?: Record<string, unknown>) =>
+    [...gradeKeys.all, "list", params] as const,
 };
 
-export async function listAdminGrades(params?: Record<string, unknown>): Promise<ListGradesResponse> {
-  const response = await api.get<ListGradesResponse>('/admin/grades', { params });
+export async function listAdminGrades(
+  params?: Record<string, unknown>,
+): Promise<ListGradesResponse> {
+  const response = await api.get<ListGradesResponse>("/admin/grades", {
+    params,
+  });
   return response.data;
 }
 
-export async function saveGrade(dto: Record<string, unknown>): Promise<GradeItem> {
-  const response = await api.post<GradeItem>('/admin/grades', dto);
+export async function saveGrade(
+  dto: Record<string, unknown>,
+): Promise<GradeItem> {
+  const response = await api.post<GradeItem>("/admin/grades", dto);
   return response.data;
 }
 
-export async function updateGrade(id: string, dto: Record<string, unknown>): Promise<GradeItem> {
+export async function updateGrade(
+  id: string,
+  dto: Record<string, unknown>,
+): Promise<GradeItem> {
   const response = await api.patch<GradeItem>(`/admin/grades/${id}`, dto);
   return response.data;
 }
@@ -53,8 +63,20 @@ export async function deleteGrade(id: string): Promise<{ message: string }> {
   return response.data;
 }
 
-export async function publishGradesBulk(dto: Record<string, unknown>): Promise<{ modifiedCount: number }> {
-  const response = await api.post<{ modifiedCount: number }>('/admin/grades/publish', dto);
+export async function publishGradesBulk(
+  dto: Record<string, unknown>,
+): Promise<{ modifiedCount: number }> {
+  if (dto.isPublished && !dto.releaseDigests) {
+    const preview = await api.post<{ releaseDigests: Record<string, string> }>(
+      "/admin/grades/release-preview",
+      dto,
+    );
+    dto = { ...dto, releaseDigests: preview.data.releaseDigests };
+  }
+  const response = await api.post<{ modifiedCount: number }>(
+    "/admin/grades/publish",
+    dto,
+  );
   return response.data;
 }
 
@@ -93,7 +115,7 @@ export async function recalculateAcademicProgress(options?: {
   maxAllowedCarriedCourses?: number;
 }): Promise<AcademicProgressRecalculateResult> {
   const response = await api.post<AcademicProgressRecalculateResult>(
-    '/admin/grades/recalculate-progress',
+    "/admin/grades/recalculate-progress",
     options ?? {},
   );
   return response.data;
@@ -112,7 +134,7 @@ export interface AuditAcademicWarningsResult {
     gpa: number;
     previousWarnings: number;
     newWarnings: number;
-    status: 'WARNED' | 'CLEARED' | 'GOOD_STANDING';
+    status: "WARNED" | "CLEARED" | "GOOD_STANDING";
     isActionRequired: boolean;
   }>;
 }
@@ -121,7 +143,7 @@ export async function auditAcademicWarnings(options?: {
   dryRun?: boolean;
 }): Promise<AuditAcademicWarningsResult> {
   const response = await api.post<AuditAcademicWarningsResult>(
-    '/admin/grades/audit-warnings',
+    "/admin/grades/audit-warnings",
     options ?? {},
   );
   return response.data;
@@ -135,20 +157,23 @@ export interface GradesSettingsData {
 }
 
 export async function getGradesSettings(): Promise<GradesSettingsData> {
-  const response = await api.get<GradesSettingsData>('/admin/grades/settings');
+  const response = await api.get<GradesSettingsData>("/admin/grades/settings");
   return response.data;
 }
 
 export async function updateGradesSettings(
   dto: Partial<GradesSettingsData>,
 ): Promise<GradesSettingsData> {
-  const response = await api.patch<GradesSettingsData>('/admin/grades/settings', dto);
+  const response = await api.patch<GradesSettingsData>(
+    "/admin/grades/settings",
+    dto,
+  );
   return response.data;
 }
 
 export interface StudentResultsStatusData {
   isOpen: boolean;
-  reason?: 'system_closed' | 'not_started' | 'ended' | 'level_not_published';
+  reason?: "system_closed" | "not_started" | "ended" | "level_not_published";
   openAt?: string;
   closeAt?: string;
   studentLevel: string;
@@ -156,6 +181,8 @@ export interface StudentResultsStatusData {
 }
 
 export async function getStudentResultsStatus(): Promise<StudentResultsStatusData> {
-  const response = await api.get<StudentResultsStatusData>('/students/me/results-window');
+  const response = await api.get<StudentResultsStatusData>(
+    "/students/me/results-window",
+  );
   return response.data;
 }

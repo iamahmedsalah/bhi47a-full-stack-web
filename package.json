@@ -30,7 +30,12 @@
     "test:control:e2e": "node apps/api/test/control/run.cjs",
     "test:control:audit": "node --test apps/api/test/control-data-audit.test.cjs",
     "test:control:browser": "node apps/web/tests/control-workbook.browser.mjs",
-    "test:control:services": "docker compose -p student-portal-control-e2e -f docker-compose.control-test.yml up -d --wait"
+    "test:control:release:browser": "node apps/web/tests/control-release.browser.mjs",
+    "seed:control:demo": "node scripts/seed-control-demo.cjs",
+    "test:control:services": "docker compose -p student-portal-control-e2e -f docker-compose.control-test.yml up -d --wait",
+    "audit:control:acceptance": "node apps/api/test/control/acceptance-audit.cjs",
+    "test:control:restore": "node --experimental-require-module apps/api/test/control/restore-rehearsal.cjs",
+    "test:control:acceptance-safety": "node --test apps/api/test/control/acceptance-audit-safety.test.cjs apps/api/test/control/restore-safety.test.cjs"
   },
   "devDependencies": {
     "rimraf": "6.1.3",

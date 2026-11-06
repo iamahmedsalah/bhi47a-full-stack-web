@@ -101,6 +101,12 @@ jobs:
       - name: Verify admission replica-set runner isolation
         run: node --test apps/api/test/admissions/runner-safety.test.cjs
 
+      - name: Verify Control fixture and data-audit safety
+        run: node --test apps/api/test/control/runner-safety.test.cjs apps/api/test/control-data-audit.test.cjs scripts/seed-control-demo.test.cjs
+
+      - name: Verify Control acceptance audit and restore isolation
+        run: pnpm run test:control:acceptance-safety
+
       - name: Lint workspace
         run: pnpm run lint
 
@@ -159,6 +165,16 @@ jobs:
 
       - name: Test student-code transactions and concurrent allocation
         run: pnpm --filter @student-portal/api test:admissions:e2e
+
+      - name: Test Control releases, corrections and academic reconciliation
+        run: pnpm run test:control:e2e
+        env:
+          CONTROL_TEST_MONGODB_URI: mongodb://127.0.0.1:27021/control-e2e
+
+      - name: Test Control workbook and result releases in Chromium
+        run: |
+          pnpm run test:control:browser
+          pnpm run test:control:release:browser
 
       - name: Stop isolated admission services
         if: always()

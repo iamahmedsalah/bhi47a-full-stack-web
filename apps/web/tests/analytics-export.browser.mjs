@@ -21,20 +21,23 @@ await fs.writeFile(path.join(output, 'api.ts'), `
 export const getApiErrorMessage = (e, fallback) => e.message || fallback;
 export default {get:async (url, options) => {
   const query = new URLSearchParams();
-  for(const [key,value] of Object.entries(options.params)) if(value !== undefined) query.set(key,String(value));
+  for(const [key,value] of Object.entries(options?.params ?? {})) if(value !== undefined) query.set(key,String(value));
   const response = await fetch(url+'?'+query);
   if(!response.ok) throw await response.json();
-  return response.blob(); // The real Axios interceptor unwraps binary responses.
+  return options?.responseType === 'blob' ? response.blob() : {data: await response.json()}; // Match binary vs JSON API response shapes.
 }};`);
 await fs.writeFile(path.join(output, 'entry.tsx'), `
 import React,{useState} from 'react'; import {createRoot} from 'react-dom/client';
 import {NextIntlClientProvider} from 'next-intl';
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
+import {DeferredAnalyticsSummary} from '${path.join(web, 'src/features/analytics/components/deferred-analytics-summary.tsx').replaceAll('\\', '/')}';
 import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';
 import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';
 import {AnalyticsExportModal} from '${path.join(web, 'src/features/analytics/components/analytics-export-modal.tsx').replaceAll('\\', '/')}';
 const locale = new URLSearchParams(location.search).get('locale') || 'en';
 document.documentElement.dir = locale === 'ar' ? 'rtl':'ltr';
-function App(){const [open,setOpen]=useState(true);return <NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar:en} timeZone="Africa/Cairo"><button id="reopen" onClick={()=>setOpen(true)}>Open export</button><AnalyticsExportModal open={open} onOpenChange={setOpen} locale={locale}/></NextIntlClientProvider>}
+const client=new QueryClient();
+function App(){const [open,setOpen]=useState(true);if(location.search.includes('performance'))return <QueryClientProvider client={client}><div style={{height:2500}}>Dashboard above fold</div><div id="advanced-performance"><DeferredAnalyticsSummary isAr={false}/></div></QueryClientProvider>;return <NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar:en} timeZone="Africa/Cairo"><button id="reopen" onClick={()=>setOpen(true)}>Open export</button><AnalyticsExportModal open={open} onOpenChange={setOpen} locale={locale}/></NextIntlClientProvider>}
 createRoot(document.getElementById('root')).render(<App/>);`);
 await new Promise((resolve, reject) => webpack({
   mode:'development', devtool:false, target:'web', entry:path.join(output, 'entry.tsx'),
@@ -46,11 +49,13 @@ const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({bas
 await fs.writeFile(path.join(output,'styles.css'),css.css);
 const requests = [];
 let failNext = false;
+let overviewRequests = 0;
 let hold = false;
 let release;
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url,'http://localhost');
+    if(url.pathname === '/admin/analytics/overview') { overviewRequests++; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({kpis:{totalQuizzes:0,publishedQuizzes:0,activeQuizzes:0,avgQuizParticipationRate:0,avgQuizPassRate:0,totalCourses:0,activeCourses:0},staffPerformance:[],coursePerformance:[]}));return;}
     if(url.pathname === '/admin/analytics/report/export') {
       const query = Object.fromEntries(url.searchParams); requests.push(query);
       if(hold) await new Promise(resolve => { release=resolve; });
@@ -61,7 +66,7 @@ const server = http.createServer(async (req,res) => {
       res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.end(await workbook.xlsx.writeBuffer()); return;
     }
-    const asset=url.pathname === '/bundle.js' || url.pathname === '/styles.css' ? path.join(output,url.pathname.slice(1)) : url.pathname.startsWith('/fonts/') ? path.join(web,'public',url.pathname) : null;
+    const asset=/^\/[\w.-]+\.js$/.test(url.pathname) || url.pathname === '/styles.css' ? path.join(output,url.pathname.slice(1)) : url.pathname.startsWith('/fonts/') ? path.join(web,'public',url.pathname) : null;
     if(asset){res.setHeader('Content-Type',url.pathname.endsWith('.js')?'text/javascript':url.pathname.endsWith('.css')?'text/css':'font/woff2');res.end(await fs.readFile(asset));return;}
     res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><html class="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   } catch(error){res.statusCode=500;res.end(String(error));}
@@ -74,6 +79,13 @@ try {
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue():route.abort());
   const base=`http://127.0.0.1:${server.address().port}`;
+  await page.goto(base+'/?performance=1');
+  await page.locator('#advanced-performance').waitFor();
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(overviewRequests,0,'Below-fold analytics must not fetch during initial dashboard rendering');
+  await page.locator('#advanced-performance').scrollIntoViewIfNeeded();
+  await page.getByText('Quizzes, Faculty Performance & Course Pass Rates',{exact:true}).waitFor();
+  assert.equal(overviewRequests,1,'Analytics fetch once when their section approaches the viewport');
   const select=async(label,option)=>{try {await page.getByRole('combobox',{name:label,exact:true}).click({timeout:10000});await page.getByRole('option',{name:option,exact:true}).click();}catch(error){await page.screenshot({path:path.join(output,'failure.png')});await fs.writeFile(path.join(output,'failure.html'),await page.content());console.error('Selectors:',await page.locator('[role=combobox]').evaluateAll(items=>items.map(item=>item.outerHTML)),errors);throw error;}};
   const download=async(label)=>{
     const [file]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:label,exact:true}).click()]);
@@ -139,5 +151,5 @@ try {
     await page.setViewportSize({width:1440,height:1050});
   }
   assert.deepEqual(errors,[]);
-  console.log('PASS: Arabic/English analytics exports, real XLSX downloads, full/selected sheets, level 3–4 departments, stale-filter clearing, retry, duplicate-click guard and mobile layout.');
+  console.log('PASS: deferred dashboard analytics request timing, Arabic/English analytics exports, real XLSX downloads, full/selected sheets, level 3–4 departments, stale-filter clearing, retry, duplicate-click guard and mobile layout.');
 } finally {if(release)release();await browser?.close();await new Promise(resolve=>server.close(resolve));}

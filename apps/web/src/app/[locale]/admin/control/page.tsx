@@ -1,56 +1,80 @@
-'use client';
+"use client";
 
-import React, { Suspense, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from "next-intl";
+import React, { Suspense, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
 import {
   ExternalLink,
   Loader2,
+  Lock,
   MoreVertical,
+  ShieldCheck,
   SlidersHorizontal,
   TableProperties,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { PERMISSIONS, type Semester } from '@student-portal/shared';
-import { getApiErrorMessage } from '@/lib/api';
-import { useTableState } from '@/hooks/use-table-state';
+  Unlock,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  PERMISSIONS,
+  type Semester,
+  type ControlComponentKey,
+} from "@student-portal/shared";
+import { getApiErrorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { useTableState } from "@/hooks/use-table-state";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   CustomDropdown,
   type CustomDropdownOption,
-} from '@/components/ui/custom-dropdown';
+} from "@/components/ui/custom-dropdown";
 import {
   DataTableShell,
   type ColumnDef,
-} from '@/components/ui/data-table-shell';
-import { FilterBar } from '@/components/ui/filter-bar';
-import { Input } from '@/components/ui/input';
-import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
-import { PageTitleBanner } from '@/components/ui/page-title-banner';
-import { PermissionGuard } from '@/components/ui/permission-guard';
+} from "@/components/ui/data-table-shell";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
+import { PageTitleBanner } from "@/components/ui/page-title-banner";
+import { PermissionGuard } from "@/components/ui/permission-guard";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { StatusBadge } from '@/components/ui/status-badge';
-import { TableCell } from '@/components/ui/table';
+} from "@/components/ui/select";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { TableCell } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   controlKeys,
   getControlCapabilities,
   listControlCourses,
+  lockControlSheet,
   openControlSheet,
-} from '@/features/control/api';
-import { GradingSchemeDialog } from '@/features/control/components/grading-scheme-dialog';
-import type { ControlCourseSummary } from '@/features/control/types';
+  unlockControlSheet,
+} from "@/features/control/api";
+import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
+import type { ControlCourseSummary } from "@/features/control/types";
 
 function ControlHomeContent() {
+  const releaseText = useTranslations("controlRelease");
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const locale = (params?.locale as string) || 'ar';
-  const isAr = locale === 'ar';
+  const locale = (params?.locale as string) || "ar";
+  const isAr = locale === "ar";
 
   const {
     search,
@@ -61,14 +85,22 @@ function ControlHomeContent() {
     setSelectedKeys,
   } = useTableState({
     defaultFilters: {
-      academicYear: '2026-2027',
-      semester: 'first',
-      status: 'all',
+      academicYear: "2026-2027",
+      semester: "first",
+      status: "all",
+      component: "midterm",
+      level: "all",
     },
   });
 
-  const academicYear = filters.academicYear || '2026-2027';
-  const semester = (filters.semester || 'first') as Semester;
+  const component = (
+    ["midterm", "coursework", "final"].includes(filters.component)
+      ? filters.component
+      : "midterm"
+  ) as ControlComponentKey;
+  const academicYear = filters.academicYear || "2026-2027";
+  const semester = (filters.semester || "first") as Semester;
+  const level = filters.level || "all";
 
   const { data: caps } = useQuery({
     queryKey: controlKeys.me(),
@@ -82,13 +114,55 @@ function ControlHomeContent() {
     error,
     refetch,
   } = useQuery({
-    queryKey: controlKeys.courses(academicYear, semester),
-    queryFn: () => listControlCourses({ academicYear, semester }),
+    queryKey: controlKeys.courses(academicYear, semester, level),
+    queryFn: () =>
+      listControlCourses({
+        academicYear,
+        semester,
+        level: level !== "all" ? level : undefined,
+      }),
     enabled: Boolean(academicYear && /^\d{4}-\d{4}$/.test(academicYear)),
   });
 
-  const [schemeTarget, setSchemeTarget] =
-    useState<ControlCourseSummary | null>(null);
+  const [schemeTarget, setSchemeTarget] = useState<ControlCourseSummary | null>(
+    null,
+  );
+  const [lockTarget, setLockTarget] = useState<{
+    sheetId: string;
+    locked: boolean;
+    courseCode: string;
+    courseName: string;
+  } | null>(null);
+  const [lockReason, setLockReason] = useState("");
+
+  const toggleLockMutation = useMutation({
+    mutationFn: async () => {
+      if (!lockTarget) return;
+      return lockTarget.locked
+        ? unlockControlSheet(lockTarget.sheetId, lockReason.trim())
+        : lockControlSheet(lockTarget.sheetId, lockReason.trim() || undefined);
+    },
+    onSuccess: (updated) => {
+      toast.success(
+        updated?.sheet.locked
+          ? isAr
+            ? "تم قفل كشف الرصد بنجاح"
+            : "Sheet locked successfully"
+          : isAr
+            ? "تم فك قفل الكشف بنجاح"
+            : "Sheet unlocked successfully",
+      );
+      setLockTarget(null);
+      setLockReason("");
+      queryClient.invalidateQueries({
+        queryKey: controlKeys.courses(academicYear, semester, level),
+      });
+      queryClient.invalidateQueries({ queryKey: controlKeys.all });
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
+    },
+  });
 
   const openSheetMutation = useMutation({
     mutationFn: (courseId: string) =>
@@ -96,13 +170,13 @@ function ControlHomeContent() {
         academicYear,
         semester,
         courseId,
-        component: 'midterm',
+        component,
       }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({
-        queryKey: controlKeys.courses(academicYear, semester),
+        queryKey: controlKeys.courses(academicYear, semester, level),
       });
-      router.push(`/${locale}/admin/control/${res.sheet.id}`);
+      router.push(`/${locale}/admin/control/${res.sheet.slug || res.sheet.id}`);
     },
     onError: (err) => {
       toast.error(getApiErrorMessage(err));
@@ -114,22 +188,26 @@ function ControlHomeContent() {
     const needle = search.trim().toLowerCase();
     return items.filter((course) => {
       if (needle) {
-        const hay = `${course.code} ${course.name} ${course.nameAr ?? ''} ${course.nameEn ?? ''}`.toLowerCase();
+        const hay =
+          `${course.code} ${course.name} ${course.nameAr ?? ""} ${course.nameEn ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
-      const mid = course.components.find((c) => c.key === 'midterm');
-      if (filters.status === 'locked' && !mid?.locked) return false;
-      if (filters.status === 'open' && mid?.locked) return false;
+      if (level !== "all" && course.level && course.level !== level) {
+        return false;
+      }
+      const mid = course.components.find((c) => c.key === component);
+      if (filters.status === "locked" && !mid?.locked) return false;
+      if (filters.status === "open" && mid?.locked) return false;
       return true;
     });
-  }, [coursesData?.items, search, filters.status]);
+  }, [coursesData?.items, search, filters.status, component, level]);
 
   const columns = useMemo<ColumnDef<ControlCourseSummary>[]>(
     () => [
       {
-        key: 'code',
-        header: isAr ? 'كود المقرر' : 'Course Code',
-        className: 'w-28',
+        key: "code",
+        header: isAr ? "كود المقرر" : "Course Code",
+        className: "w-28",
         render: (item) => (
           <TableCell className="w-28 font-mono font-bold text-foreground">
             <bdi dir="ltr">{item.code}</bdi>
@@ -137,16 +215,39 @@ function ControlHomeContent() {
         ),
       },
       {
-        key: 'name',
-        header: isAr ? 'اسم المقرر' : 'Course Name',
-        className: 'min-w-[220px]',
+        key: "name",
+        header: isAr ? "اسم المقرر" : "Course Name",
+        className: "min-w-[220px]",
         render: (item) => {
           const title = isAr
             ? item.nameAr || item.name
             : item.nameEn || item.name;
+          const levelLabel = item.level
+            ? isAr
+              ? `الفرقة ${
+                  item.level === "1"
+                    ? "الأولى"
+                    : item.level === "2"
+                      ? "الثانية"
+                      : item.level === "3"
+                        ? "الثالثة"
+                        : "الرابعة"
+                }`
+              : `Level ${item.level}`
+            : null;
           return (
             <TableCell className="min-w-[220px]">
-              <div className="font-semibold text-foreground">{title}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-foreground">{title}</span>
+                {levelLabel && (
+                  <Badge
+                    variant="outline"
+                    className="rounded-squircle text-[10px] py-0 px-2 font-medium border-primary/30 text-primary bg-primary/5"
+                  >
+                    {levelLabel}
+                  </Badge>
+                )}
+              </div>
               {item.nameAr && item.nameEn && (
                 <div className="text-[11px] text-muted-foreground">
                   {isAr ? item.nameEn : item.nameAr}
@@ -157,32 +258,33 @@ function ControlHomeContent() {
         },
       },
       {
-        key: 'component',
-        header: isAr ? 'المكوّن' : 'Component',
-        className: 'w-32 text-center',
+        key: "component",
+        header: isAr ? "المكوّن" : "Component",
+        className: "w-32 text-center",
         render: () => (
           <TableCell className="w-32 text-center">
-            <StatusBadge
-              label={isAr ? 'ميدتيرم' : 'Midterm'}
-              variant="primary"
-            />
+            <StatusBadge label={releaseText(component)} variant="primary" />
           </TableCell>
         ),
       },
       {
-        key: 'progress',
-        header: isAr ? 'تقدم الرصد (المرصود / المسجلين)' : 'Entry Progress',
-        className: 'min-w-[200px]',
+        key: "progress",
+        header: isAr ? "تقدم الرصد (المرصود / المسجلين)" : "Entry Progress",
+        className: "min-w-[200px]",
         render: (item) => {
-          const mid = item.components.find((c) => c.key === 'midterm');
+          const mid = item.components.find((c) => c.key === component);
           const entered = mid?.entered ?? 0;
           const total = Math.max(item.rosterCount, entered);
-          const pct = total > 0 ? Math.min(100, Math.round((entered / total) * 100)) : 0;
+          const pct =
+            total > 0 ? Math.min(100, Math.round((entered / total) * 100)) : 0;
 
           return (
             <TableCell className="min-w-[200px]">
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-mono" dir="ltr">
+                <div
+                  className="flex items-center justify-between text-xs font-mono"
+                  dir="ltr"
+                >
                   <span className="font-bold text-foreground">
                     {entered} / {item.rosterCount}
                   </span>
@@ -200,27 +302,93 @@ function ControlHomeContent() {
         },
       },
       {
-        key: 'status',
-        header: isAr ? 'حالة الكشف' : 'Sheet Status',
-        className: 'w-32 text-center',
+        key: "status",
+        header: isAr ? "حالة الكشف" : "Sheet Status",
+        className: "w-40 text-center",
         render: (item) => {
-          const mid = item.components.find((c) => c.key === 'midterm');
+          const mid = item.components.find((c) => c.key === component);
+          const isLocked = Boolean(mid?.locked);
+          const canToggle = Boolean(
+            mid?.sheetId &&
+              ((isLocked && caps?.canUnlock) || (!isLocked && caps?.canLock)),
+          );
+
           return (
-            <TableCell className="w-32 text-center">
-              <StatusBadge
-                label={mid?.locked ? 'locked' : 'unlocked'}
-                variant={mid?.locked ? 'warning' : 'success'}
-              />
+            <TableCell className="w-40 text-center">
+              <div className="inline-flex flex-col items-center gap-1">
+                {canToggle ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!mid?.sheetId) return;
+                      setLockReason("");
+                      setLockTarget({
+                        sheetId: mid.sheetId,
+                        locked: isLocked,
+                        courseCode: item.code,
+                        courseName:
+                          (isAr
+                            ? item.nameAr || item.name
+                            : item.nameEn || item.name),
+                      });
+                    }}
+                    title={
+                      isAr
+                        ? isLocked
+                          ? "الكشف مقفول - انقر لفك القفل"
+                          : "الكشف مفتوح - انقر للقفل"
+                        : isLocked
+                          ? "Sheet is locked - click to unlock"
+                          : "Sheet is open - click to lock"
+                    }
+                    className={cn(
+                      "group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-squircle text-xs font-semibold transition-all border cursor-pointer",
+                      isLocked
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
+                    )}
+                  >
+                    {isLocked ? (
+                      <Lock className="h-3 w-3 text-amber-400" />
+                    ) : (
+                      <Unlock className="h-3 w-3 text-emerald-400" />
+                    )}
+                    <span>
+                      {isAr
+                        ? isLocked
+                          ? "مغلق"
+                          : "مفتوح"
+                        : isLocked
+                          ? "Locked"
+                          : "Open"}
+                    </span>
+                  </button>
+                ) : (
+                  <StatusBadge
+                    label={isLocked ? "locked" : "unlocked"}
+                    variant={isLocked ? "warning" : "success"}
+                  />
+                )}
+                <span className="text-[10px] text-muted-foreground">
+                  {isAr
+                    ? isLocked
+                      ? "للقراءة فقط"
+                      : "متاح للرصد"
+                    : isLocked
+                      ? "Read-only"
+                      : "Accepting marks"}
+                </span>
+              </div>
             </TableCell>
           );
         },
       },
       {
-        key: 'visibility',
-        header: isAr ? 'الظهور للطالب (موديول الدرجات)' : 'Published Count',
-        className: 'w-40 text-center',
+        key: "visibility",
+        header: isAr ? "الظهور للطالب (موديول الدرجات)" : "Published Count",
+        className: "w-40 text-center",
         render: (item) => {
-          const mid = item.components.find((c) => c.key === 'midterm');
+          const mid = item.components.find((c) => c.key === component);
           const pub = mid?.published ?? 0;
           return (
             <TableCell className="w-40 text-center">
@@ -230,39 +398,70 @@ function ControlHomeContent() {
                     ? isAr
                       ? `منشور (${pub})`
                       : `Published (${pub})`
-                    : 'hidden'
+                    : "hidden"
                 }
-                variant={pub > 0 ? 'info' : 'neutral'}
+                variant={pub > 0 ? "info" : "neutral"}
               />
             </TableCell>
           );
         },
       },
       {
-        key: 'actions',
-        header: isAr ? 'إجراءات' : 'Actions',
-        className: 'w-14 text-center',
+        key: "actions",
+        header: isAr ? "إجراءات" : "Actions",
+        className: "w-14 text-center",
         render: (item) => {
-          const mid = item.components.find((c) => c.key === 'midterm');
+          const mid = item.components.find((c) => c.key === component);
           const canOpen = Boolean(
             mid?.sheetId || caps?.canCreateSheets || caps?.scopeAll,
           );
+          const isLocked = Boolean(mid?.locked);
           const options: CustomDropdownOption[] = [
             ...(canOpen
               ? [
                   {
-                    value: 'open',
+                    value: "open",
                     label: (
                       <div className="flex items-center gap-2 text-xs py-0.5">
                         <ExternalLink className="h-3.5 w-3.5 text-primary" />
                         <span>
                           {mid?.sheetId
                             ? isAr
-                              ? 'فتح شبكة رصد الدرجات'
-                              : 'Open Grade Sheet Grid'
+                              ? "فتح شبكة رصد الدرجات"
+                              : "Open Grade Sheet Grid"
                             : isAr
-                              ? 'إنشاء وفتح كشف الميدتيرم'
-                              : 'Create & Open Midterm Sheet'}
+                              ? "إنشاء وفتح كشف الميدتيرم"
+                              : "Create & Open Grade Sheet"}
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
+            ...(mid?.sheetId && !isLocked && caps?.canLock
+              ? [
+                  {
+                    value: "lock",
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5 text-amber-400">
+                        <Lock className="h-3.5 w-3.5 text-amber-400" />
+                        <span>
+                          {isAr ? "قفل كشف الرصد" : "Lock Grade Sheet"}
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
+            ...(mid?.sheetId && isLocked && caps?.canUnlock
+              ? [
+                  {
+                    value: "unlock",
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5 text-emerald-400">
+                        <Unlock className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>
+                          {isAr ? "فك قفل كشف الرصد" : "Unlock Grade Sheet"}
                         </span>
                       </div>
                     ),
@@ -272,14 +471,14 @@ function ControlHomeContent() {
             ...(caps?.canManageSchemes
               ? [
                   {
-                    value: 'scheme',
+                    value: "scheme",
                     label: (
                       <div className="flex items-center gap-2 text-xs py-0.5">
                         <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
                         <span>
                           {isAr
-                            ? 'ضبط الدرجات العظمى وخطوة الرصد'
-                            : 'Configure Max Marks & Step'}
+                            ? "ضبط الدرجات العظمى وخطوة الرصد"
+                            : "Configure Max Marks & Step"}
                         </span>
                       </div>
                     ),
@@ -294,19 +493,33 @@ function ControlHomeContent() {
                 <div className="inline-flex justify-center">
                   <CustomDropdown
                     value=""
-                    ariaLabel={isAr ? 'إجراءات المقرر' : 'Course actions'}
+                    ariaLabel={isAr ? "إجراءات المقرر" : "Course actions"}
                     placeholder={
                       <MoreVertical className="h-4 w-4 text-muted-foreground hover:text-primary" />
                     }
                     options={options}
                     onValueChange={(val) => {
-                      if (val === 'open') {
+                      if (val === "open") {
                         if (mid?.sheetId) {
-                          router.push(`/${locale}/admin/control/${mid.sheetId}`);
+                          router.push(
+                            `/${locale}/admin/control/${mid.slug || mid.sheetId}`,
+                          );
                         } else {
                           openSheetMutation.mutate(item.courseId);
                         }
-                      } else if (val === 'scheme') {
+                      } else if (val === "lock" || val === "unlock") {
+                        if (!mid?.sheetId) return;
+                        setLockReason("");
+                        setLockTarget({
+                          sheetId: mid.sheetId,
+                          locked: isLocked,
+                          courseCode: item.code,
+                          courseName:
+                            (isAr
+                              ? item.nameAr || item.name
+                              : item.nameEn || item.name),
+                        });
+                      } else if (val === "scheme") {
                         setSchemeTarget(item);
                       }
                     }}
@@ -320,7 +533,7 @@ function ControlHomeContent() {
         },
       },
     ],
-    [isAr, caps, locale, router, openSheetMutation],
+    [isAr, caps, locale, router, openSheetMutation, component, releaseText],
   );
 
   return (
@@ -330,19 +543,19 @@ function ControlHomeContent() {
         PERMISSIONS.CONTROL_SHEETS_VIEW,
       ]}
     >
-      <div className="space-y-6" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="space-y-6" dir={isAr ? "rtl" : "ltr"}>
         <PageTitleBanner
           title={
             isAr
-              ? 'الكنترول — رصد ومراجعة الدرجات'
-              : 'Control — Grade Entry & Sheets'
+              ? "الكنترول — رصد ومراجعة الدرجات"
+              : "Control — Grade Entry & Sheets"
           }
           subtitle={
             isAr
-              ? 'إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات.'
-              : 'Interactive spreadsheet-style midterm grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module.'
+              ? "إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات."
+              : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
           }
-          eyebrow={isAr ? 'أعمال الكنترول' : 'Academic Control Office'}
+          eyebrow={isAr ? "أعمال الكنترول" : "Academic Control Office"}
           icon={<TableProperties className="h-4 w-4" />}
         />
 
@@ -351,8 +564,8 @@ function ControlHomeContent() {
           onSearchChange={setSearch}
           searchPlaceholder={
             isAr
-              ? 'ابحث بكود المقرر أو اسمه...'
-              : 'Search by course code or name...'
+              ? "ابحث بكود المقرر أو اسمه..."
+              : "Search by course code or name..."
           }
           wrapFilters
         >
@@ -360,7 +573,7 @@ function ControlHomeContent() {
             <Input
               dir="ltr"
               value={academicYear}
-              onChange={(e) => setFilter('academicYear', e.target.value)}
+              onChange={(e) => setFilter("academicYear", e.target.value)}
               placeholder="2026-2027"
               className="h-10 rounded-squircle text-left font-mono text-xs"
             />
@@ -368,20 +581,64 @@ function ControlHomeContent() {
           <div className="w-44">
             <Select
               value={semester}
-              onValueChange={(v) => setFilter('semester', v)}
+              onValueChange={(v) => setFilter("semester", v)}
             >
               <SelectTrigger className="h-10 rounded-squircle text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="first">
-                  {isAr ? 'الفصل الدراسي الأول' : 'First Semester'}
+                  {isAr ? "الفصل الدراسي الأول" : "First Semester"}
                 </SelectItem>
                 <SelectItem value="second">
-                  {isAr ? 'الفصل الدراسي الثاني' : 'Second Semester'}
+                  {isAr ? "الفصل الدراسي الثاني" : "Second Semester"}
                 </SelectItem>
                 <SelectItem value="summer">
-                  {isAr ? 'الفصل الصيفي' : 'Summer Semester'}
+                  {isAr ? "الفصل الصيفي" : "Summer Semester"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-44">
+            <Select
+              value={component}
+              onValueChange={(v) => setFilter("component", v)}
+            >
+              <SelectTrigger aria-label={releaseText("component")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent dir={isAr ? "rtl" : "ltr"}>
+                {["midterm", "coursework", "final"].map((v) => (
+                  <SelectItem value={v} key={v}>
+                    {releaseText(v)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-40">
+            <Select
+              value={filters.level || "all"}
+              onValueChange={(v) => setFilter("level", v)}
+            >
+              <SelectTrigger className="h-10 rounded-squircle text-xs">
+                <SelectValue placeholder={isAr ? "الفرقة الدراسية" : "Level"} />
+              </SelectTrigger>
+              <SelectContent dir={isAr ? "rtl" : "ltr"}>
+                <SelectItem value="all">
+                  {isAr ? "كل الفرق الدراسية" : "All Levels"}
+                </SelectItem>
+                <SelectItem value="1">
+                  {isAr ? "الفرقة الأولى" : "Level 1"}
+                </SelectItem>
+                <SelectItem value="2">
+                  {isAr ? "الفرقة الثانية" : "Level 2"}
+                </SelectItem>
+                <SelectItem value="3">
+                  {isAr ? "الفرقة الثالثة" : "Level 3"}
+                </SelectItem>
+                <SelectItem value="4">
+                  {isAr ? "الفرقة الرابعة" : "Level 4"}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -389,20 +646,20 @@ function ControlHomeContent() {
           <div className="w-40">
             <Select
               value={filters.status}
-              onValueChange={(v) => setFilter('status', v)}
+              onValueChange={(v) => setFilter("status", v)}
             >
               <SelectTrigger className="h-10 rounded-squircle text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">
-                  {isAr ? 'كل الكشوف' : 'All Sheets'}
+                  {isAr ? "كل الكشوف" : "All Sheets"}
                 </SelectItem>
                 <SelectItem value="open">
-                  {isAr ? 'مفتوحة للرصد' : 'Open for Entry'}
+                  {isAr ? "مفتوحة للرصد" : "Open for Entry"}
                 </SelectItem>
                 <SelectItem value="locked">
-                  {isAr ? 'مقفولة' : 'Locked'}
+                  {isAr ? "مقفولة" : "Locked"}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -413,11 +670,22 @@ function ControlHomeContent() {
           <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>
-              {isAr ? 'جاري فتح كشف الرصد...' : 'Opening grade sheet...'}
+              {isAr ? "جاري فتح كشف الرصد..." : "Opening grade sheet..."}
             </span>
           </div>
         )}
 
+        {!isLoading && !isError && !coursesData?.items.length && (
+          <div className="rounded-xl border p-4 text-sm space-y-2">
+            <p>{releaseText("emptyHelp")}</p>
+            <a
+              className="text-primary underline"
+              href={`/${locale}/admin/courses`}
+            >
+              {releaseText("setupCourses")}
+            </a>
+          </div>
+        )}
         <DataTableShell
           columns={columns}
           data={filteredItems}
@@ -431,8 +699,8 @@ function ControlHomeContent() {
           onSelectedKeysChange={setSelectedKeys}
           emptyMessage={
             isAr
-              ? 'لا توجد مقررات متاحة ضمن نطاق صلاحياتك لهذا الفصل الدراسي.'
-              : 'No courses available within your scope for this semester.'
+              ? "لا توجد مقررات متاحة ضمن نطاق صلاحياتك لهذا الفصل الدراسي."
+              : "No courses available within your scope for this semester."
           }
         />
 
@@ -454,6 +722,130 @@ function ControlHomeContent() {
             locale={locale}
           />
         )}
+
+        {/* Sheet Lock / Unlock Dialog */}
+        <Dialog
+          open={Boolean(lockTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setLockTarget(null);
+              setLockReason("");
+            }
+          }}
+        >
+          <DialogContent
+            dir={isAr ? "rtl" : "ltr"}
+            className="sm:max-w-md rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {lockTarget?.locked ? (
+                  <Unlock className="h-5 w-5 text-amber-400" />
+                ) : (
+                  <Lock className="h-5 w-5 text-primary" />
+                )}
+                <span>
+                  {lockTarget?.locked
+                    ? isAr
+                      ? "فك قفل كشف الرصد"
+                      : "Unlock Grade Sheet"
+                    : isAr
+                      ? "قفل كشف الرصد"
+                      : "Lock Grade Sheet"}
+                </span>
+              </DialogTitle>
+              <DialogDescription>
+                {lockTarget?.courseCode} — {lockTarget?.courseName}
+                <br />
+                {lockTarget?.locked
+                  ? isAr
+                    ? "فك القفل يتيح التعديل مجدداً لأعضاء الكنترول وهيئة التدريس المصرح لهم. يجب إدخال سبب معتمد يُسجل في سجل التدقيق."
+                    : "Unlocking allows edits again. A mandatory reason is recorded in the audit log."
+                  : isAr
+                    ? "قفل الكشف يمنع أي تعديلات إضافية على الدرجات ويجعله للقراءة فقط حتى يتم فك قفله من مسؤول الكنترول."
+                    : "Locking prevents any further edits and turns the sheet read-only."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              <div className="rounded-xl border border-border/60 bg-surface/50 p-3 text-xs text-muted-foreground space-y-1">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  <span>
+                    {isAr
+                      ? "ضوابط صلاحيات حالة الكشف:"
+                      : "Sheet Status Governance:"}
+                  </span>
+                </div>
+                <p>
+                  {isAr
+                    ? "• القفل يتطلب صلاحية (control.sheets.lock)"
+                    : "• Locking requires permission (control.sheets.lock)"}
+                </p>
+                <p>
+                  {isAr
+                    ? "• فك القفل يتطلب صلاحية (control.sheets.unlock) مع كتابة سبب إلزامي"
+                    : "• Unlocking requires (control.sheets.unlock) with a mandatory audit reason"}
+                </p>
+              </div>
+
+              {lockTarget?.locked && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    {isAr ? "سبب فك القفل (إلزامي)" : "Unlock Reason (Mandatory)"}
+                  </Label>
+                  <Textarea
+                    value={lockReason}
+                    onChange={(e) => setLockReason(e.target.value)}
+                    placeholder={
+                      isAr
+                        ? "مثال: تصحيح درجة بناءً على تظلم معتمد رقم..."
+                        : "e.g. Correcting marks based on approved student grievance #..."
+                    }
+                    className="min-h-[80px] rounded-squircle text-xs resize-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 sm:justify-start rtl:sm:justify-start">
+              <Button
+                type="button"
+                variant={lockTarget?.locked ? "default" : "destructive"}
+                className="rounded-squircle"
+                disabled={
+                  toggleLockMutation.isPending ||
+                  (lockTarget?.locked && lockReason.trim().length < 3)
+                }
+                onClick={() => toggleLockMutation.mutate()}
+              >
+                {toggleLockMutation.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin me-1.5" />
+                )}
+                <span>
+                  {lockTarget?.locked
+                    ? isAr
+                      ? "تأكيد فك القفل"
+                      : "Confirm Unlock"
+                    : isAr
+                      ? "تأكيد قفل الكشف"
+                      : "Confirm Lock"}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-squircle"
+                onClick={() => {
+                  setLockTarget(null);
+                  setLockReason("");
+                }}
+              >
+                {isAr ? "إلغاء" : "Cancel"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </PermissionGuard>
   );

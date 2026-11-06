@@ -1,3 +1,6 @@
+import { ControlReleaseStore } from './control-release.store';
+import { randomUUID } from 'node:crypto';
+import type { ResultPolicy } from '../control/utils/official-result.util';
 import { ConflictException } from '@nestjs/common';
 import {
   GradeAuditLog,
@@ -70,7 +73,76 @@ export class GradesService implements OnModuleInit {
     private readonly controlAudit: Model<GradeAuditLogDocument>,
   ) {}
 
+  private releaseTimer?: ReturnType<typeof setInterval>;
+  private processingReleases = false;
+  get controlReleases() {
+    return new ControlReleaseStore(this.gradeModel.db);
+  }
+
+  async processControlReleases() {
+    if (this.processingReleases) return;
+    this.processingReleases = true;
+    const leases = this.gradeModel.db.collection(
+      'control_reconciliation_leases',
+    );
+    const leaseId = new Types.ObjectId('0000000000000000000000c1');
+    const token = randomUUID();
+    let acquired = false;
+    try {
+      try {
+        await leases.findOneAndUpdate(
+          {
+            _id: leaseId,
+            $or: [
+              { expiresAt: { $lt: new Date() } },
+              { expiresAt: { $exists: false } },
+            ],
+          },
+          { $set: { token, expiresAt: new Date(Date.now() + 600000) } },
+          { upsert: true, returnDocument: 'after' },
+        );
+        acquired = true;
+      } catch (error) {
+        if ((error as { code?: number }).code === 11000) return;
+        throw error;
+      }
+      const jobs = await this.gradeModel.db
+        .collection('control_release_outbox')
+        .find({ delivered: { $ne: true } })
+        .sort({ createdAt: 1 })
+        .limit(100)
+        .toArray();
+      const students = [...new Set(jobs.map((j) => String(j.studentId)))];
+      const finalStudents = await this.gradeModel.db
+        .collection('control_academic_baselines')
+        .find({ _id: { $in: students.map((id) => new Types.ObjectId(id)) } })
+        .toArray();
+      if (finalStudents.length)
+        await this.syncPublishedAcademicProgress(
+          finalStudents.map((b) => String(b._id)),
+        );
+      await this.controlReleases.flushOutbox(jobs.map((j) => j._id));
+    } finally {
+      if (acquired) await leases.deleteOne({ _id: leaseId, token });
+      this.processingReleases = false;
+    }
+  }
+  onModuleDestroy() {
+    if (this.releaseTimer) clearInterval(this.releaseTimer);
+  }
+
   async onModuleInit() {
+    if (
+      process.env.NODE_ENV !== 'test' &&
+      process.env.QUEUE_WORKERS_ENABLED === 'true'
+    ) {
+      this.releaseTimer = setInterval(() => {
+        void this.processControlReleases().catch(() =>
+          console.warn('Control release reconciliation pending; will retry'),
+        );
+      }, 10000);
+      this.releaseTimer.unref();
+    }
     if (!shouldRunStartupTasks()) {
       return;
     }
@@ -191,7 +263,9 @@ export class GradesService implements OnModuleInit {
     ];
     if (uniqueIds.length === 0) return [];
 
-    const courses = await this.courseModel.find({ isActive: true }).lean();
+    const courses = await this.courseModel
+      .find({ isActive: { $ne: false } })
+      .lean();
     const courseCredits = Object.fromEntries(
       courses.map((course) => [
         course.code.toUpperCase(),
@@ -223,6 +297,32 @@ export class GradesService implements OnModuleInit {
         .lean(),
     ]);
 
+    const baselines = await this.gradeModel.db
+      .collection('control_academic_baselines')
+      .find({ _id: { $in: objectIds } })
+      .toArray();
+    const baselineById = new Map(baselines.map((b) => [String(b._id), b]));
+    for (const studentId of objectIds) {
+      const released = await this.controlReleases.studentMarks(studentId);
+      for (const mark of released)
+        if (mark.examType === 'final' && mark.officialResult?.official) {
+          allGrades.push({
+            ...mark,
+            examType: 'final',
+            grade: mark.officialResult.total!,
+            maxGrade: mark.officialResult.totalMax,
+            officialResult: mark.officialResult,
+            retakePolicy: (
+              await this.controlReleases.policy({
+                courseId: mark.courseId,
+                academicYear: mark.academicYear,
+                semester: mark.semester,
+              })
+            ).rules.retake,
+          } as unknown as (typeof allGrades)[number]);
+        }
+    }
+
     const academicMap = new Map(
       allAcademics.map((a) => [a.studentId.toString(), a]),
     );
@@ -253,14 +353,17 @@ export class GradesService implements OnModuleInit {
         studentProfile?.department,
       );
 
+      const baseline = baselineById.get(studentId);
       const progress = mergeAcademicCourseProgress({
-        completedCourses: academic?.completedCourses,
-        failedCourses: academic?.failedCourses,
-        lowGradeCourses: academic?.lowGradeCourses,
+        completedCourses:
+          baseline?.completedCourses ?? academic?.completedCourses,
+        failedCourses: baseline?.failedCourses ?? academic?.failedCourses,
+        lowGradeCourses: baseline?.lowGradeCourses ?? academic?.lowGradeCourses,
         grades,
         courseCredits,
       });
-      const currentLevel = (academic?.academicLevel ??
+      const currentLevel = (baseline?.academicLevel ??
+        academic?.academicLevel ??
         studentProfile?.level ??
         '1') as CourseLevel;
       const finalizedCourses = progress.courseResults.map(
@@ -285,7 +388,8 @@ export class GradesService implements OnModuleInit {
           course.type !== 'elective',
       );
 
-      const previousCredits = academic?.completedCreditHours ?? 0;
+      const previousCredits =
+        baseline?.completedCreditHours ?? academic?.completedCreditHours ?? 0;
       const completedCreditsFromGrades = progress.courseResults
         .filter((r) => r.passed)
         .reduce((acc, curr) => acc + curr.creditHours, 0);
@@ -307,15 +411,20 @@ export class GradesService implements OnModuleInit {
           completedCreditsFromGrades > 0;
         const finalGpa = hasFullHistoricalGrades
           ? (progress.calculatedGpa ?? academic?.gpa)
-          : (academic?.gpa ?? progress.calculatedGpa);
-        let warningCount: number | undefined;
-        if (typeof finalGpa === 'number' && finalGpa > 0) {
+          : (baseline?.gpa ?? academic?.gpa ?? progress.calculatedGpa);
+        let warningCount: number | undefined = baseline?.academicWarnings;
+        if (
+          typeof finalGpa === 'number' &&
+          (progress.gradedCredits > 0 || finalGpa > 0)
+        ) {
           if (finalGpa < 2.0) {
             warningCount = Math.max(
               1,
-              (academic?.academicWarnings ??
-                studentProfile?.academicWarnings ??
-                0) + 1,
+              baseline
+                ? 1
+                : (academic?.academicWarnings ??
+                    studentProfile?.academicWarnings ??
+                    0),
             );
           } else {
             warningCount = 0;
@@ -332,6 +441,7 @@ export class GradesService implements OnModuleInit {
           }
           academic.academicLevel = promotedLevel;
           if (wasPromoted) academic.semester = 'first';
+          else if (baseline?.semester) academic.semester = baseline.semester;
           if (warningCount !== undefined) {
             academic.academicWarnings = warningCount;
           }
@@ -345,6 +455,8 @@ export class GradesService implements OnModuleInit {
           ) {
             studentProfile.level = promotedLevel;
             if (wasPromoted) studentProfile.semester = 'first';
+            else if (baseline?.semester)
+              studentProfile.semester = baseline.semester;
             shouldSaveProfile = true;
           }
           if (
@@ -670,6 +782,96 @@ export class GradesService implements OnModuleInit {
     return { message: 'تم حذف الدرجة بنجاح' }; // Grade deleted successfully
   }
 
+  async getControlPolicy(id: string) {
+    const sheet = await this.controlSheetModel.findById(id).lean();
+    if (!sheet) throw new NotFoundException('Control sheet not found');
+    return this.controlReleases.policy(sheet);
+  }
+
+  async updateControlPolicy(
+    id: string,
+    dto: ResultPolicy & { version: number },
+    actorId: string,
+  ) {
+    const sheet = await this.controlSheetModel.findById(id).lean();
+    if (!sheet) throw new NotFoundException('Control sheet not found');
+    const { version, ...rules } = dto;
+    return this.controlReleases.updatePolicy(sheet, rules, version, actorId);
+  }
+
+  async previewControlRelease(dto: PublishGradesDto) {
+    if (dto.level)
+      throw new ConflictException(
+        'Use the level visibility settings for access. Release Control results by course and term.',
+      );
+    const filter: Record<string, unknown> = {};
+    if (dto.academicYear) filter.academicYear = dto.academicYear;
+    if (dto.semester) filter.semester = dto.semester;
+    if (dto.courseCode) filter.courseCode = dto.courseCode.toUpperCase();
+    if (dto.examType && dto.examType !== 'quiz')
+      filter.component = dto.examType;
+    if (dto.examType === 'quiz') return { sheets: [], releaseDigests: {} };
+    const sheets = await this.controlSheetModel.find(filter).limit(501).lean();
+    if (sheets.length > 500)
+      throw new ConflictException('Choose a narrower publication scope');
+    const items: Array<{
+      sheetId: string;
+      courseCode: string;
+      component: string;
+      students: number;
+      activeReleaseId: string | null;
+      digest: string;
+    }> = [];
+    for (const sheet of sheets) {
+      if (!dto.isPublished) continue;
+      const preview = await this.controlReleases.preview(sheet);
+      items.push({
+        sheetId: String(sheet._id),
+        courseCode: sheet.courseCode,
+        component: sheet.component,
+        students: preview.count,
+        activeReleaseId: preview.activeReleaseId,
+        digest: preview.digest,
+      });
+    }
+    return {
+      sheets: items,
+      releaseDigests: Object.fromEntries(
+        items.map((i) => [i.sheetId, i.digest]),
+      ),
+    };
+  }
+
+  async controlReleaseHistory(id: string) {
+    const sheet = await this.controlSheetModel.findById(id).lean();
+    if (!sheet) throw new NotFoundException('Control sheet not found');
+    const db = this.gradeModel.db;
+    const releases = await db
+      .collection('control_releases')
+      .find({ sheetId: sheet._id }, { projection: { marks: 0, results: 0 } })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .toArray();
+    const pointer = await db
+      .collection('control_release_pointers')
+      .findOne({ _id: sheet._id });
+    const pendingJobs = await db
+      .collection('control_release_outbox')
+      .countDocuments({
+        releaseId: { $in: releases.map((r) => r._id) },
+        delivered: { $ne: true },
+      });
+    return {
+      releases: releases.map((r) => ({
+        _id: String(r._id),
+        createdAt: new Date(r.createdAt).toISOString(),
+        digest: String(r.digest),
+      })),
+      activeReleaseId: pointer?.active ? String(pointer.releaseId) : null,
+      pendingJobs,
+    };
+  }
+
   async publishGrades(
     dto: PublishGradesDto,
     actorId?: string,
@@ -712,6 +914,11 @@ export class GradesService implements OnModuleInit {
           .select('studentId controlManaged')
           .lean()
       : [];
+    if (dto.level && affectedGrades.some((g) => g.controlManaged))
+      throw new ConflictException(
+        'Control releases require an entire course/term; use level settings to control student access',
+      );
+    await this.controlReleases.prepare();
     const session = await this.gradeModel.db.startSession();
     let result = { modifiedCount: 0 };
     try {
@@ -758,14 +965,6 @@ export class GradesService implements OnModuleInit {
           const sheet = sheetByScope.get(scopeKey(grade));
           if (
             dto.isPublished &&
-            grade.controlManaged &&
-            grade.examType === 'final'
-          )
-            throw new ConflictException(
-              'Final publication requires complete course-result policy. Draft final marks remain hidden.',
-            );
-          if (
-            dto.isPublished &&
             (grade.controlManaged || sheet) &&
             (!sheet ||
               sheet.workflowState !== 'APPROVED' ||
@@ -776,6 +975,23 @@ export class GradesService implements OnModuleInit {
             );
           }
           if (sheet) sheetIds.add(String(sheet._id));
+        }
+        // Cleared draft rows must not prevent withdrawal of an older snapshot.
+        if (!dto.isPublished && !dto.level) {
+          const sheetFilter: Record<string, unknown> = {};
+          if (dto.academicYear) sheetFilter.academicYear = dto.academicYear;
+          if (dto.semester) sheetFilter.semester = dto.semester;
+          if (dto.courseCode)
+            sheetFilter.courseCode = dto.courseCode.toUpperCase();
+          if (dto.examType) sheetFilter.component = dto.examType;
+          const matching = await this.controlSheetModel
+            .find(sheetFilter)
+            .session(session)
+            .limit(501)
+            .lean();
+          if (matching.length > 500)
+            throw new ConflictException('Choose a narrower withdrawal scope');
+          matching.forEach((s) => sheetIds.add(String(s._id)));
         }
         result = await this.gradeModel.updateMany(
           filter,
@@ -790,6 +1006,20 @@ export class GradesService implements OnModuleInit {
             .session(session)
             .lean();
           if (!sheet) continue;
+          if (dto.isPublished && dto.releaseDigests && !dto.releaseDigests[id])
+            throw new ConflictException(
+              'Preview every selected Control sheet before activation',
+            );
+          const releaseEvidence = dto.isPublished
+            ? await this.controlReleases.activate(
+                sheet,
+                actorId!,
+                session,
+                dto.releaseDigests?.[id],
+              )
+            : null;
+          if (!dto.isPublished)
+            await this.controlReleases.withdraw(sheet, session);
           await this.controlSheetModel.updateOne(
             { _id: sheet._id },
             { $inc: { revision: 1 } },
@@ -806,7 +1036,15 @@ export class GradesService implements OnModuleInit {
                 action: dto.isPublished ? 'PUBLISH' : 'HIDE',
                 source: 'SYSTEM',
                 actorId: new Types.ObjectId(actorId),
-                newValue: { isPublished: dto.isPublished },
+                newValue: {
+                  isPublished: dto.isPublished,
+                  ...(releaseEvidence
+                    ? {
+                        releaseId: String(releaseEvidence._id),
+                        digest: releaseEvidence.digest,
+                      }
+                    : {}),
+                },
               },
             ],
             { session },
@@ -834,7 +1072,7 @@ export class GradesService implements OnModuleInit {
     if (dto.isPublished && result.modifiedCount > 0) {
       // Find all matching grades to obtain target students
       const gradesToPublish = await this.gradeModel
-        .find(filter)
+        .find({ ...filter, controlManaged: { $ne: true } })
         .select('studentCode courseCode')
         .lean();
 
@@ -870,6 +1108,13 @@ export class GradesService implements OnModuleInit {
       }
     }
 
+    try {
+      await this.processControlReleases();
+    } catch {
+      console.warn(
+        'Control academic/notification jobs pending; durable retry retained',
+      );
+    }
     return { count: result.modifiedCount + quizResult.modifiedCount };
   }
 
@@ -1020,8 +1265,9 @@ export class GradesService implements OnModuleInit {
 
     // Student reads never mutate GPA/progression. Control midterm/coursework
     // releases are components, not official full-course outcomes.
-    const grades = await this.gradeModel
+    const legacyGrades = await this.gradeModel
       .find({
+        cleared: { $ne: true },
         studentId: new Types.ObjectId(studentId),
         isPublished: true,
         status: { $ne: 'withheld' },
@@ -1032,6 +1278,23 @@ export class GradesService implements OnModuleInit {
       })
       .sort({ courseCode: 1, examType: 1 })
       .lean();
+    const released = await this.controlReleases.studentMarks(
+      new Types.ObjectId(studentId),
+    );
+    const controlledScopes =
+      await this.controlReleases.managedScopes(legacyGrades);
+    const grades = [
+      ...legacyGrades.filter(
+        (g) =>
+          !controlledScopes.has(
+            `${String(g.courseId)}|${g.academicYear}|${g.semester}|${g.examType}`,
+          ) &&
+          !controlledScopes.has(
+            `${String(g.courseId)}|${g.academicYear}|${g.semester}|final`,
+          ),
+      ),
+      ...released,
+    ];
     const courseCodes = [...new Set(grades.map((grade) => grade.courseCode))];
     const matchedCourses = courseCodes.length
       ? await this.courseModel

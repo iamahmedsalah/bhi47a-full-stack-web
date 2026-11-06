@@ -40,6 +40,40 @@ import { GradingSchemeService } from './grading-scheme.service';
 import { toControlEntry } from '../utils/control-entry.util';
 import type { GradeChangeDto, ReviewSheetDto } from '../dto/control.dto';
 
+const STATUS_ARABIC_LABELS: Record<string, string> = {
+  present: 'حاضر',
+  absent: 'غائب',
+  excused: 'بعذر',
+  banned: 'محروم',
+  withheld: 'محجوبة',
+  incomplete: 'غير مكتمل',
+};
+
+const STATUS_INPUT_MAP: Record<string, string> = {
+  present: 'present',
+  حاضر: 'present',
+  absent: 'absent',
+  غائب: 'absent',
+  غايب: 'absent',
+  excused: 'excused',
+  بعذر: 'excused',
+  معذور: 'excused',
+  banned: 'banned',
+  محروم: 'banned',
+  withheld: 'withheld',
+  محجوبة: 'withheld',
+  محجوب: 'withheld',
+  incomplete: 'incomplete',
+  'غير مكتمل': 'incomplete',
+};
+
+function normalizeStatusInput(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  return STATUS_INPUT_MAP[trimmed.toLowerCase()] ?? STATUS_INPUT_MAP[trimmed] ?? trimmed;
+}
+
 /** Office workflow over the existing grades collection; Grades owns publication. */
 @Injectable()
 export class ControlWorkbookService {
@@ -77,11 +111,12 @@ export class ControlWorkbookService {
           semester: sheet.semester,
           examType: { $in: CONTROL_COMPONENT_KEYS },
         })
-        .limit(6001)
+        .select(
+          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark',
+        )
+        .batchSize(500)
         .lean(),
     ]);
-    if (docs.length > 6000)
-      throw new ConflictException('ROSTER_LIMIT_EXCEEDED');
     const byStudent = new Map<string, typeof docs>();
     for (const doc of docs) {
       const id = String(doc.studentId);
@@ -130,19 +165,31 @@ export class ControlWorkbookService {
         ? PERMISSIONS.CONTROL_SHEETS_SUBMIT
         : PERMISSIONS.CONTROL_SHEETS_REVIEW,
     );
-    const { course } = await this.sheetService.requireSheetInScope(
-      user,
-      sheetId,
-    );
+    const { sheet: targetSheet, course } =
+      await this.sheetService.requireSheetInScope(user, sheetId);
+    const resolvedSheetId = String(targetSheet?._id ?? sheetId);
     const session = await this.sheets.db.startSession();
     try {
       await session.withTransaction(async () => {
         const sheet = await this.sheets
-          .findById(sheetId)
+          .findById(resolvedSheetId)
           .session(session)
           .lean();
         if (!sheet || (sheet.revision ?? 0) !== dto.expectedRevision)
           throw new ConflictException('STALE_REVISION');
+        if (dto.action === 'APPROVE') {
+          const caps = this.access.getCapabilities(user);
+          if (sheet.component === 'final' && caps.canApproveFinal === false) {
+            throw new ForbiddenException(
+              'اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي / عميد المعهد (control.final.approve)',
+            );
+          }
+          if (caps.canApprove === false) {
+            throw new ForbiddenException(
+              'اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)',
+            );
+          }
+        }
         const state = sheet.workflowState ?? 'DRAFT';
         const allowed =
           dto.action === 'SUBMIT'
@@ -185,7 +232,7 @@ export class ControlWorkbookService {
           })
           .session(session)
           .sort({ studentId: 1 })
-          .limit(2001)
+          .batchSize(500)
           .lean();
         const component = scheme.components.find(
           (c) => c.key === sheet.component,
@@ -207,28 +254,45 @@ export class ControlWorkbookService {
           )
           .digest('hex');
         if (dto.action === 'SUBMIT' || dto.action === 'APPROVE') {
+          const rosterDocs = docs.filter((d) =>
+            roster.has(String(d.studentId)),
+          );
+          const invalidRosterDocs = rosterDocs.filter(
+            (d) =>
+              d.maxGrade !== component.max ||
+              ((d.status === 'present' || d.status === 'withheld') &&
+                Boolean(validateMark(d.grade, component))),
+          );
+          const missingCount = Math.max(0, roster.size - rosterDocs.length);
           if (
             !roster.size ||
             docs.length !== roster.size ||
-            docs.some(
-              (d) =>
-                !roster.has(String(d.studentId)) ||
-                d.maxGrade !== component.max ||
-                ((d.status === 'present' || d.status === 'withheld') &&
-                  validateMark(d.grade, component)),
-            )
+            rosterDocs.length !== roster.size ||
+            invalidRosterDocs.length > 0
           )
-            throw new ConflictException('RESULT_INCOMPLETE');
+            throw new ConflictException({
+              message: 'RESULT_INCOMPLETE',
+              code: 'RESULT_INCOMPLETE',
+              details: {
+                rosterSize: roster.size,
+                enteredCount: rosterDocs.length,
+                missingCount,
+                invalidCount: invalidRosterDocs.length,
+              },
+            });
           if (
             sheet.component === 'coursework' &&
             docs.some(
               (d) =>
-                computeCoursework(
+                !(CONTROL_SCORELESS_STATES as readonly string[]).includes(
+                  d.status,
+                ) &&
+                (computeCoursework(
                   d.attendanceMark as number,
                   d.quizzesMark as number,
                 ) !== d.grade ||
-                (d.attendanceMark ?? 0) > scheme.courseworkAttendanceMax ||
-                (d.quizzesMark ?? 0) > scheme.courseworkQuizzesMax,
+                  (d.attendanceMark ?? 0) > scheme.courseworkAttendanceMax ||
+                  (d.quizzesMark ?? 0) > scheme.courseworkQuizzesMax),
             )
           )
             throw new ConflictException('COURSEWORK_BREAKDOWN_REQUIRED');
@@ -254,13 +318,19 @@ export class ControlWorkbookService {
           );
         }
         if (dto.action === 'REOPEN') {
-          if (docs.some((d) => d.isPublished))
+          const release = await this.sheets.db
+            .collection('control_release_pointers')
+            .findOne({ _id: sheet._id, active: true }, { session });
+          if (docs.some((d) => d.isPublished) && !release)
             throw new ConflictException(
               'Hide this sheet on the Grades page before reopening',
             );
           await this.grades.updateMany(
             { _id: { $in: docs.map((d) => d._id) } },
-            { $unset: { controlApprovedRev: '' } },
+            {
+              $unset: { controlApprovedRev: '' },
+              $set: { isPublished: false },
+            },
             { session },
           );
         }
@@ -336,20 +406,20 @@ export class ControlWorkbookService {
     const book = new ExcelJS.Workbook();
     const page = book.addWorksheet('Marks');
     // Only active-component inputs may be imported. The other columns are context.
+    // Note: studentId (raw MongoDB ObjectId) is intentionally omitted; students are matched by studentCode.
     page.addRow([
-      'studentId',
-      'studentCode',
-      'name',
-      'score',
-      'status',
-      'attendanceMark',
-      'quizzesMark',
-      'expectedRev',
-      'reason',
-      'coursework',
-      'midterm',
-      'final',
-      'total',
+      'كود الطالب (studentCode)',
+      'اسم الطالب (name)',
+      'الدرجة (score)',
+      'حالة الطالب (status)',
+      'درجة الحضور (attendanceMark)',
+      'درجة الاختبارات (quizzesMark)',
+      'رقم المراجعة (expectedRev)',
+      'السبب / الملاحظة (reason)',
+      'أعمال السنة (coursework)',
+      'الميدتيرم (midterm)',
+      'النهائي (final)',
+      'المجموع الكلي (total)',
     ]);
     for (const row of rows) {
       const active = row.components[details.sheet.component];
@@ -360,12 +430,14 @@ export class ControlWorkbookService {
         (!active?.status || active.status === 'present')
       )
         continue;
+      const localizedStatus = active?.status
+        ? (STATUS_ARABIC_LABELS[active.status] ?? active.status)
+        : '';
       page.addRow([
-        row.studentId,
         row.studentCode,
         row.nameAr || row.name,
         active?.score ?? '',
-        active?.status ?? '',
+        localizedStatus,
         active?.attendanceMark ?? '',
         active?.quizzesMark ?? '',
         active?.rev ?? 0,
@@ -386,12 +458,99 @@ export class ControlWorkbookService {
       cell.alignment = { horizontal: 'center' };
     });
     page.columns.forEach((col, i) => {
-      col.width = i === 2 ? 36 : 20;
+      col.width = i === 1 ? 36 : 22;
     });
-    page.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }];
+    page.views = [{ rightToLeft: true, state: 'frozen', xSplit: 2, ySplit: 1 }];
+
+    const instructions = book.addWorksheet('إرشادات الرصد');
+    instructions.views = [{ rightToLeft: true }];
+    const courseLabel = [
+      details.course?.code,
+      details.course?.nameAr || details.course?.name,
+    ]
+      .filter(Boolean)
+      .join(' — ');
+    const semesterLabel =
+      details.sheet.semester === 'first'
+        ? 'الفصل الأول (First Semester)'
+        : details.sheet.semester === 'second'
+          ? 'الفصل الثاني (Second Semester)'
+          : 'الفصل الصيفي (Summer Semester)';
+    const componentNameAr =
+      details.rules?.nameAr ||
+      (details.sheet.component === 'midterm'
+        ? 'الميدتيرم'
+        : details.sheet.component === 'coursework'
+          ? 'أعمال السنة'
+          : 'النهائي');
+    instructions.addRow([
+      'البند / الحقل (Field)',
+      'التعليمات والضوابط بالعربية',
+      'Instructions & Rules (English)',
+    ]);
+    instructions.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center' };
+    });
+    instructions.addRows([
+      [
+        'بيانات الكشف (Sheet Info)',
+        `المقرر: ${courseLabel || '-'} | العام: ${details.sheet.academicYear} | ${semesterLabel} | المكوّن: ${componentNameAr}`,
+        `Course: ${courseLabel || '-'} | Term: ${details.sheet.academicYear} (${details.sheet.semester}) | Component: ${details.sheet.component}`,
+      ],
+      [
+        'الدرجة العظمى والخطوة (Max & Step)',
+        `الدرجة العظمى لهذا المكوّن: ${details.rules?.max ?? 20} درجة — خطوة الرصد المسموح بها: ${details.rules?.step ?? 0.5}`,
+        `Max mark: ${details.rules?.max ?? 20} — Allowed step increment: ${details.rules?.step ?? 0.5}`,
+      ],
+      [
+        '1. كود الطالب (studentCode)',
+        'لا تقم بتعديل كود الطالب. يتم التعرف على الطالب ومطابقة درجاته تلقائياً عبر كود الطالب الجامعي بدون الحاجة لأي معرّف تقني.',
+        'Do not modify studentCode. Students are matched automatically by their institutional studentCode.',
+      ],
+      [
+        '2. الدرجة (score)',
+        `أدخل الدرجة الرقمية للمكوّن النشط (${componentNameAr}) فقط بين 0 و ${details.rules?.max ?? 20}. ترك الخلية فارغة يعني عدم تعديل حالة الطالب.`,
+        `Enter the numeric mark for the active component (${details.sheet.component}) between 0 and ${details.rules?.max ?? 20}. Leave blank if unchanged.`,
+      ],
+      [
+        '3. أعمال السنة (Coursework Split)',
+        `في كشف أعمال السنة فقط: يجب إدخال درجة الحضور (بحد أقصى ${scheme.courseworkAttendanceMax}) + درجة الاختبارات (بحد أقصى ${scheme.courseworkQuizzesMax}) بحيث يساوي مجموعهما الدرجة الكلية لأعمال السنة.`,
+        `For coursework sheets only: attendanceMark (max ${scheme.courseworkAttendanceMax}) + quizzesMark (max ${scheme.courseworkQuizzesMax}) must equal score.`,
+      ],
+      [
+        '4. حالة الطالب (status)',
+        'يمكنك كتابة الحالة باللغة العربية أو الإنجليزية: حاضر (present)، غائب (absent)، بعذر (excused)، محروم (banned)، محجوبة (withheld)، غير مكتمل (incomplete).',
+        'You may enter status in Arabic or English: حاضر / present, غائب / absent, بعذر / excused, محروم / banned, محجوبة / withheld, غير مكتمل / incomplete.',
+      ],
+      [
+        '5. الحالات الخاصة والسبب (reason)',
+        'حالات (غائب، بعذر، محروم، غير مكتمل) لا تقبل درجة رقمية. كما أن حالات (بعذر، محروم، محجوبة، غير مكتمل) تتطلب كتابة سبب واضح (3 أحرف على الأقل) في عمود السبب.',
+        'Scoreless states (absent, excused, banned, incomplete) must have an empty score cell. Restricted states require a reason (min 3 chars).',
+      ],
+      [
+        '6. رقم المراجعة (expectedRev)',
+        'لا تقم بتغيير رقم المراجعة؛ يُستخدم للتحقق من عدم تعديل الدرجة بواسطة مستخدم آخر أثناء عملك على الملف.',
+        'Do not change expectedRev; it protects against overwriting concurrent edits.',
+      ],
+      [
+        '7. الأعمدة المرجعية (Context Columns)',
+        'أعمدة (أعمال السنة، الميدتيرم، النهائي، المجموع الكلي) في نهاية الجدول هي للعرض والمراجعة فقط ولا يتم استيرادها.',
+        'The summary columns (coursework, midterm, final, total) at the end of the sheet are read-only context.',
+      ],
+    ]);
+    instructions.getColumn(1).width = 30;
+    instructions.getColumn(2).width = 68;
+    instructions.getColumn(3).width = 60;
+
     const metadata = book.addWorksheet('Scope');
     metadata.addRows([
-      ['sheetId', sheetId],
+      ['sheetId', details.sheet.id || sheetId],
       ['academicYear', details.sheet.academicYear],
       ['semester', details.sheet.semester],
       ['component', details.sheet.component],
@@ -403,6 +562,7 @@ export class ControlWorkbookService {
         'note',
         'Edit score/status for the active component only. Blank means unchanged. Coursework = attendanceMark + quizzesMark, max 20. Totals are read-only.',
       ],
+      ['slug', details.sheet.slug || ''],
     ]);
     return book.xlsx.writeBuffer();
   }
@@ -413,11 +573,12 @@ export class ControlWorkbookService {
     previewId: string,
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
-    await this.sheetService.getSheet(user, sheetId);
+    const detail = await this.sheetService.getSheet(user, sheetId);
+    const resolvedSheetId = detail.sheet.id || sheetId;
     const batch = await this.imports
       .findOne({
         _id: new Types.ObjectId(previewId),
-        sheetId: new Types.ObjectId(sheetId),
+        sheetId: new Types.ObjectId(resolvedSheetId),
         actorId: new Types.ObjectId(user._id),
         expiresAt: { $gt: new Date() },
       })
@@ -457,6 +618,7 @@ export class ControlWorkbookService {
 
   async previewFile(user: AuthenticatedUser, sheetId: string, buffer: Buffer) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
+    const detail = await this.sheetService.getSheet(user, sheetId);
     const book = new ExcelJS.Workbook();
     try {
       await book.xlsx.load(
@@ -467,28 +629,70 @@ export class ControlWorkbookService {
     }
     const page = book.getWorksheet('Marks');
     const scope = book.getWorksheet('Scope');
-    if (!page || !scope || scope.getCell('B1').text !== sheetId)
+    const scopeSheetId = scope?.getCell('B1').text?.trim() ?? '';
+    const scopeSlug = scope?.getCell('B10').text?.trim() ?? '';
+    const isScopeMatch =
+      Boolean(page && scope) &&
+      (scopeSheetId === sheetId ||
+        scopeSheetId === detail.sheet.id ||
+        (Boolean(detail.sheet.slug) &&
+          (scopeSheetId === detail.sheet.slug ||
+            scopeSlug === detail.sheet.slug)));
+    if (!page || !scope || !isScopeMatch)
       throw new BadRequestException('Download the template for this sheet');
     if (page.rowCount > 501 || page.columnCount > 20)
       throw new BadRequestException('Maximum 500 rows per import');
-    const expected = [
-      'studentId',
-      'studentCode',
-      'name',
-      'score',
-      'status',
-      'attendanceMark',
-      'quizzesMark',
-      'expectedRev',
-      'reason',
+
+    const firstCell = page.getRow(1).getCell(1).text.trim();
+    const isLegacyWithStudentId = firstCell === 'studentId';
+    const expectedKeys = isLegacyWithStudentId
+      ? [
+          'studentId',
+          'studentCode',
+          'name',
+          'score',
+          'status',
+          'attendanceMark',
+          'quizzesMark',
+          'expectedRev',
+          'reason',
+        ]
+      : [
+          'studentCode',
+          'name',
+          'score',
+          'status',
+          'attendanceMark',
+          'quizzesMark',
+          'expectedRev',
+          'reason',
+        ];
+    const expectedBilingual = [
+      'كود الطالب (studentCode)',
+      'اسم الطالب (name)',
+      'الدرجة (score)',
+      'حالة الطالب (status)',
+      'درجة الحضور (attendanceMark)',
+      'درجة الاختبارات (quizzesMark)',
+      'رقم المراجعة (expectedRev)',
+      'السبب / الملاحظة (reason)',
     ];
-    if (expected.some((key, i) => page.getRow(1).getCell(i + 1).text !== key))
+    const headersMatch = isLegacyWithStudentId
+      ? expectedKeys.every(
+          (key, i) => page.getRow(1).getCell(i + 1).text.trim() === key,
+        )
+      : expectedKeys.every((key, i) => {
+          const headerText = page.getRow(1).getCell(i + 1).text.trim();
+          return headerText === key || headerText === expectedBilingual[i];
+        });
+    if (!headersMatch)
       throw new BadRequestException('Invalid template headers');
+
     const rows: Record<string, unknown>[] = [];
     page.eachRow((row, n) => {
       if (n === 1) return;
       const values: Record<string, unknown> = {};
-      expected.forEach((key, i) => {
+      expectedKeys.forEach((key, i) => {
         const cell = row.getCell(i + 1);
         if (cell.type === ExcelJS.ValueType.Formula)
           throw new BadRequestException(`Formula in row ${n}`);
@@ -514,20 +718,32 @@ export class ControlWorkbookService {
     if (expectedScheme !== undefined && scheme.version !== expectedScheme)
       throw new ConflictException('SCHEME_CHANGED');
     const byId = new Map(roster.map((r) => [r.studentId, r]));
+    const byCode = new Map(
+      roster
+        .filter((r) => Boolean(r.studentCode))
+        .map((r) => [String(r.studentCode).trim(), r]),
+    );
     const errors: string[] = [],
       changes: GradeChangeDto[] = [],
       seen = new Set<string>();
     if (!rows.length || rows.length > 500)
       throw new BadRequestException('Import between 1 and 500 rows');
     for (const [index, row] of rows.entries()) {
-      const id = typeof row.studentId === 'string' ? row.studentId : '';
-      const student = byId.get(id);
+      const rawId =
+        typeof row.studentId === 'string' ? row.studentId.trim() : '';
+      const rawCode =
+        row.studentCode !== undefined && row.studentCode !== null
+          ? String(row.studentCode).trim()
+          : '';
+      const student = rawId ? byId.get(rawId) : byCode.get(rawCode);
+      const id = student?.studentId ?? rawId;
       const fail = (message: string) =>
         errors.push(`Row ${index + 2}: ${message}`);
       if (
         !student ||
         student.notRegistered ||
-        student.studentCode !== String(row.studentCode)
+        !rawCode ||
+        student.studentCode !== rawCode
       ) {
         fail('Student identity/registration mismatch');
         continue;
@@ -542,12 +758,15 @@ export class ControlWorkbookService {
         continue;
       }
       const score = parseMarkInput(row.score);
-      const status =
-        typeof row.status === 'string' && row.status
-          ? row.status
-          : score.ok && score.value !== null
-            ? 'present'
-            : '';
+      const normalizedStatus = normalizeStatusInput(row.status);
+      const current = student.components[detail.sheet.component];
+      // When re-importing an exported sheet where existing rows have status 'present' (or 'حاضر')
+      // and the same score, only skip if completely empty or unchanged.
+      const status = normalizedStatus
+        ? normalizedStatus
+        : score.ok && score.value !== null
+          ? 'present'
+          : '';
       if (score.ok && score.value === null && !status) continue;
       if (
         !score.ok ||
@@ -559,7 +778,7 @@ export class ControlWorkbookService {
       if (
         ((CONTROL_RESTRICTED_STATES as readonly string[]).includes(status) ||
           (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
-            student.components[detail.sheet.component]?.status ?? '',
+            current?.status ?? '',
           )) &&
         (!this.access.getCapabilities(user).canManageStates ||
           typeof row.reason !== 'string' ||
@@ -568,7 +787,7 @@ export class ControlWorkbookService {
         fail('Special status requires permission and a reason');
         continue;
       }
-      if (student.components[detail.sheet.component]?.isPublished) {
+      if (current?.isPublished) {
         fail('Hide published marks before importing');
         continue;
       }
@@ -584,7 +803,6 @@ export class ControlWorkbookService {
         continue;
       }
       const rev = Number(row.expectedRev);
-      const current = student.components[detail.sheet.component];
       if (!Number.isInteger(rev) || rev !== (current?.rev ?? 0)) {
         fail('Stale mark revision');
         continue;
@@ -624,8 +842,9 @@ export class ControlWorkbookService {
         reason: typeof row.reason === 'string' ? row.reason : undefined,
       });
     }
+    const resolvedSheetId = detail.sheet.id || sheetId;
     const batch = await this.imports.create({
-      sheetId: new Types.ObjectId(sheetId),
+      sheetId: new Types.ObjectId(resolvedSheetId),
       actorId: new Types.ObjectId(user._id),
       revision: detail.sheet.revision,
       schemeVersion: scheme.version,
@@ -645,10 +864,11 @@ export class ControlWorkbookService {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    const resolvedSheetId = detail.sheet.id || sheetId;
     const batch = await this.imports
       .findOne({
         _id: new Types.ObjectId(previewId),
-        sheetId: new Types.ObjectId(sheetId),
+        sheetId: new Types.ObjectId(resolvedSheetId),
         actorId: new Types.ObjectId(user._id),
         expiresAt: { $gt: new Date() },
       })
@@ -669,7 +889,7 @@ export class ControlWorkbookService {
     if (!batch.changes.length) throw new BadRequestException('No valid rows');
     const result = await this.mutations.applyChanges(
       user,
-      sheetId,
+      resolvedSheetId,
       { changes: batch.changes },
       'XLSX',
       {

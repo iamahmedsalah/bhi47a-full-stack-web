@@ -1,3 +1,5 @@
+import { StudentProfileSchema } from '../../src/modules/students/schemas/student-profile.schema';
+import { StudentAcademicProfileSchema } from '../../src/modules/registrations/schemas/student-academic-profile.schema';
 import mongoose, { Types } from 'mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -52,6 +54,10 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     auditModel: mongoose.Model<GradeAuditLogDocument>;
   const ownedCollections: string[] = [];
   let windowOpen = false;
+  let publishedReleasePreview: Awaited<
+    ReturnType<GradesService['previewControlRelease']>
+  >;
+  let academicSyncSpy: { mockRestore: () => void };
   beforeAll(async () => {
     const uri = process.env.MONGODB_URI || '';
     const url = new URL(uri);
@@ -93,6 +99,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         'CourseStaffAssignment',
         CourseStaffAssignmentSchema,
       );
+    const studentProfile = model('StudentProfile', StudentProfileSchema);
+    const academicProfile = model(
+      'StudentAcademicProfile',
+      StudentAcademicProfileSchema,
+    );
     const sheetModel = model('ControlSheet', ControlSheetSchema),
       schemeModel = model('GradingScheme', GradingSchemeSchema);
     const grade = model('Grade', GradeSchema),
@@ -108,6 +119,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     await Promise.all(
       [
         userModel,
+        studentProfile,
+        academicProfile,
         courseModel,
         registrationModel,
         assignmentModel,
@@ -134,7 +147,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       _id: courseId,
       code: 'SYNTH101',
       name: 'Synthetic course',
-      isActive: true,
+      // Historical course: no isActive field yet.
+      creditHours: 3,
     });
     await registrationModel.collection.insertOne({
       studentId,
@@ -142,6 +156,26 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       semester: 'first',
       courses: ['SYNTH101'],
       status: 'approved',
+    });
+    await academicProfile.collection.insertOne({
+      studentId,
+      academicLevel: '1',
+      semester: 'first',
+      gpa: 0,
+      completedCourses: [],
+      failedCourses: [],
+      lowGradeCourses: [],
+      academicWarnings: 0,
+      completedCreditHours: 0,
+    });
+    await studentProfile.collection.insertOne({
+      userId: studentId,
+      studentCode: 'SYNTH260001',
+      fullName: 'Synthetic student',
+      academicYear: year,
+      level: '1',
+      semester: 'first',
+      academicWarnings: 0,
     });
     const access = new ControlAccessService(
       courseModel as never,
@@ -167,14 +201,16 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       {} as never,
       userModel as never,
       courseModel as never,
-      {} as never,
-      {} as never,
+      studentProfile as never,
+      academicProfile as never,
       {} as never,
       sheetModel as never,
       {} as never,
       audit as never,
     );
-    jest.spyOn(grades, 'syncPublishedAcademicProgress').mockResolvedValue([]);
+    academicSyncSpy = jest
+      .spyOn(grades, 'syncPublishedAcademicProgress')
+      .mockResolvedValue([]);
     jest
       .spyOn(grades, 'getStudentResultsStatus')
       .mockImplementation(() =>
@@ -203,6 +239,30 @@ describe('Control real replica-set persistence, approval and Grades visibility',
   }, 120000);
   afterAll(async () => {
     if (connection) {
+      const releaseIds = (
+        await connection
+          .db!.collection('control_releases')
+          .find({ 'scope.courseId': courseId })
+          .toArray()
+      ).map((r) => r._id);
+      await connection
+        .db!.collection('control_release_outbox')
+        .deleteMany({ releaseId: { $in: releaseIds } });
+      await connection
+        .db!.collection('notifications')
+        .deleteMany({ targetStudentId: studentId });
+      await connection
+        .db!.collection('control_releases')
+        .deleteMany({ 'scope.courseId': courseId });
+      await connection
+        .db!.collection('control_release_pointers')
+        .deleteMany({ 'scope.courseId': courseId });
+      await connection
+        .db!.collection('control_result_policies')
+        .deleteMany({ actorId: { $in: [actor._id, reviewer._id] } });
+      await connection
+        .db!.collection('control_academic_baselines')
+        .deleteOne({ _id: studentId });
       await connection
         .collection('control_import_batches')
         .deleteMany({ actorId: new Types.ObjectId(actor._id) });
@@ -274,6 +334,30 @@ describe('Control real replica-set persistence, approval and Grades visibility',
   });
 
   it('requires independent approval, keeps drafts hidden, and honors the Grades open/close window', async () => {
+    const policySheet = await open();
+    const initialPolicy = await grades.getControlPolicy(policySheet.sheet.id);
+    expect(initialPolicy.rules).toMatchObject({
+      passPercentage: 50,
+      finalMinimumPercentage: 0,
+      retake: 'latest',
+    });
+    const updatedPolicy = await grades.updateControlPolicy(
+      policySheet.sheet.id,
+      { ...initialPolicy.rules, version: initialPolicy.version },
+      reviewer._id,
+    );
+    await grades.updateControlPolicy(
+      policySheet.sheet.id,
+      { ...updatedPolicy.rules, version: updatedPolicy.version },
+      reviewer._id,
+    );
+    await expect(
+      grades.updateControlPolicy(
+        policySheet.sheet.id,
+        { ...initialPolicy.rules, version: initialPolicy.version },
+        reviewer._id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
     let detail = await open();
     await expect(
       grades.publishGrades(
@@ -463,4 +547,408 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       marks.applyChanges(actor, detail.sheet.id, { changes: [change()] }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
+  it('discovers a legacy course without an active flag for the administrator', async () => {
+    const courses = await sheets.listCourses(actor, {
+      academicYear: year,
+      semester: 'first',
+    });
+    expect(
+      courses.items.find((c) => c.courseId === String(courseId)),
+    ).toMatchObject({ code: 'SYNTH101', rosterCount: 1 });
+  });
+  it('preserves previously published Control marks until their scope is explicitly migrated to snapshots', async () => {
+    const id = new Types.ObjectId();
+    await gradeModel.collection.insertOne({
+      _id: id,
+      studentId,
+      studentCode: 'SYNTH260001',
+      courseId: new Types.ObjectId(),
+      courseCode: 'LEGACY-SAFE',
+      courseName: 'Synthetic historical result',
+      examType: 'midterm',
+      grade: 14,
+      maxGrade: 20,
+      status: 'present',
+      academicYear: year,
+      semester: 'first',
+      isPublished: true,
+      controlManaged: true,
+      rev: 1,
+      controlApprovedRev: 1,
+    });
+    const previousWindow = windowOpen;
+    windowOpen = true;
+    try {
+      expect(
+        (await grades.findStudentResults(String(studentId))).find(
+          (g) => g.courseCode === 'LEGACY-SAFE',
+        ),
+      ).toMatchObject({ grade: 14, isPublished: true });
+    } finally {
+      windowOpen = previousWindow;
+      await gradeModel.deleteOne({ _id: id });
+    }
+  });
+
+  it('releases an official 80/100 result, reconciles once, corrects with continuity and withdraws', async () => {
+    academicSyncSpy.mockRestore();
+    // An old stored coursework maximum must use the same /20 normalization as
+    // grading-scheme reads and entry, without rescaling any awarded marks.
+    await connection.models.GradingScheme.updateOne(
+      { courseId, academicYear: year, semester: 'first' },
+      { $set: { 'components.$[coursework].max': 40 } },
+      { arrayFilters: [{ 'coursework.key': 'coursework' }] },
+    );
+    for (const [component, score] of [
+      ['coursework', 17],
+      ['midterm', 15],
+      ['final', 48],
+    ] as const) {
+      let detail = await open(component);
+      if (detail.sheet.locked)
+        detail = await sheets.unlock(
+          reviewer,
+          detail.sheet.id,
+          'Synthetic final release',
+        );
+      const view = await workbook.workbook(actor, detail.sheet.id);
+      const current = view.rows[0].components[component];
+      const saved = await marks.applyChanges(actor, detail.sheet.id, {
+        changes: [
+          change({
+            score,
+            expectedRev: current?.rev ?? 0,
+            ...(component === 'coursework'
+              ? { attendanceMark: 4, quizzesMark: 13 }
+              : {}),
+          }),
+        ],
+      });
+      expect(saved.results[0].result).toBe('ok');
+      detail = await sheets.getSheet(actor, detail.sheet.id);
+      detail = await workbook.review(actor, detail.sheet.id, {
+        action: 'SUBMIT',
+        expectedRevision: detail.sheet.revision,
+        reason: 'Synthetic complete result',
+      });
+      await workbook.review(reviewer, detail.sheet.id, {
+        action: 'APPROVE',
+        expectedRevision: detail.sheet.revision,
+        reason: 'Synthetic independent review',
+      });
+    }
+    const scope = {
+      academicYear: year,
+      semester: 'first' as const,
+      courseCode: 'SYNTH101',
+      examType: 'final' as const,
+      isPublished: true,
+    };
+    const preview = await grades.previewControlRelease(scope);
+    publishedReleasePreview = preview;
+    await grades.publishGrades(
+      { ...scope, releaseDigests: preview.releaseDigests },
+      reviewer._id,
+    );
+    windowOpen = true;
+    const result = await grades.findStudentResults(String(studentId));
+    expect(result).toHaveLength(3);
+    expect(result.find((g) => g.examType === 'final')).toMatchObject({
+      officialResult: {
+        official: true,
+        total: 80,
+        totalMax: 100,
+        passed: true,
+      },
+    });
+    const academic = await connection
+      .db!.collection(connection.models.StudentAcademicProfile.collection.name)
+      .findOne({ studentId });
+    expect(academic).toMatchObject({
+      completedCourses: ['SYNTH101'],
+      failedCourses: [],
+      completedCreditHours: 3,
+    });
+    const firstGpa = academic!.gpa;
+    expect(
+      await connection
+        .db!.collection('control_release_outbox')
+        .countDocuments({ studentId, delivered: { $ne: true } }),
+    ).toBe(0);
+    const again = await grades.previewControlRelease(scope);
+    await grades.publishGrades(
+      { ...scope, releaseDigests: again.releaseDigests },
+      reviewer._id,
+    );
+    expect(
+      await connection.db!.collection('control_releases').countDocuments({
+        'scope.courseId': courseId,
+        'scope.component': 'final',
+      }),
+    ).toBe(1);
+    expect(
+      (await connection
+        .db!.collection(
+          connection.models.StudentAcademicProfile.collection.name,
+        )
+        .findOne({ studentId }))!.gpa,
+    ).toBe(firstGpa);
+  });
+
+  it('keeps the previous result visible during correction and reverses academic effects on withdrawal', async () => {
+    const scope = {
+      academicYear: year,
+      semester: 'first' as const,
+      courseCode: 'SYNTH101',
+      examType: 'final' as const,
+      isPublished: true,
+    };
+    const preview = publishedReleasePreview;
+    let detail = await open('final');
+    detail = await workbook.review(reviewer, detail.sheet.id, {
+      action: 'REOPEN',
+      expectedRevision: detail.sheet.revision,
+      reason: 'Synthetic correction with snapshot continuity',
+    });
+    const view = await workbook.workbook(actor, detail.sheet.id);
+    await marks.applyChanges(actor, detail.sheet.id, {
+      changes: [
+        change({ score: 0, expectedRev: view.rows[0].components.final.rev }),
+      ],
+    });
+    expect(
+      (await grades.findStudentResults(String(studentId))).find(
+        (g) => g.examType === 'final',
+      ),
+    ).toMatchObject({ grade: 48 });
+    await expect(
+      grades.publishGrades(
+        { ...scope, releaseDigests: preview.releaseDigests },
+        reviewer._id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    detail = await sheets.getSheet(actor, detail.sheet.id);
+    detail = await workbook.review(actor, detail.sheet.id, {
+      action: 'SUBMIT',
+      expectedRevision: detail.sheet.revision,
+      reason: 'Synthetic corrected result',
+    });
+    await workbook.review(reviewer, detail.sheet.id, {
+      action: 'APPROVE',
+      expectedRevision: detail.sheet.revision,
+      reason: 'Synthetic reviewed correction',
+    });
+    const replacement = await grades.previewControlRelease(scope);
+    await expect(
+      grades.publishGrades(
+        { ...scope, releaseDigests: preview.releaseDigests },
+        reviewer._id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    await grades.publishGrades(
+      { ...scope, releaseDigests: replacement.releaseDigests },
+      reviewer._id,
+    );
+    const academic = await connection
+      .db!.collection(connection.models.StudentAcademicProfile.collection.name)
+      .findOne({ studentId });
+    expect(academic).toMatchObject({
+      completedCourses: [],
+      failedCourses: ['SYNTH101'],
+      completedCreditHours: 0,
+      gpa: 0,
+      academicWarnings: 1,
+    });
+    await grades.publishGrades({ ...scope, isPublished: false }, reviewer._id);
+    expect(await grades.findStudentResults(String(studentId))).toHaveLength(0);
+    expect(
+      await connection
+        .db!.collection(
+          connection.models.StudentAcademicProfile.collection.name,
+        )
+        .findOne({ studentId }),
+    ).toMatchObject({
+      completedCourses: [],
+      failedCourses: [],
+      completedCreditHours: 0,
+      gpa: 0,
+      academicWarnings: 0,
+    });
+    expect(
+      await connection
+        .db!.collection('control_release_outbox')
+        .countDocuments({ studentId, delivered: { $ne: true } }),
+    ).toBe(0);
+  });
+
+  it('reactivates a withdrawn release and retries without duplicating notifications', async () => {
+    const scope = {
+      academicYear: year,
+      semester: 'first' as const,
+      courseCode: 'SYNTH101',
+      examType: 'final' as const,
+      isPublished: true,
+    };
+    const detail = await open('final');
+    const reactivate = await grades.previewControlRelease(scope);
+    await grades.publishGrades(
+      { ...scope, releaseDigests: reactivate.releaseDigests },
+      reviewer._id,
+    );
+    expect(
+      await connection
+        .db!.collection(
+          connection.models.StudentAcademicProfile.collection.name,
+        )
+        .findOne({ studentId }),
+    ).toMatchObject({ failedCourses: ['SYNTH101'], academicWarnings: 1 });
+    const notifications = await connection
+      .db!.collection('notifications')
+      .countDocuments({ targetStudentId: studentId });
+    const repeat = await grades.previewControlRelease(scope);
+    await grades.publishGrades(
+      { ...scope, releaseDigests: repeat.releaseDigests },
+      reviewer._id,
+    );
+    expect(
+      await connection
+        .db!.collection('notifications')
+        .countDocuments({ targetStudentId: studentId }),
+    ).toBe(notifications);
+    expect(
+      await connection.db!.collection('control_releases').countDocuments({
+        'scope.courseId': courseId,
+        'scope.component': 'final',
+      }),
+    ).toBe(2);
+    await expect(
+      grades.updateControlPolicy(
+        detail.sheet.id,
+        {
+          passPercentage: 60,
+          finalMinimumPercentage: 0,
+          retake: 'latest',
+          version: 2,
+        },
+        reviewer._id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+  it('loads, independently reviews and previews a full 3001-student course without truncating any component', async () => {
+    const largeCourse = new Types.ObjectId();
+    const code = 'SCALE-' + randomUUID().slice(0, 8).toUpperCase();
+    const count = 3001;
+    const students = Array.from({ length: count }, (_, i) => ({
+      _id: new Types.ObjectId(),
+      name: 'Synthetic scale ' + i,
+      studentCode: 'SCALE' + String(i).padStart(5, '0'),
+      email: code + '-' + i + '@example.invalid',
+      role: 'student',
+      isActive: true,
+    }));
+    await connection.models.Course.collection.insertOne({
+      _id: largeCourse,
+      code,
+      name: 'Synthetic scale course',
+      isActive: true,
+      department: 'BIS',
+      level: '1',
+      semester: 'first',
+      creditHours: 3,
+    });
+    await connection.models.User.collection.insertMany(students);
+    await connection.models.CourseRegistration.collection.insertMany(
+      students.map((student) => ({
+        studentId: student._id,
+        courses: [code],
+        academicYear: year,
+        semester: 'first',
+        status: 'approved',
+      })),
+    );
+    await gradeModel.collection.insertMany(
+      students.flatMap((student) =>
+        (['coursework', 'midterm', 'final'] as const).map((component) => ({
+          studentId: student._id,
+          studentCode: student.studentCode,
+          courseId: largeCourse,
+          courseCode: code,
+          academicYear: year,
+          semester: 'first',
+          examType: component,
+          grade:
+            component === 'coursework' ? 17 : component === 'midterm' ? 15 : 48,
+          maxGrade: component === 'final' ? 60 : 20,
+          status: 'present',
+          rev: 1,
+          controlManaged: true,
+          isPublished: false,
+          ...(component === 'coursework'
+            ? { attendanceMark: 4, quizzesMark: 13 }
+            : {}),
+        })),
+      ),
+    );
+    const times: Record<string, number> = {};
+    for (const component of ['coursework', 'midterm', 'final'] as const) {
+      const detail = await sheets.openSheet(actor, {
+        courseId: String(largeCourse),
+        academicYear: year,
+        semester: 'first',
+        component,
+      });
+      const started = performance.now();
+      const view = await workbook.workbook(actor, detail.sheet.id);
+      times[component + 'WorkbookMs'] = performance.now() - started;
+      expect(view.rows).toHaveLength(count);
+      expect(new Set(view.rows.map((row) => row.studentId)).size).toBe(count);
+      expect(view.rows[0].components.final?.score).toBe(48);
+      expect(view.rows.at(-1)?.studentCode).toBe('SCALE03000');
+      const submitted = await workbook.review(actor, detail.sheet.id, {
+        action: 'SUBMIT',
+        expectedRevision: view.revision,
+        reason: 'Synthetic scale submission',
+      });
+      await workbook.review(reviewer, detail.sheet.id, {
+        action: 'APPROVE',
+        expectedRevision: submitted.sheet.revision,
+        reason: 'Independent scale review',
+      });
+    }
+    const started = performance.now();
+    const preview = await grades.previewControlRelease({
+      courseCode: code,
+      academicYear: year,
+      semester: 'first',
+      examType: 'final',
+      isPublished: true,
+    });
+    times.finalPreviewMs = performance.now() - started;
+    expect(preview.sheets).toHaveLength(1);
+    expect(preview.sheets[0].students).toBe(count);
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { resolve } = await import('node:path');
+    const output = resolve(__dirname, '../../../../outputs/control-scale');
+    await mkdir(output, { recursive: true });
+    await writeFile(
+      resolve(output, '3001-students.json'),
+      JSON.stringify(
+        {
+          students: count,
+          marks: count * 3,
+          times,
+          environment:
+            'isolated localhost replica set; synthetic records; single request measurements, not p95 or production SLA',
+          verified: [
+            'all roster identities',
+            'all component marks',
+            'independent approval',
+            'full official release preview count',
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+  }, 120000);
 });
