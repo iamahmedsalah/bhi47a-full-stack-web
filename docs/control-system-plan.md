@@ -31,14 +31,15 @@ Updated: 6 November 2026. Current increment: **A + B + C**. Update this table, t
 
 | Check | Evidence so far |
 | --- | --- |
-| Control unit suites | 4 suites, 36 tests; final workspace rerun in progress. Expanded tests are in `apps/api/src/modules/control/` |
+| Control unit suites | 4 suites, 36 tests passed within the full workspace run. Expanded tests are in `apps/api/src/modules/control/` |
 | Real MongoDB integration | 7 tests passed against the isolated replica set: atomic audit/receipt, concurrent writes, independent review and Grades visibility, XLSX coursework, clear revisions, stale previews/schemes and lock contention. Log: `outputs/control-integration-final.log` |
-| GUI acceptance | Real component/CSS fixture in `apps/web/tests/control-workbook.browser.mjs`; final bilingual run pending |
+| GUI acceptance | Passed: real component/CSS fixture in `apps/web/tests/control-workbook.browser.mjs`, Arabic/English, all columns, autosave/retry, draft restoration, stale-scheme refresh and desktop/mobile screenshots. Transport is mocked; persistence is verified separately. |
 | Workspace lint | Passed with existing warnings; no errors |
 | Workspace typecheck | Passed, 4 tasks |
-| Full API unit run | Prior run: 90 suites and 845 tests passed; final rerun in progress. Log: `outputs/control-unit.log` |
+| Full API unit run | Final run: 90 suites and 845 tests passed. Log: `outputs/control-unit.log` |
 | Production build | Prior Webpack production build passed; final source rerun pending. Default Turbopack stalled locally and is not counted as passed. |
 | Read-only audit helper | `node --test apps/api/test/control-data-audit.test.cjs` passed; local inventory: `outputs/control-data-audit.json`. Empty canonical local grade collections do not establish anything about production data. |
+| General API E2E | Incomplete: local performance fixture startup exceeded its 120-second hook timeout. This is not a green full-CI claim. Log: `outputs/control-standard-e2e-final.log` |
 
 Local verification uses synthetic data on an isolated localhost MongoDB replica set. Docker failed to start on this machine, so a portable official MongoDB binary and all test data/caches are kept in ignored `outputs/` on D:. C: disk exhaustion affected initial runs; failed/stalled checks are not counted as passes.
 
@@ -363,7 +364,7 @@ Use these as tracking checkboxes. Unchecked means not accepted under this plan, 
 ### Phase A — Baseline and policy contract
 
 - [x] Inventory all grade writers/readers, publication settings, legacy totals, and affected permission paths.
-- [ ] Run existing Control tests and document failures; capture current Arabic/English screen behavior.
+- [x] Run existing Control tests and document failures; capture current Arabic/English screen behavior.
 - [x] Record the existing midterm defaults, confirmed coursework 20 with configurable 5/15 split, and draft full-course policy blockers.
 - [x] Provide and test a read-only inventory helper for duplicate identities, out-of-roster marks, ambiguous totals, and publication inconsistencies; generate an isolated local report.
 - [ ] Run the reviewed inventory against an approved production/staging copy and classify real historical totals before migration. Local empty-data results are not production acceptance.
@@ -374,7 +375,7 @@ Exit: a reproducible baseline, approved pilot policy, and explicit legacy-data d
 
 - [x] Consolidate entry/clear/status/import mutation rules and actor attribution; old core-component write APIs reject bypass attempts and direct operators to Control.
 - [x] Make edit/audit/idempotency and lock/edit contention transactional; freeze marked schemes and bind review to roster/scheme/mark digests.
-- [ ] Finish grid error, retry, navigation, RTL, keyboard, and conflict behavior.
+- [x] Finish grid error, retry, navigation, RTL, keyboard, and conflict behavior; browser fixture and transactional revision tests pass.
 - [x] Add submit/review/reopen with an immutable submitted digest, read-only submitted/approved marks, and capability separation. Full historical publication snapshots remain Phase D work.
 
 Exit: two simultaneous operators cannot lose an edit; lock or submission cannot race a write; unauthorized/out-of-roster edits fail; reviewed midterms remain hidden until explicitly released. Existing and new regression suites pass.
@@ -475,4 +476,7 @@ Control integration scenarios now live in `apps/api/test/control/workflow.e2e-sp
 5. Compare old/new per-student totals and academic effects on staging. Review every difference before activating a migrated scope.
 6. Roll out midterm first; gate later components server-side until their dependencies pass. Keep read-only access to history throughout rollout.
 7. Monitor autosave errors/conflicts, missing audit entries, stale previews, blocked releases, queue failures, release/effect lag, and discrepancy counts. Logs use operation IDs and avoid national IDs or full mark sheets.
-8. Use transactional outbox delivery for post-release jobs. A noti
+8. Use transactional outbox delivery for post-release jobs. A notification failure retries without rolling back a successful release. An academic-effects failure stays visible as pending/failed and has a safe retry/reconciliation path.
+9. Rollback disables new writes/releases for affected scope first. Retain snapshots and audit; switch reads only to a compatible previously reconciled release. Older code must not resume unrestricted writes against migrated data. Do not erase newer marks or blindly restore a database over subsequent work.
+
+The implementation is complete only when the core acceptance gates pass, migrated totals reconcile, and Control staff can perform the full midterm and final workflow in both languages. Extension items remain separately tracked.
