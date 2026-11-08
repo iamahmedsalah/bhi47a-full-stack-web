@@ -8,6 +8,7 @@ import { LanguageProvider } from '@/providers/language-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
 import { NetworkStatusOverlay } from '@/components/ui/NetworkStatusOverlay';
 import { AuthProvider } from '@/providers/auth-provider';
+import { MaterialUploadProvider } from '@/features/courses/material-upload-provider';
 import { ConsoleBanner } from '@/providers/console-banner';
 import { getSiteUrl } from '@/lib/site-url';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
@@ -131,7 +132,7 @@ export default async function LocaleLayout({
             <LanguageProvider>
               <ThemeProvider>
                 <AuthProvider locale={locale}>
-                  {children}
+                  <MaterialUploadProvider locale={locale}>{children}</MaterialUploadProvider>
                 </AuthProvider>
                 <NetworkStatusOverlay locale={locale} />
                 <SonnerToaster />

@@ -2,6 +2,8 @@
 
 Files live on persistent host disk; MongoDB Atlas holds file references. There is no local MongoDB service. Existing Cloudinary/Base64 records remain readable through authenticated API routes. New book files are limited to 100 MiB; lectures and sections to 25 MiB. Covers retain their existing storage and 4 MiB limit.
 
+Book, lecture and section uploads run in an account-scoped browser queue. Closing the upload dialog or navigating within the same portal session keeps the transfer running. The floating upload panel and notification bell show bytes-sent percentage, speed, estimated time remaining, queued files, and a separate verification/saving stage until the API acknowledges success. Large files transfer one at a time to avoid competing for upload bandwidth. Failed uploads require an explicit retry; cancelling queued or transferring files is available in notifications. Logging out cancels the queue. Keep the browser tab open: refresh, browser closure, and changing locale reload the session and cannot resume partially uploaded files. The browser warns before leaving during an active upload. Connection speed still determines transfer time; for example, 15 MiB takes about two minutes on a 1 Mbit/s uplink before server processing.
+
 ## Provision before deploying
 
 Run on the production host, adapting the checkout directory and Nginx group if necessary:

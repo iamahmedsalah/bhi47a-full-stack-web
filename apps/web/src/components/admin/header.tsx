@@ -39,6 +39,9 @@ import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 import LangToggle from '@/components/ui/LangToggle';
 import { Themes } from '@/components/ui/Themes';
 import { useUIStore } from '@/store/ui-store';
+import { useMaterialUploads } from '@/features/courses/material-upload-provider';
+import { isUploadActive } from '@/features/courses/material-upload-queue';
+import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
 
 const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
 const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
@@ -112,6 +115,8 @@ export default function AdminHeader() {
 
   const displayedNotifications = activeTab === 'unread' ? unreadItems : notifications;
   const unreadCount = unreadItems.length;
+  const { tasks: uploadTasks } = useMaterialUploads();
+  const notificationBadgeCount = unreadCount + uploadTasks.filter(task => isUploadActive(task) || task.status === 'failed').length;
 
   // Delete notification mutation
   const deleteMutation = useMutation({
@@ -230,9 +235,9 @@ export default function AdminHeader() {
                 aria-label={isAr ? 'الإشعارات' : 'Notifications'}
               >
                 <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
+                {notificationBadgeCount > 0 && (
                   <span className="absolute top-1.5 end-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-white animate-pulse z-10">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {notificationBadgeCount > 9 ? '9+' : notificationBadgeCount}
                   </span>
                 )}
               </button>
@@ -323,12 +328,13 @@ export default function AdminHeader() {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-3 custom-scroll pr-1">
+                <MaterialUploadNotifications locale={locale} />
                 {notificationsQuery.isLoading ? (
                   <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                     <Loader2 className="h-6 w-6 animate-spin text-primary mb-2" />
                     <span className="text-xs">{isAr ? 'جاري تحميل الإشعارات...' : 'Loading notifications...'}</span>
                   </div>
-                ) : displayedNotifications.length === 0 ? (
+                ) : displayedNotifications.length === 0 && uploadTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
                     <Inbox className="w-10 h-10 mb-2 opacity-40 text-muted-foreground" />
                     <p className="text-xs font-medium">

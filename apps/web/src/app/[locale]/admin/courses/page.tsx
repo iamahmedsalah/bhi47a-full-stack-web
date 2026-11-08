@@ -2,8 +2,7 @@
 
 import { getCourseStaffIds } from '@/features/courses/assignment-utils';
 
-import type { AxiosRequestConfig } from 'axios';
-import { useMaterialUpload, MaterialUploadProgress } from '@/features/courses/use-material-upload';
+import { useStartBookUpload } from '@/features/courses/material-upload-provider';
 import React, { useState, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
@@ -146,7 +145,6 @@ interface CourseFormDialogProps {
       removeSyllabus?: boolean;
       removeCover?: boolean;
     },
-    uploadOptions?: AxiosRequestConfig,
   ) => Promise<void>;
   t: ReturnType<typeof useTranslations>;
   tCommon: ReturnType<typeof useTranslations>;
@@ -188,7 +186,6 @@ function CourseFormDialog({
   const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(() => getCourseStaffIds(initialValues).teachingAssistantIds);
   const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
   const [loading, setLoading] = useState(false);
-  const upload = useMaterialUpload();
   const [error, setError] = useState('');
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
@@ -347,18 +344,17 @@ function CourseFormDialog({
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
         removeCover,
-      }, syllabusFile ? upload.begin() : undefined);
+      });
       onOpenChange(false);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, tCommon('errorLoading')));
     } finally {
-      upload.finish();
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) upload.cancel(); onOpenChange(next); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass max-h-[90vh] max-w-2xl sm:max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-5 sm:p-6">
         <DialogHeader className="border-b border-border pb-4">
           <DialogTitle className="text-foreground text-lg font-bold">
@@ -870,9 +866,8 @@ function CourseFormDialog({
             <label htmlFor="isActiveCourse" className="text-sm font-semibold text-foreground cursor-pointer">{t('isActive')}</label>
           </div>
 
-          <MaterialUploadProgress progress={upload.progress} onCancel={upload.cancel} isAr={locale === 'ar'} />
           <DialogFooter className="mt-6 gap-2 border-t border-border pt-4">
-            <Button variant="secondary" type="button" onClick={() => { upload.cancel(); onOpenChange(false); }}>{tCommon('cancel')}</Button>
+            <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>{tCommon('cancel')}</Button>
             <Button type="submit" disabled={loading} className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {tCommon('save')}
@@ -903,7 +898,7 @@ function UploadCoursePdfDialog({
   const isAr = locale === 'ar';
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const upload = useMaterialUpload();
+  const startBookUpload = useStartBookUpload();
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -921,7 +916,7 @@ function UploadCoursePdfDialog({
 
   if (!course) return null;
 
-  const handleUpload = async (e: React.FormEvent) => {
+  const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
       setError(isAr ? 'يرجى اختيار ملف PDF لرفعه' : 'Please select a PDF file to upload');
@@ -939,20 +934,12 @@ function UploadCoursePdfDialog({
     setLoading(true);
     setError('');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await api.post(`/admin/courses/${course._id}/syllabus`, fd, upload.begin());
-      toast.success(
-        isAr
-          ? `تم رفع ملف المنهج لمقرر ${course.code} بنجاح`
-          : `Syllabus PDF uploaded successfully for ${course.code}`,
-      );
-      onSuccess();
+      startBookUpload(course._id, `${isAr ? 'كتاب المقرر' : 'Course book'} · ${course.code}`, file);
+      setFile(null);
       onOpenChange(false);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, isAr ? 'فشل رفع ملف المنهج' : 'Failed to upload syllabus PDF'));
     } finally {
-      upload.finish();
       setLoading(false);
     }
   };
@@ -977,7 +964,7 @@ function UploadCoursePdfDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) upload.cancel(); onOpenChange(next); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="glass max-w-lg rounded-2xl border border-white/10 p-5 sm:p-6 text-start">
         <DialogHeader className="border-b border-border/80 pb-3 text-start">
           <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
@@ -1096,12 +1083,11 @@ function UploadCoursePdfDialog({
             </div>
           </div>
 
-          <MaterialUploadProgress progress={upload.progress} onCancel={upload.cancel} isAr={isAr} />
           <DialogFooter className="mt-4 gap-2 border-t border-border pt-4">
             <Button
               type="button"
               variant="secondary"
-              onClick={() => { upload.cancel(); onOpenChange(false); }}
+              onClick={() => onOpenChange(false)}
               className="rounded-squircle text-xs"
             >
               {isAr ? 'إلغاء' : 'Cancel'}
@@ -1123,6 +1109,7 @@ function UploadCoursePdfDialog({
 
 /* ─── Main Page ───────────────────────────────────────── */
 function CoursesPageContent() {
+  const startBookUpload = useStartBookUpload();
   const router = useRouter();
   const t = useTranslations('courses');
   const tCommon = useTranslations('common');
@@ -1189,26 +1176,13 @@ function CoursesPageContent() {
       syllabusFile?: File | null;
       coverImageFile?: File | null;
     },
-    uploadOptions?: AxiosRequestConfig,
   ) => {
     const { syllabusFile, coverImageFile, ...coursePayload } = data;
     const res = await api.post<Course>('/admin/courses', coursePayload);
     const newCourseId = (res as any)?.data?._id || (res as any)?._id;
     if (newCourseId) {
       if (syllabusFile) {
-        try {
-          const fd = new FormData();
-          fd.append('file', syllabusFile);
-          await api.post(`/admin/courses/${newCourseId}/syllabus`, fd, uploadOptions);
-        } catch {
-          setSelectedCourseForPdf({ ...coursePayload, _id: newCourseId });
-          setIsPdfModalOpen(true);
-          toast.error(
-            locale === 'ar'
-              ? 'تم إضافة المادة ولكن فشل رفع الكتاب. يمكنك إعادة المحاولة من نافذة رفع الكتاب.'
-              : 'Course added, but book upload failed. Retry from the book upload dialog.',
-          );
-        }
+        startBookUpload(newCourseId, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${coursePayload.code}`, syllabusFile);
       }
       if (coverImageFile) {
         try {
@@ -1243,7 +1217,6 @@ function CoursesPageContent() {
       removeSyllabus?: boolean;
       removeCover?: boolean;
     },
-    uploadOptions?: AxiosRequestConfig,
   ) => {
     if (!selectedCourse) return;
     const { syllabusFile, coverImageFile, removeSyllabus, removeCover, ...coursePayload } = data;
@@ -1265,19 +1238,7 @@ function CoursesPageContent() {
         // null payload already handled deletion
       }
     } else if (syllabusFile) {
-      try {
-        const fd = new FormData();
-        fd.append('file', syllabusFile);
-        await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd, uploadOptions);
-      } catch {
-        setSelectedCourseForPdf({ ...selectedCourse, ...coursePayload });
-        setIsPdfModalOpen(true);
-        toast.error(
-          locale === 'ar'
-            ? 'تم تحديث المادة ولكن فشل رفع الكتاب. يمكنك إعادة المحاولة من نافذة رفع الكتاب.'
-            : 'Course updated, but book upload failed. Retry from the book upload dialog.',
-        );
-      }
+      startBookUpload(selectedCourse._id, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${selectedCourse.code}`, syllabusFile);
     }
 
     if (removeCover) {
@@ -2131,7 +2092,7 @@ function CoursesPageContent() {
 
       {/* Direct Course Syllabus PDF Dialog */}
       <UploadCoursePdfDialog
-        course={selectedCourseForPdf}
+        course={courses.find(course => course._id === selectedCourseForPdf?._id) ?? selectedCourseForPdf}
         open={isPdfModalOpen}
         onOpenChange={(open) => {
           setIsPdfModalOpen(open);

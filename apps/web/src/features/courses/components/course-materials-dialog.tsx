@@ -39,6 +39,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useMaterialUploadActions } from '@/features/courses/material-upload-provider';
+import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
 
 interface CourseMaterialsDialogProps {
   open: boolean;
@@ -64,6 +66,7 @@ export function CourseMaterialsDialog({
   const isAr = locale === 'ar';
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { start: startUpload } = useMaterialUploadActions();
 
   const isAdmin = user?.role === 'admin';
   const staffType = (user as any)?.staffType;
@@ -87,9 +90,6 @@ export function CourseMaterialsDialog({
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const uploadController = React.useRef<AbortController | null>(null);
-  React.useEffect(() => () => uploadController.current?.abort(), []);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -137,8 +137,8 @@ export function CourseMaterialsDialog({
       : materials.filter((m) => m.type === activeTab);
 
   // Create material mutation
-  const uploadMutation = useMutation({
-    mutationFn: async () => {
+  const handleUpload = () => {
+    try {
       if (!file) throw new Error(isAr ? 'يرجى اختيار ملف' : 'Please select a file');
       if (file.size > MAX_MATERIAL_FILE_SIZE) {
         throw new Error(
@@ -149,48 +149,34 @@ export function CourseMaterialsDialog({
       }
       if (!title.trim()) throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
 
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('title', title.trim());
-      fd.append('type', uploadType);
-      if (weekNumber) fd.append('weekNumber', String(Number(weekNumber)));
-      if (description.trim()) fd.append('description', description.trim());
-
-      uploadController.current = new AbortController();
-      setUploadProgress(0);
-      const res = await api.post(`/courses/${courseId}/materials`, fd, {
-        signal: uploadController.current.signal,
-        onUploadProgress: (event) => setUploadProgress(Math.min(100, Math.round(100 * event.loaded / (event.total || file.size)))),
+      const selectedFile = file;
+      const payload = { title: title.trim(), type: uploadType, weekNumber, description: description.trim() };
+      startUpload({
+        key: `material:${courseId}:${JSON.stringify(payload)}:${file.name}:${file.size}:${file.lastModified}`,
+        courseId,
+        label: `${courseCode} · ${payload.title}`,
+        fileName: file.name,
+        fileSize: file.size,
+        request: config => {
+          const fd = new FormData();
+          fd.append('file', selectedFile);
+          fd.append('title', payload.title);
+          fd.append('type', payload.type);
+          if (payload.weekNumber) fd.append('weekNumber', String(Number(payload.weekNumber)));
+          if (payload.description) fd.append('description', payload.description);
+          return api.post(`/courses/${courseId}/materials`, fd, config);
+        },
       });
-      return res.data;
-    },
-    onSuccess: () => {
-      toast.success(
-        uploadType === COURSE_MATERIAL_TYPES.LECTURE
-          ? isAr
-            ? 'تم رفع المحاضرة بنجاح'
-            : 'Lecture uploaded successfully'
-          : isAr
-            ? 'تم رفع السكشن بنجاح'
-            : 'Section uploaded successfully',
-      );
       // Reset form
       setTitle('');
       setWeekNumber('');
       setDescription('');
       setFile(null);
       setIsUploadFormOpen(false);
-      void refetch();
-      void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
-    },
-    onError: (err) => {
-      if ((err as { code?: string }).code === 'ERR_CANCELED') {
-        void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
-        return;
-      }
+    } catch (err) {
       toast.error(getApiErrorMessage(err, isAr ? 'فشل رفع الملف' : 'Failed to upload file'));
-    },
-  });
+    }
+  };
 
   // Delete material mutation
   const deleteMutation = useMutation({
@@ -259,7 +245,7 @@ export function CourseMaterialsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(next) => { if (!next) uploadController.current?.abort(); onOpenChange(next); }}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           className="max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border-border bg-card p-6"
           dir={isAr ? 'rtl' : 'ltr'}
@@ -394,7 +380,7 @@ export function CourseMaterialsDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => { uploadController.current?.abort(); setIsUploadFormOpen(false); }}
+                  onClick={() => setIsUploadFormOpen(false)}
                   className="h-6 w-6 p-0 rounded-squircle text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -577,14 +563,13 @@ export function CourseMaterialsDialog({
                 )}
               </div>
 
-              {uploadMutation.isPending && <p role="status" className="text-sm text-muted-foreground">{isAr ? 'جاري الرفع' : 'Uploading'}: {uploadProgress}%</p>}
               {/* Form Actions */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-primary/20">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => { uploadController.current?.abort(); setIsUploadFormOpen(false); }}
+                  onClick={() => setIsUploadFormOpen(false)}
                   className="h-8 rounded-squircle text-xs"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
@@ -592,15 +577,11 @@ export function CourseMaterialsDialog({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={uploadMutation.isPending || !file || !title.trim()}
-                  onClick={() => uploadMutation.mutate()}
+                  disabled={!file || !title.trim()}
+                  onClick={handleUpload}
                   className="h-8 rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
                 >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <UploadCloud className="h-3.5 w-3.5" />
-                  )}
+                  <UploadCloud className="h-3.5 w-3.5" />
                   <span>{isAr ? 'رفع وحفظ' : 'Upload & Save'}</span>
                 </Button>
               </div>
@@ -608,6 +589,7 @@ export function CourseMaterialsDialog({
           )}
 
           {/* Materials List */}
+          <MaterialUploadNotifications locale={locale} courseId={courseId} />
           <div className="space-y-2.5 pt-1">
             {isLoading ? (
               <div className="py-12 text-center text-muted-foreground">
