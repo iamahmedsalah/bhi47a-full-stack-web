@@ -2,6 +2,7 @@ import datetime as dt
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -66,21 +67,45 @@ class BackupStateTest(unittest.TestCase):
             codes = {issue["code"] for issue in module.assess(self.root)}
         self.assertIn("storage-unavailable", codes)
 
+    def test_abandoned_maintenance_guard_alerts_without_removing_it(self):
+        now = dt.datetime.now(dt.timezone.utc)
+        gate = self.root / ".maintenance"
+        gate.mkdir()
+        old = (now - dt.timedelta(minutes=16)).timestamp()
+        os.utime(gate, (old, old))
+        self.assertIn("maintenance-stale", {issue["code"] for issue in module.assess(self.root, now)})
+        self.assertTrue(gate.is_dir())
+
+    def test_recent_api_errors_ignore_expected_rejections_and_redact_log_data(self):
+        route = "/api/courses/" + "a" * 24 + "/materials"
+        base = {"context": "AllExceptionsFilter", "method": "POST", "path": route}
+        rows = [{**base, "statusCode": 400}, {**base, "statusCode": 503, "message": "Materials maintenance in progress. Please retry shortly."}, {**base, "statusCode": 500, "stack": "DO_NOT_COPY_PRIVATE_LOG_DATA"}, {"context": "MaterialStorageService", "message": "Referenced material file is missing"}]
+        issues = module.recent_api_errors("not JSON\n" + "\n".join(json.dumps(row) for row in rows))
+        self.assertEqual({issue["code"] for issue in issues}, {"recent-upload-errors", "recent-missing-files"})
+        self.assertNotIn("DO_NOT_COPY_PRIVATE_LOG_DATA", json.dumps(issues))
+
+    def test_api_log_reader_reports_unavailable_checks_without_exposing_output(self):
+        result = type("Result", (), {"returncode": 1, "stdout": "PRIVATE", "stderr": "PRIVATE"})()
+        with patch.object(module.subprocess, "run", return_value=result):
+            issues = module.api_log_issues({})
+        self.assertEqual(issues[0]["code"], "api-log-check-failed")
+        self.assertNotIn("PRIVATE", json.dumps(issues))
+
     def test_monitor_suppresses_duplicate_notifications(self):
         settings = {"MATERIALS_HOST_ROOT": str(self.root), "MATERIALS_MONITOR_STATE": str(self.root / "monitor.json")}
         issue = [{"code": "off-server-backup-stale", "detail": "Copy pending"}]
         healthy_unit = type("Result", (), {"returncode": 1})()
-        with patch.object(module, "assess", return_value=issue), patch.object(module.subprocess, "run", return_value=healthy_unit), patch.object(module, "notify") as send:
+        with patch.object(module, "assess", return_value=issue), patch.object(module, "api_log_issues", return_value=[]), patch.object(module.subprocess, "run", return_value=healthy_unit), patch.object(module, "notify") as send:
             module.monitor(settings)
             module.monitor(settings)
             self.assertEqual(send.call_count, 1)
-        with patch.object(module, "assess", return_value=[]), patch.object(module.subprocess, "run", return_value=healthy_unit), patch.object(module, "notify") as send:
+        with patch.object(module, "assess", return_value=[]), patch.object(module, "api_log_issues", return_value=[]), patch.object(module.subprocess, "run", return_value=healthy_unit), patch.object(module, "notify") as send:
             module.monitor(settings)
             self.assertEqual(send.call_count, 1)
 
     def test_dry_run_never_sends_alerts(self):
         settings = {"MATERIALS_HOST_ROOT": str(self.root)}
-        with patch.object(module.subprocess, "run", return_value=type("Result", (), {"returncode": 1})()), patch.object(module, "notify") as send:
+        with patch.object(module, "api_log_issues", return_value=[]), patch.object(module.subprocess, "run", return_value=type("Result", (), {"returncode": 1})()), patch.object(module, "notify") as send:
             module.monitor(settings, dry_run=True)
             send.assert_not_called()
 

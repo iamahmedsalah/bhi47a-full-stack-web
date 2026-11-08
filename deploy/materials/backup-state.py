@@ -100,6 +100,14 @@ def assess(root, now=None):
             issues.append({"code": "disk-critical" if used >= 0.9 else "disk-warning", "detail": f"Materials disk usage is {used:.1%}"})
     except OSError:
         issues.append({"code": "storage-unavailable", "detail": "Materials storage is unavailable"})
+    try:
+        age = now.timestamp() - (root / ".maintenance").stat().st_mtime
+        if age > 15 * 60:
+            issues.append({"code": "maintenance-stale", "detail": "Material mutations have been paused for over 15 minutes. Inspect active jobs before clearing the guard."})
+    except FileNotFoundError:
+        pass
+    except OSError:
+        issues.append({"code": "maintenance-check-failed", "detail": "Cannot check the material mutation guard"})
     for filename, label in [(".backup-local-success.json", "local"), (".backup-success.json", "off-server")]:
         try:
             marker = json.loads((root / filename).read_text())
@@ -110,6 +118,43 @@ def assess(root, now=None):
         except (OSError, ValueError, KeyError, TypeError):
             issues.append({"code": label + "-backup-missing", "detail": f"No verified {label} backup marker"})
     return issues
+
+
+def recent_api_errors(output):
+    uploads = missing = cleanup = 0
+    for line in output.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        message = str(row.get("message", ""))
+        if row.get("context") == "MaterialStorageService":
+            missing += message == "Referenced material file is missing"
+            cleanup += message in ["Failed to remove temporary material", "Uncommitted material requires reconciliation"]
+        status = row.get("statusCode")
+        upload_path = re.fullmatch(r"/api/(?:admin/)?courses/[a-fA-F0-9]{24}/(?:syllabus|materials)(?:\?.*)?", str(row.get("path", "")))
+        if row.get("context") == "AllExceptionsFilter" and row.get("method") == "POST" and isinstance(status, int) and status >= 500 and upload_path and "Materials maintenance in progress" not in message:
+            uploads += 1
+    issues = []
+    for code, count, label in [("recent-upload-errors", uploads, "material upload server errors"), ("recent-missing-files", missing, "missing material file errors"), ("recent-cleanup-errors", cleanup, "material cleanup errors")]:
+        if count:
+            issues.append({"code": code, "detail": f"Observed {count} {label} in the last 16 minutes. Inspect restricted API logs and verify reconciliation."})
+    return issues
+
+
+def api_log_issues(settings):
+    container = settings.get("MATERIALS_API_CONTAINER", "app-api-1")
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", container):
+        raise ValueError("Invalid API container name")
+    try:
+        result = subprocess.run(["docker", "logs", "--since", "16m", "--tail", "2000", container], capture_output=True, text=True, timeout=10, check=False)
+        if result.returncode == 0:
+            return recent_api_errors(result.stdout + "\n" + result.stderr)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return [{"code": "api-log-check-failed", "detail": "Cannot inspect recent API material errors"}]
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -150,6 +195,7 @@ def monitor(settings, dry_run=False, test_alert=False):
     root = Path(settings.get("MATERIALS_HOST_ROOT", "/srv/student-portal/materials"))
     now = dt.datetime.now(UTC)
     issues = assess(root, now)
+    issues.extend(api_log_issues(settings))
     for unit in ["portal-materials-backup.service", "portal-materials-reconcile.service"]:
         failed = subprocess.run(["systemctl", "is-failed", "--quiet", unit], capture_output=True, check=False)
         if failed.returncode == 0:
@@ -172,7 +218,7 @@ def monitor(settings, dry_run=False, test_alert=False):
     changed = previous.get("codes", []) != codes
     reminder = bool(codes) and (now - last_sent).total_seconds() >= 6 * 3600
     if changed or reminder:
-        text = "\n".join(item["detail"] for item in issues) if issues else "Materials backup and storage checks have recovered."
+        text = "\n".join(item["detail"] for item in issues) if issues else "Current backup, storage and recent-error checks no longer report alerts. Confirm previously reported file problems with reconciliation."
         notify(settings, "Student Portal: materials backup health", text)
         previous["sentAt"] = now.isoformat()
     atomic_json(state_path, {**previous, "codes": codes, "checkedAt": now.isoformat()})

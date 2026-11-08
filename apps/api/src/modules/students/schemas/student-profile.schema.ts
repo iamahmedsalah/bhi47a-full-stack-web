@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Schema as MongooseSchema } from 'mongoose';
+import type { Document, Types } from 'mongoose';
 import {
   ENROLLMENT_STATUS_VALUES,
   type EnrollmentStatus,
@@ -12,7 +13,7 @@ export type StudentProfileDocument = StudentProfile & Document;
   timestamps: true,
 })
 export class StudentProfile {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
 
   @Prop({ required: true, trim: true })

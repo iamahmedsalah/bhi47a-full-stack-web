@@ -63,6 +63,9 @@ build_import_files.mjs
 !/docs/portal-fixes-domain-setup.md
 !/docs/security-session-details.md
 !/docs/weekly-mongodb-backups.md
+!/docs/backups/
+/docs/backups/*
+!/docs/backups/weekly-mongodb-backups.md
 !/docs/admissions-code-lifecycle.md
 !/docs/control-system-plan.md
 !/docs/control-testing.md
