@@ -17,9 +17,11 @@ import {
   StudentProfileSchema,
 } from '../students/schemas/student-profile.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { MaterialStorageModule } from '../material-storage/material-storage.module';
 
 @Module({
   imports: [
+    MaterialStorageModule,
     RegistrationsModule,
     MongooseModule.forFeature([
       { name: Course.name, schema: CourseSchema },

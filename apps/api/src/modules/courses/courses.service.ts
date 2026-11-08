@@ -6,10 +6,13 @@ import {
   ForbiddenException,
   Optional,
 } from '@nestjs/common';
+import {
+  MaterialStorageService,
+  type MaterialUpload,
+} from '../material-storage/material-storage.service';
 import { CacheService } from '../../core/cache/cache.service';
 import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import { MetricsService } from '../../core/metrics/metrics.service';
-import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
 import { courseStaffFilter } from './utils/course-staff.util';
 import { courseCurriculumFilter } from './utils/course-filter.util';
 import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
@@ -25,6 +28,7 @@ import {
   type CourseEnrollmentResult,
   type CourseEnrollmentIssue,
   type CourseEnrollmentLimitDetails,
+  type MaterialFileReference,
 } from '@student-portal/shared';
 import { RegistrationsService } from '../registrations/registrations.service';
 import { isCourseOfferedForTerm } from '../registrations/utils/term-availability.util';
@@ -104,6 +108,7 @@ export class CoursesService {
     @Optional() private cacheService?: CacheService,
     @Optional() private registrationsService?: RegistrationsService,
     @Optional() private metricsService?: MetricsService,
+    @Optional() private materialStorage?: MaterialStorageService,
   ) {}
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
@@ -581,6 +586,7 @@ export class CoursesService {
       updatePayload.syllabusPdfUrl = null;
       updatePayload.syllabusPdfName = null;
       updatePayload.syllabusPdfData = null;
+      updatePayload.syllabusFile = null;
       updatePayload.syllabusUpdatedAt = null;
     }
     if (dto.coverImageUrl === null || dto.coverImageUrl === '') {
@@ -779,6 +785,11 @@ export class CoursesService {
 
   validateCourseDoctorOrAdmin(course: CourseDocument, caller?: any) {
     if (!caller || caller.role === 'admin') return;
+    if (caller.role !== 'staff' || caller.staffType !== 'doctor') {
+      throw new ForbiddenException(
+        'Only an assigned doctor or administrator can manage the course book',
+      );
+    }
     if (caller.role === 'staff') {
       if (caller.staffType === 'teaching_assistant') {
         throw new ForbiddenException(
@@ -799,125 +810,49 @@ export class CoursesService {
     }
   }
 
-  async uploadSyllabus(
+  async authorizeMaterialUpload(
     courseId: string,
-    file: CourseSyllabusFile,
-    caller?: any,
+    caller: { role: string; staffType?: string; _id: { toString(): string } },
+    book: boolean,
   ) {
-    if (
-      file.size > MAX_HTTP_UPLOAD_SIZE_BYTES ||
-      file.buffer.length > MAX_HTTP_UPLOAD_SIZE_BYTES
-    ) {
-      throw new BadRequestException(
-        'PDF must not exceed 4MB / الحد الأقصى لملف PDF هو 4 ميجابايت',
+    if (!caller) throw new ForbiddenException('Authentication required');
+    const course = await this.findOne(courseId);
+    if (book) return this.validateCourseDoctorOrAdmin(course, caller);
+    if (caller.role === 'admin') return;
+    const id = caller._id.toString();
+    const assigned =
+      caller.staffType === 'doctor'
+        ? course.doctorId?.toString() === id ||
+          (course.doctorIds || []).some((item) => item.toString() === id)
+        : caller.staffType === 'teaching_assistant' &&
+          (course.teachingAssistantIds || []).some(
+            (item) => item.toString() === id,
+          );
+    if (caller.role !== 'staff' || !assigned)
+      throw new ForbiddenException(
+        'You are not assigned to upload materials for this course',
       );
-    }
+  }
+
+  async uploadSyllabus(courseId: string, file: MaterialUpload, caller?: any) {
     const course = await this.findOne(courseId);
     this.validateCourseDoctorOrAdmin(course, caller);
-
-    const isPdf =
-      file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname);
-
-    if (!isPdf) {
-      throw new BadRequestException('يجب أن يكون الملف بصيغة PDF فقط');
-    }
-
-    let cleanOriginalName = file.originalname;
+    const stored = await this.materialStorage!.save(file, true);
+    course.syllabusFile = stored;
+    course.syllabusPdfUrl = `/api/courses/${courseId}/syllabus/download`;
+    course.syllabusPdfName = stored.originalName;
+    course.syllabusPdfData = undefined;
+    course.syllabusUpdatedAt = new Date();
     try {
-      cleanOriginalName = Buffer.from(file.originalname, 'latin1').toString(
-        'utf8',
-      );
-    } catch {
-      cleanOriginalName = file.originalname;
+      await course.save();
+    } catch (error) {
+      await this.cleanupFailedMaterialCommit(stored, course._id, true, error);
+      throw error;
     }
-
-    const config = this.getCloudinaryConfig();
-    let fileUrl: string;
-
-    if (config) {
-      const { cloudName, apiKey, apiSecret } = config;
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-      const folder = 'course-syllabi';
-      const accessMode = 'public';
-      const signature = this.createCloudinarySignature(
-        { access_mode: accessMode, folder, timestamp },
-        apiSecret,
-      );
-
-      const safeFilename = `syllabus_${course.code || 'course'}_${Date.now()}.pdf`;
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([new Uint8Array(file.buffer)], {
-          type: file.mimetype || 'application/pdf',
-        }),
-        safeFilename,
-      );
-      formData.append('api_key', apiKey);
-      formData.append('folder', folder);
-      formData.append('timestamp', timestamp);
-      formData.append('access_mode', accessMode);
-      formData.append('signature', signature);
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`,
-        {
-          method: 'POST',
-          body: formData,
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new BadRequestException(
-          `فشل رفع ملف المنهج إلى السحابة: ${errorText || response.statusText}`,
-        );
-      }
-
-      const result = (await response.json()) as { secure_url?: string };
-      if (!result.secure_url) {
-        throw new BadRequestException('لم يتم استلام رابط الملف من السحابة');
-      }
-      fileUrl = result.secure_url;
-
-      // When CDN is configured, store URL only and clear any heavy binary buffer from DB
-      course.syllabusPdfUrl = fileUrl;
-      course.syllabusPdfName = cleanOriginalName;
-      course.syllabusPdfData = undefined;
-      course.syllabusUpdatedAt = new Date();
-    } else {
-      // Local development fallback without Cloudinary: guard against MongoDB 16MB document size limit
-      if (file.buffer.length > 5 * 1024 * 1024) {
-        throw new BadRequestException(
-          'حجم الملف يتجاوز الحد المسموح به (5 ميجابايت) للتخزين المحلي. يرجى تفعيل مفاتيح Cloudinary',
-        );
-      }
-      const base64 = Buffer.from(file.buffer).toString('base64');
-      fileUrl = `data:application/pdf;base64,${base64}`;
-
-      course.syllabusPdfUrl = fileUrl;
-      course.syllabusPdfName = cleanOriginalName;
-      course.syllabusPdfData = base64;
-      course.syllabusUpdatedAt = new Date();
-    }
-
-    // Automatically derive CoverBook thumbnail from page 1 of Cloudinary PDF if no custom cover was uploaded
-    if (!course.coverImageUrl && fileUrl.includes('res.cloudinary.com')) {
-      course.coverImageUrl = fileUrl
-        .replace(
-          '/raw/upload/',
-          '/image/upload/pg_1,w_400,h_560,c_fill,f_auto,q_auto/',
-        )
-        .replace(/\.pdf$/i, '.jpg');
-    }
-
-    await course.save();
     await this.cacheService?.delPattern('courses:*');
-
     return {
-      message: 'تم رفع وتحديث منهج المقرر بنجاح',
-      courseId: course._id.toString(),
-      courseCode: course.code,
+      message: 'Course book uploaded successfully',
+      courseId,
       syllabusPdfUrl: course.syllabusPdfUrl,
       syllabusPdfName: course.syllabusPdfName,
       syllabusUpdatedAt: course.syllabusUpdatedAt,
@@ -942,9 +877,17 @@ export class CoursesService {
       .select('+syllabusPdfData')
       .exec();
 
-    if (!course || (!course.syllabusPdfUrl && !course.syllabusPdfData)) {
+    if (
+      !course ||
+      (!course.syllabusPdfUrl &&
+        !course.syllabusPdfData &&
+        !course.syllabusFile)
+    ) {
       throw new NotFoundException('لم يتم رفع ملف المنهج لهذا المقرر بعد');
     }
+
+    if (course.syllabusFile)
+      return this.materialStorage!.deliver(course.syllabusFile, res, true);
 
     const fallbackFilename = `syllabus_${course.code || 'course'}.pdf`;
     const safeFilename = encodeURIComponent(
@@ -985,11 +928,19 @@ export class CoursesService {
       try {
         const headers: Record<string, string> = {};
         const config = this.getCloudinaryConfig();
-        if (config && course.syllabusPdfUrl.includes('res.cloudinary.com')) {
+        if (
+          config &&
+          new URL(course.syllabusPdfUrl).origin === 'https://res.cloudinary.com'
+        ) {
           headers['Authorization'] =
             `Basic ${Buffer.from(`${config.apiKey}:${config.apiSecret}`).toString('base64')}`;
         }
-        const upstream = await fetch(course.syllabusPdfUrl, { headers });
+        this.assertLegacyOrigin(course.syllabusPdfUrl);
+        const upstream = await fetch(course.syllabusPdfUrl, {
+          headers,
+          redirect: 'error',
+          signal: AbortSignal.timeout(60000),
+        });
         if (upstream.ok && upstream.body) {
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader(
@@ -1002,14 +953,13 @@ export class CoursesService {
           const nodeStream = Readable.fromWeb(upstream.body as any);
           return nodeStream.pipe(res);
         }
-      } catch (err) {
-        console.warn(
-          'Streaming proxy fetch for syllabus PDF failed, redirecting:',
-          err,
-        );
+      } catch {
+        console.warn('Legacy syllabus streaming failed');
       }
 
-      return res.redirect(302, course.syllabusPdfUrl);
+      throw new NotFoundException(
+        'Legacy book is unavailable; please retry later',
+      );
     }
 
     throw new NotFoundException('ملف المنهج غير متوفر حالياً');
@@ -1195,6 +1145,7 @@ export class CoursesService {
   ): Promise<{ message: string }> {
     const course = await this.findOne(courseId);
     this.validateCourseDoctorOrAdmin(course, caller);
+    course.syllabusFile = undefined;
     course.syllabusPdfUrl = undefined;
     course.syllabusPdfName = undefined;
     course.syllabusPdfData = undefined;
@@ -1220,7 +1171,7 @@ export class CoursesService {
    */
   async uploadCourseMaterial(
     courseId: string,
-    file: CourseSyllabusFile,
+    file: MaterialUpload,
     dto: CreateCourseMaterialDto,
     caller: any,
   ) {
@@ -1274,72 +1225,17 @@ export class CoursesService {
       throw new ForbiddenException('صلاحية غير كافية لرفع المحتوى');
     }
 
-    let cleanOriginalName = file.originalname;
-    try {
-      cleanOriginalName = Buffer.from(file.originalname, 'latin1').toString(
-        'utf8',
-      );
-    } catch {
-      cleanOriginalName = file.originalname;
-    }
-
-    const config = this.getCloudinaryConfig();
-    let fileUrl: string;
-
-    if (config) {
-      const { cloudName, apiKey, apiSecret } = config;
-      const timestamp = Math.floor(Date.now() / 1000).toString();
-      const folder = `course-materials/${dto.type}s`;
-      const accessMode = 'public';
-      const signature = this.createCloudinarySignature(
-        { access_mode: accessMode, folder, timestamp },
-        apiSecret,
-      );
-
-      const ext = file.originalname.split('.').pop() || 'pdf';
-      const safeFilename = `${dto.type}_${course.code || 'course'}_${Date.now()}.${ext}`;
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([new Uint8Array(file.buffer)], {
-          type: file.mimetype || 'application/octet-stream',
-        }),
-        safeFilename,
-      );
-      formData.append('api_key', apiKey);
-      formData.append('folder', folder);
-      formData.append('timestamp', timestamp);
-      formData.append('access_mode', accessMode);
-      formData.append('signature', signature);
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`,
-        { method: 'POST', body: formData },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new BadRequestException(
-          `فشل رفع الملف إلى السحابة: ${errorText || response.statusText}`,
-        );
-      }
-
-      const result = (await response.json()) as { secure_url?: string };
-      fileUrl = result.secure_url || '';
-    } else {
-      const base64 = Buffer.from(file.buffer).toString('base64');
-      fileUrl = `data:${file.mimetype || 'application/pdf'};base64,${base64}`;
-    }
-
+    const stored = await this.materialStorage!.save(file, false);
     const material = new this.courseMaterialModel({
       courseId: course._id,
       type: dto.type,
       title: dto.title.trim(),
       titleAr: dto.titleAr?.trim(),
-      fileUrl,
-      fileName: cleanOriginalName,
-      fileSize: file.buffer.length,
-      mimeType: file.mimetype,
+      fileUrl: `/api/courses/materials/pending/download`,
+      storedFile: stored,
+      fileName: stored.originalName,
+      fileSize: stored.size,
+      mimeType: stored.mimeType,
       weekNumber: dto.weekNumber,
       description: dto.description?.trim(),
       isPublished: true,
@@ -1348,7 +1244,19 @@ export class CoursesService {
       uploadedByRole,
     });
 
-    const saved = await material.save();
+    material.fileUrl = `/api/courses/materials/${material._id.toString()}/download`;
+    let saved: CourseMaterialDocument;
+    try {
+      saved = await material.save();
+    } catch (error) {
+      await this.cleanupFailedMaterialCommit(
+        stored,
+        material._id,
+        false,
+        error,
+      );
+      throw error;
+    }
     void this.cacheService?.delPattern(`courses:${courseId}:materials*`);
 
     return {
@@ -1427,6 +1335,11 @@ export class CoursesService {
       }
     }
 
+    if (caller?.role === 'student' && !material.isPublished)
+      throw new NotFoundException('Material is unavailable');
+    if (material.storedFile)
+      return this.materialStorage!.deliver(material.storedFile, res);
+
     res.setHeader('Cache-Control', 'private, no-store');
     if (material.fileUrl.startsWith('data:')) {
       const parts = material.fileUrl.split(';base64,');
@@ -1440,12 +1353,93 @@ export class CoursesService {
       return res.send(buffer);
     }
 
-    return res.redirect(302, material.fileUrl);
+    return this.streamLegacyMaterial(
+      material.fileUrl,
+      res,
+      material.fileName,
+      material.mimeType,
+    );
   }
 
   /**
    * Delete course material (admin or original uploader).
    */
+  private async cleanupFailedMaterialCommit(
+    reference: MaterialFileReference,
+    id: unknown,
+    book: boolean,
+    error: unknown,
+  ) {
+    const failure = error as { name?: string; code?: number };
+    if (
+      !['ValidationError', 'CastError'].includes(failure?.name || '') &&
+      failure?.code !== 11000
+    ) {
+      console.warn(
+        'Material commit outcome is uncertain; retaining file for reconciliation',
+      );
+      return;
+    }
+    try {
+      const referenced = book
+        ? await this.courseModel.exists({
+            _id: id,
+            'syllabusFile.storageKey': reference.storageKey,
+          })
+        : await this.courseMaterialModel.exists({
+            _id: id,
+            'storedFile.storageKey': reference.storageKey,
+          });
+      if (!referenced) await this.materialStorage!.removeUncommitted(reference);
+    } catch {
+      // A lost database acknowledgement can follow a successful commit. Never delete
+      // its file while database availability prevents confirming the outcome.
+      console.warn(
+        'Material commit outcome is uncertain; retaining file for reconciliation',
+      );
+    }
+  }
+
+  private assertLegacyOrigin(value: string) {
+    const url = new URL(value);
+    const configured = this.configService.get<string>(
+      'MATERIALS_LEGACY_ORIGINS',
+      'https://res.cloudinary.com',
+    );
+    const origins = configured.split(',').map((item) => item.trim());
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      !origins.includes(url.origin)
+    ) {
+      throw new BadRequestException('Legacy storage origin is not allowed');
+    }
+  }
+
+  private async streamLegacyMaterial(
+    url: string,
+    res: any,
+    filename: string,
+    mimeType?: string,
+  ) {
+    this.assertLegacyOrigin(url);
+    const upstream = await fetch(url, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!upstream.ok || !upstream.body)
+      throw new NotFoundException('Legacy material is unavailable');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="material"; filename*=UTF-8''${encodeURIComponent(filename).replace(/'/g, '%27')}`,
+    );
+    return Readable.fromWeb(upstream.body as any).pipe(res);
+  }
+
   async deleteCourseMaterial(materialId: string, caller: any) {
     const material = await this.courseMaterialModel.findById(materialId);
     if (!material) {

@@ -5,6 +5,9 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -35,6 +38,9 @@ export class CreateCourseMaterialDto {
   @ApiPropertyOptional({ description: 'Academic week number (1-20)' })
   @IsOptional()
   @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
   weekNumber?: number;
 
   @ApiPropertyOptional({ description: 'Description or summary' })

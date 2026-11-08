@@ -1,0 +1,13 @@
+[Unit]
+Description=Verify private course materials and remove retained orphans
+After=docker.service
+Requires=docker.service
+OnFailure=portal-materials-monitor.service
+
+[Service]
+Type=oneshot
+User=bhi47a
+WorkingDirectory=/home/bhi47a/app
+ExecStart=/usr/bin/docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api node operations/materials/manage.cjs reconcile --apply
+UMask=0077
+TimeoutStartSec=2h

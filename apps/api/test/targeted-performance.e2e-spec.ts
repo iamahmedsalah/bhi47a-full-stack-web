@@ -11,6 +11,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CoursesController } from '../src/modules/courses/courses.controller';
+import { MaterialStorageModule } from '../src/modules/material-storage/material-storage.module';
 import { CoursesService } from '../src/modules/courses/courses.service';
 import { CourseSchema } from '../src/modules/courses/schemas/course.schema';
 import { StudentProfileSchema } from '../src/modules/students/schemas/student-profile.schema';
@@ -179,6 +180,7 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
       {} as never,
     );
     const module = await Test.createTestingModule({
+      imports: [MaterialStorageModule],
       controllers: [CoursesController, ComplaintsController],
       providers: [
         { provide: CoursesService, useValue: coursesService },

@@ -24,6 +24,8 @@ import { downloadFileBlob } from '@/lib/export-utils';
 import { useAuth } from '@/providers/auth-provider';
 import {
   COURSE_MATERIAL_TYPES,
+  COURSE_MATERIAL_MAX_BYTES,
+  type CourseMaterialsResponse,
   type CourseMaterialType,
   type CourseMaterialDto,
 } from '@student-portal/shared';
@@ -85,10 +87,13 @@ export function CourseMaterialsDialog({
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const uploadController = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => uploadController.current?.abort(), []);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const MAX_MATERIAL_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  const MAX_MATERIAL_FILE_SIZE = COURSE_MATERIAL_MAX_BYTES;
 
   const handleFileSelect = (selectedFile: File | null) => {
     if (!selectedFile) {
@@ -98,8 +103,8 @@ export function CourseMaterialsDialog({
     if (selectedFile.size > MAX_MATERIAL_FILE_SIZE) {
       toast.error(
         isAr
-          ? `حجم الملف (${(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (10 ميجابايت)`
-          : `File size (${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the maximum limit of 10 MB`,
+          ? `حجم الملف (${(selectedFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (25 ميجابايت)`
+          : `File size (${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds the maximum limit of 25 MB`,
       );
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
@@ -115,17 +120,17 @@ export function CourseMaterialsDialog({
   const [materialToDelete, setMaterialToDelete] = useState<CourseMaterialDto | null>(null);
 
   // Fetch materials
-  const { data, isLoading, refetch } = useQuery<{ items: CourseMaterialDto[]; total: number }>({
+  const { data, isLoading, refetch } = useQuery<CourseMaterialsResponse>({
     queryKey: ['course-materials', courseId],
     queryFn: async () => {
-      if (!courseId) return { items: [], total: 0 };
-      const res = await api.get(`/courses/${courseId}/materials`);
+      if (!courseId) return { courseId: '', courseCode: '', courseName: '', materials: [], totalCount: 0 };
+      const res = await api.get<CourseMaterialsResponse>(`/courses/${courseId}/materials`);
       return res.data;
     },
     enabled: open && Boolean(courseId),
   });
 
-  const materials = data?.items || [];
+  const materials = data?.materials || [];
   const filteredMaterials =
     activeTab === 'all'
       ? materials
@@ -138,8 +143,8 @@ export function CourseMaterialsDialog({
       if (file.size > MAX_MATERIAL_FILE_SIZE) {
         throw new Error(
           isAr
-            ? 'حجم الملف يتجاوز الحد الأقصى المسموح به (10 ميجابايت)'
-            : 'File size exceeds 10 MB limit',
+            ? 'حجم الملف يتجاوز الحد الأقصى المسموح به (25 ميجابايت)'
+            : 'File size exceeds 25 MB limit',
         );
       }
       if (!title.trim()) throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
@@ -151,7 +156,12 @@ export function CourseMaterialsDialog({
       if (weekNumber) fd.append('weekNumber', String(Number(weekNumber)));
       if (description.trim()) fd.append('description', description.trim());
 
-      const res = await api.post(`/courses/${courseId}/materials`, fd);
+      uploadController.current = new AbortController();
+      setUploadProgress(0);
+      const res = await api.post(`/courses/${courseId}/materials`, fd, {
+        signal: uploadController.current.signal,
+        onUploadProgress: (event) => setUploadProgress(Math.min(100, Math.round(100 * event.loaded / (event.total || file.size)))),
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -174,6 +184,10 @@ export function CourseMaterialsDialog({
       void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
     },
     onError: (err) => {
+      if ((err as { code?: string }).code === 'ERR_CANCELED') {
+        void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
+        return;
+      }
       toast.error(getApiErrorMessage(err, isAr ? 'فشل رفع الملف' : 'Failed to upload file'));
     },
   });
@@ -245,7 +259,7 @@ export function CourseMaterialsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(next) => { if (!next) uploadController.current?.abort(); onOpenChange(next); }}>
         <DialogContent
           className="max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border-border bg-card p-6"
           dir={isAr ? 'rtl' : 'ltr'}
@@ -380,7 +394,7 @@ export function CourseMaterialsDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsUploadFormOpen(false)}
+                  onClick={() => { uploadController.current?.abort(); setIsUploadFormOpen(false); }}
                   className="h-6 w-6 p-0 rounded-squircle text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -481,7 +495,7 @@ export function CourseMaterialsDialog({
               {/* Modern Drag-and-Drop File Upload Zone */}
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                  {isAr ? 'ملف المحتوى التعليمي (الحد الأقصى: 10 ميجابايت) *' : 'Material File (Max 10 MB) *'}
+                  {isAr ? 'ملف المحتوى التعليمي (الحد الأقصى: 25 ميجابايت) *' : 'Material File (Max 25 MB) *'}
                 </label>
 
                 <input
@@ -522,8 +536,8 @@ export function CourseMaterialsDialog({
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       {isAr
-                        ? 'PDF, Word, PowerPoint, Excel — الحد الأقصى 10 ميجابايت'
-                        : 'PDF, Word, PowerPoint, Excel — Max size 10 MB'}
+                        ? 'PDF, Word, PowerPoint, Excel — الحد الأقصى 25 ميجابايت'
+                        : 'PDF, Word, PowerPoint, Excel — Max size 25 MB'}
                     </p>
                   </div>
                 ) : (
@@ -540,7 +554,7 @@ export function CourseMaterialsDialog({
                           <span className="font-mono">{formatFileSize(file.size)}</span>
                           <span>•</span>
                           <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            {isAr ? 'جاهز للرفع (أقل من 10 ميجابايت)' : 'Ready to upload (< 10 MB)'}
+                            {isAr ? 'جاهز للرفع (أقل من 25 ميجابايت)' : 'Ready to upload (< 25 MB)'}
                           </span>
                         </div>
                       </div>
@@ -563,13 +577,14 @@ export function CourseMaterialsDialog({
                 )}
               </div>
 
+              {uploadMutation.isPending && <p role="status" className="text-sm text-muted-foreground">{isAr ? 'جاري الرفع' : 'Uploading'}: {uploadProgress}%</p>}
               {/* Form Actions */}
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-primary/20">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsUploadFormOpen(false)}
+                  onClick={() => { uploadController.current?.abort(); setIsUploadFormOpen(false); }}
                   className="h-8 rounded-squircle text-xs"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}

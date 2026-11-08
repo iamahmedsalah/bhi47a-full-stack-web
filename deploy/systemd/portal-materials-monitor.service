@@ -1,0 +1,13 @@
+[Unit]
+Description=Check course materials storage and independent backup freshness
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=bhi47a
+EnvironmentFile=/etc/student-portal/materials-backup.env
+WorkingDirectory=/home/bhi47a/app
+ExecStart=/usr/bin/python3 /home/bhi47a/app/deploy/materials/backup-state.py monitor
+UMask=0077
+TimeoutStartSec=90s
+NoNewPrivileges=true

@@ -13,6 +13,11 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import {
+  MaterialUploadInterceptor,
+  MaterialMutationInterceptor,
+} from './material-upload.interceptor';
+import type { MaterialUpload } from '../material-storage/material-storage.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import {
@@ -40,6 +45,7 @@ import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limi
 
 @ApiTags('Courses')
 @Controller()
+@UseInterceptors(MaterialMutationInterceptor)
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
@@ -310,26 +316,7 @@ export class CoursesController {
   @Post('admin/courses/:id/syllabus')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: MAX_HTTP_UPLOAD_SIZE_BYTES }, // 4MB max for PDF syllabus (Vercel serverless limit)
-      fileFilter: (_req, file, callback) => {
-        if (
-          file.mimetype === 'application/pdf' ||
-          /\.pdf$/i.test(file.originalname)
-        ) {
-          callback(null, true);
-        } else {
-          callback(
-            new BadRequestException(
-              'Only PDF documents are allowed for course syllabus',
-            ),
-            false,
-          );
-        }
-      },
-    }),
-  )
+  @UseInterceptors(MaterialUploadInterceptor(true))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Upload course curriculum / syllabus PDF (Admin/Staff)',
@@ -348,7 +335,7 @@ export class CoursesController {
   })
   async uploadSyllabus(
     @Param('id', ParseObjectIdPipe) id: string,
-    @UploadedFile() file: CourseSyllabusFile,
+    @UploadedFile() file: MaterialUpload,
     @CurrentUser() caller: any,
   ) {
     if (!file) {
@@ -445,11 +432,7 @@ export class CoursesController {
   @Post(['courses/:id/materials', 'admin/courses/:id/materials'])
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_WRITE)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max for academic material
-    }),
-  )
+  @UseInterceptors(MaterialUploadInterceptor(false))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary:
@@ -457,11 +440,11 @@ export class CoursesController {
   })
   async uploadMaterial(
     @Param('id', ParseObjectIdPipe) id: string,
-    @UploadedFile() file: CourseSyllabusFile,
+    @UploadedFile() file: MaterialUpload,
     @Body() dto: CreateCourseMaterialDto,
     @CurrentUser() caller: any,
   ) {
-    if (!file || !file.buffer) {
+    if (!file || !file.path) {
       throw new BadRequestException('يرجى اختيار ملف المحاضرة أو السكشن لرفعه');
     }
     return this.coursesService.uploadCourseMaterial(id, file, dto, caller);

@@ -9,6 +9,23 @@ services:
       timeout: 5s
       retries: 12
   api:
+    environment:
+      MATERIALS_DELIVERY: stream
+    volumes:
+      - ci_materials:/data/materials
     depends_on:
       mongodb:
         condition: service_healthy
+      materials-init:
+        condition: service_completed_successfully
+  materials-init:
+    image: student-portal-api:${RELEASE_TAG:-prod}
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command: ["mkdir -p /data/materials/.tmp /data/materials/.writers /data/materials/files && chown -R 1001:1001 /data/materials && chmod 750 /data/materials /data/materials/files && chmod 700 /data/materials/.tmp /data/materials/.writers"]
+    volumes:
+      - ci_materials:/data/materials
+    networks: [internal]
+
+volumes:
+  ci_materials:

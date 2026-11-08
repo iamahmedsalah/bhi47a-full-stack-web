@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { publicMaterialResponse } from '../../modules/material-storage/material-response';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -25,7 +26,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
     return next.handle().pipe(
       map((data) => ({
         success: true,
-        data,
+        data: publicMaterialResponse(data) as T,
         timestamp: new Date().toISOString(),
       })),
     );

@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily course materials integrity and retention check
+
+[Timer]
+OnCalendar=*-*-* 11:00:00 Africa/Cairo
+Persistent=true
+
+[Install]
+WantedBy=timers.target

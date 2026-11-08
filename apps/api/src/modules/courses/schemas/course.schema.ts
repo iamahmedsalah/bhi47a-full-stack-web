@@ -6,6 +6,7 @@ import {
   type CourseLevel,
   type Semester,
   type CourseCurriculum,
+  type MaterialFileReference,
 } from '@student-portal/shared';
 
 export type CourseDocument = Course & Document;
@@ -115,6 +116,9 @@ export class Course {
 
   @Prop({ trim: true })
   syllabusPdfUrl?: string;
+
+  @Prop({ type: Object })
+  syllabusFile?: MaterialFileReference;
 
   @Prop({ trim: true })
   syllabusPdfName?: string;

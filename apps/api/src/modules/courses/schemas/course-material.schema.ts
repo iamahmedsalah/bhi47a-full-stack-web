@@ -3,6 +3,7 @@ import { Document, Types } from 'mongoose';
 import {
   COURSE_MATERIAL_TYPE_VALUES,
   type CourseMaterialType,
+  type MaterialFileReference,
 } from '@student-portal/shared';
 
 export type CourseMaterialDocument = CourseMaterial & Document;
@@ -31,6 +32,9 @@ export class CourseMaterial {
 
   @Prop({ required: true, trim: true })
   fileUrl!: string;
+
+  @Prop({ type: Object })
+  storedFile?: MaterialFileReference;
 
   @Prop({ required: true, trim: true })
   fileName!: string;

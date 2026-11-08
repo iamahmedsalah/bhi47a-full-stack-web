@@ -3,6 +3,29 @@ export const COURSE_MATERIAL_TYPES = {
   SECTION: 'section',
 } as const;
 
+export const COURSE_BOOK_MAX_BYTES = 100 * 1024 * 1024;
+export const COURSE_MATERIAL_MAX_BYTES = 25 * 1024 * 1024;
+export const COURSE_MATERIAL_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'zip', 'rar'] as const;
+
+/** Internal persistence contract. Never include this object in public responses. */
+export interface MaterialFileReference {
+  storageProvider: 'vps';
+  storageKey: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+  sha256: string;
+}
+
+export interface CourseMaterialsResponse {
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  courseNameAr?: string;
+  totalCount: number;
+  materials: CourseMaterialDto[];
+}
+
 export type CourseMaterialType =
   (typeof COURSE_MATERIAL_TYPES)[keyof typeof COURSE_MATERIAL_TYPES];
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Encrypted private course materials backup
+After=docker.service network-online.target
+Requires=docker.service
+OnFailure=portal-materials-monitor.service
+
+[Service]
+Type=oneshot
+User=bhi47a
+EnvironmentFile=/etc/student-portal/materials-backup.env
+WorkingDirectory=/home/bhi47a/app
+ExecStart=/bin/bash /home/bhi47a/app/deploy/materials/backup.sh
+UMask=0077
+TimeoutStartSec=2h
+NoNewPrivileges=true

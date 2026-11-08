@@ -48,6 +48,11 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     env_file: .env.prod
+    environment:
+      MATERIALS_ROOT: /data/materials
+      MATERIALS_DELIVERY: ${MATERIALS_DELIVERY:-nginx}
+    volumes:
+      - ${MATERIALS_HOST_ROOT:-/srv/student-portal/materials}:/data/materials
     depends_on:
       redis:
         condition: service_healthy

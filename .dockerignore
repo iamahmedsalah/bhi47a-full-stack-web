@@ -10,6 +10,8 @@ out
 
 coverage
 **/coverage
+**/var/materials
+outputs
 .turbo
 **/.turbo
 *.tsbuildinfo

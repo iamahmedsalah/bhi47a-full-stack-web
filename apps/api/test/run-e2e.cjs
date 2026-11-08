@@ -85,7 +85,13 @@ async function main() {
       .slice(2)
       .filter((arg) => arg !== '--runInBand' && arg !== '--'),
   ];
-  const child = spawn(process.execPath, args, { stdio: 'inherit', env });
+  // Root and filtered workspace invocations must resolve fixtures and output
+  // paths from the API package, rather than writing outside the repository.
+  const child = spawn(process.execPath, args, {
+    stdio: 'inherit',
+    env,
+    cwd: path.resolve(__dirname, '..'),
+  });
   for (const signal of ['SIGINT', 'SIGTERM'])
     process.on(signal, () => child.kill(signal));
   child.on('error', () => {

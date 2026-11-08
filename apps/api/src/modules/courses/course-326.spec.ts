@@ -5,7 +5,11 @@ import { CourseImporter } from '../uploads/importers/course.importer';
 import { normalizeRowKeys } from '../uploads/upload-utils';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { COURSE_326_CURRICULA, type Semester } from '@student-portal/shared';
+import {
+  COURSE_326_CURRICULA,
+  type Semester,
+  type MaterialFileReference,
+} from '@student-portal/shared';
 import { CoursesService } from './courses.service';
 import {
   CreateCourseDto,
@@ -531,9 +535,25 @@ describe('shared syllabus upload and removal', () => {
       doctorIds: [doctorId],
       save: jest.fn().mockResolvedValue(undefined),
       syllabusPdfData: 'old-data',
+      syllabusFile: undefined as MaterialFileReference | undefined,
     };
-    const courses = { findById: jest.fn().mockResolvedValue(document) };
+    const courses = {
+      findById: jest.fn().mockResolvedValue(document),
+      exists: jest.fn().mockResolvedValue(null),
+    };
     const cache = { delPattern: jest.fn().mockResolvedValue(undefined) };
+    const stored: MaterialFileReference = {
+      storageProvider: 'vps',
+      storageKey: `files/${crypto.randomUUID()}`,
+      originalName: 'book.pdf',
+      size: 28,
+      mimeType: 'application/pdf',
+      sha256: 'test-checksum',
+    };
+    const storage = {
+      save: jest.fn().mockResolvedValue(stored),
+      removeUncommitted: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new CoursesService(
       courses as never,
       {} as never,
@@ -542,6 +562,9 @@ describe('shared syllabus upload and removal', () => {
       {} as never,
       { get: () => undefined } as never,
       cache as never,
+      undefined,
+      undefined,
+      storage as never,
     );
     const buffer = Buffer.from('%PDF-1.7\nshared course book');
     const file = {
@@ -550,9 +573,10 @@ describe('shared syllabus upload and removal', () => {
       mimetype: 'application/pdf',
       encoding: '7bit',
       buffer,
+      path: '/private/.tmp/book',
       size: buffer.length,
     };
-    return { doctorId, document, service, cache, file };
+    return { doctorId, document, service, cache, file, storage, stored };
   }
   it('uploads once on the existing course and invalidates cached metadata', async () => {
     const h = uploadHarness();
@@ -562,11 +586,13 @@ describe('shared syllabus upload and removal', () => {
       _id: h.doctorId,
     });
     expect(h.document.save).toHaveBeenCalledTimes(1);
-    expect(h.document.syllabusPdfData).toBe(h.file.buffer.toString('base64'));
+    expect(h.document.syllabusPdfData).toBeUndefined();
+    expect(h.document.syllabusFile).toEqual(h.stored);
+    expect(h.storage.save).toHaveBeenCalledWith(h.file, true);
     expect(h.cache.delPattern).toHaveBeenCalledWith('courses:*');
     expect(h.document.curricula).toEqual(course.curricula);
   });
-  it('rejects teaching assistants, unrelated doctors, invalid types and oversize files', async () => {
+  it('rejects teaching assistants and unrelated doctors before passing files to storage', async () => {
     const h = uploadHarness();
     for (const caller of [
       { role: 'staff', staffType: 'teaching_assistant', _id: h.doctorId },
@@ -576,30 +602,22 @@ describe('shared syllabus upload and removal', () => {
         h.service.uploadSyllabus(course._id.toHexString(), h.file, caller),
       ).rejects.toThrow();
     }
-    await expect(
-      h.service.uploadSyllabus(
-        course._id.toHexString(),
-        { ...h.file, size: 4 * 1024 * 1024 + 1 },
-        { role: 'admin' },
-      ),
-    ).rejects.toThrow('4MB');
-    await expect(
-      h.service.uploadSyllabus(
-        course._id.toHexString(),
-        { ...h.file, mimetype: 'text/plain', originalname: 'book.txt' },
-        { role: 'admin' },
-      ),
-    ).rejects.toThrow();
+    expect(h.storage.save).not.toHaveBeenCalled();
     expect(h.document.save).not.toHaveBeenCalled();
   });
   it('surfaces storage failure instead of reporting upload success', async () => {
     const h = uploadHarness();
-    h.document.save.mockRejectedValue(new Error('Storage unavailable'));
+    h.document.save.mockRejectedValue(
+      Object.assign(new Error('Storage unavailable'), {
+        name: 'ValidationError',
+      }),
+    );
     await expect(
       h.service.uploadSyllabus(course._id.toHexString(), h.file, {
         role: 'admin',
       }),
     ).rejects.toThrow('Storage unavailable');
+    expect(h.storage.removeUncommitted).toHaveBeenCalledWith(h.stored);
     expect(h.cache.delPattern).not.toHaveBeenCalled();
   });
   it('removes both URL and embedded data so a deleted PDF cannot still be downloaded', async () => {

@@ -2,6 +2,8 @@
 
 import { getCourseStaffIds } from '@/features/courses/assignment-utils';
 
+import type { AxiosRequestConfig } from 'axios';
+import { useMaterialUpload, MaterialUploadProgress } from '@/features/courses/use-material-upload';
 import React, { useState, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
@@ -30,6 +32,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
 import {
   COURSE_LEVEL_VALUES,
+  COURSE_BOOK_MAX_BYTES,
   getCourseCurricula,
   courseCurriculumSummary,
   formatStaffDisplayName,
@@ -143,13 +146,15 @@ interface CourseFormDialogProps {
       removeSyllabus?: boolean;
       removeCover?: boolean;
     },
+    uploadOptions?: AxiosRequestConfig,
   ) => Promise<void>;
   t: ReturnType<typeof useTranslations>;
   tCommon: ReturnType<typeof useTranslations>;
   canManageBook?: boolean;
 }
 
-const MAX_COURSE_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB Vercel serverless payload limit
+const MAX_COURSE_FILE_SIZE_BYTES = COURSE_BOOK_MAX_BYTES;
+const MAX_COVER_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 
 function CourseFormDialog({
   open,
@@ -183,6 +188,7 @@ function CourseFormDialog({
   const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(() => getCourseStaffIds(initialValues).teachingAssistantIds);
   const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
   const [loading, setLoading] = useState(false);
+  const upload = useMaterialUpload();
   const [error, setError] = useState('');
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
@@ -294,13 +300,13 @@ function CourseFormDialog({
     if (syllabusFile && syllabusFile.size > MAX_COURSE_FILE_SIZE_BYTES) {
       setError(
         locale === 'ar'
-          ? `حجم ملف المنهج (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (4 ميجابايت). يرجى ضغط ملف الـ PDF قبل الرفع.`
-          : `Syllabus PDF file size (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB serverless limit. Please compress the file before uploading.`,
+          ? `حجم ملف المنهج (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (100 ميجابايت).`
+          : `Syllabus PDF file size (${(syllabusFile.size / (1024 * 1024)).toFixed(1)} MB) exceeds 100 MiB limit.`,
       );
       return;
     }
 
-    if (coverImageFile && coverImageFile.size > MAX_COURSE_FILE_SIZE_BYTES) {
+    if (coverImageFile && coverImageFile.size > MAX_COVER_FILE_SIZE_BYTES) {
       setError(
         locale === 'ar'
           ? `حجم صورة الغلاف (${(coverImageFile.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (4 ميجابايت).`
@@ -341,17 +347,18 @@ function CourseFormDialog({
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
         removeCover,
-      });
+      }, syllabusFile ? upload.begin() : undefined);
       onOpenChange(false);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, tCommon('errorLoading')));
     } finally {
+      upload.finish();
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) upload.cancel(); onOpenChange(next); }}>
       <DialogContent className="glass max-h-[90vh] max-w-2xl sm:max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-5 sm:p-6">
         <DialogHeader className="border-b border-border pb-4">
           <DialogTitle className="text-foreground text-lg font-bold">
@@ -695,8 +702,8 @@ function CourseFormDialog({
                         if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
                           setError(
                             locale === 'ar'
-                              ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
-                              : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+                              ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (100 ميجابايت).`
+                              : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 100 MiB limit.`,
                           );
                           e.target.value = '';
                           setSyllabusFile(null);
@@ -716,7 +723,7 @@ function CourseFormDialog({
                   )}
                 </div>
                 <p className="text-[10px] text-muted-foreground/80 pt-1">
-                  {locale === 'ar' ? 'الحد الأقصى: 4 ميجابايت (PDF فقط)' : 'Max size: 4 MB (PDF only)'}
+                  {locale === 'ar' ? 'الحد الأقصى: 100 ميجابايت (PDF فقط)' : 'Max size: 100 MiB (PDF only)'}
                 </p>
               </div>
 
@@ -802,11 +809,11 @@ function CourseFormDialog({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
+                        if (file.size > MAX_COVER_FILE_SIZE_BYTES) {
                           setError(
                             locale === 'ar'
                               ? `حجم الصورة (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
-                              : `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+                              : `Image size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4 MiB limit.`,
                           );
                           e.target.value = '';
                           setCoverImageFile(null);
@@ -863,8 +870,9 @@ function CourseFormDialog({
             <label htmlFor="isActiveCourse" className="text-sm font-semibold text-foreground cursor-pointer">{t('isActive')}</label>
           </div>
 
+          <MaterialUploadProgress progress={upload.progress} onCancel={upload.cancel} isAr={locale === 'ar'} />
           <DialogFooter className="mt-6 gap-2 border-t border-border pt-4">
-            <Button variant="secondary" type="button" onClick={() => onOpenChange(false)}>{tCommon('cancel')}</Button>
+            <Button variant="secondary" type="button" onClick={() => { upload.cancel(); onOpenChange(false); }}>{tCommon('cancel')}</Button>
             <Button type="submit" disabled={loading} className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {tCommon('save')}
@@ -895,6 +903,7 @@ function UploadCoursePdfDialog({
   const isAr = locale === 'ar';
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const upload = useMaterialUpload();
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -921,8 +930,8 @@ function UploadCoursePdfDialog({
     if (file.size > MAX_COURSE_FILE_SIZE_BYTES) {
       setError(
         isAr
-          ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (4 ميجابايت).`
-          : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4MB limit.`,
+          ? `حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح به (100 ميجابايت).`
+          : `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 100 MiB limit.`,
       );
       return;
     }
@@ -932,7 +941,7 @@ function UploadCoursePdfDialog({
     try {
       const fd = new FormData();
       fd.append('file', file);
-      await api.post(`/admin/courses/${course._id}/syllabus`, fd);
+      await api.post(`/admin/courses/${course._id}/syllabus`, fd, upload.begin());
       toast.success(
         isAr
           ? `تم رفع ملف المنهج لمقرر ${course.code} بنجاح`
@@ -943,6 +952,7 @@ function UploadCoursePdfDialog({
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, isAr ? 'فشل رفع ملف المنهج' : 'Failed to upload syllabus PDF'));
     } finally {
+      upload.finish();
       setLoading(false);
     }
   };
@@ -967,7 +977,7 @@ function UploadCoursePdfDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) upload.cancel(); onOpenChange(next); }}>
       <DialogContent className="glass max-w-lg rounded-2xl border border-white/10 p-5 sm:p-6 text-start">
         <DialogHeader className="border-b border-border/80 pb-3 text-start">
           <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
@@ -1058,7 +1068,7 @@ function UploadCoursePdfDialog({
                 </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  {isAr ? 'أقصى حجم مسموح به: 4 ميجابايت' : 'Maximum file size: 4 MB'}
+                  {isAr ? 'أقصى حجم مسموح به: 100 ميجابايت' : 'Maximum file size: 100 MiB'}
                 </p>
               )}
               <input
@@ -1072,8 +1082,8 @@ function UploadCoursePdfDialog({
                     if (f.size > MAX_COURSE_FILE_SIZE_BYTES) {
                       setError(
                         isAr
-                          ? `حجم الملف (${(f.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (4 ميجابايت).`
-                          : `File size exceeds 4MB limit.`,
+                          ? `حجم الملف (${(f.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى (100 ميجابايت).`
+                          : `File size exceeds 100 MiB limit.`,
                       );
                       setFile(null);
                       return;
@@ -1086,11 +1096,12 @@ function UploadCoursePdfDialog({
             </div>
           </div>
 
+          <MaterialUploadProgress progress={upload.progress} onCancel={upload.cancel} isAr={isAr} />
           <DialogFooter className="mt-4 gap-2 border-t border-border pt-4">
             <Button
               type="button"
               variant="secondary"
-              onClick={() => onOpenChange(false)}
+              onClick={() => { upload.cancel(); onOpenChange(false); }}
               className="rounded-squircle text-xs"
             >
               {isAr ? 'إلغاء' : 'Cancel'}
@@ -1178,6 +1189,7 @@ function CoursesPageContent() {
       syllabusFile?: File | null;
       coverImageFile?: File | null;
     },
+    uploadOptions?: AxiosRequestConfig,
   ) => {
     const { syllabusFile, coverImageFile, ...coursePayload } = data;
     const res = await api.post<Course>('/admin/courses', coursePayload);
@@ -1187,14 +1199,14 @@ function CoursesPageContent() {
         try {
           const fd = new FormData();
           fd.append('file', syllabusFile);
-          await api.post(`/admin/courses/${newCourseId}/syllabus`, fd);
+          await api.post(`/admin/courses/${newCourseId}/syllabus`, fd, uploadOptions);
         } catch {
           setSelectedCourseForPdf({ ...coursePayload, _id: newCourseId });
           setIsPdfModalOpen(true);
           toast.error(
             locale === 'ar'
-              ? 'تم إضافة المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
-              : 'Course added, but syllabus upload failed (ensure file is under 4MB and Cloudinary is configured)',
+              ? 'تم إضافة المادة ولكن فشل رفع الكتاب. يمكنك إعادة المحاولة من نافذة رفع الكتاب.'
+              : 'Course added, but book upload failed. Retry from the book upload dialog.',
           );
         }
       }
@@ -1231,6 +1243,7 @@ function CoursesPageContent() {
       removeSyllabus?: boolean;
       removeCover?: boolean;
     },
+    uploadOptions?: AxiosRequestConfig,
   ) => {
     if (!selectedCourse) return;
     const { syllabusFile, coverImageFile, removeSyllabus, removeCover, ...coursePayload } = data;
@@ -1255,14 +1268,14 @@ function CoursesPageContent() {
       try {
         const fd = new FormData();
         fd.append('file', syllabusFile);
-        await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd);
+        await api.post(`/admin/courses/${selectedCourse._id}/syllabus`, fd, uploadOptions);
       } catch {
         setSelectedCourseForPdf({ ...selectedCourse, ...coursePayload });
         setIsPdfModalOpen(true);
         toast.error(
           locale === 'ar'
-            ? 'تم تحديث المادة ولكن فشل رفع ملف المنهج (تأكد من أن حجم الملف أقل من 4MB وإعدادات Cloudinary)'
-            : 'Course updated, but syllabus upload failed (ensure file is under 4MB and Cloudinary is configured)',
+            ? 'تم تحديث المادة ولكن فشل رفع الكتاب. يمكنك إعادة المحاولة من نافذة رفع الكتاب.'
+            : 'Course updated, but book upload failed. Retry from the book upload dialog.',
         );
       }
     }
@@ -1954,8 +1967,8 @@ function CoursesPageContent() {
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {locale === 'ar'
-                    ? 'اختر المقرر لرفع واستعراض المحاضرات والسكاشن (الحد الأقصى لحجم الملف: 10 ميجابايت)'
-                    : 'Select a course to view or upload lectures and sections (Max upload size: 10 MB)'}
+                    ? 'اختر المقرر لرفع واستعراض المحاضرات والسكاشن (الحد الأقصى لحجم الملف: 25 ميجابايت)'
+                    : 'Select a course to view or upload lectures and sections (Max upload size: 25 MiB)'}
                 </p>
               </div>
             </div>
