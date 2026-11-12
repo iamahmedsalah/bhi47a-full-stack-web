@@ -29,6 +29,8 @@ Updated: 6 November 2026. Current increment: **D + E + correction workflow in F*
 
 ### Verification log
 
+12 November increment: bilingual colored scheme/workbook guidance, strict scheme request serialization, file previews with sequential 500-row transactional uploads (10,000 rows / 2 MB per file), original Excel row error numbers, cross-batch duplicate checks, safe receipt retries, paginated audit detail previews, localized validation guidance and Arabic level terminology. Operational steps and regression commands are in [control-testing.md](control-testing.md). This increment does not change the pending production rollout gates.
+
 Production acceptance evidence and outstanding gates are tracked in [control-production-acceptance.md](control-production-acceptance.md). On 6 November, the live portal's login/health returned 200 and existing protected routes returned 401, but the new Control policy/history routes returned 404. The explicitly configured database audit found no flagged inconsistencies (its identity as the live database is unconfirmed). A real synthetic backup/restore rehearsal passed across 16 collections. General performance E2E still times out in fixture setup; production acceptance remains pending.
 
 | Check | Evidence so far |
@@ -49,7 +51,7 @@ Local verification uses synthetic data on an isolated localhost MongoDB replica 
 
 Open **Admin -> Control**, select the year/semester and course, then select the component. Set the coursework split in **Grading scheme** before entering coursework. Earlier saved schemes may still have coursework/final disabled from the old midterm-only phase: explicitly enable those components in that dialog when ready. Download **Excel / template** from the workbook, edit only the selected component inputs and preserve student IDs/revisions, then preview and confirm valid rows. Invalid rows are listed without changing their marks. Blank cells mean unchanged; clear marks explicitly in the UI.
 
-The workbook paginates 100 students per page. Imports and save batches support at most 500 changes; upload files are capped at 2 MB. Rosters above 2,000 approved registrations produce an explicit overflow error. Unsaved drafts survive navigation within the same tab for the same authenticated user; review and retry restored drafts explicitly. Refreshing or closing the browser requires resolving the unsaved-work warning.
+The workbook paginates 100 students per page. Save transactions and direct row/paste imports support at most 500 changes. XLSX files are capped at 2 MB / 10,000 rows and previewed and committed in sequential 500-row batches. The former 2,000-student roster cutoff has been removed; local regression checks cover 3,001 students. Unsaved drafts survive navigation within the same tab for the same authenticated user; review and retry restored drafts explicitly. Refreshing or closing the browser requires resolving the unsaved-work warning.
 
 After all students have a mark or reviewed status, submit the sheet. A different user with review permission approves it. Publish it from **Grades** and configure that page's opening/closing window. For corrections to a snapshot-backed release, reopen it in Control with a reason, correct, review and activate a fresh preview in Grades. The old snapshot stays visible until replacement. Withdraw explicitly from Grades to hide a release. A legacy published sheet without a snapshot must still be hidden before reopening.
 

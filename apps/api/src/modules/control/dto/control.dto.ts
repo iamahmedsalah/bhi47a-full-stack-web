@@ -231,6 +231,15 @@ export class ControlEntriesQueryDto {
   search?: string;
 }
 
+export class ControlFileBatchQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(19)
+  batch = 0;
+}
+
 export class ReviewSheetDto {
   @IsIn(['SUBMIT', 'APPROVE', 'RETURN', 'REOPEN'])
   action!: 'SUBMIT' | 'APPROVE' | 'RETURN' | 'REOPEN';

@@ -131,7 +131,9 @@ export class GradingSchemeService {
       {
         $inc: { mutationRevision: 1 },
         $setOnInsert: {
-          version: 1,
+          // Persisting/freezing unchanged defaults must preserve the version
+          // used by existing previews and templates. Only a rule edit bumps it.
+          version: 0,
           components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({ ...c })),
         },
       },

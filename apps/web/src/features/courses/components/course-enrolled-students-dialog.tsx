@@ -235,7 +235,7 @@ export function CourseEnrolledStudentsDialog({
             {course?.level && (
               <span className="inline-flex items-center gap-1 rounded-squircle border border-border/80 bg-secondary/40 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-medium text-muted-foreground">
                 <GraduationCap className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
-                <span>{isAr ? `الفرقة ${course.level}` : `Level ${course.level}`}</span>
+                <span>{isAr ? `المستوى ${course.level}` : `Level ${course.level}`}</span>
               </span>
             )}
 
@@ -258,7 +258,7 @@ export function CourseEnrolledStudentsDialog({
               onChange={(e) => setSearch(e.target.value)}
               placeholder={
                 isAr
-                  ? 'بحث سريع بكود الطالب أو اسم الطالب أو الفرقة...'
+                  ? 'بحث سريع بكود الطالب أو اسم الطالب أو المستوى...'
                   : 'Quick search by student code, name or level...'
               }
               className="ps-9 rounded-squircle bg-background border-border/80 text-xs h-9"
@@ -317,7 +317,7 @@ export function CourseEnrolledStudentsDialog({
                       <th className="py-2.5 px-3 font-semibold text-center w-12">#</th>
                       <th className="py-2.5 px-3 font-semibold text-start w-32">{isAr ? 'كود الطالب' : 'Student Code'}</th>
                       <th className="py-2.5 px-3 font-semibold text-start">{isAr ? 'اسم الطالب' : 'Student Name'}</th>
-                      <th className="py-2.5 px-3 font-semibold text-center w-28">{isAr ? 'الفرقة' : 'Level'}</th>
+                      <th className="py-2.5 px-3 font-semibold text-center w-28">{isAr ? 'المستوى' : 'Level'}</th>
                       <th className="py-2.5 px-3 font-semibold text-center w-36">{isAr ? 'تاريخ التسجيل' : 'Enrolled At'}</th>
                     </tr>
                   </thead>

@@ -830,7 +830,7 @@ export default function StudentProfilePage() {
                         {t('level')}
                       </span>
                       <span className="text-sm font-bold text-foreground mt-0.5 block">
-                        {isEnglish ? `Level ${profile.level}` : `الفرقة / المستوى ${profile.level}`}
+                        {isEnglish ? `Level ${profile.level}` : `المستوى / المستوى ${profile.level}`}
                       </span>
                     </div>
                   </div>

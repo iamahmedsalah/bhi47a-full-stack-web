@@ -224,7 +224,7 @@ function ControlHomeContent() {
             : item.nameEn || item.name;
           const levelLabel = item.level
             ? isAr
-              ? `الفرقة ${
+              ? `المستوى ${
                   item.level === "1"
                     ? "الأولى"
                     : item.level === "2"
@@ -622,23 +622,23 @@ function ControlHomeContent() {
               onValueChange={(v) => setFilter("level", v)}
             >
               <SelectTrigger className="h-10 rounded-squircle text-xs">
-                <SelectValue placeholder={isAr ? "الفرقة الدراسية" : "Level"} />
+                <SelectValue placeholder={isAr ? "المستوى الدراسي" : "Level"} />
               </SelectTrigger>
               <SelectContent dir={isAr ? "rtl" : "ltr"}>
                 <SelectItem value="all">
-                  {isAr ? "كل الفرق الدراسية" : "All Levels"}
+                  {isAr ? "كل المستويات الدراسية" : "All Levels"}
                 </SelectItem>
                 <SelectItem value="1">
-                  {isAr ? "الفرقة الأولى" : "Level 1"}
+                  {isAr ? "المستوى الأول" : "Level 1"}
                 </SelectItem>
                 <SelectItem value="2">
-                  {isAr ? "الفرقة الثانية" : "Level 2"}
+                  {isAr ? "المستوى الثاني" : "Level 2"}
                 </SelectItem>
                 <SelectItem value="3">
-                  {isAr ? "الفرقة الثالثة" : "Level 3"}
+                  {isAr ? "المستوى الثالث" : "Level 3"}
                 </SelectItem>
                 <SelectItem value="4">
-                  {isAr ? "الفرقة الرابعة" : "Level 4"}
+                  {isAr ? "المستوى الرابع" : "Level 4"}
                 </SelectItem>
               </SelectContent>
             </Select>

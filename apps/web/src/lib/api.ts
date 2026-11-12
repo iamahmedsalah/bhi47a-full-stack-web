@@ -428,7 +428,7 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     en: 'Student roster exceeds the maximum allowed limit for a single sheet',
   },
   'COURSE_LIMIT_EXCEEDED': {
-    ar: 'تجاوز عدد المقررات الحد الأقصى المسموح به للعرض (500 مقرر). يرجى التصفية بحسب الفرقة أو الفصل',
+    ar: 'تجاوز عدد المقررات الحد الأقصى المسموح به للعرض (500 مقرر). يرجى التصفية بحسب المستوى أو الفصل',
     en: 'Course count exceeds the maximum limit (500). Please filter by level or semester',
   },
   'A mark is required': {
@@ -573,6 +573,55 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
   },
 };
 
+Object.assign(ERROR_TRANSLATIONS, {"Invalid XLSX workbook":{"ar":"الملف تالف أو ليس ملف XLSX صالحًا. احفظه بصيغة XLSX ثم أعد المحاولة.","en":"The workbook is damaged or is not a valid XLSX file. Save it as XLSX and retry."},"Download the template for this sheet":{"ar":"الملف يخص كشفًا آخر أو يفتقد بيانات النطاق. نزّل قالب هذا الكشف واستخدمه.","en":"This file belongs to another sheet or is missing scope information. Download this sheet's template."},"Invalid template headers":{"ar":"أعمدة الملف غير مطابقة للقالب. احتفظ بعناوين الأعمدة وترتيبها كما هي.","en":"The column headers do not match the template. Keep their names and order unchanged."},"Maximum 10000 rows per file":{"ar":"الحد الأقصى 10000 صف و20 عمودًا لكل ملف. قسّم الملف ثم أعد المعاينة.","en":"A file may contain at most 10,000 rows and 20 columns. Split it and preview again."},"Invalid import batch":{"ar":"رقم دفعة الاستيراد غير صالح. أعد معاينة الملف.","en":"Invalid import batch. Preview the file again."},"Student identity/registration mismatch":{"ar":"كود الطالب أو هويته غير مطابق، أو ليس لديه تسجيل معتمد في هذا المقرر والفصل.","en":"The student code or identity does not match, or the student has no approved registration for this course and term."},"Duplicate student":{"ar":"الطالب مكرر داخل الدفعة. احتفظ بصف واحد لكل طالب.","en":"Duplicate student in this batch. Keep one row per student."},"Reason must not exceed 500 characters":{"ar":"السبب يجب ألا يزيد عن 500 حرف.","en":"The reason must not exceed 500 characters."},"Invalid score/status":{"ar":"صيغة الدرجة أو الحالة غير صالحة. استخدم رقمًا وحالة معتمدة من القالب.","en":"Invalid score or status. Use a numeric score and a supported template status."},"Special status requires permission and a reason":{"ar":"الحالة الاستثنائية تتطلب صلاحية إدارة الحالات وسببًا من 3 أحرف على الأقل.","en":"A special status requires state-management permission and a reason of at least 3 characters."},"Hide published marks before importing":{"ar":"الدرجة منشورة. أخفِها من صفحة الدرجات واتبع إجراءات التصحيح قبل الاستيراد.","en":"This mark is published. Hide it in Grades and follow the correction workflow before importing."},"Mark does not match status, maximum or step":{"ar":"الدرجة لا تتوافق مع الحالة أو الحد الأقصى أو خطوة الإدخال. راجع توزيع الدرجات.","en":"The mark does not match the status, maximum or entry increment. Check the grading scheme."},"Stale mark revision":{"ar":"تم تعديل درجة الطالب بعد تنزيل القالب. حدّث القالب ثم راجع الدرجة مجددًا.","en":"This mark changed after the template was downloaded. Refresh the template and review it again."},"Coursework must equal attendance + quizzes, max 20":{"ar":"أعمال السنة يجب أن تساوي الحضور + الاختبارات، داخل مخصص كل جزء، والمجموع لا يتجاوز 20.","en":"Coursework must equal attendance plus quizzes within each allocation, with a total no greater than 20."},"Preview expired or inaccessible":{"ar":"انتهت صلاحية المعاينة أو لا تملك صلاحية الوصول إليها. أعد معاينة الملف.","en":"The preview expired or is inaccessible. Preview the file again."},"Preview is stale; preview again":{"ar":"تغير الكشف أو توزيع الدرجات منذ المعاينة. أعد المعاينة قبل الحفظ.","en":"The sheet or grading scheme changed since preview. Preview again before saving."},"No valid rows":{"ar":"لا توجد صفوف صالحة للحفظ. راجع الأخطاء وأعد المعاينة.","en":"There are no valid rows to save. Review the errors and preview again."},"Coursework split is frozen after entry":{"ar":"تقسيم الحضور والاختبارات مقفل بعد بدء رصد أعمال السنة.","en":"The attendance and quiz allocation is frozen after coursework entry starts."},"Marks exist. Create a new term scheme; in-place force changes are disabled.":{"ar":"توجد درجات مرصودة؛ لا يمكن تغيير حدودها أو خطواتها في نفس النطاق. استخدم توزيعًا جديدًا للفصل المناسب.","en":"Marks already exist; maximums and increments cannot be changed in this scope. Use a new scheme for the appropriate term."},"Step cannot exceed the maximum mark":{"ar":"خطوة الإدخال يجب ألا تتجاوز الحد الأقصى للدرجة.","en":"The entry increment must not exceed the maximum mark."},"At most two decimals are allowed":{"ar":"يُسمح بمنزلتين عشريتين على الأكثر.","en":"At most two decimal places are allowed."},"Coursework maximum must be 20":{"ar":"الحد الأقصى لأعمال السنة ثابت عند 20.","en":"The coursework maximum is fixed at 20."},"SHEET_NOT_EDITABLE":{"ar":"الكشف مقفل أو قيد المراجعة أو معتمد. أعده للمسودة عبر الإجراء المسموح قبل الإدخال.","en":"The sheet is locked, under review or approved. Return it to a draft through an authorized workflow before entry."},"SCHEME_CHANGED":{"ar":"تغير توزيع الدرجات. حدّث البيانات وأعد المعاينة.","en":"The grading scheme changed. Refresh the data and preview again."},"File too large":{"ar":"حجم الملف يتجاوز الحد المسموح. قلّل حجم الملف ثم أعد المحاولة.","en":"The file exceeds the allowed size. Reduce its size and retry."}});
+
+Object.assign(ERROR_TRANSLATIONS, {
+  "Insufficient permissions": {
+    "ar": "ليست لديك الصلاحية المطلوبة لهذه العملية. راجع مسؤول النظام.",
+    "en": "You do not have permission for this action. Contact an administrator."
+  },
+  "Course not accessible": {
+    "ar": "لا يمكنك الوصول إلى هذا المقرر ضمن صلاحياتك الحالية.",
+    "en": "This course is outside your current access permissions."
+  },
+  "Course is outside your assigned scope": {
+    "ar": "هذا المقرر خارج نطاق المقررات أو الفصول المسندة إليك.",
+    "en": "This course is outside your assigned course or term scope."
+  },
+  "Sheet not found": {
+    "ar": "الكشف غير موجود. ارجع إلى قائمة الكشوف وحدّثها.",
+    "en": "The sheet was not found. Return to the sheet list and refresh."
+  },
+  "Course not found": {
+    "ar": "المقرر غير موجود. حدّث قائمة المقررات.",
+    "en": "The course was not found. Refresh the course list."
+  },
+  "Concurrent entry; refresh the sheet and retry": {
+    "ar": "تم تعديل الدرجة بالتزامن بواسطة مستخدم آخر. حدّث الكشف ثم راجع الدرجة وأعد المحاولة.",
+    "en": "Another user changed the mark concurrently. Refresh, review the mark and retry."
+  },
+  "Sheet is already locked": {
+    "ar": "الكشف مقفل بالفعل. حدّث حالته قبل المتابعة.",
+    "en": "The sheet is already locked. Refresh its status before continuing."
+  },
+  "Sheet is not locked": {
+    "ar": "الكشف غير مقفل. حدّث حالته قبل المتابعة.",
+    "en": "The sheet is not locked. Refresh its status before continuing."
+  },
+  "Component is not enabled for this course": {
+    "ar": "هذا المكوّن غير مفعّل لهذا المقرر. راجع توزيع الدرجات.",
+    "en": "This component is not enabled for this course. Check the grading scheme."
+  },
+  "اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي / عميد المعهد (control.final.approve)": {
+    "ar": "اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي أو عميد المعهد.",
+    "en": "Final approval requires final Control approval or dean permissions."
+  },
+  "اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)": {
+    "ar": "اعتماد الكشف يتطلب صلاحية اعتماد كشوف الكنترول.",
+    "en": "Approving the sheet requires Control sheet approval permission."
+  }
+});
+
 const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>(
   Object.entries(ERROR_TRANSLATIONS).map(([k, v]) => [k.toLowerCase(), v]),
 );
@@ -581,6 +630,13 @@ function localizeErrorMessage(rawMsg: string): string {
   if (typeof window === 'undefined') return rawMsg;
   const isEn = window.location.pathname.startsWith('/en');
   const cleanMsg = rawMsg.replace(/^\.+|\.+$/g, '').trim();
+  const row = /^Row (\d+): (.+)$/.exec(cleanMsg);
+  if (row) return (isEn ? 'Row ' : 'الصف ') + row[1] + ': ' + localizeErrorMessage(row[2]);
+  const formula = /^Formula in row (\d+)$/.exec(cleanMsg);
+  if (formula) return isEn ? 'Formula in row ' + formula[1] + '. Replace formulas with values.' : 'توجد معادلة في الصف ' + formula[1] + '. استبدل المعادلات بقيم ثابتة.';
+  const duplicate = /^Duplicate student in file at row (\d+)$/.exec(cleanMsg);
+  if (duplicate) return (isEn ? 'Duplicate student in file at row ' : 'طالب مكرر داخل الملف في الصف ') + duplicate[1];
+  if (/^components\.\d+\./.test(cleanMsg)) return isEn ? 'Invalid grading component settings. Check maximums, increments and enabled components, then refresh if needed.' : 'إعدادات توزيع الدرجات غير صالحة. راجع الحدود وخطوات الإدخال والمكوّنات المفعلة، ثم حدّث الصفحة عند الحاجة.';
   const entry =
     ERROR_TRANSLATIONS[cleanMsg] ??
     LOWERCASE_ERROR_TRANSLATIONS.get(cleanMsg.toLowerCase());

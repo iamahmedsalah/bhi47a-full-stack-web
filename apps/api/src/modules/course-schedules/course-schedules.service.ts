@@ -435,7 +435,7 @@ export class CourseSchedulesService {
         key: 'location',
         width: 24,
       },
-      { header: 'الفرقة (level: 1..4)', key: 'level', width: 16 },
+      { header: 'المستوى (level: 1..4)', key: 'level', width: 16 },
       {
         header: 'القسم (department e.g. GENERAL/BIS)',
         key: 'department',
@@ -848,7 +848,7 @@ export class CourseSchedulesService {
 
       // 6. Optional level, department, group, section, notes
       const level =
-        this.extractFieldValue(row, ['level', 'year', 'الفرقة', 'السنة']) ||
+        this.extractFieldValue(row, ['level', 'year', 'المستوى', 'الفرقة', 'السنة']) ||
         String(matchedCourse.level ?? '1');
 
       const department =

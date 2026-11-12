@@ -28,10 +28,10 @@ export interface CoursesByLevelChartProps {
 }
 
 const LEVEL_LABELS: Record<string, { shortAr: string; fullAr: string; shortEn: string; fullEn: string; color: string }> = {
-  '1': { shortAr: 'الفرقة الأولى', fullAr: 'الفرقة الأولى (الشعبة العامة)', shortEn: 'Level 1', fullEn: 'Level 1 (General)', color: '#0d9488' },
-  '2': { shortAr: 'الفرقة الثانية', fullAr: 'الفرقة الثانية (الشعبة العامة)', shortEn: 'Level 2', fullEn: 'Level 2 (General)', color: '#0284c7' },
-  '3': { shortAr: 'الفرقة الثالثة', fullAr: 'الفرقة الثالثة (تخصص BIS / محاسبة)', shortEn: 'Level 3', fullEn: 'Level 3 (Specialization)', color: '#8b5cf6' },
-  '4': { shortAr: 'الفرقة الرابعة', fullAr: 'الفرقة الرابعة (سنة التخرج)', shortEn: 'Level 4', fullEn: 'Level 4 (Graduation)', color: '#10b981' },
+  '1': { shortAr: 'المستوى الأول', fullAr: 'المستوى الأول (الشعبة العامة)', shortEn: 'Level 1', fullEn: 'Level 1 (General)', color: '#0d9488' },
+  '2': { shortAr: 'المستوى الثاني', fullAr: 'المستوى الثاني (الشعبة العامة)', shortEn: 'Level 2', fullEn: 'Level 2 (General)', color: '#0284c7' },
+  '3': { shortAr: 'المستوى الثالث', fullAr: 'المستوى الثالث (تخصص BIS / محاسبة)', shortEn: 'Level 3', fullEn: 'Level 3 (Specialization)', color: '#8b5cf6' },
+  '4': { shortAr: 'المستوى الرابع', fullAr: 'المستوى الرابع (سنة التخرج)', shortEn: 'Level 4', fullEn: 'Level 4 (Graduation)', color: '#10b981' },
 };
 
 export function CoursesByLevelChart({
@@ -197,7 +197,7 @@ export function CoursesByLevelChart({
           <p className="font-mono font-bold text-sm text-foreground mt-0.5">{totalCourses}</p>
         </div>
         <div className="rounded-xl bg-secondary/30 p-2">
-          <p className="text-[11px] text-muted-foreground">{isAr ? 'متوسط الفرقة' : 'Avg / Level'}</p>
+          <p className="text-[11px] text-muted-foreground">{isAr ? 'متوسط المستوى' : 'Avg / Level'}</p>
           <p className="font-mono font-bold text-sm text-teal-400 mt-0.5">{avgCourses}</p>
         </div>
         <div className="rounded-xl bg-secondary/30 p-2">

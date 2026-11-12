@@ -92,16 +92,16 @@ export function localizeSemester(semester: unknown, locale: RegistrationLocale):
 export function localizeAcademicLevel(level: unknown, locale: RegistrationLocale): string {
   const l = String(level ?? "").toLowerCase().trim();
   if (locale === "ar") {
-    if (l === "1" || l.includes("أولى") || l.includes("first")) return "المستوى الأول (الفرقة الأولى)";
-    if (l === "2" || l.includes("ثانية") || l.includes("second")) return "المستوى الثاني (الفرقة الثانية)";
-    if (l === "3" || l.includes("ثالثة") || l.includes("third")) return "المستوى الثالث (الفرقة الثالثة)";
-    if (l === "4" || l.includes("رابعة") || l.includes("fourth")) return "المستوى الرابع (الفرقة الرابعة)";
+    if (l === "1" || l.includes("أول") || l.includes("first")) return "المستوى الأول";
+    if (l === "2" || l.includes("ثاني") || l.includes("second")) return "المستوى الثاني";
+    if (l === "3" || l.includes("ثالث") || l.includes("third")) return "المستوى الثالث";
+    if (l === "4" || l.includes("رابع") || l.includes("fourth")) return "المستوى الرابع";
     return `المستوى ${level ?? "—"}`;
   } else {
-    if (l === "1" || l.includes("أولى") || l.includes("first")) return "Level 1 (Freshman)";
-    if (l === "2" || l.includes("ثانية") || l.includes("second")) return "Level 2 (Sophomore)";
-    if (l === "3" || l.includes("ثالثة") || l.includes("third")) return "Level 3 (Junior)";
-    if (l === "4" || l.includes("رابعة") || l.includes("fourth")) return "Level 4 (Senior)";
+    if (l === "1" || l.includes("أول") || l.includes("first")) return "Level 1 (Freshman)";
+    if (l === "2" || l.includes("ثاني") || l.includes("second")) return "Level 2 (Sophomore)";
+    if (l === "3" || l.includes("ثالث") || l.includes("third")) return "Level 3 (Junior)";
+    if (l === "4" || l.includes("رابع") || l.includes("fourth")) return "Level 4 (Senior)";
     return `Level ${level ?? "—"}`;
   }
 }

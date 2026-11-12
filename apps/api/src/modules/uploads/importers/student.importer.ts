@@ -515,7 +515,7 @@ export class StudentImporter implements Importer {
                         status: 'approved',
                         approvedAt: new Date(),
                         advisorNotes:
-                          'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+                          'تسجيل تلقائي لطلاب المستوى الأول (Automated First-Year Registration)',
                       },
                       $setOnInsert: {
                         editCount: 0,

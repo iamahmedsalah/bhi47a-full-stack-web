@@ -1598,10 +1598,10 @@ export function AdvisingWorkspace() {
                       onValueChange={(val) => setAutoDistLevel(val)}
                       options={[
                         { value: "all", label: isArabic ? "جميع المستويات (1 - 4)" : "All Levels (1 - 4)" },
-                        { value: "1", label: isArabic ? "الفرقة الأولى (Level 1)" : "Level 1" },
-                        { value: "2", label: isArabic ? "الفرقة الثانية (Level 2)" : "Level 2" },
-                        { value: "3", label: isArabic ? "الفرقة الثالثة (Level 3)" : "Level 3" },
-                        { value: "4", label: isArabic ? "الفرقة الرابعة (Level 4)" : "Level 4" },
+                        { value: "1", label: isArabic ? "المستوى الأول (Level 1)" : "Level 1" },
+                        { value: "2", label: isArabic ? "المستوى الثاني (Level 2)" : "Level 2" },
+                        { value: "3", label: isArabic ? "المستوى الثالث (Level 3)" : "Level 3" },
+                        { value: "4", label: isArabic ? "المستوى الرابع (Level 4)" : "Level 4" },
                       ]}
                       className="w-full h-9 rounded-squircle bg-secondary/60 border border-white/10 text-xs text-foreground"
                     />

@@ -353,7 +353,7 @@ export default function StudentCodesPage({
           <TableCell className="w-24 py-2.5 px-2 text-center text-xs">
             {row.level ? (
               <span className="inline-block rounded-squircle border border-border/60 bg-secondary/50 px-2 py-0.5 font-semibold text-foreground text-[11px]">
-                {dir === "rtl" ? `الفرقة ${row.level}` : `Level ${row.level}`}
+                {dir === "rtl" ? `المستوى ${row.level}` : `Level ${row.level}`}
               </span>
             ) : (
               <span className="text-muted-foreground">—</span>

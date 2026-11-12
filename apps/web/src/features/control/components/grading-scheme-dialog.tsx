@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { getApiErrorMessage } from "@/lib/api";
 import { controlKeys, getGradingScheme, updateGradingScheme } from "../api";
+import { ControlHelpNotes } from "./control-help-notes";
 
 interface Props {
   open: boolean;
@@ -44,10 +45,11 @@ export function GradingSchemeDialog({
 }: Props) {
   const t = useTranslations("control");
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: controlKeys.scheme(courseId, academicYear, semester),
     queryFn: () => getGradingScheme(courseId, { academicYear, semester }),
     enabled: open,
+    refetchOnWindowFocus: false,
   });
   const [previous, setPrevious] = useState(data);
   const [components, setComponents] = useState<ControlSchemeComponent[]>(
@@ -77,11 +79,42 @@ export function GradingSchemeDialog({
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
+  const invalidScheme =
+    components.length !== 3 ||
+    components.some(
+      (component) =>
+        !Number.isFinite(component.max) ||
+        !Number.isFinite(component.step) ||
+        component.max <= 0 ||
+        component.max > 1000 ||
+        component.step <= 0 ||
+        component.step > component.max ||
+        Math.abs(component.max * 100 - Math.round(component.max * 100)) >
+          1e-8 ||
+        Math.abs(component.step * 100 - Math.round(component.step * 100)) >
+          1e-8,
+    );
+  const invalidAttendance =
+    !Number.isFinite(attendanceMax) ||
+    attendanceMax < 0 ||
+    attendanceMax > 20 ||
+    Math.abs(attendanceMax * 100 - Math.round(attendanceMax * 100)) > 1e-8;
+  function changeOpen(next: boolean) {
+    if (save.isPending) return;
+    if (!next) {
+      setComponents(
+        data?.components.map((component) => ({ ...component })) ?? [],
+      );
+      setAttendanceMax(data?.courseworkAttendanceMax ?? 5);
+      save.reset();
+    }
+    onOpenChange(next);
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent
         dir={locale === "ar" ? "rtl" : "ltr"}
-        className="rounded-2xl max-w-xl"
+        className="flex flex-col rounded-2xl max-w-xl max-h-[90dvh] overflow-hidden"
       >
         <DialogHeader>
           <DialogTitle className="text-start">
@@ -94,9 +127,15 @@ export function GradingSchemeDialog({
         {isLoading ? (
           <p>{t("loading")}</p>
         ) : error ? (
-          <p role="alert">{getApiErrorMessage(error)}</p>
+          <div role="alert">
+            <p>{getApiErrorMessage(error)}</p>
+            <Button variant="outline" onClick={() => void refetch()}>
+              {t("retry")}
+            </Button>
+          </div>
         ) : (
-          <div className="space-y-4">
+          <div className="min-h-0 space-y-4 overflow-y-auto">
+            <ControlHelpNotes scheme />
             <Label htmlFor="control-attendance-max">{t("attendanceMax")}</Label>
             <Input
               id="control-attendance-max"
@@ -105,14 +144,26 @@ export function GradingSchemeDialog({
               min={0}
               max={20}
               step={0.5}
-              value={attendanceMax}
-              onChange={(e) => setAttendanceMax(Number(e.target.value))}
+              value={Number.isFinite(attendanceMax) ? attendanceMax : ""}
+              aria-invalid={invalidAttendance}
+              onChange={(e) =>
+                setAttendanceMax(
+                  e.target.value === "" ? NaN : Number(e.target.value),
+                )
+              }
             />
-            <p className="text-xs text-muted-foreground">{t("splitNote")}</p>
-            <p className="text-xs text-muted-foreground">
-              {t("calculationNote")}
-            </p>
-            <p className="text-xs text-muted-foreground">{t("frozenNote")}</p>
+            {!invalidAttendance && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-xs text-primary"
+              >
+                {t("courseworkNote", {
+                  attendance: attendanceMax,
+                  quizzes: 20 - attendanceMax,
+                })}
+              </p>
+            )}
             {components.map((component) => (
               <div
                 key={component.key}
@@ -145,16 +196,33 @@ export function GradingSchemeDialog({
                         dir="ltr"
                         type="number"
                         min={0.01}
+                        max={1000}
+                        aria-invalid={
+                          !Number.isFinite(component[field]) ||
+                          component[field] <= 0 ||
+                          component[field] > 1000 ||
+                          component.step > component.max
+                        }
                         step={0.01}
                         disabled={
                           field === "max" && component.key === "coursework"
                         }
-                        value={component[field]}
+                        value={
+                          Number.isFinite(component[field])
+                            ? component[field]
+                            : ""
+                        }
                         onChange={(e) =>
                           setComponents((current) =>
                             current.map((c) =>
                               c.key === component.key
-                                ? { ...c, [field]: Number(e.target.value) }
+                                ? {
+                                    ...c,
+                                    [field]:
+                                      e.target.value === ""
+                                        ? NaN
+                                        : Number(e.target.value),
+                                  }
                                 : c,
                             ),
                           )
@@ -167,8 +235,22 @@ export function GradingSchemeDialog({
             ))}
           </div>
         )}
-        <DialogFooter className="rtl:sm:justify-start">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        {(invalidScheme || invalidAttendance) && !isLoading && (
+          <p role="alert" className="text-sm text-destructive">
+            {t("schemeValidation")}
+          </p>
+        )}
+        {save.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {getApiErrorMessage(save.error)}
+          </p>
+        )}
+        <DialogFooter className="shrink-0 rtl:sm:justify-start">
+          <Button
+            variant="outline"
+            disabled={save.isPending}
+            onClick={() => changeOpen(false)}
+          >
             {t("cancel")}
           </Button>
           <Button
@@ -176,6 +258,8 @@ export function GradingSchemeDialog({
               isLoading ||
               Boolean(error) ||
               save.isPending ||
+              invalidScheme ||
+              invalidAttendance ||
               !Number.isFinite(attendanceMax) ||
               attendanceMax < 0 ||
               attendanceMax > 20

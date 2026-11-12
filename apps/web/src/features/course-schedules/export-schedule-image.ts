@@ -26,10 +26,10 @@ export interface ExportScheduleOptions {
 }
 
 const LEVEL_NAMES_AR: Record<string, string> = {
-  "1": "الفرقة الأولى",
-  "2": "الفرقة الثانية",
-  "3": "الفرقة الثالثة",
-  "4": "الفرقة الرابعة",
+  "1": "المستوى الأول",
+  "2": "المستوى الثاني",
+  "3": "المستوى الثالث",
+  "4": "المستوى الرابع",
 };
 
 const LEVEL_NAMES_EN: Record<string, string> = {
@@ -105,10 +105,10 @@ function buildScheduleMarkup(
   const levelName =
     !level || level === "all"
       ? isAr
-        ? "جميع الفرق"
+        ? "جميع المستويات"
         : "All levels"
       : isAr
-        ? LEVEL_NAMES_AR[level] || `الفرقة ${level}`
+        ? LEVEL_NAMES_AR[level] || `المستوى ${level}`
         : LEVEL_NAMES_EN[level] || `Level ${level}`;
 
   // Filter items by categoryTab if needed

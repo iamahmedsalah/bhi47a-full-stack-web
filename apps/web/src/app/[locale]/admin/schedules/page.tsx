@@ -408,7 +408,7 @@ function SchedulesManagementContent() {
     if (schedules.length === 0) {
       toast.warning(
         isAr
-          ? 'لا توجد مواعيد مسجلة لهذه الفرقة لعرضها في صورة الجدول.'
+          ? 'لا توجد مواعيد مسجلة لهذه المستوى لعرضها في صورة الجدول.'
           : 'No schedules found for this level to export as an image.',
       );
       return;
@@ -562,7 +562,7 @@ function SchedulesManagementContent() {
       ) {
         conflicts.push(
           isAr
-            ? `تعارض جدول الدفعة: الفرقة ${item.level} (${item.department}) لديها موعد آخر (${item.courseNameAr || item.courseName}) في نفس التوقيت`
+            ? `تعارض جدول الدفعة: المستوى ${item.level} (${item.department}) لديها موعد آخر (${item.courseNameAr || item.courseName}) في نفس التوقيت`
             : `Batch Conflict: Level ${item.level} (${item.department}) has another session (${item.courseName}) at the same time`,
         );
       }
@@ -1213,15 +1213,15 @@ function SchedulesManagementContent() {
         {/* Level Filter */}
         <div className="w-[130px]">
           <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-            <SelectTrigger aria-label={isAr ? 'تصفية حسب الفرقة' : 'Filter by level'} className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
-              <SelectValue placeholder={isAr ? 'جميع الفرق' : 'All Levels'} />
+            <SelectTrigger aria-label={isAr ? 'تصفية حسب المستوى' : 'Filter by level'} className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue placeholder={isAr ? 'جميع المستويات' : 'All Levels'} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
-              <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-              <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-              <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-              <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+              <SelectItem value="all">{isAr ? 'جميع المستويات' : 'All Levels'}</SelectItem>
+              <SelectItem value="1">{isAr ? 'المستوى الأول' : 'Level 1'}</SelectItem>
+              <SelectItem value="2">{isAr ? 'المستوى الثاني' : 'Level 2'}</SelectItem>
+              <SelectItem value="3">{isAr ? 'المستوى الثالث' : 'Level 3'}</SelectItem>
+              <SelectItem value="4">{isAr ? 'المستوى الرابع' : 'Level 4'}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -1271,7 +1271,7 @@ function SchedulesManagementContent() {
                   <th className="px-4 py-3.5 text-center">{isAr ? 'النوع' : 'TYPE'}</th>
                   <th className="px-4 py-3.5 text-start">{isAr ? 'اليوم والتوقيت' : 'DAY & TIME'}</th>
                   <th className="px-4 py-3.5 text-start">{isAr ? 'المكان / القاعة' : 'HALL / LOCATION'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'الفرقة والمجموعة' : 'LEVEL & GROUP'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'المستوى والمجموعة' : 'LEVEL & GROUP'}</th>
                   <th className="px-4 py-3.5 text-center">{isAr ? 'الإجراءات' : 'ACTIONS'}</th>
                 </tr>
               </thead>
@@ -1389,7 +1389,7 @@ function SchedulesManagementContent() {
                       {/* Level & Group */}
                       <td className="px-4 py-3.5 text-foreground">
                         <div>
-                          {isAr ? `الفرقة ${item.level}` : `Level ${item.level}`}
+                          {isAr ? `المستوى ${item.level}` : `Level ${item.level}`}
                           {item.department && ` · ${item.department}`}
                         </div>
                         {(item.group || item.section) && (
@@ -1620,17 +1620,17 @@ function SchedulesManagementContent() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">
-                  {isAr ? 'الفرقة' : 'Level'}
+                  {isAr ? 'المستوى' : 'Level'}
                 </label>
                 <Select value={formLevel} onValueChange={setFormLevel}>
                   <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-                    <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-                    <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-                    <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+                    <SelectItem value="1">{isAr ? 'المستوى الأول' : 'Level 1'}</SelectItem>
+                    <SelectItem value="2">{isAr ? 'المستوى الثاني' : 'Level 2'}</SelectItem>
+                    <SelectItem value="3">{isAr ? 'المستوى الثالث' : 'Level 3'}</SelectItem>
+                    <SelectItem value="4">{isAr ? 'المستوى الرابع' : 'Level 4'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1890,7 +1890,7 @@ function SchedulesManagementContent() {
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 {isAr
-                  ? 'يحتوي النموذج على الأعمدة المطلوبة (كود المقرر، اسم الدكتور/المعيد، نوع الموعد، اليوم، التوقيت، القاعة، الفرقة) مع أمثلة استرشادية جاهزة.'
+                  ? 'يحتوي النموذج على الأعمدة المطلوبة (كود المقرر، اسم الدكتور/المعيد، نوع الموعد، اليوم، التوقيت، القاعة، المستوى) مع أمثلة استرشادية جاهزة.'
                   : 'Includes all required columns (course code, doctor username, type, day, time, hall, level) with ready-to-use sample rows.'}
               </p>
               <div className="flex flex-wrap items-center gap-2 pt-1">

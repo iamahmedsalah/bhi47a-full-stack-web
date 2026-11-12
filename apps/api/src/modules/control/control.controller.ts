@@ -12,6 +12,7 @@ import {
   CommitImportDto,
   ImportRowsDto,
   ExportControlDto,
+  ControlFileBatchQueryDto,
 } from './dto/control.dto';
 import {
   Body,
@@ -128,11 +129,12 @@ export class ControlController {
   previewFile(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
+    @Query() query: ControlFileBatchQueryDto,
     @UploadedFile() file?: { buffer: Buffer; originalname: string },
   ) {
     if (!file || !file.originalname.toLowerCase().endsWith('.xlsx'))
       throw new BadRequestException('Upload an XLSX file');
-    return this.workbook.previewFile(user, id, file.buffer);
+    return this.workbook.previewFile(user, id, file.buffer, query.batch);
   }
 
   @Post('sheets/:id/import/rows')

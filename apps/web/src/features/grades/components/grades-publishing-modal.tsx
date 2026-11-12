@@ -45,10 +45,10 @@ interface GradesPublishingModalProps {
 }
 
 const ACADEMIC_LEVELS = [
-  { level: '1', labelEn: 'Level 1 (Freshman)', labelAr: 'الفرقة الأولى' },
-  { level: '2', labelEn: 'Level 2 (Sophomore)', labelAr: 'الفرقة الثانية' },
-  { level: '3', labelEn: 'Level 3 (Junior)', labelAr: 'الفرقة الثالثة' },
-  { level: '4', labelEn: 'Level 4 (Senior)', labelAr: 'الفرقة الرابعة' },
+  { level: '1', labelEn: 'Level 1 (Freshman)', labelAr: 'المستوى الأول' },
+  { level: '2', labelEn: 'Level 2 (Sophomore)', labelAr: 'المستوى الثاني' },
+  { level: '3', labelEn: 'Level 3 (Junior)', labelAr: 'المستوى الثالث' },
+  { level: '4', labelEn: 'Level 4 (Senior)', labelAr: 'المستوى الرابع' },
 ];
 
 export function GradesPublishingModal({

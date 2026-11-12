@@ -377,7 +377,7 @@ export default function AdminHeader() {
                             {item.targetType === 'all'
                               ? (isAr ? 'الجميع' : 'All')
                               : item.targetType === 'level'
-                              ? (isAr ? `الفرقة ${item.targetLevel || ''}` : `Level ${item.targetLevel || ''}`)
+                              ? (isAr ? `المستوى ${item.targetLevel || ''}` : `Level ${item.targetLevel || ''}`)
                               : (isAr ? `طالب: ${item.targetStudentId?.studentCode || ''}` : `Student: ${item.targetStudentId?.studentCode || ''}`)}
                           </span>
                         </div>

@@ -34,6 +34,61 @@ Use separate browser profiles or private windows for submitter, reviewer and stu
 
 ## Office acceptance checklist
 
+### Guidance, Excel batches and audit previews (12 November 2026)
+
+- The scheme dialog and workbook contain bilingual notes with distinct colors and icons for the calculation example, input increments, frozen rules and student visibility. Scheme confirmation saves settings; it does not publish results or rescale recorded marks. The scheme request sends only `key`, `max`, `step` and `enabled` for each component.
+- Download the scoped XLSX template. A file may contain up to **10,000 rows**, **20 columns** and **2 MB**. The server previews it in batches of **500 rows**. The preview displays student identity, before/after values, status, row errors, saved counts and progress. Review every batch before confirming.
+- Each batch is an independent transaction; the complete file is not one transaction. Invalid rows are excluded. Completed batches stay saved if a later batch fails. Retry in the same open dialog reuses the current receipt and skips completed batches, including a lost response after a successful save. Later batches are re-previewed and compared with the approved values before saving. Changed marks, permissions, workflow or rules can stop the import; re-open a fresh scoped template when instructed. Preview receipts remain scoped to the initiating user and sheet and expire through the existing TTL.
+- Duplicate student codes anywhere in the file, formulas, mismatched headers/scope, unsupported files and invalid batch numbers are rejected. Row errors retain their original Excel row numbers across batches. The direct paste/row endpoint retains its 500-row limit. Neither preview nor guidance changes marks.
+- In audit history, use Previous/Next to navigate beyond the first 50 events. Open an event preview to inspect the actor, timestamp in Cairo, localized source, reason and before/after values. Loading failures display a retry action rather than an empty history.
+- Arabic academic labels now use **المستوى الأول، المستوى الثاني، المستوى الثالث، المستوى الرابع** throughout display text and reports. Existing spreadsheet aliases using **الفرقة** remain accepted for compatibility.
+
+Regression commands:
+
+```powershell
+pnpm.cmd run test:control:validation
+pnpm.cmd run test:control:import:browser
+pnpm.cmd run test:control:e2e
+```
+
+Completion review: the scheme dialog now discards cancelled edits, offers a retry after loading failures and prevents closing during an active save. Coursework file previews show attendance and quiz contributions as separate columns. A processed batch with rejected changes displays a warning rather than a success checkmark, and the finished-file notice distinguishes saved rows from rows requiring correction. The validation-message test also complies with Next.js's reserved `module` variable rule.
+
+Verification evidence for this increment:
+
+| Check | Recorded outcome |
+| --- | --- |
+| Control workbook unit tests | 22 passed; `outputs/control-import-unit-focused.log` |
+| Real replica-set workflow | 14 passed, including the 501-row two-batch XLSX commit, receipt replay, stale preview rejection, audit counts and the 3,001-student roster; `outputs/control-import-integration.log` |
+| Bilingual scheme/import/audit browser checks | Passed, including strict save payloads, mobile actions, 501-row batching and a lost response without duplicate saves; rerun passed in `outputs/control-completion-browser.log` |
+| Workbook browser regression | Passed with 3,001 synthetic students; `outputs/control-import-workbook-browser.log` |
+| Localized validation messages | 2 passed after correcting the reserved test variable; `outputs/control-completion-error-tests-final.log` |
+| Earlier full production build | All three tasks passed; `outputs/control-import-build.log`. Later completion edits require their own final checks. |
+| Earlier workspace/E2E type checks | Passed; `outputs/control-import-types.log` and `outputs/control-import-e2e-types-final.log` |
+| Earlier changed-source lint | No errors; `outputs/control-import-lint-changed.log`. The later full lint additionally found a reserved variable in the test harness, now fixed. |
+| Broad API tests | Earlier run: 94 suites passed; security requests hit a local timeout/reset. File-storage tests passed independently (16 tests). This is not an all-green full-suite claim. |
+| General E2E | The completion retry again exceeded the 120-second performance-fixture setup hook. No assertions or timeouts were weakened; `outputs/control-completion-general-e2e.log`. |
+
+The full completion runs use `outputs/control-completion-*.log`. Workspace typechecking passed all four tasks in `outputs/control-completion-types.log`. Local resource pressure caused prolonged/stalled lint and security runs, and competing general-test/build runs were explicitly stopped. An experimental security-test listener change did not establish a pass and was removed; existing security assertions, setup and timeouts remain unchanged. The remaining gate is a clean complete CI run in a functioning test environment. No production data or deployment was changed.
+
+Verification evidence for this increment:
+
+| Check | Recorded outcome |
+| --- | --- |
+| Control workbook unit tests | 22 passed; `outputs/control-import-unit-focused.log` |
+| Real replica-set workflow | 14 passed, including the 501-row two-batch XLSX commit, receipt replay, stale preview rejection, audit counts and the 3,001-student roster; `outputs/control-import-integration.log` |
+| Bilingual scheme/import/audit browser checks | Passed, including strict save payloads, mobile actions, 501-row batching and a lost response without duplicate saves; rerun passed in `outputs/control-completion-browser.log` |
+| Workbook browser regression | Passed with 3,001 synthetic students; `outputs/control-import-workbook-browser.log` |
+| Localized validation messages | 2 passed after correcting the reserved test variable; `outputs/control-completion-error-tests-final.log` |
+| Earlier full production build | All three tasks passed; `outputs/control-import-build.log`. Later completion edits require their own final checks. |
+| Earlier workspace/E2E type checks | Passed; `outputs/control-import-types.log` and `outputs/control-import-e2e-types-final.log` |
+| Earlier changed-source lint | No errors; `outputs/control-import-lint-changed.log`. The later full lint additionally found a reserved variable in the test harness, now fixed. |
+| Broad API tests | Earlier run: 94 suites passed; security requests hit a local timeout/reset. File-storage tests passed independently (16 tests). This is not an all-green full-suite claim. |
+| General E2E | The completion retry again exceeded the 120-second performance-fixture setup hook. No assertions or timeouts were weakened; `outputs/control-completion-general-e2e.log`. |
+
+The remaining full lint, type, unit and build completion runs use `outputs/control-completion-*.log`; verify their terminal summaries and exit status before treating them as passing. Local resource pressure caused prolonged/stalled runs, and some competing runs were explicitly stopped. The security fixture now starts one IPv4 listener for the suite instead of having Supertest open and close a listener per request; its assertions and timeouts are unchanged. A clean complete CI run is still required before deployment. No production data or deployment was changed.
+
+Browser evidence is written to `outputs/control-import-browser/`. The browser checks include strict scheme payloads, both languages, field validation, audit details, 501-row batching and a lost response after the first batch saved. API tests reopen a real generated XLSX and verify cross-batch duplicates and original row numbers. The real replica-set test checks two transactional commits and receipt replay. An untouched default scheme retains version 0 when first frozen, so the first batch does not invalidate later file batches merely by persisting unchanged defaults.
+
 Select **2026-2027 → first semester → CTRL-DEMO** in Control. The component selector supports coursework, midterm and final. If a real course is missing, check Courses, its active flag, staff assignments and term permissions. A missing historical active flag is treated as active; explicitly inactive courses stay hidden.
 
 - Configure the grading scheme before entering marks: coursework 20, midterm 20, final 60. Coursework defaults to attendance 5 + quizzes 15; the attendance allocation is configurable, with quizzes taking the remainder of 20. The split freezes after coursework entry.

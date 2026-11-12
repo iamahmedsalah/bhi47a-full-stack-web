@@ -93,7 +93,7 @@ export const LABELS_AR: ReportLabels = {
     academicYear: 'العام الأكاديمي المحدد',
     semester: 'الفصل الدراسي المحدد',
     department: 'القسم / المسار المحدد',
-    level: 'الفرقة الدراسية المحددة',
+    level: 'المستوى الدراسي المحددة',
     all: 'الكل (جميع البيانات)',
     methodologyTitle: 'منهجية القياس وتعريف المؤشرات',
     kpiDef:

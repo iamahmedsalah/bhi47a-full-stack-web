@@ -113,6 +113,9 @@ jobs:
       - name: Verify Control acceptance audit and restore isolation
         run: pnpm run test:control:acceptance-safety
 
+      - name: Verify localized Control validation messages
+        run: pnpm run test:control:validation
+
       - name: Lint workspace
         run: pnpm run lint
 
@@ -188,6 +191,7 @@ jobs:
       - name: Test Control workbook and result releases in Chromium
         run: |
           pnpm run test:control:browser
+          pnpm run test:control:import:browser
           pnpm run test:control:release:browser
 
       - name: Stop isolated admission services

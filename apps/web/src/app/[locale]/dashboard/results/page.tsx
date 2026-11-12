@@ -233,7 +233,7 @@ export default function StudentResultsPage() {
         : "نتائج هذا المستوى قيد المراجعة";
       emptyDesc = isEnglish
         ? `Results for academic level ${statusData.studentLevel} have not been released yet.`
-        : `لم يتم اعتماد ونشر نتائج الفرقة الدراسية (${statusData.studentLevel}) حتى الآن.`;
+        : `لم يتم اعتماد ونشر نتائج المستوى الدراسي (${statusData.studentLevel}) حتى الآن.`;
     } else if (statusData?.reason === "system_closed") {
       emptyTitle = isEnglish
         ? "Results Portal Offline"

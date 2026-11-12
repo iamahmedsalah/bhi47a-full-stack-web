@@ -1036,7 +1036,7 @@ export class RegistrationsService {
 
   /**
    * Automated First-Year Course Registration:
-   * Automatically enrolls Level 1 ("الفرقة الأولى") students into all required Level 1 semester courses.
+   * Automatically enrolls Level 1 ("المستوى الأول") students into all required Level 1 semester courses.
    */
   async autoRegisterFirstYearStudents(
     dto?: AutoRegisterFirstYearDto,
@@ -1062,7 +1062,11 @@ export class RegistrationsService {
       enrollmentStatus: 'active',
       $or: [
         { level: '1' },
-        { level: { $regex: /^(1|الفرقة\s*الأولى|first|level\s*1)/i } },
+        {
+          level: {
+            $regex: /^(1|الفرقة\s*الأولى|المستوى\s*الأول|first|level\s*1)/i,
+          },
+        },
       ],
     };
 
@@ -1083,7 +1087,7 @@ export class RegistrationsService {
         skippedCount: 0,
         academicYear: targetYear,
         semester: targetSemester,
-        message: 'لا يوجد طلاب مؤهلين للتسجيل التلقائي في الفرقة الأولى',
+        message: 'لا يوجد طلاب مؤهلين للتسجيل التلقائي في المستوى الأول',
         results: [],
       };
     }
@@ -1265,7 +1269,7 @@ export class RegistrationsService {
                 approvedAt: now,
                 approvedBy: actorObjectId,
                 advisorNotes:
-                  'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+                  'تسجيل تلقائي لطلاب المستوى الأول (Automated First-Year Registration)',
                 printableFormUrl: `/api/registrations/${existing._id.toString()}/print`,
               },
             },
@@ -1296,7 +1300,7 @@ export class RegistrationsService {
               approvedAt: now,
               approvedBy: actorObjectId,
               advisorNotes:
-                'تسجيل تلقائي لطلاب الفرقة الأولى (Automated First-Year Registration)',
+                'تسجيل تلقائي لطلاب المستوى الأول (Automated First-Year Registration)',
               editCount: 0,
               printableFormUrl: `/api/registrations/${newId.toString()}/print`,
             },

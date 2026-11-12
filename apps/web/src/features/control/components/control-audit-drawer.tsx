@@ -1,9 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
-import { History, Loader2 } from "lucide-react";
+import { History, Loader2, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { getApiErrorMessage } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { CAIRO_TIME_ZONE } from "@/lib/cairo-time";
 import {
   Sheet,
@@ -78,16 +87,25 @@ export function ControlAuditDrawer({
   locale,
 }: ControlAuditDrawerProps) {
   const isAr = locale === "ar";
+  const [page, setPage] = useState(1);
+  const [preview, setPreview] = useState<ControlAuditRow | null>(null);
+  const context = `${sheetId}:${studentId ?? ""}`;
+  const [previousContext, setPreviousContext] = useState(context);
+  if (context !== previousContext) {
+    setPreviousContext(context);
+    setPage(1);
+    setPreview(null);
+  }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: controlKeys.audit(sheetId, {
-      page: 1,
+      page,
       limit: 50,
       studentId: studentId || undefined,
     }),
     queryFn: () =>
       listControlAudit(sheetId, {
-        page: 1,
+        page,
         limit: 50,
         studentId: studentId || undefined,
       }),
@@ -115,7 +133,13 @@ export function ControlAuditDrawer({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) setPreview(null);
+        onOpenChange(value);
+      }}
+    >
       <SheetContent
         side={isAr ? "left" : "right"}
         dir={isAr ? "rtl" : "ltr"}
@@ -143,6 +167,13 @@ export function ControlAuditDrawer({
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : isError ? (
+            <div role="alert">
+              <p>{getApiErrorMessage(error)}</p>
+              <Button variant="outline" onClick={() => void refetch()}>
+                {t("retry")}
+              </Button>
             </div>
           ) : !data?.items?.length ? (
             <div className="rounded-xl border border-border/60 bg-surface/30 p-6 text-center text-xs text-muted-foreground">
@@ -203,6 +234,14 @@ export function ControlAuditDrawer({
                     {item.reason}
                   </div>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPreview(item)}
+                >
+                  <Eye className="size-4 me-2" />
+                  {t("auditPreview")}
+                </Button>
 
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
                   <span>
@@ -211,12 +250,74 @@ export function ControlAuditDrawer({
                       {item.actorName ?? "—"}
                     </span>
                   </span>
-                  <span className="font-mono">{item.source}</span>
+                  <span>{t(`auditSources.${item.source}`)}</span>
                 </div>
               </div>
             ))
           )}
         </div>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            disabled={page <= 1 || isLoading}
+            onClick={() => setPage(page - 1)}
+          >
+            {t("previous")}
+          </Button>
+          <span>
+            {page} / {data?.totalPages || 1}
+          </span>
+          <Button
+            variant="outline"
+            disabled={isLoading || !data || page >= data.totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            {t("next")}
+          </Button>
+        </div>
+        <Dialog
+          open={Boolean(preview) && open}
+          onOpenChange={(value) => {
+            if (!value) setPreview(null);
+          }}
+        >
+          <DialogContent dir={isAr ? "rtl" : "ltr"} className="rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-start">
+                {t("auditPreview")}
+              </DialogTitle>
+              <DialogDescription className="text-start">
+                {preview?.studentName} <bdi>{preview?.studentCode}</bdi> ·{" "}
+                {preview && formatCairoTimestamp(preview.at, locale)}
+              </DialogDescription>
+            </DialogHeader>
+            {preview && (
+              <div className="space-y-3">
+                <p>
+                  {preview.actorName} · {actionLabel(preview.action)} ·{" "}
+                  {t(`auditSources.${preview.source}`)}
+                </p>
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                  <p className="text-xs">{t("beforeValue")}</p>
+                  <p>
+                    {formatSnapshot(preview.oldValue, isAr, (state) =>
+                      t(`workflow.${state}`),
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-3">
+                  <p className="text-xs">{t("afterValue")}</p>
+                  <p>
+                    {formatSnapshot(preview.newValue, isAr, (state) =>
+                      t(`workflow.${state}`),
+                    )}
+                  </p>
+                </div>
+                <p>{preview.reason || "—"}</p>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </SheetContent>
     </Sheet>
   );

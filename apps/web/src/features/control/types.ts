@@ -208,6 +208,9 @@ export interface ControlWorkbook {
   rows: WorkbookRow[];
 }
 export interface ControlImportPreview {
+  batchIndex?: number;
+  totalBatches?: number;
+  totalRows?: number;
   previewId: string;
   valid: number;
   errors: string[];

@@ -1478,17 +1478,17 @@ export class CoursesService {
     if (format === 'csv') {
       const csvHeaders = [
         'كود الطالب',
-        'الفرقة',
+        'المستوى',
         'الحجب',
         'اسم الطالب (اختياري)',
       ];
       const sampleRows = [
-        '260402,الفرقة الثانية,مفعل,عبدالرحمن صابر علي محمود وحيده',
-        '260104,الفرقة الثانية,مفعل,فارس ابراهيم نصر ابراهيم عبدالوهاب المالح',
-        '260464,الفرقة الثانية,محجوب,مصطفى ايهاب العوضي عريب محمد',
-        '260791,الفرقة الثانية,مفعل,ملك محمد رضا عبدالسلام عثمان',
-        '261556,الفرقة الثانية,محجوب,خلود نشأت رمضان عبدالعزيز علي',
-        '260646,الفرقة الثانية,مفعل,مصطفى عصمت حسن صديق احمد',
+        '260402,المستوى الثاني,مفعل,عبدالرحمن صابر علي محمود وحيده',
+        '260104,المستوى الثاني,مفعل,فارس ابراهيم نصر ابراهيم عبدالوهاب المالح',
+        '260464,المستوى الثاني,محجوب,مصطفى ايهاب العوضي عريب محمد',
+        '260791,المستوى الثاني,مفعل,ملك محمد رضا عبدالسلام عثمان',
+        '261556,المستوى الثاني,محجوب,خلود نشأت رمضان عبدالعزيز علي',
+        '260646,المستوى الثاني,مفعل,مصطفى عصمت حسن صديق احمد',
       ];
       const csvContent =
         '\uFEFF' + [csvHeaders.join(','), ...sampleRows].join('\n');
@@ -1509,7 +1509,7 @@ export class CoursesService {
 
     sheet.columns = [
       { header: 'كود الطالب', key: 'student_code', width: 20 },
-      { header: 'الفرقة', key: 'level', width: 22 },
+      { header: 'المستوى', key: 'level', width: 22 },
       { header: 'الحجب', key: 'status', width: 18 },
       { header: 'اسم الطالب (اختياري)', key: 'student_name', width: 38 },
     ];
@@ -1534,37 +1534,37 @@ export class CoursesService {
     const sampleRows = [
       {
         student_code: '260402',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'مفعل',
         student_name: 'عبدالرحمن صابر علي محمود وحيده',
       },
       {
         student_code: '260104',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'مفعل',
         student_name: 'فارس ابراهيم نصر ابراهيم عبدالوهاب المالح',
       },
       {
         student_code: '260464',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'محجوب',
         student_name: 'مصطفى ايهاب العوضي عريب محمد',
       },
       {
         student_code: '260791',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'مفعل',
         student_name: 'ملك محمد رضا عبدالسلام عثمان',
       },
       {
         student_code: '261556',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'محجوب',
         student_name: 'خلود نشأت رمضان عبدالعزيز علي',
       },
       {
         student_code: '260646',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         status: 'مفعل',
         student_name: 'مصطفى عصمت حسن صديق احمد',
       },
@@ -1853,6 +1853,7 @@ export class CoursesService {
       ]);
 
       const rawLevel = this.extractFieldValue(row, [
+        'المستوى',
         'الفرقة',
         'فرقة',
         'level',
@@ -2545,7 +2546,7 @@ export class CoursesService {
 
     // Meta Row
     const metaRow = sheet.addRow([
-      `عدد الطلاب: ${students.length} | الساعات المعتمدة: ${course.creditHours} | الفرقة: ${course.level || 'عام'} | تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}`,
+      `عدد الطلاب: ${students.length} | الساعات المعتمدة: ${course.creditHours} | المستوى: ${course.level || 'عام'} | تاريخ الاستخراج: ${new Date().toLocaleDateString('ar-EG')}`,
     ]);
     metaRow.font = {
       name: 'Segoe UI',
@@ -2570,7 +2571,7 @@ export class CoursesService {
       'م',
       'كود الطالب',
       'اسم الطالب',
-      'الفرقة الدراسية',
+      'المستوى الدراسي',
       'القسم / التخصص',
       'المجموعة',
       'السكشن',
@@ -2604,7 +2605,7 @@ export class CoursesService {
         index + 1,
         s.studentCode,
         s.nameAr || s.name,
-        s.level ? `الفرقة ${s.level}` : '—',
+        s.level ? `المستوى ${s.level}` : '—',
         s.department || 'عام',
         s.group || '—',
         s.section || '—',

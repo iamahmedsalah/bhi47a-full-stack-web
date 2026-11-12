@@ -30,6 +30,8 @@
     "test:control:e2e": "node apps/api/test/control/run.cjs",
     "test:control:audit": "node --test apps/api/test/control-data-audit.test.cjs",
     "test:control:browser": "node apps/web/tests/control-workbook.browser.mjs",
+    "test:control:import:browser": "node apps/web/tests/control-import.browser.mjs",
+    "test:control:validation": "node --test apps/web/tests/control-error-messages.test.mjs",
     "test:control:release:browser": "node apps/web/tests/control-release.browser.mjs",
     "seed:control:demo": "node scripts/seed-control-demo.cjs",
     "test:control:services": "docker compose -p student-portal-control-e2e -f docker-compose.control-test.yml up -d --wait",

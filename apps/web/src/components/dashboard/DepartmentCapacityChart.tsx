@@ -25,21 +25,21 @@ export interface DepartmentCapacityItem {
 export const DEFAULT_DEPT_CAPACITY: DepartmentCapacityItem[] = [
   {
     department: 'General Track (Years 1 & 2)',
-    departmentAr: 'الشعبة العامة (الفرقة الأولى والثانية)',
+    departmentAr: 'الشعبة العامة (المستوى الأول والثاني)',
     code: 'GEN',
     enrolled: 1850,
     capacity: 2200,
   },
   {
     department: 'Business Information Systems',
-    departmentAr: 'نظم معلومات الأعمال (الفرقة الثالثة والرابعة)',
+    departmentAr: 'نظم معلومات الأعمال (المستوى الثالث والرابع)',
     code: 'BIS',
     enrolled: 1240,
     capacity: 1400,
   },
   {
     department: 'Accounting & Auditing',
-    departmentAr: 'المحاسبة والمراجعة (الفرقة الثالثة والرابعة)',
+    departmentAr: 'المحاسبة والمراجعة (المستوى الثالث والرابع)',
     code: 'ACC',
     enrolled: 820,
     capacity: 1000,

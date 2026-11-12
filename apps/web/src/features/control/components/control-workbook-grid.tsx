@@ -72,10 +72,11 @@ import {
   exportControlImportErrors,
   getControlWorkbook,
   openControlSheet,
-  previewControlFile,
   previewControlRows,
   reviewControlSheet,
 } from "../api";
+import { ControlHelpNotes } from "./control-help-notes";
+import { ControlFileImportDialog } from "./control-file-import-dialog";
 import type {
   ControlImportPreview,
   ControlRosterRow,
@@ -183,6 +184,7 @@ export function ControlWorkbookGrid({
   const [action, setAction] = useState<
     "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN" | "CLEAR" | null
   >(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ControlImportPreview | null>(null);
   const [undo, setUndo] = useState<GradeChangeInput[]>([]);
   const inFlight = useRef(false);
@@ -288,7 +290,10 @@ export function ControlWorkbookGrid({
       if (code === "unpublish_required" || msg.includes("unpublish")) {
         return t("unpublishRequired");
       }
-      if (code === "not_in_roster" || msg.includes("no approved registration")) {
+      if (
+        code === "not_in_roster" ||
+        msg.includes("no approved registration")
+      ) {
         return t("unregistered");
       }
       if (code === "coursework_breakdown" || msg.includes("coursework mark")) {
@@ -493,7 +498,9 @@ export function ControlWorkbookGrid({
         courseId: detail.course.id,
         component,
       });
-      router.push(`/${locale}/admin/control/${next.sheet.slug || next.sheet.id}`);
+      router.push(
+        `/${locale}/admin/control/${next.sheet.slug || next.sheet.id}`,
+      );
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -648,6 +655,16 @@ export function ControlWorkbookGrid({
 
   return (
     <div className="space-y-3" dir={rtl ? "rtl" : "ltr"}>
+      {importFile && (
+        <ControlFileImportDialog
+          file={importFile}
+          sheetId={sheet.id}
+          rows={rows}
+          locale={locale}
+          onClose={() => setImportFile(null)}
+          onSaved={refresh}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
         {CONTROL_COMPONENT_KEYS.map((component) => (
           <Button
@@ -711,14 +728,7 @@ export function ControlWorkbookGrid({
           </Button>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
-        {t("courseworkNote", {
-          attendance: workbook.data?.scheme.courseworkAttendanceMax ?? 5,
-          quizzes: workbook.data?.scheme.courseworkQuizzesMax ?? 15,
-        })}
-      </p>
-      <p className="text-xs text-muted-foreground">{t("visibilityNote")}</p>
-      <p className="text-xs text-muted-foreground">{t("calculationNote")}</p>
+      <ControlHelpNotes />
       {key === "final" && (
         <p className="text-xs text-amber-500">{t("finalDraftNote")}</p>
       )}
@@ -940,14 +950,7 @@ export function ControlWorkbookGrid({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file) return;
-                setBusy(true);
-                try {
-                  setPreview(await previewControlFile(sheet.id, file));
-                } catch (err) {
-                  toast.error(getApiErrorMessage(err));
-                } finally {
-                  setBusy(false);
-                }
+                if (await save()) setImportFile(file);
               }}
             />
           </>

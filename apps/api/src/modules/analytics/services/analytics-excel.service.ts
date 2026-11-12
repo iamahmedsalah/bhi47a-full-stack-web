@@ -193,7 +193,7 @@ export class AnalyticsExcelService {
         [
           labels.info.level,
           query.level
-            ? `${isAr ? 'الفرقة' : 'Level'} ${query.level}`
+            ? `${isAr ? 'المستوى' : 'Level'} ${query.level}`
             : labels.info.all,
         ],
         ['', ''],
@@ -426,7 +426,7 @@ export class AnalyticsExcelService {
     if (wants('cohorts')) {
       const cohortSheet = workbook.addWorksheet(labels.sheets.cohorts);
       cohortSheet.columns = [
-        { header: isAr ? 'الفرقة الدراسية' : 'Level', key: 'level', width: 26 },
+        { header: isAr ? 'المستوى الدراسي' : 'Level', key: 'level', width: 26 },
         {
           header: isAr ? 'إجمالي المقيدين' : 'Total Enrolled',
           key: 'total',
@@ -482,10 +482,10 @@ export class AnalyticsExcelService {
       });
 
       const levelNames: Record<string, { ar: string; en: string }> = {
-        '1': { ar: 'الفرقة الأولى (عام)', en: 'Level 1 (General)' },
-        '2': { ar: 'الفرقة الثانية (عام)', en: 'Level 2 (General)' },
-        '3': { ar: 'الفرقة الثالثة (تخصص)', en: 'Level 3 (Specialization)' },
-        '4': { ar: 'الفرقة الرابعة (تخرج)', en: 'Level 4 (Graduation)' },
+        '1': { ar: 'المستوى الأول (عام)', en: 'Level 1 (General)' },
+        '2': { ar: 'المستوى الثاني (عام)', en: 'Level 2 (General)' },
+        '3': { ar: 'المستوى الثالث (تخصص)', en: 'Level 3 (Specialization)' },
+        '4': { ar: 'المستوى الرابع (تخرج)', en: 'Level 4 (Graduation)' },
       };
 
       ['1', '2', '3', '4'].forEach((lvl) => {
@@ -897,7 +897,7 @@ export class AnalyticsExcelService {
           width: 30,
         },
         { header: isAr ? 'القسم' : 'Dept', key: 'dept', width: 12 },
-        { header: isAr ? 'الفرقة' : 'Level', key: 'level', width: 10 },
+        { header: isAr ? 'المستوى' : 'Level', key: 'level', width: 10 },
         { header: isAr ? 'الساعات' : 'Credits', key: 'credits', width: 10 },
         {
           header: isAr ? 'أساتذة المقرر' : 'Doctors',
@@ -1022,7 +1022,7 @@ export class AnalyticsExcelService {
           width: 28,
         },
         { header: isAr ? 'القسم' : 'Dept', key: 'dept', width: 12 },
-        { header: isAr ? 'الفرقة' : 'Level', key: 'level', width: 10 },
+        { header: isAr ? 'المستوى' : 'Level', key: 'level', width: 10 },
         { header: labels.common.status, key: 'status', width: 18 },
         {
           header: isAr ? 'المعدل التراكمي (GPA)' : 'GPA',

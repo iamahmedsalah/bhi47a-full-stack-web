@@ -80,7 +80,7 @@ export class CourseSchedule {
   department!: string; // 'GENERAL' | 'BIS' | 'ACCOUNTING'
 
   @Prop({ trim: true })
-  group?: string; // e.g. "مجموعة أ" or "الفرقة الأولى"
+  group?: string; // e.g. "مجموعة أ" or "المستوى الأول"
 
   @Prop({ trim: true })
   section?: string; // e.g. "سكشن 1"

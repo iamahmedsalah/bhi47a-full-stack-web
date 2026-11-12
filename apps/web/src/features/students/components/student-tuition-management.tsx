@@ -694,14 +694,14 @@ export function StudentTuitionManagement({
           }}
         >
           <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-[150px] text-xs h-10 rounded-squircle">
-            <SelectValue placeholder={isAr ? 'الفرقة' : 'Level'} />
+            <SelectValue placeholder={isAr ? 'المستوى' : 'Level'} />
           </SelectTrigger>
           <SelectContent className="border-border bg-card text-xs" dir={isAr ? 'rtl' : 'ltr'}>
-            <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
-            <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-            <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-            <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-            <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+            <SelectItem value="all">{isAr ? 'جميع المستويات' : 'All Levels'}</SelectItem>
+            <SelectItem value="1">{isAr ? 'المستوى الأول' : 'Level 1'}</SelectItem>
+            <SelectItem value="2">{isAr ? 'المستوى الثاني' : 'Level 2'}</SelectItem>
+            <SelectItem value="3">{isAr ? 'المستوى الثالث' : 'Level 3'}</SelectItem>
+            <SelectItem value="4">{isAr ? 'المستوى الرابع' : 'Level 4'}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -855,7 +855,7 @@ export function StudentTuitionManagement({
                 )}
                 <th className="px-4 py-3 text-start">{isAr ? 'كود الطالب' : 'Student Code'}</th>
                 <th className="px-4 py-3 text-start">{isAr ? 'اسم الطالب' : 'Student Name'}</th>
-                <th className="px-4 py-3 text-start">{isAr ? 'الفرقة / القسم' : 'Level / Dept'}</th>
+                <th className="px-4 py-3 text-start">{isAr ? 'المستوى / القسم' : 'Level / Dept'}</th>
                 <th className="px-4 py-3 text-start">{isAr ? 'حالة المصروفات' : 'Tuition Status'}</th>
                 <th className="px-4 py-3 text-start">{isAr ? 'حالة الحجب' : 'Block Status'}</th>
                 <th className="px-4 py-3 text-start">{isAr ? 'السبب وتاريخ التحديث' : 'Reason / Updated'}</th>
@@ -925,7 +925,7 @@ export function StudentTuitionManagement({
                       <td className="px-4 py-3 text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                           <span className="font-semibold text-foreground">
-                            {isAr ? `الفرقة ${student.level || 1}` : `L${student.level || 1}`}
+                            {isAr ? `المستوى ${student.level || 1}` : `L${student.level || 1}`}
                           </span>
                           {student.department && (
                             <span className="text-[10px] bg-secondary/60 px-1.5 py-0.5 rounded border border-border/40">
@@ -1104,7 +1104,7 @@ export function StudentTuitionManagement({
                 <FileSpreadsheet className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 <span className="text-muted-foreground">
                   {isAr
-                    ? 'الأعمدة: كود الطالب | الفرقة | حالة المصروفات | الحجب'
+                    ? 'الأعمدة: كود الطالب | المستوى | حالة المصروفات | الحجب'
                     : 'Columns: Student Code | Level | Tuition Status | Block'}
                 </span>
               </div>

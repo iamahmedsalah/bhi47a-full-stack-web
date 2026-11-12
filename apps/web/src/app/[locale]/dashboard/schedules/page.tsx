@@ -195,7 +195,7 @@ function StudentSchedulesContent() {
     if (filteredSchedules.length === 0) {
       toast.warning(
         isAr
-          ? 'لا توجد مواعيد مسجلة لهذه الفرقة لعرضها في صورة الجدول.'
+          ? 'لا توجد مواعيد مسجلة لهذه المستوى لعرضها في صورة الجدول.'
           : 'No schedules found for this level to export as an image.',
       );
       return;
@@ -366,15 +366,15 @@ function StudentSchedulesContent() {
         {/* Level Filter */}
         <div className="w-[140px]">
           <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-            <SelectTrigger aria-label={isAr ? 'تصفية حسب الفرقة' : 'Filter by level'} className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
-              <SelectValue placeholder={isAr ? 'جميع الفرق' : 'All Levels'} />
+            <SelectTrigger aria-label={isAr ? 'تصفية حسب المستوى' : 'Filter by level'} className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
+              <SelectValue placeholder={isAr ? 'جميع المستويات' : 'All Levels'} />
             </SelectTrigger>
             <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
-              <SelectItem value="all">{isAr ? 'جميع الفرق' : 'All Levels'}</SelectItem>
-              <SelectItem value="1">{isAr ? 'الفرقة الأولى' : 'Level 1'}</SelectItem>
-              <SelectItem value="2">{isAr ? 'الفرقة الثانية' : 'Level 2'}</SelectItem>
-              <SelectItem value="3">{isAr ? 'الفرقة الثالثة' : 'Level 3'}</SelectItem>
-              <SelectItem value="4">{isAr ? 'الفرقة الرابعة' : 'Level 4'}</SelectItem>
+              <SelectItem value="all">{isAr ? 'جميع المستويات' : 'All Levels'}</SelectItem>
+              <SelectItem value="1">{isAr ? 'المستوى الأول' : 'Level 1'}</SelectItem>
+              <SelectItem value="2">{isAr ? 'المستوى الثاني' : 'Level 2'}</SelectItem>
+              <SelectItem value="3">{isAr ? 'المستوى الثالث' : 'Level 3'}</SelectItem>
+              <SelectItem value="4">{isAr ? 'المستوى الرابع' : 'Level 4'}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -435,7 +435,7 @@ function StudentSchedulesContent() {
           title={isAr ? 'لا توجد مواعيد محاضرات مطابقة' : 'No schedules found'}
           description={
             isAr
-              ? 'لم يتم العثور على أي مواعيد مطابقة لخيارات التصفية المحددة. جرب تغيير الفرقة أو المجموعة أو اليوم.'
+              ? 'لم يتم العثور على أي مواعيد مطابقة لخيارات التصفية المحددة. جرب تغيير المستوى أو المجموعة أو اليوم.'
               : 'No schedules match the selected filters. Try changing level, group or day.'
           }
         />
@@ -556,7 +556,7 @@ function StudentSchedulesContent() {
                               <span>{item.location}</span>
                             </span>
                             <div className="text-[11px] text-muted-foreground">
-                              <span>{isAr ? `الفرقة ${item.level}` : `L${item.level}`}</span>
+                              <span>{isAr ? `المستوى ${item.level}` : `L${item.level}`}</span>
                               {(item.group || item.section) && (
                                 <span className="font-medium text-foreground ms-1">
                                   ({item.group ? `${item.group}` : ''}
@@ -644,7 +644,7 @@ function StudentSchedulesContent() {
                     <span>{item.location}</span>
                   </span>
                   <div className="text-[11px] text-muted-foreground">
-                    <span>{isAr ? `الفرقة ${item.level}` : `Level ${item.level}`}</span>
+                    <span>{isAr ? `المستوى ${item.level}` : `Level ${item.level}`}</span>
                     {item.department && <span> · {item.department}</span>}
                     {(item.group || item.section) && (
                       <span className="font-medium text-primary ms-1">
@@ -670,7 +670,7 @@ function StudentSchedulesContent() {
                   <th className="px-4 py-3.5 text-center">{isAr ? 'النوع' : 'TYPE'}</th>
                   <th className="px-4 py-3.5 text-start">{isAr ? 'اليوم والتوقيت' : 'DAY & TIME'}</th>
                   <th className="px-4 py-3.5 text-start">{isAr ? 'المكان / القاعة' : 'HALL / LOCATION'}</th>
-                  <th className="px-4 py-3.5 text-start">{isAr ? 'الفرقة والمجموعة' : 'LEVEL & GROUP'}</th>
+                  <th className="px-4 py-3.5 text-start">{isAr ? 'المستوى والمجموعة' : 'LEVEL & GROUP'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -745,7 +745,7 @@ function StudentSchedulesContent() {
                       </td>
                       <td className="px-4 py-3.5 text-foreground">
                         <div>
-                          {isAr ? `الفرقة ${item.level}` : `Level ${item.level}`}
+                          {isAr ? `المستوى ${item.level}` : `Level ${item.level}`}
                           {item.department && ` · ${item.department}`}
                         </div>
                         {(item.group || item.section) && (

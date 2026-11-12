@@ -620,7 +620,12 @@ export class ControlWorkbookService {
     return book.xlsx.writeBuffer();
   }
 
-  async previewFile(user: AuthenticatedUser, sheetId: string, buffer: Buffer) {
+  async previewFile(
+    user: AuthenticatedUser,
+    sheetId: string,
+    buffer: Buffer,
+    batch = 0,
+  ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
     const book = new ExcelJS.Workbook();
@@ -644,8 +649,10 @@ export class ControlWorkbookService {
             scopeSlug === detail.sheet.slug)));
     if (!page || !scope || !isScopeMatch)
       throw new BadRequestException('Download the template for this sheet');
-    if (page.rowCount > 501 || page.columnCount > 20)
-      throw new BadRequestException('Maximum 500 rows per import');
+    if (page.rowCount > 10001 || page.columnCount > 20)
+      throw new BadRequestException('Maximum 10000 rows per file');
+    if (!Number.isInteger(batch) || batch < 0 || batch > 19)
+      throw new BadRequestException('Invalid import batch');
 
     const firstCell = page.getRow(1).getCell(1).text.trim();
     const isLegacyWithStudentId = firstCell === 'studentId';
@@ -700,6 +707,7 @@ export class ControlWorkbookService {
       throw new BadRequestException('Invalid template headers');
 
     const rows: Record<string, unknown>[] = [];
+    const identities = new Set<string>();
     page.eachRow((row, n) => {
       if (n === 1) return;
       const values: Record<string, unknown> = {};
@@ -709,9 +717,29 @@ export class ControlWorkbookService {
           throw new BadRequestException(`Formula in row ${n}`);
         values[key] = cell.text;
       });
+      const identity =
+        typeof values.studentCode === 'string' ? values.studentCode.trim() : '';
+      if (identity && identities.has(identity))
+        throw new BadRequestException(`Duplicate student in file at row ${n}`);
+      if (identity) identities.add(identity);
+      values.sourceRow = n;
       rows.push(values);
     });
-    return this.preview(user, sheetId, rows, Number(scope.getCell('B5').text));
+    const totalBatches = Math.max(1, Math.ceil(rows.length / 500));
+    if (batch >= totalBatches)
+      throw new BadRequestException('Invalid import batch');
+    const preview = await this.preview(
+      user,
+      sheetId,
+      rows.slice(batch * 500, (batch + 1) * 500),
+      Number(scope.getCell('B5').text),
+    );
+    return {
+      ...preview,
+      batchIndex: batch,
+      totalBatches,
+      totalRows: rows.length,
+    };
   }
 
   async preview(
@@ -751,7 +779,9 @@ export class ControlWorkbookService {
       const student = rawId ? byId.get(rawId) : byCode.get(rawCode);
       const id = student?.studentId ?? rawId;
       const fail = (message: string) =>
-        errors.push(`Row ${index + 2}: ${message}`);
+        errors.push(
+          `Row ${typeof row.sourceRow === 'number' ? row.sourceRow : index + 2}: ${message}`,
+        );
       if (
         !student ||
         student.notRegistered ||

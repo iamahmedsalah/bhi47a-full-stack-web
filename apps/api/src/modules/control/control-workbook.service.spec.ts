@@ -301,6 +301,66 @@ describe('Control workbook import and review', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+  it('previews 501 XLSX rows in scoped batches and rejects duplicates across batches', async () => {
+    const ctx = build();
+    const first = ctx.rows[0];
+    for (let i = 1; i <= 500; i++)
+      ctx.rows.push({
+        ...first,
+        studentId: String(new Types.ObjectId()),
+        studentCode: String(260001 + i),
+      });
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+    const page = book.getWorksheet('Marks')!;
+    for (let row = 2; row <= 502; row++) page.getCell('C' + row).value = 15;
+    const bytes = Buffer.from(await book.xlsx.writeBuffer());
+    const firstBatch = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      bytes,
+      0,
+    );
+    const lastBatch = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      bytes,
+      1,
+    );
+    expect(firstBatch).toMatchObject({
+      valid: 500,
+      totalBatches: 2,
+      totalRows: 501,
+      batchIndex: 0,
+    });
+    expect(lastBatch).toMatchObject({ valid: 1, batchIndex: 1 });
+    expect(lastBatch.changes[0].studentId).toBe(ctx.rows[500].studentId);
+    expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
+    page.getCell('C502').value = 25;
+    const invalid = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      Buffer.from(await book.xlsx.writeBuffer()),
+      1,
+    );
+    expect(invalid.valid).toBe(0);
+    expect(invalid.errors[0]).toMatch(/^Row 502:/);
+    page.getCell('A502').value = page.getCell('A2').text;
+    await expect(
+      ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+        1,
+      ),
+    ).rejects.toThrow('Duplicate student in file at row 502');
+    await expect(
+      ctx.service.previewFile(ctx.user, ctx.sheetId, bytes, -1),
+    ).rejects.toThrow('Invalid import batch');
+    await expect(
+      ctx.service.previewFile(ctx.user, ctx.sheetId, bytes, 2),
+    ).rejects.toThrow('Invalid import batch');
+  });
   it('submits an immutable digest and prevents the submitter approving their own sheet', async () => {
     const ctx = build();
     await ctx.service.review(ctx.user, ctx.sheetId, {

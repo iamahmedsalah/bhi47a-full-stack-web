@@ -241,7 +241,7 @@ function StudentsPageContent() {
 
     const toastId = toast.loading(
       locale === 'ar'
-        ? 'جاري التسجيل التلقائي لطلاب الفرقة الأولى في الخلفية...'
+        ? 'جاري التسجيل التلقائي لطلاب المستوى الأول في الخلفية...'
         : 'Auto-registering Level 1 students in the background...',
     );
 
@@ -264,7 +264,7 @@ function StudentsPageContent() {
       toast.success(
         res.data?.message ||
           (locale === 'ar'
-            ? 'تم التسجيل التلقائي لطلاب الفرقة الأولى بنجاح'
+            ? 'تم التسجيل التلقائي لطلاب المستوى الأول بنجاح'
             : 'Level 1 students automatically registered'),
         { id: toastId },
       );
@@ -579,7 +579,7 @@ function StudentsPageContent() {
             )}
             <span>
               {locale === 'ar'
-                ? 'تسجيل الفرقة الأولى'
+                ? 'تسجيل المستوى الأول'
                 : 'Auto-Register Level 1'}
             </span>
           </Button>
@@ -598,7 +598,7 @@ function StudentsPageContent() {
             <ArrowLeftRight className="h-3.5 w-3.5" />
             <span>
               {locale === 'ar'
-                ? 'تحويل تخصص الفرقة 3'
+                ? 'تحويل تخصص المستوى 3'
                 : 'Transfer Specialization (Level 3)'}
             </span>
           </Button>
@@ -1002,11 +1002,11 @@ function StudentsPageContent() {
           <DialogHeader className="text-start sm:text-start rtl:sm:text-right">
             <DialogTitle className="flex items-center gap-2">
               <BookOpenCheck className="h-5 w-5 text-primary" />
-              {locale === 'ar' ? 'التسجيل التلقائي لمقررات الفرقة الأولى' : 'Auto-Register Level 1 Courses'}
+              {locale === 'ar' ? 'التسجيل التلقائي لمقررات المستوى الأول' : 'Auto-Register Level 1 Courses'}
             </DialogTitle>
             <DialogDescription className="text-start">
               {locale === 'ar'
-                ? 'تسجيل طلاب الفرقة الأولى النشطين في المقررات الإجبارية للفصل الدراسي المحدد بشكل آلي وفق اللائحة.'
+                ? 'تسجيل طلاب المستوى الأول النشطين في المقررات الإجبارية للفصل الدراسي المحدد بشكل آلي وفق اللائحة.'
                 : 'Batch enroll active Level 1 students into mandatory semester courses automatically.'}
             </DialogDescription>
           </DialogHeader>
@@ -1022,7 +1022,7 @@ function StudentsPageContent() {
               ) : (
                 <span>
                   {locale === 'ar'
-                    ? `النطاق: سيتم فحص وتسجيل جميع طلاب الفرقة الأولى النشطين المسجلين في النظام (${total} طالب).`
+                    ? `النطاق: سيتم فحص وتسجيل جميع طلاب المستوى الأول النشطين المسجلين في النظام (${total} طالب).`
                     : `Scope: All active Level 1 students in the registry (${total}) will be processed.`}
                 </span>
               )}

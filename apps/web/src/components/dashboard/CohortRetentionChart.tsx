@@ -23,10 +23,10 @@ export interface RetentionCohortPoint {
 }
 
 export const DEFAULT_COHORT_DATA: RetentionCohortPoint[] = [
-  { semester: 'Level 1', semesterAr: 'الفرقة الأولى (عام)', active: 1120, probation: 75, attrition: 22 },
-  { semester: 'Level 2', semesterAr: 'الفرقة الثانية (عام)', active: 1040, probation: 62, attrition: 34 },
-  { semester: 'Level 3', semesterAr: 'الفرقة الثالثة (تخصص)', active: 980, probation: 48, attrition: 18 },
-  { semester: 'Level 4', semesterAr: 'الفرقة الرابعة (تخرج)', active: 940, probation: 25, attrition: 12 },
+  { semester: 'Level 1', semesterAr: 'المستوى الأول (عام)', active: 1120, probation: 75, attrition: 22 },
+  { semester: 'Level 2', semesterAr: 'المستوى الثاني (عام)', active: 1040, probation: 62, attrition: 34 },
+  { semester: 'Level 3', semesterAr: 'المستوى الثالث (تخصص)', active: 980, probation: 48, attrition: 18 },
+  { semester: 'Level 4', semesterAr: 'المستوى الرابع (تخرج)', active: 940, probation: 25, attrition: 12 },
 ];
 export const defaultCohortData = DEFAULT_COHORT_DATA;
 

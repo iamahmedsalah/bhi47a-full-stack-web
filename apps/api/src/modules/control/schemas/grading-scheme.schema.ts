@@ -51,7 +51,7 @@ export class GradingScheme {
   @Prop({ type: Number, default: 5, min: 0, max: 20 })
   courseworkAttendanceMax!: number;
 
-  @Prop({ required: true, default: 1, min: 1 })
+  @Prop({ required: true, default: 0, min: 0 })
   version!: number;
 
   @Prop({ type: [GradingSchemeComponentSchema], default: [] })

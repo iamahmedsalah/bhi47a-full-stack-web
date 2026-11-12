@@ -49,7 +49,7 @@ Check completion and exit status before treating a log as passing. Full producti
 
 1. Apply the reviewed indexes and deploy the API and web changes together.
 2. Open a course with more than 2,000 approved students. Compare its full unique roster count, first/last student and all components with registration records. Verify search and paging without `ROSTER_LIMIT_EXCEEDED`.
-3. Test scoped Excel export, a valid import, independent review and final preview. The existing 500-row import/commit safety limit remains unchanged; it is separate from roster size.
+3. Test scoped Excel export, a valid import, independent review and final preview. Transactions and direct row/paste imports remain limited to 500 changes. The 12 November file workflow supports up to 10,000 rows / 2 MB, previewed and committed in sequential 500-row batches; see [control-testing.md](../control-testing.md).
 4. Compare dashboard network requests and timings using the same account/device. Initial rendering must not request `/admin/students` for sampled chart data, advanced overview requests must wait for their section, and opening a dialog must load its code only then. Verify retry behavior and access for staff with limited permissions.
 
 The workbook still transfers a complete course snapshot while rendering a page at a time. These changes do not establish unlimited roster capacity, a 10,000-student production benchmark, or bypass MongoDB's document/transaction limits for immutable releases.

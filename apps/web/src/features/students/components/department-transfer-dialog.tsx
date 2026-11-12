@@ -42,7 +42,7 @@ const DEPARTMENTS = [
   {
     id: 'BIS',
     shortLabel: (isAr: boolean) => (isAr ? 'نظم معلومات الأعمال (BIS)' : 'Business Info Systems (BIS)'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
+    levelHint: (isAr: boolean) => (isAr ? 'المستوى 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Laptop,
     badgeColor: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400',
     selectedBorder: 'border-cyan-500 ring-2 ring-cyan-500/30 bg-cyan-500/10 shadow-sm',
@@ -50,7 +50,7 @@ const DEPARTMENTS = [
   {
     id: 'ACCOUNTING',
     shortLabel: (isAr: boolean) => (isAr ? 'المحاسبة والمراجعة' : 'Accounting & Auditing'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
+    levelHint: (isAr: boolean) => (isAr ? 'المستوى 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Calculator,
     badgeColor: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
     selectedBorder: 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-500/10 shadow-sm',
@@ -58,7 +58,7 @@ const DEPARTMENTS = [
   {
     id: 'GENERAL',
     shortLabel: (isAr: boolean) => (isAr ? 'الشعبة العامة' : 'General Track'),
-    levelHint: (isAr: boolean) => (isAr ? 'الفرقة 1 و 2 • شعبة مشتركة' : 'Levels 1 & 2 • Common Track'),
+    levelHint: (isAr: boolean) => (isAr ? 'المستوى 1 و 2 • شعبة مشتركة' : 'Levels 1 & 2 • Common Track'),
     icon: BookOpen,
     badgeColor: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
     selectedBorder: 'border-primary ring-2 ring-primary/30 bg-primary/10 shadow-sm',
@@ -353,7 +353,7 @@ export function DepartmentTransferDialog({
             <div className="space-y-0.5 flex-1 min-w-0">
               <div className="font-semibold text-foreground truncate">
                 {isAr
-                  ? 'تثبيت / ترقية الفرقة الدراسية إلى "المستوى الثالث"'
+                  ? 'تثبيت / ترقية المستوى الدراسي إلى "المستوى الثالث"'
                   : 'Promote Student Level to "Level 3" (Specialization)'}
               </div>
               <div className="text-[11px] text-muted-foreground">

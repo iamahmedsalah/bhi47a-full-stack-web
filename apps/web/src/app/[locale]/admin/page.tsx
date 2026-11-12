@@ -348,7 +348,7 @@ export default function AdminDashboard() {
     assignedCourses.forEach((c) => {
       const lvl = String(c.level ?? "1");
       const existing = counts.get(lvl) || {
-        level: isAr ? `الفرقة ${lvl}` : `Level ${lvl}`,
+        level: isAr ? `المستوى ${lvl}` : `Level ${lvl}`,
         courses: 0,
         students: 0,
       };
@@ -665,12 +665,12 @@ export default function AdminDashboard() {
         semester: `Level ${c.level}`,
         semesterAr:
           c.level === "1"
-            ? "الفرقة الأولى (عام)"
+            ? "المستوى الأول (عام)"
             : c.level === "2"
-              ? "الفرقة الثانية (عام)"
+              ? "المستوى الثاني (عام)"
               : c.level === "3"
-                ? "الفرقة الثالثة (تخصص)"
-                : "الفرقة الرابعة (تخرج)",
+                ? "المستوى الثالث (تخصص)"
+                : "المستوى الرابع (تخرج)",
         active: c.active,
         probation: c.probation,
         attrition: c.attrition,
@@ -749,18 +749,18 @@ export default function AdminDashboard() {
       ).map((c) => [
         c.level === "1"
           ? isAr
-            ? "الفرقة الأولى (عام)"
+            ? "المستوى الأول (عام)"
             : "Level 1 (General)"
           : c.level === "2"
             ? isAr
-              ? "الفرقة الثانية (عام)"
+              ? "المستوى الثاني (عام)"
               : "Level 2 (General)"
             : c.level === "3"
               ? isAr
-                ? "الفرقة الثالثة (تخصص)"
+                ? "المستوى الثالث (تخصص)"
                 : "Level 3 (Specialization)"
               : isAr
-                ? "الفرقة الرابعة (تخرج)"
+                ? "المستوى الرابع (تخرج)"
                 : "Level 4 (Graduation)",
         c.total,
         c.active,
@@ -824,7 +824,7 @@ export default function AdminDashboard() {
         {
           name: isAr ? "استبقاء الدفعات" : "Cohort Retention",
           headers: [
-            isAr ? "الفرقة الدراسية" : "Academic Level",
+            isAr ? "المستوى الدراسي" : "Academic Level",
             isAr ? "إجمالي المقيدين" : "Cohort Total",
             isAr ? "الطلاب المنتظمون" : "Active Students",
             isAr ? "إنذار أكاديمي وتعثر" : "Academic Probation",
@@ -836,7 +836,7 @@ export default function AdminDashboard() {
               ? cohortRows
               : [
                   [
-                    isAr ? "الفرقة الأولى (عام)" : "Level 1 (General)",
+                    isAr ? "المستوى الأول (عام)" : "Level 1 (General)",
                     1120,
                     1023,
                     75,
@@ -844,7 +844,7 @@ export default function AdminDashboard() {
                     "91%",
                   ],
                   [
-                    isAr ? "الفرقة الثانية (عام)" : "Level 2 (General)",
+                    isAr ? "المستوى الثاني (عام)" : "Level 2 (General)",
                     1040,
                     944,
                     62,
@@ -852,7 +852,7 @@ export default function AdminDashboard() {
                     "91%",
                   ],
                   [
-                    isAr ? "الفرقة الثالثة (تخصص)" : "Level 3 (Specialization)",
+                    isAr ? "المستوى الثالث (تخصص)" : "Level 3 (Specialization)",
                     980,
                     914,
                     48,
@@ -860,7 +860,7 @@ export default function AdminDashboard() {
                     "93%",
                   ],
                   [
-                    isAr ? "الفرقة الرابعة (تخرج)" : "Level 4 (Graduation)",
+                    isAr ? "المستوى الرابع (تخرج)" : "Level 4 (Graduation)",
                     940,
                     903,
                     25,
@@ -1222,7 +1222,7 @@ export default function AdminDashboard() {
                           {isAr ? "المكان / القاعة" : "Hall / Location"}
                         </th>
                         <th className="px-4 py-3 text-start">
-                          {isAr ? "الفرقة / المجموعة" : "Level & Group"}
+                          {isAr ? "المستوى / المجموعة" : "Level & Group"}
                         </th>
                         <th className="px-4 py-3 text-start">
                           {isAr ? "ملاحظات" : "Notes"}
@@ -1299,7 +1299,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-foreground">
                               <div>
                                 {isAr
-                                  ? `الفرقة ${slot.level}`
+                                  ? `المستوى ${slot.level}`
                                   : `Level ${slot.level}`}
                                 {slot.department && ` · ${slot.department}`}
                               </div>
@@ -1518,7 +1518,7 @@ export default function AdminDashboard() {
                   <div>
                     <h3 className="text-base font-bold text-foreground">
                       {isAr
-                        ? "توزيع الطلاب حسب الفرق الدراسية"
+                        ? "توزيع الطلاب حسب المستويات الدراسية"
                         : "Student Distribution by Level"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
@@ -2147,7 +2147,7 @@ export default function AdminDashboard() {
                   </h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {isAr
-                      ? "توزيع المعدلات التراكمية، ومعدلات استبقاء الفرق الدراسية، وطاقة الأقسام العلمية (الشعبة العامة، BIS، المحاسبة)"
+                      ? "توزيع المعدلات التراكمية، ومعدلات استبقاء المستويات الدراسية، وطاقة الأقسام العلمية (الشعبة العامة، BIS، المحاسبة)"
                       : "GPA standing distributions, cohort retention rates, and academic department capacity (General Track, BIS, Accounting)"}
                   </p>
                 </div>

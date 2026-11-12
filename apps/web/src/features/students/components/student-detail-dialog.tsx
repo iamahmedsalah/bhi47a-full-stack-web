@@ -825,7 +825,7 @@ export function StudentDetailDialog({
                       value={student.group || '—'}
                     />
                     <InfoItem
-                      label={isAr ? 'الشعبة / الفرقة' : 'Section'}
+                      label={isAr ? 'الشعبة / المستوى' : 'Section'}
                       value={student.section || '—'}
                     />
                     <InfoItem

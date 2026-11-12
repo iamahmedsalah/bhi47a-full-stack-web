@@ -1628,7 +1628,7 @@ export class StudentsService {
   async generateTuitionTemplate(format: 'xlsx' | 'csv' = 'xlsx') {
     const csvHeaders = [
       'كود الطالب',
-      'الفرقة',
+      'المستوى',
       'حالة المصروفات',
       'الحجب',
       'سبب الحجب',
@@ -1637,11 +1637,11 @@ export class StudentsService {
 
     if (format === 'csv') {
       const sampleRows = [
-        '260402,الفرقة الثانية,مسدد,مفعل,,عبدالرحمن صابر علي',
-        '260104,الفرقة الثانية,مسدد,مفعل,,فارس ابراهيم نصر',
-        '260464,الفرقة الثانية,غير مسدد,محجوب,عدم سداد المصروفات,مصطفى ايهاب العوضي',
-        '260791,الفرقة الثانية,مسدد,مفعل,,ملك محمد رضا',
-        '261556,الفرقة الثانية,غير مسدد,محجوب,عدم سداد المصروفات,خلود نشأت رمضان',
+        '260402,المستوى الثاني,مسدد,مفعل,,عبدالرحمن صابر علي',
+        '260104,المستوى الثاني,مسدد,مفعل,,فارس ابراهيم نصر',
+        '260464,المستوى الثاني,غير مسدد,محجوب,عدم سداد المصروفات,مصطفى ايهاب العوضي',
+        '260791,المستوى الثاني,مسدد,مفعل,,ملك محمد رضا',
+        '261556,المستوى الثاني,غير مسدد,محجوب,عدم سداد المصروفات,خلود نشأت رمضان',
       ];
       const csvContent =
         '\uFEFF' + [csvHeaders.join(','), ...sampleRows].join('\n');
@@ -1662,7 +1662,7 @@ export class StudentsService {
 
     sheet.columns = [
       { header: 'كود الطالب', key: 'student_code', width: 20 },
-      { header: 'الفرقة', key: 'level', width: 20 },
+      { header: 'المستوى', key: 'level', width: 20 },
       { header: 'حالة المصروفات', key: 'tuition_status', width: 22 },
       { header: 'الحجب', key: 'block_status', width: 18 },
       { header: 'سبب الحجب', key: 'block_reason', width: 28 },
@@ -1687,7 +1687,7 @@ export class StudentsService {
     const sampleRows = [
       {
         student_code: '260402',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         tuition_status: 'مسدد',
         block_status: 'مفعل',
         block_reason: '',
@@ -1695,7 +1695,7 @@ export class StudentsService {
       },
       {
         student_code: '260104',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         tuition_status: 'مسدد',
         block_status: 'مفعل',
         block_reason: '',
@@ -1703,7 +1703,7 @@ export class StudentsService {
       },
       {
         student_code: '260464',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         tuition_status: 'غير مسدد',
         block_status: 'محجوب',
         block_reason: 'عدم سداد المصروفات الدراسية',
@@ -1711,7 +1711,7 @@ export class StudentsService {
       },
       {
         student_code: '260791',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         tuition_status: 'مسدد',
         block_status: 'مفعل',
         block_reason: '',
@@ -1719,7 +1719,7 @@ export class StudentsService {
       },
       {
         student_code: '261556',
-        level: 'الفرقة الثانية',
+        level: 'المستوى الثاني',
         tuition_status: 'غير مسدد',
         block_status: 'محجوب',
         block_reason: 'عدم سداد المصروفات الدراسية',
@@ -1799,8 +1799,8 @@ export class StudentsService {
         cleanCode,
         rawCode,
         rawLevel: this.extractFieldValue(row, [
-          'الفرقة',
-          'الفرقة الدراسية',
+          'المستوى',
+          'المستوى الدراسي',
           'فرقة',
           'level',
           'السنة',
@@ -2076,10 +2076,10 @@ export class StudentsService {
     };
 
     const LEVEL_MAP: Record<string, string> = {
-      '1': 'الفرقة الأولى',
-      '2': 'الفرقة الثانية',
-      '3': 'الفرقة الثالثة',
-      '4': 'الفرقة الرابعة',
+      '1': 'المستوى الأول',
+      '2': 'المستوى الثاني',
+      '3': 'المستوى الثالث',
+      '4': 'المستوى الرابع',
     };
 
     const TUITION_MAP: Record<string, string> = {
@@ -2214,7 +2214,7 @@ export class StudentsService {
     // Section 1: Level Breakdown Table
     dashSheet.addRow([]);
     const sec1Row = dashSheet.addRow([
-      'أولاً: توزيع الطلاب وسداد المصروفات حسب الفرقة الدراسية',
+      'أولاً: توزيع الطلاب وسداد المصروفات حسب المستوى الدراسي',
     ]);
     sec1Row.font = {
       bold: true,
@@ -2224,7 +2224,7 @@ export class StudentsService {
     };
 
     const lvlHeaders = dashSheet.addRow([
-      'الفرقة الدراسية',
+      'المستوى الدراسي',
       'إجمالي المقيدين',
       'المسددين (مفعل)',
       'المحجوبين (غير مسدد)',
@@ -2261,7 +2261,7 @@ export class StudentsService {
           : '0%';
 
       const r = dashSheet.addRow([
-        LEVEL_MAP[lvlKey] || `الفرقة ${lvlKey}`,
+        LEVEL_MAP[lvlKey] || `المستوى ${lvlKey}`,
         lTotal,
         lPaid,
         lBlocked,
@@ -2432,7 +2432,7 @@ export class StudentsService {
       { header: 'م', key: 'index', width: 8 },
       { header: 'كود الطالب', key: 'studentCode', width: 18 },
       { header: 'اسم الطالب', key: 'studentName', width: 34 },
-      { header: 'الفرقة', key: 'level', width: 18 },
+      { header: 'المستوى', key: 'level', width: 18 },
       { header: 'القسم', key: 'department', width: 16 },
       { header: 'حالة المصروفات', key: 'tuitionStatus', width: 18 },
       { header: 'حالة الحجب', key: 'blockStatus', width: 16 },
@@ -2466,7 +2466,7 @@ export class StudentsService {
         index: idx + 1,
         studentCode: s.studentCode,
         studentName: s.fullNameAr || s.fullName,
-        level: LEVEL_MAP[s.level] || `الفرقة ${s.level}`,
+        level: LEVEL_MAP[s.level] || `المستوى ${s.level}`,
         department: s.department || 'GENERAL',
         tuitionStatus:
           TUITION_MAP[s.tuitionFeesStatus || ''] ||
@@ -2525,7 +2525,7 @@ export class StudentsService {
       { header: 'التاريخ والوقت (توقيت القاهرة)', key: 'timestamp', width: 25 },
       { header: 'كود الطالب', key: 'studentCode', width: 18 },
       { header: 'اسم الطالب', key: 'studentName', width: 32 },
-      { header: 'الفرقة', key: 'level', width: 16 },
+      { header: 'المستوى', key: 'level', width: 16 },
       { header: 'الحالة السابقة', key: 'oldStatus', width: 18 },
       { header: 'الحالة الجديدة', key: 'newStatus', width: 18 },
       { header: 'نوع الإجراء', key: 'actionType', width: 22 },
@@ -2555,7 +2555,7 @@ export class StudentsService {
         timestamp: formatCairoDate(log.createdAt),
         studentCode: log.studentCode,
         studentName: log.studentName,
-        level: LEVEL_MAP[log.level] || `الفرقة ${log.level}`,
+        level: LEVEL_MAP[log.level] || `المستوى ${log.level}`,
         oldStatus: `${TUITION_MAP[log.previousTuitionStatus] || log.previousTuitionStatus} (${log.previousBlockStatus ? 'محجوب' : 'مفعل'})`,
         newStatus: `${TUITION_MAP[log.newTuitionStatus] || log.newTuitionStatus} (${log.newBlockStatus ? 'محجوب' : 'مفعل'})`,
         actionType: ACTION_TYPE_MAP[log.actionType] || log.actionType,

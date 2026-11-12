@@ -954,4 +954,90 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       ),
     );
   }, 120000);
+  it('commits a 501-row XLSX in two idempotent batches without changing the default scheme version', async () => {
+    const largeCourse = new Types.ObjectId();
+    const code = 'BATCH-' + randomUUID().slice(0, 8).toUpperCase();
+    const students = Array.from({ length: 501 }, (_, i) => ({
+      _id: new Types.ObjectId(),
+      name: 'Synthetic batch ' + i,
+      studentCode: code + '-' + String(i).padStart(4, '0'),
+      email: code + '-' + i + '@example.invalid',
+      role: 'student',
+      isActive: true,
+    }));
+    await connection.models.Course.collection.insertOne({
+      _id: largeCourse,
+      code,
+      name: 'Synthetic import course',
+      isActive: true,
+      department: 'BIS',
+      level: '1',
+      semester: 'first',
+      creditHours: 3,
+    });
+    await connection.models.User.collection.insertMany(students);
+    await connection.models.CourseRegistration.collection.insertMany(
+      students.map((student) => ({
+        studentId: student._id,
+        courses: [code],
+        academicYear: year,
+        semester: 'first',
+        status: 'approved',
+      })),
+    );
+    const detail = await sheets.openSheet(actor, {
+      courseId: String(largeCourse),
+      academicYear: year,
+      semester: 'first',
+      component: 'midterm',
+    });
+    const { default: ExcelJS } = await import('exceljs');
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await workbook.export(actor, detail.sheet.id));
+    const page = book.getWorksheet('Marks')!;
+    for (let row = 2; row <= 502; row++) page.getCell('C' + row).value = 15;
+    const bytes = Buffer.from(await book.xlsx.writeBuffer());
+    const first = await workbook.previewFile(actor, detail.sheet.id, bytes, 0);
+    const initialSecond = await workbook.previewFile(
+      actor,
+      detail.sheet.id,
+      bytes,
+      1,
+    );
+    expect(first.valid).toBe(500);
+    expect(initialSecond.valid).toBe(1);
+    const firstResult = await workbook.commit(
+      actor,
+      detail.sheet.id,
+      first.previewId,
+    );
+    expect(firstResult).toMatchObject({ summary: { ok: 500 } });
+    await expect(
+      workbook.commit(actor, detail.sheet.id, first.previewId),
+    ).resolves.toEqual(firstResult);
+    await expect(
+      workbook.commit(actor, detail.sheet.id, initialSecond.previewId),
+    ).rejects.toThrow('Preview is stale');
+    const second = await workbook.previewFile(actor, detail.sheet.id, bytes, 1);
+    const result = await workbook.commit(
+      actor,
+      detail.sheet.id,
+      second.previewId,
+    );
+    expect(result).toMatchObject({ summary: { ok: 1 } });
+    expect(await gradeModel.countDocuments({ courseId: largeCourse })).toBe(
+      501,
+    );
+    expect(
+      await auditModel.countDocuments({
+        courseId: largeCourse,
+        source: 'XLSX',
+      }),
+    ).toBe(501);
+    expect(
+      (await workbook.workbook(actor, detail.sheet.id)).rows.filter(
+        (row) => row.score === 15,
+      ),
+    ).toHaveLength(501);
+  }, 120000);
 });

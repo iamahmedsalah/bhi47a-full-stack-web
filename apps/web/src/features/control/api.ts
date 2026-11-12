@@ -19,7 +19,13 @@ export const controlKeys = {
   all: ["control"] as const,
   me: () => [...controlKeys.all, "me"] as const,
   courses: (academicYear: string, semester: Semester, level?: string) =>
-    [...controlKeys.all, "courses", academicYear, semester, level ?? "all"] as const,
+    [
+      ...controlKeys.all,
+      "courses",
+      academicYear,
+      semester,
+      level ?? "all",
+    ] as const,
   sheet: (sheetId: string) => [...controlKeys.all, "sheet", sheetId] as const,
   entries: (sheetId: string, search?: string) =>
     [...controlKeys.all, "entries", sheetId, search ?? ""] as const,
@@ -152,7 +158,15 @@ export async function updateGradingScheme(
 ): Promise<ResolvedGradingScheme> {
   const res = await api.put<ResolvedGradingScheme>(
     `/admin/control/schemes/${courseId}`,
-    dto,
+    {
+      ...dto,
+      components: dto.components.map(({ key, max, step, enabled }) => ({
+        key,
+        max,
+        step,
+        enabled,
+      })),
+    },
   );
   return res.data;
 }
@@ -194,12 +208,17 @@ export async function exportControlSheet(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 }
-export async function previewControlFile(sheetId: string, file: File) {
+export async function previewControlFile(
+  sheetId: string,
+  file: File,
+  batch = 0,
+) {
   const body = new FormData();
   body.append("file", file);
   const res = await api.post<import("./types").ControlImportPreview>(
     `/admin/control/sheets/${sheetId}/import/preview`,
     body,
+    { params: { batch } },
   );
   return res.data;
 }

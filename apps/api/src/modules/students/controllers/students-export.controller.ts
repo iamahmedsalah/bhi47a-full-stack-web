@@ -71,7 +71,7 @@ export class StudentsExportController {
       { header: 'الاسم الكامل', key: 'fullName', width: 30 },
       { header: 'الاسم بالعربية', key: 'fullNameAr', width: 25 },
       { header: 'الاسم بالإنجليزية', key: 'fullNameEn', width: 25 },
-      { header: 'الفرقة', key: 'level', width: 12 },
+      { header: 'المستوى', key: 'level', width: 12 },
       { header: 'القسم', key: 'department', width: 20 },
       { header: 'البريد الأكاديمي', key: 'academicEmail', width: 30 },
       { header: 'حالة القيد', key: 'enrollmentStatus', width: 15 },
