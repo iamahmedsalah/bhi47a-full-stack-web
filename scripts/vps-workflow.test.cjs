@@ -37,6 +37,9 @@ test('workflow is VPS-only and contains no Vercel deployment or credentials', ()
 });
 
 test('Jest reports are collected from every Jest stage without masking failures', () => {
+  const prepare = workflow.indexOf('- name: Prepare Jest report directory');
+  assert.ok(prepare > 0 && prepare < workflow.indexOf('- name: Verify VPS deployment trigger policy'));
+  assert.match(workflow, /name: Prepare Jest report directory\n        run: >-\n          node -e "require\('node:fs'\)\.mkdirSync\('apps\/api\/coverage', \{ recursive: true \}\)"/);
   for (const id of ['api-unit', 'admissions', 'control', 'api-e2e']) {
     assert.match(workflow, new RegExp(`id: ${id}\\n(?:        #[^\\n]+\\n)?        run: [^\\n]+--json --outputFile="\\$GITHUB_WORKSPACE/apps/api/coverage/ci-${id}\\.json"`));
   }

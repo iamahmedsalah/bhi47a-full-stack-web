@@ -88,22 +88,43 @@ test('CLI appends a summary even after an earlier failed stage without dependenc
 test('consumes real Jest JSON with passing, failing, skipped and todo tests', () => {
   const temporary = mkdtempSync(path.join(tmpdir(), 'portal-jest-contract-'));
   try {
-    writeFileSync(path.join(temporary, 'fixture.test.cjs'), `
+    // Execute the real workflow preparation on a clean filesystem. Jest does
+    // not create missing parent directories for --outputFile.
+    const workflow = readFileSync(path.join(root, '.github/workflows/ci-cd.yml'), 'utf8').replace(/\r\n/g, '\n');
+    const prepare = workflow.match(/name: Prepare Jest report directory\n        run: >-\n          node -e "([^"\n]+)"/);
+    assert.ok(prepare, 'Workflow must prepare the report directory before running Jest');
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const preparation = spawnSync(process.execPath, ['-e', prepare[1]], { cwd: temporary, encoding: 'utf8' });
+      assert.equal(preparation.status, 0, preparation.stderr);
+    }
+    const fixture = path.join(temporary, 'fixture.test.cjs');
+    const source = `
       test('passes', () => expect(1).toBe(1));
       test('fails', () => expect(1).toBe(2));
       test.skip('skips', () => {});
       test.todo('later');
-    `);
-    const output = path.join(temporary, 'jest.json');
-    const result = spawnSync(process.execPath, [
+    `;
+    writeFileSync(fixture, source);
+    const output = path.join(temporary, 'apps/api/coverage/ci-api-unit.json');
+    const args = [
       path.join(root, 'apps/api/node_modules/jest/bin/jest.js'),
       '--config', JSON.stringify({ rootDir: temporary, testEnvironment: 'node', testMatch: ['**/*.test.cjs'] }),
       '--runInBand', '--json', '--outputFile', output,
-    ], { encoding: 'utf8', timeout: 60000 });
+    ];
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
     assert.equal(result.status, 1, result.stderr);
     const report = render(JSON.parse(readFileSync(output, 'utf8')), 'failure');
     assert.equal(report.invalid, true);
     assert.match(report.markdown, /1 failures.*1 passes.*1 skipped.*1 todo.*4 total/);
     assert.equal(report.annotations.length, 1);
+
+    // Reproduce the reported CI case: all executed tests pass and writing the
+    // JSON must leave the Jest process successful as well.
+    writeFileSync(fixture, source.replace('expect(1).toBe(2)', 'expect(1).toBe(1)'));
+    const passingRun = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
+    assert.equal(passingRun.status, 0, passingRun.stderr);
+    const passingReport = render(JSON.parse(readFileSync(output, 'utf8')));
+    assert.equal(passingReport.invalid, false);
+    assert.match(passingReport.markdown, /2 passes.*1 skipped.*1 todo.*4 total/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 });

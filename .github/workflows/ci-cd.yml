@@ -71,6 +71,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare Jest report directory
+        run: >-
+          node -e "require('node:fs').mkdirSync('apps/api/coverage', { recursive: true })"
+
       - name: Verify VPS deployment trigger policy
         run: node --test scripts/vps-workflow.test.cjs scripts/ci-test-report.test.cjs
 
