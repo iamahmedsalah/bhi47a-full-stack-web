@@ -848,8 +848,13 @@ export class CourseSchedulesService {
 
       // 6. Optional level, department, group, section, notes
       const level =
-        this.extractFieldValue(row, ['level', 'year', 'المستوى', 'الفرقة', 'السنة']) ||
-        String(matchedCourse.level ?? '1');
+        this.extractFieldValue(row, [
+          'level',
+          'year',
+          'المستوى',
+          'الفرقة',
+          'السنة',
+        ]) || String(matchedCourse.level ?? '1');
 
       const department =
         this.extractFieldValue(row, ['department', 'القسم', 'التخصص']) ||

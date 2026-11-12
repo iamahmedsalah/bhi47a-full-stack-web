@@ -35,3 +35,29 @@ test('workflow is VPS-only and contains no Vercel deployment or credentials', ()
   const jobs = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/^  ([\w-]+):\n/gm)].map(match => match[1]);
   assert.deepEqual(jobs, ['validate', 'docker-validate', 'deploy-vps']);
 });
+
+test('Jest reports are collected from every Jest stage without masking failures', () => {
+  for (const id of ['api-unit', 'admissions', 'control', 'api-e2e']) {
+    assert.match(workflow, new RegExp(`id: ${id}\\n(?:        #[^\\n]+\\n)?        run: [^\\n]+--json --outputFile="\\$GITHUB_WORKSPACE/apps/api/coverage/ci-${id}\\.json"`));
+  }
+  assert.match(workflow, /name: Publish test summary and failure annotations\n        if: always\(\)/);
+  assert.match(workflow, /CI_STEPS_JSON: \$\{\{ toJSON\(steps\) \}\}/);
+  assert.match(workflow, /name: Upload structured test reports\n        if: always\(\)/);
+  assert.doesNotMatch(workflow, /continue-on-error: true|\|\| true/);
+});
+
+test('VPS retains its protected environment and exposes the real portal link and deployment outcomes', () => {
+  assert.match(job, /environment:\n      name: production-vps\n      url: https:\/\/bhi47\.app/);
+  assert.match(job, /name: Verify public portal after VPS deployment\n        id: public-health\n        shell: bash/);
+  assert.match(job, /https:\/\/bhi47\.app\/api\/health/);
+  assert.match(job, /name: Publish VPS deployment report\n        if: always\(\)/);
+  assert.match(job, /DEPLOY_OUTCOME: \$\{\{ steps.deploy.outcome \}\}/);
+  assert.match(job, /PUBLIC_HEALTH_OUTCOME: \$\{\{ steps.public-health.outcome \}\}/);
+  assert.match(job, /GITHUB_STEP_SUMMARY/);
+});
+
+test('workflow pins Ubuntu and uses the verified Node 24 action releases', () => {
+  assert.doesNotMatch(workflow, /runs-on: ubuntu-latest|actions\/(checkout|setup-node|cache)@v4|pnpm\/action-setup@v4/);
+  assert.equal([...workflow.matchAll(/runs-on: ubuntu-24\.04/g)].length, 3);
+  assert.match(workflow, /uses: actions\/upload-artifact@v6/);
+});

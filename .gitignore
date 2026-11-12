@@ -73,3 +73,6 @@ build_import_files.mjs
 !/scripts/seed-control-demo.cjs
 !/scripts/seed-control-demo.test.cjs
 !/scripts/ensure-control-query-indexes.cjs
+!/scripts/ci-test-report.cjs
+!/scripts/ci-test-report.test.cjs
+!/docs/ci-reports.md

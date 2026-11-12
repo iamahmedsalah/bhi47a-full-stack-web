@@ -32,7 +32,7 @@ concurrency:
 jobs:
   validate:
     name: Validate monorepo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       mongodb:
@@ -46,22 +46,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.28.0
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
 
       - name: Restore Turborepo cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -72,7 +72,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify VPS deployment trigger policy
-        run: node --test scripts/vps-workflow.test.cjs
+        run: node --test scripts/vps-workflow.test.cjs scripts/ci-test-report.test.cjs
 
       - name: Verify materials migration and restore boundaries
         run: node --test deploy/materials/manage.test.cjs
@@ -117,13 +117,17 @@ jobs:
         run: pnpm run test:control:validation
 
       - name: Lint workspace
+        id: lint
         run: pnpm run lint
 
       - name: Typecheck workspace
+        id: typecheck
         run: pnpm run typecheck
 
       - name: Test API
-        run: pnpm run test -- --runInBand
+        id: api-unit
+        # coverage/** is a declared Turbo output, so cache hits restore the JSON too.
+        run: pnpm run test -- --runInBand --json --outputFile="$GITHUB_WORKSPACE/apps/api/coverage/ci-api-unit.json"
         env:
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/student-portal-test
@@ -139,6 +143,7 @@ jobs:
         run: pnpm --filter @student-portal/web test:timetable
 
       - name: Build workspace
+        id: build
         run: pnpm run build
 
       - name: Verify materials migration and restore against isolated MongoDB
@@ -181,14 +186,17 @@ jobs:
         run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml up -d --wait
 
       - name: Test student-code transactions and concurrent allocation
-        run: pnpm --filter @student-portal/api test:admissions:e2e
+        id: admissions
+        run: pnpm --filter @student-portal/api test:admissions:e2e --json --outputFile="$GITHUB_WORKSPACE/apps/api/coverage/ci-admissions.json"
 
       - name: Test Control releases, corrections and academic reconciliation
-        run: pnpm run test:control:e2e
+        id: control
+        run: pnpm run test:control:e2e --json --outputFile="$GITHUB_WORKSPACE/apps/api/coverage/ci-control.json"
         env:
           CONTROL_TEST_MONGODB_URI: mongodb://127.0.0.1:27021/control-e2e
 
       - name: Test Control workbook and result releases in Chromium
+        id: control-browser
         run: |
           pnpm run test:control:browser
           pnpm run test:control:import:browser
@@ -202,7 +210,8 @@ jobs:
         run: pnpm --filter @student-portal/web test:security
 
       - name: Test API end to end with browser passkeys
-        run: pnpm run test:e2e -- --runInBand
+        id: api-e2e
+        run: pnpm run test:e2e -- --runInBand --json --outputFile="$GITHUB_WORKSPACE/apps/api/coverage/ci-api-e2e.json"
         env:
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/student-portal-e2e
@@ -211,15 +220,31 @@ jobs:
           QUEUE_WORKERS_ENABLED: "false"
           RUN_STARTUP_TASKS: "false"
 
+      - name: Publish test summary and failure annotations
+        if: always()
+        env:
+          CI_STEPS_JSON: ${{ toJSON(steps) }}
+          CI_JOB_STATUS: ${{ job.status }}
+        run: node scripts/ci-test-report.cjs
+
+      - name: Upload structured test reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: api-test-reports
+          path: apps/api/coverage/ci-*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   docker-validate:
     name: Build and smoke-test VPS containers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       RELEASE_TAG: ci
       REDIS_PASSWORD: ci-redis-password
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check deployment scripts
         run: |
           bash -n deploy/deploy.sh deploy/backup.sh deploy/materials/backup.sh
@@ -306,15 +331,17 @@ jobs:
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deployment_target == 'vps')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
       name: production-vps
+      url: https://bhi47.app
     concurrency:
       group: production-vps
       cancel-in-progress: false
     steps:
       - name: Deploy over SSH with pinned server host key
+        id: deploy
         shell: bash
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -358,3 +385,30 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-delay 5 \
             http://127.0.0.1:3000/ar/login/student > /dev/null
           REMOTE
+
+      - name: Verify public portal after VPS deployment
+        id: public-health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 30 \
+            https://bhi47.app/api/health | python3 -c 'import json,sys; assert json.load(sys.stdin).get("status") == "ok", "Public API health check failed"'
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 30 \
+            --output /dev/null https://bhi47.app/ar/login/student
+
+      - name: Publish VPS deployment report
+        if: always()
+        shell: bash
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          PUBLIC_HEALTH_OUTCOME: ${{ steps.public-health.outcome }}
+        run: |
+          {
+            printf '## VPS deployment report\n\n'
+            printf '[Open Student Portal](https://bhi47.app) · [Login](https://bhi47.app/ar/login/student)\n\n'
+            printf '| Check | Result |\n| --- | --- |\n'
+            printf '| SSH deployment and internal health | %s |\n' "$DEPLOY_OUTCOME"
+            printf '| Public HTTPS health and login | %s |\n\n' "$PUBLIC_HEALTH_OUTCOME"
+            printf 'Commit: `%s`\n\n' "$GITHUB_SHA"
+            printf 'A failed public check requires investigation; it does not automatically roll back the VPS.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
