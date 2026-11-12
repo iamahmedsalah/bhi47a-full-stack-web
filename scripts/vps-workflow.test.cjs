@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
+const { spawnSync } = require('node:child_process');
 
 const workflow = readFileSync(`${__dirname}/../.github/workflows/ci-cd.yml`, 'utf8').replace(/\r\n/g, '\n');
 const job = workflow.slice(workflow.indexOf('\n  deploy-vps:\n'));
@@ -63,4 +64,23 @@ test('workflow pins Ubuntu and uses the verified Node 24 action releases', () =>
   assert.doesNotMatch(workflow, /runs-on: ubuntu-latest|actions\/(checkout|setup-node|cache)@v4|pnpm\/action-setup@v4/);
   assert.equal([...workflow.matchAll(/runs-on: ubuntu-24\.04/g)].length, 3);
   assert.match(workflow, /uses: actions\/upload-artifact@v6/);
+});
+
+test('public health gate validates the real API envelope and rejects unhealthy responses', () => {
+  const check = job.match(/https:\/\/bhi47\.app\/api\/health \| python3 -c '([^'\n]+)'/);
+  assert.ok(check, 'Public health JSON validator must be present');
+  const python = process.platform === 'win32' ? 'python' : 'python3';
+  for (const [body, expected] of [
+    [JSON.stringify({ success: true, data: { status: 'ok' }, timestamp: '2026-11-13T00:00:00Z' }), 0],
+    [JSON.stringify({ success: false, data: { status: 'ok' } }), 1],
+    [JSON.stringify({ success: true, data: { status: 'disconnected' } }), 1],
+    [JSON.stringify({ success: true, data: null }), 1],
+    [JSON.stringify({ status: 'ok' }), 1],
+    ['null', 1],
+    ['[]', 1],
+    ['<html>Proxy error</html>', 1],
+  ]) {
+    const result = spawnSync(python, ['-c', check[1]], { input: body, encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, expected, result.stderr || result.error?.message);
+  }
 });

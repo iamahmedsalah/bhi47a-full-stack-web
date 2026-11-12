@@ -10,6 +10,8 @@ The **Deploy reviewed commit to VPS** job uses the existing **production-vps** G
 
 No DNS record changes are needed to display the link. DNS, TLS and the VPS reverse proxy must already serve this domain. Existing production environment approvals/secrets and deployment gates are unchanged: validation plus container smoke tests must pass; only main pushes or manual VPS runs from main may deploy.
 
+The public API health validator checks the real response envelope: `success: true` and `data.status: "ok"`. The API's transform interceptor wraps the health payload under `data`; checking a top-level `status` falsely rejects a healthy deployment. Invalid JSON, unsuccessful envelopes and unhealthy/missing statuses still fail the deployment check.
+
 Jobs use Ubuntu 24.04 explicitly. Checkout, Node setup, caching and pnpm setup use Node 24 action runtimes; artifact upload uses its Node 24 release. The project Node version remains 24 and pnpm remains 10.28.0.
 
 Local regression checks:

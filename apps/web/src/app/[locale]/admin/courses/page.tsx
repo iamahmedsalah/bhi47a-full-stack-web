@@ -105,7 +105,7 @@ interface Course {
   doctorNameAr?: string;
   doctors?: Array<{ _id: string; name: string; nameAr?: string }>;
   teachingAssistantIds?: string[];
-  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string }>;
+  teachingAssistants?: Array<{ _id: string; name: string; nameAr?: string; staffType?: string; titlePrefix?: string }>;
   coverImageUrl?: string;
   isActive: boolean;
 }
@@ -196,16 +196,16 @@ function CourseFormDialog({
     staleTime: 5 * 60 * 1000,
   });
 
-  const staffMembers = staffQuery.data?.items || [];
+  const staffMembers = React.useMemo(() => staffQuery.data?.items ?? [], [staffQuery.data?.items]);
 
   const doctorsList = React.useMemo(() => {
-    const docs = staffMembers.filter((s: any) => s.staffType === 'doctor');
+    const docs = staffMembers.filter((s) => s.staffType === 'doctor');
     return docs.length > 0 ? docs : staffMembers;
   }, [staffMembers]);
 
   const teachingAssistantsList = React.useMemo(() => {
     const tas = staffMembers.filter(
-      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant' || s.staffType === 'assistant_lecturer',
+      (s) => ['teaching_assistant', 'assistant', 'assistant_lecturer'].includes(s.staffType || ''),
     );
     return tas.length > 0 ? tas : staffMembers;
   }, [staffMembers]);
@@ -533,7 +533,7 @@ function CourseFormDialog({
                             {
                               ...ta,
                               staffType:
-                                (ta as any).staffType || 'teaching_assistant',
+                                ta.staffType || 'teaching_assistant',
                             },
                             locale,
                           )}
@@ -550,8 +550,8 @@ function CourseFormDialog({
                         (t) => t._id === id,
                       );
                       const taType =
-                        (staff as any)?.staffType ||
-                        (fallbackTa as any)?.staffType ||
+                        staff?.staffType ||
+                        fallbackTa?.staffType ||
                         'teaching_assistant';
                       const cleanName = staff
                         ? getCleanStaffName(staff, locale)
@@ -1123,9 +1123,8 @@ function CoursesPageContent() {
   } = useTableState({ defaultFilters: { activeLevel: 'all', activeSemester: 'all', department: 'all' }, defaultLimit: 10 });
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const staffType = (user as any)?.staffType;
+  const staffType = user?.staffType;
   const isDoctor = user?.role === 'staff' && staffType === 'doctor';
-  const isTeachingAssistant = user?.role === 'staff' && staffType === 'teaching_assistant';
   const canManageBook = isAdmin || isDoctor;
   const canWriteCourses = isAdmin || Boolean(user?.permissions?.includes('courses.write'));
   const canUploadCourses = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
@@ -1178,8 +1177,8 @@ function CoursesPageContent() {
     },
   ) => {
     const { syllabusFile, coverImageFile, ...coursePayload } = data;
-    const res = await api.post<Course>('/admin/courses', coursePayload);
-    const newCourseId = (res as any)?.data?._id || (res as any)?._id;
+    const res = await api.post<Course, { data: Course } | Course>('/admin/courses', coursePayload);
+    const newCourseId = 'data' in res ? res.data._id : res._id;
     if (newCourseId) {
       if (syllabusFile) {
         startBookUpload(newCourseId, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${coursePayload.code}`, syllabusFile);
@@ -1221,15 +1220,13 @@ function CoursesPageContent() {
     if (!selectedCourse) return;
     const { syllabusFile, coverImageFile, removeSyllabus, removeCover, ...coursePayload } = data;
 
-    if (removeSyllabus) {
-      (coursePayload as any).syllabusPdfUrl = null;
-      (coursePayload as any).syllabusPdfName = null;
-    }
-    if (removeCover) {
-      (coursePayload as any).coverImageUrl = null;
-    }
+    const updatePayload = {
+      ...coursePayload,
+      ...(removeSyllabus ? { syllabusPdfUrl: null, syllabusPdfName: null } : {}),
+      ...(removeCover ? { coverImageUrl: null } : {}),
+    };
 
-    await api.patch(`/admin/courses/${selectedCourse._id}`, coursePayload);
+    await api.patch(`/admin/courses/${selectedCourse._id}`, updatePayload);
 
     if (removeSyllabus) {
       try {
@@ -1485,7 +1482,7 @@ function CoursesPageContent() {
                     key={ta._id}
                     className="inline-flex items-center gap-1 rounded-squircle border border-border/70 bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground"
                     title={
-                      (ta as any).staffType === 'assistant_lecturer'
+                      ta.staffType === 'assistant_lecturer'
                         ? locale === 'ar'
                           ? 'مدرس مساعد'
                           : 'Assistant Lecturer'
@@ -1500,7 +1497,7 @@ function CoursesPageContent() {
                         {
                           ...ta,
                           staffType:
-                            (ta as any).staffType || 'teaching_assistant',
+                            ta.staffType || 'teaching_assistant',
                         },
                         locale,
                       )}
@@ -2017,7 +2014,7 @@ function CoursesPageContent() {
                                     {
                                       ...ta,
                                       staffType:
-                                        (ta as any).staffType ||
+                                        ta.staffType ||
                                         'teaching_assistant',
                                     },
                                     locale,
