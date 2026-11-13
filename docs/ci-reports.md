@@ -38,4 +38,10 @@ The `INTAKE26` wait timed out because importing the admissions hub also imported
 
 When browser code fails, the test now includes collected runtime errors in its thrown error. Failed CI jobs also upload the admissions fixtures' failure screenshots, DOM snapshots and runtime-error files as `admissions-browser-failures`, retained for seven days. These fixtures contain synthetic data; compiled bundles and application environment files are excluded.
 
+## Control release browser router fixture
+
+The standalone Control release test reproduced the timeout waiting for the `Course` button. The real release panel now calls Next's `useRouter` to open a grade workbook, but its browser fixture did not provide a Next router. The fixture now supplies an observable navigation adapter, retains the real release controls and API envelopes, and asserts that English final and Arabic midterm selections open their corresponding workbook slugs. The original stale-preview, policy, activation, withdrawal, history and bilingual layout checks remain unchanged, as do their timeouts.
+
+`pnpm run test:control:release:browser` passes locally with the corrected fixture. Runtime errors are printed directly and failure screenshots, DOM snapshots and runtime-error JSON are saved under `outputs/control-release-browser` for diagnosis.
+
 References: GitHub's [job summary commands](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-job-summary) and [deployment environment URLs](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idenvironment). Action runtime declarations were checked in the official `action.yml` files for [checkout v5](https://github.com/actions/checkout/blob/v5/action.yml), [setup-node v5](https://github.com/actions/setup-node/blob/v5/action.yml), [cache v5](https://github.com/actions/cache/blob/v5/action.yml), [pnpm setup v5](https://github.com/pnpm/action-setup/blob/v5/action.yml) and [artifact upload v6](https://github.com/actions/upload-artifact/blob/v6/action.yml).
