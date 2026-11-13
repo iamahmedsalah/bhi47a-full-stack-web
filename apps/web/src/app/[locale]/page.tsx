@@ -31,27 +31,35 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const isAr = locale === 'ar';
 
   const title = isAr
-    ? `${INSTITUTE_INFO.nameAr} | الموقع الرسمي`
-    : `${INSTITUTE_INFO.nameEn} | Official Website`;
+    ? `${INSTITUTE_INFO.nameAr} (BHI47) | الموقع الرسمي وبوابة الطالب`
+    : `${INSTITUTE_INFO.nameEn} (BHI47) | Official Website & Student Portal`;
 
   const description = isAr
-    ? 'الموقع الرسمي للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات (BHI47a). يقدم برامج بكالوريوس معتمدة في نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة مع بوابة إلكترونية متطورة للطلاب.'
-    : 'Official website of the High Institute for Advanced Management Sciences and Computer (BHI47a). Offering accredited bachelor programs in BIS and Accounting & Auditing with a modern student electronic portal.';
+    ? 'الموقع الرسمي للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات بالبحيرة (BHI47 / BHI47a). بوابة الطالب الإلكترونية لتسجيل الدخول، الجداول الدراسية، نتائج الامتحانات، وبرامج نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة.'
+    : 'Official website of the High Institute for Advanced Management Sciences and Computer in Beheira (BHI47 / BHI47a). Student electronic portal for login, exam results, schedules, BIS, and Accounting & Auditing programs.';
 
   const baseUrl = getSiteUrl();
 
   return {
-    title,
+    title: {
+      absolute: title,
+    },
     description,
     keywords: [
       'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات',
+      'المعاهد العليا بالبحيرة',
+      'BHI47',
       'BHI47a',
+      'bhi47.app',
+      'نظم معلومات الأعمال',
       'نظم معلومات إدارية',
       'BIS',
       'شعبة محاسبة ومراجعة',
       'علوم إدارية ومصرفية',
       'بوابة الطالب الإلكترونية',
+      'تسجيل دخول الطالب المعاهد العليا بالبحيرة',
       'تنسيق المعاهد العليا',
+      'نتائج امتحانات المعهد العالي بالبحيرة',
       'كود 47 ك',
       'High Institute for Advanced Management Sciences and Computer',
     ],
@@ -125,9 +133,21 @@ export default async function InstitutionalHomePage({ params }: PageProps) {
         '@type': 'EducationalOrganization',
         '@id': `${baseUrl}/#organization`,
         name: isAr ? INSTITUTE_INFO.name.ar : INSTITUTE_INFO.name.en,
-        alternateName: ['BHI47a', 'معهد 47أ', 'معهد العلوم الإدارية والحاسبات'],
+        alternateName: [
+          'BHI47',
+          'BHI47a',
+          'معهد 47',
+          'معهد 47أ',
+          'المعاهد العليا بالبحيرة',
+          'المعهد العالي للعلوم الإدارية المتقدمة والحاسبات بالبحيرة',
+        ],
         url: baseUrl,
-        logo: `${baseUrl}/logo.webp`,
+        logo: {
+          '@type': 'ImageObject',
+          url: `${baseUrl}/icon.png`,
+          width: 512,
+          height: 512,
+        },
         image: `${baseUrl}/images/institutional/campus-hero.jpg`,
         description: isAr
           ? 'معهد عالي مصري معتمد من وزارة التعليم العالي يمنح درجة البكالوريوس في نظم معلومات الأعمال والمحاسبة والمراجعة.'
@@ -163,6 +183,7 @@ export default async function InstitutionalHomePage({ params }: PageProps) {
         '@id': `${baseUrl}/#website`,
         url: baseUrl,
         name: isAr ? INSTITUTE_INFO.name.ar : INSTITUTE_INFO.name.en,
+        alternateName: ['BHI47', 'BHI47a', 'بوابة المعهد العالي بالبحيرة'],
         publisher: {
           '@id': `${baseUrl}/#organization`,
         },

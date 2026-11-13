@@ -115,11 +115,6 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={dir} data-theme="light" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon_io/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon_io/favicon-16x16.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icon.png" />
-        <link rel="apple-touch-icon" href="/apple-icon.png" />
         <script
           id="theme-init"
           dangerouslySetInnerHTML={{ __html: themeInitScript }}

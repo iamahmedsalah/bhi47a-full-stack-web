@@ -6,6 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getSiteUrl();
   const locales = ['ar', 'en'];
 
+  const staticLastModified = new Date('2026-11-13T00:00:00.000Z');
   const staticRoutes = [
     '',
     '/about',
@@ -16,6 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/gallery',
     '/downloads',
     '/contact',
+    '/login/student',
   ];
 
   const sitemapEntries: MetadataRoute.Sitemap = [];
@@ -24,9 +26,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     for (const route of staticRoutes) {
       sitemapEntries.push({
         url: `${baseUrl}/${locale}${route}`,
-        lastModified: new Date(),
+        lastModified: staticLastModified,
         changeFrequency: route === '' || route === '/news' ? 'daily' : 'weekly',
-        priority: route === '' ? 1.0 : route === '/academics' || route === '/about' ? 0.9 : 0.8,
+        priority: route === '' ? 1.0 : route === '/academics' || route === '/about' || route === '/login/student' ? 0.9 : 0.8,
         alternates: {
           languages: {
             ar: `${baseUrl}/ar${route}`,

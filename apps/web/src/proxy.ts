@@ -25,7 +25,7 @@ export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/ar";
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, 308);
   }
   return intlProxy(request);
 }
