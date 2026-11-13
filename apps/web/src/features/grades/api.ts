@@ -150,6 +150,7 @@ export async function auditAcademicWarnings(options?: {
 }
 
 export interface GradesSettingsData {
+  gradesLevelBasis?: 'student' | 'course';
   gradesSystemOpen: boolean;
   gradesOpenAt?: string | null;
   gradesCloseAt?: string | null;
@@ -176,7 +177,13 @@ export async function updateGradesSettings(
 export interface StudentResultsStatusData {
   visibilityVersion?: string;
   isOpen: boolean;
-  reason?: "system_closed" | "not_started" | "ended" | "level_not_published";
+  reason?:
+    | "system_closed"
+    | "not_started"
+    | "ended"
+    | "level_not_published"
+    | "tuition_blocked"
+    | "student_blocked";
   openAt?: string;
   closeAt?: string;
   studentLevel: string;

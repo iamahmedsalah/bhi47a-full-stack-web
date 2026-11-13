@@ -31,16 +31,19 @@ const courseId='100000000000000000000001';
 const sheetId='200000000000000000000001';
 let policy={version:0,rules:{passPercentage:50,finalMinimumPercentage:0,retake:'latest'}};
 let activations=0, withdrawals=0, active=false, stale=true;
-let settings={gradesSystemOpen:false,gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
+let settings={gradesSystemOpen:false,gradesLevelBasis:'student',gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
 const visibilityWrites=[];
 let studentCloseAt;
 let absentComponent='midterm';
+let course111=false, course111Status='present', tuitionBlocked=false;
 const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     const send=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(status===200?{success:true,data,timestamp:new Date().toISOString()}:data));};
-    if(url.pathname==='/students/me/results-window')return send({isOpen:Date.now()<Date.parse(studentCloseAt),closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':undefined,studentLevel:'1',isLevelPublished:true});
-    if(url.pathname==='/students/me/profile')return send({level:'1',gpa:0});
+    if(url.pathname==='/students/me/results-window')return send({isOpen:!tuitionBlocked&&Date.now()<Date.parse(studentCloseAt),visibilityVersion:tuitionBlocked?'tuition-blocked':'tuition-clear',closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':tuitionBlocked?'tuition_blocked':undefined,studentLevel:course111?'3':'1',isLevelPublished:!course111});
+    if(url.pathname==='/students/me/results' && tuitionBlocked)return send([]);
+    if(url.pathname==='/students/me/profile')return send({level:course111?'3':'1',gpa:0});
+    if(url.pathname==='/students/me/results' && course111)return send([{_id:'course111-midterm',courseCode:'111',courseName:'Synthetic course 111',courseNameAr:'مقرر تجريبي 111',courseNameEn:'Synthetic course 111',examType:'midterm',grade:course111Status==='present'?5:0,maxGrade:20,status:course111Status,academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/students/me/results')return send(Date.now()>=Date.parse(studentCloseAt)?[]:[{_id:'synthetic-midterm',courseCode:'SYNTH101',courseName:'Synthetic course',courseNameEn:'Synthetic course',courseNameAr:'Synthetic course',examType:'midterm',grade:absentComponent==='midterm'?0:15,maxGrade:20,status:absentComponent==='midterm'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true},{_id:'synthetic-final',courseCode:'SYNTH101',courseName:'Synthetic course',examType:'final',grade:absentComponent==='final'?0:55,maxGrade:60,status:absentComponent==='final'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/admin/control/courses')return send({items:[{courseId,code:'SYNTH101',name:'Synthetic course',nameAr:'SYNTH101',nameEn:'Synthetic course',rosterCount:1,components:['coursework','midterm','final'].map(key=>({key,sheetId,slug:`synth101-${key}`,entered:1,published:active?1:0}))}]});
     if(url.pathname.startsWith('/admin/grades/')){
@@ -101,14 +104,21 @@ try{
   for(const locale of ['en','ar']){
     const ar=locale==='ar';
     const text=(en,arabic)=>ar?arabic:en;
-    settings={gradesSystemOpen:false,gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
+    settings={gradesSystemOpen:false,gradesLevelBasis:'student',gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
     await page.setViewportSize({width:1440,height:1100});
     await page.goto(`${base}/${locale}/admin/grades?view=visibility`);
     const dialog=page.getByRole('dialog');
     await dialog.getByText(text('Master switch is off: all results are hidden','المفتاح العام مغلق: جميع النتائج محجوبة'),{exact:true}).waitFor();
+    await dialog.getByText(text('These settings apply only to coursework, midterm and final results. Course instructors control quiz visibility independently of the results switch and schedule.','هذه الإعدادات لأعمال السنة والميدترم والنهائي فقط. إظهار الكويزات وإخفاؤها من اختصاص دكتور المقرر، ولا تتأثر بإغلاق النتائج أو مواعيدها.'),{exact:true}).waitFor();
+    assert.ok(await dialog.evaluate(node=>node.getBoundingClientRect().width<=768),'desktop visibility modal should be at most 768px wide');
+    assert.equal(await dialog.getByRole('button',{name:new RegExp(ar?'الاختبارات القصيرة|العملي|الشفوي':'Quizzes|Practical|Oral')}).count(),0);
     await dialog.getByRole('button',{name:text('Open results viewing','فتح عرض النتائج'),exact:true}).click();
     await dialog.getByRole('button',{name:text('Hide all results','حجب كل النتائج'),exact:true}).waitFor();
     assert.equal(settings.gradesSystemOpen,true);
+    await dialog.getByRole('button',{name:text('Level visibility basis','أساس إتاحة المستوى'),exact:true}).click();
+    await page.getByRole('option',{name:text('By course level','حسب مستوى المقرر'),exact:true}).click();
+    await dialog.getByText(text('Example: Level 1 course 111 can appear for an enrolled Level 3 student when Level 1 is allowed.','مثال: المقرر 111 من المستوى الأول يظهر لأي طالب مسجّل به عند إتاحة المستوى الأول، حتى لو مستواه الحالي الثالث.'),{exact:true}).waitFor();
+    assert.equal(settings.gradesLevelBasis,'course');
     await dialog.getByRole('button',{name:text('Midterm — Hidden','الميدترم — محجوب'),exact:true}).click();
     await dialog.getByRole('button',{name:text('Midterm — Visible','الميدترم — متاح'),exact:true}).waitFor();
     assert.ok(settings.gradesPublishedExamTypes.includes('midterm'));
@@ -124,6 +134,8 @@ try{
     await dialog.getByText(text('Viewing window is open; levels, components and overrides below apply','نافذة العرض مفتوحة؛ تطبّق المستويات والمكوّنات والاستثناءات أدناه'),{exact:true}).waitFor();
     assert.equal(settings.gradesOpenAt,null);assert.equal(settings.gradesCloseAt,null);
     assert.equal(activations,1,'visibility settings must not approve or activate Control drafts');
+    await dialog.evaluate(node=>{node.scrollTop=0;});
+    await dialog.screenshot({path:path.join(output,`visibility-${locale}-desktop.png`)});
     await page.setViewportSize({width:390,height:844});
     assert.ok(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth+2),'visibility controls must fit mobile width');
     await dialog.screenshot({path:path.join(output,`visibility-${locale}-mobile.png`)});
@@ -147,6 +159,30 @@ try{
   await page.goto(`${base}/en/dashboard/results?view=student`);
   await page.getByRole('row').filter({hasText:'SYNTH101'}).getByText('15 / 20',{exact:true}).waitFor();
   await page.getByRole('row').filter({hasText:'SYNTH101'}).getByText('Absent',{exact:true}).first().waitFor();
+  course111=true;studentCloseAt=new Date(Date.now()+60000).toISOString();
+  for(const locale of ['ar','en']){
+    for(const status of ['present','absent','banned']){
+      course111Status=status;
+      await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+      const row=page.getByRole('row').filter({hasText:'111'});
+      await row.first().waitFor();
+      if(status==='present')await row.getByText('5 / 20',{exact:true}).waitFor();
+      else await row.getByText(messages[locale].control.states[status],{exact:true}).first().waitFor();
+      assert.equal(await page.getByText(locale==='ar'?'عرض النتائج غير متاح لمستواك الحالي':'Results hidden for your current level',{exact:true}).count(),0);
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      await page.evaluate(()=>Promise.all(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished.catch(()=>{}))));
+      await page.screenshot({path:path.join(output,`course111-${locale}-${status}.png`),fullPage:true});
+    }
+  }
+  for(const locale of ['ar','en']){
+    tuitionBlocked=true;studentCloseAt=new Date(Date.now()+120000).toISOString();
+    await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+    await page.getByText(locale==='en'?'Results withheld due to unpaid tuition fees':'النتيجة محجوبة بسبب عدم سداد المصروفات الدراسية',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('row').filter({hasText:'111'}).count(),0);
+    tuitionBlocked=false;
+    await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+    await page.getByRole('row').filter({hasText:'111'}).first().waitFor();
+  }
   assert.deepEqual(errors,[]);
   console.log('Control release browser acceptance passed: real API envelopes, scoped course selection, policy editing, stale preview recovery, activation, withdrawal, history, Arabic/English desktop/mobile.');
 }catch(error){if(page){await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});await write('failure-dom.html',await page.content());}await write('runtime-errors.json',JSON.stringify(errors));if(errors.length)throw new AggregateError([error],`Control release runtime errors: ${errors.join('; ')}`);throw error;}

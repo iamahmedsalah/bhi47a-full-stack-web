@@ -1,5 +1,12 @@
 import { EXAM_TYPE_VALUES, type ExamType } from "./exam-types";
 
+/** Official grade publication does not control instructor-managed quizzes. */
+export const CONTROL_RESULT_EXAM_TYPES: ExamType[] = [
+  "coursework",
+  "midterm",
+  "final",
+];
+
 export interface GradeVisibilityRule {
   courseCode?: string;
   studentCode?: string;
@@ -8,6 +15,7 @@ export interface GradeVisibilityRule {
 }
 
 export interface GradeVisibilitySettings {
+  gradesLevelBasis?: "student" | "course";
   gradesSystemOpen?: boolean;
   gradesOpenAt?: string | null;
   gradesCloseAt?: string | null;
@@ -20,7 +28,7 @@ export interface GradeVisibilitySettings {
 export function isReleasedGradeVisible(
   settings: GradeVisibilitySettings,
   student: { level: string; studentCode?: string },
-  grade: { courseCode: string; examType: string },
+  grade: { courseCode: string; examType: string; academicLevel?: string },
   now = Date.now(),
 ): boolean {
   if (settings.gradesSystemOpen === false) return false;
@@ -30,7 +38,9 @@ export function isReleasedGradeVisible(
     return false;
   if (
     !(settings.gradesPublishedLevels ?? ["1", "2", "3", "4"]).includes(
-      student.level,
+      settings.gradesLevelBasis !== "student"
+        ? (grade.academicLevel ?? student.level)
+        : student.level,
     )
   )
     return false;

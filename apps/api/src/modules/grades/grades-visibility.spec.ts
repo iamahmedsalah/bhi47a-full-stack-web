@@ -14,11 +14,227 @@ import {
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { GradesController } from './grades.controller';
 import { GradesService } from './grades.service';
-import { UpdateGradesSettingsDto } from './dto/grade.dto';
+import { PublishGradesDto, UpdateGradesSettingsDto } from './dto/grade.dto';
 
 const student = { level: '1', studentCode: '260001' };
 const midterm = { courseCode: 'CS101', examType: 'midterm' };
 describe('Released grade visibility', () => {
+  it('keeps instructor quiz publication independent from official result settings but respects holds', async () => {
+    const profile = { isBlocked: false };
+    const published = [{ courseCode: '111', isPublished: true, quizzes: [] }];
+    const find = jest.fn().mockReturnValue({
+      sort: () => ({ lean: () => Promise.resolve(published) }),
+    });
+    const settingsRead = jest.fn();
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        courseQuizModel: { find },
+        systemSettingsModel: { findOne: settingsRead },
+        studentProfileModel: {
+          findOne: () => ({
+            select: () => ({ lean: () => Promise.resolve(profile) }),
+          }),
+        },
+      },
+    );
+    const studentId = '100000000000000000000001';
+    expect(await service.findStudentQuizzes(studentId)).toEqual(published);
+    expect(find).toHaveBeenCalledWith(
+      expect.objectContaining({ isPublished: true }),
+    );
+    expect(settingsRead).not.toHaveBeenCalled();
+    profile.isBlocked = true;
+    expect(await service.findStudentQuizzes(studentId)).toEqual([]);
+    await expect(
+      service.publishGrades({ examType: 'quiz', isPublished: true }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.previewControlRelease({ examType: 'quiz', isPublished: true }),
+    ).rejects.toThrow(BadRequestException);
+    expect(
+      await validate(
+        plainToInstance(PublishGradesDto, {
+          examType: 'quiz',
+          isPublished: true,
+        }),
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it('limits unscoped grade publication to coursework, midterm and final without touching quizzes', async () => {
+    const stop = new Error('stop before writes');
+    const find = jest.fn();
+    find.mockReturnValue({
+      select: () => ({ lean: () => Promise.reject(stop) }),
+    });
+    const quizWrite = jest.fn();
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        gradeModel: { find },
+        courseQuizModel: { updateMany: quizWrite },
+      },
+    );
+    await expect(service.publishGrades({ isPublished: false })).rejects.toThrow(
+      stop,
+    );
+    expect(find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        examType: { $in: ['coursework', 'midterm', 'final'] },
+      }),
+    );
+    expect(quizWrite).not.toHaveBeenCalled();
+  });
+  it('enforces tuition holds for grades and quizzes, and restores access after removal', async () => {
+    const profile = {
+      level: '3',
+      studentCode: '250633',
+      isBlocked: true,
+      tuitionFeesStatus: 'unpaid',
+    };
+    const settings = { gradesSystemOpen: true, gradesLevelBasis: 'course' };
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        systemSettingsModel: { findOne: () => Promise.resolve(settings) },
+        studentProfileModel: {
+          findOne: () => ({
+            select: () => ({ lean: () => Promise.resolve(profile) }),
+          }),
+        },
+        gradeModel: { find: jest.fn() },
+      },
+    );
+    const studentId = '100000000000000000000001';
+    const blocked = await service.getStudentResultsStatus(studentId);
+    expect(blocked).toMatchObject({ isOpen: false, reason: 'tuition_blocked' });
+    expect(await service.findStudentResults(studentId)).toEqual([]);
+    expect(service['gradeModel'].find).not.toHaveBeenCalled();
+    // The final result-row filter also enforces the hold before any override.
+    const rows = [{ ...midterm, academicLevel: '1', grade: 15 }];
+    expect(await service['visibleStudentRows'](studentId, rows)).toEqual([]);
+    settings.gradesSystemOpen = false;
+    expect(await service.getStudentResultsStatus(studentId)).toMatchObject({
+      isOpen: false,
+      reason: 'system_closed',
+    });
+    settings.gradesSystemOpen = true;
+    profile.tuitionFeesStatus = 'paid';
+    expect(await service.getStudentResultsStatus(studentId)).toMatchObject({
+      isOpen: false,
+      reason: 'student_blocked',
+    });
+    profile.isBlocked = false;
+    for (const tuitionStatus of ['paid', 'exempt', 'unpaid']) {
+      profile.tuitionFeesStatus = tuitionStatus;
+      const unblocked = await service.getStudentResultsStatus(studentId);
+      expect(unblocked.isOpen).toBe(true);
+      expect(unblocked.visibilityVersion).not.toBe(blocked.visibilityVersion);
+      expect(await service['visibleStudentRows'](studentId, rows)).toEqual(
+        rows,
+      );
+    }
+  });
+  it('shows course 111 to an enrolled Level 3 student when course-level visibility allows Level 1', () => {
+    const learner = { level: '3', studentCode: '250633' };
+    const grade = {
+      courseCode: '111',
+      academicLevel: '1',
+      examType: 'midterm',
+    };
+    const settings: GradeVisibilitySettings = {
+      gradesPublishedLevels: ['1', '2'],
+      gradesPublishedExamTypes: ['midterm'],
+      gradesLevelBasis: 'student',
+    };
+    expect(isReleasedGradeVisible(settings, learner, grade)).toBe(false);
+    expect(
+      isReleasedGradeVisible(
+        { ...settings, gradesLevelBasis: 'course' },
+        learner,
+        grade,
+      ),
+    ).toBe(true);
+    expect(
+      isReleasedGradeVisible(
+        { ...settings, gradesLevelBasis: undefined },
+        learner,
+        grade,
+      ),
+    ).toBe(true);
+    expect(
+      isReleasedGradeVisible(
+        {
+          ...settings,
+          gradesLevelBasis: 'course',
+          gradesPublishedLevels: ['2'],
+        },
+        learner,
+        grade,
+      ),
+    ).toBe(false);
+  });
+  it.each(['absent', 'banned'])(
+    'returns zero with the original %s status for released course 111',
+    async (status) => {
+      const chain = (value: unknown) => {
+        const query = {
+          select: () => query,
+          sort: () => query,
+          lean: () => Promise.resolve(value),
+        };
+        return query;
+      };
+      const service = Object.assign(
+        Object.create(GradesService.prototype) as GradesService,
+        {
+          gradeModel: { find: () => chain([]) },
+          systemSettingsModel: {
+            findOne: () =>
+              Promise.resolve({
+                gradesSystemOpen: true,
+                gradesLevelBasis: 'course',
+                gradesPublishedLevels: ['1'],
+                gradesPublishedExamTypes: ['midterm'],
+              }),
+          },
+          studentProfileModel: {
+            findOne: () => chain({ level: '3', studentCode: '250633' }),
+          },
+          courseModel: {
+            find: () => chain([{ code: '111', academicLevel: '1' }]),
+          },
+        },
+      );
+      jest.spyOn(service, 'controlReleases', 'get').mockReturnValue({
+        managedScopes: () => Promise.resolve(new Set()),
+        studentMarks: () =>
+          Promise.resolve([
+            {
+              courseCode: '111',
+              examType: 'midterm',
+              status,
+              grade: 17,
+              maxGrade: 20,
+            },
+          ]),
+      } as never);
+      const gate = await service.getStudentResultsStatus(
+        '100000000000000000000001',
+      );
+      expect(gate.isOpen).toBe(true);
+      const rows = await service.findStudentResults('100000000000000000000001');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        courseCode: '111',
+        status,
+        grade: 0,
+        percentage: 0,
+        academicLevel: '1',
+      });
+    },
+  );
   it('does not let a grade writer publish or withdraw through a single-grade payload', async () => {
     const saveGrade = jest.fn();
     const update = jest.fn();
@@ -241,9 +457,12 @@ describe('Released grade visibility', () => {
       ),
     ).toHaveLength(0);
     for (const input of [
+      { gradesPublishedExamTypes: ['quiz'] },
+      { gradesVisibilityRules: [{ examType: 'quiz', isVisible: true }] },
       { gradesOpenAt: 'invalid' },
       { gradesPublishedLevels: ['5'] },
       { gradesSystemOpen: null },
+      { gradesLevelBasis: null },
       { gradesPublishedLevels: null },
       { gradesPublishedLevels: ['1', '1'] },
       { gradesPublishedExamTypes: null },

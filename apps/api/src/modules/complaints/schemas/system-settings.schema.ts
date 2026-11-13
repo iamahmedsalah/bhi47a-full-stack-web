@@ -51,6 +51,9 @@ export class SystemSettings {
   @Prop({ type: [String], default: ['1', '2', '3', '4'] })
   gradesPublishedLevels?: string[];
 
+  @Prop({ type: String, enum: ['student', 'course'], default: 'course' })
+  gradesLevelBasis?: 'student' | 'course';
+
   @Prop({ type: [String], default: [...EXAM_TYPE_VALUES] })
   gradesPublishedExamTypes?: ExamType[];
 

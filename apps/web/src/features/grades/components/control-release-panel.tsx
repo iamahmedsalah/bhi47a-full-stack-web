@@ -1,6 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import {
+  ClipboardCheck,
+  Eye,
+  Send,
+  Undo2,
+  History as HistoryIcon,
+  BookOpen,
+  ShieldCheck,
+} from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -101,7 +110,10 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
       dir={locale === "ar" ? "rtl" : "ltr"}
       className="rounded-2xl border border-border bg-card p-5 space-y-4"
     >
-      <h3 className="font-bold">{t("title")}</h3>
+      <h3 className="flex items-center gap-2 font-bold">
+        <ClipboardCheck className="h-5 w-5 text-cyan-400" />
+        {t("title")}
+      </h3>
       <p className="text-sm text-muted-foreground">{t("description")}</p>
       <div className="grid gap-3 sm:grid-cols-4">
         <Label>
@@ -197,6 +209,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
           }
         >
           {t("preview")}
+          <Eye className="h-4 w-4" />
         </Button>
         <Button
           variant="outline"
@@ -217,6 +230,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
           }
         >
           {t("activate")}
+          <Send className="h-4 w-4" />
         </Button>
         <Button
           variant="outline"
@@ -233,6 +247,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
           }
         >
           {t("withdraw")}
+          <Undo2 className="h-4 w-4" />
         </Button>
         {user?.role === "admin" && (
           <Button
@@ -248,6 +263,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             }
           >
             {t("policy")}
+            <ShieldCheck className="h-4 w-4" />
           </Button>
         )}
         {sheetId && (
@@ -264,6 +280,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             }
           >
             {t("history")}
+            <HistoryIcon className="h-4 w-4" />
           </Button>
         )}
         {sheetId && (
@@ -274,12 +291,21 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             }}
           >
             {t("openSheet")}
+            <BookOpen className="h-4 w-4" />
           </Button>
         )}
       </div>
       {history && (
         <div className="rounded-xl border p-3 text-sm space-y-2">
           <p>{t("pendingJobs", { count: history.pendingJobs })}</p>
+          {history.pendingJobs > 0 && (
+            <p className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-6 text-muted-foreground">
+              <HistoryIcon className="h-4 w-4 shrink-0 text-amber-400" />
+              {locale === "ar"
+                ? "هذه مهام تسوية السجل الأكاديمي والإشعارات. ظهور الميدترم للطالب يعتمد على الإصدار المفعّل وإعدادات الإتاحة أعلاه، ولا يتطلب اكتمال درجات النهائي."
+                : "These jobs reconcile academic records and notifications. Midterm viewing depends on an active release and visibility settings above; it does not require final marks."}
+            </p>
+          )}
           {history.pendingJobs > 0 && user?.role === "admin" && (
             <Button
               variant="outline"

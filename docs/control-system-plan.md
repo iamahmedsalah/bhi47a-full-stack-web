@@ -6,7 +6,7 @@ Scope: the existing single-institute Student Portal, Arabic and English.
 
 ## Live phase tracker
 
-Updated: 6 November 2026. Current increment: **D + E + correction workflow in F**. Local test instructions and synthetic accounts: [control-testing.md](control-testing.md). Update this table, the phase checklists, and the verification log together after each increment; code presence alone is not completion.
+Updated: 13 November 2026. Current follow-up: **D/F permissions, course-level student visibility, compact management and tuition holds**. Local test instructions and synthetic accounts: [control-testing.md](control-testing.md). Detailed follow-up evidence: [control-permissions-and-visibility.md](control-permissions-and-visibility.md). Update this table, the phase checklists, and the verification log together after each increment; code presence alone is not completion.
 
 | Phase | Current status | Delivered work / remaining gate |
 | --- | --- | --- |
@@ -19,6 +19,10 @@ Updated: 6 November 2026. Current increment: **D + E + correction workflow in F*
 | G — extensions | Optional / pending | Anonymous marking, practical/oral, multiple sittings and appeals. |
 
 ### Confirmed product decisions for this increment
+
+- Instructor-quiz follow-up: Grades visibility and bulk publication now cover coursework, midterm and final only. Instructors retain independent quiz publication; official result closure/dates/levels cannot override it. Financial/administrative holds remain enforced. The management dialog is limited to 768px and shows three components. Verified locally with 97 unit suites / 933 tests, 19 Control integration tests, bilingual desktop/mobile acceptance, workspace lint/types and isolated shared/API builds; final web-build evidence is recorded in [ci-reports.md](ci-reports.md).
+
+- November 13 follow-up is locally verified: independent approval/publication permissions, visibility by course level by default, clear Eye/EyeOff management, zero scores with absent/banned labels, and tuition holds enforced on student results/quizzes. Removing a hold restores only otherwise published and visible results. Evidence: 97 API suites / 931 tests, 19 Control replica-set tests, bilingual browser acceptance, workspace lint/types, isolated API build and default Next.js/Turbopack build with route-manifest validation. Build details and deployment limitations are tracked in [ci-reports.md](ci-reports.md); production acceptance gates above are not automatically completed by these local checks.
 
 - **Coursework is always out of 20**, consisting of attendance and quiz contributions. Default: **attendance 5 + quizzes 15**. Admin configures the attendance allocation per course/term; quiz allocation is `20 - attendance allocation`. Both contributions are stored and audited with the aggregate. The split is frozen once coursework is entered.
 - Contributions are awarded marks, not unscaled source values. Example: 80% attendance gives 4/5; 80% in selected quizzes gives 12/15; coursework is 16/20. Review and round awarded contributions to the configured step before entry. Source attendance/quiz changes never silently overwrite marks. Automatic source selection/aggregation remains future work.

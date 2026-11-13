@@ -18,6 +18,12 @@ Existing historical approvals/publications are retained. Administrators can use 
 
 ## Visibility and publication are separate
 
+### Instructor quizzes are independent
+
+The Grades visibility dialog and publication APIs manage **coursework, midterm and final** results only. Quizzes remain under the course instructor's own publication/release settings. Closing the official results switch, changing its dates or levels, and adding course/student visibility overrides do not hide or reveal quizzes. Bulk official-grade publication no longer updates quiz publication flags, including when no component is selected. Explicit quiz publication or visibility requests through these official-grade endpoints are rejected. Existing quiz publication records are retained; there is no backfill that publishes quizzes.
+
+Student course-quiz reads still require the quiz record to be published and continue to respect financial/administrative holds. Coursework's quiz contribution remains part of the official coursework total; it is distinct from publishing individual quizzes. The dialog now has a 768px maximum width and exposes only the three official components in both component controls and override selection.
+
 1. Enter and review component marks in Control.
 2. An authorized approver approves the appropriate component sheet.
 3. An authorized publisher previews and activates the release on Grades. Activation includes the preview digests; stale previews must be repeated.
@@ -25,9 +31,9 @@ Existing historical approvals/publications are retained. Administrators can use 
 
 The new dialog displays the effective master/window restriction and has separate controls for student levels, exam components, and course/student overrides. Clearing a schedule sends explicit `null` values and removes the stored deadlines. Picker values are interpreted in `Africa/Cairo`, independent of the browser timezone. Invalid or reversed schedules are rejected, including a partial update that conflicts with the other stored deadline.
 
-All of these must permit viewing: the master switch, opening/closing window, and the student's academic level. Component settings then apply, followed by matching course/student rules in order; the last matching rule wins. A rule with both codes targets that student in that course only. Overrides never bypass master, time or level restrictions.
+All of these must permit viewing: the master switch, opening/closing window, and the result's course academic level. Per the confirmed institute policy, **course level is the default**, including historical settings without `gradesLevelBasis`. A Level 3 student may see a released Level 1 course when Level 1 is allowed. An explicit `student` basis remains available if the administration deliberately wants current-student-level restrictions instead. Component settings then apply, followed by matching course/student rules in order; the last matching rule wins. A rule with both codes targets that student in that course only. Overrides never bypass master, time or the selected level basis.
 
-For example, to expose only one student's midterm in one course, hide midterm globally and add a visible midterm rule containing both codes. Ensure the master switch is open, the student's level is allowed, the current time is within the window, and the result has already been approved and published.
+For example, to expose only one student's midterm in course 111, hide midterm globally and add a visible midterm rule containing both codes. Ensure the master switch is open, the course's level is allowed, the current time is within the window, and the result has already been approved and published. Approval alone does not activate a release. Existing releases are not changed by editing visibility settings.
 
 The API applies visibility to both legacy and released Control results, and to quiz-grade inquiry. Hidden components are omitted; complete official totals are omitted if they could disclose a hidden component by subtraction. Visibility settings do not change stored marks, release evidence, GPA or academic progression.
 
@@ -37,7 +43,7 @@ Opening is inclusive and closing is exclusive: results hide at `now >= closeAt`.
 
 Each mark is identified by student, course, year, term **and component**. The status dropdown edits the currently selected component; the column heading names it explicitly. A student can be absent in midterm and present in final, or the reverse. Student results preserve each component's status rather than replacing every status with one global attendance value.
 
-An absent component contributes zero to the total, while retaining its absent status. Under the configurable default policy, an absent midterm does not automatically fail a present final; an absent final fails the official course result. Excused, incomplete and withheld states retain their existing separate policies.
+Absent and banned components contribute zero to the total while retaining their original statuses. Student API output normalizes their numeric grade to zero, even if an old mark retained a number; Arabic results show `غائب` or `محروم` and English results show `Absent` or `Banned`. The original stored mark and release evidence are unchanged. Under the configurable default policy, an absent midterm does not automatically fail a present final; an absent final fails the official course result. Excused, incomplete and withheld states retain their existing separate policies.
 
 ## Verification
 
@@ -45,7 +51,7 @@ Regression coverage includes the independent permission matrix, direct unauthori
 
 This document describes local implementation. Production verification and deployment sign-off remain separate; no live student records were modified.
 
-### Completed local evidence
+### Completed local evidence — earlier permission increment
 
 - Workspace lint passed, with no reported warnings/errors; workspace types and all three production builds passed. Root-route and API runtime artifact checks passed.
 - Final API unit run: 97 suites / 927 tests passed.
@@ -54,3 +60,27 @@ This document describes local implementation. Production verification and deploy
 - General startup/authentication initially exceeded its fresh database setup limit. A warm rerun passed 17/18, with a student WebAuthn case exceeding 30 seconds; that case passed alone with its unchanged timeout. The final complete startup/authentication rerun subsequently passed **18/18**, with no skipped tests and no timeout/assertion changes (`outputs/visibility-api-startup-accepted.log`). This verifies the startup/authentication file, not every broad API E2E file. The synthetic localhost MongoDB fixture was stopped after verification.
 
 The new permissions must be assigned explicitly to staff who need publication or visibility control. Existing staff with only `grades.write` lose those unrelated powers; admins retain access. Review prior approvals in the existing audit history where the former review-to-approval implication may have affected results.
+
+## Course 111 and compact result management follow-up
+
+### Tuition holds
+
+Student results and quizzes now respect the existing Student Profile `isBlocked` flag. An unpaid, blocked student receives no grade rows and sees “النتيجة محجوبة بسبب عدم سداد المصروفات الدراسية” / “Results withheld due to unpaid tuition fees” when the results window is otherwise open. Other administrative holds use a generic message; internal block notes are not exposed. Master closure, dates and level restrictions keep their precedence.
+
+Removing the hold restores access only to approved, published and otherwise visible results. Payment status alone does not override an explicit hold or create a new hold for an administratively unblocked student. Paid/exempt students without a hold remain eligible. The status visibility version includes the hold state, so the existing 60-second status refresh also refreshes grade data after a hold changes. A student can reload immediately after staff remove the hold. No student records or financial status are changed by reading results.
+
+Tuition follow-up verification passed: **97 unit suites / 931 tests**, **19 real Control integration tests**, bilingual release/visibility browser acceptance, all workspace lint and typecheck tasks, and the isolated API production build. The integration case verifies both a released grade and an actual published quiz before/after removing a hold. Detailed evidence and build limitations are recorded in `docs/ci-reports.md`.
+
+The final isolated default Next.js/Turbopack production build also passed, including TypeScript, page generation and the root-route manifest audit. This supersedes the earlier local PostCSS timeout; production deployment and live-course sign-off are still separate.
+
+The reported student belonged to Level 3 while only Levels 1 and 2 were allowed. The earlier student-level gate hid every result before considering that course 111 belongs to Level 1. The institute confirmed that visibility should follow **course level**. Missing/old settings now default to that policy; explicit current-student-level mode remains a deliberate option. Only the student's own published results are read. This does not disclose other students' marks, publish drafts or bypass release approval.
+
+The manager now uses a compact full-width master strip instead of an expanded grid cell around one button. Levels occupy four columns on wide screens; exam components use equal three-column cells with consistent `Eye`/`EyeOff` icons and visible/hidden labels. Dates use two side-by-side fields with Cairo placeholders. Course/student overrides and release actions occupy their own sections. Arabic RTL and mobile layouts are covered by the browser fixture.
+
+Synthetic course-111 acceptance uses a Level 3 student and a Level 1 midterm result: present `5 / 20`, absent `غائب` / `Absent`, and banned `محروم` / `Banned`. The student API returns zero grade and percentage for absent/banned components, preserving the original status and stored release evidence. The misleading “not approved” level message now describes visibility restrictions explicitly.
+
+The real replica-set suite includes saving course-level visibility for an enrolled higher-level student. Local browser evidence is in `outputs/control-release-browser/visibility-ar-desktop.png`, `visibility-ar-mobile.png` and the `course111-<locale>-<status>.png` screenshots. These contain synthetic data, not live student records. Production deployment and live-course verification remain separate.
+
+Final functional evidence for this increment: **97 API unit suites / 930 tests**, **18 Control replica-set tests**, and **18 startup/authentication tests** passed. The final compact browser acceptance passed both languages, all three course-111 statuses, automatic closing, permission separation and mobile geometry. Workspace TypeScript and lint passed; the compact web follow-up also passed ESLint. The first broad unit process exited abnormally on Windows (`-1073740791`) without totals; its unchanged rerun with temporary files on D completed successfully. No assertion, timeout or failure policy was relaxed.
+
+Build verification uses source copies under `outputs/result-ui-production-check` because the user's development servers are running. Production web output and API compilation are isolated from their `.next` and `dist` directories. The first copied web build needed a temporary Turbopack root correction to resolve dependency junctions; that change exists only in ignored verification files, not repository configuration. The synthetic database fixture was shut down after integration checks.

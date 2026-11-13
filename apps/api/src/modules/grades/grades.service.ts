@@ -50,7 +50,7 @@ import { evaluateAcademicProgression } from './utils/academic-level-progression.
 import {
   calculateGradeScale,
   type CourseLevel,
-  EXAM_TYPE_VALUES,
+  CONTROL_RESULT_EXAM_TYPES,
   isReleasedGradeVisible,
 } from '@student-portal/shared';
 import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
@@ -805,6 +805,11 @@ export class GradesService implements OnModuleInit {
   }
 
   async previewControlRelease(dto: PublishGradesDto) {
+    if (dto.examType && !CONTROL_RESULT_EXAM_TYPES.includes(dto.examType)) {
+      throw new BadRequestException(
+        'Only coursework, midterm and final results are managed here',
+      );
+    }
     if (dto.level)
       throw new ConflictException(
         'Use the level visibility settings for access. Release Control results by course and term.',
@@ -813,9 +818,7 @@ export class GradesService implements OnModuleInit {
     if (dto.academicYear) filter.academicYear = dto.academicYear;
     if (dto.semester) filter.semester = dto.semester;
     if (dto.courseCode) filter.courseCode = dto.courseCode.toUpperCase();
-    if (dto.examType && dto.examType !== 'quiz')
-      filter.component = dto.examType;
-    if (dto.examType === 'quiz') return { sheets: [], releaseDigests: {} };
+    filter.component = dto.examType ?? { $in: CONTROL_RESULT_EXAM_TYPES };
     const sheets = await this.controlSheetModel.find(filter).limit(501).lean();
     if (sheets.length > 500)
       throw new ConflictException('Choose a narrower publication scope');
@@ -881,7 +884,15 @@ export class GradesService implements OnModuleInit {
     dto: PublishGradesDto,
     actorId?: string,
   ): Promise<{ count: number }> {
-    const filter: any = { cleared: { $ne: true } };
+    if (dto.examType && !CONTROL_RESULT_EXAM_TYPES.includes(dto.examType)) {
+      throw new BadRequestException(
+        'Only coursework, midterm and final results are managed here',
+      );
+    }
+    const filter: any = {
+      cleared: { $ne: true },
+      examType: { $in: CONTROL_RESULT_EXAM_TYPES },
+    };
     if (dto.academicYear) filter.academicYear = dto.academicYear;
     if (dto.semester) filter.semester = dto.semester;
     if (dto.examType) filter.examType = dto.examType;
@@ -899,26 +910,10 @@ export class GradesService implements OnModuleInit {
       filter.studentId = { $in: userIds };
     }
 
-    const quizFilter: any = {};
-    if (dto.academicYear) quizFilter.academicYear = dto.academicYear;
-    if (dto.semester) quizFilter.semester = dto.semester;
-    if (dto.courseCode) quizFilter.courseCode = dto.courseCode.toUpperCase();
-    if (dto.level) {
-      const studentsInLevel = await this.studentProfileModel
-        .find({ level: dto.level })
-        .select('userId')
-        .lean();
-      quizFilter.studentId = { $in: studentsInLevel.map((p) => p.userId) };
-    }
-
-    const includeGrades = !dto.examType || dto.examType !== 'quiz';
-    const includeQuizzes = !dto.examType || dto.examType === 'quiz';
-    const affectedGrades = includeGrades
-      ? await this.gradeModel
-          .find(filter)
-          .select('studentId controlManaged')
-          .lean()
-      : [];
+    const affectedGrades = await this.gradeModel
+      .find(filter)
+      .select('studentId controlManaged')
+      .lean();
     if (dto.level && affectedGrades.some((g) => g.controlManaged))
       throw new ConflictException(
         'Control releases require an entire course/term; use level settings to control student access',
@@ -928,7 +923,6 @@ export class GradesService implements OnModuleInit {
     let result = { modifiedCount: 0 };
     try {
       await session.withTransaction(async () => {
-        if (!includeGrades) return;
         const selected = await this.gradeModel
           .find(filter)
           .session(session)
@@ -1059,12 +1053,6 @@ export class GradesService implements OnModuleInit {
     } finally {
       await session.endSession();
     }
-    const quizResult = includeQuizzes
-      ? await this.courseQuizModel.updateMany(quizFilter, {
-          $set: { isPublished: dto.isPublished },
-        })
-      : { modifiedCount: 0 };
-
     const legacyAffected = affectedGrades.filter(
       (grade) => !grade.controlManaged,
     );
@@ -1120,7 +1108,7 @@ export class GradesService implements OnModuleInit {
         'Control academic/notification jobs pending; durable retry retained',
       );
     }
-    return { count: result.modifiedCount + quizResult.modifiedCount };
+    return { count: result.modifiedCount };
   }
 
   async getGradesSettings() {
@@ -1134,6 +1122,7 @@ export class GradesService implements OnModuleInit {
     }
     return {
       gradesSystemOpen: settings.gradesSystemOpen ?? true,
+      gradesLevelBasis: settings.gradesLevelBasis ?? 'course',
       visibilityVersion: settings.updatedAt?.toISOString(),
       gradesOpenAt: settings.gradesOpenAt?.toISOString(),
       gradesCloseAt: settings.gradesCloseAt?.toISOString(),
@@ -1143,10 +1132,13 @@ export class GradesService implements OnModuleInit {
         '3',
         '4',
       ],
-      gradesPublishedExamTypes: settings.gradesPublishedExamTypes ?? [
-        ...EXAM_TYPE_VALUES,
-      ],
-      gradesVisibilityRules: settings.gradesVisibilityRules ?? [],
+      gradesPublishedExamTypes: (
+        settings.gradesPublishedExamTypes ?? CONTROL_RESULT_EXAM_TYPES
+      ).filter((type) => CONTROL_RESULT_EXAM_TYPES.includes(type)),
+      gradesVisibilityRules: (settings.gradesVisibilityRules ?? []).filter(
+        (rule) =>
+          !rule.examType || CONTROL_RESULT_EXAM_TYPES.includes(rule.examType),
+      ),
     };
   }
 
@@ -1155,6 +1147,8 @@ export class GradesService implements OnModuleInit {
     if (!settings) {
       settings = new this.systemSettingsModel();
     }
+    if (dto.gradesLevelBasis !== undefined)
+      settings.gradesLevelBasis = dto.gradesLevelBasis;
 
     const openAt =
       dto.gradesOpenAt !== undefined
@@ -1214,7 +1208,13 @@ export class GradesService implements OnModuleInit {
 
   async getStudentResultsStatus(studentId: string): Promise<{
     isOpen: boolean;
-    reason?: 'system_closed' | 'not_started' | 'ended' | 'level_not_published';
+    reason?:
+      | 'system_closed'
+      | 'not_started'
+      | 'ended'
+      | 'level_not_published'
+      | 'tuition_blocked'
+      | 'student_blocked';
     openAt?: string;
     closeAt?: string;
     studentLevel: string;
@@ -1224,8 +1224,9 @@ export class GradesService implements OnModuleInit {
     const settings = await this.getGradesSettings();
     const profile = await this.studentProfileModel
       .findOne({ userId: new Types.ObjectId(studentId) })
-      .select('level')
+      .select('level isBlocked tuitionFeesStatus')
       .lean();
+    const visibilityVersion = `${settings.visibilityVersion ?? ''}:${profile?.isBlocked === true ? 'blocked' : 'clear'}`;
     const studentLevel = profile?.level || '1';
     const publishedLevels = settings.gradesPublishedLevels ?? [
       '1',
@@ -1241,7 +1242,7 @@ export class GradesService implements OnModuleInit {
         reason: 'system_closed',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
-        visibilityVersion: settings.visibilityVersion,
+        visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1254,7 +1255,7 @@ export class GradesService implements OnModuleInit {
         reason: 'not_started',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
-        visibilityVersion: settings.visibilityVersion,
+        visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1266,19 +1267,34 @@ export class GradesService implements OnModuleInit {
         reason: 'ended',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
-        visibilityVersion: settings.visibilityVersion,
+        visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
     }
 
-    if (!isLevelPublished) {
+    if (!isLevelPublished && settings.gradesLevelBasis === 'student') {
       return {
         isOpen: false,
         reason: 'level_not_published',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
-        visibilityVersion: settings.visibilityVersion,
+        visibilityVersion,
+        studentLevel,
+        isLevelPublished,
+      };
+    }
+
+    if (profile?.isBlocked) {
+      return {
+        isOpen: false,
+        reason:
+          profile.tuitionFeesStatus === 'unpaid'
+            ? 'tuition_blocked'
+            : 'student_blocked',
+        openAt: settings.gradesOpenAt,
+        closeAt: settings.gradesCloseAt,
+        visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1288,9 +1304,9 @@ export class GradesService implements OnModuleInit {
       isOpen: true,
       openAt: settings.gradesOpenAt,
       closeAt: settings.gradesCloseAt,
-      visibilityVersion: settings.visibilityVersion,
+      visibilityVersion,
       studentLevel,
-      isLevelPublished: true,
+      isLevelPublished,
     };
   }
 
@@ -1316,6 +1332,7 @@ export class GradesService implements OnModuleInit {
     const legacyGrades = await this.gradeModel
       .find({
         cleared: { $ne: true },
+        examType: { $in: CONTROL_RESULT_EXAM_TYPES },
         studentId: new Types.ObjectId(studentId),
         isPublished: true,
         status: { $ne: 'withheld' },
@@ -1353,7 +1370,14 @@ export class GradesService implements OnModuleInit {
     const coursesByCode = new Map(
       matchedCourses.map((course) => [course.code.toUpperCase(), course]),
     );
-    const visible = await this.visibleStudentRows(studentId, grades);
+    const enriched = grades.map((grade) => ({
+      ...grade,
+      academicLevel:
+        coursesByCode.get(grade.courseCode.toUpperCase())?.academicLevel ??
+        coursesByCode.get(grade.courseCode.toUpperCase())?.level ??
+        '1',
+    }));
+    const visible = await this.visibleStudentRows(studentId, enriched);
     return visible.map((grade) => ({
       ...grade,
       creditHours:
@@ -1375,44 +1399,80 @@ export class GradesService implements OnModuleInit {
       })
       .sort({ courseCode: 1 })
       .lean();
-    return this.visibleStudentRows(studentId, quizzes, 'quiz');
+    const profile = await this.studentProfileModel
+      .findOne({ userId: new Types.ObjectId(studentId) })
+      .select('isBlocked')
+      .lean();
+    // Instructor publication is independent of official result visibility.
+    // Financial/administrative holds still protect all student grade reads.
+    return profile?.isBlocked ? [] : quizzes;
   }
 
   private async visibleStudentRows<
-    T extends { courseCode: string; examType?: string },
+    T extends {
+      courseCode: string;
+      examType?: string;
+      academicLevel?: string;
+      status?: string;
+      grade?: number;
+    },
   >(studentId: string, rows: T[], examType?: string): Promise<T[]> {
     const [settings, profile] = await Promise.all([
       this.getGradesSettings(),
       this.studentProfileModel
         .findOne({ userId: new Types.ObjectId(studentId) })
-        .select('level studentCode')
+        .select('level studentCode isBlocked')
         .lean(),
     ]);
+    // Match the existing tuition administration block, including manual holds.
+    // Visibility overrides and approved releases cannot bypass this gate.
+    if (profile?.isBlocked) return [];
     const student = {
       level: profile?.level ?? '1',
       studentCode: profile?.studentCode,
     };
     const now = Date.now();
-    const visible = (courseCode: string, component: string) =>
+    const visible = (
+      courseCode: string,
+      component: string,
+      academicLevel?: string,
+    ) =>
       isReleasedGradeVisible(
         settings,
         student,
-        { courseCode, examType: component },
+        { courseCode, examType: component, academicLevel },
         now,
       );
     return rows
-      .filter((row) => visible(row.courseCode, examType ?? row.examType ?? ''))
+      .filter((row) =>
+        visible(
+          row.courseCode,
+          examType ?? row.examType ?? '',
+          row.academicLevel,
+        ),
+      )
       .map((row) => {
+        const normalized =
+          row.status === 'absent' || row.status === 'banned'
+            ? {
+                ...row,
+                grade: 0,
+                percentage: 0,
+                gradePoints: 0,
+                letterGrade: calculateGradeScale(0, row.status).letter,
+              }
+            : row;
         // A complete total would disclose a hidden component through subtraction.
         if (
           'officialResult' in row &&
           ['coursework', 'midterm', 'final'].some(
-            (component) => !visible(row.courseCode, component),
+            (component) =>
+              !visible(row.courseCode, component, row.academicLevel),
           )
         ) {
-          return { ...row, officialResult: undefined };
+          return { ...normalized, officialResult: undefined };
         }
-        return row;
+        return normalized;
       });
   }
 

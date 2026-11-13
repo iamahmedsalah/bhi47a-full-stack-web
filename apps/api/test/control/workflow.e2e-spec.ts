@@ -19,6 +19,7 @@ import {
   type GradeDocument,
 } from '../../src/modules/grades/schemas/grade.schema';
 import { CourseSchema } from '../../src/modules/courses/schemas/course.schema';
+import { CourseQuizSchema } from '../../src/modules/grades/schemas/course-quiz.schema';
 import { UserSchema } from '../../src/modules/users/schemas/user.schema';
 import { CourseRegistrationSchema } from '../../src/modules/registrations/schemas/course-registration.schema';
 import { CourseStaffAssignmentSchema } from '../../src/modules/attendance/schemas/course-staff-assignment.schema';
@@ -203,7 +204,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     );
     grades = new GradesService(
       grade as never,
-      {} as never,
+      model('CourseQuiz', CourseQuizSchema) as never,
       userModel as never,
       courseModel as never,
       studentProfile as never,
@@ -472,6 +473,131 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         gradesPublishedExamTypes: [...EXAM_TYPE_VALUES],
         gradesVisibilityRules: [],
       });
+      windowOpen = false;
+    }
+  });
+
+  it('persists course-level visibility for an enrolled higher-level student', async () => {
+    windowOpen = true;
+    const profiles = connection.collection(`${prefix}_StudentProfile`);
+    const courses = connection.collection(`${prefix}_Course`);
+    try {
+      await profiles.updateOne({ userId: studentId }, { $set: { level: '3' } });
+      await courses.updateOne(
+        { _id: courseId },
+        { $set: { academicLevel: '1' } },
+      );
+      await grades.updateGradesSettings({
+        gradesLevelBasis: 'student',
+        gradesPublishedLevels: ['1'],
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        0,
+      );
+      await grades.updateGradesSettings({ gradesLevelBasis: 'course' });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        1,
+      );
+    } finally {
+      await profiles.updateOne({ userId: studentId }, { $set: { level: '1' } });
+      await courses.updateOne(
+        { _id: courseId },
+        { $unset: { academicLevel: '' } },
+      );
+      await grades.updateGradesSettings({
+        gradesLevelBasis: 'student',
+        gradesPublishedLevels: ['1', '2', '3', '4'],
+      });
+      windowOpen = false;
+    }
+  });
+
+  it('withholds published results during a tuition hold and restores them after removal', async () => {
+    windowOpen = true;
+    const profiles = connection.collection(`${prefix}_StudentProfile`);
+    const quizzes = connection.collection(`${prefix}_CourseQuiz`);
+    try {
+      await quizzes.insertOne({
+        studentId,
+        courseId,
+        courseCode: 'SYNTH101',
+        academicYear: '2097-2098',
+        isPublished: true,
+        quizzes: [],
+      });
+      await profiles.updateOne(
+        { userId: studentId },
+        { $set: { isBlocked: true, tuitionFeesStatus: 'unpaid' } },
+      );
+      const blocked =
+        await GradesService.prototype.getStudentResultsStatus.call(
+          grades,
+          String(studentId),
+        );
+      expect(blocked).toMatchObject({
+        isOpen: false,
+        reason: 'tuition_blocked',
+      });
+      expect(await grades.findStudentResults(String(studentId))).toEqual([]);
+      expect(await grades.findStudentQuizzes(String(studentId))).toEqual([]);
+      await profiles.updateOne(
+        { userId: studentId },
+        { $set: { isBlocked: false, tuitionFeesStatus: 'paid' } },
+      );
+      const restored =
+        await GradesService.prototype.getStudentResultsStatus.call(
+          grades,
+          String(studentId),
+        );
+      expect(restored.isOpen).toBe(true);
+      expect(restored.visibilityVersion).not.toBe(blocked.visibilityVersion);
+      expect(await grades.findStudentQuizzes(String(studentId))).toHaveLength(
+        1,
+      );
+      expect(
+        await grades.publishGrades(
+          {
+            academicYear: '2097-2098',
+            isPublished: false,
+          },
+          actor._id,
+        ),
+      ).toEqual({ count: 0 });
+      expect(await quizzes.findOne({ studentId })).toMatchObject({
+        isPublished: true,
+      });
+      await grades.updateGradesSettings({
+        gradesSystemOpen: false,
+        gradesPublishedLevels: [],
+        gradesPublishedExamTypes: [],
+        gradesOpenAt: '2099-01-01T00:00:00Z',
+      });
+      expect(await grades.findStudentQuizzes(String(studentId))).toHaveLength(
+        1,
+      );
+      await quizzes.updateOne({ studentId }, { $set: { isPublished: false } });
+      expect(await grades.findStudentQuizzes(String(studentId))).toEqual([]);
+      await grades.updateGradesSettings({
+        gradesSystemOpen: true,
+        gradesPublishedLevels: ['1', '2', '3', '4'],
+        gradesPublishedExamTypes: ['coursework', 'midterm', 'final'],
+        gradesOpenAt: null,
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        1,
+      );
+    } finally {
+      await quizzes.deleteMany({ studentId });
+      await grades.updateGradesSettings({
+        gradesSystemOpen: true,
+        gradesPublishedLevels: ['1', '2', '3', '4'],
+        gradesPublishedExamTypes: ['coursework', 'midterm', 'final'],
+        gradesOpenAt: null,
+      });
+      await profiles.updateOne(
+        { userId: studentId },
+        { $set: { isBlocked: false, tuitionFeesStatus: 'paid' } },
+      );
       windowOpen = false;
     }
   });

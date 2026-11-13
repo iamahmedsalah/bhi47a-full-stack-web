@@ -22,6 +22,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EXAM_TYPE_VALUES,
+  CONTROL_RESULT_EXAM_TYPES,
   GRADE_STATUS_VALUES,
   type ExamType,
   type GradeStatus,
@@ -146,11 +147,11 @@ export class PublishGradesDto {
 
   @ApiPropertyOptional({
     example: 'midterm',
-    enum: EXAM_TYPE_VALUES,
-    description: 'Omit to affect final, midterm, and quiz results',
+    enum: CONTROL_RESULT_EXAM_TYPES,
+    description: 'Omit to affect coursework, midterm and final results',
   })
   @IsOptional()
-  @IsEnum(EXAM_TYPE_VALUES)
+  @IsIn(CONTROL_RESULT_EXAM_TYPES)
   examType?: ExamType;
 
   @ApiPropertyOptional()
@@ -203,7 +204,7 @@ export class GradeVisibilityRuleDto {
   studentCode?: string;
 
   @IsOptional()
-  @IsEnum(EXAM_TYPE_VALUES)
+  @IsIn(CONTROL_RESULT_EXAM_TYPES)
   examType?: ExamType;
 
   @IsBoolean()
@@ -211,6 +212,9 @@ export class GradeVisibilityRuleDto {
 }
 
 export class UpdateGradesSettingsDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['student', 'course'])
+  gradesLevelBasis?: 'student' | 'course';
   @ApiPropertyOptional({ example: true })
   @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
@@ -236,9 +240,9 @@ export class UpdateGradesSettingsDto {
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(6)
+  @ArrayMaxSize(3)
   @ArrayUnique()
-  @IsIn(EXAM_TYPE_VALUES, { each: true })
+  @IsIn(CONTROL_RESULT_EXAM_TYPES, { each: true })
   gradesPublishedExamTypes?: ExamType[];
 
   @ValidateIf((_object, value) => value !== undefined)

@@ -263,13 +263,25 @@ export default function StudentResultsPage() {
       emptyDesc = isEnglish
         ? `The official viewing period concluded on: ${closeDate}`
         : `انتهت الفترة الرسمية المحددة لعرض النتائج في: ${closeDate}`;
+    } else if (statusData?.reason === "tuition_blocked") {
+      emptyTitle = isEnglish
+        ? "Results withheld due to unpaid tuition fees"
+        : "النتيجة محجوبة بسبب عدم سداد المصروفات الدراسية";
+      emptyDesc = isEnglish
+        ? "Please contact Student Affairs about payment and removal of the hold. Once the hold is removed, published results will be available during the viewing window."
+        : "يرجى مراجعة شؤون الطلاب لسداد المصروفات ورفع الحجب. بعد رفع الحجب، تظهر النتائج المنشورة خلال فترة إتاحتها.";
+    } else if (statusData?.reason === "student_blocked") {
+      emptyTitle = isEnglish ? "Results withheld" : "النتيجة محجوبة";
+      emptyDesc = isEnglish
+        ? "Please contact Student Affairs to review and remove the hold on your account."
+        : "يرجى مراجعة شؤون الطلاب لمعرفة سبب الحجب ورفعه عن حسابك.";
     } else if (statusData?.reason === "level_not_published") {
       emptyTitle = isEnglish
-        ? "Academic Level Results Pending"
-        : "نتائج هذا المستوى قيد المراجعة";
+        ? "Results hidden for your current level"
+        : "عرض النتائج غير متاح لمستواك الحالي";
       emptyDesc = isEnglish
-        ? `Results for academic level ${statusData.studentLevel} have not been released yet.`
-        : `لم يتم اعتماد ونشر نتائج المستوى الدراسي (${statusData.studentLevel}) حتى الآن.`;
+        ? `The administration has not enabled viewing for your current level (${statusData.studentLevel}). This setting is separate from course approval.`
+        : `إعدادات الإتاحة لا تسمح بعرض النتائج لمستواك الحالي (${statusData.studentLevel}). هذا الإعداد منفصل عن اعتماد درجات المقرر.`;
     } else if (statusData?.reason === "system_closed") {
       emptyTitle = isEnglish
         ? "Results Portal Offline"
