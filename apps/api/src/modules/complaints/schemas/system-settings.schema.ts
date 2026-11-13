@@ -1,5 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import {
+  EXAM_TYPE_VALUES,
+  type ExamType,
+  type GradeVisibilityRule,
+} from '@student-portal/shared';
 
 export type SystemSettingsDocument = SystemSettings & Document;
 
@@ -8,6 +13,8 @@ export type SystemSettingsDocument = SystemSettings & Document;
   timestamps: true,
 })
 export class SystemSettings {
+  // Populated by Mongoose timestamps, used to refresh an already-open results page.
+  updatedAt?: Date;
   @Prop({ required: true, default: true })
   complaintsSystemOpen!: boolean;
 
@@ -43,6 +50,23 @@ export class SystemSettings {
 
   @Prop({ type: [String], default: ['1', '2', '3', '4'] })
   gradesPublishedLevels?: string[];
+
+  @Prop({ type: [String], default: [...EXAM_TYPE_VALUES] })
+  gradesPublishedExamTypes?: ExamType[];
+
+  @Prop({
+    type: [
+      {
+        courseCode: String,
+        studentCode: String,
+        examType: String,
+        isVisible: Boolean,
+        _id: false,
+      },
+    ],
+    default: [],
+  })
+  gradesVisibilityRules?: GradeVisibilityRule[];
 
   @Prop({ default: true })
   registrationVisible?: boolean;

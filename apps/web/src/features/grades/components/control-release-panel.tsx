@@ -51,6 +51,9 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
   const t = useTranslations("controlRelease");
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const canPublish =
+    user?.role === "admin" ||
+    Boolean(user?.permissions?.includes("grades.publish"));
   const [year, setYear] = useState("2026-2027");
   const [semester, setSemester] = useState<Semester>("first");
   const [courseId, setCourseId] = useState("");
@@ -63,7 +66,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
   const courses = useQuery({
     queryKey: ["release-courses", year, semester],
     queryFn: () => listControlCourses({ academicYear: year, semester }),
-    enabled: /^\d{4}-\d{4}$/.test(year),
+    enabled: canPublish && /^\d{4}-\d{4}$/.test(year),
   });
   const course = courses.data?.items.find((c) => c.courseId === courseId);
   const selectedComp = course?.components.find((c) => c.key === component);
@@ -92,6 +95,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
       setBusy(false);
     }
   };
+  if (!canPublish) return null;
   return (
     <section
       dir={locale === "ar" ? "rtl" : "ltr"}
@@ -144,6 +148,11 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             <SelectValue placeholder={t("course")} />
           </SelectTrigger>
           <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+            <SelectItem value="all">
+              {locale === "ar"
+                ? "كل المقررات في العام والفصل المحددين"
+                : "All courses in this year and term"}
+            </SelectItem>
             {courses.data?.items.map((c) => (
               <SelectItem key={c.courseId} value={c.courseId}>
                 {c.code} —{" "}
@@ -176,7 +185,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
       {course && !sheetId && <p className="text-sm">{t("openFirst")}</p>}
       <div className="flex flex-wrap gap-2">
         <Button
-          disabled={!sheetId || busy}
+          disabled={!canPublish || (!sheetId && courseId !== "all") || busy}
           onClick={() =>
             void run(async () => {
               const res = await api.post<Preview>(
@@ -191,7 +200,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
         </Button>
         <Button
           variant="outline"
-          disabled={!preview || busy}
+          disabled={!canPublish || !preview?.sheets.length || busy}
           onClick={() =>
             void run(async () => {
               await publishGradesBulk({
@@ -211,7 +220,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
         </Button>
         <Button
           variant="outline"
-          disabled={!sheetId || busy}
+          disabled={!canPublish || (!sheetId && courseId !== "all") || busy}
           onClick={() =>
             void run(async () => {
               await publishGradesBulk({ ...scope, isPublished: false });

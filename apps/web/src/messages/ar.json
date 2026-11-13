@@ -964,6 +964,8 @@
         "courses_write": "إنشاء المقررات وتعديلها",
         "grades_read": "عرض الدرجات",
         "grades_write": "إنشاء الدرجات وتعديلها",
+        "grades_publish": "نشر النتائج المعتمدة وسحبها",
+        "grades_visibility_manage": "إدارة إتاحة النتائج للطلاب والمستويات وجدولتها",
         "grades_delete": "حذف الدرجات",
         "grades_export": "تصدير كشوف الدرجات (إكسيل)",
         "academic_emails_read": "عرض البريد الأكاديمي",

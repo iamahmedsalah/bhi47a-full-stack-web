@@ -15,6 +15,18 @@ const marks = {
   final: { score: 48, status: 'present' },
 };
 describe('Official Control course results', () => {
+  it('keeps an absent midterm independent from a present final', () => {
+    const entries = {
+      ...marks,
+      midterm: { score: null, status: 'absent' },
+      final: { score: 60, status: 'present' },
+    };
+    expect(
+      evaluateOfficialResult(components, entries, DEFAULT_RESULT_POLICY),
+    ).toMatchObject({ official: true, total: 77, passed: true });
+    expect(entries.midterm.status).toBe('absent');
+    expect(entries.final.status).toBe('present');
+  });
   it('calculates 17 + 15 + 48 exactly once as 80/100', () => {
     expect(
       evaluateOfficialResult(components, marks, DEFAULT_RESULT_POLICY),

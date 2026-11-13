@@ -488,3 +488,6 @@ Control integration scenarios now live in `apps/api/test/control/workflow.e2e-sp
 9. Rollback disables new writes/releases for affected scope first. Retain snapshots and audit; switch reads only to a compatible previously reconciled release. Older code must not resume unrestricted writes against migrated data. Do not erase newer marks or blindly restore a database over subsequent work.
 
 The implementation is complete only when the core acceptance gates pass, migrated totals reconcile, and Control staff can perform the full midterm and final workflow in both languages. Extension items remain separately tracked.
+## Permission and visibility follow-up
+
+See [Control permissions and student result visibility](control-permissions-and-visibility.md) for the independent approval/publishing permissions, audience controls, Cairo schedule rules and component-specific absence behavior added on 13 November 2026.

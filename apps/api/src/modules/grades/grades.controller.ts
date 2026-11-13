@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { GradesService } from './grades.service';
@@ -25,6 +26,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import { PERMISSIONS } from '@student-portal/shared';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 
 @ApiTags('Grades')
 @Controller()
@@ -33,7 +35,7 @@ export class GradesController {
 
   @Post('admin/grades/release-preview')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  @RequirePermissions(PERMISSIONS.GRADES_PUBLISH)
   previewRelease(@Body() dto: PublishGradesDto) {
     return this.gradesService.previewControlRelease(dto);
   }
@@ -100,7 +102,7 @@ export class GradesController {
 
   @Get('admin/grades/settings')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.GRADES_READ)
+  @RequirePermissions(PERMISSIONS.GRADES_VISIBILITY_MANAGE)
   @ApiOperation({
     summary: 'Get current grades system publishing window and settings',
   })
@@ -110,7 +112,7 @@ export class GradesController {
 
   @Patch('admin/grades/settings')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  @RequirePermissions(PERMISSIONS.GRADES_VISIBILITY_MANAGE)
   @ApiOperation({
     summary: 'Update grades system publishing window and settings',
   })
@@ -133,7 +135,11 @@ export class GradesController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.GRADES_WRITE)
   @ApiOperation({ summary: 'Add or update single grade manually (Admin)' })
-  async saveGrade(@Body() dto: SaveGradeDto) {
+  async saveGrade(
+    @Body() dto: SaveGradeDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    this.assertPublicationField(dto, user);
     return this.gradesService.saveGrade(dto);
   }
 
@@ -144,8 +150,23 @@ export class GradesController {
   async update(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: UpdateGradeDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    this.assertPublicationField(dto, user);
     return this.gradesService.update(id, dto);
+  }
+
+  private assertPublicationField(
+    dto: { isPublished?: boolean },
+    user: AuthenticatedUser,
+  ) {
+    if (
+      dto.isPublished !== undefined &&
+      user.role !== 'admin' &&
+      !user.permissions?.includes(PERMISSIONS.GRADES_PUBLISH)
+    ) {
+      throw new ForbiddenException('Publication requires grades.publish');
+    }
   }
 
   @Delete('admin/grades/:id')
@@ -158,7 +179,7 @@ export class GradesController {
 
   @Post('admin/grades/publish')
   @Roles('admin', 'staff')
-  @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+  @RequirePermissions(PERMISSIONS.GRADES_PUBLISH)
   @ApiOperation({
     summary: 'Publish or hide midterm/final results in bulk (Admin)',
   })

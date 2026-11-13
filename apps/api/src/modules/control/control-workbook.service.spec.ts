@@ -8,7 +8,9 @@ import ExcelJS from 'exceljs';
 import {
   DEFAULT_CONTROL_COMPONENTS,
   computeCoursework,
+  PERMISSIONS,
 } from '@student-portal/shared';
+import { ControlAccessService } from './services/control-access.service';
 import { ControlWorkbookService } from './services/control-workbook.service';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 
@@ -23,7 +25,7 @@ const chain = (value: unknown) => {
   };
   return query;
 };
-function build(component: 'midterm' | 'coursework' = 'midterm') {
+function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
   const studentId = String(new Types.ObjectId()),
     sheetId = String(new Types.ObjectId()),
     actorId = String(new Types.ObjectId());
@@ -159,6 +161,50 @@ function build(component: 'midterm' | 'coursework' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it('denies ordinary sheet approval on a final sheet', async () => {
+    const ctx = build('final');
+    const access = new ControlAccessService({} as never, {} as never);
+    ctx.access.assertPermission.mockImplementation((user, permission) =>
+      access.assertPermission(user, permission),
+    );
+    await expect(
+      ctx.service.review(
+        {
+          ...ctx.user,
+          role: 'staff',
+          permissions: [
+            PERMISSIONS.CONTROL_ACCESS,
+            PERMISSIONS.CONTROL_SHEETS_APPROVE,
+          ],
+        },
+        ctx.sheetId,
+        { action: 'APPROVE', expectedRevision: 0 } as never,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(ctx.doc).not.toHaveProperty('controlApprovedRev');
+  });
+  it('denies a review-only TA who calls approval directly', async () => {
+    const ctx = build();
+    const access = new ControlAccessService({} as never, {} as never);
+    ctx.access.assertPermission.mockImplementation((user, permission) =>
+      access.assertPermission(user, permission),
+    );
+    await expect(
+      ctx.service.review(
+        {
+          ...ctx.user,
+          role: 'staff',
+          permissions: [
+            PERMISSIONS.CONTROL_ACCESS,
+            PERMISSIONS.CONTROL_SHEETS_REVIEW,
+          ],
+        },
+        ctx.sheetId,
+        { action: 'APPROVE', expectedRevision: 0 } as never,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(ctx.doc).not.toHaveProperty('controlApprovedRev');
+  });
   it.each([
     [18, 10, 18],
     [10, 18, 18],

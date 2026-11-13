@@ -964,6 +964,8 @@
         "courses_write": "Create and update courses",
         "grades_read": "View grades",
         "grades_write": "Create and update grades",
+        "grades_publish": "Publish and withdraw approved results",
+        "grades_visibility_manage": "Manage result visibility, audience and schedule",
         "grades_delete": "Delete grades",
         "grades_export": "Export grade sheets (Excel)",
         "academic_emails_read": "View academic emails",

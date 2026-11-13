@@ -163,14 +163,18 @@ export class ControlWorkbookService {
   }
 
   async review(user: AuthenticatedUser, sheetId: string, dto: ReviewSheetDto) {
+    const { sheet: targetSheet, course } =
+      await this.sheetService.requireSheetInScope(user, sheetId);
     this.access.assertPermission(
       user,
       dto.action === 'SUBMIT'
         ? PERMISSIONS.CONTROL_SHEETS_SUBMIT
-        : PERMISSIONS.CONTROL_SHEETS_REVIEW,
+        : dto.action === 'APPROVE'
+          ? targetSheet.component === 'final'
+            ? PERMISSIONS.CONTROL_FINAL_APPROVE
+            : PERMISSIONS.CONTROL_SHEETS_APPROVE
+          : PERMISSIONS.CONTROL_SHEETS_REVIEW,
     );
-    const { sheet: targetSheet, course } =
-      await this.sheetService.requireSheetInScope(user, sheetId);
     const resolvedSheetId = String(targetSheet?._id ?? sheetId);
     const session = await this.sheets.db.startSession();
     try {
@@ -188,7 +192,7 @@ export class ControlWorkbookService {
               'اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي / عميد المعهد (control.final.approve)',
             );
           }
-          if (caps.canApprove === false) {
+          if (sheet.component !== 'final' && caps.canApprove === false) {
             throw new ForbiddenException(
               'اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)',
             );

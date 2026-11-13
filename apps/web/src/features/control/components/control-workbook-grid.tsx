@@ -805,7 +805,7 @@ export function ControlWorkbookGrid({
           {(caps.canReview || caps.canApprove) &&
             sheet.workflowState === "IN_REVIEW" && (
               <>
-                {(caps.canApprove ?? caps.canReview) && (
+                {caps.canApprove && (
                   <Button
                     type="button"
                     size="sm"
@@ -1147,7 +1147,7 @@ export function ControlWorkbookGrid({
                 }
               </th>
               <th className="p-3">{t("total")}</th>
-              <th className="p-3 min-w-40">{t("status")}</th>
+              <th className="p-3 min-w-40">{t("status")} — {t(key)}</th>
               <th className="p-3">{t("actions")}</th>
             </tr>
           </thead>

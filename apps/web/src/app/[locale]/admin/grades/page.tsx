@@ -86,6 +86,9 @@ function GradesPageContent() {
   const isAdmin = user?.role === "admin";
   const canWriteGrades =
     isAdmin || Boolean(user?.permissions?.includes("grades.write"));
+  const canManageVisibility =
+    isAdmin || Boolean(user?.permissions?.includes("grades.visibility.manage"));
+  const canPublishGrades = isAdmin || Boolean(user?.permissions?.includes("grades.publish"));
   const canDeleteGrades =
     isAdmin || Boolean(user?.permissions?.includes("grades.delete"));
   const canUploadGrades =
@@ -160,7 +163,7 @@ function GradesPageContent() {
   const handleCreate = async (values: GradeFormValues) => {
     setFormLoading(true);
     try {
-      await saveGrade(values);
+      await saveGrade(canPublishGrades ? values : { ...values, isPublished: undefined });
       toast.success(
         isAr ? "تمت إضافة الدرجة بنجاح" : "Grade added successfully",
       );
@@ -182,7 +185,7 @@ function GradesPageContent() {
     if (!selectedGrade) return;
     setFormLoading(true);
     try {
-      await updateGrade(selectedGrade._id, values);
+      await updateGrade(selectedGrade._id, canPublishGrades ? values : { ...values, isPublished: undefined });
       toast.success(
         isAr ? "تم تحديث الدرجة بنجاح" : "Grade updated successfully",
       );
@@ -499,6 +502,7 @@ function GradesPageContent() {
           )}
           {isAr ? "تصدير" : "Export"}
         </Button>
+        {canManageVisibility && <Button variant="outline" onClick={() => setIsPublishModalOpen(true)}><CalendarClock className="h-4 w-4"/>{isAr ? "إتاحة النتائج وجدولتها" : "Results visibility and schedule"}</Button>}
         {canWriteGrades && (
           <>
             <Button
@@ -516,14 +520,6 @@ function GradesPageContent() {
             >
               <AlertTriangle className="h-4 w-4 text-amber-400" />
               {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setIsPublishModalOpen(true)}
-              className="rounded-squircle border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20"
-            >
-              <CalendarClock className="h-4 w-4 text-cyan-400" />
-              {isAr ? "نشر وجدولة النتائج" : "Publish & Schedule Grades"}
             </Button>
             <Button
               onClick={() => setIsAddOpen(true)}

@@ -1,4 +1,6 @@
 import { StudentProfileSchema } from '../../src/modules/students/schemas/student-profile.schema';
+import { EXAM_TYPE_VALUES, PERMISSIONS } from '@student-portal/shared';
+import { SystemSettingsSchema } from '../../src/modules/complaints/schemas/system-settings.schema';
 import { StudentAcademicProfileSchema } from '../../src/modules/registrations/schemas/student-academic-profile.schema';
 import mongoose, { Types } from 'mongoose';
 import type { Connection } from 'mongoose';
@@ -101,6 +103,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         CourseStaffAssignmentSchema,
       );
     const studentProfile = model('StudentProfile', StudentProfileSchema);
+    const settingsModel = model('SystemSettings', SystemSettingsSchema);
     const academicProfile = model(
       'StudentAcademicProfile',
       StudentAcademicProfileSchema,
@@ -121,6 +124,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       [
         userModel,
         studentProfile,
+        settingsModel,
         academicProfile,
         courseModel,
         registrationModel,
@@ -204,7 +208,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       courseModel as never,
       studentProfile as never,
       academicProfile as never,
-      {} as never,
+      settingsModel as never,
       sheetModel as never,
       {} as never,
       audit as never,
@@ -383,11 +387,40 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         reason: 'Self approve',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    await workbook.review(reviewer, detail.sheet.id, {
-      action: 'APPROVE',
-      expectedRevision: detail.sheet.revision,
-      reason: 'Independent approval',
-    });
+    const reviewOnlyTA: AuthenticatedUser = {
+      ...reviewer,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_VIEW,
+        PERMISSIONS.CONTROL_SCOPE_ALL,
+        PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      ],
+    };
+    await expect(
+      workbook.review(reviewOnlyTA, detail.sheet.id, {
+        action: 'APPROVE',
+        expectedRevision: detail.sheet.revision,
+        reason: 'Unauthorized TA approval',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await workbook.review(
+      {
+        ...reviewOnlyTA,
+        permissions: [
+          PERMISSIONS.CONTROL_ACCESS,
+          PERMISSIONS.CONTROL_SHEETS_VIEW,
+          PERMISSIONS.CONTROL_SCOPE_ALL,
+          PERMISSIONS.CONTROL_SHEETS_APPROVE,
+        ],
+      },
+      detail.sheet.id,
+      {
+        action: 'APPROVE',
+        expectedRevision: detail.sheet.revision,
+        reason: 'Independent approval',
+      },
+    );
     windowOpen = true;
     expect(await grades.findStudentResults(String(studentId))).toHaveLength(0);
     // Avoid external notifications: this test verifies the same publication transaction with hiding,
@@ -410,6 +443,84 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     windowOpen = false;
     expect(await grades.findStudentResults(String(studentId))).toHaveLength(0);
     expect(await auditModel.countDocuments({ action: 'PUBLISH' })).toBe(1);
+  });
+
+  it('persists component visibility and a matching student/course exception', async () => {
+    windowOpen = true;
+    try {
+      await grades.updateGradesSettings({
+        gradesPublishedExamTypes: ['final'],
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        0,
+      );
+      await grades.updateGradesSettings({
+        gradesVisibilityRules: [
+          {
+            courseCode: 'SYNTH101',
+            studentCode: 'SYNTH260001',
+            examType: 'midterm',
+            isVisible: true,
+          },
+        ],
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        1,
+      );
+    } finally {
+      await grades.updateGradesSettings({
+        gradesPublishedExamTypes: [...EXAM_TYPE_VALUES],
+        gradesVisibilityRules: [],
+      });
+      windowOpen = false;
+    }
+  });
+
+  it('persists the master override without changing release evidence', async () => {
+    windowOpen = true;
+    try {
+      await grades.updateGradesSettings({ gradesSystemOpen: false });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        0,
+      );
+      expect(await auditModel.countDocuments({ action: 'PUBLISH' })).toBe(1);
+    } finally {
+      await grades.updateGradesSettings({ gradesSystemOpen: true });
+      windowOpen = false;
+    }
+  });
+
+  it('persists and clears a validated Cairo-compatible publication window', async () => {
+    windowOpen = true;
+    try {
+      await grades.updateGradesSettings({
+        gradesOpenAt: '2098-01-01T00:00:00Z',
+        gradesCloseAt: '2099-01-01T00:00:00Z',
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        0,
+      );
+      await expect(
+        grades.updateGradesSettings({ gradesOpenAt: '2100-01-01T00:00:00Z' }),
+      ).rejects.toThrow('Closing time must be after opening time');
+      await grades.updateGradesSettings({
+        gradesOpenAt: null,
+        gradesCloseAt: null,
+      });
+      expect(await grades.getGradesSettings()).toMatchObject({
+        gradesOpenAt: undefined,
+        gradesCloseAt: undefined,
+      });
+      expect(await grades.findStudentResults(String(studentId))).toHaveLength(
+        1,
+      );
+    } finally {
+      await grades.updateGradesSettings({
+        gradesOpenAt: null,
+        gradesCloseAt: null,
+      });
+      windowOpen = false;
+    }
   });
 
   it('enforces 5+15 coursework, real XLSX preview, atomic commit receipt and repeat commit', async () => {

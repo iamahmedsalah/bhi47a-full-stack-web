@@ -11,7 +11,14 @@ import {
   IsInt,
   IsObject,
   IsIn,
+  IsDateString,
+  ArrayMaxSize,
+  ValidateNested,
+  MaxLength,
+  ValidateIf,
+  ArrayUnique,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EXAM_TYPE_VALUES,
@@ -184,27 +191,62 @@ export class ControlResultPolicyDto {
   version!: number;
 }
 
+export class GradeVisibilityRuleDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  courseCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  studentCode?: string;
+
+  @IsOptional()
+  @IsEnum(EXAM_TYPE_VALUES)
+  examType?: ExamType;
+
+  @IsBoolean()
+  isVisible!: boolean;
+}
+
 export class UpdateGradesSettingsDto {
   @ApiPropertyOptional({ example: true })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
   gradesSystemOpen?: boolean;
 
   @ApiPropertyOptional({ example: '2026-10-15T08:00:00.000Z' })
   @IsOptional()
-  @IsString()
-  gradesOpenAt?: string;
+  @IsDateString()
+  gradesOpenAt?: string | null;
 
   @ApiPropertyOptional({ example: '2026-10-30T23:59:59.000Z' })
   @IsOptional()
-  @IsString()
-  gradesCloseAt?: string;
+  @IsDateString()
+  gradesCloseAt?: string | null;
 
   @ApiPropertyOptional({ example: ['1', '2', '3', '4'] })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(4)
+  @ArrayUnique()
+  @IsIn(['1', '2', '3', '4'], { each: true })
   gradesPublishedLevels?: string[];
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(6)
+  @ArrayUnique()
+  @IsIn(EXAM_TYPE_VALUES, { each: true })
+  gradesPublishedExamTypes?: ExamType[];
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => GradeVisibilityRuleDto)
+  gradesVisibilityRules?: GradeVisibilityRuleDto[];
 }
 
 export class RecalculateAcademicProgressDto {

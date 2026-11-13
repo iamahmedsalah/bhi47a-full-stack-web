@@ -1,7 +1,7 @@
 import { ControlReleaseStore } from './control-release.store';
 import { randomUUID } from 'node:crypto';
 import type { ResultPolicy } from '../control/utils/official-result.util';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, BadRequestException } from '@nestjs/common';
 import {
   GradeAuditLog,
   type GradeAuditLogDocument,
@@ -47,7 +47,12 @@ import {
 } from '../complaints/schemas/system-settings.schema';
 import { mergeAcademicCourseProgress } from '../registrations/utils/academic-course-progress.util';
 import { evaluateAcademicProgression } from './utils/academic-level-progression.util';
-import { calculateGradeScale, type CourseLevel } from '@student-portal/shared';
+import {
+  calculateGradeScale,
+  type CourseLevel,
+  EXAM_TYPE_VALUES,
+  isReleasedGradeVisible,
+} from '@student-portal/shared';
 import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
 
 import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
@@ -1129,6 +1134,7 @@ export class GradesService implements OnModuleInit {
     }
     return {
       gradesSystemOpen: settings.gradesSystemOpen ?? true,
+      visibilityVersion: settings.updatedAt?.toISOString(),
       gradesOpenAt: settings.gradesOpenAt?.toISOString(),
       gradesCloseAt: settings.gradesCloseAt?.toISOString(),
       gradesPublishedLevels: settings.gradesPublishedLevels ?? [
@@ -1137,6 +1143,10 @@ export class GradesService implements OnModuleInit {
         '3',
         '4',
       ],
+      gradesPublishedExamTypes: settings.gradesPublishedExamTypes ?? [
+        ...EXAM_TYPE_VALUES,
+      ],
+      gradesVisibilityRules: settings.gradesVisibilityRules ?? [],
     };
   }
 
@@ -1144,6 +1154,38 @@ export class GradesService implements OnModuleInit {
     let settings = await this.systemSettingsModel.findOne();
     if (!settings) {
       settings = new this.systemSettingsModel();
+    }
+
+    const openAt =
+      dto.gradesOpenAt !== undefined
+        ? dto.gradesOpenAt
+        : settings.gradesOpenAt?.toISOString();
+    const closeAt =
+      dto.gradesCloseAt !== undefined
+        ? dto.gradesCloseAt
+        : settings.gradesCloseAt?.toISOString();
+    if (openAt && closeAt && Date.parse(closeAt) <= Date.parse(openAt)) {
+      throw new BadRequestException('Closing time must be after opening time');
+    }
+    if (dto.gradesPublishedExamTypes !== undefined)
+      settings.gradesPublishedExamTypes = dto.gradesPublishedExamTypes;
+    if (dto.gradesVisibilityRules !== undefined) {
+      if (
+        dto.gradesVisibilityRules.some(
+          (rule) => !rule.courseCode?.trim() && !rule.studentCode?.trim(),
+        )
+      ) {
+        throw new BadRequestException(
+          'A visibility rule requires a course or student code',
+        );
+      }
+      settings.gradesVisibilityRules = dto.gradesVisibilityRules.map(
+        (rule) => ({
+          ...rule,
+          courseCode: rule.courseCode?.trim().toUpperCase() || undefined,
+          studentCode: rule.studentCode?.trim() || undefined,
+        }),
+      );
     }
 
     if (dto.gradesSystemOpen !== undefined) {
@@ -1177,6 +1219,7 @@ export class GradesService implements OnModuleInit {
     closeAt?: string;
     studentLevel: string;
     isLevelPublished: boolean;
+    visibilityVersion?: string;
   }> {
     const settings = await this.getGradesSettings();
     const profile = await this.studentProfileModel
@@ -1198,6 +1241,7 @@ export class GradesService implements OnModuleInit {
         reason: 'system_closed',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
+        visibilityVersion: settings.visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1210,17 +1254,19 @@ export class GradesService implements OnModuleInit {
         reason: 'not_started',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
+        visibilityVersion: settings.visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
     }
 
-    if (settings.gradesCloseAt && now > new Date(settings.gradesCloseAt)) {
+    if (settings.gradesCloseAt && now >= new Date(settings.gradesCloseAt)) {
       return {
         isOpen: false,
         reason: 'ended',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
+        visibilityVersion: settings.visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1232,6 +1278,7 @@ export class GradesService implements OnModuleInit {
         reason: 'level_not_published',
         openAt: settings.gradesOpenAt,
         closeAt: settings.gradesCloseAt,
+        visibilityVersion: settings.visibilityVersion,
         studentLevel,
         isLevelPublished,
       };
@@ -1241,6 +1288,7 @@ export class GradesService implements OnModuleInit {
       isOpen: true,
       openAt: settings.gradesOpenAt,
       closeAt: settings.gradesCloseAt,
+      visibilityVersion: settings.visibilityVersion,
       studentLevel,
       isLevelPublished: true,
     };
@@ -1305,7 +1353,8 @@ export class GradesService implements OnModuleInit {
     const coursesByCode = new Map(
       matchedCourses.map((course) => [course.code.toUpperCase(), course]),
     );
-    return grades.map((grade) => ({
+    const visible = await this.visibleStudentRows(studentId, grades);
+    return visible.map((grade) => ({
       ...grade,
       creditHours:
         coursesByCode.get(grade.courseCode.toUpperCase())?.creditHours ?? 1,
@@ -1319,13 +1368,52 @@ export class GradesService implements OnModuleInit {
   }
 
   async findStudentQuizzes(studentId: string): Promise<CourseQuiz[]> {
-    return this.courseQuizModel
+    const quizzes = await this.courseQuizModel
       .find({
         studentId: new Types.ObjectId(studentId),
         isPublished: true,
       })
       .sort({ courseCode: 1 })
       .lean();
+    return this.visibleStudentRows(studentId, quizzes, 'quiz');
+  }
+
+  private async visibleStudentRows<
+    T extends { courseCode: string; examType?: string },
+  >(studentId: string, rows: T[], examType?: string): Promise<T[]> {
+    const [settings, profile] = await Promise.all([
+      this.getGradesSettings(),
+      this.studentProfileModel
+        .findOne({ userId: new Types.ObjectId(studentId) })
+        .select('level studentCode')
+        .lean(),
+    ]);
+    const student = {
+      level: profile?.level ?? '1',
+      studentCode: profile?.studentCode,
+    };
+    const now = Date.now();
+    const visible = (courseCode: string, component: string) =>
+      isReleasedGradeVisible(
+        settings,
+        student,
+        { courseCode, examType: component },
+        now,
+      );
+    return rows
+      .filter((row) => visible(row.courseCode, examType ?? row.examType ?? ''))
+      .map((row) => {
+        // A complete total would disclose a hidden component through subtraction.
+        if (
+          'officialResult' in row &&
+          ['coursework', 'midterm', 'final'].some(
+            (component) => !visible(row.courseCode, component),
+          )
+        ) {
+          return { ...row, officialResult: undefined };
+        }
+        return row;
+      });
   }
 
   async auditAcademicWarnings(options?: { dryRun?: boolean }) {

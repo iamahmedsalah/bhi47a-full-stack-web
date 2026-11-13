@@ -1,444 +1,420 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Eye, EyeOff, Info, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
-  CalendarClock,
-  Eye,
-  EyeOff,
-  Layers,
-  Loader2,
-  CheckCircle2,
-  GraduationCap,
-} from 'lucide-react';
-import { toast } from 'sonner';
-
+  EXAM_TYPE_VALUES,
+  type ExamType,
+  type GradeVisibilityRule,
+} from "@student-portal/shared";
+import { useAuth } from "@/providers/auth-provider";
+import { getApiErrorMessage } from "@/lib/api";
+import { cairoDateTimeToIso, toCairoDateTimeLocal } from "@/lib/cairo-time";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { DateTimePicker } from '@/components/ui/date-time-picker';
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Select,
-  SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import {
   getGradesSettings,
   updateGradesSettings,
-  publishGradesBulk,
   type GradesSettingsData,
-} from '@/features/grades/api';
-
-interface GradesPublishingModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  isAr?: boolean;
-}
-
-const ACADEMIC_LEVELS = [
-  { level: '1', labelEn: 'Level 1 (Freshman)', labelAr: 'المستوى الأول' },
-  { level: '2', labelEn: 'Level 2 (Sophomore)', labelAr: 'المستوى الثاني' },
-  { level: '3', labelEn: 'Level 3 (Junior)', labelAr: 'المستوى الثالث' },
-  { level: '4', labelEn: 'Level 4 (Senior)', labelAr: 'المستوى الرابع' },
-];
+} from "../api";
+import { ControlReleasePanel } from "./control-release-panel";
 
 export function GradesPublishingModal({
   open,
   onOpenChange,
   isAr = true,
-}: GradesPublishingModalProps) {
-  const queryClient = useQueryClient();
-
-  // Settings query
-  const settingsQuery = useQuery({
-    queryKey: ['grades-settings'],
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isAr?: boolean;
+}) {
+  const { user } = useAuth();
+  const canManage =
+    user?.role === "admin" ||
+    Boolean(user?.permissions?.includes("grades.visibility.manage"));
+  const client = useQueryClient();
+  const query = useQuery({
+    queryKey: ["grades-settings"],
     queryFn: getGradesSettings,
-    enabled: open,
+    enabled: open && canManage,
   });
-
-  const [openAt, setOpenAt] = useState('');
-  const [closeAt, setCloseAt] = useState('');
-  const [selectedExamType, setSelectedExamType] = useState('all');
-  const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
-
-  const [previousSettings, setPreviousSettings] = useState<unknown[] | null>(null);
-  if (previousSettings === null || previousSettings.some((value, index) => !Object.is(value, [settingsQuery.data][index]))) {
-    setPreviousSettings([settingsQuery.data]);
-    (() => {
-    if (settingsQuery.data) {
-      setOpenAt(settingsQuery.data.gradesOpenAt ? settingsQuery.data.gradesOpenAt.slice(0, 16) : '');
-      setCloseAt(settingsQuery.data.gradesCloseAt ? settingsQuery.data.gradesCloseAt.slice(0, 16) : '');
-    }
-
-    })();
+  const [openAt, setOpenAt] = useState("");
+  const [closeAt, setCloseAt] = useState("");
+  const [previous, setPrevious] = useState<GradesSettingsData>();
+  const [courseCode, setCourseCode] = useState("");
+  const [studentCode, setStudentCode] = useState("");
+  const [examType, setExamType] = useState("midterm");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [open]);
+  if (query.data && previous !== query.data) {
+    setPrevious(query.data);
+    setOpenAt(toCairoDateTimeLocal(query.data.gradesOpenAt ?? undefined));
+    setCloseAt(toCairoDateTimeLocal(query.data.gradesCloseAt ?? undefined));
   }
-
-  // Mutation to update settings
-  const updateSettingsMutation = useMutation({
-    mutationFn: (patch: Partial<GradesSettingsData>) => updateGradesSettings(patch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['grades-settings'] });
-      queryClient.invalidateQueries({ queryKey: ['grades'] });
-      toast.success(isAr ? 'تم تحديث إعدادات نشر الدرجات' : 'Grades publishing settings updated');
+  const tr = (ar: string, en: string) => (isAr ? ar : en);
+  const labels: Record<string, string> = {
+    all: tr("كل المكوّنات", "All components"),
+    coursework: tr("أعمال السنة", "Coursework"),
+    midterm: tr("الميدترم", "Midterm"),
+    final: tr("النهائي", "Final"),
+    quiz: tr("الاختبارات القصيرة", "Quizzes"),
+    practical: tr("العملي", "Practical"),
+    oral: tr("الشفوي", "Oral"),
+  };
+  const mutation = useMutation({
+    mutationFn: (patch: Partial<GradesSettingsData>) =>
+      updateGradesSettings(patch),
+    onSuccess: (data) => {
+      client.setQueryData(["grades-settings"], data);
+      void client.invalidateQueries({ queryKey: ["student-results"] });
+      void client.invalidateQueries({ queryKey: ["student-results-status"] });
+      toast.success(tr("تم حفظ إتاحة النتائج", "Results visibility saved"));
     },
-    onError: () => {
-      toast.error(isAr ? 'فشل تحديث إعدادات النشر' : 'Failed to update publishing settings');
-    },
+    onError: (error) =>
+      toast.error(
+        getApiErrorMessage(
+          error,
+          tr("تعذر حفظ الإعدادات", "Unable to save settings"),
+        ),
+      ),
   });
-
-  const currentSettings = settingsQuery.data;
-  const publishedLevels = currentSettings?.gradesPublishedLevels ?? ['1', '2', '3', '4'];
-  const isMasterOpen = currentSettings?.gradesSystemOpen ?? true;
-
-  // Toggle master system
-  const handleToggleMaster = () => {
-    updateSettingsMutation.mutate({
-      gradesSystemOpen: !isMasterOpen,
-    });
-  };
-
-  // Toggle specific level in settings and database
-  const handleToggleLevel = async (level: string) => {
-    const isCurrentlyPublished = publishedLevels.includes(level);
-    const newLevels = isCurrentlyPublished
-      ? publishedLevels.filter((l) => l !== level)
-      : [...publishedLevels, level];
-
-    try {
-      await updateSettingsMutation.mutateAsync({
-        gradesPublishedLevels: newLevels,
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['grades'] });
-      toast.success(
-        isAr
-          ? `تم ${!isCurrentlyPublished ? 'إعلان' : 'إخفاء'} نتائج المستوى ${level} بنجاح`
-          : `Level ${level} results ${!isCurrentlyPublished ? 'published' : 'hidden'} successfully`,
+  if (!canManage) return null;
+  const settings = query.data;
+  const busy = mutation.isPending;
+  const levels = settings?.gradesPublishedLevels ?? ["1", "2", "3", "4"];
+  const types = settings?.gradesPublishedExamTypes ?? [...EXAM_TYPE_VALUES];
+  const rules = settings?.gradesVisibilityRules ?? [];
+  const section = "min-w-0 space-y-3 rounded-xl border border-border p-4";
+  const saveWindow = () => {
+    const start = openAt ? cairoDateTimeToIso(openAt) : null;
+    const end = closeAt ? cairoDateTimeToIso(closeAt) : null;
+    if (
+      (openAt && !start) ||
+      (closeAt && !end) ||
+      (start && end && end <= start)
+    ) {
+      toast.error(
+        tr(
+          "أدخل مواعيد صحيحة بتوقيت القاهرة، والإغلاق بعد الفتح",
+          "Enter valid Cairo times; closing must follow opening",
+        ),
       );
-    } catch {
-      toast.error(isAr ? 'فشل تحديث المستوى' : 'Failed to update level');
+      return;
     }
+    mutation.mutate({ gradesOpenAt: start, gradesCloseAt: end });
   };
-
-  // Save Schedule Window
-  const handleSaveWindow = () => {
-    updateSettingsMutation.mutate({
-      gradesOpenAt: openAt ? new Date(openAt).toISOString() : undefined,
-      gradesCloseAt: closeAt ? new Date(closeAt).toISOString() : undefined,
-    });
-  };
-
-  // Clear Schedule Window
-  const handleClearWindow = () => {
-    setOpenAt('');
-    setCloseAt('');
-    updateSettingsMutation.mutate({
-      gradesOpenAt: undefined,
-      gradesCloseAt: undefined,
-    });
-  };
-
-  // Bulk publish by exam type
-  const handleBulkAction = async (publish: boolean) => {
-    setIsUpdatingBulk(true);
-    try {
-      const payload: Record<string, unknown> = {
-        isPublished: publish,
-      };
-      if (selectedExamType !== 'all') {
-        payload.examType = selectedExamType;
-      }
-
-      await publishGradesBulk(payload);
-      queryClient.invalidateQueries({ queryKey: ['grades'] });
-      toast.success(
-        isAr
-          ? `تم ${publish ? 'نشر' : 'إخفاء'} النتائج المحددة بنجاح`
-          : `Grades ${publish ? 'published' : 'hidden'} successfully`,
+  const setRule = (isVisible: boolean) => {
+    if (!courseCode.trim() && !studentCode.trim()) {
+      toast.error(
+        tr("أدخل كود المقرر أو الطالب", "Enter a course or student code"),
       );
-    } catch {
-      toast.error(isAr ? 'فشل تنفيذ العملية المجمعة' : 'Failed to perform bulk operation');
-    } finally {
-      setIsUpdatingBulk(false);
+      return;
     }
+    const rule: GradeVisibilityRule = {
+      courseCode: courseCode.trim().toUpperCase() || undefined,
+      studentCode: studentCode.trim() || undefined,
+      examType: examType === "all" ? undefined : (examType as ExamType),
+      isVisible,
+    };
+    const rest = rules.filter(
+      (r) =>
+        r.courseCode !== rule.courseCode ||
+        r.studentCode !== rule.studentCode ||
+        r.examType !== rule.examType,
+    );
+    mutation.mutate({ gradesVisibilityRules: [...rest, rule] });
   };
-
+  const blocked = !settings?.gradesSystemOpen
+    ? tr(
+        "المفتاح العام مغلق: جميع النتائج محجوبة",
+        "Master switch is off: all results are hidden",
+      )
+    : settings.gradesOpenAt && now < Date.parse(settings.gradesOpenAt)
+      ? tr("موعد الفتح لم يأتِ بعد", "The opening time has not arrived")
+      : settings.gradesCloseAt && now >= Date.parse(settings.gradesCloseAt)
+        ? tr("انتهت نافذة عرض النتائج", "The viewing window has ended")
+        : tr(
+            "نافذة العرض مفتوحة؛ تطبّق المستويات والمكوّنات والاستثناءات أدناه",
+            "Viewing window is open; levels, components and overrides below apply",
+          );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border-border/70 bg-card p-6 shadow-2xl">
+      <DialogContent
+        dir={isAr ? "rtl" : "ltr"}
+        className="w-[calc(100%-2rem)] max-w-3xl max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader className="text-start">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-squircle bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
-              <CalendarClock className="h-5 w-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-bold text-foreground">
-                {isAr ? 'إدارة نشر وجدولة إعلان النتائج' : 'Grades Publishing & Schedule Control'}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                {isAr
-                  ? 'التحكم في إتاحة الدرجات للطلاب، وتحديد نوافذ الإعلان التلقائي، والنشر حسب المستوى الدراسي'
-                  : 'Control grade visibility for students, configure publication time windows, and manage per-level releases.'}
-              </DialogDescription>
-            </div>
-          </div>
+          <DialogTitle>
+            {tr("إتاحة النتائج ونشرها", "Results visibility and publication")}
+          </DialogTitle>
+          <DialogDescription>
+            {tr(
+              "إتاحة الطلاب منفصلة عن اعتماد ونشر درجات الكنترول",
+              "Student visibility is separate from Control approval and publication",
+            )}
+          </DialogDescription>
         </DialogHeader>
-
-        {settingsQuery.isLoading ? (
-          <div className="flex h-56 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        {query.isPending ? (
+          <p role="status">{tr("جارٍ التحميل…", "Loading…")}</p>
+        ) : query.isError ? (
+          <div role="alert">
+            <p>{tr("تعذر تحميل الإعدادات", "Unable to load settings")}</p>
+            <Button onClick={() => void query.refetch()}>
+              {tr("إعادة المحاولة", "Retry")}
+            </Button>
           </div>
         ) : (
-          <div className="space-y-6 pt-3">
-            {/* 1. MASTER SYSTEM SWITCH */}
-            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/40 p-4 transition-all">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-foreground">
-                    {isAr ? 'الإتاحة العامة للنتائج' : 'Master Results Portal'}
-                  </span>
-                  <Badge
-                    variant={isMasterOpen ? 'default' : 'secondary'}
-                    className="rounded-squircle text-[11px]"
-                  >
-                    {isMasterOpen ? (isAr ? 'متاح للطلاب' : 'Online / Visible') : (isAr ? 'مغلق بالكامل' : 'Offline / Hidden')}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {isAr
-                    ? 'إيقاف هذا المفتاح يخفي جميع النتائج فوراً عن الطلاب بغض النظر عن النوافذ والمستويات'
-                    : 'Disabling this master switch hides all results from students immediately.'}
-                </p>
-              </div>
-
-              <Button
-                variant={isMasterOpen ? 'destructive' : 'default'}
-                size="sm"
-                onClick={handleToggleMaster}
-                disabled={updateSettingsMutation.isPending}
-                className="rounded-squircle px-3.5 text-xs font-medium cursor-pointer"
+          settings && (
+            <div className="min-w-0 space-y-4">
+              <p
+                role="status"
+                className="flex gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
               >
-                {isMasterOpen ? (
-                  <>
-                    <EyeOff className="h-4 w-4 mr-1.5 rtl:ml-1.5 rtl:mr-0" />
-                    {isAr ? 'إغلاق النظام' : 'Hide All'}
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-4 w-4 mr-1.5 rtl:ml-1.5 rtl:mr-0" />
-                    {isAr ? 'فتح النظام' : 'Show All'}
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {/* 2. AUTOMATED TIME WINDOW (LIKE COMPLAINTS SYSTEM) */}
-            <div className="space-y-3 rounded-xl border border-border/70 bg-surface/30 p-4">
-              <div className="flex items-center gap-2">
-                <CalendarClock className="h-4 w-4 text-cyan-400" />
-                <h4 className="text-sm font-semibold text-foreground">
-                  {isAr ? 'نافذة الجدولة الزمنية لإعلان النتائج' : 'Automated Publication Time Window'}
-                </h4>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {isAr
-                  ? 'حدد فترة زمنية محددة لفتح وإغلاق إمكانية استعلام الطلاب عن النتائج (مثل نظام الشكاوى)'
-                  : 'Set a scheduled opening and closing window for student results inquiry.'}
+                <Info className="h-5 w-5 shrink-0" />
+                {blocked}
               </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    {isAr ? 'تاريخ ووقت بدء إعلان النتائج' : 'Publication Open Date/Time'}
-                  </label>
-                  <DateTimePicker
-                    value={openAt}
-                    onChange={setOpenAt}
-                    placeholder={isAr ? 'اختر وقت البدء' : 'Select start time'}
-                    locale={isAr ? 'ar' : 'en'}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    {isAr ? 'تاريخ ووقت انتهاء إعلان النتائج' : 'Publication Close Date/Time'}
-                  </label>
-                  <DateTimePicker
-                    value={closeAt}
-                    onChange={setCloseAt}
-                    placeholder={isAr ? 'اختر وقت الانتهاء' : 'Select end time'}
-                    locale={isAr ? 'ar' : 'en'}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                {(openAt || closeAt) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearWindow}
-                    className="rounded-squircle text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    {isAr ? 'إلغاء التوقيتات' : 'Clear Window'}
-                  </Button>
+              <p className="text-sm text-muted-foreground">
+                {tr(
+                  "تظهر النتائج المعتمدة والمنشورة فقط. الإتاحة لا تعتمد المسودات. إغلاق المفتاح العام أو انتهاء الموعد يحجب الجميع، حتى الاستثناءات.",
+                  "Only approved, published results can appear. Visibility does not approve drafts. The master switch and closing deadline override every exception.",
                 )}
+              </p>
+              <section className={section}>
+                <h3 className="font-bold">
+                  {tr("الإتاحة العامة للطلاب", "Master student visibility")}
+                </h3>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSaveWindow}
-                  disabled={updateSettingsMutation.isPending}
-                  className="rounded-squircle border-cyan-500/30 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 text-xs font-medium cursor-pointer"
+                  disabled={busy}
+                  onClick={() =>
+                    mutation.mutate({
+                      gradesSystemOpen: !settings.gradesSystemOpen,
+                    })
+                  }
                 >
-                  {updateSettingsMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1 rtl:ml-1 rtl:mr-0" />
-                  ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                  )}
-                  {isAr ? 'حفظ نافذة النشر' : 'Apply Schedule'}
+                  {settings.gradesSystemOpen ? <EyeOff /> : <Eye />}
+                  {settings.gradesSystemOpen
+                    ? tr("حجب كل النتائج", "Hide all results")
+                    : tr("فتح عرض النتائج", "Open results viewing")}
                 </Button>
-              </div>
-            </div>
-
-            {/* 3. PER-LEVEL PUBLISHING MATRIX */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-4 w-4 text-purple-400" />
-                <h4 className="text-sm font-semibold text-foreground">
-                  {isAr ? 'حالة النشر حسب المستويات الدراسية' : 'Publishing Status by Academic Level'}
-                </h4>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {ACADEMIC_LEVELS.map((item) => {
-                  const isLevelActive = publishedLevels.includes(item.level);
-
-                  return (
-                    <div
-                      key={item.level}
-                      className="flex items-center justify-between rounded-xl border border-border/70 bg-card p-3.5 shadow-sm transition-all hover:border-border"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-foreground">
-                            {isAr ? item.labelAr : item.labelEn}
-                          </span>
-                        </div>
-                        <Badge
-                          variant={isLevelActive ? 'default' : 'outline'}
-                          className={`rounded-squircle text-[10px] ${
-                            isLevelActive
-                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                              : 'bg-muted text-muted-foreground'
-                          }`}
-                        >
-                          {isLevelActive
-                            ? isAr ? 'منشور للطلاب' : 'Published'
-                            : isAr ? 'محجوب حالياً' : 'Hidden'}
-                        </Badge>
-                      </div>
-
-                      <Button
-                        variant={isLevelActive ? 'outline' : 'default'}
-                        size="sm"
-                        onClick={() => handleToggleLevel(item.level)}
-                        className="rounded-squircle text-xs h-8 px-3 cursor-pointer"
-                      >
-                        {isLevelActive ? (
-                          <>
-                            <EyeOff className="h-3.5 w-3.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                            {isAr ? 'حجب' : 'Hide'}
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-3.5 w-3.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                            {isAr ? 'إعلان' : 'Publish'}
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 4. BULK SCOPE ACTION */}
-            <div className="space-y-3 rounded-xl border border-border/70 bg-surface/30 p-4">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-emerald-400" />
-                <h4 className="text-sm font-semibold text-foreground">
-                  {isAr ? 'تحديث مجمع حسب نوع الاختبار' : 'Bulk Update by Exam Type'}
-                </h4>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
-                <Select value={selectedExamType} onValueChange={setSelectedExamType}>
-                  <SelectTrigger className="w-full sm:w-48 rounded-squircle text-xs">
-                    <SelectValue placeholder={isAr ? 'نوع الاختبار' : 'Exam Type'} />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    <SelectItem value="all">{isAr ? 'جميع الاختبارات' : 'All Exam Types'}</SelectItem>
-                    <SelectItem value="midterm">{isAr ? 'الميدتيرم' : 'Midterm Exam'}</SelectItem>
-                    <SelectItem value="coursework">{isAr ? 'أعمال السنة' : 'Coursework'}</SelectItem>
-                    <SelectItem value="final">{isAr ? 'الامتحان النهائي' : 'Final Exam'}</SelectItem>
-                    <SelectItem value="quiz">{isAr ? 'الكويزات والأنشطة' : 'Quizzes'}</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isUpdatingBulk}
-                    onClick={() => handleBulkAction(true)}
-                    className="flex-1 sm:flex-none rounded-squircle border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-medium cursor-pointer"
-                  >
-                    {isUpdatingBulk ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1 rtl:ml-1 rtl:mr-0" />
-                    ) : (
-                      <Eye className="h-3.5 w-3.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                    )}
-                    {isAr ? 'نشر المحدد' : 'Publish Selected'}
+              </section>
+              <section className={section}>
+                <h3 className="font-bold">
+                  {tr(
+                    "الفتح والإغلاق التلقائي — توقيت القاهرة",
+                    "Automatic opening and closing — Cairo time",
+                  )}
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label>
+                    {tr("موعد الفتح", "Opening time")}
+                    <DateTimePicker
+                      locale={isAr ? "ar" : "en"}
+                      timeZone="Africa/Cairo"
+                      disabled={busy}
+                      className="w-full min-w-0"
+                      value={openAt}
+                      onChange={setOpenAt}
+                    />
+                  </label>
+                  <label>
+                    {tr("موعد الإغلاق", "Closing time")}
+                    <DateTimePicker
+                      locale={isAr ? "ar" : "en"}
+                      timeZone="Africa/Cairo"
+                      disabled={busy}
+                      className="w-full min-w-0"
+                      value={closeAt}
+                      onChange={setCloseAt}
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={busy} onClick={saveWindow}>
+                    {tr("حفظ المواعيد", "Save schedule")}
                   </Button>
-
                   <Button
                     variant="outline"
-                    size="sm"
-                    disabled={isUpdatingBulk}
-                    onClick={() => handleBulkAction(false)}
-                    className="flex-1 sm:flex-none rounded-squircle border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 text-xs font-medium cursor-pointer"
+                    disabled={busy}
+                    onClick={() =>
+                      mutation.mutate({
+                        gradesOpenAt: null,
+                        gradesCloseAt: null,
+                      })
+                    }
                   >
-                    {isUpdatingBulk ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1 rtl:ml-1 rtl:mr-0" />
-                    ) : (
-                      <EyeOff className="h-3.5 w-3.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                    )}
-                    {isAr ? 'إخفاء المحدد' : 'Hide Selected'}
+                    {tr("إلغاء المواعيد", "Clear schedule")}
                   </Button>
                 </div>
-              </div>
+              </section>
+              <section className={section}>
+                <h3 className="font-bold">
+                  {tr("مستويات الطلاب المسموح لها", "Allowed student levels")}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {["1", "2", "3", "4"].map((level) => (
+                    <Button
+                      key={level}
+                      disabled={busy}
+                      variant={levels.includes(level) ? "default" : "outline"}
+                      aria-pressed={levels.includes(level)}
+                      onClick={() =>
+                        mutation.mutate({
+                          gradesPublishedLevels: levels.includes(level)
+                            ? levels.filter((l) => l !== level)
+                            : [...levels, level],
+                        })
+                      }
+                    >
+                      {tr("المستوى", "Level")} {level} —{" "}
+                      {levels.includes(level)
+                        ? tr("متاح", "Allowed")
+                        : tr("محجوب", "Hidden")}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+              <section className={section}>
+                <h3 className="font-bold">
+                  {tr(
+                    "إتاحة المكوّنات لجميع الطلاب المسموح لهم",
+                    "Component visibility for allowed students",
+                  )}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {EXAM_TYPE_VALUES.map((type) => (
+                    <Button
+                      key={type}
+                      disabled={busy}
+                      aria-pressed={types.includes(type)}
+                      variant={types.includes(type) ? "default" : "outline"}
+                      onClick={() =>
+                        mutation.mutate({
+                          gradesPublishedExamTypes: types.includes(type)
+                            ? types.filter((t) => t !== type)
+                            : [...types, type],
+                        })
+                      }
+                    >
+                      {labels[type]} —{" "}
+                      {types.includes(type)
+                        ? tr("متاح", "Visible")
+                        : tr("محجوب", "Hidden")}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+              <section className={section}>
+                <h3 className="font-bold">
+                  {tr("استثناء لمقرر أو طالب", "Course or student override")}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {tr(
+                    "الكودان معًا يحددان طالبًا في مقرر بعينه. آخر استثناء مطابق هو المعتمد، ولا يتجاوز الإغلاق أو المستوى أو المواعيد.",
+                    "Both codes target a student in one course. The last matching rule wins; master, level and time restrictions still apply.",
+                  )}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Input
+                    aria-label={tr("كود المقرر", "Course code")}
+                    placeholder={tr("كود المقرر", "Course code")}
+                    dir="ltr"
+                    value={courseCode}
+                    onChange={(e) => setCourseCode(e.target.value)}
+                    maxLength={80}
+                  />
+                  <Input
+                    aria-label={tr("كود الطالب", "Student code")}
+                    placeholder={tr("كود الطالب", "Student code")}
+                    dir="ltr"
+                    value={studentCode}
+                    onChange={(e) => setStudentCode(e.target.value)}
+                    maxLength={32}
+                  />
+                  <Select value={examType} onValueChange={setExamType}>
+                    <SelectTrigger
+                      aria-label={tr("مكوّن الاستثناء", "Override component")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent dir={isAr ? "rtl" : "ltr"}>
+                      {["all", ...EXAM_TYPE_VALUES].map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {labels[type]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={busy} onClick={() => setRule(true)}>
+                    {tr("إظهار المطابق", "Show matching results")}
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    variant="outline"
+                    onClick={() => setRule(false)}
+                  >
+                    {tr("حجب المطابق", "Hide matching results")}
+                  </Button>
+                </div>
+                {rules.map((rule, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"
+                  >
+                    <span className="min-w-0 break-all">
+                      <bdi>{rule.courseCode || "—"}</bdi> /{" "}
+                      <bdi>{rule.studentCode || "—"}</bdi> ·{" "}
+                      {labels[rule.examType ?? "all"]} ·{" "}
+                      {rule.isVisible
+                        ? tr("إظهار", "Visible")
+                        : tr("حجب", "Hidden")}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      aria-label={`${tr("حذف الاستثناء", "Remove override")} ${index + 1}`}
+                      onClick={() =>
+                        mutation.mutate({
+                          gradesVisibilityRules: rules.filter(
+                            (_, i) => i !== index,
+                          ),
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </section>
+              <ControlReleasePanel locale={isAr ? "ar" : "en"} />
             </div>
-          </div>
+          )
         )}
-
-        <DialogFooter className="rtl:sm:justify-start pt-4 border-t border-border/70">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="rounded-squircle text-xs cursor-pointer"
-          >
-            {isAr ? 'إغلاق' : 'Close'}
-          </Button>
-        </DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          {tr("إغلاق", "Close")}
+        </Button>
       </DialogContent>
     </Dialog>
   );

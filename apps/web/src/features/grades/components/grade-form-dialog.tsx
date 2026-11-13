@@ -65,7 +65,7 @@ export function GradeFormDialog({
       status: defaultValues?.status ?? "present",
       academicYear: defaultValues?.academicYear ?? "2024-2025",
       semester: defaultValues?.semester ?? "first",
-      isPublished: defaultValues?.isPublished ?? true,
+      isPublished: defaultValues?.isPublished ?? false,
     },
   });
 
@@ -81,7 +81,7 @@ export function GradeFormDialog({
         status: defaultValues?.status ?? "present",
         academicYear: defaultValues?.academicYear ?? "2024-2025",
         semester: defaultValues?.semester ?? "first",
-        isPublished: defaultValues?.isPublished ?? true,
+        isPublished: defaultValues?.isPublished ?? false,
       });
     }
   }, [open, defaultValues, form]);

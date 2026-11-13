@@ -28,7 +28,7 @@ import {
   openResultCertificate,
   type ResultCertificateData,
 } from "@/lib/result-certificate";
-import { calculateGradeScale, getGpaScale } from "@student-portal/shared";
+import { calculateGradeScale, getGpaScale, type GradeStatus } from "@student-portal/shared";
 import { getStudentResultsStatus } from "@/features/grades/api";
 
 interface Grade {
@@ -47,7 +47,7 @@ interface Grade {
   };
   grade: number;
   maxGrade: number;
-  status: "present" | "absent" | "banned";
+  status: GradeStatus;
   academicYear: string;
   semester: string;
   isPublished: boolean;
@@ -125,6 +125,7 @@ export default function StudentResultsPage() {
   const t = useTranslations("studentPortal");
   const tCommon = useTranslations("common");
   const tRelease = useTranslations("controlRelease");
+  const tControl = useTranslations("control");
   const params = useParams();
   const locale = params.locale === "en" ? "en" : "ar";
   const isEnglish = locale === "en";
@@ -151,7 +152,35 @@ export default function StudentResultsPage() {
   const statusQuery = useQuery({
     queryKey: ["student-results-status"],
     queryFn: getStudentResultsStatus,
+    refetchInterval: 60_000,
   });
+
+  const [visibilityNow, setVisibilityNow] = useState(() => Date.now());
+  const statusRefetch = statusQuery.refetch;
+  const resultsRefetch = resultsQuery.refetch;
+  const previousVisibilityVersion = React.useRef<string | undefined>(undefined);
+  React.useEffect(() => {
+    const version = statusQuery.data?.visibilityVersion;
+    if (!version) return;
+    if (previousVisibilityVersion.current && previousVisibilityVersion.current !== version) {
+      void resultsRefetch();
+    }
+    previousVisibilityVersion.current = version;
+  }, [statusQuery.data?.visibilityVersion, resultsRefetch]);
+  React.useEffect(() => {
+    const next = [statusQuery.data?.openAt, statusQuery.data?.closeAt]
+      .filter((value): value is string => Boolean(value))
+      .map(value => Date.parse(value))
+      .filter(value => value > visibilityNow)
+      .sort((a, b) => a - b)[0];
+    if (!next) return;
+    const timer = setTimeout(() => {
+      setVisibilityNow(Date.now());
+      void statusRefetch();
+      void resultsRefetch();
+    }, Math.min(Math.max(0, next - Date.now()), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [statusQuery.data?.openAt, statusQuery.data?.closeAt, visibilityNow, statusRefetch, resultsRefetch]);
 
   const resultLevels = React.useMemo(
     () =>
@@ -204,8 +233,9 @@ export default function StudentResultsPage() {
     );
   }
 
-  const grades = resultsQuery.data || [];
-  const statusData = statusQuery.data;
+  const deadlineEnded = Boolean(statusQuery.data?.closeAt && visibilityNow >= Date.parse(statusQuery.data.closeAt));
+  const statusData = deadlineEnded && statusQuery.data ? { ...statusQuery.data, isOpen: false, reason: 'ended' as const } : statusQuery.data;
+  const grades = statusData?.isOpen ? resultsQuery.data || [] : [];
 
   if (grades.length === 0) {
     let emptyTitle = isEnglish ? "No published results" : "النتائج لم تعلن بعد";
@@ -924,7 +954,7 @@ export default function StudentResultsPage() {
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                  {isEnglish ? "Absent" : "غائب"}
+                                  {tControl(`states.${course.midterm.status}`)}
                                 </span>
                               )
                             ) : (
@@ -951,7 +981,7 @@ export default function StudentResultsPage() {
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
-                                  {isEnglish ? "Absent" : "غائب"}
+                                  {tControl(`states.${course.final.status}`)}
                                 </span>
                               )
                             ) : (

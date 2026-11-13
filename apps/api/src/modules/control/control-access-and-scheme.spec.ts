@@ -20,6 +20,37 @@ describe('ControlAccessService', () => {
   const staffId = new Types.ObjectId().toString();
   const courseId = new Types.ObjectId();
 
+  it.each([
+    [PERMISSIONS.CONTROL_SHEETS_REVIEW, true, false, false],
+    [PERMISSIONS.CONTROL_SHEETS_APPROVE, false, true, false],
+    [PERMISSIONS.CONTROL_FINAL_APPROVE, false, false, true],
+  ])(
+    'keeps %s independent from other review/approval powers',
+    (permission, review, approve, final) => {
+      const service = buildAccess();
+      const user = {
+        _id: staffId,
+        role: 'staff' as const,
+        permissions: [PERMISSIONS.CONTROL_ACCESS, permission],
+      } as Parameters<ControlAccessService['getCapabilities']>[0];
+      expect(service.getCapabilities(user)).toMatchObject({
+        canReview: review,
+        canApprove: approve,
+        canApproveFinal: final,
+      });
+      for (const required of [
+        PERMISSIONS.CONTROL_SHEETS_REVIEW,
+        PERMISSIONS.CONTROL_SHEETS_APPROVE,
+        PERMISSIONS.CONTROL_FINAL_APPROVE,
+      ]) {
+        if (required !== permission)
+          expect(() => service.assertPermission(user, required)).toThrow(
+            ForbiddenException,
+          );
+      }
+    },
+  );
+
   function buildAccess(opts: { assigned?: boolean; owned?: boolean } = {}) {
     const courseModel = {
       exists: jest.fn(() => chain(opts.owned ? { _id: courseId } : null)),

@@ -18,12 +18,12 @@ const messages = Object.fromEntries(await Promise.all(['ar','en'].map(async loca
 await fs.mkdir(output,{recursive:true});
 const write = (name, value) => fs.writeFile(path.join(output,name),value);
 await write('loader.cjs',`const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=function(source){return ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText};`);
-await write('auth.ts',`export const useAuth=()=>({user:{_id:'fixture-admin',role:'admin'}});`);
+await write('auth.ts',`export const useAuth=()=>{const role=new URLSearchParams(location.search).get('role');return {user:{_id:'fixture-admin',role:role?'staff':'admin',permissions:role==='visibility'?['grades.visibility.manage']:role==='editor'?['grades.write']:[]}}};`);
 // Render the real panel outside Next while retaining observable navigation.
-await write('navigation.ts',`window.__controlNavigations=[];const router={push:url=>window.__controlNavigations.push(url)};export const useRouter=()=>router;`);
+await write('navigation.ts',`window.__controlNavigations=[];const router={push:url=>window.__controlNavigations.push(url)};export const useRouter=()=>router;export const useParams=()=>({locale:location.pathname.includes('/ar/')?'ar':'en'});`);
 await write('api.ts',`const call=async(method,url,body)=>{const response=await fetch(url,{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})});const envelope=await response.json();if(!response.ok)throw new Error(envelope.message);return envelope;};export const getApiErrorMessage=e=>e.message;export default {get:u=>call('GET',u),post:(u,b)=>call('POST',u,b),patch:(u,b)=>call('PATCH',u,b)};`);
 const local = relative => path.join(web,relative).replaceAll('\\','/');
-await write('entry.tsx',`import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{NextIntlClientProvider}from'next-intl';import{Toaster}from'sonner';import{ControlReleasePanel}from'${local('src/features/grades/components/control-release-panel.tsx')}';import ar from'${local('src/messages/ar.json')}';import en from'${local('src/messages/en.json')}';const locale=location.pathname.includes('/ar/')?'ar':'en';document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><main className="max-w-6xl mx-auto p-6"><ControlReleasePanel locale={locale}/></main><Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
+await write('entry.tsx',`import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{NextIntlClientProvider}from'next-intl';import{Toaster}from'sonner';import{ControlReleasePanel}from'${local('src/features/grades/components/control-release-panel.tsx')}';import{GradesPublishingModal}from'${local('src/features/grades/components/grades-publishing-modal.tsx')}';import Results from '${local('src/app/[locale]/dashboard/results/page.tsx')}';import ar from'${local('src/messages/ar.json')}';import en from'${local('src/messages/en.json')}';const locale=location.pathname.includes('/ar/')?'ar':'en';const view=new URLSearchParams(location.search).get('view');document.documentElement.dir=locale==='ar'?'rtl':'ltr';const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><main className="max-w-6xl mx-auto p-6"><span data-testid="fixture-ready"/>{view==='visibility'?<GradesPublishingModal open onOpenChange={()=>{}} isAr={locale==='ar'}/>:view==='student'?<Results/>:<ControlReleasePanel locale={locale}/>}</main><Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
 await new Promise((resolve,reject)=>webpack({mode:'development',devtool:false,context:web,entry:path.join(output,'entry.tsx'),output:{path:output,filename:'app.js',publicPath:'/'},module:{rules:[{test:/\.tsx?$/,exclude:/node_modules/,use:path.join(output,'loader.cjs')}]},resolve:{extensions:['.tsx','.ts','.js','.jsx'],modules:[path.join(web,'node_modules'),'node_modules'],alias:{'next/navigation':path.join(output,'navigation.ts'),'@/lib/api':path.join(output,'api.ts'),'@/providers/auth-provider':path.join(output,'auth.ts'),'@':path.join(web,'src')}}},(error,stats)=>error||stats.hasErrors()?reject(error||new Error(stats.toString({all:false,errors:true}))):resolve()));
 const css=await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({base:web})]).process(await fs.readFile(path.join(web,'src/app/globals.css'),'utf8'),{from:path.join(web,'src/app/globals.css')});
 await write('styles.css',css.css);
@@ -31,14 +31,22 @@ const courseId='100000000000000000000001';
 const sheetId='200000000000000000000001';
 let policy={version:0,rules:{passPercentage:50,finalMinimumPercentage:0,retake:'latest'}};
 let activations=0, withdrawals=0, active=false, stale=true;
+let settings={gradesSystemOpen:false,gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
+const visibilityWrites=[];
+let studentCloseAt;
+let absentComponent='midterm';
 const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     const send=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(status===200?{success:true,data,timestamp:new Date().toISOString()}:data));};
+    if(url.pathname==='/students/me/results-window')return send({isOpen:Date.now()<Date.parse(studentCloseAt),closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':undefined,studentLevel:'1',isLevelPublished:true});
+    if(url.pathname==='/students/me/profile')return send({level:'1',gpa:0});
+    if(url.pathname==='/students/me/results')return send(Date.now()>=Date.parse(studentCloseAt)?[]:[{_id:'synthetic-midterm',courseCode:'SYNTH101',courseName:'Synthetic course',courseNameEn:'Synthetic course',courseNameAr:'Synthetic course',examType:'midterm',grade:absentComponent==='midterm'?0:15,maxGrade:20,status:absentComponent==='midterm'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true},{_id:'synthetic-final',courseCode:'SYNTH101',courseName:'Synthetic course',examType:'final',grade:absentComponent==='final'?0:55,maxGrade:60,status:absentComponent==='final'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/admin/control/courses')return send({items:[{courseId,code:'SYNTH101',name:'Synthetic course',nameAr:'SYNTH101',nameEn:'Synthetic course',rosterCount:1,components:['coursework','midterm','final'].map(key=>({key,sheetId,slug:`synth101-${key}`,entered:1,published:active?1:0}))}]});
     if(url.pathname.startsWith('/admin/grades/')){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
       const body=chunks.length?JSON.parse(Buffer.concat(chunks).toString()):{};
+      if(url.pathname.endsWith('/settings')){if(req.method==='PATCH'){visibilityWrites.push(body);settings={...settings,...body};}return send(settings);}
       if(url.pathname.includes('/control-policy/')){if(req.method==='PATCH'){policy={version:policy.version+1,rules:{passPercentage:body.passPercentage,finalMinimumPercentage:body.finalMinimumPercentage,retake:body.retake}};}return send(policy);}
       if(url.pathname.endsWith('/release-preview'))return send({sheets:[{sheetId,courseCode:'SYNTH101',component:body.examType,students:1,activeReleaseId:active?'release-1':null}],releaseDigests:{[sheetId]:stale?'old-digest':'new-digest'}});
       if(url.pathname.endsWith('/publish')){
@@ -90,6 +98,55 @@ try{
   await fs.writeFile(path.join(output,'geometry.json'),JSON.stringify(geometry));
   await page.locator('main > section').screenshot({path:path.join(output,'arabic-release.png')});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
+  for(const locale of ['en','ar']){
+    const ar=locale==='ar';
+    const text=(en,arabic)=>ar?arabic:en;
+    settings={gradesSystemOpen:false,gradesOpenAt:'2026-11-13T08:00:00Z',gradesCloseAt:'2026-11-14T08:00:00Z',gradesPublishedLevels:['1'],gradesPublishedExamTypes:['final'],gradesVisibilityRules:[]};
+    await page.setViewportSize({width:1440,height:1100});
+    await page.goto(`${base}/${locale}/admin/grades?view=visibility`);
+    const dialog=page.getByRole('dialog');
+    await dialog.getByText(text('Master switch is off: all results are hidden','المفتاح العام مغلق: جميع النتائج محجوبة'),{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:text('Open results viewing','فتح عرض النتائج'),exact:true}).click();
+    await dialog.getByRole('button',{name:text('Hide all results','حجب كل النتائج'),exact:true}).waitFor();
+    assert.equal(settings.gradesSystemOpen,true);
+    await dialog.getByRole('button',{name:text('Midterm — Hidden','الميدترم — محجوب'),exact:true}).click();
+    await dialog.getByRole('button',{name:text('Midterm — Visible','الميدترم — متاح'),exact:true}).waitFor();
+    assert.ok(settings.gradesPublishedExamTypes.includes('midterm'));
+    await dialog.getByRole('button',{name:text('Midterm — Visible','الميدترم — متاح'),exact:true}).click();
+    await dialog.getByRole('button',{name:text('Midterm — Hidden','الميدترم — محجوب'),exact:true}).waitFor();
+    await dialog.getByRole('textbox',{name:text('Course code','كود المقرر'),exact:true}).fill('synth101');
+    await dialog.getByRole('textbox',{name:text('Student code','كود الطالب'),exact:true}).fill('260001');
+    await dialog.getByRole('button',{name:text('Show matching results','إظهار المطابق'),exact:true}).click();
+    await dialog.getByRole('button',{name:text('Remove override 1','حذف الاستثناء 1'),exact:true}).waitFor();
+    assert.deepEqual(settings.gradesVisibilityRules,[{courseCode:'SYNTH101',studentCode:'260001',examType:'midterm',isVisible:true}]);
+    await dialog.getByRole('button',{name:text('Clear schedule','إلغاء المواعيد'),exact:true}).click();
+    await page.waitForFunction(()=>[...document.querySelectorAll('[role=dialog]')].length>0);
+    await dialog.getByText(text('Viewing window is open; levels, components and overrides below apply','نافذة العرض مفتوحة؛ تطبّق المستويات والمكوّنات والاستثناءات أدناه'),{exact:true}).waitFor();
+    assert.equal(settings.gradesOpenAt,null);assert.equal(settings.gradesCloseAt,null);
+    assert.equal(activations,1,'visibility settings must not approve or activate Control drafts');
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth+2),'visibility controls must fit mobile width');
+    await dialog.screenshot({path:path.join(output,`visibility-${locale}-mobile.png`)});
+  }
+  await page.goto(`${base}/en/admin/grades?view=visibility&role=editor`);
+  await page.getByTestId('fixture-ready').waitFor({state:'attached'});
+  assert.equal(await page.getByRole('dialog').count(),0,'grade editing alone must not grant visibility management');
+  await page.goto(`${base}/en/admin/grades?view=visibility&role=visibility`);
+  await page.getByRole('dialog').waitFor();
+  assert.equal(await page.getByRole('button',{name:en.activate,exact:true}).count(),0,'visibility permission must not grant publication');
+  studentCloseAt=new Date(Date.now()+8000).toISOString();
+  await page.setViewportSize({width:1440,height:1100});
+  await page.goto(`${base}/en/dashboard/results?view=student`);
+  await page.getByText('SYNTH101',{exact:true}).first().waitFor();
+  const studentRow=page.getByRole('row').filter({hasText:'SYNTH101'});
+  await studentRow.getByText('Absent',{exact:true}).first().waitFor();
+  await studentRow.getByText('55 / 60',{exact:true}).waitFor();
+  await page.getByText('Results Inquiry Window Closed',{exact:true}).waitFor();
+  assert.equal(await page.getByText('SYNTH101',{exact:true}).count(),0,'an already-open student page must hide cached results at the closing deadline');
+  absentComponent='final';studentCloseAt=new Date(Date.now()+8000).toISOString();
+  await page.goto(`${base}/en/dashboard/results?view=student`);
+  await page.getByRole('row').filter({hasText:'SYNTH101'}).getByText('15 / 20',{exact:true}).waitFor();
+  await page.getByRole('row').filter({hasText:'SYNTH101'}).getByText('Absent',{exact:true}).first().waitFor();
   assert.deepEqual(errors,[]);
   console.log('Control release browser acceptance passed: real API envelopes, scoped course selection, policy editing, stale preview recovery, activation, withdrawal, history, Arabic/English desktop/mobile.');
 }catch(error){if(page){await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});await write('failure-dom.html',await page.content());}await write('runtime-errors.json',JSON.stringify(errors));if(errors.length)throw new AggregateError([error],`Control release runtime errors: ${errors.join('; ')}`);throw error;}

@@ -151,9 +151,11 @@ export async function auditAcademicWarnings(options?: {
 
 export interface GradesSettingsData {
   gradesSystemOpen: boolean;
-  gradesOpenAt?: string;
-  gradesCloseAt?: string;
+  gradesOpenAt?: string | null;
+  gradesCloseAt?: string | null;
   gradesPublishedLevels: string[];
+  gradesPublishedExamTypes?: import('@student-portal/shared').ExamType[];
+  gradesVisibilityRules?: import('@student-portal/shared').GradeVisibilityRule[];
 }
 
 export async function getGradesSettings(): Promise<GradesSettingsData> {
@@ -172,6 +174,7 @@ export async function updateGradesSettings(
 }
 
 export interface StudentResultsStatusData {
+  visibilityVersion?: string;
   isOpen: boolean;
   reason?: "system_closed" | "not_started" | "ended" | "level_not_published";
   openAt?: string;
