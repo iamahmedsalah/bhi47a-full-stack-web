@@ -13,6 +13,7 @@ RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
 # Copy dependency manifests and the shared package required by the root postinstall
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY patches ./patches
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY apps/web/package.json ./apps/web/
