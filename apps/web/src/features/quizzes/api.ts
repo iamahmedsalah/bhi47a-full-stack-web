@@ -10,6 +10,7 @@ import {
 export type QuestionType = 'mcq' | 'true_false';
 
 export interface QuizQuestion {
+  _id?: string;
   id: string;
   text: string;
   type: QuestionType;
@@ -383,7 +384,6 @@ export async function getQuizReview(quizId: string) {
   );
   return res.data;
 }
-
 
 export interface QuizCourseOption { _id: string; code: string; name: string; nameAr?: string }
 

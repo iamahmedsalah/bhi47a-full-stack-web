@@ -85,7 +85,7 @@ export function RecalculateLevelsModal({
     },
   });
 
-  const students = previewQuery.data?.students ?? [];
+  const students = useMemo(() => previewQuery.data?.students ?? [], [previewQuery.data?.students]);
 
   const filteredStudents = useMemo(() => {
     return students.filter((student) => {

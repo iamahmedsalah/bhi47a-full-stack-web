@@ -5,30 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import {
-  Activity,
-  ArrowUpDown,
-  Cpu,
-  Database,
-  Server,
-  ShieldAlert,
-  Clock,
-  RefreshCw,
-  Copy,
-  Check,
-  AlertTriangle,
-  GraduationCap,
-  CheckCircle2,
-  TrendingUp,
-  HardDrive,
-  Layers,
-  Radio,
-  Search,
-  SlidersHorizontal,
-  Download,
-  Terminal,
-  Link2,
-} from 'lucide-react';
+import { Activity, ArrowUpDown, Cpu, Database, Server, ShieldAlert, Clock, RefreshCw, Copy, Check, AlertTriangle, GraduationCap, TrendingUp, Layers, Radio, SlidersHorizontal, Download, Terminal, Link2 } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,13 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { LoadingState, ErrorState } from '@/components/ui/feedback';
 import { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob } from '@/lib/export-utils';
@@ -57,19 +27,12 @@ import { HttpTrafficCard, HttpTrafficDiagnostics } from '@/features/metrics/http
 import { UnifiedPerformanceTables } from '@/features/metrics/unified-tables';
 import type { TrafficWindow } from '@/features/metrics/api';
 
-
 const CARD_CLASS =
   'p-5 bg-card/45 backdrop-blur-sm border-border/70 rounded-2xl space-y-4';
 const KPI_CARD_CLASS =
   'p-4 bg-card/45 backdrop-blur-sm border-border/70 relative overflow-hidden rounded-2xl shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all';
 const TILE_CLASS =
   'rounded-xl border border-border/70 bg-secondary/30 p-3 space-y-1';
-
-function latencyTone(ms: number, warn = 50, danger = 200) {
-  if (ms >= danger) return 'bg-rose-500/15 text-rose-400 border border-rose-500/30';
-  if (ms >= warn) return 'bg-amber-500/15 text-amber-300 border border-amber-500/30';
-  return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
-}
 
 function StatTile({
   label,
@@ -171,7 +134,6 @@ export default function AdminMetricsPage() {
 
   // Locked Accounts management dialog
   const [lockedAccountsOpen, setLockedAccountsOpen] = useState(false);
-
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useQuery<MetricsSummaryResponse>({
@@ -998,4 +960,3 @@ export default function AdminMetricsPage() {
     </div>
   );
 }
-

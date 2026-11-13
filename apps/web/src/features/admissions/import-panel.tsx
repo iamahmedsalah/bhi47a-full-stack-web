@@ -13,15 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableCell } from "@/components/ui/table";
 import { GlassCard } from "@/components/ui/glass-card";
-import {
-  FileSpreadsheet,
-  Upload,
-  Download,
-  CheckCircle2,
-  AlertTriangle,
-  Layers,
-  FileCheck2,
-} from "lucide-react";
+import { FileSpreadsheet, Upload, Download, CheckCircle2, FileCheck2 } from "lucide-react";
 
 import { downloadFileBlob } from "@/lib/export-utils";
 import { cn } from "@/lib/cn";
@@ -31,15 +23,10 @@ import {
   admissionDownload,
   admissionPreview,
 } from "./workflow-api";
-import {
-  AdmissionDialog,
-  AdmissionInput,
-  AdmissionMenu,
-  useAdmissionUI,
-} from "./workflow-ui";
+import { AdmissionDialog, AdmissionMenu, useAdmissionUI } from "./workflow-ui";
 
 export function AdmissionImportPanel() {
-  const { t, userId, date, dir } = useAdmissionUI(),
+  const { t, userId, dir } = useAdmissionUI(),
     params = useSearchParams(),
     router = useRouter(),
     pathname = usePathname(),
@@ -203,7 +190,6 @@ export function AdmissionImportPanel() {
   };
   const validCount = rows.filter((r) => r.state === "VALID").length;
   const invalidCount = rows.filter((r) => r.state === "INVALID").length;
-  const appliedCount = rows.filter((r) => r.state === "APPLIED").length;
 
   return (
     <div className="space-y-6">

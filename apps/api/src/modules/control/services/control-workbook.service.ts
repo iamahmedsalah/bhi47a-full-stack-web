@@ -409,7 +409,7 @@ export class ControlWorkbookService {
     const { rows, scheme } = await this.workbook(user, sheetId);
     const book = new ExcelJS.Workbook();
     const page = book.addWorksheet('Marks');
-    // Only active-component inputs may be imported. The other columns are context.
+    // Only active-component inputs may be imported. Other components are context.
     // Note: studentId (raw MongoDB ObjectId) is intentionally omitted; students are matched by studentCode.
     page.addRow([
       'كود الطالب (studentCode)',
@@ -519,8 +519,8 @@ export class ControlWorkbookService {
       ],
       [
         '2. الدرجة (score)',
-        `أدخل الدرجة الرقمية للمكوّن النشط (${componentNameAr}) فقط بين 0 و ${details.rules?.max ?? 20}. ترك الخلية فارغة يعني عدم تعديل حالة الطالب.`,
-        `Enter the numeric mark for the active component (${details.sheet.component}) between 0 and ${details.rules?.max ?? 20}. Leave blank if unchanged.`,
+        `أدخل الدرجة الرقمية للمكوّن النشط (${componentNameAr}) بين 0 و ${details.rules?.max ?? 20} في عمود score أو عمود المكوّن النشط. باقي المكونات للعرض فقط. عند تعديل العمودين يجب أن تتساوى القيمتان. الصف الفارغ دون حالة يُتخطى.`,
+        `Enter the mark for the active component (${details.sheet.component}) between 0 and ${details.rules?.max ?? 20} in score or the active component column. Other components are reference only. If editing both columns, make their values equal. Rows with no mark or status are skipped.`,
       ],
       [
         '3. أعمال السنة (Coursework Split)',
@@ -717,6 +717,34 @@ export class ControlWorkbookService {
           throw new BadRequestException(`Formula in row ${n}`);
         values[key] = cell.text;
       });
+      // The export also shows component-specific columns. Accept the active
+      // component as an input alias, but never silently choose conflicting marks.
+      const activeColumn = ['coursework', 'midterm', 'final'].indexOf(
+        detail.sheet.component,
+      );
+      const contextCell = row.getCell(expectedKeys.length + activeColumn + 1);
+      const contextHeader = page.getRow(1).getCell(contextCell.col).text;
+      if (
+        activeColumn >= 0 &&
+        (contextHeader === detail.sheet.component ||
+          contextHeader.endsWith(`(${detail.sheet.component})`))
+      ) {
+        if (contextCell.type === ExcelJS.ValueType.Formula)
+          throw new BadRequestException(`Formula in row ${n}`);
+        const contextual = contextCell.text.trim();
+        const score =
+          typeof values.score === 'string' ? values.score.trim() : '';
+        const scorelessStatus = (
+          CONTROL_SCORELESS_STATES as readonly string[]
+        ).includes(normalizeStatusInput(values.status));
+        if (contextual && !score && !scorelessStatus) values.score = contextual;
+        else if (contextual && score) {
+          const left = parseMarkInput(score);
+          const right = parseMarkInput(contextual);
+          if (!left.ok || !right.ok || left.value !== right.value)
+            values.contextScore = contextual;
+        }
+      }
       const identity =
         typeof values.studentCode === 'string' ? values.studentCode.trim() : '';
       if (identity && identities.has(identity))
@@ -800,9 +828,19 @@ export class ControlWorkbookService {
         fail('Reason must not exceed 500 characters');
         continue;
       }
-      const score = parseMarkInput(row.score);
-      const normalizedStatus = normalizeStatusInput(row.status);
       const current = student.components[detail.sheet.component];
+      let score = parseMarkInput(row.score);
+      if (row.contextScore !== undefined) {
+        const contextual = parseMarkInput(row.contextScore);
+        const previous = current?.score ?? null;
+        if (score.ok && contextual.ok && score.value === previous)
+          score = contextual;
+        else if (!score.ok || !contextual.ok || contextual.value !== previous) {
+          fail('Conflicting score and active component columns');
+          continue;
+        }
+      }
+      const normalizedStatus = normalizeStatusInput(row.status);
       // When re-importing an exported sheet where existing rows have status 'present' (or 'حاضر')
       // and the same score, only skip if completely empty or unchanged.
       const status = normalizedStatus
@@ -898,6 +936,7 @@ export class ControlWorkbookService {
     return {
       previewId: String(batch._id),
       valid: changes.length,
+      skipped: rows.length - changes.length - errors.length,
       errors,
       changes,
     };

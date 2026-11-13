@@ -1,15 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import {
-  Code,
-  Calculator,
-  Briefcase,
-  Clock,
-  Award,
-  ArrowRight,
-  ArrowLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Code, Calculator, Clock, Award, ArrowRight, ArrowLeft, ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ACADEMIC_PROGRAMS } from '@/data/institutional-data';
@@ -105,8 +96,4 @@ export function ProgramsSection({ locale }: ProgramsSectionProps) {
       </div>
     </section>
   );
-}
-
-interface HeroSectionProps {
-  locale: string;
 }

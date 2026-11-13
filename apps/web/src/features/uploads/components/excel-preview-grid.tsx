@@ -46,14 +46,6 @@ export function ExcelPreviewGrid({
     return catalog.fields.slice(0, 7); // Show top 7 fields in preview table for clean layout
   }, [catalog]);
 
-  const matchPercentage = useMemo(() => {
-    if (!catalog || catalog.fields.length === 0) return 100;
-    const requiredTotal = catalog.fields.filter((f) => f.required).length;
-    if (requiredTotal === 0) return 100;
-    const matchedCount = preview.matchedColumns.length;
-    return Math.min(100, Math.round((matchedCount / requiredTotal) * 100));
-  }, [catalog, preview.matchedColumns]);
-
   return (
     <div className="space-y-4 w-full text-start">
       {/* 1. Summary KPI Stat Bar */}

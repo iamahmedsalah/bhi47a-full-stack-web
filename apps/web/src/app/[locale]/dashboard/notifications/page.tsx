@@ -1,4 +1,6 @@
 'use client';
+import type { StudentNotification } from '@/lib/features/notifications';
+import type { PaginatedResponse } from '@/lib/api';
 
 import React, { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,7 +46,7 @@ export default function StudentNotificationsPage() {
   const isArabic = locale === 'ar';
 
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
-  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<StudentNotification | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const notificationsQuery = useQuery({
@@ -58,14 +60,14 @@ export default function StudentNotificationsPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.map((item: any) =>
-              item._id === updatedItem?._id || item._id === (updatedItem as any)?.data?._id
+            items: oldData.items.map((item: StudentNotification) =>
+              item._id === updatedItem?._id
                 ? { ...item, isRead: true }
                 : item,
             ),
@@ -81,13 +83,13 @@ export default function StudentNotificationsPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.map((item: any) => ({ ...item, isRead: true })),
+            items: oldData.items.map((item: StudentNotification) => ({ ...item, isRead: true })),
           };
         },
       );
@@ -100,16 +102,15 @@ export default function StudentNotificationsPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
             items: oldData.items.filter(
-              (item: any) =>
-                item._id !== deletedItem?._id &&
-                item._id !== (deletedItem as any)?.data?._id,
+              (item: StudentNotification) =>
+                item._id !== deletedItem?._id,
             ),
           };
         },
@@ -123,25 +124,25 @@ export default function StudentNotificationsPage() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.filter((item: any) => !item.isRead),
+            items: oldData.items.filter((item: StudentNotification) => !item.isRead),
           };
         },
       );
     },
   });
 
-  const rawItems = notificationsQuery.data?.items || [];
+  const rawItems = useMemo(() => notificationsQuery.data?.items || [], [notificationsQuery.data?.items]);
   const unreadCount = rawItems.filter((item) => !item.isRead).length;
   const readCount = rawItems.length - unreadCount;
 
   // Helper function to detect category
-  const getItemCategory = (item: any): 'quiz' | 'grade' | 'attendance' | 'system' => {
+  const getItemCategory = (item: StudentNotification): 'quiz' | 'grade' | 'attendance' | 'system' => {
     const metaType = item.meta?.type || '';
     const title = (item.title || '').toLowerCase();
     if (metaType === 'quiz' || title.includes('quiz') || item.title?.includes('اختبار')) {
@@ -192,7 +193,7 @@ export default function StudentNotificationsPage() {
     });
   }, [rawItems, activeFilter]);
 
-  const handleNotificationClick = (item: any) => {
+  const handleNotificationClick = (item: StudentNotification) => {
     if (!item.isRead) {
       readMutation.mutate(item._id);
     }
@@ -214,7 +215,7 @@ export default function StudentNotificationsPage() {
     );
   }
 
-  const filterTabs: Array<{ id: FilterCategory; labelAr: string; labelEn: string; icon: any; count: number; colorClass: string }> = [
+  const filterTabs: Array<{ id: FilterCategory; labelAr: string; labelEn: string; icon: import('lucide-react').LucideIcon; count: number; colorClass: string }> = [
     {
       id: 'all',
       labelAr: 'كافة الإشعارات',

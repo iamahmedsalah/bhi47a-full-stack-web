@@ -1,8 +1,9 @@
 'use client';
+import { useHydrated } from "@/hooks/use-hydrated";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuth } from '@/providers/auth-provider';
+
 import { useTranslations } from 'next-intl';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -60,7 +61,11 @@ export default function AdminHeader() {
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
   // Load read and dismissed notifications from localStorage
-  useEffect(() => {
+  const hydrated = useHydrated();
+  const [restoredPreferences, setrestoredPreferences] = useState(false);
+  if (hydrated && !restoredPreferences) {
+    setrestoredPreferences(true);
+
     try {
       const storedRead = localStorage.getItem(ADMIN_READ_STORAGE_KEY);
       if (storedRead) {
@@ -73,7 +78,8 @@ export default function AdminHeader() {
     } catch {
       // ignore
     }
-  }, []);
+
+  }
 
   const saveReadIds = (ids: string[]) => {
     setReadIds(ids);
@@ -100,7 +106,7 @@ export default function AdminHeader() {
     staleTime: 60 * 1000,
   });
 
-  const rawNotifications = notificationsQuery.data?.items || [];
+  const rawNotifications = useMemo(() => notificationsQuery.data?.items || [], [notificationsQuery.data?.items]);
 
   // Filter out any locally dismissed notifications
   const notifications = useMemo(

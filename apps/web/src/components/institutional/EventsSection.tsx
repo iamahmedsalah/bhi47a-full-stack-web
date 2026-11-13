@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Calendar, Clock, MapPin, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Clock, MapPin, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EVENTS } from '@/data/institutional-data';

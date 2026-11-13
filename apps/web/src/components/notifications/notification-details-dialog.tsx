@@ -1,27 +1,9 @@
 'use client';
 
 import React from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import {
-  Bell,
-  Calendar,
-  BookOpenCheck,
-  Award,
-  ClipboardList,
-  MessageCircle,
-  ExternalLink,
-  CheckCircle2,
-  Trash2,
-  Share2,
-} from 'lucide-react';
+import { Bell, Calendar, BookOpenCheck, Award, ClipboardList, MessageCircle, ExternalLink, Trash2 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { StudentNotification } from '@/lib/features/notifications';
 import { cn } from '@/lib/cn';

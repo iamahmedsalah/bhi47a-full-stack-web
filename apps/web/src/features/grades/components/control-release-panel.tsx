@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import api, { getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ interface History {
 
 /** Publication stays on Grades. A visible preview is bound to the activation request. */
 export function ControlReleasePanel({ locale }: { locale: string }) {
+  const router = useRouter();
   const t = useTranslations("controlRelease");
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -259,7 +261,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
           <Button
             variant="outline"
             onClick={() => {
-              window.location.href = `/${locale}/admin/control/${sheetSlug}`;
+              router.push(`/${locale}/admin/control/${sheetSlug}`);
             }}
           >
             {t("openSheet")}

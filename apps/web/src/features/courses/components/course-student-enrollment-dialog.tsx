@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useId, useState, type ChangeEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -86,10 +86,12 @@ const initialProgress: BatchUploadProgressState = {
   retrySecondsLeft: 0,
 };
 
+const EMPTY_ENROLLMENT_COURSES: EnrollmentCourse[] = [];
+
 export function CourseStudentEnrollmentDialog({
   open,
   onOpenChange,
-  courses: initialCourses = [],
+  courses: initialCourses = EMPTY_ENROLLMENT_COURSES,
   selectedCourseId,
   locale,
   onSuccess,
@@ -99,7 +101,7 @@ export function CourseStudentEnrollmentDialog({
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const fileInputId = useId();
-  const initialized = useRef("");
+  const [initialized, setInitialized] = useState("");
   const [courseId, setCourseId] = useState("");
   const [academicYear, setAcademicYear] = useState("2026-2027");
   const [semester, setSemester] = useState<Semester>("first");
@@ -162,9 +164,12 @@ export function CourseStudentEnrollmentDialog({
         )
       ).data,
   });
-  useEffect(() => {
+  const [previousCourseInputs, setpreviousCourseInputs] = useState<unknown[] | null>(null);
+  if (!previousCourseInputs || previousCourseInputs.some((value,i) => !Object.is(value, [open, selectedCourseId, courses][i]))) {
+    setpreviousCourseInputs([open, selectedCourseId, courses]);
+    (() => {
     if (!open) {
-      initialized.current = "";
+      setInitialized("");
       setFile(null);
       setResult(null);
       setOverride(false);
@@ -175,11 +180,11 @@ export function CourseStudentEnrollmentDialog({
     if (
       selectedCourseId &&
       courses.length &&
-      initialized.current !== selectedCourseId
+      initialized !== selectedCourseId
     ) {
       const course = courses.find((item) => item._id === selectedCourseId);
       if (course) {
-        initialized.current = selectedCourseId;
+        setInitialized(selectedCourseId);
         setDepartment("all");
         setSearch("");
         setCourseId(course._id);
@@ -191,7 +196,9 @@ export function CourseStudentEnrollmentDialog({
       }
     }
     // Initialize only when opening or when the requested course becomes available.
-  }, [open, selectedCourseId, courses]);
+
+    })();
+  }
 
   function changeFilter(change: () => void) {
     change();

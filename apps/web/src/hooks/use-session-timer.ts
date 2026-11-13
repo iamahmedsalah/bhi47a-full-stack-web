@@ -44,11 +44,18 @@ export function useSessionTimer({ role }: UseSessionTimerOptions) {
     );
   }, [isAr, resetCountdown]);
 
+  const [previousPath, setPreviousPath] = useState(pathname);
+  if (previousPath !== pathname) {
+    setPreviousPath(pathname);
+    setRemainingSeconds(SESSION_MAX_SECONDS);
+  }
+
   // Reset timer on route navigation (user activity)
   useEffect(() => {
-    resetCountdown();
+    remainingRef.current = SESSION_MAX_SECONDS;
+    hasWarnedRef.current = false;
     toast.dismiss('session-warn-toast');
-  }, [pathname, resetCountdown]);
+  }, [pathname]);
 
   // Countdown timer effect
   useEffect(() => {

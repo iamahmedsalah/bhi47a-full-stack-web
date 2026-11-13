@@ -149,7 +149,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     queryFn: () => listAcademicYears(),
   });
 
-  const academicYears = academicYearsQuery.data ?? [];
+  const academicYears = useMemo(() => academicYearsQuery.data ?? [], [academicYearsQuery.data]);
 
   // Flattened terms for Table view
   const flatTerms = useMemo(() => {

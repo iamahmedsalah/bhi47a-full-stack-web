@@ -13,6 +13,7 @@ export interface NotificationLog {
     name?: string;
     studentCode?: string;
   };
+  meta?: { sendWhatsApp?: boolean };
   sentBy?: {
     name: string;
     email: string;
@@ -44,13 +45,14 @@ export interface StudentNotification {
     complaintId?: string;
     ticketNumber?: string;
     courseId?: string;
+    courseCode?: string;
     examType?: string;
     status?: string;
     titleAr?: string;
     titleEn?: string;
     bodyAr?: string;
     bodyEn?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -145,7 +147,7 @@ export function getLocalizedNotification(
       titleEn?: string;
       bodyAr?: string;
       bodyEn?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
   },
   isAr: boolean,

@@ -1,4 +1,6 @@
 ﻿"use client";
+import { useHydrated } from "@/hooks/use-hydrated";
+import NextImage from "next/image";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
@@ -17,19 +19,8 @@ import { Button } from "@/components/ui/button";
 import { LangToggle } from "@/components/ui/LangToggle";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GlassCard } from "@/components/ui/glass-card";
-import {
-  UserPlus,
-  Search,
-  KeyRound,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Copy,
-  Printer,
-  ExternalLink,
-} from "lucide-react";
+
+import { UserPlus, Search, KeyRound, ShieldCheck, CheckCircle2, Clock, XCircle, Printer } from "lucide-react";
 import { CopyButton } from "@/components/ui/copy-button";
 import { ApplicantForm } from "./applicant-form";
 import {
@@ -84,14 +75,17 @@ function AdmissionCaptcha({
   useEffect(() => {
     const api = turnstile();
     if (!loaded || !api || !element.current || !sitekey) return;
+    const target = element.current;
 
     let active = true;
     let widgetId: string | undefined;
+    const frame = requestAnimationFrame(() => {
+    if (!active) return;
     setWidgetError(false);
     setConfigurationError(false);
     onToken("");
     try {
-      widgetId = api.render(element.current, {
+      widgetId = api.render(target, {
         sitekey,
         theme: "dark",
         action: "admission",
@@ -131,7 +125,9 @@ function AdmissionCaptcha({
       onToken("");
     }
 
+    });
     return () => {
+      cancelAnimationFrame(frame);
       active = false;
       if (widgetId) {
         try {
@@ -283,7 +279,11 @@ export function PublicAdmissionPage() {
     printWindow.document.close();
   };
 
-  useEffect(() => {
+  const hydrated = useHydrated();
+  const [restoredBrowserState, setRestoredBrowserState] = useState(false);
+  if (hydrated && !restoredBrowserState) {
+    setRestoredBrowserState(true);
+
     if (typeof window !== "undefined") {
       const sp = new URLSearchParams(window.location.search);
       const tab = sp.get("tab");
@@ -294,7 +294,11 @@ export function PublicAdmissionPage() {
         if (ref) setStatusPrefill({ ref, secret: sec ?? "" });
       }
     }
-  }, []);
+
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    setAccessId(fragment.get("access") ?? "");
+    setQrToken(fragment.get("token") ?? "");
+  }
   const schema = z.object({
     pin: z
       .string()
@@ -306,9 +310,7 @@ export function PublicAdmissionPage() {
     defaultValues: { pin: "" },
   });
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.slice(1));
-    setAccessId(params.get("access") ?? "");
-    setQrToken(params.get("token") ?? "");
+    if (!hydrated) return;
     // Admission secrets stay out of HTTP URLs, referrers and browser persistence.
     if (window.location.hash)
       window.history.replaceState(null, "", window.location.pathname);
@@ -316,7 +318,7 @@ export function PublicAdmissionPage() {
       crypto.getRandomValues(new Uint8Array(32)),
       (byte) => byte.toString(16).padStart(2, "0"),
     ).join("");
-  }, []);
+  }, [hydrated]);
   const validate = async (pin?: string) => {
     setError("");
     try {
@@ -340,7 +342,7 @@ export function PublicAdmissionPage() {
         <LangToggle />
       </div>
       <div className="flex flex-col items-center justify-center text-center space-y-3 pb-2">
-        <img
+        <NextImage unoptimized
           src="/logo.webp"
           alt="Institute Logo"
           width={84}
@@ -634,7 +636,7 @@ function PublicStatusForm({
         }
       })();
     }
-  }, [initialReference, initialSecret]);
+  }, [form, initialReference, initialSecret, t]);
 
   return (
     <form

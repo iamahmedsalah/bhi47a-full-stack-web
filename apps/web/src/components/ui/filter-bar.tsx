@@ -32,9 +32,14 @@ export function FilterBar({
   const [localSearch, setLocalSearch] = useState(search);
 
   // Synchronize internal state with incoming prop
-  useEffect(() => {
+  const [previousSearch, setPreviousSearch] = useState<unknown[] | null>(null);
+  if (previousSearch === null || previousSearch.some((value, index) => !Object.is(value, [search][index]))) {
+    setPreviousSearch([search]);
+    (() => {
     setLocalSearch(search);
-  }, [search]);
+
+    })();
+  }
 
   // Debounce notification back to parent
   useEffect(() => {

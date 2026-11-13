@@ -1,17 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import {
-  ShieldCheck,
-  Building,
-  Target,
-  GraduationCap,
-  ArrowRight,
-  ArrowLeft,
-  CheckCircle,
-} from 'lucide-react';
+import { ShieldCheck, Building, GraduationCap, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { INSTITUTE_INFO } from '@/data/institutional-data';
 
 interface AboutSectionProps {
   locale: string;

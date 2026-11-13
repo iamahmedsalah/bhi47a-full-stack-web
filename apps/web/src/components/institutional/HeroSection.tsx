@@ -12,7 +12,6 @@ import {
   Laptop,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { INSTITUTE_INFO } from '@/data/institutional-data';
 
 interface HeroSectionProps {
   locale: string;

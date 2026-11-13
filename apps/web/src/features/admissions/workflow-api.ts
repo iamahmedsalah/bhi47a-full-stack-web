@@ -12,7 +12,7 @@ import type {
 } from "@student-portal/shared";
 const base = "/admin/admissions";
 
-function unwrapData<T>(res: any): T {
+function unwrapData<T>(res: unknown): T {
   if (
     res &&
     typeof res === "object" &&

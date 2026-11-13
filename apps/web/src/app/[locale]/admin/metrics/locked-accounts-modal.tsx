@@ -4,19 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { toast } from 'sonner';
-import {
-  ShieldAlert,
-  Unlock,
-  Search,
-  RotateCcw,
-  Loader2,
-  CheckCircle2,
-  Clock,
-  User,
-  GraduationCap,
-  ShieldCheck,
-  AlertTriangle,
-} from 'lucide-react';
+import { ShieldAlert, Unlock, Search, RotateCcw, Loader2, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 
 import {
   Dialog,

@@ -194,7 +194,7 @@ const SelectValue = ({ placeholder }: { placeholder?: React.ReactNode }) => {
 const SelectTrigger = React.forwardRef<
   HTMLButtonElement,
   SelectTriggerMarkerProps
->(({ children: _children, ..._props }, _ref) => null);
+>(() => null);
 SelectTrigger.displayName = 'SelectTrigger';
 
 const SelectScrollUpButton = () => null;
@@ -203,24 +203,24 @@ const SelectScrollDownButton = () => null;
 const SelectContent = React.forwardRef<
   HTMLDivElement,
   SelectContentMarkerProps
->(({ children: _children, ..._props }, _ref) => null);
+>(() => null);
 SelectContent.displayName = 'SelectContent';
 
 const SelectLabel = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<'div'>
->(({ children }, _ref) => <>{children}</>);
+>(({ children }) => <>{children}</>);
 SelectLabel.displayName = 'SelectLabel';
 
 const SelectItem = React.forwardRef<HTMLButtonElement, SelectItemMarkerProps>(
-  ({ children }, _ref) => <>{children}</>,
+  ({ children }) => <>{children}</>,
 );
 SelectItem.displayName = 'SelectItem';
 
 const SelectSeparator = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<'div'>
->((_props, _ref) => null);
+>(() => null);
 SelectSeparator.displayName = 'SelectSeparator';
 
 export {

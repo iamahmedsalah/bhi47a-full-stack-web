@@ -67,7 +67,7 @@ export function AuditWarningsModal({
     },
   });
 
-  const details = previewQuery.data?.details ?? [];
+  const details = useMemo(() => previewQuery.data?.details ?? [], [previewQuery.data?.details]);
 
   const filteredDetails = useMemo(() => {
     return details.filter((item) => {

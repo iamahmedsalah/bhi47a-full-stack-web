@@ -213,6 +213,7 @@ export interface ControlImportPreview {
   totalRows?: number;
   previewId: string;
   valid: number;
+  skipped?: number;
   errors: string[];
   changes: GradeChangeInput[];
 }

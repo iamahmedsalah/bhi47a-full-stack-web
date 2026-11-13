@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -64,6 +64,7 @@ export function AdmissionPeriodForm({
       isEnabled: initial?.isEnabled ?? false,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
   const submit = async (values: AdmissionPeriodFormValues) => {
     form.clearErrors("root");
     try {
@@ -174,10 +175,10 @@ export function AdmissionPeriodForm({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">{t("cairoHint")}</p>
-            {isAdmissionAcademicYear(form.watch("academicYear")) && (
+            {isAdmissionAcademicYear((watchedForm.academicYear ?? '')) && (
               <p className="text-xs text-primary">
                 {t("allocationPrefix", {
-                  prefix: admissionYearPrefix(form.watch("academicYear")),
+                  prefix: admissionYearPrefix((watchedForm.academicYear ?? '')),
                 })}
               </p>
             )}

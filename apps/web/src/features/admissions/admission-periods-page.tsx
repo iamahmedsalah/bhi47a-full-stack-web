@@ -304,17 +304,7 @@ export default function AdmissionPeriodsPage({
           ]
         : []),
     ],
-    [
-      canManage,
-      rows,
-      selected,
-      selectedKeys,
-      setSelectedKeys,
-      pending,
-      t,
-      locale,
-      formatDate,
-    ],
+    [canManage, t, rows, pending, selected, setSelectedKeys, selectedKeys, locale, formatDate, user?.role],
   );
   if (!canRead)
     return (

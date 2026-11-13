@@ -3,7 +3,7 @@ import { AdmissionSection } from "./admission-section";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -33,26 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Download,
-  Eye,
-  User,
-  GraduationCap,
-  Hash,
-  Calendar,
-  Clock,
-  XCircle,
-  Copy,
-  Edit2,
-  CheckCircle,
-  Trash2,
-  Loader2,
-  ShieldAlert,
-  MapPin,
-  School,
-  Users,
-  History,
-} from "lucide-react";
+import { Download, Eye, User, GraduationCap, Hash, Calendar, Clock, XCircle, Edit2, CheckCircle, Trash2, Loader2, ShieldAlert, MapPin, School, Users, History } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorDetails } from "@/lib/api";
 import { MappingCorrection } from "@/features/student-codes/mapping-correction";
@@ -60,7 +41,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 import { cairoDateTimeToIso } from "@/lib/cairo-time";
-import { cn } from "@/lib/cn";
+
 import { ApplicantForm } from "./applicant-form";
 import {
   admissionAction,
@@ -1058,7 +1039,12 @@ function ApprovalForm({
       passedCourses: "",
     },
   });
-  useEffect(() => setConfirmed(false), [item.revision]);
+  const watchedForm = useWatch({ control: form.control });
+  const [previousRevision, setPreviousRevision] = useState(item.revision);
+  if (previousRevision !== item.revision) {
+    setPreviousRevision(item.revision);
+    setConfirmed(false);
+  }
   const groups = useQuery({
     queryKey: ["admission-groups", item.academicYear],
     queryFn: () =>
@@ -1097,7 +1083,7 @@ function ApprovalForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Choice
           label={t("fields.level")}
-          value={form.watch("level")}
+          value={(watchedForm.level ?? '')}
           onChange={(value) => form.setValue("level", value as "1")}
           options={["1", "2", "3", "4"].map((value) => ({
             value,
@@ -1106,7 +1092,7 @@ function ApprovalForm({
         />
         <Choice
           label={t("fields.semester")}
-          value={form.watch("semester")}
+          value={(watchedForm.semester ?? '')}
           onChange={(value) => form.setValue("semester", value as "1")}
           options={["1", "2"].map((value) => ({
             value,
@@ -1138,7 +1124,7 @@ function ApprovalForm({
       {can(PERMISSIONS.ADMISSIONS_GROUPS_MANAGE) && (
         <Choice
           label={t("fields.group")}
-          value={form.watch("groupId")}
+          value={(watchedForm.groupId ?? '')}
           onChange={(value) => form.setValue("groupId", value)}
           options={[
             { value: "NONE", label: t("noGroup") },
@@ -1146,8 +1132,8 @@ function ApprovalForm({
               .filter(
                 (group) =>
                   group.isEnabled &&
-                  group.level === form.watch("level") &&
-                  group.department === form.watch("department"),
+                  group.level === (watchedForm.level ?? '') &&
+                  group.department === (watchedForm.department ?? ''),
               )
               .map((group) => ({
                 value: group._id,
@@ -1213,8 +1199,9 @@ function DecisionForm({
   const form = useForm<{ reason: string; reasonCode: string }>({
     defaultValues: { reason: "", reasonCode: "INELIGIBLE" },
   });
+  const watchedForm = useWatch({ control: form.control });
   const needsReason =
-    action !== "reject" || form.watch("reasonCode") === "OTHER";
+    action !== "reject" || (watchedForm.reasonCode ?? '') === "OTHER";
   return (
     <form
       className="space-y-4"
@@ -1243,7 +1230,7 @@ function DecisionForm({
       {action === "reject" && (
         <Choice
           label={t("reasonCode")}
-          value={form.watch("reasonCode")}
+          value={(watchedForm.reasonCode ?? '')}
           onChange={(value) => form.setValue("reasonCode", value)}
           options={ADMISSION_REJECTION_REASONS.map((value) => ({
             value,

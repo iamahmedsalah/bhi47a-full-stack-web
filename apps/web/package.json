@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "preview": "next build && next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
     "typecheck": "tsc --noEmit --incremental false",
     "test:registration": "node tests/registration-print.browser.mjs",
     "test:admissions:browser": "node tests/admissions.browser.mjs && node tests/admissions-workflow.browser.mjs",

@@ -1,4 +1,5 @@
 "use client";
+import { isAxiosError } from 'axios';
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -296,11 +297,16 @@ export function AdvisingWorkspace() {
   });
 
   // Keep autoDistAdvisorIds populated when advisors list loads
-  useEffect(() => {
+  const [previousAdvisors, setPreviousAdvisors] = useState<unknown[] | null>(null);
+  if (previousAdvisors === null || previousAdvisors.some((value, index) => !Object.is(value, [advisors.data, autoDistAdvisorIds.length][index]))) {
+    setPreviousAdvisors([advisors.data, autoDistAdvisorIds.length]);
+    (() => {
     if (advisors.data && advisors.data.length > 0 && autoDistAdvisorIds.length === 0) {
       setAutoDistAdvisorIds(advisors.data.map((a) => a._id));
     }
-  }, [advisors.data, autoDistAdvisorIds.length]);
+
+    })();
+  }
 
   const filteredAutoDistAdvisors = useMemo(() => {
     const list = advisors.data ?? [];
@@ -589,7 +595,7 @@ export function AdvisingWorkspace() {
 
   if (
     (user?.role === "staff" && !user?.permissions?.includes(PERMISSIONS.ADVISING_READ)) ||
-    (students.isError && ((students.error as any)?.response?.status === 403 || (students.error as any)?.status === 403))
+    (students.isError && ((isAxiosError(students.error) ? students.error.response?.status : undefined) === 403 || (students.error && 'status' in students.error ? students.error.status : undefined) === 403))
   ) {
     return (
       <RestrictedFeature
@@ -2555,7 +2561,7 @@ function CanvasContent({
         const prereqs = course.prerequisites ?? [];
         return prereqs.every((code) => completedSet.has(code.toUpperCase()));
       }),
-    [advisingSemester, courseMap.courses, completedSet],
+    [courseMap.courses, completedSet, advisingSemester, studentTrack],
   );
 
   // Credit limits computation
@@ -3228,7 +3234,7 @@ function CanvasContent({
           readonly={disabled}
           studentName={courseMap.student.name}
           studentCode={courseMap.student.studentCode}
-          studentDepartment={activeStudent?.department || courseMap.student?.department || (activeStudent as any)?.major}
+          studentDepartment={activeStudent?.department || courseMap.student?.department || (activeStudent && 'major' in activeStudent && typeof activeStudent.major === 'string' ? activeStudent.major : undefined)}
           gpa={courseMap.student.gpa}
           currentSemester={courseMap.student.semester}
           onToggleCourse={(code) => {

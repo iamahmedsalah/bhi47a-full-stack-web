@@ -2,24 +2,9 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  FileText,
-  UploadCloud,
-  Download,
-  Trash2,
-  Loader2,
-  Lock,
-  Layers,
-  BookOpen,
-  Calendar,
-  User,
-  Plus,
-  AlertTriangle,
-  X,
-  FileCheck,
-} from 'lucide-react';
+import { FileText, UploadCloud, Download, Trash2, Loader2, Lock, Layers, BookOpen, User, Plus, X, FileCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import api, { getApiErrorMessage, apiBaseUrl } from '@/lib/api';
+import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob } from '@/lib/export-utils';
 import { useAuth } from '@/providers/auth-provider';
 import {
@@ -69,7 +54,7 @@ export function CourseMaterialsDialog({
   const { start: startUpload } = useMaterialUploadActions();
 
   const isAdmin = user?.role === 'admin';
-  const staffType = (user as any)?.staffType;
+  const staffType = user?.staffType;
   const isDoctor = user?.role === 'staff' && staffType === 'doctor';
   const isTeachingAssistant = user?.role === 'staff' && staffType === 'teaching_assistant';
 

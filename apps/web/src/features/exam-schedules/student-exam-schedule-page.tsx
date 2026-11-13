@@ -1,4 +1,5 @@
 'use client';
+import NextImage from "next/image";
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -204,7 +205,7 @@ export default function StudentExamSchedulePage() {
                       </p>
                     </div>
                   ) : (
-                    <img src={currentSchedule.fileUrl} alt={currentSchedule.title} className="h-full min-h-88 w-full object-contain" />
+                    <NextImage unoptimized width={1200} height={800} src={currentSchedule.fileUrl} alt={currentSchedule.title} className="h-full min-h-88 w-full object-contain" />
                   )}
                 </div>
 

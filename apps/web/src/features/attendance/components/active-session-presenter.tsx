@@ -2,23 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import {
-  Clock,
-  QrCode,
-  AlertCircle,
-  StopCircle,
-  UserPlus,
-  RefreshCw,
-  Edit2,
-  BookOpen,
-  Copy,
-  MapPin,
-  ExternalLink,
-  Building2,
-  GraduationCap,
-  Monitor,
-  MapPinned,
-} from "lucide-react";
+import { Clock, AlertCircle, StopCircle, UserPlus, RefreshCw, Edit2, BookOpen, Copy, MapPin, ExternalLink, Building2, GraduationCap, Monitor, MapPinned } from "lucide-react";
 import {
   INSTITUTE_VENUE_PRESETS,
   INSTITUTE_GEO_LOCATION,

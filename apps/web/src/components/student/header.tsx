@@ -1,4 +1,6 @@
 'use client';
+import type { StudentNotification } from '@/lib/features/notifications';
+import type { PaginatedResponse } from '@/lib/api';
 
 import React, { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -7,11 +9,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Inbox, Calendar, Loader2, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { queryKeys } from '@/lib/query-keys';
-import { 
-  listStudentNotifications, 
-  markNotificationRead, 
-  markAllNotificationsRead, 
-  deleteNotification, 
+import {
+  listStudentNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotification,
   clearAllReadNotifications,
   getLocalizedNotification,
 } from '@/lib/features/notifications';
@@ -32,7 +34,7 @@ export default function StudentHeader() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'unread' | 'read'>('unread');
-  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [selectedNotification, setSelectedNotification] = useState<StudentNotification | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const notificationsQuery = useQuery({
@@ -48,14 +50,14 @@ export default function StudentHeader() {
   const readMutation = useMutation({
     mutationFn: markNotificationRead,
     onSuccess: (updatedItem) => {
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.map((item: any) =>
-              item._id === updatedItem?._id || item._id === (updatedItem as any)?.data?._id
+            items: oldData.items.map((item: StudentNotification) =>
+              item._id === updatedItem?._id
                 ? { ...item, isRead: true }
                 : item
             ),
@@ -71,13 +73,13 @@ export default function StudentHeader() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.map((item: any) => ({ ...item, isRead: true })),
+            items: oldData.items.map((item: StudentNotification) => ({ ...item, isRead: true })),
           };
         }
       );
@@ -90,14 +92,14 @@ export default function StudentHeader() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.filter((item: any) => 
-              item._id !== deletedItem?._id && item._id !== (deletedItem as any)?.data?._id
+            items: oldData.items.filter((item: StudentNotification) =>
+              item._id !== deletedItem?._id
             ),
           };
         }
@@ -111,13 +113,13 @@ export default function StudentHeader() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.notifications.studentList,
       });
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<PaginatedResponse<StudentNotification>>(
         queryKeys.notifications.studentList,
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            items: oldData.items.filter((item: any) => !item.isRead),
+            items: oldData.items.filter((item: StudentNotification) => !item.isRead),
           };
         }
       );
@@ -128,7 +130,7 @@ export default function StudentHeader() {
     return notificationsQuery.data?.items?.filter((n) => !n.isRead).length || 0;
   }, [notificationsQuery.data]);
 
-  const items = notificationsQuery.data?.items || [];
+  const items = useMemo(() => notificationsQuery.data?.items || [], [notificationsQuery.data?.items]);
 
   const filteredItems = useMemo(() => {
     if (activeTab === 'unread') {
@@ -138,7 +140,7 @@ export default function StudentHeader() {
     }
   }, [items, activeTab]);
 
-  const handleNotificationClick = (item: any) => {
+  const handleNotificationClick = (item: StudentNotification) => {
     if (!item.isRead) {
       readMutation.mutate(item._id);
     }
@@ -208,8 +210,8 @@ export default function StudentHeader() {
                   )}
                 </button>
               </SheetTrigger>
-              <SheetContent 
-                side={isAr ? 'left' : 'right'} 
+              <SheetContent
+                side={isAr ? 'left' : 'right'}
                 className="w-80 sm:w-96 bg-card/95 border-border shadow-2xl backdrop-blur-md p-6 flex flex-col h-full z-[100]"
               >
               <SheetHeader className="mb-4">
@@ -226,8 +228,8 @@ export default function StudentHeader() {
                   onClick={() => setActiveTab('unread')}
                   className={cn(
                     "flex-1 pb-2 text-xs font-bold text-center border-b-2 transition-all cursor-pointer",
-                    activeTab === 'unread' 
-                      ? "border-primary text-primary" 
+                    activeTab === 'unread'
+                      ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -238,8 +240,8 @@ export default function StudentHeader() {
                   onClick={() => setActiveTab('read')}
                   className={cn(
                     "flex-1 pb-2 text-xs font-bold text-center border-b-2 transition-all cursor-pointer",
-                    activeTab === 'read' 
-                      ? "border-primary text-primary" 
+                    activeTab === 'read'
+                      ? "border-primary text-primary"
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -284,13 +286,13 @@ export default function StudentHeader() {
                   </button>
                 </div>
               )}
-              
+
               <div className="flex-1 overflow-y-auto space-y-4 custom-scroll pr-1 relative">
                 {filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                     <Inbox className="w-10 h-10 mb-2 opacity-50" />
                     <p className="text-xs">
-                      {activeTab === 'unread' 
+                      {activeTab === 'unread'
                         ? (isAr ? 'لا يوجد تنبيهات غير مقروءة' : 'No unread notifications')
                         : (isAr ? 'لا يوجد تنبيهات مقروءة بعد' : 'No read notifications yet')
                       }
@@ -329,7 +331,7 @@ export default function StudentHeader() {
                               >
                                 <Bell className="h-4 w-4" />
                               </div>
-                              
+
                               <div className="min-w-0 flex-1 space-y-1.5">
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                   <h3 className="text-xs font-bold leading-snug text-foreground flex flex-wrap items-center gap-1.5">
@@ -344,13 +346,13 @@ export default function StudentHeader() {
                                 <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground font-normal">
                                   <bdi>{loc.body}</bdi>
                                 </p>
-                                
+
                                 <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40 text-[10px] text-muted-foreground pr-1">
                                   <time className="font-mono flex items-center gap-1 font-medium">
                                     <Calendar className="h-3 w-3 opacity-80" />
                                     <bdi>{new Date(item.createdAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-US')}</bdi>
                                   </time>
-                                  
+
                                   {/* Mark As Read Action (Unread Tab) */}
                                   {!item.isRead && (
                                     <button

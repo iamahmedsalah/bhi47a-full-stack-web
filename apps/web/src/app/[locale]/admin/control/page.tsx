@@ -210,7 +210,11 @@ function ControlHomeContent() {
         className: "w-28",
         render: (item) => (
           <TableCell className="w-28 font-mono font-bold text-foreground">
-            <bdi dir="ltr">{item.code}</bdi>
+            <button type="button" className="text-primary hover:underline disabled:text-muted-foreground" disabled={openSheetMutation.isPending || !(item.components.find(c => c.key === component)?.sheetId || caps?.canCreateSheets || caps?.scopeAll)} onClick={() => {
+              const sheet = item.components.find(c => c.key === component);
+              if (sheet?.sheetId) router.push(`/${locale}/admin/control/${sheet.slug || sheet.sheetId}`);
+              else openSheetMutation.mutate(item.courseId);
+            }}><bdi dir="ltr">{item.code}</bdi></button>
           </TableCell>
         ),
       },
@@ -238,7 +242,11 @@ function ControlHomeContent() {
           return (
             <TableCell className="min-w-[220px]">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground">{title}</span>
+                <button type="button" className="font-semibold text-foreground hover:text-primary hover:underline text-start disabled:text-muted-foreground" disabled={openSheetMutation.isPending || !(item.components.find(c => c.key === component)?.sheetId || caps?.canCreateSheets || caps?.scopeAll)} onClick={() => {
+                  const sheet = item.components.find(c => c.key === component);
+                  if (sheet?.sheetId) router.push(`/${locale}/admin/control/${sheet.slug || sheet.sheetId}`);
+                  else openSheetMutation.mutate(item.courseId);
+                }}>{title}</button>
                 {levelLabel && (
                   <Badge
                     variant="outline"

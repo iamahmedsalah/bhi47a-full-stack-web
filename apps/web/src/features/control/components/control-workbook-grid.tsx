@@ -316,8 +316,8 @@ export function ControlWorkbookGrid({
       const result = await applyControlChanges(sheet.id, {
         expectedSchemeVersion: workbook.data?.scheme.version ?? 0,
         changes: snapshot.map(
-          ({ raw: _raw, attendance: _a, quizzes: _q, error: _e, ...change }) =>
-            change,
+          ({ studentId, attendanceMark, quizzesMark, score, status, expectedRev, opId, reason }) =>
+            ({ studentId, attendanceMark, quizzesMark, score, status, expectedRev, opId, reason }),
         ),
         reason: reason.trim() || undefined,
       });
@@ -384,7 +384,7 @@ export function ControlWorkbookGrid({
       inFlight.current = false;
       setSaving(false);
     }
-  }, [sheet.id, key, byId, reason, refresh, t, workbook.data?.scheme.version]);
+  }, [sheet.id, workbook.data?.scheme.version, reason, formatControlIssue, refresh, byId, key]);
 
   useEffect(() => {
     if (!pending || failed || saving || !caps.canEdit) return;

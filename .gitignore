@@ -76,3 +76,4 @@ build_import_files.mjs
 !/scripts/ci-test-report.cjs
 !/scripts/ci-test-report.test.cjs
 !/docs/ci-reports.md
+!/docs/production-dependency-audit-2026-11-13.md

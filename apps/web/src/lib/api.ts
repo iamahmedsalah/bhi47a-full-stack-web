@@ -319,6 +319,10 @@ export function getApiErrorDetails(error: unknown, fallback = 'Something went wr
 }
 
 const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
+  'Conflicting score and active component columns': {
+    ar: 'توجد درجتان مختلفتان في عمود الدرجة وعمود المكوّن النشط. أدخل الدرجة المطلوبة في عمود واحد واترك الآخر كما كان، أو اجعل القيمتين متساويتين، ثم أعد المعاينة.',
+    en: 'The score and active component columns contain conflicting marks. Edit one column while leaving the other at its saved value, or make both values equal, then preview again.',
+  },
   'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held': {
     ar: 'لهذا الطالب سجل قبول وملكية كود. ألغِ القيد من صفحة القبول بدلًا من حذف الهوية. يظل الكود محجوزًا لصاحبه.',
     en: 'This student has admission history. Cancel the enrollment in Admissions; the original identity and code are retained.',

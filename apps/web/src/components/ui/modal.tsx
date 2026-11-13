@@ -1,6 +1,7 @@
 'use client';
+import { useHydrated } from "@/hooks/use-hydrated";
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button } from './button';
@@ -31,11 +32,7 @@ export function Modal({
   size = 'md',
   className = '',
 }: ModalProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
 
   useEffect(() => {
     if (!open) {

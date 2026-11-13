@@ -1,6 +1,7 @@
 'use client';
+import NextImage from "next/image";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
@@ -92,7 +93,7 @@ function AdminExamSchedulesManagerContent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const staffType = (user as any)?.staffType;
+  const staffType = user?.staffType;
   const isTeachingOrFinanceStaff =
     user?.role === 'staff' &&
     ['doctor', 'teaching_assistant', 'ta', 'accountant'].includes(staffType || '');
@@ -123,7 +124,10 @@ function AdminExamSchedulesManagerContent() {
   const schedules = schedulesQuery.data || [];
   const currentSchedule = schedules.find((schedule) => schedule.examType === selectedType) || null;
 
-  useEffect(() => {
+  const [previousSchedule, setPreviousSchedule] = useState<unknown[] | null>(null);
+  if (previousSchedule === null || previousSchedule.some((value, index) => !Object.is(value, [currentSchedule, selectedType][index]))) {
+    setPreviousSchedule([currentSchedule, selectedType]);
+    (() => {
     if (currentSchedule) {
       setTitle(currentSchedule.title);
       setAcademicYear(currentSchedule.academicYear);
@@ -142,7 +146,9 @@ function AdminExamSchedulesManagerContent() {
     setPreviewUrl('');
     setUploadedImageName('');
     setIsPublished(true);
-  }, [currentSchedule, selectedType]);
+
+    })();
+  }
 
   const uploadScheduleImage = async (file: File) => {
     const isImage = /^image\//.test(file.type);
@@ -370,7 +376,7 @@ function AdminExamSchedulesManagerContent() {
 
                 <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-border bg-black/20">
                   {isImageFile(currentSchedule.fileUrl) ? (
-                    <img
+                    <NextImage unoptimized width={1200} height={800}
                       src={previewUrl || currentSchedule.fileUrl}
                       alt={currentSchedule.title}
                       className="h-64 w-full object-cover"
@@ -542,7 +548,7 @@ function AdminExamSchedulesManagerContent() {
 
             {previewUrl && isImageFile(previewUrl) && (
               <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
-                <img src={previewUrl} alt={title || 'Schedule preview'} className="h-44 w-full object-cover" />
+                <NextImage unoptimized width={1200} height={800} src={previewUrl} alt={title || 'Schedule preview'} className="h-44 w-full object-cover" />
               </div>
             )}
             {previewUrl && isPdfFile(previewUrl) && (

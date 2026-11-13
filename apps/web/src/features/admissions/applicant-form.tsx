@@ -1,7 +1,7 @@
 ﻿"use client";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useState, type ReactNode } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useWatch, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -130,8 +130,9 @@ export function ApplicantForm({
       ...initial,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
   const guardians = useFieldArray({ control: form.control, name: "guardians" });
-  const transfer = form.watch("studentType") === "TRANSFER";
+  const transfer = (watchedForm.studentType ?? '') === "TRANSFER";
   return (
     <form
       className="space-y-5"
@@ -189,7 +190,7 @@ export function ApplicantForm({
         )}
         <Choice
           label={t("fields.studentType")}
-          value={form.watch("studentType")}
+          value={(watchedForm.studentType ?? '')}
           onChange={(value) =>
             form.setValue("studentType", value as "NEW" | "TRANSFER", {
               shouldValidate: true,
@@ -238,7 +239,7 @@ export function ApplicantForm({
       </div>
 
       {guardians.fields.map((field, index) => {
-        const currentRel = form.watch(`guardians.${index}.relationship`);
+        const currentRel = watchedForm.guardians?.[index]?.relationship;
         const isStandard = STANDARD_RELATIONSHIPS.some(
           (r) => r.value === currentRel,
         );

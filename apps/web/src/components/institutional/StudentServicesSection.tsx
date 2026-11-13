@@ -1,14 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import {
-  GraduationCap,
-  MessageSquare,
-  FileText,
-  UserCheck,
-  ArrowRight,
-  ArrowLeft,
-  ExternalLink,
-} from 'lucide-react';
+import { GraduationCap, MessageSquare, FileText, UserCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 

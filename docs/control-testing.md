@@ -121,6 +121,12 @@ CI reuses the admissions replica set for Control, with a separate `control-e2e` 
 
 ## Historical data and rollout
 
+### Excel preview input and progress
+
+The `Marks` sheet accepts the `score` column or the active component column (for example `midterm`). Inactive component columns remain reference values. If one column retains the saved mark and the other is edited, the edited value is validated. Two conflicting edits produce an error instead of choosing a value silently. Maximum, entry increment, registration, status, scope and revision checks still apply, including zero marks.
+
+Preview counts distinguish valid inputs, errors and blank rows skipped. A file containing only blank marks shows an explicit no-input message and cannot be submitted. Preview progress and save progress are separate: the save bar counts rows actually saved and stays at zero before applying valid rows. Preview never publishes or saves grades. Course codes and names on the Control list open the same grade sheet as the existing actions menu, with the same capability checks.
+
 See [control-production-acceptance.md](control-production-acceptance.md) for dated live checks, read-only inventory, the successful synthetic recovery rehearsal, repeatable commands and the remaining production gates. The live policy/history endpoints currently return 404; confirm deployment before trying the new release workflow there.
 
 Run the read-only inventory described in [control-system-plan.md](control-system-plan.md) against an approved staging copy before migrating institute records. Historical `final` records may represent an exam component or a whole-course total; do not infer that meaning from a column name. Review their maximum, term, student identity and roster explicitly. Grade entry and review cannot silently rescale a historical total into a final-exam mark.

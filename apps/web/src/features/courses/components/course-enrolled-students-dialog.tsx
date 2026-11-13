@@ -12,18 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Users,
-  Search,
-  Loader2,
-  GraduationCap,
-  Calendar,
-  Clock,
-  Layers,
-  FileSpreadsheet,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Users, Search, Loader2, GraduationCap, Clock, Layers, FileSpreadsheet, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
@@ -103,7 +92,7 @@ export function CourseEnrolledStudentsDialog({
     staleTime: 30000,
   });
 
-  const students = data?.students ?? [];
+  const students = useMemo(() => data?.students ?? [], [data?.students]);
 
   // Filter students by local search
   const filteredStudents = useMemo(() => {
@@ -120,9 +109,14 @@ export function CourseEnrolledStudentsDialog({
   }, [students, search]);
 
   // Reset to first page on search change
-  React.useEffect(() => {
+  const [previousSearch, setPreviousSearch] = useState<unknown[] | null>(null);
+  if (previousSearch === null || previousSearch.some((value, index) => !Object.is(value, [search][index]))) {
+    setPreviousSearch([search]);
+    (() => {
     setCurrentPage(1);
-  }, [search]);
+
+    })();
+  }
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));

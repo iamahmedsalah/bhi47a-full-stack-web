@@ -1,4 +1,5 @@
 "use client";
+import { useHydrated } from "@/hooks/use-hydrated";
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -16,11 +17,12 @@ export function DeferredDashboardSection({
   children: React.ReactNode;
 }) {
   const container = useRef<HTMLDivElement>(null);
+  const hydrated = useHydrated();
+  const fallbackVisible = hydrated && !("IntersectionObserver" in window);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     if (!container.current) return;
     if (!("IntersectionObserver" in window)) {
-      setVisible(true);
       return;
     }
     const observer = new IntersectionObserver(
@@ -37,7 +39,7 @@ export function DeferredDashboardSection({
   }, []);
   return (
     <div ref={container} className="min-h-32">
-      {visible ? (
+      {visible || fallbackVisible ? (
         children
       ) : (
         <div

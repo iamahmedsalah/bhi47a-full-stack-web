@@ -168,9 +168,9 @@ function UploadsPageContent() {
         allowDuplicateStudentCode: newAllowDuplicate,
       });
       setPreview(inspectRes);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setErrorMsg(
-        err?.message || (isAr ? "فشل فحص الملف" : "Inspection failed"),
+        (err instanceof Error ? err.message : '') || (isAr ? "فشل فحص الملف" : "Inspection failed"),
       );
     } finally {
       setIsInspecting(false);
@@ -281,10 +281,10 @@ function UploadsPageContent() {
           ? `تم فحص الملف: ${inspectRes.totalRows} صف (${inspectRes.validRows} صالح)`
           : `Workbook inspected: ${inspectRes.totalRows} rows (${inspectRes.validRows} valid)`,
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       setPreview(null);
       setErrorMsg(
-        err?.message ||
+        (err instanceof Error ? err.message : '') ||
           (isAr
             ? "تعذر قراءة أو فحص ملف الإكسيل"
             : "Failed to inspect workbook"),

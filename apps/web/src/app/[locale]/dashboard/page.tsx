@@ -1,4 +1,6 @@
 "use client";
+import NextImage from "next/image";
+import type { StudentQuizViewItem } from '@/features/quizzes/api';
 
 import React from "react";
 import { useParams } from "next/navigation";
@@ -57,6 +59,8 @@ const StudentQrScannerDialog = dynamic(
   { ssr: false },
 );
 
+interface SyllabusCourse { _id?: string; courseId?: string; code: string; courseCode?: string; name: string; nameAr?: string; nameEn?: string; level: string; creditHours?: number; coverImageUrl?: string; syllabusPdfUrl?: string; isRegistered?: boolean; doctorName?: string; doctorNameAr?: string; }
+
 interface StudentProfile {
   _id: string;
   fullName: string;
@@ -93,15 +97,15 @@ export default function StudentDashboard() {
   const locale = params.locale as string;
   const { user } = useAuth();
 
-  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = React.useState<any | null>(null);
+  const [selectedCourseForMaterials, setSelectedCourseForMaterials] = React.useState<SyllabusCourse | null>(null);
   const [isMaterialsOpen, setIsMaterialsOpen] = React.useState(false);
 
   // 1. Profile Query (immutable within session)
   const profileQuery = useQuery({
     queryKey: ["student-profile"],
     queryFn: async () => {
-      const res = await api.get<any>("/students/me/profile");
-      return (res.data?.data ?? res.data) as StudentProfile;
+      const res = await api.get<StudentProfile | { data: StudentProfile }>("/students/me/profile");
+      return ('data' in res.data ? res.data.data : res.data);
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -117,8 +121,8 @@ export default function StudentDashboard() {
   const eligibilityQuery = useQuery({
     queryKey: ["registration-eligibility"],
     queryFn: async () => {
-      const res = await api.get<any>("/registration/eligibility");
-      return (res.data?.data ?? res.data) as Eligibility;
+      const res = await api.get<Eligibility | { data: Eligibility }>("/registration/eligibility");
+      return ('data' in res.data ? res.data.data : res.data);
     },
     staleTime: 10 * 60 * 1000,
   });
@@ -137,7 +141,7 @@ export default function StudentDashboard() {
   const syllabiQuery = useQuery({
     queryKey: ["student-syllabi"],
     queryFn: async () => {
-      const res = await api.get<any>("/students/me/syllabi");
+      const res = await api.get<{ registeredCount?: number; registeredCourses: SyllabusCourse[]; availableLevelCourses: SyllabusCourse[] }>("/students/me/syllabi");
       return res.data;
     },
     staleTime: 15 * 60 * 1000,
@@ -205,7 +209,7 @@ export default function StudentDashboard() {
     queryKey: ["student-quizzes-dashboard"],
     queryFn: async () => {
       try {
-        const res = await api.get<any[]>("/students/me/quizzes");
+        const res = await api.get<StudentQuizViewItem[]>("/students/me/quizzes");
         return res.data || [];
       } catch {
         return [];
@@ -234,7 +238,7 @@ export default function StudentDashboard() {
     liveSessions.find((s) => !s.alreadyCheckedIn && s.remainingSeconds > 0) ||
     liveSessions[0];
   const openQuizzes = (quizzesQuery.data || []).filter(
-    (q: any) => q.isOpen && !q.isSubmitted,
+    (q) => q.isOpen && !q.isSubmitted,
   );
   const activeQuiz = openQuizzes[0] || null;
   const publishedSchedules = examAssignmentQuery.data?.schedules || [];
@@ -953,7 +957,7 @@ export default function StudentDashboard() {
                     </div>
                   ) : (
                     <>
-                      <img
+                      <NextImage unoptimized width={1200} height={800}
                         src={activeSchedule.fileUrl}
                         alt={activeSchedule.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -1216,7 +1220,7 @@ export default function StudentDashboard() {
                   syllabiQuery.data?.registeredCourses?.length
                     ? syllabiQuery.data.registeredCourses
                     : (syllabiQuery.data?.availableLevelCourses || [])
-                ).map((course: any) => (
+                ).map((course) => (
                   <div
                     key={course.code}
                     className="rounded-xl border border-border/70 bg-card/80 p-3 flex items-center justify-between gap-3 text-start hover:border-primary/40 hover:bg-card/95 transition-all group"
@@ -1225,7 +1229,7 @@ export default function StudentDashboard() {
                       {/* Cover thumbnail or academic textbook spine preview */}
                       {course.coverImageUrl ? (
                         <div className="w-12 h-16 rounded-md overflow-hidden shrink-0 border border-border/60 shadow-sm bg-secondary/40 group-hover:scale-105 transition-transform duration-300">
-                          <img
+                          <NextImage unoptimized width={1200} height={800}
                             src={course.coverImageUrl}
                             alt={course.name}
                             className="w-full h-full object-cover"

@@ -170,6 +170,7 @@ export function ControlFileImportDialog({
   });
   const pages = Math.max(1, Math.ceil(filtered.length / 50));
   const valid = batches.reduce((sum, batch) => sum + batch.preview.valid, 0);
+  const skipped = batches.reduce((sum, batch) => sum + (batch.preview.skipped ?? 0), 0);
   const saved = batches.reduce((sum, batch) => sum + (batch.saved ?? 0), 0);
   const invalid = batches.reduce(
     (sum, batch) =>
@@ -177,7 +178,7 @@ export function ControlFileImportDialog({
     0,
   );
   const complete =
-    !loading &&
+    !loading && valid > 0 &&
     batches.length > 0 &&
     batches.every((batch) => batch.saved !== undefined || !batch.preview.valid);
   const errors = [
@@ -228,16 +229,22 @@ export function ControlFileImportDialog({
               {t("savedCount", { count: saved })}
             </div>
           </div>
-          <progress
-            className="w-full"
+          <p role="status" className="text-sm text-muted-foreground">
+            {loading ? t("previewProgress", { current: batches.length, total: batches[0]?.preview.totalBatches ?? 1 }) : t("previewReady", { valid, invalid, skipped })}
+          </p>
+          <p className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3 text-sm" role="note">
+            {t("fileInputHelp")}
+          </p>
+          {ready && valid === 0 && invalid === 0 && <p role="status" className="rounded-xl border p-3 text-sm">{t("noImportChanges")}</p>}
+          <p className="text-sm">{t("savedProgress", { saved, valid })}</p>
+          <div
+            className="h-2 w-full overflow-hidden rounded-full bg-muted"
+            role="progressbar"
             aria-label={t("batchProgress")}
-            max={Math.max(1, batches.length)}
-            value={
-              batches.filter(
-                (batch) => batch.saved !== undefined || !batch.preview.valid,
-              ).length
-            }
-          />
+            aria-valuemin={0}
+            aria-valuemax={Math.max(1, valid)}
+            aria-valuenow={saved}
+          ><div className="h-full bg-primary transition-all" style={{ width: `${valid ? Math.min(100, saved / valid * 100) : 0}%` }} /></div>
           <p
             role="note"
             className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs"

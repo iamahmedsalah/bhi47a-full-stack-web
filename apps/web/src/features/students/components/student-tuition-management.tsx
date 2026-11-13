@@ -370,9 +370,9 @@ export function StudentTuitionManagement({
 
       if (parsedHeaders.length > 0 && parsedRawRows.length > 0) {
         // Map raw cells into row objects keyed by header names
-        const objectRows: Record<string, any>[] = parsedRawRows
+        const objectRows: Record<string, unknown>[] = parsedRawRows
           .map((row) => {
-            const obj: Record<string, any> = {};
+            const obj: Record<string, unknown> = {};
             parsedHeaders.forEach((h, idx) => {
               if (h) obj[h] = row[idx];
             });
@@ -386,7 +386,7 @@ export function StudentTuitionManagement({
 
         if (objectRows.length > 0) {
           const BATCH_SIZE = 150;
-          const chunks: Record<string, any>[][] = [];
+          const chunks: Record<string, unknown>[][] = [];
           for (let i = 0; i < objectRows.length; i += BATCH_SIZE) {
             chunks.push(objectRows.slice(i, i + BATCH_SIZE));
           }

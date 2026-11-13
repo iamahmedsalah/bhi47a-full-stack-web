@@ -86,9 +86,14 @@ export function InstitutionalHeader({ locale }: InstitutionalHeaderProps) {
   };
 
   // Close mobile menu on route change
-  useEffect(() => {
+  const [previousPathname, setPreviousPathname] = useState<unknown[] | null>(null);
+  if (previousPathname === null || previousPathname.some((value, index) => !Object.is(value, [pathname][index]))) {
+    setPreviousPathname([pathname]);
+    (() => {
     setMobileMenuOpen(false);
-  }, [pathname]);
+
+    })();
+  }
 
   const navLinks = [
     { href: `/${locale}`, section: 'home', labelAr: 'الرئيسية', labelEn: 'Home', icon: Home },
@@ -103,16 +108,6 @@ export function InstitutionalHeader({ locale }: InstitutionalHeaderProps) {
   ];
 
   // Helper to get alternate locale path
-  const getAlternateLocalePath = () => {
-    const targetLocale = isAr ? 'en' : 'ar';
-    if (!pathname) return `/${targetLocale}`;
-    const segments = pathname.split('/');
-    if (segments.length > 1 && (segments[1] === 'ar' || segments[1] === 'en')) {
-      segments[1] = targetLocale;
-      return segments.join('/');
-    }
-    return `/${targetLocale}${pathname}`;
-  };
 
   return (
     <>

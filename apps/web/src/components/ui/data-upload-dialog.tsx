@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -54,7 +54,11 @@ export interface DataUploadDialogProps {
   onSuccess?: (result: UploadResult) => void;
 }
 
-export function DataUploadDialog({
+export function DataUploadDialog(props: DataUploadDialogProps) {
+  return <DataUploadDialogState key={`${props.open}:${props.uploadType}`} {...props} />;
+}
+
+function DataUploadDialogState({
   open,
   onOpenChange,
   title,
@@ -129,11 +133,16 @@ export function DataUploadDialog({
     catalogType === 'grades' || catalogType === 'quizzes' || catalogType === 'attendance',
   );
 
-  useEffect(() => {
+  const [previousCatalog, setPreviousCatalog] = useState<unknown[] | null>(null);
+  if (previousCatalog === null || previousCatalog.some((value, index) => !Object.is(value, [catalogType][index]))) {
+    setPreviousCatalog([catalogType]);
+    (() => {
     setAllowDuplicateStudentCode(
       catalogType === 'grades' || catalogType === 'quizzes' || catalogType === 'attendance',
     );
-  }, [catalogType]);
+
+    })();
+  }
 
   const reInspectWithOption = async (newAllowDuplicate: boolean) => {
     setAllowDuplicateStudentCode(newAllowDuplicate);
@@ -144,8 +153,8 @@ export function DataUploadDialog({
         allowDuplicateStudentCode: newAllowDuplicate,
       });
       setPreview(inspectRes);
-    } catch (inspectErr: any) {
-      setError(inspectErr?.message || (isAr ? 'فشل فحص الملف' : 'Inspection failed'));
+    } catch (inspectErr: unknown) {
+      setError((inspectErr instanceof Error ? inspectErr.message : '') || (isAr ? 'فشل فحص الملف' : 'Inspection failed'));
     } finally {
       setIsInspecting(false);
     }
@@ -162,12 +171,6 @@ export function DataUploadDialog({
     setErrorSearch('');
     uploader.reset();
   };
-
-  useEffect(() => {
-    if (!open) {
-      resetState();
-    }
-  }, [open]);
 
   // Handle file selection and live pre-flight inspection
   const handleSelectFile = async (selectedFile?: File | null) => {
@@ -212,10 +215,10 @@ export function DataUploadDialog({
           ? `تم فحص الملف: ${inspectRes.totalRows} صف (${inspectRes.validRows} صالح)`
           : `Workbook inspected: ${inspectRes.totalRows} rows (${inspectRes.validRows} valid)`,
       );
-    } catch (inspectErr: any) {
+    } catch (inspectErr: unknown) {
       setPreview(null);
       setError(
-        inspectErr?.message ||
+        (inspectErr instanceof Error ? inspectErr.message : '') ||
         (isAr
           ? 'تعذر قراءة أو فحص ملف الإكسيل. يرجى التأكد من صلاحية الملف.'
           : 'Failed to inspect Excel workbook. Please check file formatting.'),

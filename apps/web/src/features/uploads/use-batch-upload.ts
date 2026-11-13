@@ -4,8 +4,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import api, { getApiErrorMessage } from '@/lib/api';
 import type { UploadCatalogType, UploadResult } from './types';
 
-export function isNetworkError(err: any): boolean {
-  if (!err) return false;
+export function isNetworkError(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const err = value as Record<string, unknown>;
   if (err.name === 'AxiosError' && (!err.response || err.code === 'ERR_NETWORK')) {
     return true;
   }
@@ -17,7 +18,7 @@ export function isNetworkError(err: any): boolean {
     return true;
   }
   if (
-    err.message &&
+    typeof err.message === 'string' &&
     /network|offline|internet|timeout|failed to fetch/i.test(err.message)
   ) {
     return true;
@@ -241,7 +242,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                 Math.round(((bIdx + 1) / totalBatches) * 90) + 5,
               );
               setPercentage(completedPercent);
-            } catch (err: any) {
+            } catch (err: unknown) {
               if (isNetworkError(err) && !isAbortedRef.current) {
                 setIsNetworkInterrupted(true);
                 const waitSec = Math.min(10, 3 + attempt * 2);
@@ -354,7 +355,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
           onSuccess?.(res.data);
           uploadCommitted = true;
           setIsUploading(false);
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (isNetworkError(err) && !isAbortedRef.current && attempt <= 5) {
             setIsNetworkInterrupted(true);
             const waitSec = Math.min(10, 3 + attempt * 2);

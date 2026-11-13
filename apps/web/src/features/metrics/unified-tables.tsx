@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -379,7 +379,7 @@ export function UnifiedPerformanceTables({
   >(null);
   const routes = useMemo(() => buildRouteRows(data), [data]);
   const database = useMemo(() => buildDatabaseRows(data), [data]);
-  const text = (ar: string, en: string) => (isAr ? ar : en);
+  const text = useCallback((ar: string, en: string) => (isAr ? ar : en), [isAr]);
 
   const routeStats = useMemo(() => {
     const activeInWindow = routes.filter((r) => r.windowCalls > 0).length;
@@ -673,9 +673,9 @@ export function UnifiedPerformanceTables({
         ),
       },
       // Locale is the only dependency of the labels.
-       
+
     ],
-    [isAr],
+    [text],
   );
   const dbColumns = useMemo<DataTableColumn<UnifiedDatabaseRow>[]>(
     () => [
@@ -753,9 +753,9 @@ export function UnifiedPerformanceTables({
           </div>
         ),
       },
-       
+
     ],
-    [isAr],
+    [text],
   );
   return (
     <>

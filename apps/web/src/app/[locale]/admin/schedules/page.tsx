@@ -1,4 +1,6 @@
 'use client';
+import type { StaffMember, StaffListResponse } from '@/features/staff/types';
+import type { PaginatedResponse } from '@/lib/api';
 
 import React, { Suspense, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -232,22 +234,6 @@ function parseTimeToMinutes(t?: string | null): number | null {
   return null;
 }
 
-function minutesTo12h(totalMinutes: number): string {
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
-  const hours = Math.floor(normalized / 60);
-  const minutes = normalized % 60;
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const h12 = hours % 12 === 0 ? 12 : hours % 12;
-  return `${String(h12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
-}
-
-function minutesTo24h(totalMinutes: number): string {
-  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
-  const hours = Math.floor(normalized / 60);
-  const minutes = normalized % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
 function formatDurationText(mins: number, isAr: boolean): string {
   const hours = Math.floor(mins / 60);
   const remainingMins = mins % 60;
@@ -351,7 +337,7 @@ function SchedulesManagementContent() {
   const coursesQuery = useQuery({
     queryKey: ['admin-courses-dropdown'],
     queryFn: async () => {
-      const res = await api.get<any>('/admin/courses', { params: { limit: 200 } });
+      const res = await api.get<PaginatedResponse<{ _id: string; code: string; name: string; nameAr?: string; level?: string; department?: string }>>('/admin/courses', { params: { limit: 200 } });
       return res.data?.items ?? [];
     },
   });
@@ -361,22 +347,18 @@ function SchedulesManagementContent() {
     queryKey: ['admin-staff-dropdown'],
     queryFn: async () => {
       try {
-        const res = await api.get<any>('/admin/staff', {
+        const res = await api.get<StaffListResponse | StaffMember[]>('/admin/staff', {
           params: { page: 1, limit: 300, status: 'all' },
         });
-        const payload = (res as any)?.data ?? res;
-        return Array.isArray(payload?.items)
-          ? payload.items
-          : Array.isArray(payload)
-            ? payload
-            : [];
+        const payload = res.data;
+        return Array.isArray(payload) ? payload : payload.items ?? [];
       } catch {
         return [];
       }
     },
   });
 
-  const rawSchedules = schedulesQuery.data ?? [];
+  const rawSchedules = useMemo(() => schedulesQuery.data ?? [], [schedulesQuery.data]);
   const [isClearingAll, setIsClearingAll] = useState(false);
 
   const handleClearAllSchedules = async () => {
@@ -457,16 +439,16 @@ function SchedulesManagementContent() {
   const totalCount = matchingSchedules.length;
 
   const courses = coursesQuery.data ?? [];
-  const staffMembers = staffQuery.data ?? [];
+  const staffMembers = useMemo(() => staffQuery.data ?? [], [staffQuery.data]);
 
   // Filter staff strictly: separate Doctors and Teaching Assistants, excluding Administrative staff
   const doctorsList = useMemo(() => {
-    return staffMembers.filter((s: any) => s.staffType === 'doctor');
+    return staffMembers.filter((s) => s.staffType === 'doctor');
   }, [staffMembers]);
 
   const teachingAssistantsList = useMemo(() => {
     return staffMembers.filter(
-      (s: any) => s.staffType === 'teaching_assistant' || s.staffType === 'assistant' || s.staffType === 'assistant_lecturer',
+      (s) => ['teaching_assistant', 'assistant', 'assistant_lecturer'].includes(s.staffType || ''),
     );
   }, [staffMembers]);
 
@@ -477,7 +459,6 @@ function SchedulesManagementContent() {
 
   const startMins = parseTimeToMinutes(formStartTime);
   const endMins = parseTimeToMinutes(formEndTime);
-
 
   const timeValidationError = useMemo(() => {
     if (!formStartTime.trim() || !formEndTime.trim()) {
@@ -1127,7 +1108,7 @@ function SchedulesManagementContent() {
                   {isAr ? 'أعضاء هيئة التدريس (الدكاترة)' : 'Doctors & Lecturers'}
                 </div>
               )}
-              {doctorsList.map((s: any) => (
+              {doctorsList.map((s) => (
                 <SelectItem key={s._id} value={s._id}>
                   <div className="flex items-center justify-between w-full gap-2">
                     <span>
@@ -1148,7 +1129,7 @@ function SchedulesManagementContent() {
                   {isAr ? 'الهيئة المعاونة (المعيدين)' : 'Teaching Assistants'}
                 </div>
               )}
-              {teachingAssistantsList.map((s: any) => (
+              {teachingAssistantsList.map((s) => (
                 <SelectItem key={s._id} value={s._id}>
                   <div className="flex items-center justify-between w-full gap-2">
                     <span>
@@ -1493,7 +1474,7 @@ function SchedulesManagementContent() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {courses.map((c: any) => (
+                    {courses.map((c) => (
                       <SelectItem key={c._id} value={c._id}>
                         <span className="font-mono font-bold text-primary me-1.5">
                           {c.code}
@@ -1527,7 +1508,7 @@ function SchedulesManagementContent() {
                         {isAr ? 'أعضاء هيئة التدريس (الدكاترة)' : 'Doctors & Lecturers'}
                       </div>
                     )}
-                    {doctorsList.map((s: any) => (
+                    {doctorsList.map((s) => (
                       <SelectItem key={s._id} value={s._id}>
                         <div className="flex items-center justify-between w-full gap-2">
                           <span className="font-medium">
@@ -1548,7 +1529,7 @@ function SchedulesManagementContent() {
                         {isAr ? 'الهيئة المعاونة (المعيدين)' : 'Teaching Assistants'}
                       </div>
                     )}
-                    {teachingAssistantsList.map((s: any) => (
+                    {teachingAssistantsList.map((s) => (
                       <SelectItem key={s._id} value={s._id}>
                         <div className="flex items-center justify-between w-full gap-2">
                           <span className="font-medium">
@@ -1585,7 +1566,7 @@ function SchedulesManagementContent() {
                 </label>
                 <Select
                   value={formType}
-                  onValueChange={(val) => setFormType(val as any)}
+                  onValueChange={(val) => setFormType(val as 'lecture' | 'section' | 'lab')}
                 >
                   <SelectTrigger className="h-9 rounded-squircle text-xs font-medium border-border bg-background">
                     <SelectValue />

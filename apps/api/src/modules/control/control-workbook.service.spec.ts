@@ -159,6 +159,85 @@ function build(component: 'midterm' | 'coursework' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it.each([
+    [18, 10, 18],
+    [10, 18, 18],
+    [18, 18, 18],
+  ])(
+    'accepts a single edited column beside a saved reference mark (%s, %s)',
+    async (score, context, expected) => {
+      const ctx = build();
+      Object.assign(ctx.rows[0].components, {
+        midterm: { score: 10, status: 'present', rev: 0 },
+      });
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+      book.getWorksheet('Marks')!.getCell('C2').value = score;
+      book.getWorksheet('Marks')!.getCell('J2').value = context;
+      const preview = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(preview.valid).toBe(1);
+      expect(preview.changes[0].score).toBe(expected);
+    },
+  );
+  it('does not restore a reference mark when changing to a scoreless status', async () => {
+    const ctx = build();
+    Object.assign(ctx.rows[0].components, {
+      midterm: { score: 10, status: 'present', rev: 0 },
+    });
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+    book.getWorksheet('Marks')!.getCell('C2').value = '';
+    book.getWorksheet('Marks')!.getCell('D2').value = 'absent';
+    const preview = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      Buffer.from(await book.xlsx.writeBuffer()),
+    );
+    expect(preview.valid).toBe(1);
+    expect(preview.changes[0]).toMatchObject({ score: null, status: 'absent' });
+  });
+  it.each([0, 18, 21, 0.25])(
+    'validates a mark entered in the active midterm column: %s',
+    async (mark) => {
+      const ctx = build();
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+      book.getWorksheet('Marks')!.getCell('J2').value = mark;
+      const result = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(result.valid).toBe(mark <= 20 && mark % 0.5 === 0 ? 1 : 0);
+      expect(result.errors).toHaveLength(result.valid ? 0 : 1);
+      if (result.valid) expect(result.changes[0].score).toBe(mark);
+      expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
+    },
+  );
+  it('reports blank rows without treating them as saved and rejects conflicting score inputs', async () => {
+    const ctx = build();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+    const blank = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      Buffer.from(await book.xlsx.writeBuffer()),
+    );
+    expect(blank).toMatchObject({ valid: 0, skipped: 1, errors: [] });
+    book.getWorksheet('Marks')!.getCell('C2').value = 10;
+    book.getWorksheet('Marks')!.getCell('J2').value = 18;
+    const conflict = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      Buffer.from(await book.xlsx.writeBuffer()),
+    );
+    expect(conflict.valid).toBe(0);
+    expect(conflict.errors[0]).toContain('Conflicting score');
+  });
   it.each([{}, [], true, NaN, Infinity, null, undefined])(
     'rejects a non-scalar or invalid student code: %p',
     async (studentCode) => {

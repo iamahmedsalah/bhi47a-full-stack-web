@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations, useLocale } from 'next-intl';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { useQuizReleaseRefresh } from '@/features/quizzes/use-quiz-release-refresh';
@@ -9,28 +9,7 @@ import { cn } from '@/lib/cn';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
-import {
-  FileText,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
-  XCircle,
-  Award,
-  Calendar,
-  Clock,
-  Play,
-  HelpCircle,
-  UserCheck,
-  AlertTriangle,
-  RotateCcw,
-  Check,
-  Loader2,
-  ShieldAlert,
-  Eye,
-  Lightbulb,
-  AlertCircle,
-  ListChecks,
-} from 'lucide-react';
+import { FileText, ChevronDown, ChevronUp, CheckCircle2, XCircle, Award, Calendar, Clock, Play, HelpCircle, AlertTriangle, RotateCcw, Check, Loader2, ShieldAlert, Eye, Lightbulb, AlertCircle, ListChecks } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -41,19 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import {
-  getStudentQuizzesWithTiming,
-  getQuizForTaking,
-  startQuizAttempt,
-  saveQuizDraft,
-  recordQuizExit,
-  submitQuiz,
-  getQuizReview,
-  type StudentQuizViewItem,
-  type TakeQuizResponse,
-  type SubmitQuizResult,
-  type QuizReviewResponse,
-} from '@/features/quizzes/api';
+import { getStudentQuizzesWithTiming, startQuizAttempt, saveQuizDraft, recordQuizExit, submitQuiz, getQuizReview, type StudentQuizViewItem, type SubmitQuizResult } from '@/features/quizzes/api';
 
 /* ─── Existing Excel Uploaded Grades Interfaces ─────────── */
 interface QuizEntry {
@@ -348,7 +315,7 @@ function TakeQuizModal({
 
   const attemptData = attemptQuery.data;
   const quiz = attemptData?.quiz;
-  const allowResume = (attemptData?.allowResume ?? (attemptData?.quiz as any)?.allowResume) !== false;
+  const allowResume = (attemptData?.allowResume ?? attemptData?.quiz?.allowResume) !== false;
 
   const selectedAnswersRef = React.useRef(selectedAnswers);
   useEffect(() => {
@@ -356,7 +323,10 @@ function TakeQuizModal({
   }, [selectedAnswers]);
 
   // Load server attempt data and restore draft answers if resumed
-  useEffect(() => {
+  const [previousAttemptInputs, setpreviousAttemptInputs] = useState<unknown[] | null>(null);
+  if (!previousAttemptInputs || previousAttemptInputs.some((value,i) => !Object.is(value, [attemptData, open, submissionResult, isAr][i]))) {
+    setpreviousAttemptInputs([attemptData, open, submissionResult, isAr]);
+    (() => {
     if (!attemptData || !open || submissionResult) return;
 
     const initialAnswers: Record<string, number> = {};
@@ -373,9 +343,13 @@ function TakeQuizModal({
       });
     }
     setSelectedAnswers(initialAnswers);
-    selectedAnswersRef.current = initialAnswers;
+
     setTerminatedByExit(false);
 
+    })();
+  }
+  useEffect(() => {
+    if (!attemptData || !open || submissionResult) return;
     if (attemptData.isResumed) {
       toast.info(
         isAr
@@ -383,6 +357,7 @@ function TakeQuizModal({
           : 'Resumed quiz: previously saved answers and remaining time restored',
       );
     }
+
   }, [attemptData, open, submissionResult, isAr]);
 
   const draftSaveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -414,7 +389,7 @@ function TakeQuizModal({
       draftSaveTimeoutRef.current = setTimeout(() => {
         const current = selectedAnswersRef.current;
         const answersPayload = Object.entries(current)
-          .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+          .filter(([, idx]) => typeof idx === 'number' && idx >= 0)
           .map(([qId, idx]) => ({
             questionId: qId,
             selectedOptionIndex: idx,
@@ -455,7 +430,7 @@ function TakeQuizModal({
           : 'Quiz submitted and graded successfully',
       );
       onSubmitted();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
         getApiErrorMessage(
           err,
@@ -505,7 +480,7 @@ function TakeQuizModal({
       if (document.visibilityState === 'hidden') {
         const currentAnswers = selectedAnswersRef.current;
         const answersPayload = Object.entries(currentAnswers)
-          .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+          .filter(([, idx]) => typeof idx === 'number' && idx >= 0)
           .map(([qId, idx]) => ({
             questionId: qId,
             selectedOptionIndex: idx,
@@ -523,7 +498,7 @@ function TakeQuizModal({
               if (res.status === 'terminated_by_exit') {
                 setTerminatedByExit(true);
                 if (res.submission) {
-                  setSubmissionResult(res.submission as any);
+                  setSubmissionResult({ ...res.submission, message: '', submittedAt: res.submission.submittedAt || new Date().toISOString() });
                 }
                 toast.error(
                   isAr
@@ -563,7 +538,7 @@ function TakeQuizModal({
       }
       const currentAnswers = selectedAnswersRef.current;
       const answersPayload = Object.entries(currentAnswers)
-        .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+        .filter(([, idx]) => typeof idx === 'number' && idx >= 0)
         .map(([qId, idx]) => ({
           questionId: qId,
           selectedOptionIndex: idx,
@@ -642,7 +617,7 @@ function TakeQuizModal({
 
       const currentAnswers = selectedAnswersRef.current;
       const answersPayload = Object.entries(currentAnswers)
-        .filter(([_, idx]) => typeof idx === 'number' && idx >= 0)
+        .filter(([, idx]) => typeof idx === 'number' && idx >= 0)
         .map(([qId, idx]) => ({
           questionId: qId,
           selectedOptionIndex: idx,
@@ -1584,9 +1559,9 @@ export default function StudentQuizzesPage() {
   });
 
   useQuizReleaseRefresh(onlineQuizzesQuery.data, onlineQuizzesQuery.refetch);
-  const onlineQuizzes = onlineQuizzesQuery.data?.quizzes || [];
+  const onlineQuizzes = useMemo(() => onlineQuizzesQuery.data?.quizzes || [], [onlineQuizzesQuery.data?.quizzes]);
   const resultModalQuiz = onlineQuizzes.find((quiz) => quiz._id === resultModalQuizId) ?? null;
-  const historyItems = historyQuery.data || [];
+  const historyItems = useMemo(() => historyQuery.data || [], [historyQuery.data]);
 
   // Close a revoked review before rendering another frame with stale answers.
   if (reviewQuizId && onlineQuizzesQuery.data && !onlineQuizzes.some((quiz) => quiz._id === reviewQuizId && quiz.canReview)) {

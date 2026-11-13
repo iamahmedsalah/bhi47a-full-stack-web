@@ -238,7 +238,7 @@ function NotificationsPageContent() {
         header: tCommon('status'),
         cell: (log) => {
           const statusKey = `status_${log.deliveryStatus || 'pending'}`;
-          const statusLabel = t(statusKey as any) || log.deliveryStatus;
+          const statusLabel = t(statusKey) || log.deliveryStatus;
           const statusBadge =
             log.deliveryStatus === 'sent'
               ? 'badge-success'
@@ -248,7 +248,7 @@ function NotificationsPageContent() {
           return (
             <div className="flex flex-col items-start gap-1">
               <span className={cn('badge', statusBadge)}>{statusLabel}</span>
-              {(log as any).meta?.sendWhatsApp && (
+              {log.meta?.sendWhatsApp && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
                   <MessageSquare className="h-2.5 w-2.5" />
                   WhatsApp
@@ -313,7 +313,7 @@ function NotificationsPageContent() {
         ),
       },
     ],
-    [t, tCommon, tGrades, isArabic],
+    [t, tCommon, isArabic],
   );
 
   const openSendModal = () => {

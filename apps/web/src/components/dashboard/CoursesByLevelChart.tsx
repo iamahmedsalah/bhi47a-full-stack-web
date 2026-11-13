@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { BookOpen, Download, Loader2, Library, Layers } from 'lucide-react';
+import { BookOpen, Download, Loader2, Library } from 'lucide-react';
 import { exportElementToPng } from '@/lib/export-utils';
 
 export interface CourseLevelItem {

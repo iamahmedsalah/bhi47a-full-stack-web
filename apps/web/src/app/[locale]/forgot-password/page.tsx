@@ -1,4 +1,5 @@
 "use client";
+import NextImage from "next/image";
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useTranslations } from "next-intl";
@@ -111,7 +112,7 @@ function ForgotPasswordContent() {
 
     setLoading(true);
     try {
-      const res = await api.post<{ user: any; csrfToken: string }>(
+      const res = await api.post<{ user: unknown; csrfToken: string }>(
         "/auth/reset-password-otp",
         {
           identifier: identifier.trim(),
@@ -179,7 +180,7 @@ function ForgotPasswordContent() {
             )}
           </Button>
 
-          <img
+          <NextImage unoptimized
             src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_144,h_144,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
             alt="Institute Logo"
             width={144}

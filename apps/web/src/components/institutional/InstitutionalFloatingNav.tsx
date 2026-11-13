@@ -1,4 +1,5 @@
 'use client';
+import { useHydrated } from "@/hooks/use-hydrated";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
@@ -57,7 +58,7 @@ export function InstitutionalFloatingNav({ locale }: InstitutionalFloatingNavPro
   const [activeSection, setActiveSection] = useState('home');
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
 
   const navRef = useRef<HTMLElement>(null);
   const isClickScrollingRef = useRef(false);
@@ -65,15 +66,19 @@ export function InstitutionalFloatingNav({ locale }: InstitutionalFloatingNavPro
   const rafIdRef = useRef<number | null>(null);
 
   // Restore user pin preference
-  useEffect(() => {
-    setMounted(true);
+  const hydrated = useHydrated();
+  const [restoredPin, setrestoredPin] = useState(false);
+  if (hydrated && !restoredPin) {
+    setrestoredPin(true);
+
     try {
       const stored = localStorage.getItem('inst-nav-pinned');
       if (stored === 'true') setIsPinned(true);
     } catch {
       // ignore storage errors
     }
-  }, []);
+
+  }
 
   const togglePin = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

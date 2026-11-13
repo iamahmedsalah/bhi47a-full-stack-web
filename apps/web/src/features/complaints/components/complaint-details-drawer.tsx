@@ -1,4 +1,5 @@
 'use client';
+import NextImage from "next/image";
 
 import React, { useState } from 'react';
 import {
@@ -136,25 +137,7 @@ function formatStudentDisplayName(
   return englishName || ticket.studentName || ticket.requesterName || '';
 }
 
-
-
-
-export function ComplaintDetailsDrawer({
-  ticket,
-  onClose,
-  locale,
-  statusWorkflow,
-  statusLabels,
-  statusLabelsEn,
-  priorityLabels,
-  assignmentGroups,
-  groupTranslations,
-  assignees,
-  onPatchTicket,
-  onReply,
-  onAddNote,
-  drawerLoading,
-}: ComplaintDetailsDrawerProps) {
+export function ComplaintDetailsDrawer({ ticket, onClose, locale, statusWorkflow, statusLabels, statusLabelsEn, priorityLabels, onPatchTicket, onReply, onAddNote, drawerLoading }: ComplaintDetailsDrawerProps) {
   const isAr = locale === 'ar';
   const [replyMessage, setReplyMessage] = useState('');
   const [internalNote, setInternalNote] = useState('');
@@ -359,7 +342,7 @@ export function ComplaintDetailsDrawer({
                 }}
                 className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-black/20 p-2 transition-all hover:border-primary/50 hover:bg-black/30 focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
-                <img
+                <NextImage unoptimized width={1200} height={800}
                   src={ticket.screenshotUrl}
                   alt="Complaint Screenshot"
                   className="max-h-80 w-full rounded-lg object-contain transition-transform duration-200 group-hover:scale-[1.01]"

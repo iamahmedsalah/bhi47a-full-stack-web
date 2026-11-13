@@ -1,20 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  ZoomIn,
-  ZoomOut,
-  RotateCw,
-  RotateCcw,
-  Maximize2,
-  Minimize2,
-  X,
-  Download,
-  ExternalLink,
-  Move,
-} from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, RotateCcw, X, Download, ExternalLink, Move } from 'lucide-react';
 import { Button } from './button';
-import { cn } from '@/lib/utils';
 
 interface ImageLightboxProps {
   src: string | null | undefined;
@@ -43,12 +31,15 @@ export function ImageLightbox({
     positionRef.current = position;
   }, [position]);
 
+  const [previousImage, setPreviousImage] = useState({ isOpen, src });
+  if (previousImage.isOpen !== isOpen || previousImage.src !== src) {
+    setPreviousImage({ isOpen, src });
+    if (isOpen) { setScale(1); setRotation(0); setPosition({ x: 0, y: 0 }); }
+  }
   // Reset transform state whenever image opens or changes
   useEffect(() => {
     if (isOpen) {
-      setScale(1);
-      setRotation(0);
-      setPosition({ x: 0, y: 0 });
+
       // Prevent body scrolling while lightbox is active
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';

@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { MessageSquareWarning, Download, Loader2, CheckCircle2, Clock } from 'lucide-react';
+import { MessageSquareWarning, Download, Loader2, Clock } from 'lucide-react';
 import { exportElementToPng } from '@/lib/export-utils';
 
 export interface ComplaintStatusItem {

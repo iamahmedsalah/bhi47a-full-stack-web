@@ -113,12 +113,12 @@ function PublicComplaintsContent() {
       .catch(() => {});
   }, []);
 
-  const formatDateString = (dateStr: string) => {
+  const formatDateString = React.useCallback((dateStr: string) => {
     return new Date(dateStr).toLocaleString(isAr ? 'ar-EG' : 'en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     });
-  };
+  }, [isAr]);
 
   const systemStatusMessage = useMemo(() => {
     if (!settings) return null;
@@ -163,9 +163,8 @@ function PublicComplaintsContent() {
       };
     }
 
-
     return null;
-  }, [settings, isAr]);
+  }, [settings, isAr, formatDateString]);
 
   const typeOptions = useMemo(
     () => [

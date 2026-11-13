@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getStaffCourseChoices, getStaffFormCourses } from "../api";
 import { StaffPermissionFields } from "./staff-permission-fields";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import {
   Loader2,
   Sparkles,
@@ -70,7 +70,11 @@ interface Props {
   onSubmit: (values: StaffFormValues) => Promise<void>;
 }
 
-export function StaffFormDialog({
+export function StaffFormDialog(props: Props) {
+  return <StaffFormDialogState key={`${props.open}:${props.staff?._id ?? "new"}`} {...props} />;
+}
+
+function StaffFormDialogState({
   open,
   staff,
   pending,
@@ -115,11 +119,12 @@ export function StaffFormDialog({
       isCreate: true,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
 
   const explicitTitle = useRef(false);
-  const selectedRole = form.watch("role");
-  const selectedType = form.watch("staffType");
-  const selectedCourses = form.watch("courseIds") ?? [];
+  const selectedRole = (watchedForm.role ?? '');
+  const selectedType = (watchedForm.staffType ?? '');
+  const selectedCourses = watchedForm.courseIds ?? [];
   const teaching =
     selectedRole === "staff" &&
     ["doctor", "teaching_assistant", "assistant_lecturer"].includes(
@@ -145,8 +150,6 @@ export function StaffFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    setCourseSearch("");
-    setCourseLevel("all");
     const initialStaffType =
       (staff?.staffType as StaffType) ?? allowedStaffTypes[0] ?? "doctor";
     const initialTitlePrefix =
@@ -693,7 +696,7 @@ export function StaffFormDialog({
                   </fieldset>
                 )}
                 {isAdmin && <StaffPermissionFields
-                  value={(form.watch("permissions") ?? []) as Permission[]}
+                  value={(watchedForm.permissions ?? []) as Permission[]}
                   currentStaffType={selectedType as StaffType}
                   onChange={(value) =>
                     form.setValue("permissions", value, { shouldDirty: true })

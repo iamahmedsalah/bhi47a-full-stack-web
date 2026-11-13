@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -168,7 +169,10 @@ export default function StudentResultsPage() {
     return [...levels].sort((a, b) => Number(a) - Number(b));
   }, [profileQuery.data?.level, resultLevels]);
 
-  React.useEffect(() => {
+  const [previousLevelInputs, setPreviousLevelInputs] = useState<unknown[] | null>(null);
+  if (previousLevelInputs === null || previousLevelInputs.some((value, index) => !Object.is(value, [availableLevels, profileQuery.data?.level, resultLevels, selectedLevel][index]))) {
+    setPreviousLevelInputs([availableLevels, profileQuery.data?.level, resultLevels, selectedLevel]);
+    (() => {
     if (
       selectedLevel &&
       availableLevels.includes(selectedLevel as Grade["academicLevel"])
@@ -182,7 +186,9 @@ export default function StudentResultsPage() {
         ? current
         : resultLevels.at(-1) || current || availableLevels.at(-1) || "1";
     setSelectedLevel(targetLevel);
-  }, [availableLevels, profileQuery.data?.level, resultLevels, selectedLevel]);
+
+    })();
+  }
 
   if (resultsQuery.isLoading || statusQuery.isLoading) {
     return <LoadingState title={tCommon("loading")} />;

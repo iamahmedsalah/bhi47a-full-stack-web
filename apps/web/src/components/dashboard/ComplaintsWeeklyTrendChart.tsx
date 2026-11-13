@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { Activity, Download, Loader2, Calendar, TrendingUp } from 'lucide-react';
+import { Activity, Download, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPng } from '@/lib/export-utils';
 
 export interface WeeklyTrendItem {

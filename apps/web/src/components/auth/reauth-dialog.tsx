@@ -1,4 +1,5 @@
 'use client';
+import { isAxiosError } from 'axios';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -75,12 +76,12 @@ export function ReauthDialog() {
       pending.current = null;
       setOpen(false);
       request.resolve();
-    } catch (cause: any) {
-      const serverMsg = cause?.response?.data?.message || '';
+    } catch (cause: unknown) {
+      const serverMsg = getApiErrorMessage(cause, '');
       if (
         serverMsg.includes('Password verification failed') ||
-        cause?.response?.status === 403 ||
-        cause?.response?.status === 401
+        (isAxiosError(cause) ? cause.response?.status : undefined) === 403 ||
+        (isAxiosError(cause) ? cause.response?.status : undefined) === 401
       ) {
         setError(
           isAr

@@ -19,7 +19,7 @@ export const useCourseStore = create<CourseState>((set) => ({
   activeSemester: 'all',
   selectedKeys: [],
   setFilter: (key, value) =>
-    set((state) => ({
+    set(() => ({
       [key]: value,
       selectedKeys: [], // Reset selections automatically
     })),

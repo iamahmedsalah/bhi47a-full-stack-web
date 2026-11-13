@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarClock,
@@ -70,12 +70,17 @@ export function GradesPublishingModal({
   const [selectedExamType, setSelectedExamType] = useState('all');
   const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
 
-  useEffect(() => {
+  const [previousSettings, setPreviousSettings] = useState<unknown[] | null>(null);
+  if (previousSettings === null || previousSettings.some((value, index) => !Object.is(value, [settingsQuery.data][index]))) {
+    setPreviousSettings([settingsQuery.data]);
+    (() => {
     if (settingsQuery.data) {
       setOpenAt(settingsQuery.data.gradesOpenAt ? settingsQuery.data.gradesOpenAt.slice(0, 16) : '');
       setCloseAt(settingsQuery.data.gradesCloseAt ? settingsQuery.data.gradesCloseAt.slice(0, 16) : '');
     }
-  }, [settingsQuery.data]);
+
+    })();
+  }
 
   // Mutation to update settings
   const updateSettingsMutation = useMutation({

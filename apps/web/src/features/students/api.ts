@@ -2,7 +2,6 @@ import api, { type PaginatedResponse } from '@/lib/api';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
 import { downloadFileBlob, EXCEL_MIME_TYPE } from '@/lib/export-utils';
 
-
 export interface StudentUserRef {
   isActive?: boolean;
   mustChangePassword?: boolean;
@@ -181,10 +180,11 @@ export function createStudent(payload: StudentWritePayload) {
 }
 
 export function updateStudent(id: string, payload: StudentWritePayload) {
-  const { studentCode: _studentCode, ...rest } = payload;
+  const rest = { ...payload };
+  delete rest.studentCode;
   const cleanPayload: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(rest)) {
-    if (val !== undefined && val !== '') {
+  for (const [key, val] of Object.entries(payload)) {
+    if (key !== 'studentCode' && val !== undefined && val !== '') {
       cleanPayload[key] = val;
     }
   }
@@ -275,7 +275,6 @@ export async function exportStudentsStreamingExcel(
 
   await downloadFileBlob(raw, filename, EXCEL_MIME_TYPE);
 }
-
 
 export async function listAllStudentsForExport(
   params: Omit<StudentListParams, 'page'>,

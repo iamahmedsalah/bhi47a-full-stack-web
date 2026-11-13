@@ -167,11 +167,16 @@ function StudentLoginContent() {
     },
   );
 
-  useEffect(() => {
+  const [previousCredentials, setPreviousCredentials] = useState<unknown[] | null>(null);
+  if (previousCredentials === null || previousCredentials.some((value, index) => !Object.is(value, [studentCodeVal, passwordVal][index]))) {
+    setPreviousCredentials([studentCodeVal, passwordVal]);
+    (() => {
     if (googleAuthNotice) {
       setGoogleAuthNotice(null);
     }
-  }, [studentCodeVal, passwordVal]);
+
+    })();
+  }
 
   const [buttonWidth, setButtonWidth] = useState<string>("320");
 

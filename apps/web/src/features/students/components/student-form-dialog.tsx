@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useWatch, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   User,
@@ -75,7 +75,11 @@ const DEPARTMENT_PRESETS = [
   { value: 'GENERAL', ar: 'الشعبة العامة (General)', en: 'General' },
 ];
 
-export function StudentFormDialog({
+export function StudentFormDialog(props: StudentFormDialogProps) {
+  return <StudentFormDialogState key={`${props.open}:${props.defaultValues?.studentCode ?? "new"}`} {...props} />;
+}
+
+function StudentFormDialogState({
   open,
   onOpenChange,
   isEditing,
@@ -112,11 +116,12 @@ export function StudentFormDialog({
       mustChangePassword: false,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
 
   // Always reset & populate values when opened or defaultValues changes to prevent stale states
   useEffect(() => {
     if (open) {
-      setActiveTab('identity');
+
       const resolvedAr =
         defaultValues?.fullNameAr ||
         (defaultValues?.fullName && /[\u0600-\u06FF]/.test(defaultValues.fullName)
@@ -401,7 +406,7 @@ export function StudentFormDialog({
                         <span className="text-primary">*</span>
                       </label>
                       <Select
-                        value={form.watch('level')}
+                        value={(watchedForm.level ?? '')}
                         onValueChange={(val) => form.setValue('level', val)}
                       >
                         <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
@@ -427,7 +432,7 @@ export function StudentFormDialog({
                         <span className="text-primary">*</span>
                       </label>
                       <Select
-                        value={form.watch('enrollmentStatus')}
+                        value={watchedForm.enrollmentStatus}
                         onValueChange={(val) => form.setValue('enrollmentStatus', val)}
                       >
                         <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
@@ -508,7 +513,7 @@ export function StudentFormDialog({
                         <span className="text-primary">*</span>
                       </label>
                       <Select
-                        value={form.watch('semester')}
+                        value={(watchedForm.semester ?? '')}
                         onValueChange={(val) => form.setValue('semester', val)}
                       >
                         <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">

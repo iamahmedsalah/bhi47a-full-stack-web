@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+
 import { useParams } from "next/navigation";
 import {
   ClipboardList,
@@ -20,10 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LoadingState, ErrorState } from "@/components/ui/feedback";
 import { CustomDropdown } from "@/components/ui/custom-dropdown";
-import {
-  attendanceApi,
-  type CourseAttendanceSummary,
-} from "@/features/attendance/api/attendance-api";
+import { attendanceApi } from "@/features/attendance/api/attendance-api";
 import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
 
 export default function StudentAttendancePage() {
@@ -68,7 +65,7 @@ export default function StudentAttendancePage() {
   };
 
   const courses = data?.courses || [];
-  const records = data?.records || [];
+  const records = useMemo(() => data?.records || [], [data?.records]);
 
   // Filtered session records
   const filteredRecords = useMemo(() => {

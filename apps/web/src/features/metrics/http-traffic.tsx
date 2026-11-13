@@ -5,17 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import * as Select from "@radix-ui/react-select";
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  Database,
-  Gauge,
-  Lock,
-  Radio,
-  ShieldAlert,
-  ServerCrash,
-} from "lucide-react";
+import { Activity, CheckCircle2, Database, Gauge, Radio } from "lucide-react";
 import {
   latencyTone,
   type HttpTraffic,

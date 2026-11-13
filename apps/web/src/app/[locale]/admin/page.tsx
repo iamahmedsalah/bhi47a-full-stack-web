@@ -1,4 +1,5 @@
 "use client";
+import type { TimetableEntry } from '@/features/course-schedules/timetable-model';
 
 import React, { useState } from "react";
 import dynamic from "next/dynamic";
@@ -73,7 +74,7 @@ import {
   DeferredAnalyticsSummary,
   DeferredDashboardSection,
 } from "@/features/analytics/components/deferred-analytics-summary";
-import { exportMultiSheetExcel, type ExcelSheet } from "@/lib/export-utils";
+
 import { StatCard, StatCardRow } from "@/components/ui/stat-card";
 
 import { createStudent } from "@/features/students/api";
@@ -156,17 +157,6 @@ interface DashboardComplaint {
   priority?: "low" | "medium" | "high" | "urgent";
   type?: string;
   createdAt?: string;
-}
-
-interface ChartDatum {
-  name: string;
-  value: number;
-}
-
-function formatStatusLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatCourseLevel(lvl: string | number | undefined, isAr: boolean) {
@@ -318,7 +308,7 @@ export default function AdminDashboard() {
     },
     enabled: isStaff,
   });
-  const assignedCourses = assignedCoursesQuery.data ?? [];
+  const assignedCourses = React.useMemo(() => assignedCoursesQuery.data ?? [], [assignedCoursesQuery.data]);
 
   const staffTotalEnrolledStudents = React.useMemo(() => {
     return assignedCourses.reduce(
@@ -362,18 +352,18 @@ export default function AdminDashboard() {
   const myScheduleQuery = useQuery({
     queryKey: ["staff-my-schedule", user?._id],
     queryFn: async () => {
-      const res = await api.get<any[]>("/staff/me/schedule");
+      const res = await api.get<Array<TimetableEntry & { notes?: string }>>("/staff/me/schedule");
       return res.data ?? [];
     },
     enabled: isStaff,
   });
-  const mySchedules = myScheduleQuery.data ?? [];
+  const mySchedules = React.useMemo(() => myScheduleQuery.data ?? [], [myScheduleQuery.data]);
   const [doctorScheduleDayFilter, setDoctorScheduleDayFilter] = useState("all");
 
   const filteredDoctorSchedules = React.useMemo(() => {
     if (doctorScheduleDayFilter === "all") return mySchedules;
     return mySchedules.filter(
-      (s: any) => s.dayOfWeek === doctorScheduleDayFilter,
+      (s) => s.dayOfWeek === doctorScheduleDayFilter,
     );
   }, [mySchedules, doctorScheduleDayFilter]);
 
@@ -390,7 +380,7 @@ export default function AdminDashboard() {
     queryKey: ["doctor-dashboard-exam-schedules"],
     queryFn: async () => {
       try {
-        const res = await api.get<any[]>("/admin/exam-schedules");
+        const res = await api.get<Array<{ _id: string; title: string; fileUrl: string; academicYear: string; semester: string; examType: string }>>("/admin/exam-schedules");
         return Array.isArray(res.data) ? res.data : [];
       } catch {
         return [];
@@ -623,7 +613,7 @@ export default function AdminDashboard() {
     : 0;
 
   const dashboardContainerRef = React.useRef<HTMLDivElement>(null);
-  const [isExportingExcel, setIsExportingExcel] = useState(false);
+
   const [isAnalyticsExportModalOpen, setIsAnalyticsExportModalOpen] =
     useState(false);
 
@@ -695,228 +685,6 @@ export default function AdminDashboard() {
     }
     return defaultGpaData;
   }, [studentsStatsQuery.data?.gpaDistribution]);
-
-  const handleExportComprehensiveExcel = () => {
-    setIsExportingExcel(true);
-    try {
-      const stats = studentsStatsQuery.data;
-
-      // Sheet 1: General KPIs
-      const kpiRows: (string | number)[][] = [
-        [
-          isAr ? "إجمالي الطلاب المسجلين" : "Total Students",
-          totalStudentsCountNum,
-        ],
-        [isAr ? "الطلاب المنتظمون" : "Active Students", activeStudents],
-        [isAr ? "نسبة انتظام القيد" : "Active Rate", `${activeStudentRate}%`],
-        [
-          isAr ? "الطلاب موقوفو القيد" : "Suspended Students",
-          stats?.suspended ?? 0,
-        ],
-        [
-          isAr ? "الطلاب المنسحبون" : "Withdrawn Students",
-          stats?.withdrawn ?? 0,
-        ],
-        [
-          isAr ? "الطلاب الخريجون" : "Graduated Students",
-          stats?.graduated ?? 0,
-        ],
-        [isAr ? "إجمالي المقررات الدراسية" : "Total Courses", totalCourses],
-        [isAr ? "إجمالي تذاكر الشكاوى" : "Total Complaints", complaints.length],
-        [
-          isAr ? "الشكاوى التي تم حلها" : "Resolved Complaints",
-          resolvedComplaints,
-        ],
-        [isAr ? "نسبة إنجاز الشكاوى" : "Resolution Rate", `${resolutionRate}%`],
-        [
-          isAr ? "الشكاوى العاجلة والمرتفعة" : "Urgent/High Complaints",
-          urgentComplaints,
-        ],
-      ];
-
-      // Sheet 2: Departments & Tracks
-      const deptRows: (string | number)[][] = departmentChartData.map((d) => [
-        isAr && d.departmentAr ? d.departmentAr : d.department,
-        d.code,
-        d.enrolled,
-        d.capacity,
-        `${Math.round((d.enrolled / d.capacity) * 100)}%`,
-      ]);
-
-      // Sheet 3: Cohort Retention
-      const cohortRows: (string | number)[][] = (
-        stats?.cohortRetention ?? []
-      ).map((c) => [
-        c.level === "1"
-          ? isAr
-            ? "المستوى الأول (عام)"
-            : "Level 1 (General)"
-          : c.level === "2"
-            ? isAr
-              ? "المستوى الثاني (عام)"
-              : "Level 2 (General)"
-            : c.level === "3"
-              ? isAr
-                ? "المستوى الثالث (تخصص)"
-                : "Level 3 (Specialization)"
-              : isAr
-                ? "المستوى الرابع (تخرج)"
-                : "Level 4 (Graduation)",
-        c.total,
-        c.active,
-        c.probation,
-        c.attrition,
-        `${c.retentionRate}%`,
-      ]);
-
-      // Sheet 4: GPA Distribution
-      const gpaRows: (string | number)[][] = gpaChartData.map((g) => [
-        isAr && g.labelAr ? g.labelAr : g.label,
-        g.range,
-        g.count,
-        totalStudentsCountNum > 0
-          ? `${Math.round((g.count / totalStudentsCountNum) * 100)}%`
-          : "0%",
-      ]);
-
-      // Sheet 5: Enrollment Status
-      const enrollmentRows: (string | number)[][] = enrollmentStatusData.map(
-        (e) => [
-          e.name,
-          e.value,
-          totalStudentsCountNum > 0
-            ? `${Math.round((e.value / totalStudentsCountNum) * 100)}%`
-            : "0%",
-        ],
-      );
-
-      // Sheet 6: Complaints by Status
-      const complaintsRows: (string | number)[][] = complaintStatusData.map(
-        (c) => [
-          c.name,
-          c.value,
-          complaints.length > 0
-            ? `${Math.round((c.value / complaints.length) * 100)}%`
-            : "0%",
-        ],
-      );
-
-      const sheets: ExcelSheet[] = [
-        {
-          name: isAr ? "المؤشرات العامة" : "Summary KPIs",
-          headers: [
-            isAr ? "المؤشر الأكاديمي" : "Metric",
-            isAr ? "القيمة الإحصائية" : "Value",
-          ],
-          rows: kpiRows,
-        },
-        {
-          name: isAr ? "الأقسام والشعب" : "Departments",
-          headers: [
-            isAr ? "القسم / المسار الأكاديمي" : "Department / Track",
-            isAr ? "الرمز" : "Code",
-            isAr ? "عدد الطلاب المسجلين" : "Enrolled Students",
-            isAr ? "الطاقة الاستيعابية القصوى" : "Capacity",
-            isAr ? "نسبة الإشغال" : "Utilization Rate",
-          ],
-          rows: deptRows,
-        },
-        {
-          name: isAr ? "استبقاء الدفعات" : "Cohort Retention",
-          headers: [
-            isAr ? "المستوى الدراسي" : "Academic Level",
-            isAr ? "إجمالي المقيدين" : "Cohort Total",
-            isAr ? "الطلاب المنتظمون" : "Active Students",
-            isAr ? "إنذار أكاديمي وتعثر" : "Academic Probation",
-            isAr ? "الانسحاب ووقف القيد" : "Attrition / Withdrawn",
-            isAr ? "نسبة الاستبقاء" : "Retention Rate",
-          ],
-          rows:
-            cohortRows.length > 0
-              ? cohortRows
-              : [
-                  [
-                    isAr ? "المستوى الأول (عام)" : "Level 1 (General)",
-                    1120,
-                    1023,
-                    75,
-                    22,
-                    "91%",
-                  ],
-                  [
-                    isAr ? "المستوى الثاني (عام)" : "Level 2 (General)",
-                    1040,
-                    944,
-                    62,
-                    34,
-                    "91%",
-                  ],
-                  [
-                    isAr ? "المستوى الثالث (تخصص)" : "Level 3 (Specialization)",
-                    980,
-                    914,
-                    48,
-                    18,
-                    "93%",
-                  ],
-                  [
-                    isAr ? "المستوى الرابع (تخرج)" : "Level 4 (Graduation)",
-                    940,
-                    903,
-                    25,
-                    12,
-                    "96%",
-                  ],
-                ],
-        },
-        {
-          name: isAr ? "توزيع المعدلات التراكمية" : "GPA Distribution",
-          headers: [
-            isAr ? "الفئة الأكاديمية" : "Standing Band",
-            isAr ? "نطاق المعدل (GPA)" : "GPA Range",
-            isAr ? "عدد الطلاب" : "Student Count",
-            isAr ? "النسبة المئوية" : "Percentage",
-          ],
-          rows: gpaRows,
-        },
-        {
-          name: isAr ? "حالات القيد" : "Enrollment Status",
-          headers: [
-            isAr ? "حالة القيد" : "Status",
-            isAr ? "عدد الطلاب" : "Count",
-            isAr ? "النسبة المئوية" : "Percentage",
-          ],
-          rows: enrollmentRows,
-        },
-        {
-          name: isAr ? "تذاكر الشكاوى" : "Tickets by Status",
-          headers: [
-            isAr ? "مرحلة المتابعة" : "Status",
-            isAr ? "عدد التذاكر" : "Count",
-            isAr ? "النسبة المئوية" : "Percentage",
-          ],
-          rows: complaintsRows,
-        },
-      ];
-
-      exportMultiSheetExcel(
-        sheets,
-        `academic-analytics-report-${new Date().toISOString().slice(0, 10)}.xls`,
-      );
-      toast.success(
-        isAr
-          ? "تم تصدير ملف Excel الشامل بجميع أوراق التحليلات بنجاح"
-          : "Comprehensive multi-sheet Excel report exported",
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error(
-        isAr ? "فشل تصدير ملف Excel" : "Failed to export Excel report",
-      );
-    } finally {
-      setIsExportingExcel(false);
-    }
-  };
 
   return (
     <div
@@ -1230,7 +998,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60 bg-card/60">
-                      {filteredDoctorSchedules.map((slot: any) => {
+                      {filteredDoctorSchedules.map((slot) => {
                         const dayArMap: Record<string, string> = {
                           saturday: "السبت",
                           sunday: "الأحد",
@@ -1642,7 +1410,7 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {doctorExamSchedules.map((schedule: any) => {
+                  {doctorExamSchedules.map((schedule) => {
                     const isFinal = schedule.examType === "final";
                     const isPdf = schedule.fileUrl
                       ?.toLowerCase()

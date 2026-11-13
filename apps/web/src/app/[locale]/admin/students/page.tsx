@@ -1,4 +1,6 @@
 'use client';
+import { useMemo } from "react";
+import type { StudentFormValues } from '@/features/students/schema';
 
 import React, { Suspense, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -100,7 +102,6 @@ const initialForm = {
   mustChangePassword: false,
 };
 
-
 const studentImportColumns = [
   'studentCode',
   'fullName',
@@ -128,7 +129,7 @@ function StudentsPageContent() {
   const locale = params.locale as string;
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isDoctor = user?.role === 'staff' && (user as any)?.staffType === 'doctor';
+  const isDoctor = user?.role === 'staff' && user?.staffType === 'doctor';
 
   const {
     page,
@@ -162,7 +163,7 @@ function StudentsPageContent() {
   const setFilter = (key: string, value: string | number | undefined) => {
     if (key === 'search') setSearch(String(value ?? ''));
     else if (key === 'page') setPage(Number(value) || 1);
-    else setTableFilter(key as any, value !== undefined ? String(value) : undefined);
+    else setTableFilter(key as keyof typeof filters, value !== undefined ? String(value) : undefined);
   };
 
   const isAdmin = user?.role === 'admin';
@@ -190,7 +191,7 @@ function StudentsPageContent() {
   const [transferStudent, setTransferStudent] = useState<Student | null>(null);
   const [profileStudent, setProfileStudent] = useState<Student | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [form, setForm] = useState(initialForm);
+  const [, setForm] = useState(initialForm);
   const [formLoading, setFormLoading] = useState(false);
   const [isTogglingMustChange, setIsTogglingMustChange] = useState(false);
 
@@ -226,14 +227,18 @@ function StudentsPageContent() {
     }
   };
 
+  const [previousTab, setPreviousTab] = useState(searchTab);
+  if (previousTab !== searchTab) {
+    setPreviousTab(searchTab);
+    if (searchTab === 'students' || searchTab === 'tuition') setActiveTabState(searchTab);
+  }
   React.useEffect(() => {
-    if (searchTab && (searchTab === 'students' || searchTab === 'tuition') && searchTab !== activeTab) {
-      setActiveTabState(searchTab);
+    if (searchTab === 'students' || searchTab === 'tuition') {
       try {
         sessionStorage.setItem('admin_students_active_tab', searchTab);
       } catch {}
     }
-  }, [searchTab, activeTab]);
+  }, [searchTab]);
 
   const handleAutoRegisterFirstYear = async () => {
     setIsAutoRegistering(true);
@@ -322,14 +327,17 @@ function StudentsPageContent() {
     queryFn: () => getStudentAcademicEmail(profileStudent?.studentCode ?? ''),
   });
 
-  const students = studentsQuery.data?.items ?? [];
+  const students = useMemo(() => studentsQuery.data?.items ?? [], [studentsQuery.data?.items]);
   const total = studentsQuery.data?.total ?? 0;
   const totalPages = studentsQuery.data?.totalPages ?? 1;
 
   const [selectedStudentsMap, setSelectedStudentsMap] = React.useState<Map<string, Student>>(new Map());
 
   // Cache selected students across pagination and filter changes
-  React.useEffect(() => {
+  const [previousSelection, setPreviousSelection] = useState<unknown[] | null>(null);
+  if (previousSelection === null || previousSelection.some((value, index) => !Object.is(value, [students, selectedKeys][index]))) {
+    setPreviousSelection([students, selectedKeys]);
+    (() => {
     if (selectedKeys.length === 0) {
       setSelectedStudentsMap(new Map());
       return;
@@ -357,7 +365,9 @@ function StudentsPageContent() {
 
       return changed ? next : prev;
     });
-  }, [students, selectedKeys]);
+
+    })();
+  }
 
   // Fetch any missing selected students from other pages
   React.useEffect(() => {
@@ -441,14 +451,14 @@ function StudentsPageContent() {
     }
   };
 
-  const handleAddSubmit = async (values: any) => {
+  const handleAddSubmit = async (values: StudentFormValues) => {
     setFormLoading(true);
     try {
       await createStudent(values);
       setIsAddOpen(false);
       toast.success(locale === 'ar' ? 'تمت إضافة الطالب بنجاح' : 'Student added successfully');
       invalidateStudents();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
         getApiErrorMessage(
           err,
@@ -460,7 +470,7 @@ function StudentsPageContent() {
     }
   };
 
-  const handleEditSubmit = async (values: any) => {
+  const handleEditSubmit = async (values: StudentFormValues) => {
     if (!selectedStudent) return;
     setFormLoading(true);
     try {
@@ -468,7 +478,7 @@ function StudentsPageContent() {
       setIsEditOpen(false);
       toast.success(locale === 'ar' ? 'تم تحديث بيانات الطالب بنجاح' : 'Student updated successfully');
       invalidateStudents();
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(
         getApiErrorMessage(
           err,
@@ -508,9 +518,9 @@ function StudentsPageContent() {
                   ? 'تم تصدير كشف الطلاب بصيغة Excel المعتمدة (.xlsx)'
                   : 'Students registry exported successfully (.xlsx)',
               );
-            } catch (err: any) {
+            } catch (err: unknown) {
               toast.error(
-                err?.message ||
+                (err instanceof Error ? err.message : '') ||
                   (locale === 'ar'
                     ? 'فشل تصدير بيانات الطلاب'
                     : 'Failed to export students'),
@@ -756,8 +766,8 @@ function StudentsPageContent() {
               value={`${sortBy || 'createdAt'}:${sortOrder || 'desc'}`}
               onValueChange={(val) => {
                 const [f, o] = val.split(':');
-                setTableFilter('sortBy' as any, f);
-                setTableFilter('sortOrder' as any, o);
+                setTableFilter('sortBy', f);
+                setTableFilter('sortOrder', o);
               }}
             >
               <SelectTrigger className="w-full border-border bg-secondary/50 lg:w-47.5">
@@ -798,8 +808,8 @@ function StudentsPageContent() {
             sortBy={sortBy}
             sortOrder={sortOrder as 'asc' | 'desc'}
             onSortChange={(field, order) => {
-              setTableFilter('sortBy' as any, field);
-              setTableFilter('sortOrder' as any, order);
+              setTableFilter('sortBy', field);
+              setTableFilter('sortOrder', order);
             }}
             onViewStudent={(st) => setProfileStudent(st)}
             onEditStudent={(st) => {

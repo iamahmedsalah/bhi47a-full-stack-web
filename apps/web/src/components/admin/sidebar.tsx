@@ -203,7 +203,7 @@ export default function AdminSidebar() {
     if (item.adminOnly) return false;
 
     // Exam schedules management is strictly administrative (hide from doctor, TA, accountant)
-    const staffType = (user as any)?.staffType;
+    const staffType = user?.staffType;
     const isAcademicOrFinanceStaff =
       user?.role === "staff" &&
       [

@@ -1,4 +1,5 @@
 'use client';
+import NextImage from "next/image";
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -144,14 +145,7 @@ function getStatusBadgeStyle(status: string) {
   }
 }
 
-export function PublicTicketInquiry({
-  locale: _locale,
-  isAr,
-  initialTicketNumber = '',
-  initialStudentCode = '',
-  initialNationalId = '',
-  onSwitchToNew,
-}: PublicTicketInquiryProps) {
+export function PublicTicketInquiry({ isAr, initialTicketNumber = '', initialStudentCode = '', initialNationalId = '', onSwitchToNew }: PublicTicketInquiryProps) {
   const [studentCode, setStudentCode] = useState(initialStudentCode);
   const [nationalId, setNationalId] = useState(initialNationalId);
   const [ticketNumber, setTicketNumber] = useState(initialTicketNumber);
@@ -244,16 +238,20 @@ export function PublicTicketInquiry({
     void executeSearch(selectedNumber);
   };
 
+  const [previousPrefill, setPreviousPrefill] = useState<unknown[] | null>(null);
+  if (!previousPrefill || previousPrefill.some((value, i) => value !== [initialStudentCode, initialNationalId, initialTicketNumber][i])) {
+    setPreviousPrefill([initialStudentCode, initialNationalId, initialTicketNumber]);
+    if (initialStudentCode && initialNationalId) {
+      setStudentCode(initialStudentCode); setNationalId(initialNationalId);
+      if (initialTicketNumber) setTicketNumber(initialTicketNumber);
+      setIsSearching(true);
+    }
+  }
+
   // Auto search if initial parameters provided
   useEffect(() => {
     if (initialStudentCode && initialNationalId) {
-      setStudentCode(initialStudentCode);
-      setNationalId(initialNationalId);
-      if (initialTicketNumber) {
-        setTicketNumber(initialTicketNumber);
-      }
       void (async () => {
-        setIsSearching(true);
         try {
           const res = await api.post<PublicTicketQueryResponse>(
             '/public/complaints/query',
@@ -617,7 +615,7 @@ export function PublicTicketInquiry({
                   onClick={() => setPreviewImageUrl(ticket.screenshotUrl ?? null)}
                   className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-black/20 p-2 transition-all hover:border-primary/50 max-w-xs"
                 >
-                  <img
+                  <NextImage unoptimized width={1200} height={800}
                     src={ticket.screenshotUrl}
                     alt="Complaint Screenshot"
                     className="max-h-48 w-full rounded-lg object-contain"

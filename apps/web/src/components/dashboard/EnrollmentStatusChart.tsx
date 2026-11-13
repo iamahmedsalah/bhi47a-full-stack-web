@@ -39,18 +39,7 @@ const STATUS_MAP: Record<string, { labelAr: string; labelEn: string; color: stri
   withdrawn: { labelAr: 'منسحب', labelEn: 'Withdrawn', color: '#f59e0b' },
 };
 
-export function EnrollmentStatusChart({
-  data = [],
-  title,
-  subtitle,
-  isAr = false,
-  isLoading = false,
-  totalStudents: propTotal,
-  liveOnline,
-  liveOnlineStaff,
-  isAdmin: _isAdmin = false,
-  onLiveOnlineClick,
-}: EnrollmentStatusChartProps) {
+export function EnrollmentStatusChart({ data = [], title, subtitle, isAr = false, isLoading = false, totalStudents: propTotal, liveOnline, liveOnlineStaff, onLiveOnlineClick }: EnrollmentStatusChartProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 

@@ -1,4 +1,5 @@
 "use client";
+import { useCallback } from "react";
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
@@ -41,14 +42,15 @@ export default function StudentCheckInPage() {
   const isAuthenticated = !!user;
   const token = searchParams.get("t");
 
-  const [status, setStatus] = useState<
+  const [verificationStatus, setStatus] = useState<
     "idle" | "verifying" | "success" | "already" | "error" | "unauthorized"
   >("idle");
   const [result, setResult] = useState<CheckInResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [manualToken, setManualToken] = useState<string>("");
 
-  const handleVerifyToken = async (tokenToVerify: string) => {
+  const status = !isAuthLoading && !isAuthenticated ? "unauthorized" : verificationStatus;
+  const handleVerifyToken = useCallback(async (tokenToVerify: string) => {
     if (!tokenToVerify) return;
 
     const cleanToken = extractRawToken(tokenToVerify);
@@ -106,22 +108,14 @@ export default function StudentCheckInPage() {
       const msg = getAttendanceErrorMessage(err, locale);
       setErrorMessage(msg);
     }
-  };
+  }, [locale, isArabic]);
 
   useEffect(() => {
-    if (isAuthLoading) return;
-
-    if (!isAuthenticated) {
-      setStatus("unauthorized");
-      return;
-    }
-
-    if (token) {
-      handleVerifyToken(token);
-    } else {
-      setStatus("idle");
-    }
-  }, [token, isAuthenticated, isAuthLoading]);
+    if (isAuthLoading || !isAuthenticated || !token) return;
+    // Let the verification UI paint before requesting device/location access.
+    const frame = requestAnimationFrame(() => { void handleVerifyToken(token); });
+    return () => cancelAnimationFrame(frame);
+  }, [token, isAuthenticated, isAuthLoading, handleVerifyToken]);
 
   // Handle Login Redirect
   const handleLoginRedirect = () => {

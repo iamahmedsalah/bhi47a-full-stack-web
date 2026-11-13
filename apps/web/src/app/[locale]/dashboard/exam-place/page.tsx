@@ -3,9 +3,9 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import api, { getApiErrorMessage } from '@/lib/api';
+import api from '@/lib/api';
 import { Card } from '@/components/ui/card';
-import { LoadingState, ErrorState, EmptyState } from '@/components/ui/feedback';
+import { LoadingState, EmptyState } from '@/components/ui/feedback';
 import { MapPin, Info, HelpCircle, CheckCircle, BadgeCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 

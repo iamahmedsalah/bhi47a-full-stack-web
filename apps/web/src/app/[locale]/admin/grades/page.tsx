@@ -43,14 +43,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TableActionButton } from "@/components/ui/table-action-button";
 import { TableCell } from "@/components/ui/table";
-import {
-  deleteGrade,
-  listAdminGrades,
-  recalculateAcademicProgress,
-  saveGrade,
-  updateGrade,
-  type GradeItem,
-} from "@/features/grades/api";
+import { deleteGrade, listAdminGrades, saveGrade, updateGrade, type GradeItem } from "@/features/grades/api";
 import { GradeFormDialog } from "@/features/grades/components/grade-form-dialog";
 import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
 import { AuditWarningsModal } from "@/features/grades/components/audit-warnings-modal";

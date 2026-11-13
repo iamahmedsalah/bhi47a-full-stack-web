@@ -1,4 +1,5 @@
 'use client';
+import { useHydrated } from "@/hooks/use-hydrated";
 
 import React, { useState, useMemo, Suspense } from 'react';
 import { useTranslations } from 'next-intl';
@@ -57,7 +58,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { PERMISSIONS } from '@student-portal/shared';
 import { getApiErrorMessage } from '@/lib/api';
-import api from '@/lib/api';
+
 import { exportElementToPng } from '@/lib/export-utils';
 
 // UI Primitives
@@ -119,7 +120,6 @@ interface QuizFormDialogProps {
   onSuccess: (savedQuiz?: QuizItem) => void;
 }
 
-
 function getInitialQuizWindow() {
   const now = Date.now();
   return {
@@ -128,11 +128,13 @@ function getInitialQuizWindow() {
   };
 }
 
+const EMPTY_QUIZ_VALUES: Partial<QuizItem> = {};
+
 function QuizFormDialog({
   open,
   onOpenChange,
   mode,
-  initialValues = {},
+  initialValues = EMPTY_QUIZ_VALUES,
   courses,
   coursesLoading = false,
   coursesError = false,
@@ -195,9 +197,11 @@ function QuizFormDialog({
   const endsAtIso = useMemo(() => endsAt === toDateTimeLocal(initialValues.endsAt)
     ? initialValues.endsAt : cairoDateTimeToIso(endsAt), [endsAt, initialValues.endsAt]);
 
-
   // Reset or initialize on open and sync whenever initialValues updates
-  React.useEffect(() => {
+  const [previousQuizInputs, setPreviousQuizInputs] = useState<unknown[] | null>(null);
+  if (previousQuizInputs === null || previousQuizInputs.some((value, index) => !Object.is(value, [open, initialValues, isAr, mode][index]))) {
+    setPreviousQuizInputs([open, initialValues, isAr, mode]);
+    (() => {
     if (!open) return;
 
     setCourseId(initialValues.courseId || '');
@@ -222,7 +226,7 @@ function QuizFormDialog({
     if (initialValues.questions && initialValues.questions.length > 0) {
       setQuestions(
         initialValues.questions.map((q, idx) => ({
-          id: q.id || `q_${idx + 1}_${Date.now()}`,
+          id: q.id || `q_${idx + 1}_${nowTime}`,
           text: q.text || '',
           type: (q.type as 'mcq' | 'true_false') || 'mcq',
           options:
@@ -251,11 +255,17 @@ function QuizFormDialog({
         },
       ]);
     }
-  }, [open, initialValues, isAr, mode]);
+
+    })();
+  }
 
   // Check if saved draft exists when opening in 'add' mode
-  React.useEffect(() => {
-    if (!open || mode !== 'add') {
+  const hydrated = useHydrated();
+  const [previousDraftInputs, setpreviousDraftInputs] = useState<unknown[] | null>(null);
+  if (!previousDraftInputs || previousDraftInputs.some((value,i) => !Object.is(value, [open, mode, draftStorageKey, hydrated][i]))) {
+    setpreviousDraftInputs([open, mode, draftStorageKey, hydrated]);
+    (() => {
+    if (!hydrated || !open || mode !== 'add') {
       setHasDraft(false);
       setDraftSavedNotice(null);
       return;
@@ -268,7 +278,7 @@ function QuizFormDialog({
           Boolean(parsed.title?.trim()) ||
           Boolean(parsed.courseId) ||
           (Array.isArray(parsed.questions) &&
-            parsed.questions.some((q: any) => q.text?.trim()));
+            parsed.questions.some((q: unknown) => q && typeof q === 'object' && 'text' in q && typeof q.text === 'string' && q.text.trim()));
         if (hasContent) {
           setHasDraft(true);
           setDraftSavedAt(parsed.savedAt || null);
@@ -277,7 +287,9 @@ function QuizFormDialog({
     } catch {
       // Ignore
     }
-  }, [open, mode, draftStorageKey]);
+
+    })();
+  }
 
   // Debounced auto-save effect for 'add' mode
   React.useEffect(() => {
@@ -1469,7 +1481,7 @@ function StudentSubmissionDetailDialog({
               questions.map((q, idx) => {
                 const answer =
                   answersMap.get(q.id) ||
-                  answersMap.get((q as any)._id?.toString()) ||
+                  answersMap.get(q._id?.toString() || '') ||
                   submission.answers?.[idx];
                 const isAnswered =
                   answer &&
@@ -1646,7 +1658,7 @@ function SubmissionsModal({
 
   const activeQuiz = fullQuizQuery.data || quiz;
 
-  const submissions = submissionsQuery.data || [];
+  const submissions = useMemo(() => submissionsQuery.data || [], [submissionsQuery.data]);
 
   const total = submissions.length;
   const passed = submissions.filter((s) => s.isPassed).length;
@@ -2234,7 +2246,6 @@ function AdminQuizzesContent() {
   const urlCourseId = searchParams?.get('courseId') || 'ALL';
   const autoCreate = searchParams?.get('create') === 'true';
 
-
   const [page] = useState(1);
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState(urlCourseId);
@@ -2297,7 +2308,7 @@ function AdminQuizzesContent() {
     refetchOnReconnect: 'always',
   });
 
-  const coursesList = coursesQuery.data || [];
+  const coursesList = useMemo(() => coursesQuery.data || [], [coursesQuery.data]);
   const coursesMap = useMemo(() => {
     const map = new Map<string, { code: string; name: string; nameAr?: string }>();
     for (const c of coursesList) {

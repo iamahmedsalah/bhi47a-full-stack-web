@@ -1,10 +1,12 @@
 "use client";
+import { useHydrated } from "@/hooks/use-hydrated";
+import NextImage from "next/image";
 import { AdmissionSection } from "./admission-section";
 import { AcademicYearChoice } from "./academic-year-choice";
 import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import QRCode from "qrcode";
@@ -30,7 +32,7 @@ import { exportElementToPng } from "@/lib/export-utils";
 import { cn } from "@/lib/cn";
 import { Ban, Edit2, Loader2, QrCode, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
-import { listStudents } from "@/features/students/api";
+
 import { listAdmissionPeriods } from "./api";
 import {
   admissionAccessCreate,
@@ -408,6 +410,7 @@ function AccessForm({
       maxRegistrations: 1000,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
   const periods = useQuery({
     queryKey: ["admission-access-periods"],
     queryFn: () => listAdmissionPeriods({ page: 1, limit: 100 }),
@@ -458,7 +461,7 @@ function AccessForm({
       </Field>
       <Choice
         label={t("fields.period")}
-        value={form.watch("admissionPeriodId")}
+        value={(watchedForm.admissionPeriodId ?? '')}
         onChange={(value) => {
           form.setValue("admissionPeriodId", value, { shouldValidate: true });
           const target = periods.data?.items?.find((p) => p._id === value);
@@ -475,7 +478,7 @@ function AccessForm({
       />
       {(() => {
         const selected = periods.data?.items?.find(
-          (p) => p._id === form.watch("admissionPeriodId"),
+          (p) => p._id === (watchedForm.admissionPeriodId ?? ''),
         );
         if (!selected) return null;
         return (
@@ -501,14 +504,14 @@ function AccessForm({
       )}
       <Choice
         label={t("fields.method")}
-        value={form.watch("method")}
+        value={(watchedForm.method ?? '')}
         onChange={(value) => form.setValue("method", value as "BOTH")}
         options={["PIN", "QR", "BOTH"].map((value) => ({
           value,
           label: t(`methods.${value}`),
         }))}
       />
-      {form.watch("method") !== "QR" && (
+      {(watchedForm.method ?? '') !== "QR" && (
         <Field
           label={t("fields.pin")}
           error={form.formState.errors.pin?.message}
@@ -529,7 +532,7 @@ function AccessForm({
         error={form.formState.errors.expiresAt?.message}
       >
         <DateTimePicker
-          value={form.watch("expiresAt")}
+          value={(watchedForm.expiresAt ?? '')}
           onChange={(value) =>
             form.setValue("expiresAt", value, { shouldValidate: true })
           }
@@ -583,10 +586,8 @@ function AdmissionPoster({
     [qr, setQr] = useState(""),
     [error, setError] = useState(""),
     poster = useRef<HTMLDivElement>(null);
-  const [origin, setOrigin] = useState("");
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+  const hydrated = useHydrated();
+  const origin = hydrated ? window.location.origin : "";
   const url = origin
     ? `${origin}/${locale}/admission#access=${secret._id}${secret.token ? `&token=${secret.token}` : ""}`
     : "";
@@ -655,7 +656,7 @@ function AdmissionPoster({
         className="space-y-4 rounded-xl bg-white p-6 text-center text-slate-900 shadow-sm border border-border/40"
         dir={dir}
       >
-        <img
+        <NextImage unoptimized
           src="/logo.webp"
           alt="Institute Logo"
           width={80}
@@ -672,7 +673,7 @@ function AdmissionPoster({
           <bdi>{secret.academicYear}</bdi>
         </p>
         {qr && (
-          <img
+          <NextImage unoptimized
             src={qr}
             width={280}
             height={280}
@@ -1154,7 +1155,7 @@ function GroupForm({
   onSaved: () => Promise<void>;
   onCancel: () => void;
 }) {
-  const { t, locale } = useAdmissionUI(),
+  const { t } = useAdmissionUI(),
     [error, setError] = useState("");
   const schema = z.object({
     name: z.string().trim().min(1, t("invalid")).max(80),
@@ -1177,6 +1178,7 @@ function GroupForm({
       isEnabled: initial?.isEnabled ?? true,
     },
   });
+  const watchedForm = useWatch({ control: form.control });
   return (
     <form
       className="grid gap-4 sm:grid-cols-2"
@@ -1217,7 +1219,7 @@ function GroupForm({
         <AdmissionInput {...form.register("nameAr")} dir="rtl" />
       </Field>
       <AcademicYearChoice
-        value={form.watch("academicYear")}
+        value={(watchedForm.academicYear ?? '')}
         onChange={(value) =>
           form.setValue("academicYear", value, { shouldValidate: true })
         }
@@ -1230,7 +1232,7 @@ function GroupForm({
       )}
       <Choice
         label={t("fields.level")}
-        value={form.watch("level")}
+        value={(watchedForm.level ?? '')}
         onChange={(val) => form.setValue("level", val as "1")}
         disabled={Boolean(initial)}
         options={["1", "2", "3", "4"].map((l) => ({
@@ -1263,7 +1265,7 @@ function GroupForm({
       {initial && (
         <Choice
           label={t("statusLabel")}
-          value={form.watch("isEnabled") ? "true" : "false"}
+          value={watchedForm.isEnabled ? "true" : "false"}
           onChange={(v) => form.setValue("isEnabled", v === "true")}
           options={[
             { value: "true", label: t("enabled") },
