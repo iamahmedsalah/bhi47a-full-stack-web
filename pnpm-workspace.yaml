@@ -17,19 +17,34 @@ allowBuilds:
 
 overrides:
   '@grpc/grpc-js@<1.13.6': '>=1.13.6'
+  '@nestjs/cli>fork-ts-checker-webpack-plugin': '-'
+  body-parser@>=2.0.0 <2.4.0: 2.4.0
   dompurify@<=3.4.12: '>=3.4.13'
   dompurify@<=3.4.15: '>=3.4.16'
   dompurify@<=3.4.16: '>=3.4.17'
   dompurify@>=3.4.4 <=3.4.16: '>=3.4.17'
-  follow-redirects@>=1.16.0 <1.16.1: '>=1.16.1'
+  fast-uri@>=3.0.0 <3.1.9: 3.1.9
+  fast-xml-parser@>=5.0.0 <5.12.0: 5.12.0
+  firebase-admin>@google-cloud/firestore: ^9.4.1
+  follow-redirects@>=1.16.0 <1.16.2: 1.16.2
   handlebars@>=3.0.0 <=4.7.9: '>=4.7.10'
   handlebars@>=4.0.0 <=4.7.9: '>=4.7.10'
+  # Modern glob/minimatch consumers (Jest/coverage) retain their named APIs.
+  # Leave legacy glob 7 and minimatch 3/5 on their own compatible releases.
+  glob@>=9.0.0 <14.0.2: 14.0.3
+  minimatch@>=9.0.0 <11.0.1: 11.0.5
+  multer@>=2.0.0 <2.5.0: 2.5.0
   next@>=16.0.0 <16.3.8: '>=16.3.8'
   next@>=16.0.0 <=16.4.0: '>=16.4.1'
   next@>=16.2.0 <16.3.6: '>=16.3.6'
   next@>=16.3.0 <16.3.8: '>=16.3.8'
-  qs@>=2.2.5 <6.16.0: '>=6.16.0'
-  qs@>=6.14.2 <=6.15.3: '>=6.16.0'
+  qs@>=2.2.5 <6.16.1: 6.16.1
+  re2js@>=2.2.0 <2.8.7: 2.8.7
   sharp@<0.35.5: '>=0.35.5'
   source-map-js@>=1.0.0 <1.2.2: '>=1.2.2'
   uuid@<11.1.1: '>=11.1.1'
+
+patchedDependencies:
+  # GHSA-gcqx-w48m-w2h4: preserve inert own data keys in Jest's merge result.
+  # Keep the upstream version and audit warning visible until a fixed release exists.
+  deepmerge@4.3.1: patches/deepmerge@4.3.1.patch

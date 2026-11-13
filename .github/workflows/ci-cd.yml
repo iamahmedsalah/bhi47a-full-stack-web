@@ -78,6 +78,9 @@ jobs:
       - name: Verify VPS deployment trigger policy
         run: node --test scripts/vps-workflow.test.cjs scripts/ci-test-report.test.cjs
 
+      - name: Verify patched development dependency contracts
+        run: node --test scripts/dependency-security.test.cjs
+
       - name: Verify materials migration and restore boundaries
         run: node --test deploy/materials/manage.test.cjs
 
@@ -239,6 +242,21 @@ jobs:
           path: apps/api/coverage/ci-*.json
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Upload admissions browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: admissions-browser-failures
+          path: |
+            outputs/admissions/failure.png
+            outputs/admissions/failure-dom.html
+            outputs/admissions/runtime-error.txt
+            outputs/admissions-workflow/failure.png
+            outputs/admissions-workflow/failure-dom.html
+            outputs/admissions-workflow/runtime-errors.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   docker-validate:
     name: Build and smoke-test VPS containers

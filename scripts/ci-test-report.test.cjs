@@ -98,8 +98,10 @@ test('consumes real Jest JSON with passing, failing, skipped and todo tests', ()
       assert.equal(preparation.status, 0, preparation.stderr);
     }
     const fixture = path.join(temporary, 'fixture.test.cjs');
+    writeFileSync(path.join(temporary, 'logic.cjs'), 'module.exports = value => value + 1;\n');
     const source = `
-      test('passes', () => expect(1).toBe(1));
+      const increment = require('./logic.cjs');
+      test('passes', () => expect(increment(0)).toBe(1));
       test('fails', () => expect(1).toBe(2));
       test.skip('skips', () => {});
       test.todo('later');
@@ -108,7 +110,7 @@ test('consumes real Jest JSON with passing, failing, skipped and todo tests', ()
     const output = path.join(temporary, 'apps/api/coverage/ci-api-unit.json');
     const args = [
       path.join(root, 'apps/api/node_modules/jest/bin/jest.js'),
-      '--config', JSON.stringify({ rootDir: temporary, testEnvironment: 'node', testMatch: ['**/*.test.cjs'] }),
+      '--config', JSON.stringify({ rootDir: temporary, testEnvironment: 'node', testMatch: ['**/*.test.cjs'], collectCoverage: true, collectCoverageFrom: ['logic.cjs'], coverageDirectory: path.join(temporary, 'coverage') }),
       '--runInBand', '--json', '--outputFile', output,
     ];
     const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
@@ -123,7 +125,9 @@ test('consumes real Jest JSON with passing, failing, skipped and todo tests', ()
     writeFileSync(fixture, source.replace('expect(1).toBe(2)', 'expect(1).toBe(1)'));
     const passingRun = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
     assert.equal(passingRun.status, 0, passingRun.stderr);
-    const passingReport = render(JSON.parse(readFileSync(output, 'utf8')));
+    const passingJson = JSON.parse(readFileSync(output, 'utf8'));
+    assert.ok(Object.keys(passingJson.coverageMap || {}).some(file => file.endsWith('logic.cjs')), 'Coverage file matching and instrumentation must work with the patched glob/minimatch dependencies');
+    const passingReport = render(passingJson);
     assert.equal(passingReport.invalid, false);
     assert.match(passingReport.markdown, /2 passes.*1 skipped.*1 todo.*4 total/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
