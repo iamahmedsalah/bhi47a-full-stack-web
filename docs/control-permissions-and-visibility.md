@@ -44,3 +44,13 @@ An absent component contributes zero to the total, while retaining its absent st
 Regression coverage includes the independent permission matrix, direct unauthorized approval, single-grade publication bypass attempts, scoped visibility, exact schedule boundaries, date clearing, and independent midterm/final absence. The browser release acceptance also exercises bilingual settings, mobile width, visibility-only staff, grade-edit-only staff, and hiding a real already-open student results page at its deadline. Replica-set integration verifies persistence and publication with actual synthetic MongoDB records.
 
 This document describes local implementation. Production verification and deployment sign-off remain separate; no live student records were modified.
+
+### Completed local evidence
+
+- Workspace lint passed, with no reported warnings/errors; workspace types and all three production builds passed. Root-route and API runtime artifact checks passed.
+- Final API unit run: 97 suites / 927 tests passed.
+- Real isolated Control replica-set integration: 17 tests passed. The expanded publication scenario initially exceeded its unchanged 30-second limit; independent visibility scenarios replaced the added work in that scenario, and the complete integration suite passed with the same limits and assertions.
+- Bilingual workbook and release/visibility browser checks passed, including mobile layout, both directions of component absence and automatic hiding on an already-open results page.
+- General startup/authentication initially exceeded its fresh database setup limit. A warm rerun passed 17/18, with a student WebAuthn case exceeding 30 seconds; that case passed alone with its unchanged timeout. The final complete startup/authentication rerun subsequently passed **18/18**, with no skipped tests and no timeout/assertion changes (`outputs/visibility-api-startup-accepted.log`). This verifies the startup/authentication file, not every broad API E2E file. The synthetic localhost MongoDB fixture was stopped after verification.
+
+The new permissions must be assigned explicitly to staff who need publication or visibility control. Existing staff with only `grades.write` lose those unrelated powers; admins retain access. Review prior approvals in the existing audit history where the former review-to-approval implication may have affected results.

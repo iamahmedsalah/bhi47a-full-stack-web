@@ -55,10 +55,26 @@ try{
   assert.equal(await page.getByRole('progressbar').getAttribute('aria-valuenow'),'0');
   await page.getByText(t.fileInputHelp,{exact:true}).waitFor();
   await page.goto(`${base}/${locale}?mode=scheme`);await page.locator('#midterm-max').waitFor();assert.equal(await page.getByRole('note').count(),4);await page.locator('#midterm-step').fill('0');assert.equal(await page.getByRole('button',{name:t.confirm,exact:true}).isEnabled(),false);await page.locator('#midterm-step').fill('0.5');await page.locator('#midterm-max').fill('30');await page.locator('#final-max').fill('50');await page.getByRole('button',{name:t.confirm,exact:true}).click();await page.getByText('Closed',{exact:true}).waitFor();assert.equal(schemePayload.components.find(c=>c.key==='midterm').max,30);
-  await page.goto(`${base}/${locale}?mode=audit`);await page.getByRole('button',{name:t.auditPreview,exact:true}).click();await page.getByRole('heading',{name:t.auditPreview,exact:true}).waitFor();await page.keyboard.press('Escape');await page.getByRole('button',{name:t.next,exact:true}).click();await page.getByText(t.auditSources.GRID,{exact:true}).waitFor();
+  await page.goto(`${base}/${locale}?mode=audit`);
+  const next=page.getByRole('button',{name:t.next,exact:true});
+  for(let attempt=0;attempt<3;attempt++){
+   await page.getByRole('button',{name:t.auditPreview,exact:true}).click();
+   await page.getByRole('heading',{name:t.auditPreview,exact:true}).waitFor();
+   await page.keyboard.press('Escape');
+   await page.getByRole('heading',{name:t.auditPreview,exact:true}).waitFor({state:'hidden'});
+   await next.waitFor();
+   assert.equal(await next.isEnabled(),true,'closing a nested preview must retain audit pagination');
+  }
+  await next.click();await page.getByText(t.auditSources.GRID,{exact:true}).waitFor();
+  await page.getByRole('button',{name:t.auditPreview,exact:true}).click();
+  await page.getByRole('heading',{name:t.auditPreview,exact:true}).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('heading',{name:t.auditPreview,exact:true}).waitFor({state:'hidden'});
+  await page.getByRole('button',{name:t.previous,exact:true}).click();
+  await page.getByText(t.auditSources.XLSX,{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,locale+'-audit.png'),fullPage:true});
  }
  const t=JSON.parse(await fs.readFile(path.join(web,'src/messages/en.json'),'utf8')).control;
  await page.goto(`${base}/en?mode=import`);const confirm=page.getByRole('button',{name:t.confirmImport,exact:true});await confirm.waitFor();await page.getByText(t.batchPosition.replace('{current}','1').replace('{total}','2'),{exact:true}).waitFor();assert.equal(await page.locator('tbody tr').count(),50);assert.equal(await confirm.isEnabled(),true);await confirm.click();await page.getByText('Synthetic response lost after save',{exact:true}).waitFor();assert.equal(savedStudents.size,500);await page.getByRole('button',{name:t.retry,exact:true}).click();await page.getByText(t.savedCount.replace('{count}','501'),{exact:true}).waitFor();assert.equal(savedStudents.size,501);assert.equal(commits,3);assert.deepEqual(previewRequests,[0,1,1]);assert.equal(await confirm.isEnabled(),false);await page.setViewportSize({width:390,height:844});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await page.getByRole('dialog').evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished.catch(()=>{}))));const geometry=await page.getByRole('dialog').evaluate(element=>{const rect=element.getBoundingClientRect();return {x:rect.x,y:rect.y,width:rect.width,height:rect.height,maxHeight:getComputedStyle(element).maxHeight,viewport:innerHeight};});await fs.writeFile(path.join(output,'mobile-geometry.json'),JSON.stringify(geometry,null,2));assert.ok(geometry.y>=0 && geometry.y+geometry.height<=845,'Import dialog must fit vertically inside the mobile viewport');await page.screenshot({path:path.join(output,'mobile-import.png'),fullPage:true});await page.goto(`${base}/ar?mode=import`);await page.getByRole('heading',{name:JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control.filePreviewTitle,exact:true}).waitFor();const mobileAction=await page.getByRole('button',{name:JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control.confirmImport,exact:true}).boundingBox();assert.ok(mobileAction && mobileAction.y >= 0 && mobileAction.y + mobileAction.height <= 844,'Import action stays visible on mobile');assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.screenshot({path:path.join(output,'arabic-mobile-import.png'),fullPage:true});assert.deepEqual(errors,[]);
  console.log('PASS: bilingual scheme help and strict payload, field validation, paginated audit details, 501-row preview, sequential batches, lost-response retry without duplicates and mobile layout.');
-}catch(error){if(page)await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});throw error;}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
+}catch(error){if(page){await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});await fs.writeFile(path.join(output,'failure-dom.html'),await page.content());}throw error;}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

@@ -144,6 +144,14 @@ export function ControlAuditDrawer({
         side={isAr ? "left" : "right"}
         dir={isAr ? "rtl" : "ltr"}
         className="w-full sm:max-w-md overflow-y-auto bg-card/95 border-border/80 backdrop-blur-xl"
+        onEscapeKeyDown={(event) => {
+          // During preview mount/unmount, Escape must never dismiss the audit
+          // sheet underneath it. Keep its page and focus context available.
+          if (preview) {
+            event.preventDefault();
+            setPreview(null);
+          }
+        }}
       >
         <SheetHeader className="text-start">
           <SheetTitle className="flex items-center gap-2 text-lg font-bold">
@@ -281,7 +289,11 @@ export function ControlAuditDrawer({
             if (!value) setPreview(null);
           }}
         >
-          <DialogContent dir={isAr ? "rtl" : "ltr"} className="rounded-2xl">
+          <DialogContent
+            dir={isAr ? "rtl" : "ltr"}
+            className="rounded-2xl"
+            onEscapeKeyDown={(event) => event.stopPropagation()}
+          >
             <DialogHeader>
               <DialogTitle className="text-start">
                 {t("auditPreview")}
