@@ -27,6 +27,7 @@ export interface ResultCertificateData {
   overallGradeName?: string;
   passedCourses: number;
   courses: ResultCertificateCourse[];
+  visibleComponents?: { midterm: boolean; final: boolean; total: boolean };
   issuedAt: string;
 }
 
@@ -513,10 +514,9 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
           <span class="c-name">${escapeHtml(course.name)}</span>
           <span class="c-code">${escapeHtml(course.code)}${course.creditHours ? ` · ${course.creditHours} ${isAr ? "ساعات" : "Hrs"}` : ""}</span>
         </td>
-        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.midterm)}</td>
-        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.final)}</td>
-        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.coursework ?? "-")}</td>
-        <td style="font-family: monospace; font-weight: 900; color: #092c35;">${escapeHtml(course.total)}</td>
+${data.visibleComponents?.midterm !== false ? `        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.midterm)}</td>` : ""}
+${data.visibleComponents?.final !== false ? `        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.final)}</td>` : ""}
+${data.visibleComponents?.total !== false ? `        <td style="font-family: monospace; font-weight: 900; color: #092c35;">${escapeHtml(course.total)}</td>` : ""}
         <td>
           <span class="status-badge ${isPass ? "status-pass" : "status-fail"}">
             ${escapeHtml(course.status)}${course.letterGrade ? ` (${escapeHtml(course.letterGrade)})` : ""}
@@ -569,7 +569,9 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
           </div>
         </section>
 
-        <section class="summary-band">
+${
+  data.visibleComponents?.total !== false
+    ? `        <section class="summary-band">
           <div class="summary-tile primary-tile">
             <span class="sum-label">${escapeHtml(copy.gpa)}</span>
             <span class="sum-val" style="font-family: monospace;">${data.gpa.toFixed(2)} / 4.00</span>
@@ -592,15 +594,17 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
           </div>
         </section>
 
+`
+    : ""
+}
         <table class="results-table">
           <thead>
             <tr>
               <th style="width: 30px;">#</th>
               <th>${escapeHtml(copy.courseTitle)}</th>
-              <th style="width: 80px;">${escapeHtml(copy.midterm)}</th>
-              <th style="width: 85px;">${escapeHtml(copy.final)}</th>
-              <th style="width: 70px;">${data.locale === "ar" ? "\u0623\u0639\u0645\u0627\u0644 \u0627\u0644\u0633\u0646\u0629" : "Coursework"}</th>
-              <th style="width: 75px;">${escapeHtml(copy.total)}</th>
+${data.visibleComponents?.midterm !== false ? `              <th style="width: 80px;">${escapeHtml(copy.midterm)}</th>` : ""}
+${data.visibleComponents?.final !== false ? `              <th style="width: 85px;">${escapeHtml(copy.final)}</th>` : ""}
+${data.visibleComponents?.total !== false ? `              <th style="width: 75px;">${escapeHtml(copy.total)}</th>` : ""}
               <th style="width: 95px;">${escapeHtml(copy.status)}</th>
             </tr>
           </thead>

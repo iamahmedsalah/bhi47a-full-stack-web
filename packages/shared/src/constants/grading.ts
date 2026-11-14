@@ -48,7 +48,7 @@ export function calculateGradeScale(
   }
   if (normStatus === 'banned' || normStatus === 'محروم' || normStatus === 'محجوب') {
     return {
-      letter: 'F',
+      letter: 'FX',
       minPercentage: 0,
       maxPercentage: 0,
       points: 0,
@@ -60,7 +60,7 @@ export function calculateGradeScale(
   if (normStatus === 'excused' || normStatus === 'incomplete') {
     const excused = normStatus === 'excused';
     return {
-      letter: 'F',
+      letter: excused ? 'F' : 'IC',
       minPercentage: 0,
       maxPercentage: 0,
       points: 0,

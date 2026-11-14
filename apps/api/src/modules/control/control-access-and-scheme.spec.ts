@@ -20,6 +20,33 @@ describe('ControlAccessService', () => {
   const staffId = new Types.ObjectId().toString();
   const courseId = new Types.ObjectId();
 
+  it('retains every capability for admins while final approval remains explicit for staff', () => {
+    const service = buildAccess();
+    const admin = {
+      _id: staffId,
+      role: 'admin',
+      permissions: [],
+    } as Parameters<ControlAccessService['getCapabilities']>[0];
+    expect(Object.values(service.getCapabilities(admin)).every(Boolean)).toBe(
+      true,
+    );
+    expect(() =>
+      service.assertPermission(admin, PERMISSIONS.CONTROL_FINAL_APPROVE),
+    ).not.toThrow();
+    const staff = {
+      ...admin,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      ],
+    } as typeof admin;
+    expect(service.getCapabilities(staff).canApproveFinal).toBe(false);
+    expect(() =>
+      service.assertPermission(staff, PERMISSIONS.CONTROL_FINAL_APPROVE),
+    ).toThrow(ForbiddenException);
+  });
+
   it.each([
     [PERMISSIONS.CONTROL_SHEETS_REVIEW, true, false, false],
     [PERMISSIONS.CONTROL_SHEETS_APPROVE, false, true, false],

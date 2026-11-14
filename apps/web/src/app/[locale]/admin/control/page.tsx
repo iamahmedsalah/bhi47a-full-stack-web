@@ -84,6 +84,7 @@ function ControlHomeContent() {
     selectedKeys,
     setSelectedKeys,
   } = useTableState({
+    shallow: true,
     defaultFilters: {
       academicYear: "2026-2027",
       semester: "first",
@@ -173,8 +174,11 @@ function ControlHomeContent() {
         component,
       }),
     onSuccess: (res) => {
+      queryClient.setQueryData(controlKeys.sheet(res.sheet.id), res);
+      if (res.sheet.slug) queryClient.setQueryData(controlKeys.sheet(res.sheet.slug), res);
       queryClient.invalidateQueries({
         queryKey: controlKeys.courses(academicYear, semester, level),
+        refetchType: "none",
       });
       router.push(`/${locale}/admin/control/${res.sheet.slug || res.sheet.id}`);
     },

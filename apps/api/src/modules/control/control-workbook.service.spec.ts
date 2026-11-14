@@ -161,6 +161,51 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it('skips unchanged imported marks instead of generating grade writes', async () => {
+    const ctx = build();
+    ctx.rows[0].components = {
+      midterm: {
+        studentId: ctx.row.studentId,
+        score: 17.5,
+        status: 'present',
+        rev: 0,
+        isPublished: false,
+        updatedAt: null,
+        attendanceMark: null,
+        quizzesMark: null,
+      },
+    };
+    const preview = await ctx.service.preview(ctx.user, ctx.sheetId, [ctx.row]);
+    expect(preview).toMatchObject({ valid: 0, skipped: 1, errors: [] });
+    expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
+  });
+
+  it('accepts a zero beside an absent midterm and retains the exam status', async () => {
+    const ctx = build();
+    const preview = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      {
+        ...ctx.row,
+        score: 0,
+        status: 'absent',
+      },
+    ]);
+    expect(preview.errors).toEqual([]);
+    expect(preview.changes[0]).toMatchObject({ score: null, status: 'absent' });
+  });
+
+  it('exports a compact entry sheet with hidden revision metadata and separate context', async () => {
+    const ctx = build();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+    const entry = book.getWorksheet('Marks')!;
+    expect(entry.getColumn(7).hidden).toBe(true);
+    expect(entry.getColumn(5).hidden).toBe(true);
+    expect(entry.getColumn(9).hidden).toBe(true);
+    expect(book.getWorksheet('CourseContext')).toBeDefined();
+    expect(entry.getCell('C2').dataValidation).toMatchObject({
+      type: 'decimal',
+    });
+  });
   it('denies ordinary sheet approval on a final sheet', async () => {
     const ctx = build('final');
     const access = new ControlAccessService({} as never, {} as never);

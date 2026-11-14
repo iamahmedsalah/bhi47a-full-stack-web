@@ -337,7 +337,11 @@ export class ControlReleaseStore {
             ),
           }))
         : [];
-    if (results.some((r) => !r.result.official && !r.result.withheld))
+    if (
+      results.some(
+        (r) => !r.result.official && !r.result.withheld && !r.result.incomplete,
+      )
+    )
       throw new ConflictException(
         'Missing or deferred components block an official final result',
       );

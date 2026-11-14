@@ -51,6 +51,7 @@ import {
   calculateGradeScale,
   type CourseLevel,
   CONTROL_RESULT_EXAM_TYPES,
+  STUDENT_RESULT_EXAM_TYPES,
   isReleasedGradeVisible,
 } from '@student-portal/shared';
 import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
@@ -1133,11 +1134,11 @@ export class GradesService implements OnModuleInit {
         '4',
       ],
       gradesPublishedExamTypes: (
-        settings.gradesPublishedExamTypes ?? CONTROL_RESULT_EXAM_TYPES
-      ).filter((type) => CONTROL_RESULT_EXAM_TYPES.includes(type)),
+        settings.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES
+      ).filter((type) => STUDENT_RESULT_EXAM_TYPES.includes(type)),
       gradesVisibilityRules: (settings.gradesVisibilityRules ?? []).filter(
         (rule) =>
-          !rule.examType || CONTROL_RESULT_EXAM_TYPES.includes(rule.examType),
+          !rule.examType || STUDENT_RESULT_EXAM_TYPES.includes(rule.examType),
       ),
     };
   }
@@ -1444,33 +1445,64 @@ export class GradesService implements OnModuleInit {
         now,
       );
     return rows
-      .filter((row) =>
-        visible(
-          row.courseCode,
-          examType ?? row.examType ?? '',
-          row.academicLevel,
-        ),
+      .filter(
+        (row) =>
+          STUDENT_RESULT_EXAM_TYPES.includes(
+            (examType ??
+              row.examType ??
+              '') as import('@student-portal/shared').ExamType,
+          ) &&
+          visible(
+            row.courseCode,
+            examType ?? row.examType ?? '',
+            row.academicLevel,
+          ),
       )
       .map((row) => {
+        const publicRow = {
+          ...row,
+          attendanceMark: undefined,
+          quizzesMark: undefined,
+          ...(row.examType === 'midterm'
+            ? { letterGrade: undefined, gradePoints: undefined }
+            : {}),
+        };
         const normalized =
           row.status === 'absent' || row.status === 'banned'
             ? {
-                ...row,
+                ...publicRow,
                 grade: 0,
                 percentage: 0,
                 gradePoints: 0,
-                letterGrade: calculateGradeScale(0, row.status).letter,
+                letterGrade:
+                  row.examType === 'midterm'
+                    ? undefined
+                    : calculateGradeScale(0, row.status).letter,
               }
-            : row;
-        // A complete total would disclose a hidden component through subtraction.
+            : publicRow;
         if (
           'officialResult' in row &&
-          ['coursework', 'midterm', 'final'].some(
-            (component) =>
-              !visible(row.courseCode, component, row.academicLevel),
-          )
+          row.officialResult &&
+          typeof row.officialResult === 'object'
         ) {
-          return { ...normalized, officialResult: undefined };
+          const outcome = row.officialResult as Record<string, unknown>;
+          // A published final authorizes the official aggregate, not raw coursework.
+          // Never return the release's component array to student clients.
+          if (row.examType !== 'final')
+            return { ...normalized, officialResult: undefined };
+          return {
+            ...normalized,
+            officialResult: {
+              official: outcome.official,
+              complete: outcome.complete,
+              total: outcome.total,
+              totalMax: outcome.totalMax,
+              percentage: outcome.percentage,
+              passed: outcome.passed,
+              gradePoints: outcome.gradePoints,
+              letterGrade: row.status === 'banned' ? 'FX' : outcome.letterGrade,
+            },
+          };
         }
         return normalized;
       });

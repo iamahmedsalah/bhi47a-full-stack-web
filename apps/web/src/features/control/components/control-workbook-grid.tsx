@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useDeferredValue,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -31,6 +32,7 @@ import {
   CONTROL_SCORELESS_STATES,
   GRADE_STATUS_VALUES,
   computeCoursework,
+  computeCourseResult,
   parseMarkInput,
   validateMark,
   type ControlComponentKey,
@@ -71,6 +73,7 @@ import {
   exportControlSheet,
   exportControlImportErrors,
   getControlWorkbook,
+  getControlSheet,
   openControlSheet,
   previewControlRows,
   reviewControlSheet,
@@ -130,6 +133,7 @@ export function ControlWorkbookGrid({
   const workbook = useQuery({
     queryKey: [...controlKeys.sheet(sheet.id), "workbook"],
     queryFn: () => getControlWorkbook(sheet.id),
+    staleTime: 15_000,
   });
   const archiveKey = principalId ? `${principalId}:${sheet.id}` : "";
   const [restoredDraft] = useState(() =>
@@ -146,6 +150,7 @@ export function ControlWorkbookGrid({
   const [failed, setFailed] = useState(Boolean(restoredDraft));
   const [needsSchemeRefresh, setNeedsSchemeRefresh] = useState(false);
   const view = useTableState({
+    shallow: true,
     defaultFilters: {
       gridSort: "code",
       gridDirection: "asc",
@@ -166,20 +171,6 @@ export function ControlWorkbookGrid({
   const setPage = view.setPage;
   const filter = view.filters.gridFilter;
   const setFilter = (value: string) => view.setFilter("gridFilter", value);
-  const selectionScope = JSON.stringify([
-    search,
-    page,
-    filter,
-    onlyMissing,
-    sort,
-    descending,
-  ]);
-  const [previousSelectionScope, setPreviousSelectionScope] =
-    useState(selectionScope);
-  if (previousSelectionScope !== selectionScope) {
-    setPreviousSelectionScope(selectionScope);
-    setSelected([]);
-  }
   const [reason, setReason] = useState("");
   const [action, setAction] = useState<
     "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN" | "CLEAR" | null
@@ -198,6 +189,34 @@ export function ControlWorkbookGrid({
     }
   }, [drafts, archiveKey]);
   const rows = workbook.data?.rows ?? EMPTY_ROWS;
+  const [searchText, setSearchText] = useState(search);
+  const [previousSearch, setPreviousSearch] = useState(search);
+  if (previousSearch !== search) {
+    setPreviousSearch(search);
+    if (searchText.trim() !== search) setSearchText(search);
+  }
+  useEffect(() => {
+    if (searchText.trim() === search) return;
+    const timer = setTimeout(() => onSearchChange(searchText), 250);
+    return () => clearTimeout(timer);
+  }, [searchText, search, onSearchChange]);
+  const deferredSearch = useDeferredValue(
+    searchText.trim().toLocaleLowerCase(locale),
+  );
+  const selectionScope = JSON.stringify([
+    deferredSearch,
+    page,
+    filter,
+    onlyMissing,
+    sort,
+    descending,
+  ]);
+  const [previousSelectionScope, setPreviousSelectionScope] =
+    useState(selectionScope);
+  if (previousSelectionScope !== selectionScope) {
+    setPreviousSelectionScope(selectionScope);
+    setSelected([]);
+  }
   const byId = useMemo(
     () => new Map(rows.map((r) => [r.studentId, r])),
     [rows],
@@ -227,31 +246,41 @@ export function ControlWorkbookGrid({
       }),
     [rows, sort, key, rtl, descending],
   );
-  const filtered = useMemo(
+  const searchableRows = useMemo(
     () =>
       sortedRows.filter((row) => {
         if (
           !`${row.studentCode} ${row.name} ${row.nameAr ?? ""}`
-            .toLowerCase()
-            .includes(search.toLowerCase())
+            .toLocaleLowerCase(locale)
+            .includes(deferredSearch)
         )
           return false;
         if (onlyMissing && row.components[key]?.status) return false;
-        if (filter === "invalid" && !drafts[row.studentId]?.error) return false;
-        if (filter === "dirty" && !drafts[row.studentId]) return false;
-        if (filter === "errors" && !errors[row.studentId]) return false;
         if (filter === "absent" && row.components[key]?.status !== "absent")
           return false;
         return true;
       }),
-    [sortedRows, search, onlyMissing, filter, drafts, errors, key],
+    [sortedRows, deferredSearch, onlyMissing, filter, key, locale],
   );
+  const filtered = useMemo(() => {
+    if (!["invalid", "dirty", "errors"].includes(filter)) return searchableRows;
+    return searchableRows.filter((row) =>
+      filter === "invalid"
+        ? Boolean(drafts[row.studentId]?.error)
+        : filter === "dirty"
+          ? Boolean(drafts[row.studentId])
+          : Boolean(errors[row.studentId]),
+    );
+  }, [searchableRows, filter, drafts, errors]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / 100));
   const currentPage = Math.max(
     1,
     Math.min(Number.isInteger(page) ? page : 1, pageCount),
   );
-  const visible = filtered.slice((currentPage - 1) * 100, currentPage * 100);
+  const visible = useMemo(
+    () => filtered.slice((currentPage - 1) * 100, currentPage * 100),
+    [filtered, currentPage],
+  );
   const pending = Object.keys(drafts).length > 0;
   useEffect(() => {
     onPendingChange?.(pending);
@@ -316,8 +345,25 @@ export function ControlWorkbookGrid({
       const result = await applyControlChanges(sheet.id, {
         expectedSchemeVersion: workbook.data?.scheme.version ?? 0,
         changes: snapshot.map(
-          ({ studentId, attendanceMark, quizzesMark, score, status, expectedRev, opId, reason }) =>
-            ({ studentId, attendanceMark, quizzesMark, score, status, expectedRev, opId, reason }),
+          ({
+            studentId,
+            attendanceMark,
+            quizzesMark,
+            score,
+            status,
+            expectedRev,
+            opId,
+            reason,
+          }) => ({
+            studentId,
+            attendanceMark,
+            quizzesMark,
+            score,
+            status,
+            expectedRev,
+            opId,
+            reason,
+          }),
         ),
         reason: reason.trim() || undefined,
       });
@@ -369,7 +415,71 @@ export function ControlWorkbookGrid({
               };
             }),
         );
-        await refresh();
+        query.setQueryData<import("../types").ControlWorkbook>(
+          [...controlKeys.sheet(sheet.id), "workbook"],
+          (current) => {
+            if (!current) return current;
+            const accepted = new Map(
+              result.results
+                .filter((item) => item.result === "ok" && item.entry)
+                .map((item) => [item.studentId, item.entry!]),
+            );
+            const sent = new Map(
+              snapshot.map((item) => [item.studentId, item]),
+            );
+            return {
+              ...current,
+              rows: current.rows.map((row) => {
+                const entry = accepted.get(row.studentId);
+                if (!entry) return row;
+                const draft = sent.get(row.studentId);
+                const scoreless = (
+                  CONTROL_SCORELESS_STATES as readonly string[]
+                ).includes(entry.status ?? "");
+                const components = {
+                  ...row.components,
+                  [key]: {
+                    ...row.components[key],
+                    ...entry,
+                    attendanceMark:
+                      key === "coursework"
+                        ? scoreless
+                          ? null
+                          : (draft?.attendanceMark ?? null)
+                        : (row.components[key]?.attendanceMark ?? null),
+                    quizzesMark:
+                      key === "coursework"
+                        ? scoreless
+                          ? null
+                          : (draft?.quizzesMark ?? null)
+                        : (row.components[key]?.quizzesMark ?? null),
+                  },
+                };
+                return {
+                  ...row,
+                  components,
+                  result: computeCourseResult(
+                    current.scheme.components.map((component) => ({
+                      ...component,
+                      enabled: true,
+                    })),
+                    components,
+                  ),
+                };
+              }),
+            };
+          },
+        );
+        void query.invalidateQueries({
+          predicate: (cached) =>
+            cached.queryKey[0] === "control" &&
+            cached.queryKey[1] === "sheet" &&
+            cached.queryKey.length === 3,
+        });
+        void query.invalidateQueries({
+          queryKey: ["control", "courses"],
+          refetchType: "none",
+        });
       }
       return (
         Object.keys(issues).length === 0 && allDrafts.length === snapshot.length
@@ -384,7 +494,15 @@ export function ControlWorkbookGrid({
       inFlight.current = false;
       setSaving(false);
     }
-  }, [sheet.id, workbook.data?.scheme.version, reason, formatControlIssue, refresh, byId, key]);
+  }, [
+    sheet.id,
+    workbook.data?.scheme.version,
+    reason,
+    formatControlIssue,
+    query,
+    byId,
+    key,
+  ]);
 
   useEffect(() => {
     if (!pending || failed || saving || !caps.canEdit) return;
@@ -498,6 +616,9 @@ export function ControlWorkbookGrid({
         courseId: detail.course.id,
         component,
       });
+      query.setQueryData(controlKeys.sheet(next.sheet.id), next);
+      if (next.sheet.slug)
+        query.setQueryData(controlKeys.sheet(next.sheet.slug), next);
       router.push(
         `/${locale}/admin/control/${next.sheet.slug || next.sheet.id}`,
       );
@@ -526,9 +647,12 @@ export function ControlWorkbookGrid({
           throw new Error(t("partialFailure"));
         setSelected([]);
       } else {
+        // Autosave patches rows locally. Read the small sheet record just before
+        // a workflow transition so its revision is authoritative.
+        const latest = await getControlSheet(sheet.id);
         await reviewControlSheet(sheet.id, {
           action,
-          expectedRevision: workbook.data?.revision ?? sheet.revision,
+          expectedRevision: latest.sheet.revision,
           reason,
         });
       }
@@ -570,8 +694,16 @@ export function ControlWorkbookGrid({
   ) => {
     const entry = row.components[component],
       draft = drafts[row.studentId];
-    const value =
-      component === key && draft
+    const effectiveStatus =
+      component === key ? (draft?.status ?? entry?.status) : entry?.status;
+    const scoreless = (CONTROL_SCORELESS_STATES as readonly string[]).includes(
+      effectiveStatus ?? "",
+    );
+    const value = scoreless
+      ? effectiveStatus === "absent" || effectiveStatus === "banned"
+        ? 0
+        : ""
+      : component === key && draft
         ? draft[field]
         : field === "attendance"
           ? (entry?.attendanceMark ?? "")
@@ -600,6 +732,7 @@ export function ControlWorkbookGrid({
         value={value}
         readOnly={
           component !== key ||
+          busy ||
           !caps.canEdit ||
           row.notRegistered ||
           Boolean(entry?.isPublished)
@@ -854,8 +987,11 @@ export function ControlWorkbookGrid({
         <Input
           aria-label={t("search")}
           placeholder={t("search")}
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
+          value={searchText}
+          onChange={(e) => {
+            setSearchText(e.target.value);
+            setSelected([]);
+          }}
           className="max-w-64 h-9 rounded-squircle text-xs"
         />
         <Button
@@ -1147,7 +1283,9 @@ export function ControlWorkbookGrid({
                 }
               </th>
               <th className="p-3">{t("total")}</th>
-              <th className="p-3 min-w-40">{t("status")} — {t(key)}</th>
+              <th className="p-3 min-w-40">
+                {t("status")} — {t(key)}
+              </th>
               <th className="p-3">{t("actions")}</th>
             </tr>
           </thead>

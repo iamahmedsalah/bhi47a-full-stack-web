@@ -27,6 +27,14 @@ export function evaluateOfficialResult(
     (c) => c.enabled && marks[c.key]?.status === 'withheld',
   );
   const final = marks.final;
+  // An explicitly approved incomplete final can publish its IC status once
+  // other contributions are complete, without publishing a numeric outcome.
+  const incomplete =
+    final?.status === 'incomplete' &&
+    computeCourseResult(
+      components.filter((component) => component.key !== 'final'),
+      marks,
+    ).complete;
   const finalMax = components.find((c) => c.key === 'final')?.max ?? 0;
   if (
     !result.complete ||
@@ -38,11 +46,12 @@ export function evaluateOfficialResult(
     return {
       ...result,
       official: false as const,
+      incomplete,
       withheld,
       passed: false,
       percentage: null,
       gradePoints: null,
-      letterGrade: null,
+      letterGrade: incomplete ? 'IC' : null,
     };
   const percentage = Math.round((result.total * 10000) / result.totalMax) / 100;
   const blocked =
@@ -50,10 +59,14 @@ export function evaluateOfficialResult(
     Math.round((final.score ?? 0) * 10000) <
       Math.round(policy.finalMinimumPercentage * finalMax * 100);
   const passed = !blocked && percentage >= policy.passPercentage;
-  const scale = calculateGradeScale(percentage, passed ? 'present' : 'absent');
+  const scale = calculateGradeScale(
+    percentage,
+    passed ? 'present' : final.status === 'banned' ? 'banned' : 'absent',
+  );
   return {
     ...result,
     official: true as const,
+    incomplete: false,
     withheld: false,
     passed,
     percentage,

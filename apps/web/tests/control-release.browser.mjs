@@ -35,14 +35,19 @@ let settings={gradesSystemOpen:false,gradesLevelBasis:'student',gradesOpenAt:'20
 const visibilityWrites=[];
 let studentCloseAt;
 let absentComponent='midterm';
-let course111=false, course111Status='present', tuitionBlocked=false;
+let course111=false, course111Status='present', tuitionBlocked=false, resultMode='midterm';
 const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     const send=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(status===200?{success:true,data,timestamp:new Date().toISOString()}:data));};
     if(url.pathname==='/students/me/results-window')return send({isOpen:!tuitionBlocked&&Date.now()<Date.parse(studentCloseAt),visibilityVersion:tuitionBlocked?'tuition-blocked':'tuition-clear',closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':tuitionBlocked?'tuition_blocked':undefined,studentLevel:course111?'3':'1',isLevelPublished:!course111});
     if(url.pathname==='/students/me/results' && tuitionBlocked)return send([]);
-    if(url.pathname==='/students/me/profile')return send({level:course111?'3':'1',gpa:0});
+    if(url.pathname==='/students/me/profile')return send({level:course111?'3':'1',gpa:0,academicWarnings:2});
+    if(url.pathname==='/students/me/results' && course111 && resultMode!=='midterm'){
+      const common={courseCode:'111',courseName:'Synthetic course 111',courseNameEn:'Synthetic course 111',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true};
+      const final={...common,_id:'final-111',examType:'final',grade:course111Status==='present'?48:0,maxGrade:60,status:course111Status,officialResult:{official:course111Status!=='incomplete',total:course111Status==='present'?80:32,totalMax:100,passed:course111Status==='present',percentage:course111Status==='present'?80:32,gradePoints:course111Status==='present'?3.3:0,letterGrade:course111Status==='banned'?'FX':course111Status==='incomplete'?'IC':course111Status==='present'?'B+':'F'}};
+      return send(resultMode==='both'?[{...common,_id:'midterm-111',examType:'midterm',grade:15,maxGrade:20,status:'present'},final]:[final]);
+    }
     if(url.pathname==='/students/me/results' && course111)return send([{_id:'course111-midterm',courseCode:'111',courseName:'Synthetic course 111',courseNameAr:'مقرر تجريبي 111',courseNameEn:'Synthetic course 111',examType:'midterm',grade:course111Status==='present'?5:0,maxGrade:20,status:course111Status,academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/students/me/results')return send(Date.now()>=Date.parse(studentCloseAt)?[]:[{_id:'synthetic-midterm',courseCode:'SYNTH101',courseName:'Synthetic course',courseNameEn:'Synthetic course',courseNameAr:'Synthetic course',examType:'midterm',grade:absentComponent==='midterm'?0:15,maxGrade:20,status:absentComponent==='midterm'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true},{_id:'synthetic-final',courseCode:'SYNTH101',courseName:'Synthetic course',examType:'final',grade:absentComponent==='final'?0:55,maxGrade:60,status:absentComponent==='final'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/admin/control/courses')return send({items:[{courseId,code:'SYNTH101',name:'Synthetic course',nameAr:'SYNTH101',nameEn:'Synthetic course',rosterCount:1,components:['coursework','midterm','final'].map(key=>({key,sheetId,slug:`synth101-${key}`,entered:1,published:active?1:0}))}]});
@@ -109,9 +114,9 @@ try{
     await page.goto(`${base}/${locale}/admin/grades?view=visibility`);
     const dialog=page.getByRole('dialog');
     await dialog.getByText(text('Master switch is off: all results are hidden','المفتاح العام مغلق: جميع النتائج محجوبة'),{exact:true}).waitFor();
-    await dialog.getByText(text('These settings apply only to coursework, midterm and final results. Course instructors control quiz visibility independently of the results switch and schedule.','هذه الإعدادات لأعمال السنة والميدترم والنهائي فقط. إظهار الكويزات وإخفاؤها من اختصاص دكتور المقرر، ولا تتأثر بإغلاق النتائج أو مواعيدها.'),{exact:true}).waitFor();
+    await dialog.getByText(text('Choose midterm or final visibility. Coursework is always hidden from students and counts toward the official total. Instructors control quiz visibility.','اختر إظهار الميدترم أو النهائي. أعمال السنة مخفية عن الطالب دائمًا وتُحتسب في المجموع الرسمي. إتاحة الكويزات من اختصاص دكتور المقرر.'),{exact:true}).waitFor();
     assert.ok(await dialog.evaluate(node=>node.getBoundingClientRect().width<=768),'desktop visibility modal should be at most 768px wide');
-    assert.equal(await dialog.getByRole('button',{name:new RegExp(ar?'الاختبارات القصيرة|العملي|الشفوي':'Quizzes|Practical|Oral')}).count(),0);
+    assert.equal(await dialog.getByRole('button',{name:new RegExp(ar?'الاختبارات القصيرة|العملي|الشفوي|أعمال السنة':'Quizzes|Practical|Oral|Coursework')}).count(),0);
     await dialog.getByRole('button',{name:text('Open results viewing','فتح عرض النتائج'),exact:true}).click();
     await dialog.getByRole('button',{name:text('Hide all results','حجب كل النتائج'),exact:true}).waitFor();
     assert.equal(settings.gradesSystemOpen,true);
@@ -182,6 +187,35 @@ try{
     tuitionBlocked=false;
     await page.goto(`${base}/${locale}/dashboard/results?view=student`);
     await page.getByRole('row').filter({hasText:'111'}).first().waitFor();
+  }
+  tuitionBlocked=false;course111=true;studentCloseAt=new Date(Date.now()+120000).toISOString();
+  for(const locale of ['en','ar']){
+    for(const mode of ['midterm','final','both']){
+      resultMode=mode;course111Status='present';
+      await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+      await page.getByRole('row').filter({hasText:'111'}).first().waitFor();
+      const headers=await page.getByRole('columnheader').allTextContents();
+      if(mode==='midterm'){const row=page.getByRole('row').filter({hasText:'111'});assert.equal(await row.getByText(/^(A\+?|B\+?|C\+?|D\+?|F|FX|IC)$/).count(),0,'midterm must not display a letter grade');}
+      assert.equal(headers.some(value=>/Coursework|أعمال السنة/.test(value)),false);
+      assert.equal(headers.some(value=>/Midterm Exam/.test(value)),locale==='en'&&mode!=='final');
+      assert.equal(headers.some(value=>/Final Exam/.test(value)),locale==='en'&&mode!=='midterm');
+      if(mode!=='midterm')await page.getByRole('row').filter({hasText:'111'}).getByText('80 / 100',{exact:true}).waitFor();
+      await page.getByText(locale==='en'?'Academic warnings':'عدد الإنذارات الأكاديمية',{exact:true}).waitFor();
+      assert.equal(await page.getByText('Level Performance',{exact:true}).count(),0);
+      await page.evaluate(()=>Promise.all(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished.catch(()=>{}))));
+      await page.screenshot({path:path.join(output,`student-${locale}-${mode}.png`),fullPage:true});
+    }
+    resultMode='both';
+    for(const status of ['absent','banned','incomplete']){
+      course111Status=status;
+      await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+      const row=page.getByRole('row').filter({hasText:'111'});
+      await row.getByText('15 / 20',{exact:true}).waitFor();
+      await row.getByText(messages[locale].control.states[status],{exact:true}).first().waitFor();
+      if(status!=='incomplete')await row.getByText('32 / 100',{exact:true}).waitFor();
+      if(status==='banned')await row.getByText('FX',{exact:true}).waitFor();
+      if(status==='incomplete')await row.getByText('IC',{exact:true}).waitFor();
+    }
   }
   assert.deepEqual(errors,[]);
   console.log('Control release browser acceptance passed: real API envelopes, scoped course selection, policy editing, stale preview recovery, activation, withdrawal, history, Arabic/English desktop/mobile.');

@@ -7,6 +7,9 @@ export const CONTROL_RESULT_EXAM_TYPES: ExamType[] = [
   "final",
 ];
 
+/** Coursework contributes to official totals but is never a student-facing column. */
+export const STUDENT_RESULT_EXAM_TYPES: ExamType[] = ["midterm", "final"];
+
 export interface GradeVisibilityRule {
   courseCode?: string;
   studentCode?: string;

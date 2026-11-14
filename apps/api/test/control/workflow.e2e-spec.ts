@@ -677,7 +677,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       detail.sheet.id,
       Buffer.from(bytes),
     );
-    expect(imported.valid).toBe(1);
+    expect(imported).toMatchObject({ valid: 0, skipped: 1, errors: [] });
+    expect(await auditModel.countDocuments({ source: 'XLSX' })).toBe(1);
     const view = await workbook.workbook(actor, detail.sheet.id);
     expect(view.rows[0].components.coursework).toMatchObject({
       score: 17,
@@ -890,7 +891,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     );
     windowOpen = true;
     const result = await grades.findStudentResults(String(studentId));
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(2);
+    expect(result.some((grade) => grade.examType === 'coursework')).toBe(false);
     expect(result.find((g) => g.examType === 'final')).toMatchObject({
       officialResult: {
         official: true,
@@ -1277,4 +1279,140 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       ),
     ).toHaveLength(501);
   }, 120000);
+  it.each(['absent', 'banned', 'incomplete'] as const)(
+    'publishes a %s final with retained contributions and no student coursework payload',
+    async (status) => {
+      const learner = new Types.ObjectId(),
+        course = new Types.ObjectId();
+      const code = `SYNTH-${status.toUpperCase()}`;
+      await connection.models.User.collection.insertOne({
+        _id: learner,
+        role: 'student',
+        studentCode: code,
+        name: 'Synthetic status learner',
+      });
+      await connection.models.Course.collection.insertOne({
+        _id: course,
+        code,
+        name: 'Synthetic exam status',
+        creditHours: 3,
+        academicLevel: '1',
+        isActive: true,
+      });
+      await connection.models.StudentProfile.collection.insertOne({
+        userId: learner,
+        studentCode: code,
+        fullName: 'Synthetic status learner',
+        level: '1',
+        isBlocked: false,
+      });
+      await connection.models.CourseRegistration.collection.insertOne({
+        studentId: learner,
+        academicYear: year,
+        semester: 'first',
+        courses: [code],
+        status: 'approved',
+      });
+      await connection.models.StudentAcademicProfile.collection.insertOne({
+        studentId: learner,
+        academicLevel: '1',
+        semester: 'first',
+        gpa: 0,
+        completedCourses: [],
+        failedCourses: [],
+        lowGradeCourses: [],
+        academicWarnings: 0,
+        completedCreditHours: 0,
+      });
+      for (const component of ['coursework', 'midterm', 'final'] as const) {
+        let detail = await sheets.openSheet(actor, {
+          courseId: String(course),
+          academicYear: year,
+          semester: 'first',
+          component,
+        });
+        const saved = await marks.applyChanges(actor, detail.sheet.id, {
+          changes: [
+            {
+              studentId: String(learner),
+              score:
+                component === 'final'
+                  ? null
+                  : component === 'midterm'
+                    ? 15
+                    : 17,
+              status: component === 'final' ? status : 'present',
+              expectedRev: 0,
+              opId: randomUUID(),
+              reason: 'Synthetic exam-status acceptance',
+              ...(component === 'coursework'
+                ? { attendanceMark: 4, quizzesMark: 13 }
+                : {}),
+            },
+          ],
+        });
+        expect(saved.results[0].result).toBe('ok');
+        detail = await sheets.getSheet(actor, detail.sheet.id);
+        detail = await workbook.review(actor, detail.sheet.id, {
+          action: 'SUBMIT',
+          expectedRevision: detail.sheet.revision,
+          reason: 'Synthetic status submission',
+        });
+        await workbook.review(reviewer, detail.sheet.id, {
+          action: 'APPROVE',
+          expectedRevision: detail.sheet.revision,
+          reason: 'Synthetic independent status review',
+        });
+      }
+      const scope = {
+        academicYear: year,
+        semester: 'first' as const,
+        courseCode: code,
+        examType: 'final' as const,
+        isPublished: true,
+      };
+      const preview = await grades.previewControlRelease(scope);
+      await grades.publishGrades(
+        { ...scope, releaseDigests: preview.releaseDigests },
+        actor._id,
+      );
+      await grades.updateGradesSettings({
+        gradesSystemOpen: true,
+        gradesLevelBasis: 'course',
+        gradesPublishedLevels: ['1'],
+        gradesPublishedExamTypes: ['midterm', 'final'],
+        gradesOpenAt: null,
+        gradesCloseAt: null,
+      });
+      windowOpen = true;
+      try {
+        const visible = await grades.findStudentResults(String(learner));
+        expect(visible).toHaveLength(2);
+        expect(visible.some((grade) => grade.examType === 'coursework')).toBe(
+          false,
+        );
+        expect(
+          visible.find((grade) => grade.examType === 'midterm'),
+        ).toMatchObject({ grade: 15, status: 'present' });
+        const final = visible.find((grade) => grade.examType === 'final');
+        expect(final).toMatchObject({
+          grade: 0,
+          status,
+          officialResult: {
+            official: status !== 'incomplete',
+            total: status === 'incomplete' ? null : 32,
+            totalMax: 100,
+            passed: false,
+            gradePoints: status === 'incomplete' ? null : 0,
+            letterGrade:
+              status === 'incomplete' ? 'IC' : status === 'banned' ? 'FX' : 'F',
+          },
+        });
+        expect(final).not.toHaveProperty('officialResult.components');
+      } finally {
+        windowOpen = false;
+      }
+    },
+    60000,
+  );
 });

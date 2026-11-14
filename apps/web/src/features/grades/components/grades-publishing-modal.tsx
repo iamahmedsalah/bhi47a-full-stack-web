@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  CONTROL_RESULT_EXAM_TYPES,
+  STUDENT_RESULT_EXAM_TYPES,
   type ExamType,
   type GradeVisibilityRule,
 } from "@student-portal/shared";
@@ -117,10 +117,10 @@ export function GradesPublishingModal({
   const settings = query.data;
   const busy = mutation.isPending;
   const levels = settings?.gradesPublishedLevels ?? ["1", "2", "3", "4"];
-  const types = (settings?.gradesPublishedExamTypes ?? CONTROL_RESULT_EXAM_TYPES)
-    .filter((type) => CONTROL_RESULT_EXAM_TYPES.includes(type));
+  const types = (settings?.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES)
+    .filter((type) => STUDENT_RESULT_EXAM_TYPES.includes(type));
   const rules = (settings?.gradesVisibilityRules ?? [])
-    .filter((rule) => !rule.examType || CONTROL_RESULT_EXAM_TYPES.includes(rule.examType));
+    .filter((rule) => !rule.examType || STUDENT_RESULT_EXAM_TYPES.includes(rule.examType));
   const section =
     "min-w-0 space-y-4 rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5";
   const saveWindow = () => {
@@ -424,12 +424,12 @@ export function GradesPublishingModal({
                 </h3>
                 <p className="text-xs leading-6 text-muted-foreground">
                   {tr(
-                    "هذه الإعدادات لأعمال السنة والميدترم والنهائي فقط. إظهار الكويزات وإخفاؤها من اختصاص دكتور المقرر، ولا تتأثر بإغلاق النتائج أو مواعيدها.",
-                    "These settings apply only to coursework, midterm and final results. Course instructors control quiz visibility independently of the results switch and schedule.",
+                    "اختر إظهار الميدترم أو النهائي. أعمال السنة مخفية عن الطالب دائمًا وتُحتسب في المجموع الرسمي. إتاحة الكويزات من اختصاص دكتور المقرر.",
+                    "Choose midterm or final visibility. Coursework is always hidden from students and counts toward the official total. Instructors control quiz visibility.",
                   )}
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {CONTROL_RESULT_EXAM_TYPES.map((type) => (
+                  {STUDENT_RESULT_EXAM_TYPES.map((type) => (
                     <Button
                       key={type}
                       className="h-auto min-h-12 whitespace-normal justify-start text-xs sm:text-sm"
@@ -492,7 +492,7 @@ export function GradesPublishingModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent dir={isAr ? "rtl" : "ltr"}>
-                      {["all", ...CONTROL_RESULT_EXAM_TYPES].map((type) => (
+                      {["all", ...STUDENT_RESULT_EXAM_TYPES].map((type) => (
                         <SelectItem key={type} value={type}>
                           {labels[type]}
                         </SelectItem>

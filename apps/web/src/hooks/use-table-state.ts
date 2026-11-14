@@ -7,12 +7,15 @@ export interface TableStateOptions<TFilters extends Record<string, string>> {
   defaultFilters: TFilters;
   defaultPage?: number;
   defaultLimit?: number;
+  /** Client-filtered grids can update the URL without a server navigation. */
+  shallow?: boolean;
 }
 
 export function useTableState<TFilters extends Record<string, string>>({
   defaultFilters,
   defaultPage = 1,
   defaultLimit = 20,
+  shallow = false,
 }: TableStateOptions<TFilters>) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,12 +41,13 @@ export function useTableState<TFilters extends Record<string, string>>({
       const newUrl = query ? `${pathname}?${query}` : pathname;
       if (typeof window !== 'undefined') {
         window.history.replaceState(null, '', newUrl);
+        if (shallow) return;
       }
       startTransition(() => {
         router.replace(newUrl, { scroll: false });
       });
     },
-    [pathname, router],
+    [pathname, router, shallow],
   );
 
   const setPage = useCallback(

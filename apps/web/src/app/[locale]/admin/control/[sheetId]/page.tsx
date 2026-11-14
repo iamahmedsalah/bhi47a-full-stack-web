@@ -52,6 +52,7 @@ function ControlSheetEditorContent() {
   const isAr = locale === "ar";
 
   const { search, setSearch } = useTableState({
+    shallow: true,
     defaultFilters: {
       filter: "all",
     },
@@ -67,6 +68,7 @@ function ControlSheetEditorContent() {
     queryKey: controlKeys.sheet(sheetId),
     queryFn: () => getControlSheet(sheetId),
     enabled: Boolean(sheetId),
+    staleTime: 10_000,
   });
 
   const [hasPending, setHasPending] = useState(false);

@@ -23,6 +23,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EXAM_TYPE_VALUES,
   CONTROL_RESULT_EXAM_TYPES,
+  STUDENT_RESULT_EXAM_TYPES,
   GRADE_STATUS_VALUES,
   type ExamType,
   type GradeStatus,
@@ -204,7 +205,7 @@ export class GradeVisibilityRuleDto {
   studentCode?: string;
 
   @IsOptional()
-  @IsIn(CONTROL_RESULT_EXAM_TYPES)
+  @IsIn(STUDENT_RESULT_EXAM_TYPES)
   examType?: ExamType;
 
   @IsBoolean()
@@ -240,9 +241,9 @@ export class UpdateGradesSettingsDto {
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
-  @ArrayMaxSize(3)
+  @ArrayMaxSize(2)
   @ArrayUnique()
-  @IsIn(CONTROL_RESULT_EXAM_TYPES, { each: true })
+  @IsIn(STUDENT_RESULT_EXAM_TYPES, { each: true })
   gradesPublishedExamTypes?: ExamType[];
 
   @ValidateIf((_object, value) => value !== undefined)

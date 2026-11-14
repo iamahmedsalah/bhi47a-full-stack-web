@@ -413,6 +413,13 @@ export class ControlWorkbookService {
     const { rows, scheme } = await this.workbook(user, sheetId);
     const book = new ExcelJS.Workbook();
     const page = book.addWorksheet('Marks');
+    const displayScore = (entry?: {
+      score: number | null;
+      status: string | null;
+    }) =>
+      entry?.status === 'absent' || entry?.status === 'banned'
+        ? 0
+        : (entry?.score ?? '');
     // Only active-component inputs may be imported. Other components are context.
     // Note: studentId (raw MongoDB ObjectId) is intentionally omitted; students are matched by studentCode.
     page.addRow([
@@ -444,15 +451,15 @@ export class ControlWorkbookService {
       page.addRow([
         row.studentCode,
         row.nameAr || row.name,
-        active?.score ?? '',
+        displayScore(active),
         localizedStatus,
         active?.attendanceMark ?? '',
         active?.quizzesMark ?? '',
         active?.rev ?? 0,
         '',
-        row.components.coursework?.score ?? '',
-        row.components.midterm?.score ?? '',
-        row.components.final?.score ?? '',
+        displayScore(row.components.coursework),
+        displayScore(row.components.midterm),
+        displayScore(row.components.final),
         row.result.total ?? '',
       ]);
     }
@@ -469,6 +476,86 @@ export class ControlWorkbookService {
       col.width = i === 1 ? 36 : 22;
     });
     page.views = [{ rightToLeft: true, state: 'frozen', xSplit: 2, ySplit: 1 }];
+
+    // Preserve revision metadata and legacy round-trip compatibility without
+    // asking an operator to edit technical or duplicate reference columns.
+    page.getColumn(7).hidden = true;
+    for (const index of [9, 10, 11, 12]) page.getColumn(index).hidden = true;
+    if (details.sheet.component !== 'coursework') {
+      page.getColumn(5).hidden = true;
+      page.getColumn(6).hidden = true;
+    }
+    page.autoFilter = { from: 'A1', to: 'H1' };
+    const context = book.addWorksheet('CourseContext');
+    context.views = [
+      { rightToLeft: true, state: 'frozen', ySplit: 1, xSplit: 2 },
+    ];
+    context.addRow([
+      'studentCode',
+      'name',
+      'coursework',
+      'midterm',
+      'final',
+      'total',
+      'midtermStatus',
+      'finalStatus',
+    ]);
+    for (const row of rows) {
+      context.addRow([
+        row.studentCode,
+        row.nameAr || row.name,
+        displayScore(row.components.coursework),
+        displayScore(row.components.midterm),
+        displayScore(row.components.final),
+        row.result.total ?? '',
+        row.components.midterm?.status
+          ? (STATUS_ARABIC_LABELS[row.components.midterm.status] ??
+            row.components.midterm.status)
+          : '',
+        row.components.final?.status
+          ? (STATUS_ARABIC_LABELS[row.components.final.status] ??
+            row.components.final.status)
+          : '',
+      ]);
+    }
+    context.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    });
+    context.columns.forEach((column, index) => {
+      column.width = index === 1 ? 36 : 22;
+    });
+    page.eachRow((row, index) => {
+      if (index === 1) return;
+      row.getCell(1).numFmt = '@';
+      row.getCell(3).numFmt = '0.##';
+      row.getCell(3).dataValidation = {
+        type: 'decimal',
+        operator: 'between',
+        allowBlank: true,
+        formulae: [0, details.rules?.max ?? 20],
+        showErrorMessage: true,
+        errorTitle: 'Invalid grade / درجة غير صحيحة',
+        error:
+          'Enter a grade within the component maximum / أدخل درجة ضمن الحد الأقصى',
+      };
+      row.getCell(4).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${Object.values(STATUS_ARABIC_LABELS).join(',')}"`],
+      };
+      for (const column of [3, 4, 8]) {
+        row.getCell(column).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F4F1' },
+        };
+      }
+    });
 
     const instructions = book.addWorksheet('إرشادات الرصد');
     instructions.views = [{ rightToLeft: true }];
@@ -538,18 +625,18 @@ export class ControlWorkbookService {
       ],
       [
         '5. الحالات الخاصة والسبب (reason)',
-        'حالات (غائب، بعذر، محروم، غير مكتمل) لا تقبل درجة رقمية. كما أن حالات (بعذر، محروم، محجوبة، غير مكتمل) تتطلب كتابة سبب واضح (3 أحرف على الأقل) في عمود السبب.',
-        'Scoreless states (absent, excused, banned, incomplete) must have an empty score cell. Restricted states require a reason (min 3 chars).',
+        'للغياب أو الحرمان: اترك الدرجة فارغة أو اكتب صفرًا. لبعذر أو غير مكتمل: اتركها فارغة. حالات بعذر ومحروم ومحجوبة وغير مكتمل تتطلب سببًا واضحًا (3 أحرف على الأقل). الصفوف غير المعدّلة تُتخطّى تلقائيًا. الحرمان في النهائي = FX، وغير المكتمل = IC، والرسوب = F؛ تظل درجات الميدتيرم وأعمال السنة محفوظة.',
+        'For absent/banned, leave score empty or enter 0. Excused/incomplete require an empty score. Restricted states require a reason (min 3 chars). Unchanged rows are skipped. A banned final is FX, incomplete is IC and failure is F; midterm/coursework contributions are preserved.',
       ],
       [
         '6. رقم المراجعة (expectedRev)',
-        'لا تقم بتغيير رقم المراجعة؛ يُستخدم للتحقق من عدم تعديل الدرجة بواسطة مستخدم آخر أثناء عملك على الملف.',
-        'Do not change expectedRev; it protects against overwriting concurrent edits.',
+        'رقم المراجعة مخفي تلقائيًا؛ لا تحذف العمود أو تغيّر قيمه، فهو يحمي الدرجة من استبدال تعديل أحدث.',
+        'expectedRev is hidden automatically. Keep the column unchanged; it protects against overwriting concurrent edits.',
       ],
       [
         '7. الأعمدة المرجعية (Context Columns)',
-        'أعمدة (أعمال السنة، الميدتيرم، النهائي، المجموع الكلي) في نهاية الجدول هي للعرض والمراجعة فقط ولا يتم استيرادها.',
-        'The summary columns (coursework, midterm, final, total) at the end of the sheet are read-only context.',
+        'تعرض ورقة CourseContext جميع مكونات المقرر والمجموع وحالة كل امتحان للمراجعة فقط. أدخل التعديلات في ورقة Marks، وتظل الأعمدة التقنية والمرجعية مخفية للحفاظ على سهولة الرصد.',
+        'CourseContext contains read-only context: all components, total and exam statuses. Edit Marks only. Technical and duplicate reference columns stay hidden.',
       ],
     ]);
     instructions.getColumn(1).width = 30;
@@ -860,6 +947,47 @@ export class ControlWorkbookService {
         fail('Invalid score/status');
         continue;
       }
+      const scoreless = (
+        CONTROL_SCORELESS_STATES as readonly string[]
+      ).includes(status);
+      // A zero entered beside an absence/ban means no exam mark, not a
+      // positive contribution. Preserve the explicit exam status for students.
+      if (
+        score.ok &&
+        score.value === 0 &&
+        ['absent', 'banned'].includes(status)
+      ) {
+        score.value = null;
+      }
+      if (
+        (scoreless && score.value !== null) ||
+        (!scoreless &&
+          (score.value === null || validateMark(score.value, detail.rules)))
+      ) {
+        fail('Mark does not match status, maximum or step');
+        continue;
+      }
+      const rev = Number(row.expectedRev);
+      if (!Number.isInteger(rev) || rev !== (current?.rev ?? 0)) {
+        fail('Stale mark revision');
+        continue;
+      }
+      const attendance = parseMarkInput(row.attendanceMark),
+        quizzes = parseMarkInput(row.quizzesMark);
+      const unchangedBreakdown =
+        detail.sheet.component !== 'coursework' ||
+        scoreless ||
+        (attendance.ok &&
+          quizzes.ok &&
+          attendance.value === (current?.attendanceMark ?? null) &&
+          quizzes.value === (current?.quizzesMark ?? null));
+      if (
+        current &&
+        current.status === status &&
+        current.score === score.value &&
+        unchangedBreakdown
+      )
+        continue;
       if (
         ((CONTROL_RESTRICTED_STATES as readonly string[]).includes(status) ||
           (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
@@ -876,24 +1004,6 @@ export class ControlWorkbookService {
         fail('Hide published marks before importing');
         continue;
       }
-      const scoreless = (
-        CONTROL_SCORELESS_STATES as readonly string[]
-      ).includes(status);
-      if (
-        (scoreless && score.value !== null) ||
-        (!scoreless &&
-          (score.value === null || validateMark(score.value, detail.rules)))
-      ) {
-        fail('Mark does not match status, maximum or step');
-        continue;
-      }
-      const rev = Number(row.expectedRev);
-      if (!Number.isInteger(rev) || rev !== (current?.rev ?? 0)) {
-        fail('Stale mark revision');
-        continue;
-      }
-      const attendance = parseMarkInput(row.attendanceMark),
-        quizzes = parseMarkInput(row.quizzesMark);
       if (
         detail.sheet.component === 'coursework' &&
         !scoreless &&

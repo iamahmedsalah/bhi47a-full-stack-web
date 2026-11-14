@@ -259,7 +259,7 @@ describe('Released grade visibility', () => {
     await controller.saveGrade({} as never, editor);
     expect(saveGrade).toHaveBeenCalledTimes(1);
   });
-  it('filters student API rows and suppresses totals that could disclose hidden components', async () => {
+  it('returns only enabled exam rows and the authorized final aggregate, without coursework details', async () => {
     const chain = (value: unknown) => {
       const query = {
         select: () => query,
@@ -295,10 +295,20 @@ describe('Released grade visibility', () => {
               },
               {
                 courseCode: 'CS101',
+                examType: 'coursework',
+                status: 'present',
+                grade: 17,
+              },
+              {
+                courseCode: 'CS101',
                 examType: 'final',
                 status: 'present',
                 grade: 55,
-                officialResult: { total: 72 },
+                officialResult: {
+                  official: true,
+                  total: 72,
+                  components: [{ key: 'coursework', value: 17 }],
+                },
               },
             ]),
         },
@@ -319,10 +329,15 @@ describe('Released grade visibility', () => {
       grade: 55,
       status: 'present',
     });
-    expect(results[0]).not.toHaveProperty('officialResult', { total: 72 });
+    expect(results[0]).toHaveProperty('officialResult.total', 72);
+    expect(results[0]).not.toHaveProperty('officialResult.components');
     settings.gradesPublishedExamTypes = ['midterm', 'final'];
     const both = await service.findStudentResults(studentId);
     expect(both.map((row) => row.status)).toEqual(['absent', 'present']);
+    expect(
+      both.find((row) => row.examType === 'midterm')?.letterGrade,
+    ).toBeUndefined();
+    expect(both.some((row) => row.examType === 'coursework')).toBe(false);
   });
   it('keeps existing published results visible with old settings', () => {
     expect(isReleasedGradeVisible({}, student, midterm)).toBe(true);

@@ -1,4 +1,7 @@
-import { DEFAULT_CONTROL_COMPONENTS } from '@student-portal/shared';
+import {
+  DEFAULT_CONTROL_COMPONENTS,
+  calculateGradeScale,
+} from '@student-portal/shared';
 import {
   DEFAULT_RESULT_POLICY,
   evaluateOfficialResult,
@@ -15,6 +18,70 @@ const marks = {
   final: { score: 48, status: 'present' },
 };
 describe('Official Control course results', () => {
+  it('can release an explicit IC status without a numeric outcome or GPA points', () => {
+    const result = evaluateOfficialResult(
+      components,
+      {
+        ...marks,
+        final: { score: null, status: 'incomplete' },
+      },
+      DEFAULT_RESULT_POLICY,
+    );
+    expect(result).toMatchObject({
+      official: false,
+      incomplete: true,
+      total: null,
+      gradePoints: null,
+      letterGrade: 'IC',
+    });
+    const missing = evaluateOfficialResult(
+      components,
+      {
+        final: { score: null, status: 'incomplete' },
+      },
+      DEFAULT_RESULT_POLICY,
+    );
+    expect(missing.incomplete).toBe(false);
+  });
+  it.each([
+    ['banned', 'FX'],
+    ['incomplete', 'IC'],
+    ['absent', 'F'],
+    ['present', 'F'],
+  ])('classifies %s as %s without passing credit', (status, letter) => {
+    expect(calculateGradeScale(20, status)).toMatchObject({
+      letter,
+      points: 0,
+      isPass: false,
+    });
+  });
+  it.each(['absent', 'banned'])(
+    'keeps coursework and midterm contributions when the final is %s',
+    (status) => {
+      const result = evaluateOfficialResult(
+        components,
+        {
+          ...marks,
+          final: { status, score: null },
+        },
+        DEFAULT_RESULT_POLICY,
+      );
+      expect(result).toMatchObject({
+        official: true,
+        total: 32,
+        totalMax: 100,
+        passed: false,
+        gradePoints: 0,
+        letterGrade: status === 'banned' ? 'FX' : 'F',
+      });
+      expect(
+        result.components.find((item) => item.key === 'midterm')?.value,
+      ).toBe(15);
+      expect(
+        result.components.find((item) => item.key === 'coursework')?.value,
+      ).toBe(17);
+    },
+  );
   it('keeps an absent midterm independent from a present final', () => {
     const entries = {
       ...marks,
