@@ -6,7 +6,11 @@ import mongoose, { Types } from 'mongoose';
 import type { Connection } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ControlSheetSchema } from '../../src/modules/control/schemas/control-sheet.schema';
 import { GradingSchemeSchema } from '../../src/modules/control/schemas/grading-scheme.schema';
 import {
@@ -214,6 +218,17 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       {} as never,
       audit as never,
     );
+    // Production responds after commit; this fixture explicitly drains durable
+    // work before assertions about academic effects and notifications.
+    jest
+      .spyOn(grades, 'scheduleControlReleases')
+      .mockReturnValue({ scheduled: true });
+    const publish = grades.publishGrades.bind(grades);
+    jest.spyOn(grades, 'publishGrades').mockImplementation(async (...args) => {
+      const result = await publish(...args);
+      await grades.processControlReleases();
+      return result;
+    });
     academicSyncSpy = jest
       .spyOn(grades, 'syncPublishedAcademicProgress')
       .mockResolvedValue([]);
@@ -339,7 +354,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     ).toEqual(['conflict', 'ok']);
   });
 
-  it('requires independent approval, keeps drafts hidden, and honors the Grades open/close window', async () => {
+  it('versions result policies and rejects stale policy updates', async () => {
     const policySheet = await open();
     const initialPolicy = await grades.getControlPolicy(policySheet.sheet.id);
     expect(initialPolicy.rules).toMatchObject({
@@ -364,6 +379,9 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         reviewer._id,
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('requires independent approval, keeps drafts hidden, and honors the Grades open/close window', async () => {
     let detail = await open();
     await expect(
       grades.publishGrades(
@@ -382,11 +400,15 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       reason: 'Office checked',
     });
     await expect(
-      workbook.review(actor, detail.sheet.id, {
-        action: 'APPROVE',
-        expectedRevision: detail.sheet.revision,
-        reason: 'Self approve',
-      }),
+      workbook.review(
+        { ...actor, role: 'staff', permissions: Object.values(PERMISSIONS) },
+        detail.sheet.id,
+        {
+          action: 'APPROVE',
+          expectedRevision: detail.sheet.revision,
+          reason: 'Self approve',
+        },
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     const reviewOnlyTA: AuthenticatedUser = {
       ...reviewer,
@@ -885,11 +907,38 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     };
     const preview = await grades.previewControlRelease(scope);
     publishedReleasePreview = preview;
+    const approved = await sheets.listCourses(actor, {
+      academicYear: year,
+      semester: 'first',
+    });
+    const finalBefore = approved.items
+      .find((entry) => entry.code === 'SYNTH101')
+      ?.components.find((entry) => entry.key === 'final');
+    expect(finalBefore).toMatchObject({
+      workflowState: 'APPROVED',
+      releaseActive: false,
+    });
+    expect(
+      (await workbook.workbook(actor, finalBefore!.sheetId!)).componentStates,
+    ).toEqual({
+      coursework: 'APPROVED',
+      midterm: 'APPROVED',
+      final: 'APPROVED',
+    });
     await grades.publishGrades(
       { ...scope, releaseDigests: preview.releaseDigests },
       reviewer._id,
     );
     windowOpen = true;
+    const published = await sheets.listCourses(actor, {
+      academicYear: year,
+      semester: 'first',
+    });
+    expect(
+      published.items
+        .find((entry) => entry.code === 'SYNTH101')
+        ?.components.find((entry) => entry.key === 'final'),
+    ).toMatchObject({ releaseActive: true });
     const result = await grades.findStudentResults(String(studentId));
     expect(result).toHaveLength(2);
     expect(result.some((grade) => grade.examType === 'coursework')).toBe(false);
@@ -1303,6 +1352,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         userId: learner,
         studentCode: code,
         fullName: 'Synthetic status learner',
+        academicYear: year,
+        semester: 'first',
         level: '1',
         isBlocked: false,
       });
@@ -1358,10 +1409,10 @@ describe('Control real replica-set persistence, approval and Grades visibility',
           expectedRevision: detail.sheet.revision,
           reason: 'Synthetic status submission',
         });
-        await workbook.review(reviewer, detail.sheet.id, {
+        await workbook.review(actor, detail.sheet.id, {
           action: 'APPROVE',
           expectedRevision: detail.sheet.revision,
-          reason: 'Synthetic independent status review',
+          reason: 'Synthetic admin self approval',
         });
       }
       const scope = {
@@ -1415,4 +1466,103 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     },
     60000,
   );
+  it('resets only one course/term, keeps enrolments and audit, and withdraws snapshots', async () => {
+    const dto = {
+      courseCode: 'SYNTH-INCOMPLETE',
+      academicYear: year,
+      semester: 'first' as const,
+      confirmation: 'SYNTH-INCOMPLETE',
+      reason: 'Remove synthetic course test marks',
+    };
+    await expect(
+      grades.resetControlCourse({ ...dto, confirmation: 'WRONG' }, actor),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    const course = await connection.models.Course.findOne({
+      code: dto.courseCode,
+    }).lean();
+    const before = await gradeModel.countDocuments({
+      courseCode: 'SYNTH101',
+      cleared: { $ne: true },
+    });
+    const historyCount = await connection
+      .db!.collection('control_releases')
+      .countDocuments({ 'scope.courseId': course!._id });
+    const leaseId = new Types.ObjectId('0000000000000000000000c1');
+    await connection.db!.collection('control_reconciliation_leases').updateOne(
+      { _id: leaseId },
+      {
+        $set: {
+          token: 'synthetic-busy-reset',
+          expiresAt: new Date(Date.now() + 60000),
+        },
+      },
+      { upsert: true },
+    );
+    try {
+      await expect(grades.resetControlCourse(dto, actor)).rejects.toMatchObject(
+        { response: { code: 'CONTROL_RESET_BUSY' } },
+      );
+      expect(
+        await gradeModel.countDocuments({
+          courseCode: dto.courseCode,
+          cleared: { $ne: true },
+        }),
+      ).toBe(3);
+    } finally {
+      await connection
+        .db!.collection('control_reconciliation_leases')
+        .deleteOne({ _id: leaseId, token: 'synthetic-busy-reset' });
+    }
+    const result = await grades.resetControlCourse(dto, actor);
+    expect(result.cleared).toBe(3);
+    expect(
+      await gradeModel.countDocuments({
+        courseCode: dto.courseCode,
+        cleared: { $ne: true },
+      }),
+    ).toBe(0);
+    expect(
+      await gradeModel.countDocuments({
+        courseCode: 'SYNTH101',
+        cleared: { $ne: true },
+      }),
+    ).toBe(before);
+    expect(
+      await connection
+        .db!.collection('control_release_pointers')
+        .countDocuments({ 'scope.courseId': course!._id, active: true }),
+    ).toBe(0);
+    expect(
+      await connection
+        .db!.collection('control_releases')
+        .countDocuments({ 'scope.courseId': course!._id }),
+    ).toBe(historyCount);
+    const summary = await sheets.listCourses(actor, {
+      academicYear: year,
+      semester: 'first',
+    });
+    expect(
+      summary.items
+        .find((entry) => entry.code === dto.courseCode)
+        ?.components.every(
+          (entry) =>
+            entry.workflowState === 'DRAFT' &&
+            !entry.releaseActive &&
+            entry.entered === 0,
+        ),
+    ).toBe(true);
+    expect(
+      await auditModel.countDocuments({
+        courseId: course!._id,
+        action: 'CLEAR',
+        reason: dto.reason,
+      }),
+    ).toBe(3);
+    expect(
+      await connection.models.CourseRegistration.countDocuments({
+        courses: dto.courseCode,
+      }),
+    ).toBe(1);
+    await grades.processControlReleases();
+  });
 });

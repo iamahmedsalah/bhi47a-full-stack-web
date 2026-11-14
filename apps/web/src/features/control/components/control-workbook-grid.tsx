@@ -79,7 +79,9 @@ import {
   reviewControlSheet,
 } from "../api";
 import { ControlHelpNotes } from "./control-help-notes";
-import { ControlFileImportDialog } from "./control-file-import-dialog";
+import { HelpNote } from "@/components/ui/help-note";
+import { normalizeSearchText } from "@/lib/search-text";
+import { ControlImportLauncher } from "./control-import-launcher";
 import type {
   ControlImportPreview,
   ControlRosterRow,
@@ -99,6 +101,7 @@ type Draft = GradeChangeInput & {
 const EMPTY_ROWS: WorkbookRow[] = [];
 const draftArchive = new Map<string, Record<string, Draft>>();
 interface Props {
+  canPublish?: boolean;
   principalId?: string;
   sheetDetails: ControlSheetDetails;
   locale: string;
@@ -113,6 +116,7 @@ interface Props {
 
 /** All component columns stay visible; the selected component owns editing/review. */
 export function ControlWorkbookGrid({
+  canPublish = false,
   principalId,
   sheetDetails: detail,
   locale,
@@ -175,11 +179,10 @@ export function ControlWorkbookGrid({
   const [action, setAction] = useState<
     "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN" | "CLEAR" | null
   >(null);
-  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [preview, setPreview] = useState<ControlImportPreview | null>(null);
   const [undo, setUndo] = useState<GradeChangeInput[]>([]);
   const inFlight = useRef(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const draftRef = useRef(drafts);
   useEffect(() => {
     draftRef.current = drafts;
@@ -200,8 +203,18 @@ export function ControlWorkbookGrid({
     const timer = setTimeout(() => onSearchChange(searchText), 250);
     return () => clearTimeout(timer);
   }, [searchText, search, onSearchChange]);
-  const deferredSearch = useDeferredValue(
-    searchText.trim().toLocaleLowerCase(locale),
+  const deferredSearch = useDeferredValue(normalizeSearchText(searchText));
+  const searchIndex = useMemo(
+    () =>
+      new Map(
+        rows.map((row) => [
+          row.studentId,
+          normalizeSearchText(
+            `${row.studentCode} ${row.name} ${row.nameAr ?? ""}`,
+          ),
+        ]),
+      ),
+    [rows],
   );
   const selectionScope = JSON.stringify([
     deferredSearch,
@@ -249,18 +262,14 @@ export function ControlWorkbookGrid({
   const searchableRows = useMemo(
     () =>
       sortedRows.filter((row) => {
-        if (
-          !`${row.studentCode} ${row.name} ${row.nameAr ?? ""}`
-            .toLocaleLowerCase(locale)
-            .includes(deferredSearch)
-        )
+        if (!searchIndex.get(row.studentId)?.includes(deferredSearch))
           return false;
         if (onlyMissing && row.components[key]?.status) return false;
         if (filter === "absent" && row.components[key]?.status !== "absent")
           return false;
         return true;
       }),
-    [sortedRows, deferredSearch, onlyMissing, filter, key, locale],
+    [sortedRows, deferredSearch, onlyMissing, filter, key, searchIndex],
   );
   const filtered = useMemo(() => {
     if (!["invalid", "dirty", "errors"].includes(filter)) return searchableRows;
@@ -788,20 +797,32 @@ export function ControlWorkbookGrid({
 
   return (
     <div className="space-y-3" dir={rtl ? "rtl" : "ltr"}>
-      {importFile && (
-        <ControlFileImportDialog
-          file={importFile}
+      {importOpen && (
+        <ControlImportLauncher
           sheetId={sheet.id}
           rows={rows}
           locale={locale}
-          onClose={() => setImportFile(null)}
+          onClose={() => setImportOpen(false)}
+          onDownload={
+            caps.canExport
+              ? () =>
+                  exportControlSheet(
+                    sheet.id,
+                    "workbook",
+                    sheet.slug || sheet.id,
+                  )
+              : undefined
+          }
           onSaved={refresh}
+          onAudit={caps.canViewAudit ? onOpenSheetAudit : undefined}
         />
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
         {CONTROL_COMPONENT_KEYS.map((component) => (
           <Button
             key={component}
+            aria-label={t(component)}
+            aria-describedby={`${sheet.id}-${component}-state`}
             variant={key === component ? "default" : "outline"}
             disabled={
               busy ||
@@ -812,6 +833,26 @@ export function ControlWorkbookGrid({
             onClick={() => void switchComponent(component)}
           >
             {t(component)}
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                (component === key
+                  ? sheet.workflowState
+                  : workbook.data?.componentStates?.[component]) === "APPROVED"
+                  ? "bg-emerald-400"
+                  : workbook.data?.componentStates?.[component] === "IN_REVIEW"
+                    ? "bg-sky-400"
+                    : "bg-rose-400"
+              }`}
+              aria-hidden="true"
+            />
+            <span
+              id={`${sheet.id}-${component}-state`}
+              className="text-[10px] font-normal"
+            >
+              {t(
+                `workflow.${component === key ? sheet.workflowState : (workbook.data?.componentStates?.[component] ?? "DRAFT")}`,
+              )}
+            </span>
           </Button>
         ))}
         <span className="ms-auto text-xs" role="status" aria-live="polite">
@@ -837,6 +878,33 @@ export function ControlWorkbookGrid({
           </Button>
         )}
       </div>
+      {sheet.workflowState === "APPROVED" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+          <span>
+            {rtl
+              ? "الاعتماد اكتمل؛ نشر هذا المكوّن للطلاب يتم من صفحة الدرجات."
+              : "Review is complete; publish this component from Grades."}
+          </span>
+          {canPublish && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || saving || pending || failed}
+              onClick={() => {
+                const params = new URLSearchParams({
+                  releaseCourse: detail.course.id,
+                  releaseComponent: key,
+                  releaseYear: sheet.academicYear,
+                  releaseSemester: sheet.semester,
+                });
+                router.push(`/${locale}/admin/grades?${params}`);
+              }}
+            >
+              {rtl ? `نشر ${t(key)}` : `Publish ${t(key)}`}
+            </Button>
+          )}
+        </div>
+      )}
       {restoredDraft && pending && (
         <p
           role="alert"
@@ -863,7 +931,12 @@ export function ControlWorkbookGrid({
       )}
       <ControlHelpNotes />
       {key === "final" && (
-        <p className="text-xs text-amber-500">{t("finalDraftNote")}</p>
+        <HelpNote
+          title={rtl ? "ملاحظات النتيجة الرسمية" : "Official result guidance"}
+          className="text-amber-500"
+        >
+          {t("finalDraftNote")}
+        </HelpNote>
       )}
       {sheet.reviewReason && (
         <p className="rounded-xl border p-3 text-sm">
@@ -1072,23 +1145,13 @@ export function ControlWorkbookGrid({
               size="sm"
               className="h-9 rounded-squircle text-xs font-medium"
               disabled={pending || busy}
-              onClick={() => fileInput.current?.click()}
+              onClick={async () => {
+                if (await save()) setImportOpen(true);
+              }}
             >
               <Upload className="size-3.5 me-1.5" />
               {t("import")}
             </Button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".xlsx"
-              hidden
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file) return;
-                if (await save()) setImportFile(file);
-              }}
-            />
           </>
         )}
       </div>
@@ -1581,7 +1644,13 @@ export function ControlWorkbookGrid({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             maxLength={500}
-            placeholder={t("reason")}
+            placeholder={
+              action === "REOPEN"
+                ? rtl
+                  ? "السبب (اختياري)"
+                  : "Reason (optional)"
+                : t("reason")
+            }
           />
           <DialogFooter className="rtl:sm:justify-start">
             <Button
@@ -1592,7 +1661,11 @@ export function ControlWorkbookGrid({
               {t("cancel")}
             </Button>
             <Button
-              disabled={busy || saving || reason.trim().length < 3}
+              disabled={
+                busy ||
+                saving ||
+                (action !== "REOPEN" && reason.trim().length < 3)
+              }
               onClick={() => void transition()}
             >
               {busy && <Loader2 className="size-4 animate-spin me-2" />}

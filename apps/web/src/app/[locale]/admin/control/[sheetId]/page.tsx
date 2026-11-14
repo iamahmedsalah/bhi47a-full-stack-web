@@ -180,6 +180,10 @@ function ControlSheetEditorContent() {
         </PageTitleBanner>
 
         <ControlGrid
+          canPublish={
+            user?.role === "admin" ||
+            Boolean(user?.permissions?.includes("grades.publish"))
+          }
           key={`${user?._id ?? ""}:${sheetId}`}
           principalId={user?._id}
           sheetDetails={sheetDetails}
@@ -255,8 +259,8 @@ function ControlSheetEditorContent() {
               <DialogDescription>
                 {sheetDetails.sheet.locked
                   ? isAr
-                    ? "فك القفل يتيح التعديل مرة أخرى لمن يملك الصلاحية. يجب كتابة سبب واضح ليُسجل في التدقيق."
-                    : "Unlocking allows edits again. A mandatory reason is recorded in the audit log."
+                    ? "فك القفل يتيح التعديل مرة أخرى لمن يملك الصلاحية. السبب اختياري، ويُسجل الإجراء في التدقيق."
+                    : "Unlocking allows edits again for authorized users. The reason is optional; the action is audited."
                   : isAr
                     ? "قفل الكشف يمنع أي تعديل من الشبكة أو من استيراد الإكسيل حتى يتم فك القفل."
                     : "Locking prevents any edits from both the grid and Excel imports until unlocked."}
@@ -267,8 +271,8 @@ function ControlSheetEditorContent() {
               <Label className="text-xs font-semibold">
                 {sheetDetails.sheet.locked
                   ? isAr
-                    ? "سبب فك القفل (إجباري — ٣ أحرف على الأقل)"
-                    : "Reason for unlocking (required — min 3 chars)"
+                    ? "سبب فك القفل (اختياري)"
+                    : "Reason for unlocking (optional)"
                   : isAr
                     ? "ملاحظة أو سبب القفل (اختياري)"
                     : "Lock note / reason (optional)"}
@@ -302,10 +306,7 @@ function ControlSheetEditorContent() {
               <Button
                 type="button"
                 className="rounded-squircle"
-                disabled={
-                  lockMutation.isPending ||
-                  (sheetDetails.sheet.locked && lockReason.trim().length < 3)
-                }
+                disabled={lockMutation.isPending}
                 onClick={() => lockMutation.mutate()}
               >
                 {lockMutation.isPending && (

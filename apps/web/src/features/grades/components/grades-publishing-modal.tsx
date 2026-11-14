@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpNote } from "@/components/ui/help-note";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -117,10 +118,13 @@ export function GradesPublishingModal({
   const settings = query.data;
   const busy = mutation.isPending;
   const levels = settings?.gradesPublishedLevels ?? ["1", "2", "3", "4"];
-  const types = (settings?.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES)
-    .filter((type) => STUDENT_RESULT_EXAM_TYPES.includes(type));
-  const rules = (settings?.gradesVisibilityRules ?? [])
-    .filter((rule) => !rule.examType || STUDENT_RESULT_EXAM_TYPES.includes(rule.examType));
+  const types = (
+    settings?.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES
+  ).filter((type) => STUDENT_RESULT_EXAM_TYPES.includes(type));
+  const rules = (settings?.gradesVisibilityRules ?? []).filter(
+    (rule) =>
+      !rule.examType || STUDENT_RESULT_EXAM_TYPES.includes(rule.examType),
+  );
   const section =
     "min-w-0 space-y-4 rounded-2xl border border-border/70 bg-card/70 p-4 sm:p-5";
   const saveWindow = () => {
@@ -214,16 +218,17 @@ export function GradesPublishingModal({
                 <Info className="h-5 w-5 shrink-0" />
                 {blocked}
               </p>
-              <p
-                role="note"
-                className="flex items-start gap-2 rounded-xl border border-violet-400/20 bg-violet-400/5 p-3 text-sm leading-6 text-muted-foreground"
+              <HelpNote
+                title={tr("قواعد ظهور النتائج", "Result visibility rules")}
               >
-                <ShieldCheck className="h-5 w-5 shrink-0 text-violet-400" />
-                {tr(
-                  "تظهر النتائج المعتمدة والمنشورة فقط. الإتاحة لا تعتمد المسودات. إغلاق المفتاح العام أو انتهاء الموعد يحجب الجميع، حتى الاستثناءات.",
-                  "Only approved, published results can appear. Visibility does not approve drafts. The master switch and closing deadline override every exception.",
-                )}
-              </p>
+                <p className="flex items-start gap-2 rounded-xl border border-violet-400/20 bg-violet-400/5 p-3 text-sm leading-6 text-muted-foreground">
+                  <ShieldCheck className="h-5 w-5 shrink-0 text-violet-400" />
+                  {tr(
+                    "تظهر النتائج المعتمدة والمنشورة فقط. الإتاحة لا تعتمد المسودات. إغلاق المفتاح العام أو انتهاء الموعد يحجب الجميع، حتى الاستثناءات.",
+                    "Only approved, published results can appear. Visibility does not approve drafts. The master switch and closing deadline override every exception.",
+                  )}
+                </p>
+              </HelpNote>
               <section className="flex min-w-0 flex-wrap items-center justify-between gap-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4">
                 <div className="min-w-0 flex-1 space-y-1">
                   <h3 className="flex items-center gap-2 font-bold">
@@ -345,20 +350,24 @@ export function GradesPublishingModal({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p
-                  role="note"
-                  className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-6 text-muted-foreground"
+                <HelpNote
+                  title={tr(
+                    "مثال على إتاحة المستويات",
+                    "Level visibility example",
+                  )}
                 >
-                  {settings.gradesLevelBasis !== "student"
-                    ? tr(
-                        "مثال: المقرر 111 من المستوى الأول يظهر لأي طالب مسجّل به عند إتاحة المستوى الأول، حتى لو مستواه الحالي الثالث.",
-                        "Example: Level 1 course 111 can appear for an enrolled Level 3 student when Level 1 is allowed.",
-                      )
-                    : tr(
-                        "الإتاحة هنا تتبع مستوى الطالب الحالي. طالب المستوى الثالث لن يرى المقرر 111 إذا كان المتاح الأول والثاني فقط. اختر «حسب مستوى المقرر» إن أردت إتاحة المقرر لكل المسجّلين به.",
-                        "These settings follow the current student level. A Level 3 student cannot see course 111 when only Levels 1 and 2 are allowed. Choose course level to allow enrolled students by the course level instead.",
-                      )}
-                </p>
+                  <p className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs leading-6 text-muted-foreground">
+                    {settings.gradesLevelBasis !== "student"
+                      ? tr(
+                          "مثال: المقرر 111 من المستوى الأول يظهر لأي طالب مسجّل به عند إتاحة المستوى الأول، حتى لو مستواه الحالي الثالث.",
+                          "Example: Level 1 course 111 can appear for an enrolled Level 3 student when Level 1 is allowed.",
+                        )
+                      : tr(
+                          "الإتاحة هنا تتبع مستوى الطالب الحالي. طالب المستوى الثالث لن يرى المقرر 111 إذا كان المتاح الأول والثاني فقط. اختر «حسب مستوى المقرر» إن أردت إتاحة المقرر لكل المسجّلين به.",
+                          "These settings follow the current student level. A Level 3 student cannot see course 111 when only Levels 1 and 2 are allowed. Choose course level to allow enrolled students by the course level instead.",
+                        )}
+                  </p>
+                </HelpNote>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -422,12 +431,19 @@ export function GradesPublishingModal({
                     "Component visibility for allowed students",
                   )}
                 </h3>
-                <p className="text-xs leading-6 text-muted-foreground">
-                  {tr(
-                    "اختر إظهار الميدترم أو النهائي. أعمال السنة مخفية عن الطالب دائمًا وتُحتسب في المجموع الرسمي. إتاحة الكويزات من اختصاص دكتور المقرر.",
-                    "Choose midterm or final visibility. Coursework is always hidden from students and counts toward the official total. Instructors control quiz visibility.",
+                <HelpNote
+                  title={tr(
+                    "أعمال السنة والكويزات",
+                    "Coursework and instructor quizzes",
                   )}
-                </p>
+                >
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    {tr(
+                      "اختر إظهار الميدترم أو النهائي. أعمال السنة مخفية عن الطالب دائمًا وتُحتسب في المجموع الرسمي. إتاحة الكويزات من اختصاص دكتور المقرر.",
+                      "Choose midterm or final visibility. Coursework is always hidden from students and counts toward the official total. Instructors control quiz visibility.",
+                    )}
+                  </p>
+                </HelpNote>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {STUDENT_RESULT_EXAM_TYPES.map((type) => (
                     <Button
@@ -462,12 +478,16 @@ export function GradesPublishingModal({
                   <SlidersHorizontal className="h-5 w-5 text-cyan-400" />
                   {tr("استثناء لمقرر أو طالب", "Course or student override")}
                 </h3>
-                <p className="text-sm text-muted-foreground">
-                  {tr(
-                    "الكودان معًا يحددان طالبًا في مقرر بعينه. آخر استثناء مطابق هو المعتمد، ولا يتجاوز الإغلاق أو المستوى أو المواعيد.",
-                    "Both codes target a student in one course. The last matching rule wins; master, level and time restrictions still apply.",
-                  )}
-                </p>
+                <HelpNote
+                  title={tr("كيف تعمل الاستثناءات؟", "How overrides work")}
+                >
+                  <p className="text-sm text-muted-foreground">
+                    {tr(
+                      "الكودان معًا يحددان طالبًا في مقرر بعينه. آخر استثناء مطابق هو المعتمد، ولا يتجاوز الإغلاق أو المستوى أو المواعيد.",
+                      "Both codes target a student in one course. The last matching rule wins; master, level and time restrictions still apply.",
+                    )}
+                  </p>
+                </HelpNote>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Input
                     aria-label={tr("كود المقرر", "Course code")}
@@ -545,16 +565,20 @@ export function GradesPublishingModal({
                 ))}
               </section>
               <div className="space-y-3">
-                <p
-                  role="note"
-                  className="flex gap-2 rounded-xl border border-sky-400/20 bg-sky-400/5 p-3 text-sm text-muted-foreground"
-                >
-                  <BookOpen className="h-5 w-5 shrink-0 text-sky-400" />
-                  {tr(
-                    "معتمد في الكنترول يعني أن المراجعة اكتملت. لإظهاره للطالب: عاين الإصدار وفعّله، ثم تأكد أن المستوى والمكوّن متاحان أعلاه.",
-                    "Approved in Control means review is complete. To show it: preview and activate the release, then allow its level and component above.",
+                <HelpNote
+                  title={tr(
+                    "الاعتماد والنشر خطوتان منفصلتان",
+                    "Approval and publication are separate",
                   )}
-                </p>
+                >
+                  <p className="flex gap-2 rounded-xl border border-sky-400/20 bg-sky-400/5 p-3 text-sm text-muted-foreground">
+                    <BookOpen className="h-5 w-5 shrink-0 text-sky-400" />
+                    {tr(
+                      "معتمد في الكنترول يعني أن المراجعة اكتملت. لإظهاره للطالب: عاين الإصدار وفعّله، ثم تأكد أن المستوى والمكوّن متاحان أعلاه.",
+                      "Approved in Control means review is complete. To show it: preview and activate the release, then allow its level and component above.",
+                    )}
+                  </p>
+                </HelpNote>
                 <ControlReleasePanel locale={isAr ? "ar" : "en"} />
               </div>
             </div>

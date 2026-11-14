@@ -12,10 +12,12 @@ export function DataTable<T extends { _id?: string }>({
   rows,
   columns,
   getRowKey,
+  rowClassName,
 }: {
   rows: T[];
   columns: DataTableColumn<T>[];
   getRowKey?: (row: T, index: number) => string;
+  rowClassName?: (row: T) => string | undefined;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -33,7 +35,7 @@ export function DataTable<T extends { _id?: string }>({
           {rows.map((row, index) => (
             <tr
               key={getRowKey ? getRowKey(row, index) : row._id || index}
-              className="text-sm text-foreground transition-colors hover:bg-surface/30"
+              className={cn('text-sm text-foreground transition-colors hover:bg-surface/30', rowClassName?.(row))}
             >
               {columns.map((column) => (
                 <td key={column.key} className={cn('p-4', column.className)}>

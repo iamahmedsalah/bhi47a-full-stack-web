@@ -20,6 +20,7 @@ import {
   AuditAcademicWarningsDto,
   UpdateGradeDto,
   ControlResultPolicyDto,
+  ResetControlCourseDto,
 } from './dto/grade.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -32,6 +33,15 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 @Controller()
 export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
+
+  @Post('admin/grades/control-course/reset')
+  @Roles('admin')
+  resetControlCourse(
+    @Body() dto: ResetControlCourseDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.gradesService.resetControlCourse(dto, user);
+  }
 
   @Post('admin/grades/release-preview')
   @Roles('admin', 'staff')
@@ -50,7 +60,7 @@ export class GradesController {
   @Post('admin/grades/control-jobs/retry')
   @Roles('admin')
   retryControlJobs() {
-    return this.gradesService.processControlReleases();
+    return this.gradesService.scheduleControlReleases();
   }
 
   @Get('admin/grades/control-policy/:id')

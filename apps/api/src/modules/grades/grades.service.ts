@@ -25,12 +25,14 @@ import {
   QueryGradeDto,
   PublishGradesDto,
   UpdateGradesSettingsDto,
+  ResetControlCourseDto,
 } from './dto/grade.dto';
 import {
   buildPaginationOptions,
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { Course, CourseDocument } from '../courses/schemas/course.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -56,7 +58,10 @@ import {
 } from '@student-portal/shared';
 import { coursesForDepartment } from '../courses/utils/course-curriculum.util';
 
-import { shouldRunStartupTasks } from '../../common/utils/runtime.util';
+import {
+  shouldRunStartupTasks,
+  shouldRunQueueWorkers,
+} from '../../common/utils/runtime.util';
 
 @Injectable()
 export class GradesService implements OnModuleInit {
@@ -81,6 +86,20 @@ export class GradesService implements OnModuleInit {
 
   private releaseTimer?: ReturnType<typeof setInterval>;
   private processingReleases = false;
+  private releaseWakeup?: ReturnType<typeof setImmediate>;
+  scheduleControlReleases() {
+    if (!this.releaseWakeup) {
+      this.releaseWakeup = setImmediate(() => {
+        this.releaseWakeup = undefined;
+        void this.processControlReleases().catch(() =>
+          console.warn(
+            'Control reconciliation pending; durable retry retained',
+          ),
+        );
+      });
+    }
+    return { scheduled: true };
+  }
   get controlReleases() {
     return new ControlReleaseStore(this.gradeModel.db);
   }
@@ -116,7 +135,7 @@ export class GradesService implements OnModuleInit {
         .collection('control_release_outbox')
         .find({ delivered: { $ne: true } })
         .sort({ createdAt: 1 })
-        .limit(100)
+        .limit(25)
         .toArray();
       const students = [...new Set(jobs.map((j) => String(j.studentId)))];
       const finalStudents = await this.gradeModel.db
@@ -135,13 +154,11 @@ export class GradesService implements OnModuleInit {
   }
   onModuleDestroy() {
     if (this.releaseTimer) clearInterval(this.releaseTimer);
+    if (this.releaseWakeup) clearImmediate(this.releaseWakeup);
   }
 
   async onModuleInit() {
-    if (
-      process.env.NODE_ENV !== 'test' &&
-      process.env.QUEUE_WORKERS_ENABLED === 'true'
-    ) {
+    if (process.env.NODE_ENV !== 'test' && shouldRunQueueWorkers()) {
       this.releaseTimer = setInterval(() => {
         void this.processControlReleases().catch(() =>
           console.warn('Control release reconciliation pending; will retry'),
@@ -851,6 +868,233 @@ export class GradesService implements OnModuleInit {
     };
   }
 
+  async resetControlCourse(
+    dto: ResetControlCourseDto,
+    user: AuthenticatedUser,
+  ) {
+    if (user.role !== 'admin')
+      throw new ForbiddenException('Administrator required');
+    const code = dto.courseCode.trim().toUpperCase();
+    if (dto.confirmation.trim().toUpperCase() !== code || !dto.reason.trim())
+      throw new BadRequestException({
+        code: 'CONTROL_RESET_CONFIRMATION_REQUIRED',
+        message: 'Confirm the course code and supply a reset reason',
+      });
+    const course = await this.courseModel
+      .findOne({ code })
+      .select('_id')
+      .lean();
+    if (!course) throw new NotFoundException('Course not found');
+    const scope = {
+      courseId: course._id,
+      academicYear: dto.academicYear,
+      semester: dto.semester,
+    };
+    const db = this.gradeModel.db;
+    const resetId = new Types.ObjectId();
+    const session = await db.startSession();
+    let cleared = 0;
+    try {
+      await session.withTransaction(async () => {
+        // Serialize with academic reconciliation, as reset reverses published effects.
+        const leases = db.collection('control_reconciliation_leases');
+        const leaseId = new Types.ObjectId('0000000000000000000000c1');
+        try {
+          await leases.findOneAndUpdate(
+            {
+              _id: leaseId,
+              $or: [
+                { expiresAt: { $lt: new Date() } },
+                { expiresAt: { $exists: false } },
+              ],
+            },
+            {
+              $set: {
+                token: String(resetId),
+                expiresAt: new Date(Date.now() + 600000),
+              },
+            },
+            { upsert: true, session },
+          );
+        } catch (error) {
+          if ((error as { code?: number }).code === 11000)
+            throw new ConflictException({
+              code: 'CONTROL_RESET_BUSY',
+              message: 'Reconciliation is running; retry the reset shortly',
+            });
+          throw error;
+        }
+        const marks = await this.gradeModel
+          .find({ ...scope, examType: { $in: CONTROL_RESULT_EXAM_TYPES } })
+          .session(session)
+          .lean();
+        const sheets = await this.controlSheetModel
+          .find(scope)
+          .session(session)
+          .lean();
+        const pointers = await db
+          .collection('control_release_pointers')
+          .find(
+            {
+              'scope.courseId': course._id,
+              'scope.academicYear': dto.academicYear,
+              'scope.semester': dto.semester,
+            },
+            { session },
+          )
+          .toArray();
+        await db
+          .collection('control_release_pointers')
+          .updateMany(
+            { _id: { $in: pointers.map((entry) => entry._id) } },
+            { $set: { active: false } },
+            { session },
+          );
+        const releases = await db
+          .collection('control_releases')
+          .find(
+            {
+              'scope.courseId': course._id,
+              'scope.academicYear': dto.academicYear,
+              'scope.semester': dto.semester,
+            },
+            { session, projection: { _id: 1 } },
+          )
+          .toArray();
+        await db.collection('control_release_outbox').updateMany(
+          {
+            releaseId: { $in: releases.map((entry) => entry._id) },
+            delivered: { $ne: true },
+          },
+          { $set: { delivered: true, cancelledByReset: resetId } },
+          { session },
+        );
+        const now = new Date();
+        if (marks.length)
+          await this.controlAudit.insertMany(
+            marks.map((mark) => ({
+              gradeId: mark._id,
+              sheetId: sheets.find((sheet) => sheet.component === mark.examType)
+                ?._id,
+              ...scope,
+              component: mark.examType,
+              studentId: mark.studentId,
+              action: 'CLEAR',
+              source: 'SYSTEM',
+              actorId: new Types.ObjectId(user._id),
+              reason: dto.reason.trim(),
+              at: now,
+              oldValue: {
+                score: mark.grade,
+                attendanceMark: mark.attendanceMark,
+                quizzesMark: mark.quizzesMark,
+                status: mark.status,
+                rev: mark.rev,
+                isPublished: mark.isPublished,
+              },
+              newValue: { resetId: String(resetId), cleared: true },
+            })),
+            { session },
+          );
+        const result = await this.gradeModel.updateMany(
+          { ...scope, examType: { $in: CONTROL_RESULT_EXAM_TYPES } },
+          {
+            $set: {
+              cleared: true,
+              isPublished: false,
+              grade: 0,
+              percentage: 0,
+              gradePoints: 0,
+              letterGrade: '',
+              status: 'present',
+              attendanceMark: null,
+              quizzesMark: null,
+              updatedAt: now,
+              controlManaged: true,
+            },
+            $unset: { controlApprovedRev: '' },
+            $inc: { rev: 1 },
+          },
+          { session },
+        );
+        cleared = result.modifiedCount;
+        await this.controlSheetModel.updateMany(
+          scope,
+          {
+            $set: {
+              workflowState: 'DRAFT',
+              locked: false,
+              reviewReason: dto.reason.trim(),
+            },
+            $unset: {
+              submission: '',
+              approvedBy: '',
+              approvedAt: '',
+              lockedBy: '',
+              lockedAt: '',
+              lockReason: '',
+            },
+            $inc: { revision: 1 },
+          },
+          { session },
+        );
+        await db
+          .collection(
+            db.models.GradingScheme?.collection.name ??
+              'control_grading_schemes',
+          )
+          .deleteMany(scope, { session });
+        await db
+          .collection<{ _id: string }>('control_result_policies')
+          .deleteOne(
+            {
+              _id: `${String(course._id)}|${dto.academicYear}|${dto.semester}`,
+            },
+            { session },
+          );
+        await db
+          .collection(
+            db.models.ControlImport?.collection.name ??
+              'control_import_batches',
+          )
+          .deleteMany(
+            { sheetId: { $in: sheets.map((sheet) => sheet._id) } },
+            { session },
+          );
+        const students = [
+          ...new Map(
+            marks.map((mark) => [String(mark.studentId), mark.studentId]),
+          ).values(),
+        ];
+        if (students.length)
+          await db.collection('control_release_outbox').insertMany(
+            students.map((studentId) => ({
+              _id: new Types.ObjectId(),
+              studentId,
+              actorId: new Types.ObjectId(user._id),
+              releaseId: resetId,
+              attempts: 0,
+              createdAt: now,
+            })),
+            { session },
+          );
+        await leases.deleteOne(
+          { _id: leaseId, token: String(resetId) },
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+    this.scheduleControlReleases();
+    return {
+      cleared,
+      courseCode: code,
+      academicYear: dto.academicYear,
+      semester: dto.semester,
+    };
+  }
+
   async controlReleaseHistory(id: string) {
     const sheet = await this.controlSheetModel.findById(id).lean();
     if (!sheet) throw new NotFoundException('Control sheet not found');
@@ -864,17 +1108,31 @@ export class GradesService implements OnModuleInit {
     const pointer = await db
       .collection('control_release_pointers')
       .findOne({ _id: sheet._id });
-    const pendingJobs = await db
+    const pendingCounts = await db
       .collection('control_release_outbox')
-      .countDocuments({
-        releaseId: { $in: releases.map((r) => r._id) },
-        delivered: { $ne: true },
-      });
+      .aggregate<{ _id: Types.ObjectId; count: number }>([
+        {
+          $match: {
+            releaseId: { $in: releases.map((r) => r._id) },
+            delivered: { $ne: true },
+          },
+        },
+        { $group: { _id: '$releaseId', count: { $sum: 1 } } },
+      ])
+      .toArray();
+    const pendingByRelease = new Map(
+      pendingCounts.map((entry) => [String(entry._id), entry.count]),
+    );
+    const pendingJobs = pendingCounts.reduce(
+      (total, entry) => total + entry.count,
+      0,
+    );
     return {
       releases: releases.map((r) => ({
         _id: String(r._id),
         createdAt: new Date(r.createdAt).toISOString(),
         digest: String(r.digest),
+        pendingJobs: pendingByRelease.get(String(r._id)) ?? 0,
       })),
       activeReleaseId: pointer?.active ? String(pointer.releaseId) : null,
       pendingJobs,
@@ -922,8 +1180,10 @@ export class GradesService implements OnModuleInit {
     await this.controlReleases.prepare();
     const session = await this.gradeModel.db.startSession();
     let result = { modifiedCount: 0 };
+    const snapshotGradeIds = new Set<string>();
     try {
       await session.withTransaction(async () => {
+        snapshotGradeIds.clear();
         const selected = await this.gradeModel
           .find(filter)
           .session(session)
@@ -974,7 +1234,10 @@ export class GradesService implements OnModuleInit {
               'Approve the selected marks on the Control page before publishing',
             );
           }
-          if (sheet) sheetIds.add(String(sheet._id));
+          if (sheet) {
+            sheetIds.add(String(sheet._id));
+            snapshotGradeIds.add(String(grade._id));
+          }
         }
         // Cleared draft rows must not prevent withdrawal of an older snapshot.
         if (!dto.isPublished && !dto.level) {
@@ -1055,7 +1318,8 @@ export class GradesService implements OnModuleInit {
       await session.endSession();
     }
     const legacyAffected = affectedGrades.filter(
-      (grade) => !grade.controlManaged,
+      (grade) =>
+        !grade.controlManaged && !snapshotGradeIds.has(String(grade._id)),
     );
     if (legacyAffected.length > 0) {
       await this.syncPublishedAcademicProgress(
@@ -1063,10 +1327,17 @@ export class GradesService implements OnModuleInit {
       );
     }
 
-    if (dto.isPublished && result.modifiedCount > 0) {
+    if (
+      dto.isPublished &&
+      result.modifiedCount > 0 &&
+      legacyAffected.length > 0
+    ) {
       // Find all matching grades to obtain target students
       const gradesToPublish = await this.gradeModel
-        .find({ ...filter, controlManaged: { $ne: true } })
+        .find({
+          ...filter,
+          _id: { $in: legacyAffected.map((grade) => grade._id) },
+        })
         .select('studentCode courseCode')
         .lean();
 
@@ -1102,13 +1373,9 @@ export class GradesService implements OnModuleInit {
       }
     }
 
-    try {
-      await this.processControlReleases();
-    } catch {
-      console.warn(
-        'Control academic/notification jobs pending; durable retry retained',
-      );
-    }
+    // The committed release is already readable. GPA reconciliation and in-app
+    // notification delivery use the durable outbox and must not hold HTTP open.
+    this.scheduleControlReleases();
     return { count: result.modifiedCount };
   }
 
@@ -1208,6 +1475,7 @@ export class GradesService implements OnModuleInit {
   }
 
   async getStudentResultsStatus(studentId: string): Promise<{
+    visibleExamTypes?: Array<'midterm' | 'final'>;
     isOpen: boolean;
     reason?:
       | 'system_closed'
@@ -1303,6 +1571,11 @@ export class GradesService implements OnModuleInit {
 
     return {
       isOpen: true,
+      visibleExamTypes: (['midterm', 'final'] as const).filter((type) =>
+        (
+          settings.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES
+        ).includes(type),
+      ),
       openAt: settings.gradesOpenAt,
       closeAt: settings.gradesCloseAt,
       visibilityVersion,
@@ -1465,7 +1738,9 @@ export class GradesService implements OnModuleInit {
           quizzesMark: undefined,
           ...(row.examType === 'midterm'
             ? { letterGrade: undefined, gradePoints: undefined }
-            : {}),
+            : row.status === 'incomplete'
+              ? { letterGrade: 'IC', gradePoints: undefined }
+              : {}),
         };
         const normalized =
           row.status === 'absent' || row.status === 'banned'
@@ -1500,7 +1775,12 @@ export class GradesService implements OnModuleInit {
               percentage: outcome.percentage,
               passed: outcome.passed,
               gradePoints: outcome.gradePoints,
-              letterGrade: row.status === 'banned' ? 'FX' : outcome.letterGrade,
+              letterGrade:
+                row.status === 'banned'
+                  ? 'FX'
+                  : row.status === 'incomplete'
+                    ? 'IC'
+                    : outcome.letterGrade,
             },
           };
         }

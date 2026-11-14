@@ -17,6 +17,7 @@ import {
   MaxLength,
   ValidateIf,
   ArrayUnique,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -30,6 +31,29 @@ import {
   SEMESTER_VALUES,
   type Semester,
 } from '@student-portal/shared';
+
+export class ResetControlCourseDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  courseCode!: string;
+
+  @Matches(/^\d{4}-\d{4}$/)
+  academicYear!: string;
+
+  @IsEnum(SEMESTER_VALUES)
+  semester!: Semester;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  confirmation!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
+}
 
 export class SaveGradeDto {
   @ApiProperty({ example: '20231001' })

@@ -99,7 +99,7 @@ export class ControlSheetsService {
     const codes = courses.map((c) => String(c.code).toUpperCase());
     const examTypes = [...CONTROL_ENABLED_COMPONENT_KEYS];
 
-    const [sheets, counts, rosterCounts] = await Promise.all([
+    const [sheets, counts, rosterCounts, activeReleases] = await Promise.all([
       this.sheetModel
         .find({
           courseId: { $in: courseIds },
@@ -143,6 +143,15 @@ export class ControlSheetsService {
         { $match: { courses: { $in: codes } } },
         { $group: { _id: { $toUpper: '$courses' }, n: { $sum: 1 } } },
       ]),
+      this.sheetModel.db
+        .collection('control_release_pointers')
+        .find({
+          active: true,
+          'scope.courseId': { $in: courseIds },
+          'scope.academicYear': query.academicYear,
+          'scope.semester': query.semester,
+        })
+        .toArray(),
     ]);
 
     const sheetByKey = new Map(
@@ -178,6 +187,12 @@ export class ControlSheetsService {
                 })
               : null,
             locked: sheet?.locked ?? false,
+            workflowState: sheet?.workflowState ?? 'DRAFT',
+            releaseActive: activeReleases.some(
+              (release) =>
+                String(release.scope.courseId) === String(course._id) &&
+                release.scope.component === key,
+            ),
             entered: count?.entered ?? 0,
             published: count?.published ?? 0,
           };
@@ -409,7 +424,7 @@ export class ControlSheetsService {
     return this.getSheet(user, sheetId);
   }
 
-  async unlock(user: AuthenticatedUser, sheetId: string, reason: string) {
+  async unlock(user: AuthenticatedUser, sheetId: string, reason?: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_UNLOCK);
     const { sheet } = await this.requireSheetInScope(user, sheetId);
     const session = await this.sheetModel.db.startSession();

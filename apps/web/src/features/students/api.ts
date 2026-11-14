@@ -155,10 +155,19 @@ export function deleteStudent(id: string) {
   return apiDelete<{ success: boolean; message: string }>(`/admin/students/${id}`);
 }
 
-export function listStudentGrades(studentCode: string, limit = 100) {
-  return apiGet<PaginatedResponse<GradeSummary>>('/admin/grades', {
-    params: { studentCode, limit },
+export async function listStudentGrades(studentCode: string, limit = 100) {
+  const pageSize = Math.min(100, Math.max(1, limit));
+  const first = await apiGet<PaginatedResponse<GradeSummary>>('/admin/grades', {
+    params: { studentCode, limit: pageSize, page: 1 },
   });
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page++) {
+    const next = await apiGet<PaginatedResponse<GradeSummary>>('/admin/grades', {
+      params: { studentCode, limit: pageSize, page },
+    });
+    items.push(...next.items);
+  }
+  return { ...first, items };
 }
 
 export function listStudentComplaints(studentCode: string, limit = 50) {

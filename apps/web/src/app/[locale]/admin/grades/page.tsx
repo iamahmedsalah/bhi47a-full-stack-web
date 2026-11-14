@@ -1,20 +1,20 @@
 "use client";
 import { ControlReleasePanel } from "@/features/grades/components/control-release-panel";
+import { HelpNote } from "@/components/ui/help-note";
 
 import { Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { normalizeSearchText } from "@/lib/search-text";
 import {
   AlertTriangle,
   Award,
   CalendarClock,
   Download,
-  Edit2,
   Loader2,
-  Plus,
   RefreshCw,
-  Trash2,
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +23,6 @@ import api, { getApiErrorMessage, type PaginatedResponse } from "@/lib/api";
 import { downloadExcel } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DataTableShell,
   type ColumnDef,
@@ -41,14 +40,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { TableActionButton } from "@/components/ui/table-action-button";
 import { TableCell } from "@/components/ui/table";
-import { deleteGrade, listAdminGrades, saveGrade, updateGrade, type GradeItem } from "@/features/grades/api";
-import { GradeFormDialog } from "@/features/grades/components/grade-form-dialog";
+import { listAdminGrades, type GradeItem } from "@/features/grades/api";
 import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
 import { AuditWarningsModal } from "@/features/grades/components/audit-warnings-modal";
 import { GradesPublishingModal } from "@/features/grades/components/grades-publishing-modal";
-import type { GradeFormValues } from "@/features/grades/schema";
+import { calculateGradeScale } from "@student-portal/shared";
 
 interface CourseOption {
   _id: string;
@@ -84,26 +81,27 @@ function GradesPageContent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const [activeTab, setActiveTab] = useState("midterm");
+  const isControlComponent = [
+    "midterm",
+    "final",
+    "coursework",
+    "total",
+  ].includes(activeTab);
   const canWriteGrades =
-    isAdmin || Boolean(user?.permissions?.includes("grades.write"));
+    !isControlComponent &&
+    (isAdmin || Boolean(user?.permissions?.includes("grades.write")));
   const canManageVisibility =
     isAdmin || Boolean(user?.permissions?.includes("grades.visibility.manage"));
-  const canPublishGrades = isAdmin || Boolean(user?.permissions?.includes("grades.publish"));
-  const canDeleteGrades =
-    isAdmin || Boolean(user?.permissions?.includes("grades.delete"));
   const canUploadGrades =
     isAdmin || Boolean(user?.permissions?.includes("uploads.import"));
 
-  const [activeTab, setActiveTab] = useState("midterm");
   const [search, setSearch] = useState("");
+  const settledSearch = normalizeSearchText(search);
   const [selectedCourse, setSelectedCourse] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [selectedGrade, setSelectedGrade] = useState<GradeItem | null>(null);
-  const [formLoading, setFormLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
@@ -131,14 +129,14 @@ function GradesPageContent() {
     examType: activeTab,
     sortBy,
     sortOrder,
-    ...(search.trim() ? { studentCode: search.trim() } : {}),
+    ...(settledSearch ? { studentCode: settledSearch } : {}),
     ...(selectedCourse !== "all" ? { courseCode: selectedCourse } : {}),
     ...(selectedStatus !== "all" ? { status: selectedStatus } : {}),
   };
 
   const gradesQuery = useQuery({
     queryKey: ["grades", queryParams],
-    queryFn: () => listAdminGrades(queryParams),
+    queryFn: ({ signal }) => listAdminGrades(queryParams, signal),
   });
 
   const grades = gradesQuery.data?.items ?? [];
@@ -159,66 +157,6 @@ function GradesPageContent() {
 
   const refreshGrades = () =>
     queryClient.invalidateQueries({ queryKey: ["grades"] });
-
-  const handleCreate = async (values: GradeFormValues) => {
-    setFormLoading(true);
-    try {
-      await saveGrade(canPublishGrades ? values : { ...values, isPublished: undefined });
-      toast.success(
-        isAr ? "تمت إضافة الدرجة بنجاح" : "Grade added successfully",
-      );
-      setIsAddOpen(false);
-      await refreshGrades();
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(
-          error,
-          isAr ? "فشل حفظ الدرجة" : "Failed to save grade",
-        ),
-      );
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const handleUpdate = async (values: GradeFormValues) => {
-    if (!selectedGrade) return;
-    setFormLoading(true);
-    try {
-      await updateGrade(selectedGrade._id, canPublishGrades ? values : { ...values, isPublished: undefined });
-      toast.success(
-        isAr ? "تم تحديث الدرجة بنجاح" : "Grade updated successfully",
-      );
-      setIsEditOpen(false);
-      await refreshGrades();
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(
-          error,
-          isAr ? "فشل تحديث الدرجة" : "Failed to update grade",
-        ),
-      );
-    } finally {
-      setFormLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteGrade(id);
-      toast.success(
-        isAr ? "تم حذف الدرجة بنجاح" : "Grade deleted successfully",
-      );
-      await refreshGrades();
-    } catch (error) {
-      toast.error(
-        getApiErrorMessage(
-          error,
-          isAr ? "فشل حذف الدرجة" : "Failed to delete grade",
-        ),
-      );
-    }
-  };
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -287,7 +225,16 @@ function GradesPageContent() {
       render: (item) => (
         <TableCell className="p-4 font-mono">
           <bdi className="font-semibold text-foreground px-2 py-0.5 rounded-squircle bg-muted/60 border border-border/50 text-xs inline-block">
-            {item.studentCode}
+            {isAdmin || user?.permissions?.includes("students.read") ? (
+              <Link
+                className="text-primary underline-offset-4 hover:underline focus-visible:underline"
+                href={`/${locale}/admin/students?tab=students&profile=${encodeURIComponent(item.studentCode)}&search=${encodeURIComponent(item.studentCode)}`}
+              >
+                {item.studentCode}
+              </Link>
+            ) : (
+              item.studentCode
+            )}
           </bdi>
         </TableCell>
       ),
@@ -328,25 +275,11 @@ function GradesPageContent() {
           (item.maxGrade > 0
             ? Math.round((item.grade / item.maxGrade) * 100)
             : 0);
+        // Status takes priority over historical/stored letter grades.
         const letter =
-          item.letterGrade ||
-          (pct >= 90
-            ? "A+"
-            : pct >= 85
-              ? "A"
-              : pct >= 80
-                ? "B+"
-                : pct >= 75
-                  ? "B"
-                  : pct >= 70
-                    ? "C+"
-                    : pct >= 65
-                      ? "C"
-                      : pct >= 60
-                        ? "D+"
-                        : pct >= 50
-                          ? "D"
-                          : "F");
+          item.status && item.status !== "present"
+            ? calculateGradeScale(pct, item.status).letter
+            : item.letterGrade || calculateGradeScale(pct).letter;
 
         let letterBadgeClass = "border-border bg-muted/50 text-foreground";
         if (letter.startsWith("A")) {
@@ -361,7 +294,7 @@ function GradesPageContent() {
         } else if (letter.startsWith("D")) {
           letterBadgeClass =
             "border-orange-500/30 bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold";
-        } else if (letter === "F") {
+        } else if (letter === "F" || letter === "FX") {
           letterBadgeClass =
             "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400 font-bold";
         }
@@ -369,13 +302,17 @@ function GradesPageContent() {
         return (
           <TableCell className="p-4 font-mono">
             <div className="flex items-center gap-2 whitespace-nowrap">
-              <span
-                className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}
-              >
-                {letter}
-              </span>
+              {item.examType !== "midterm" && (
+                <span
+                  className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}
+                >
+                  {letter}
+                </span>
+              )}
               <span className="text-xs text-muted-foreground font-mono">
-                ({pct}%)
+                {item.examType === "midterm"
+                  ? `${item.grade} / ${item.maxGrade}`
+                  : `(${pct}%)`}
               </span>
             </div>
           </TableCell>
@@ -420,52 +357,6 @@ function GradesPageContent() {
         </TableCell>
       ),
     },
-    ...(canWriteGrades || canDeleteGrades
-      ? [
-          {
-            key: "actions",
-            header: tCommon("actions"),
-            className: "text-center",
-            render: (item: GradeItem) => (
-              <TableCell className="p-4">
-                <div className="flex justify-center gap-2">
-                  {canWriteGrades && (
-                    <TableActionButton
-                      variant="primary"
-                      onClick={() => {
-                        setSelectedGrade(item);
-                        setIsEditOpen(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                      {tCommon("edit")}
-                    </TableActionButton>
-                  )}
-                  {canDeleteGrades && (
-                    <ConfirmDialog
-                      title={isAr ? "حذف الدرجة" : "Delete grade"}
-                      description={
-                        isAr
-                          ? "هل أنت متأكد من حذف هذه الدرجة؟"
-                          : "Are you sure you want to delete this grade?"
-                      }
-                      confirmLabel={tCommon("delete")}
-                      cancelLabel={tCommon("cancel")}
-                      onConfirm={() => void handleDelete(item._id)}
-                      trigger={
-                        <TableActionButton variant="danger">
-                          <Trash2 className="h-4 w-4" />
-                          {tCommon("delete")}
-                        </TableActionButton>
-                      }
-                    />
-                  )}
-                </div>
-              </TableCell>
-            ),
-          } satisfies ColumnDef<GradeItem>,
-        ]
-      : []),
   ];
 
   return (
@@ -479,7 +370,7 @@ function GradesPageContent() {
             : "Manage exam grades, results, and student academic progress."
         }
       >
-        {canUploadGrades && (
+        {canUploadGrades && !isControlComponent && (
           <Button
             variant="outline"
             onClick={() => setIsUploadOpen(true)}
@@ -502,7 +393,14 @@ function GradesPageContent() {
           )}
           {isAr ? "تصدير" : "Export"}
         </Button>
-        {canManageVisibility && <Button variant="outline" onClick={() => setIsPublishModalOpen(true)}><CalendarClock className="h-4 w-4"/>{isAr ? "إتاحة النتائج وجدولتها" : "Results visibility and schedule"}</Button>}
+        {canManageVisibility && (
+          <Button variant="outline" onClick={() => setIsPublishModalOpen(true)}>
+            <CalendarClock className="h-4 w-4" />
+            {isAr
+              ? "إتاحة النتائج وجدولتها"
+              : "Results visibility and schedule"}
+          </Button>
+        )}
         {canWriteGrades && (
           <>
             <Button
@@ -521,20 +419,15 @@ function GradesPageContent() {
               <AlertTriangle className="h-4 w-4 text-amber-400" />
               {isAr ? "تدقيق إنذارات الـ CGPA" : "Audit CGPA Warnings"}
             </Button>
-            <Button
-              onClick={() => setIsAddOpen(true)}
-              className="rounded-squircle"
-            >
-              <Plus className="h-4 w-4" />
-              {isAr ? "إضافة درجة" : "Add Grade"}
-            </Button>
           </>
         )}
       </PageTitleBanner>
       <ControlReleasePanel locale={locale} />
-      <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
+      <HelpNote
+        title={isAr ? "ملاحظات إتاحة النتائج" : "Result visibility notes"}
+      >
         {tControl("visibilityNote")}
-      </p>
+      </HelpNote>
 
       <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
         {[
@@ -566,6 +459,7 @@ function GradesPageContent() {
       </div>
 
       <FilterBar
+        compact
         search={search}
         onSearchChange={(value) => {
           setSearch(value);
@@ -714,29 +608,6 @@ function GradesPageContent() {
         </Button>
       </div>
 
-      {isAddOpen && (
-        <GradeFormDialog
-          open={isAddOpen}
-          onOpenChange={setIsAddOpen}
-          isEditing={false}
-          courses={coursesQuery.data ?? []}
-          onSubmit={handleCreate}
-          isSubmitting={formLoading}
-          defaultValues={{ examType: activeTab as GradeFormValues["examType"] }}
-        />
-      )}
-      {isEditOpen && selectedGrade && (
-        <GradeFormDialog
-          key={selectedGrade._id}
-          open={isEditOpen}
-          onOpenChange={setIsEditOpen}
-          isEditing
-          courses={coursesQuery.data ?? []}
-          onSubmit={handleUpdate}
-          isSubmitting={formLoading}
-          defaultValues={selectedGrade as GradeFormValues}
-        />
-      )}
       <DataUploadDialog
         open={isUploadOpen}
         onOpenChange={setIsUploadOpen}

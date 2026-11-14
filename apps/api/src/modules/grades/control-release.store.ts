@@ -455,35 +455,54 @@ export class ControlReleaseStore {
       { releaseId: release._id, active: true, scope: preview.scope },
       { upsert: true, session },
     );
-    if (sheet.component === 'final')
-      for (const outcome of release.results) {
-        const baseline = this.db.collection('control_academic_baselines');
-        if (
-          !(await baseline.findOne({ _id: outcome.studentId }, { session }))
-        ) {
-          const profile = await this.db
-            .collection(
-              this.connection.models.StudentAcademicProfile?.collection.name ??
-                'student_academic_profiles',
-            )
-            .findOne({ studentId: outcome.studentId }, { session });
-          await baseline.insertOne(
-            {
-              _id: outcome.studentId,
-              completedCourses: profile?.completedCourses ?? [],
-              failedCourses: profile?.failedCourses ?? [],
-              lowGradeCourses: profile?.lowGradeCourses ?? [],
-              gpa: profile?.gpa ?? 0,
-              completedCreditHours: profile?.completedCreditHours ?? 0,
-              academicLevel: profile?.academicLevel ?? '1',
-              semester: profile?.semester ?? 'first',
-              academicWarnings: profile?.academicWarnings ?? 0,
-              createdAt: new Date(),
-            },
-            { session },
-          );
-        }
+    if (sheet.component === 'final' && release.results.length) {
+      const baseline = this.db.collection('control_academic_baselines');
+      const ids = release.results.map((outcome) => outcome.studentId);
+      const existing = await baseline
+        .find({ _id: { $in: ids } }, { session, projection: { _id: 1 } })
+        .toArray();
+      const known = new Set(existing.map((entry) => String(entry._id)));
+      const missing = ids.filter((id) => !known.has(String(id)));
+      if (missing.length) {
+        const profiles = await this.db
+          .collection(
+            this.connection.models.StudentAcademicProfile?.collection.name ??
+              'student_academic_profiles',
+          )
+          .find({ studentId: { $in: missing } }, { session })
+          .toArray();
+        const byStudent = new Map(
+          profiles.map((profile) => [String(profile.studentId), profile]),
+        );
+        // Keep baseline capture in the activation transaction. Only query/write
+        // batches, rather than three database round trips per enrolled student.
+        await baseline.bulkWrite(
+          missing.map((id) => {
+            const profile = byStudent.get(String(id));
+            return {
+              updateOne: {
+                filter: { _id: id },
+                update: {
+                  $setOnInsert: {
+                    completedCourses: profile?.completedCourses ?? [],
+                    failedCourses: profile?.failedCourses ?? [],
+                    lowGradeCourses: profile?.lowGradeCourses ?? [],
+                    gpa: profile?.gpa ?? 0,
+                    completedCreditHours: profile?.completedCreditHours ?? 0,
+                    academicLevel: profile?.academicLevel ?? '1',
+                    semester: profile?.semester ?? 'first',
+                    academicWarnings: profile?.academicWarnings ?? 0,
+                    createdAt: new Date(),
+                  },
+                },
+                upsert: true,
+              },
+            };
+          }),
+          { session },
+        );
       }
+    }
     return release;
   }
 

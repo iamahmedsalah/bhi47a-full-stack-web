@@ -106,7 +106,7 @@ export function GradeFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent dir={locale === "ar" ? "rtl" : "ltr"} className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? t("editTitle") : t("addTitle")}
@@ -125,6 +125,7 @@ export function GradeFormDialog({
               </label>
               <Input
                 {...form.register("studentCode")}
+                dir="ltr"
                 placeholder="2024001"
                 disabled={isEditing}
               />
@@ -152,7 +153,7 @@ export function GradeFormDialog({
                 <SelectTrigger disabled={isEditing}>
                   <SelectValue placeholder={t("selectCourse")} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
                   {courses.map((c) => (
                     <SelectItem key={c._id} value={c.code}>
                       {c.code} -{" "}
@@ -187,12 +188,14 @@ export function GradeFormDialog({
                 <SelectTrigger>
                   <SelectValue placeholder={t("examType")} />
                 </SelectTrigger>
-                <SelectContent>
-                  {(["midterm", "final", "coursework"] as const).map((examType) => (
-                    <SelectItem key={examType} value={examType}>
-                      {t(`examTypeValues.${examType}`)}
-                    </SelectItem>
-                  ))}
+                <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+                  {(["midterm", "final", "coursework"] as const).map(
+                    (examType) => (
+                      <SelectItem key={examType} value={examType}>
+                        {t(`examTypeValues.${examType}`)}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -214,7 +217,7 @@ export function GradeFormDialog({
                 <SelectTrigger>
                   <SelectValue placeholder={t("status")} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
                   {GRADE_STATUS_VALUES.map((st) => (
                     <SelectItem key={st} value={st}>
                       {t(`statusValues.${st}`)}

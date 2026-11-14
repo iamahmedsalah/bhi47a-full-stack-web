@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { Input } from "@/components/ui/input";
+import { HelpNote } from "@/components/ui/help-note";
 import { Label } from "@/components/ui/label";
 import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
 import { PageTitleBanner } from "@/components/ui/page-title-banner";
@@ -175,7 +176,8 @@ function ControlHomeContent() {
       }),
     onSuccess: (res) => {
       queryClient.setQueryData(controlKeys.sheet(res.sheet.id), res);
-      if (res.sheet.slug) queryClient.setQueryData(controlKeys.sheet(res.sheet.slug), res);
+      if (res.sheet.slug)
+        queryClient.setQueryData(controlKeys.sheet(res.sheet.slug), res);
       queryClient.invalidateQueries({
         queryKey: controlKeys.courses(academicYear, semester, level),
         refetchType: "none",
@@ -214,11 +216,28 @@ function ControlHomeContent() {
         className: "w-28",
         render: (item) => (
           <TableCell className="w-28 font-mono font-bold text-foreground">
-            <button type="button" className="text-primary hover:underline disabled:text-muted-foreground" disabled={openSheetMutation.isPending || !(item.components.find(c => c.key === component)?.sheetId || caps?.canCreateSheets || caps?.scopeAll)} onClick={() => {
-              const sheet = item.components.find(c => c.key === component);
-              if (sheet?.sheetId) router.push(`/${locale}/admin/control/${sheet.slug || sheet.sheetId}`);
-              else openSheetMutation.mutate(item.courseId);
-            }}><bdi dir="ltr">{item.code}</bdi></button>
+            <button
+              type="button"
+              className="text-primary hover:underline disabled:text-muted-foreground"
+              disabled={
+                openSheetMutation.isPending ||
+                !(
+                  item.components.find((c) => c.key === component)?.sheetId ||
+                  caps?.canCreateSheets ||
+                  caps?.scopeAll
+                )
+              }
+              onClick={() => {
+                const sheet = item.components.find((c) => c.key === component);
+                if (sheet?.sheetId)
+                  router.push(
+                    `/${locale}/admin/control/${sheet.slug || sheet.sheetId}`,
+                  );
+                else openSheetMutation.mutate(item.courseId);
+              }}
+            >
+              <bdi dir="ltr">{item.code}</bdi>
+            </button>
           </TableCell>
         ),
       },
@@ -246,11 +265,31 @@ function ControlHomeContent() {
           return (
             <TableCell className="min-w-[220px]">
               <div className="flex items-center gap-2">
-                <button type="button" className="font-semibold text-foreground hover:text-primary hover:underline text-start disabled:text-muted-foreground" disabled={openSheetMutation.isPending || !(item.components.find(c => c.key === component)?.sheetId || caps?.canCreateSheets || caps?.scopeAll)} onClick={() => {
-                  const sheet = item.components.find(c => c.key === component);
-                  if (sheet?.sheetId) router.push(`/${locale}/admin/control/${sheet.slug || sheet.sheetId}`);
-                  else openSheetMutation.mutate(item.courseId);
-                }}>{title}</button>
+                <button
+                  type="button"
+                  className="font-semibold text-foreground hover:text-primary hover:underline text-start disabled:text-muted-foreground"
+                  disabled={
+                    openSheetMutation.isPending ||
+                    !(
+                      item.components.find((c) => c.key === component)
+                        ?.sheetId ||
+                      caps?.canCreateSheets ||
+                      caps?.scopeAll
+                    )
+                  }
+                  onClick={() => {
+                    const sheet = item.components.find(
+                      (c) => c.key === component,
+                    );
+                    if (sheet?.sheetId)
+                      router.push(
+                        `/${locale}/admin/control/${sheet.slug || sheet.sheetId}`,
+                      );
+                    else openSheetMutation.mutate(item.courseId);
+                  }}
+                >
+                  {title}
+                </button>
                 {levelLabel && (
                   <Badge
                     variant="outline"
@@ -322,7 +361,7 @@ function ControlHomeContent() {
           const isLocked = Boolean(mid?.locked);
           const canToggle = Boolean(
             mid?.sheetId &&
-              ((isLocked && caps?.canUnlock) || (!isLocked && caps?.canLock)),
+            ((isLocked && caps?.canUnlock) || (!isLocked && caps?.canLock)),
           );
 
           return (
@@ -338,10 +377,9 @@ function ControlHomeContent() {
                         sheetId: mid.sheetId,
                         locked: isLocked,
                         courseCode: item.code,
-                        courseName:
-                          (isAr
-                            ? item.nameAr || item.name
-                            : item.nameEn || item.name),
+                        courseName: isAr
+                          ? item.nameAr || item.name
+                          : item.nameEn || item.name,
                       });
                     }}
                     title={
@@ -526,10 +564,9 @@ function ControlHomeContent() {
                           sheetId: mid.sheetId,
                           locked: isLocked,
                           courseCode: item.code,
-                          courseName:
-                            (isAr
-                              ? item.nameAr || item.name
-                              : item.nameEn || item.name),
+                          courseName: isAr
+                            ? item.nameAr || item.name
+                            : item.nameEn || item.name,
                         });
                       } else if (val === "scheme") {
                         setSchemeTarget(item);
@@ -572,6 +609,7 @@ function ControlHomeContent() {
         />
 
         <FilterBar
+          compact
           search={search}
           onSearchChange={setSearch}
           searchPlaceholder={
@@ -771,8 +809,8 @@ function ControlHomeContent() {
                 <br />
                 {lockTarget?.locked
                   ? isAr
-                    ? "فك القفل يتيح التعديل مجدداً لأعضاء الكنترول وهيئة التدريس المصرح لهم. يجب إدخال سبب معتمد يُسجل في سجل التدقيق."
-                    : "Unlocking allows edits again. A mandatory reason is recorded in the audit log."
+                    ? "فك القفل يتيح التعديل مجدداً للمصرح لهم. السبب اختياري والإجراء يُسجل في سجل التدقيق."
+                    : "Unlocking allows authorized edits again. The reason is optional and the action is audited."
                   : isAr
                     ? "قفل الكشف يمنع أي تعديلات إضافية على الدرجات ويجعله للقراءة فقط حتى يتم فك قفله من مسؤول الكنترول."
                     : "Locking prevents any further edits and turns the sheet read-only."}
@@ -780,15 +818,12 @@ function ControlHomeContent() {
             </DialogHeader>
 
             <div className="space-y-3 py-2">
-              <div className="rounded-xl border border-border/60 bg-surface/50 p-3 text-xs text-muted-foreground space-y-1">
-                <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                  <span>
-                    {isAr
-                      ? "ضوابط صلاحيات حالة الكشف:"
-                      : "Sheet Status Governance:"}
-                  </span>
-                </div>
+              <HelpNote
+                title={
+                  isAr ? "ضوابط صلاحيات حالة الكشف" : "Sheet status permissions"
+                }
+                icon={<ShieldCheck className="size-4" />}
+              >
                 <p>
                   {isAr
                     ? "• القفل يتطلب صلاحية (control.sheets.lock)"
@@ -796,15 +831,17 @@ function ControlHomeContent() {
                 </p>
                 <p>
                   {isAr
-                    ? "• فك القفل يتطلب صلاحية (control.sheets.unlock) مع كتابة سبب إلزامي"
-                    : "• Unlocking requires (control.sheets.unlock) with a mandatory audit reason"}
+                    ? "• فك القفل يتطلب صلاحية (control.sheets.unlock)، والسبب اختياري مع تسجيل الإجراء."
+                    : "• Unlocking requires (control.sheets.unlock); the reason is optional and the action is audited."}
                 </p>
-              </div>
+              </HelpNote>
 
               {lockTarget?.locked && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold">
-                    {isAr ? "سبب فك القفل (إلزامي)" : "Unlock Reason (Mandatory)"}
+                    {isAr
+                      ? "سبب فك القفل (اختياري)"
+                      : "Unlock reason (optional)"}
                   </Label>
                   <Textarea
                     value={lockReason}
@@ -825,10 +862,7 @@ function ControlHomeContent() {
                 type="button"
                 variant={lockTarget?.locked ? "default" : "destructive"}
                 className="rounded-squircle"
-                disabled={
-                  toggleLockMutation.isPending ||
-                  (lockTarget?.locked && lockReason.trim().length < 3)
-                }
+                disabled={toggleLockMutation.isPending}
                 onClick={() => toggleLockMutation.mutate()}
               >
                 {toggleLockMutation.isPending && (

@@ -19,6 +19,69 @@ import { PublishGradesDto, UpdateGradesSettingsDto } from './dto/grade.dto';
 const student = { level: '1', studentCode: '260001' };
 const midterm = { courseCode: 'CS101', examType: 'midterm' };
 describe('Released grade visibility', () => {
+  it('rejects course reset for staff even if all permissions are granted', async () => {
+    const service = Object.create(GradesService.prototype) as GradesService;
+    await expect(
+      service.resetControlCourse(
+        {
+          courseCode: '111',
+          academicYear: '2026-2027',
+          semester: 'first',
+          confirmation: '111',
+          reason: 'Test cleanup',
+        },
+        {
+          _id: '100000000000000000000001',
+          role: 'staff',
+          permissions: Object.values(PERMISSIONS),
+        } as Parameters<GradesService['resetControlCourse']>[1],
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+  it('schedules post-commit reconciliation without waiting for slow work and coalesces wakeups', () => {
+    jest.useFakeTimers();
+    const process = jest.fn().mockReturnValue(new Promise<void>(() => {}));
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        processControlReleases: process,
+      },
+    );
+    try {
+      expect(service.scheduleControlReleases()).toEqual({ scheduled: true });
+      expect(service.scheduleControlReleases()).toEqual({ scheduled: true });
+      expect(process).not.toHaveBeenCalled();
+      jest.runOnlyPendingTimers();
+      expect(process).toHaveBeenCalledTimes(1);
+    } finally {
+      service.onModuleDestroy();
+      jest.useRealTimers();
+    }
+  });
+  it('reports enabled student columns even before a final release exists', async () => {
+    const settings = {
+      gradesSystemOpen: true,
+      gradesPublishedExamTypes: ['midterm', 'final', 'coursework'],
+    };
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        systemSettingsModel: { findOne: () => Promise.resolve(settings) },
+        studentProfileModel: {
+          findOne: () => ({
+            select: () => ({ lean: () => Promise.resolve({ level: '3' }) }),
+          }),
+        },
+      },
+    );
+    expect(
+      await service.getStudentResultsStatus('100000000000000000000001'),
+    ).toMatchObject({ visibleExamTypes: ['midterm', 'final'] });
+    settings.gradesPublishedExamTypes = ['midterm'];
+    expect(
+      await service.getStudentResultsStatus('100000000000000000000001'),
+    ).toMatchObject({ visibleExamTypes: ['midterm'] });
+  });
   it('keeps instructor quiz publication independent from official result settings but respects holds', async () => {
     const profile = { isBlocked: false };
     const published = [{ courseCode: '111', isPublished: true, quizzes: [] }];

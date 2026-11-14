@@ -8,7 +8,6 @@ import {
   IsIn,
   IsInt,
   IsMongoId,
-  IsNotEmpty,
   IsNumber,
   IsObject,
   IsOptional,
@@ -19,6 +18,7 @@ import {
   Min,
   MinLength,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -143,12 +143,11 @@ export class LockSheetDto {
 }
 
 export class UnlockSheetDto {
-  @ApiProperty({ description: 'Required; recorded in the audit log.' })
+  @ApiPropertyOptional({ description: 'Optional; recorded when supplied.' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
   @MaxLength(500)
-  reason!: string;
+  reason?: string;
 }
 
 export class SchemeComponentInputDto {
@@ -248,10 +247,17 @@ export class ReviewSheetDto {
   @Min(0)
   expectedRevision!: number;
 
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
+  @ValidateIf(
+    (dto: ReviewSheetDto) =>
+      dto.action !== 'REOPEN' || dto.reason !== undefined,
+  )
   @IsString()
   @MinLength(3)
   @MaxLength(500)
-  reason!: string;
+  reason?: string;
 }
 
 export class ImportRowsDto {

@@ -234,7 +234,10 @@ export class GradingSchemeService {
         })
         .session(session);
       if (exists)
-        throw new ConflictException('Coursework split is frozen after entry');
+        throw new ConflictException({
+          code: 'COURSEWORK_SPLIT_FROZEN',
+          message: 'Coursework split is frozen after entry',
+        });
     }
     const next = before.components.map((current) => {
       const input = dto.components.find((c) => c.key === current.key);

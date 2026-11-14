@@ -95,7 +95,7 @@ function labels(locale: "ar" | "en") {
         semester: "Academic Semester",
         courseCode: "Course Code",
         courseTitle: "Course Title",
-        midterm: "Coursework / Midterm",
+        midterm: "Midterm",
         final: "Final Examination",
         total: "Total Score",
         status: "Result / Grade",

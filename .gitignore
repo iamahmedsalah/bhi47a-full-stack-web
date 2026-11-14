@@ -70,6 +70,7 @@ build_import_files.mjs
 !/docs/control-system-plan.md
 !/docs/control-permissions-and-visibility.md
 !/docs/control-testing.md
+!/docs/control-import-and-search-plan.md
 !/docs/control-production-acceptance.md
 !/scripts/seed-control-demo.cjs
 !/scripts/seed-control-demo.test.cjs

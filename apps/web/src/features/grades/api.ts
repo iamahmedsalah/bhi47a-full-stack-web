@@ -36,9 +36,11 @@ export const gradeKeys = {
 
 export async function listAdminGrades(
   params?: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<ListGradesResponse> {
   const response = await api.get<ListGradesResponse>("/admin/grades", {
     params,
+    signal,
   });
   return response.data;
 }
@@ -150,13 +152,13 @@ export async function auditAcademicWarnings(options?: {
 }
 
 export interface GradesSettingsData {
-  gradesLevelBasis?: 'student' | 'course';
+  gradesLevelBasis?: "student" | "course";
   gradesSystemOpen: boolean;
   gradesOpenAt?: string | null;
   gradesCloseAt?: string | null;
   gradesPublishedLevels: string[];
-  gradesPublishedExamTypes?: import('@student-portal/shared').ExamType[];
-  gradesVisibilityRules?: import('@student-portal/shared').GradeVisibilityRule[];
+  gradesPublishedExamTypes?: import("@student-portal/shared").ExamType[];
+  gradesVisibilityRules?: import("@student-portal/shared").GradeVisibilityRule[];
 }
 
 export async function getGradesSettings(): Promise<GradesSettingsData> {
@@ -175,6 +177,7 @@ export async function updateGradesSettings(
 }
 
 export interface StudentResultsStatusData {
+  visibleExamTypes?: Array<"midterm" | "final">;
   visibilityVersion?: string;
   isOpen: boolean;
   reason?:

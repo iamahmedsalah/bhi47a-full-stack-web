@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Info, AlertTriangle, Eye, Calculator } from "lucide-react";
+import { HelpNote } from "@/components/ui/help-note";
 
 export function ControlHelpNotes({ scheme = false }: { scheme?: boolean }) {
   const t = useTranslations("control");
@@ -42,17 +43,14 @@ export function ControlHelpNotes({ scheme = false }: { scheme?: boolean }) {
   return (
     <div className="space-y-2">
       {notes.map(({ title, body, icon: Icon, color }) => (
-        <div
-          role="note"
+        <HelpNote
+          title={t(title)}
+          icon={<Icon aria-hidden="true" className="size-4 shrink-0" />}
           key={title}
-          className={`flex gap-2 rounded-xl border p-3 text-xs leading-relaxed ${color}`}
+          className={color}
         >
-          <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          <div>
-            <p className="font-semibold">{t(title)}</p>
-            <p className="whitespace-pre-line">{t(body)}</p>
-          </div>
-        </div>
+          <p className="whitespace-pre-line">{t(body)}</p>
+        </HelpNote>
       ))}
     </div>
   );

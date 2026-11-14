@@ -42,11 +42,11 @@ interface Grade {
   examType: "midterm" | "final" | "coursework";
   officialResult?: {
     official: boolean;
-    total: number;
+    total: number | null;
     totalMax: number;
-    percentage: number;
+    percentage: number | null;
     passed: boolean;
-    gradePoints: number;
+    gradePoints: number | null;
     letterGrade: string;
   };
   grade: number;
@@ -139,6 +139,8 @@ export default function StudentResultsPage() {
 
   const resultsQuery = useQuery({
     queryKey: ["student-results"],
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const res = await api.get<Grade[]>("/students/me/results");
       return res.data;
@@ -410,13 +412,15 @@ export default function StudentResultsPage() {
     (group) => group.academicLevel === selectedLevel,
   );
   const selectedLevelStats = calculateGroupStats(selectedLevelGroups);
-  const showMidterm = selectedLevelGroups.some((course) =>
-    Boolean(course.midterm),
-  );
-  const showFinal = selectedLevelGroups.some((course) => Boolean(course.final));
-  const showTotal = selectedLevelGroups.some(
-    (course) => course.officialResult?.official,
-  );
+  // Keep the selected columns even when that component has no published release
+  // yet. Existing rows also cover authorized course/student visibility overrides.
+  const showMidterm =
+    Boolean(statusData?.visibleExamTypes?.includes("midterm")) ||
+    selectedLevelGroups.some((course) => Boolean(course.midterm));
+  const showFinal =
+    Boolean(statusData?.visibleExamTypes?.includes("final")) ||
+    selectedLevelGroups.some((course) => Boolean(course.final));
+  const showTotal = true;
   const columnCount =
     2 + Number(showMidterm) + Number(showFinal) + Number(showTotal);
   const semesterSections = (["first", "second", "summer"] as const)
@@ -482,9 +486,13 @@ export default function StudentResultsPage() {
       dateStyle: "long",
     }).format(new Date()),
     visibleComponents: {
-      midterm: groupedList.some((course) => Boolean(course.midterm)),
-      final: groupedList.some((course) => Boolean(course.final)),
-      total: groupedList.some((course) => course.officialResult?.official),
+      midterm:
+        Boolean(statusData?.visibleExamTypes?.includes("midterm")) ||
+        groupedList.some((course) => Boolean(course.midterm)),
+      final:
+        Boolean(statusData?.visibleExamTypes?.includes("final")) ||
+        groupedList.some((course) => Boolean(course.final)),
+      total: true,
     },
     courses: groupedList.map((course) => {
       const midtermGrade =
@@ -653,6 +661,17 @@ export default function StudentResultsPage() {
         </div>
       </div>
 
+      {showFinal && !selectedLevelGroups.some((course) => course.final) && (
+        <p
+          role="note"
+          className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm leading-6 text-muted-foreground"
+        >
+          <AlertTriangle className="mt-1 h-4 w-4 shrink-0 text-amber-500" />
+          {isEnglish
+            ? "The final column is enabled. Final marks will appear after the administration publishes an approved final release. The official total includes coursework, which remains hidden."
+            : "عمود النهائي متاح. تظهر درجاته بعد نشر الإدارة لنسخة نهائي معتمدة. يشمل المجموع الرسمي أعمال السنة، مع بقاء عمودها مخفيًا."}
+        </p>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
         {/* Total Cumulative Letter Grade Card */}
         <motion.div
@@ -1076,7 +1095,7 @@ export default function StudentResultsPage() {
                                   <span className="font-mono font-black text-sm text-foreground">
                                     <bdi>
                                       {course.officialResult?.official
-                                        ? `${total} / ${maxTotal}`
+                                        ? `${percentage.toFixed(1)}%`
                                         : "-"}
                                     </bdi>
                                   </span>
@@ -1090,12 +1109,9 @@ export default function StudentResultsPage() {
                                       }}
                                     />
                                   </div>
-                                  <span className="text-[10px] font-mono text-muted-foreground">
-                                    {percentage.toFixed(1)}%
-                                  </span>
                                 </div>
                               ) : (
-                                <span>?</span>
+                                <span className="text-muted-foreground">—</span>
                               )}
                             </td>
                           )}

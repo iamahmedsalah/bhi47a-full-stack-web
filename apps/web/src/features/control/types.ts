@@ -32,6 +32,8 @@ export interface ControlCourseSummaryComponent {
   locked: boolean;
   entered: number;
   published: number;
+  workflowState?: ControlSheetDetails["sheet"]["workflowState"];
+  releaseActive?: boolean;
 }
 
 export interface ControlCourseSummary {
@@ -204,10 +206,14 @@ export interface WorkbookRow extends ControlRosterRow {
 }
 export interface ControlWorkbook {
   revision: number;
+  componentStates?: Partial<
+    Record<ControlComponentKey, ControlSheetDetails["sheet"]["workflowState"]>
+  >;
   scheme: ResolvedGradingScheme;
   rows: WorkbookRow[];
 }
 export interface ControlImportPreview {
+  rules?: { component: ControlComponentKey; max: number; step: number };
   batchIndex?: number;
   totalBatches?: number;
   totalRows?: number;
@@ -216,4 +222,16 @@ export interface ControlImportPreview {
   skipped?: number;
   errors: string[];
   changes: GradeChangeInput[];
+  reviewRows?: Array<{
+    sourceRow: number;
+    studentId: string;
+    studentCode: string;
+    name: string;
+    nameAr: string;
+    examStatus?: string;
+    before: number | null;
+    after: string | number | null;
+    status: 'valid' | 'invalid' | 'unchanged';
+    issues: string[];
+  }>;
 }

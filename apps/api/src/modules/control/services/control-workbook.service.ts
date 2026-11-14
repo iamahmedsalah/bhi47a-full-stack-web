@@ -101,7 +101,7 @@ export class ControlWorkbookService {
       user,
       sheetId,
     );
-    const [roster, scheme, docs] = await Promise.all([
+    const [roster, scheme, docs, componentSheets] = await Promise.all([
       this.sheetService.listEntries(user, sheetId, {}),
       this.schemes.getScheme(
         String(sheet.courseId),
@@ -120,6 +120,14 @@ export class ControlWorkbookService {
         )
         .batchSize(500)
         .lean(),
+      this.sheets
+        .find({
+          courseId: sheet.courseId,
+          academicYear: sheet.academicYear,
+          semester: sheet.semester,
+        })
+        .select('component workflowState')
+        .lean(),
     ]);
     const byStudent = new Map<string, typeof docs>();
     for (const doc of docs) {
@@ -128,6 +136,12 @@ export class ControlWorkbookService {
     }
     return {
       revision: sheet.revision ?? 0,
+      componentStates: Object.fromEntries(
+        componentSheets.map((entry) => [
+          entry.component,
+          entry.workflowState ?? 'DRAFT',
+        ]),
+      ),
       scheme,
       rows: roster.entries.map((row) => {
         const components = Object.fromEntries(
@@ -306,7 +320,10 @@ export class ControlWorkbookService {
             throw new ConflictException('COURSEWORK_BREAKDOWN_REQUIRED');
         }
         if (dto.action === 'APPROVE') {
-          if (sheet.submission?.submittedBy === user._id)
+          if (
+            user.role !== 'admin' &&
+            sheet.submission?.submittedBy === user._id
+          )
             throw new ForbiddenException(
               'Submitter cannot approve their own sheet',
             );
@@ -472,6 +489,14 @@ export class ControlWorkbookService {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.alignment = { horizontal: 'center' };
     });
+    page.getRow(1).height = 32;
+    page.properties.defaultRowHeight = 24;
+    page.pageSetup = {
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+    };
     page.columns.forEach((col, i) => {
       col.width = i === 1 ? 36 : 22;
     });
@@ -531,6 +556,18 @@ export class ControlWorkbookService {
     });
     page.eachRow((row, index) => {
       if (index === 1) return;
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: index % 2 ? 'FFF1F5F9' : 'FFFFFFFF' },
+        };
+      });
       row.getCell(1).numFmt = '@';
       row.getCell(3).numFmt = '0.##';
       row.getCell(3).dataValidation = {
@@ -844,6 +881,12 @@ export class ControlWorkbookService {
       values.sourceRow = n;
       rows.push(values);
     });
+    if (!rows.length)
+      throw new BadRequestException({
+        code: 'CONTROL_IMPORT_EMPTY',
+        message:
+          'This workbook contains no student rows. Download the full workbook instead of missing grades, then edit Marks.',
+      });
     const totalBatches = Math.max(1, Math.ceil(rows.length / 500));
     if (batch >= totalBatches)
       throw new BadRequestException('Invalid import batch');
@@ -959,19 +1002,6 @@ export class ControlWorkbookService {
       ) {
         score.value = null;
       }
-      if (
-        (scoreless && score.value !== null) ||
-        (!scoreless &&
-          (score.value === null || validateMark(score.value, detail.rules)))
-      ) {
-        fail('Mark does not match status, maximum or step');
-        continue;
-      }
-      const rev = Number(row.expectedRev);
-      if (!Number.isInteger(rev) || rev !== (current?.rev ?? 0)) {
-        fail('Stale mark revision');
-        continue;
-      }
       const attendance = parseMarkInput(row.attendanceMark),
         quizzes = parseMarkInput(row.quizzesMark);
       const unchangedBreakdown =
@@ -988,6 +1018,28 @@ export class ControlWorkbookService {
         unchangedBreakdown
       )
         continue;
+      if (scoreless && score.value !== null) {
+        fail('Score must be blank for this status');
+        continue;
+      }
+      if (!scoreless && score.value === null) {
+        fail('A present status requires a numeric score');
+        continue;
+      }
+      if (!scoreless && score.value !== null) {
+        const issue = validateMark(score.value, detail.rules);
+        if (issue) {
+          fail(
+            `Mark rule: ${issue}; max=${detail.rules.max}; step=${detail.rules.step}`,
+          );
+          continue;
+        }
+      }
+      const rev = Number(row.expectedRev);
+      if (!Number.isInteger(rev) || rev !== (current?.rev ?? 0)) {
+        fail('Stale mark revision');
+        continue;
+      }
       if (
         ((CONTROL_RESTRICTED_STATES as readonly string[]).includes(status) ||
           (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
@@ -1050,9 +1102,49 @@ export class ControlWorkbookService {
     return {
       previewId: String(batch._id),
       valid: changes.length,
+      rules: {
+        component: detail.sheet.component,
+        max: detail.rules.max,
+        step: detail.rules.step,
+      },
       skipped: rows.length - changes.length - errors.length,
       errors,
       changes,
+      reviewRows: rows.map((row, index) => {
+        const sourceRow =
+          typeof row.sourceRow === 'number' ? row.sourceRow : index + 2;
+        const code =
+          typeof row.studentCode === 'string' ||
+          typeof row.studentCode === 'number'
+            ? String(row.studentCode).trim()
+            : '';
+        const student = byCode.get(code);
+        const change = changes.find(
+          (item) => item.studentId === student?.studentId,
+        );
+        const issues = errors.filter((message) =>
+          message.startsWith(`Row ${sourceRow}:`),
+        );
+        const inputScore = parseMarkInput(row.score);
+        return {
+          sourceRow,
+          studentId: student?.studentId ?? '',
+          studentCode: code,
+          name: student?.name ?? '',
+          nameAr: student?.nameAr ?? '',
+          examStatus:
+            normalizeStatusInput(row.status) ||
+            (inputScore.ok && inputScore.value !== null ? 'present' : ''),
+          before: student?.components[detail.sheet.component]?.score ?? null,
+          after:
+            change?.score ??
+            (typeof row.score === 'string' || typeof row.score === 'number'
+              ? row.score
+              : null),
+          status: issues.length ? 'invalid' : change ? 'valid' : 'unchanged',
+          issues,
+        };
+      }),
     };
   }
 

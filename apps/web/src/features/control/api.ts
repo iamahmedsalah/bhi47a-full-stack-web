@@ -112,7 +112,7 @@ export async function lockControlSheet(
 
 export async function unlockControlSheet(
   sheetId: string,
-  reason: string,
+  reason?: string,
 ): Promise<ControlSheetDetails> {
   const res = await api.post<ControlSheetDetails>(
     `/admin/control/sheets/${sheetId}/unlock`,
@@ -182,7 +182,7 @@ export async function reviewControlSheet(
   dto: {
     action: "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN";
     expectedRevision: number;
-    reason: string;
+    reason?: string;
   },
 ) {
   const res = await api.post<ControlSheetDetails>(

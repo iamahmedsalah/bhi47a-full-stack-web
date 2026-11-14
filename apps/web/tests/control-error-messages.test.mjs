@@ -19,7 +19,7 @@ function messages(locale) {
     window: { location: { pathname: '/' + locale + '/admin/control' } },
     require: (name) => name === 'axios' ? requireWeb('axios') : {},
   });
-  return (message) => evaluated.exports.getApiErrorMessage({ response: { data: { message } } });
+  return (message, code) => evaluated.exports.getApiErrorMessage({ response: { data: { message, code } } });
 }
 test('Control row validation messages retain row numbers and give localized recovery guidance', () => {
   const ar = messages('ar'), en = messages('en');
@@ -31,10 +31,28 @@ test('Control row validation messages retain row numbers and give localized reco
   assert.match(ar('Preview is stale; preview again'), /أعد المعاينة/);
   assert.match(en('Coursework split is frozen after entry'), /frozen/);
 });
+test('Frozen schemes and busy resets provide bilingual actionable guidance from stable error codes', () => {
+  const ar = messages('ar'), en = messages('en');
+  assert.match(ar('Conflict', 'SCHEME_FROZEN'), /الدرجة العظمى.*فك قفل/);
+  assert.match(en('Conflict', 'SCHEME_FROZEN'), /Maximums.*reset/);
+  assert.match(ar('Conflict', 'COURSEWORK_SPLIT_FROZEN'), /الحضور.*مجمّد/);
+  assert.match(en('Conflict', 'CONTROL_RESET_BUSY'), /No course data was reset/);
+  assert.match(ar('Conflict', 'CONTROL_RESET_BUSY'), /لم تُصفّر.*انتظر/);
+  assert.match(ar('Reconciliation is running; retry the reset shortly'), /التصفير مؤجل/);
+});
 test('Strict grading DTO failures do not leak raw nested property paths to the operator', () => {
   for (const locale of ['ar', 'en']) {
     const text = messages(locale)(['components.0.property nameAr should not exist', 'components.1.max must not be less than 0.01']);
     assert.ok(text.length > 0);
     assert.doesNotMatch(text, /components\.|nameAr|should not exist/);
   }
+});
+
+test('empty missing-grade exports explain recovery in both languages', () => {
+  assert.match(messages('en')('Conflict', 'CONTROL_IMPORT_EMPTY'), /full workbook.*Marks/);
+  assert.match(messages('ar')('Conflict', 'CONTROL_IMPORT_EMPTY'), /الكشف الكامل.*Marks/);
+});
+test('mark errors include the configured maximum and increment in both languages', () => {
+  assert.match(messages('en')('Row 2: Mark rule: off_step; max=20; step=0.5'), /Row 2:.*increment.*20.*0.5/);
+  assert.match(messages('ar')('Row 2: Mark rule: above_max; max=20; step=0.5'), /الصف 2:.*الحد الأقصى.*20.*0.5/);
 });

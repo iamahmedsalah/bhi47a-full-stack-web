@@ -1,8 +1,4 @@
-import axios, {
-  AxiosHeaders,
-  type AxiosError,
-  type InternalAxiosRequestConfig,
-} from 'axios';
+import axios, { AxiosHeaders, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { isPublicRoute } from '@/lib/public-routes';
 import { retryAfterDeadline } from './query-retry-policy';
 import { reportedNetworkType } from './session-presentation';
@@ -46,8 +42,7 @@ export interface ApiErrorDetails {
   errors?: unknown;
 }
 
-const rawApiBaseUrl =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const trimmedApiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '');
 export const apiBaseUrl = trimmedApiBaseUrl.endsWith('/api')
   ? trimmedApiBaseUrl
@@ -124,10 +119,9 @@ function syncCsrfTokenFromResponse(data: unknown) {
 }
 
 async function refreshCsrfToken() {
-  const response = await axios.get<ApiEnvelope<{ csrfToken: string }>>(
-    `${apiBaseUrl}/auth/csrf`,
-    { withCredentials: true },
-  );
+  const response = await axios.get<ApiEnvelope<{ csrfToken: string }>>(`${apiBaseUrl}/auth/csrf`, {
+    withCredentials: true,
+  });
   const csrfToken = response.data.data.csrfToken;
   writeStoredCsrfToken(csrfToken);
   return csrfToken;
@@ -145,7 +139,10 @@ type RetriableAxiosConfig = InternalAxiosRequestConfig & {
 const reauthHandlers: Array<(operation: string) => Promise<void>> = [];
 export function registerReauthenticationHandler(handler: (operation: string) => Promise<void>) {
   reauthHandlers.push(handler);
-  return () => { const index = reauthHandlers.indexOf(handler); if (index >= 0) reauthHandlers.splice(index, 1); };
+  return () => {
+    const index = reauthHandlers.indexOf(handler);
+    if (index >= 0) reauthHandlers.splice(index, 1);
+  };
 }
 
 function isInvalidCsrfError(error: AxiosError<ApiErrorPayload>) {
@@ -168,7 +165,9 @@ api.interceptors.request.use((config) => {
       headers.set('accept-language', locale);
     }
     if (config.url?.startsWith('/auth/')) {
-      const networkType = reportedNetworkType(navigator as Navigator & { connection?: { type?: string } });
+      const networkType = reportedNetworkType(
+        navigator as Navigator & { connection?: { type?: string } },
+      );
       if (networkType) headers.set('x-client-network-type', networkType);
     }
   }
@@ -195,10 +194,21 @@ api.interceptors.response.use(
   async (error: AxiosError<ApiErrorPayload>) => {
     const originalConfig = error.config as RetriableAxiosConfig | undefined;
     const handler = reauthHandlers.at(-1);
-    if (originalConfig && handler && error.response?.status === 403 && error.response.data.code === 'AUTH_REAUTH_REQUIRED' && typeof error.response.data.operation === 'string' && !originalConfig._reauthRetry) {
+    if (
+      originalConfig &&
+      handler &&
+      error.response?.status === 403 &&
+      error.response.data.code === 'AUTH_REAUTH_REQUIRED' &&
+      typeof error.response.data.operation === 'string' &&
+      !originalConfig._reauthRetry
+    ) {
       originalConfig._reauthRetry = true;
-      try { await handler(error.response.data.operation); return api.request(originalConfig); }
-      catch (reauthError) { return Promise.reject(reauthError); }
+      try {
+        await handler(error.response.data.operation);
+        return api.request(originalConfig);
+      } catch (reauthError) {
+        return Promise.reject(reauthError);
+      }
     }
     if (
       originalConfig &&
@@ -223,10 +233,7 @@ api.interceptors.response.use(
     // mounts it again on the login page and creates another anonymous 401.
     if (error.response?.status === 401 && originalConfig?.url !== '/auth/me') {
       // Redirect to login on auth failure (client-side only), but check to prevent infinite loop
-      if (
-        typeof window !== 'undefined' &&
-        !isPublicRoute(window.location.pathname)
-      ) {
+      if (typeof window !== 'undefined' && !isPublicRoute(window.location.pathname)) {
         const pathname = window.location.pathname;
         const locale = pathname.split('/')[1] || 'ar';
         const targetLogin = pathname.startsWith(`/${locale}/admin`)
@@ -239,7 +246,11 @@ api.interceptors.response.use(
     const deadline = retryAfterDeadline(error.response?.headers?.['retry-after']);
     // Keep the existing error payload shape, while preserving lost HTTP metadata.
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-      return Promise.reject({ ...payload, statusCode: payload.statusCode ?? error.response?.status, ...(deadline !== undefined ? { retryAfterAt: deadline } : {}) });
+      return Promise.reject({
+        ...payload,
+        statusCode: payload.statusCode ?? error.response?.status,
+        ...(deadline !== undefined ? { retryAfterAt: deadline } : {}),
+      });
     }
     return Promise.reject(error);
   },
@@ -282,7 +293,10 @@ function normalizeErrorMessage(message: unknown) {
   return typeof message === 'string' && message.trim() ? message.trim() : undefined;
 }
 
-export function getApiErrorDetails(error: unknown, fallback = 'Something went wrong'): ApiErrorDetails {
+export function getApiErrorDetails(
+  error: unknown,
+  fallback = 'Something went wrong',
+): ApiErrorDetails {
   const payload = getErrorPayload(error);
 
   if (!payload) {
@@ -301,10 +315,12 @@ export function getApiErrorDetails(error: unknown, fallback = 'Something went wr
   }
 
   const statusCode = readNumber(payload, 'statusCode') ?? readNumber(payload, 'status');
-  const message = normalizeErrorMessage(payload.message) ?? readString(payload, 'detail') ?? fallback;
+  const message =
+    normalizeErrorMessage(payload.message) ?? readString(payload, 'detail') ?? fallback;
   const backendCode = readString(payload, 'code') ?? readString(payload, 'error');
   const code = backendCode ?? (statusCode ? `HTTP ${statusCode}` : undefined);
-  const explicitReason = readString(payload, 'reason') ?? readString(payload, 'cause') ?? backendCode;
+  const explicitReason =
+    readString(payload, 'reason') ?? readString(payload, 'cause') ?? backendCode;
   const reason = explicitReason && explicitReason !== code ? explicitReason : message;
 
   return {
@@ -323,14 +339,16 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'توجد درجتان مختلفتان في عمود الدرجة وعمود المكوّن النشط. أدخل الدرجة المطلوبة في عمود واحد واترك الآخر كما كان، أو اجعل القيمتين متساويتين، ثم أعد المعاينة.',
     en: 'The score and active component columns contain conflicting marks. Edit one column while leaving the other at its saved value, or make both values equal, then preview again.',
   },
-  'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held': {
-    ar: 'لهذا الطالب سجل قبول وملكية كود. ألغِ القيد من صفحة القبول بدلًا من حذف الهوية. يظل الكود محجوزًا لصاحبه.',
-    en: 'This student has admission history. Cancel the enrollment in Admissions; the original identity and code are retained.',
-  },
-  'This code is managed by Admissions. Approve a new or transfer application to allocate its code safely': {
-    ar: 'تدير منظومة القبول هذا الكود. وافق على طلب طالب جديد أو محول لتخصيص الكود بأمان.',
-    en: 'This code is managed by Admissions. Approve a new or transfer application to allocate it safely.',
-  },
+  'This student has admission/code history. Cancel the approved enrollment in Admissions instead of deleting the identity. The code remains held':
+    {
+      ar: 'لهذا الطالب سجل قبول وملكية كود. ألغِ القيد من صفحة القبول بدلًا من حذف الهوية. يظل الكود محجوزًا لصاحبه.',
+      en: 'This student has admission history. Cancel the enrollment in Admissions; the original identity and code are retained.',
+    },
+  'This code is managed by Admissions. Approve a new or transfer application to allocate its code safely':
+    {
+      ar: 'تدير منظومة القبول هذا الكود. وافق على طلب طالب جديد أو محول لتخصيص الكود بأمان.',
+      en: 'This code is managed by Admissions. Approve a new or transfer application to allocate it safely.',
+    },
   'Something went wrong': {
     ar: 'حدث خطأ غير متوقع، يرجى المحاولة لاحقاً',
     en: 'Something went wrong, please try again later',
@@ -427,11 +445,11 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'فترة القبول المحددة غير موجودة',
     en: 'Admission period not found',
   },
-  'ROSTER_LIMIT_EXCEEDED': {
+  ROSTER_LIMIT_EXCEEDED: {
     ar: 'تجاوز كشف الطلاب الحد الأقصى المسموح به للرصد في الكشف الواحد',
     en: 'Student roster exceeds the maximum allowed limit for a single sheet',
   },
-  'COURSE_LIMIT_EXCEEDED': {
+  COURSE_LIMIT_EXCEEDED: {
     ar: 'تجاوز عدد المقررات الحد الأقصى المسموح به للعرض (500 مقرر). يرجى التصفية بحسب المستوى أو الفصل',
     en: 'Course count exceeds the maximum limit (500). Please filter by level or semester',
   },
@@ -463,11 +481,11 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'يجب إلغاء نشر هذا الكشف من صفحة الدرجات أولاً قبل إعادة فتحه للتعديل',
     en: 'Hide this sheet on the Grades page before reopening',
   },
-  'ROSTER_OR_SCHEME_CHANGED': {
+  ROSTER_OR_SCHEME_CHANGED: {
     ar: 'تم تعديل كشف الطلاب أو لائحة توزيع الدرجات أثناء المراجعة. يرجى إعادة التحميل',
     en: 'The student roster or grading scheme changed during review. Please refresh',
   },
-  'COURSEWORK_BREAKDOWN_REQUIRED': {
+  COURSEWORK_BREAKDOWN_REQUIRED: {
     ar: 'يجب إدخال تفصيل درجات أعمال السنة (الحضور والاختبارات) لكافة الطلاب المسجلين',
     en: 'Coursework breakdown (attendance and quizzes) is required for all registered students',
   },
@@ -475,31 +493,31 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'تم تعديل هذه الدرجة بواسطة مستخدم آخر بالتزامن. يرجى تحديث البيانات',
     en: 'The grade was changed by someone else concurrently. Please refresh',
   },
-  'RESULT_INCOMPLETE': {
+  RESULT_INCOMPLETE: {
     ar: 'لا يمكن إرسال الكشف للمراجعة أو الاعتماد قبل استكمال رصد جميع الطلاب المسجلين في المقرر (سواء بدرجة أو بحالة غياب/عذر/حرمان)',
     en: 'Cannot submit or approve the sheet until all registered students have an entered mark or status (absent/excused/banned)',
   },
-  'STALE_REVISION': {
+  STALE_REVISION: {
     ar: 'تم تحديث الكشف بواسطة مستخدم آخر. يرجى تحديث الصفحة والمحاولة مجدداً',
     en: 'The sheet was updated by another user. Please refresh and try again',
   },
-  'INVALID_WORKFLOW_TRANSITION': {
+  INVALID_WORKFLOW_TRANSITION: {
     ar: 'لا يمكن تنفيذ هذا الإجراء في المرحلة الحالية للكشف (تأكد من أن الكشف غير مقفل وفي الحالة المناسبة)',
     en: 'This workflow transition is not allowed in the current sheet state',
   },
-  'SHEET_LOCKED': {
+  SHEET_LOCKED: {
     ar: 'هذا الكشف مقفل للقراءة فقط ولا يمكن تعديل درجاته قبل فك القفل',
     en: 'This sheet is locked (read-only) and cannot be edited until unlocked',
   },
-  'SHEET_NOT_EDITABLE': {
+  SHEET_NOT_EDITABLE: {
     ar: 'الكشف غير متاح للتعديل حالياً (مقفل أو قيد المراجعة/معتمد)',
     en: 'This sheet is not editable in its current state (locked, in review, or approved)',
   },
-  'SCHEME_CHANGED': {
+  SCHEME_CHANGED: {
     ar: 'تغيّرت لائحة توزيع الدرجات أثناء عملك. يرجى تحديث الصفحة ومراجعة المسودة',
     en: 'The grading scheme changed; please refresh and review your draft',
   },
-  'PREVIEW_STALE': {
+  PREVIEW_STALE: {
     ar: 'تغيرت بيانات الكشف منذ إنشاء معاينة الاستيراد. يرجى إعادة رفع ومعاينة الملف',
     en: 'The sheet changed since the import preview was created. Please preview again',
   },
@@ -567,7 +585,7 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
     ar: 'تغيرت بيانات الإصدار منذ المعاينة؛ يرجى الضغط على «معاينة الإصدار» مرة أخرى قبل التفعيل',
     en: 'Release preview changed; please click Preview Release again before activating',
   },
-  'POLICY_CHANGED': {
+  POLICY_CHANGED: {
     ar: 'تم تعديل سياسة النتيجة بواسطة مستخدم آخر؛ يرجى تحديث الصفحة والمحاولة مرة أخرى',
     en: 'Result policy was modified by another user; please refresh and try again',
   },
@@ -577,80 +595,236 @@ const ERROR_TRANSLATIONS: Record<string, { ar: string; en: string }> = {
   },
 };
 
-Object.assign(ERROR_TRANSLATIONS, {"Invalid XLSX workbook":{"ar":"الملف تالف أو ليس ملف XLSX صالحًا. احفظه بصيغة XLSX ثم أعد المحاولة.","en":"The workbook is damaged or is not a valid XLSX file. Save it as XLSX and retry."},"Download the template for this sheet":{"ar":"الملف يخص كشفًا آخر أو يفتقد بيانات النطاق. نزّل قالب هذا الكشف واستخدمه.","en":"This file belongs to another sheet or is missing scope information. Download this sheet's template."},"Invalid template headers":{"ar":"أعمدة الملف غير مطابقة للقالب. احتفظ بعناوين الأعمدة وترتيبها كما هي.","en":"The column headers do not match the template. Keep their names and order unchanged."},"Maximum 10000 rows per file":{"ar":"الحد الأقصى 10000 صف و20 عمودًا لكل ملف. قسّم الملف ثم أعد المعاينة.","en":"A file may contain at most 10,000 rows and 20 columns. Split it and preview again."},"Invalid import batch":{"ar":"رقم دفعة الاستيراد غير صالح. أعد معاينة الملف.","en":"Invalid import batch. Preview the file again."},"Student identity/registration mismatch":{"ar":"كود الطالب أو هويته غير مطابق، أو ليس لديه تسجيل معتمد في هذا المقرر والفصل.","en":"The student code or identity does not match, or the student has no approved registration for this course and term."},"Duplicate student":{"ar":"الطالب مكرر داخل الدفعة. احتفظ بصف واحد لكل طالب.","en":"Duplicate student in this batch. Keep one row per student."},"Reason must not exceed 500 characters":{"ar":"السبب يجب ألا يزيد عن 500 حرف.","en":"The reason must not exceed 500 characters."},"Invalid score/status":{"ar":"صيغة الدرجة أو الحالة غير صالحة. استخدم رقمًا وحالة معتمدة من القالب.","en":"Invalid score or status. Use a numeric score and a supported template status."},"Special status requires permission and a reason":{"ar":"الحالة الاستثنائية تتطلب صلاحية إدارة الحالات وسببًا من 3 أحرف على الأقل.","en":"A special status requires state-management permission and a reason of at least 3 characters."},"Hide published marks before importing":{"ar":"الدرجة منشورة. أخفِها من صفحة الدرجات واتبع إجراءات التصحيح قبل الاستيراد.","en":"This mark is published. Hide it in Grades and follow the correction workflow before importing."},"Mark does not match status, maximum or step":{"ar":"الدرجة لا تتوافق مع الحالة أو الحد الأقصى أو خطوة الإدخال. راجع توزيع الدرجات.","en":"The mark does not match the status, maximum or entry increment. Check the grading scheme."},"Stale mark revision":{"ar":"تم تعديل درجة الطالب بعد تنزيل القالب. حدّث القالب ثم راجع الدرجة مجددًا.","en":"This mark changed after the template was downloaded. Refresh the template and review it again."},"Coursework must equal attendance + quizzes, max 20":{"ar":"أعمال السنة يجب أن تساوي الحضور + الاختبارات، داخل مخصص كل جزء، والمجموع لا يتجاوز 20.","en":"Coursework must equal attendance plus quizzes within each allocation, with a total no greater than 20."},"Preview expired or inaccessible":{"ar":"انتهت صلاحية المعاينة أو لا تملك صلاحية الوصول إليها. أعد معاينة الملف.","en":"The preview expired or is inaccessible. Preview the file again."},"Preview is stale; preview again":{"ar":"تغير الكشف أو توزيع الدرجات منذ المعاينة. أعد المعاينة قبل الحفظ.","en":"The sheet or grading scheme changed since preview. Preview again before saving."},"No valid rows":{"ar":"لا توجد صفوف صالحة للحفظ. راجع الأخطاء وأعد المعاينة.","en":"There are no valid rows to save. Review the errors and preview again."},"Coursework split is frozen after entry":{"ar":"تقسيم الحضور والاختبارات مقفل بعد بدء رصد أعمال السنة.","en":"The attendance and quiz allocation is frozen after coursework entry starts."},"Marks exist. Create a new term scheme; in-place force changes are disabled.":{"ar":"توجد درجات مرصودة؛ لا يمكن تغيير حدودها أو خطواتها في نفس النطاق. استخدم توزيعًا جديدًا للفصل المناسب.","en":"Marks already exist; maximums and increments cannot be changed in this scope. Use a new scheme for the appropriate term."},"Step cannot exceed the maximum mark":{"ar":"خطوة الإدخال يجب ألا تتجاوز الحد الأقصى للدرجة.","en":"The entry increment must not exceed the maximum mark."},"At most two decimals are allowed":{"ar":"يُسمح بمنزلتين عشريتين على الأكثر.","en":"At most two decimal places are allowed."},"Coursework maximum must be 20":{"ar":"الحد الأقصى لأعمال السنة ثابت عند 20.","en":"The coursework maximum is fixed at 20."},"SHEET_NOT_EDITABLE":{"ar":"الكشف مقفل أو قيد المراجعة أو معتمد. أعده للمسودة عبر الإجراء المسموح قبل الإدخال.","en":"The sheet is locked, under review or approved. Return it to a draft through an authorized workflow before entry."},"SCHEME_CHANGED":{"ar":"تغير توزيع الدرجات. حدّث البيانات وأعد المعاينة.","en":"The grading scheme changed. Refresh the data and preview again."},"File too large":{"ar":"حجم الملف يتجاوز الحد المسموح. قلّل حجم الملف ثم أعد المحاولة.","en":"The file exceeds the allowed size. Reduce its size and retry."}});
+Object.assign(ERROR_TRANSLATIONS, {
+  'Invalid XLSX workbook': {
+    ar: 'الملف تالف أو ليس ملف XLSX صالحًا. احفظه بصيغة XLSX ثم أعد المحاولة.',
+    en: 'The workbook is damaged or is not a valid XLSX file. Save it as XLSX and retry.',
+  },
+  'Download the template for this sheet': {
+    ar: 'الملف يخص كشفًا آخر أو يفتقد بيانات النطاق. نزّل قالب هذا الكشف واستخدمه.',
+    en: "This file belongs to another sheet or is missing scope information. Download this sheet's template.",
+  },
+  'Invalid template headers': {
+    ar: 'أعمدة الملف غير مطابقة للقالب. احتفظ بعناوين الأعمدة وترتيبها كما هي.',
+    en: 'The column headers do not match the template. Keep their names and order unchanged.',
+  },
+  'Maximum 10000 rows per file': {
+    ar: 'الحد الأقصى 10000 صف و20 عمودًا لكل ملف. قسّم الملف ثم أعد المعاينة.',
+    en: 'A file may contain at most 10,000 rows and 20 columns. Split it and preview again.',
+  },
+  'Invalid import batch': {
+    ar: 'رقم دفعة الاستيراد غير صالح. أعد معاينة الملف.',
+    en: 'Invalid import batch. Preview the file again.',
+  },
+  'Student identity/registration mismatch': {
+    ar: 'كود الطالب أو هويته غير مطابق، أو ليس لديه تسجيل معتمد في هذا المقرر والفصل.',
+    en: 'The student code or identity does not match, or the student has no approved registration for this course and term.',
+  },
+  'Duplicate student': {
+    ar: 'الطالب مكرر داخل الدفعة. احتفظ بصف واحد لكل طالب.',
+    en: 'Duplicate student in this batch. Keep one row per student.',
+  },
+  'Reason must not exceed 500 characters': {
+    ar: 'السبب يجب ألا يزيد عن 500 حرف.',
+    en: 'The reason must not exceed 500 characters.',
+  },
+  'Invalid score/status': {
+    ar: 'صيغة الدرجة أو الحالة غير صالحة. استخدم رقمًا وحالة معتمدة من القالب.',
+    en: 'Invalid score or status. Use a numeric score and a supported template status.',
+  },
+  'Special status requires permission and a reason': {
+    ar: 'الحالة الاستثنائية تتطلب صلاحية إدارة الحالات وسببًا من 3 أحرف على الأقل.',
+    en: 'A special status requires state-management permission and a reason of at least 3 characters.',
+  },
+  'Hide published marks before importing': {
+    ar: 'الدرجة منشورة. أخفِها من صفحة الدرجات واتبع إجراءات التصحيح قبل الاستيراد.',
+    en: 'This mark is published. Hide it in Grades and follow the correction workflow before importing.',
+  },
+  'Mark does not match status, maximum or step': {
+    ar: 'الدرجة لا تتوافق مع الحالة أو الحد الأقصى أو خطوة الإدخال. راجع توزيع الدرجات.',
+    en: 'The mark does not match the status, maximum or entry increment. Check the grading scheme.',
+  },
+  'Stale mark revision': {
+    ar: 'تم تعديل درجة الطالب بعد تنزيل القالب. حدّث القالب ثم راجع الدرجة مجددًا.',
+    en: 'This mark changed after the template was downloaded. Refresh the template and review it again.',
+  },
+  'Coursework must equal attendance + quizzes, max 20': {
+    ar: 'أعمال السنة يجب أن تساوي الحضور + الاختبارات، داخل مخصص كل جزء، والمجموع لا يتجاوز 20.',
+    en: 'Coursework must equal attendance plus quizzes within each allocation, with a total no greater than 20.',
+  },
+  'Preview expired or inaccessible': {
+    ar: 'انتهت صلاحية المعاينة أو لا تملك صلاحية الوصول إليها. أعد معاينة الملف.',
+    en: 'The preview expired or is inaccessible. Preview the file again.',
+  },
+  'Preview is stale; preview again': {
+    ar: 'تغير الكشف أو توزيع الدرجات منذ المعاينة. أعد المعاينة قبل الحفظ.',
+    en: 'The sheet or grading scheme changed since preview. Preview again before saving.',
+  },
+  'No valid rows': {
+    ar: 'لا توجد صفوف صالحة للحفظ. راجع الأخطاء وأعد المعاينة.',
+    en: 'There are no valid rows to save. Review the errors and preview again.',
+  },
+  'Coursework split is frozen after entry': {
+    ar: 'تقسيم الحضور والاختبارات مقفل بعد بدء رصد أعمال السنة.',
+    en: 'The attendance and quiz allocation is frozen after coursework entry starts.',
+  },
+  'Marks exist. Create a new term scheme; in-place force changes are disabled.': {
+    ar: 'توجد درجات مرصودة؛ لا يمكن تغيير حدودها أو خطواتها في نفس النطاق. استخدم توزيعًا جديدًا للفصل المناسب.',
+    en: 'Marks already exist; maximums and increments cannot be changed in this scope. Use a new scheme for the appropriate term.',
+  },
+  'Step cannot exceed the maximum mark': {
+    ar: 'خطوة الإدخال يجب ألا تتجاوز الحد الأقصى للدرجة.',
+    en: 'The entry increment must not exceed the maximum mark.',
+  },
+  'At most two decimals are allowed': {
+    ar: 'يُسمح بمنزلتين عشريتين على الأكثر.',
+    en: 'At most two decimal places are allowed.',
+  },
+  'Coursework maximum must be 20': {
+    ar: 'الحد الأقصى لأعمال السنة ثابت عند 20.',
+    en: 'The coursework maximum is fixed at 20.',
+  },
+  SHEET_NOT_EDITABLE: {
+    ar: 'الكشف مقفل أو قيد المراجعة أو معتمد. أعده للمسودة عبر الإجراء المسموح قبل الإدخال.',
+    en: 'The sheet is locked, under review or approved. Return it to a draft through an authorized workflow before entry.',
+  },
+  SCHEME_CHANGED: {
+    ar: 'تغير توزيع الدرجات. حدّث البيانات وأعد المعاينة.',
+    en: 'The grading scheme changed. Refresh the data and preview again.',
+  },
+  'File too large': {
+    ar: 'حجم الملف يتجاوز الحد المسموح. قلّل حجم الملف ثم أعد المحاولة.',
+    en: 'The file exceeds the allowed size. Reduce its size and retry.',
+  },
+});
 
 Object.assign(ERROR_TRANSLATIONS, {
-  "Insufficient permissions": {
-    "ar": "ليست لديك الصلاحية المطلوبة لهذه العملية. راجع مسؤول النظام.",
-    "en": "You do not have permission for this action. Contact an administrator."
+  'Insufficient permissions': {
+    ar: 'ليست لديك الصلاحية المطلوبة لهذه العملية. راجع مسؤول النظام.',
+    en: 'You do not have permission for this action. Contact an administrator.',
   },
-  "Course not accessible": {
-    "ar": "لا يمكنك الوصول إلى هذا المقرر ضمن صلاحياتك الحالية.",
-    "en": "This course is outside your current access permissions."
+  'Course not accessible': {
+    ar: 'لا يمكنك الوصول إلى هذا المقرر ضمن صلاحياتك الحالية.',
+    en: 'This course is outside your current access permissions.',
   },
-  "Course is outside your assigned scope": {
-    "ar": "هذا المقرر خارج نطاق المقررات أو الفصول المسندة إليك.",
-    "en": "This course is outside your assigned course or term scope."
+  'Course is outside your assigned scope': {
+    ar: 'هذا المقرر خارج نطاق المقررات أو الفصول المسندة إليك.',
+    en: 'This course is outside your assigned course or term scope.',
   },
-  "Sheet not found": {
-    "ar": "الكشف غير موجود. ارجع إلى قائمة الكشوف وحدّثها.",
-    "en": "The sheet was not found. Return to the sheet list and refresh."
+  'Sheet not found': {
+    ar: 'الكشف غير موجود. ارجع إلى قائمة الكشوف وحدّثها.',
+    en: 'The sheet was not found. Return to the sheet list and refresh.',
   },
-  "Course not found": {
-    "ar": "المقرر غير موجود. حدّث قائمة المقررات.",
-    "en": "The course was not found. Refresh the course list."
+  'Course not found': {
+    ar: 'المقرر غير موجود. حدّث قائمة المقررات.',
+    en: 'The course was not found. Refresh the course list.',
   },
-  "Concurrent entry; refresh the sheet and retry": {
-    "ar": "تم تعديل الدرجة بالتزامن بواسطة مستخدم آخر. حدّث الكشف ثم راجع الدرجة وأعد المحاولة.",
-    "en": "Another user changed the mark concurrently. Refresh, review the mark and retry."
+  'Concurrent entry; refresh the sheet and retry': {
+    ar: 'تم تعديل الدرجة بالتزامن بواسطة مستخدم آخر. حدّث الكشف ثم راجع الدرجة وأعد المحاولة.',
+    en: 'Another user changed the mark concurrently. Refresh, review the mark and retry.',
   },
-  "Sheet is already locked": {
-    "ar": "الكشف مقفل بالفعل. حدّث حالته قبل المتابعة.",
-    "en": "The sheet is already locked. Refresh its status before continuing."
+  'Sheet is already locked': {
+    ar: 'الكشف مقفل بالفعل. حدّث حالته قبل المتابعة.',
+    en: 'The sheet is already locked. Refresh its status before continuing.',
   },
-  "Sheet is not locked": {
-    "ar": "الكشف غير مقفل. حدّث حالته قبل المتابعة.",
-    "en": "The sheet is not locked. Refresh its status before continuing."
+  'Sheet is not locked': {
+    ar: 'الكشف غير مقفل. حدّث حالته قبل المتابعة.',
+    en: 'The sheet is not locked. Refresh its status before continuing.',
   },
-  "Component is not enabled for this course": {
-    "ar": "هذا المكوّن غير مفعّل لهذا المقرر. راجع توزيع الدرجات.",
-    "en": "This component is not enabled for this course. Check the grading scheme."
+  'Component is not enabled for this course': {
+    ar: 'هذا المكوّن غير مفعّل لهذا المقرر. راجع توزيع الدرجات.',
+    en: 'This component is not enabled for this course. Check the grading scheme.',
   },
-  "اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي / عميد المعهد (control.final.approve)": {
-    "ar": "اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي أو عميد المعهد.",
-    "en": "Final approval requires final Control approval or dean permissions."
+  'اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي / عميد المعهد (control.final.approve)':
+    {
+      ar: 'اعتماد النتيجة النهائية يتطلب صلاحية اعتماد الكنترول النهائي أو عميد المعهد.',
+      en: 'Final approval requires final Control approval or dean permissions.',
+    },
+  'اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)': {
+    ar: 'اعتماد الكشف يتطلب صلاحية اعتماد كشوف الكنترول.',
+    en: 'Approving the sheet requires Control sheet approval permission.',
   },
-  "اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)": {
-    "ar": "اعتماد الكشف يتطلب صلاحية اعتماد كشوف الكنترول.",
-    "en": "Approving the sheet requires Control sheet approval permission."
-  }
 });
 
 const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>(
   Object.entries(ERROR_TRANSLATIONS).map(([k, v]) => [k.toLowerCase(), v]),
 );
 
+const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = {
+  CONTROL_IMPORT_EMPTY: {
+    ar: 'الملف لا يحتوي على صفوف طلاب. قد يكون كشف الدرجات الناقصة فارغًا لأن الرصد مكتمل. نزّل الكشف الكامل، وعدّل الدرجة في ورقة Marks ثم أعد رفعه.',
+    en: 'This file has no student rows. A missing-grades export can be empty when entry is complete. Download the full workbook, edit the mark on Marks, then upload again.',
+  },
+  SCHEME_FROZEN: {
+    ar: 'لا يمكن تغيير الدرجة العظمى أو خطوة الإدخال أو تفعيل مكوّن بعد رصد درجاته. احتفظ بالإعدادات الحالية، أو استخدم فصلًا جديدًا. لتصحيح بيانات التجربة يستطيع admin تصفير المقرر أولًا؛ لا يكفي فك قفل الكشف.',
+    en: 'Maximums, increments and enabled state cannot change after marks exist for that component. Keep the current settings or use a new term. Admin can reset test data first; unlocking the sheet alone does not unfreeze its scheme.',
+  },
+  COURSEWORK_SPLIT_FROZEN: {
+    ar: 'توزيع الحضور والاختبارات مجمّد بعد بدء رصد أعمال السنة. لا يمكن تعديل التقسيم قبل تصفير بيانات التجربة بواسطة admin أو استخدام فصل جديد.',
+    en: 'The attendance/quiz allocation is frozen after coursework entry. Admin must reset test data first, or use a new term.',
+  },
+  CONTROL_RESET_BUSY: {
+    ar: 'التصفير مؤجل لأن تحديث السجل الأكاديمي أو الإشعارات جارٍ الآن. لم تُصفّر بيانات المقرر. انتظر انتهاء المعالجة ثم أعد المحاولة؛ لا تغيّر توزيع الدرجات ولا تسحب النسخة لتجاوز هذا التعارض.',
+    en: 'Reset is temporarily blocked while academic records or notifications are being processed. No course data was reset. Wait for processing to finish, then retry; changing the scheme or withdrawing a release does not bypass this conflict.',
+  },
+  CONTROL_RESET_CONFIRMATION_REQUIRED: {
+    ar: 'اكتب كود المقرر المحدد تمامًا وأدخل سببًا واضحًا للتصفير.',
+    en: 'Type the selected course code exactly and supply a clear reset reason.',
+  },
+};
+
 function localizeErrorMessage(rawMsg: string): string {
   if (typeof window === 'undefined') return rawMsg;
   const isEn = window.location.pathname.startsWith('/en');
   const cleanMsg = rawMsg.replace(/^\.+|\.+$/g, '').trim();
+  const guidance = CONTROL_VALIDATION_MESSAGES[cleanMsg];
+  if (guidance) return isEn ? guidance.en : guidance.ar;
+  const markRule = /^Mark rule: (\w+); max=([\d.]+); step=([\d.]+)$/.exec(cleanMsg);
+  if (markRule) {
+    const reasons: Record<string, [string, string]> = {
+      negative: ['الدرجة لا تقبل القيم السالبة.', 'Negative marks are not allowed.'],
+      above_max: ['الدرجة تتجاوز الحد الأقصى.', 'The mark exceeds the maximum.'],
+      off_step: ['الدرجة لا تطابق خطوة الإدخال.', 'The mark does not match the entry increment.'],
+      too_many_decimals: ['الدرجة تقبل منزلتين عشريتين فقط.', 'Use at most two decimal places.'],
+      not_a_number: ['أدخل درجة رقمية صحيحة.', 'Enter a valid numeric mark.'],
+    };
+    return (reasons[markRule[1]]?.[isEn ? 1 : 0] ?? '') + (isEn ? ` Maximum: ${markRule[2]}; increment: ${markRule[3]}.` : ` الحد الأقصى: ${markRule[2]}؛ خطوة الإدخال: ${markRule[3]}.`);
+  }
+  if (cleanMsg === 'Score must be blank for this status') return isEn ? 'Clear the numeric mark for this exam status. Absent/banned accept blank or zero.' : 'امسح الدرجة الرقمية لهذه الحالة. الغائب والمحروم يقبلان خانة فارغة أو صفرًا.';
+  if (cleanMsg === 'A present status requires a numeric score') return isEn ? 'A present student needs a numeric mark, including zero. Leave both mark and status blank to skip an unentered row.' : 'حالة حاضر تتطلب درجة رقمية، حتى لو صفرًا. لتجاهل صف لم يُرصد، اترك الدرجة والحالة فارغتين.';
+  if (/^courseworkAttendanceMax\b/.test(cleanMsg))
+    return isEn
+      ? 'Attendance allocation must be between 0 and 20, with at most two decimal places. Quizzes receive the remainder of the coursework total.'
+      : 'مخصص الحضور يجب أن يكون بين صفر و20 وبمنزلتين عشريتين على الأكثر؛ يخصص الباقي للاختبارات ضمن أعمال السنة.';
+  if (/^courseworkAttendanceMax\b/.test(cleanMsg))
+    return isEn
+      ? 'Attendance allocation must be between 0 and 20, with at most two decimal places. Quizzes receive the remainder of the coursework total.'
+      : 'مخصص الحضور يجب أن يكون بين صفر و20 وبمنزلتين عشريتين على الأكثر؛ يخصص الباقي للاختبارات ضمن أعمال السنة.';
+  if (cleanMsg === 'Reconciliation is running; retry the reset shortly')
+    return localizeErrorMessage('CONTROL_RESET_BUSY');
   const row = /^Row (\d+): (.+)$/.exec(cleanMsg);
   if (row) return (isEn ? 'Row ' : 'الصف ') + row[1] + ': ' + localizeErrorMessage(row[2]);
   const formula = /^Formula in row (\d+)$/.exec(cleanMsg);
-  if (formula) return isEn ? 'Formula in row ' + formula[1] + '. Replace formulas with values.' : 'توجد معادلة في الصف ' + formula[1] + '. استبدل المعادلات بقيم ثابتة.';
+  if (formula)
+    return isEn
+      ? 'Formula in row ' + formula[1] + '. Replace formulas with values.'
+      : 'توجد معادلة في الصف ' + formula[1] + '. استبدل المعادلات بقيم ثابتة.';
   const duplicate = /^Duplicate student in file at row (\d+)$/.exec(cleanMsg);
-  if (duplicate) return (isEn ? 'Duplicate student in file at row ' : 'طالب مكرر داخل الملف في الصف ') + duplicate[1];
-  if (/^components\.\d+\./.test(cleanMsg)) return isEn ? 'Invalid grading component settings. Check maximums, increments and enabled components, then refresh if needed.' : 'إعدادات توزيع الدرجات غير صالحة. راجع الحدود وخطوات الإدخال والمكوّنات المفعلة، ثم حدّث الصفحة عند الحاجة.';
+  if (duplicate)
+    return (
+      (isEn ? 'Duplicate student in file at row ' : 'طالب مكرر داخل الملف في الصف ') + duplicate[1]
+    );
+  if (/^components\.\d+\./.test(cleanMsg))
+    return isEn
+      ? 'Invalid grading component settings. Check maximums, increments and enabled components, then refresh if needed.'
+      : 'إعدادات توزيع الدرجات غير صالحة. راجع الحدود وخطوات الإدخال والمكوّنات المفعلة، ثم حدّث الصفحة عند الحاجة.';
   const entry =
-    ERROR_TRANSLATIONS[cleanMsg] ??
-    LOWERCASE_ERROR_TRANSLATIONS.get(cleanMsg.toLowerCase());
+    ERROR_TRANSLATIONS[cleanMsg] ?? LOWERCASE_ERROR_TRANSLATIONS.get(cleanMsg.toLowerCase());
   if (entry) {
     return isEn ? entry.en : entry.ar;
   }
   if (cleanMsg.toLowerCase().startsWith('uploaded file is too large')) {
-    return isEn
-      ? cleanMsg
-      : 'حجم الملف المرفوع يتجاوز الحد الأقصى المسموح به (10 ميجابايت)';
+    return isEn ? cleanMsg : 'حجم الملف المرفوع يتجاوز الحد الأقصى المسموح به (10 ميجابايت)';
   }
   return cleanMsg || rawMsg;
 }
@@ -662,25 +836,22 @@ export function getApiErrorMessage(error: unknown, fallback = 'Something went wr
     const typedPayload = payload as ApiErrorPayload;
     const message = typedPayload.message;
     const details = typedPayload.details;
+    if (typedPayload.code && CONTROL_VALIDATION_MESSAGES[typedPayload.code])
+      return localizeErrorMessage(typedPayload.code);
     if (
-      (typedPayload.code === 'RESULT_INCOMPLETE' ||
-        message === 'RESULT_INCOMPLETE') &&
+      (typedPayload.code === 'RESULT_INCOMPLETE' || message === 'RESULT_INCOMPLETE') &&
       details &&
       typeof details === 'object' &&
       typeof details.rosterSize === 'number'
     ) {
-      const isEn =
-        typeof window !== 'undefined' &&
-        window.location.pathname.startsWith('/en');
+      const isEn = typeof window !== 'undefined' && window.location.pathname.startsWith('/en');
       const rosterSize = details.rosterSize;
-      const enteredCount =
-        typeof details.enteredCount === 'number' ? details.enteredCount : 0;
+      const enteredCount = typeof details.enteredCount === 'number' ? details.enteredCount : 0;
       const missingCount =
         typeof details.missingCount === 'number'
           ? details.missingCount
           : Math.max(0, rosterSize - enteredCount);
-      const invalidCount =
-        typeof details.invalidCount === 'number' ? details.invalidCount : 0;
+      const invalidCount = typeof details.invalidCount === 'number' ? details.invalidCount : 0;
       if (isEn) {
         return `Cannot submit or approve an incomplete sheet: ${enteredCount} of ${rosterSize} registered students have marks or statuses entered (${missingCount} still missing${invalidCount > 0 ? `, and ${invalidCount} invalid` : ''}).`;
       }

@@ -189,7 +189,8 @@ function StudentsPageContent() {
   const [isBulkDeactivateOpen, setIsBulkDeactivateOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferStudent, setTransferStudent] = useState<Student | null>(null);
-  const [profileStudent, setProfileStudent] = useState<Student | null>(null);
+  const [selectedProfileStudent, setProfileStudent] = useState<Student | null>(null);
+  const [dismissedProfile, setDismissedProfile] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [, setForm] = useState(initialForm);
   const [formLoading, setFormLoading] = useState(false);
@@ -204,6 +205,17 @@ function StudentsPageContent() {
   const [isBulkMustChangeOpen, setIsBulkMustChangeOpen] = useState(false);
   const searchParams = useSearchParams();
   const searchTab = searchParams?.get('tab');
+  const profileCode = searchParams?.get('profile') ?? '';
+  const linkedProfile = useQuery({
+    queryKey: ['student-record-link', profileCode],
+    enabled: Boolean(profileCode && dismissedProfile !== profileCode),
+    queryFn: async () => {
+      const response = await listStudents({ page: 1, limit: 10, search: profileCode });
+      return response.items.find((student) => student.studentCode === profileCode) ?? null;
+    },
+    staleTime: 30_000,
+  });
+  const profileStudent = selectedProfileStudent ?? (dismissedProfile !== profileCode ? linkedProfile.data : null) ?? null;
   const [activeTab, setActiveTabState] = useState<'students' | 'tuition'>(() => {
     if (searchTab === 'tuition' || searchTab === 'students') return searchTab;
     if (typeof window !== 'undefined') {
@@ -959,7 +971,7 @@ function StudentsPageContent() {
       />
 
       <DataUploadDialog open={isUploadOpen} onOpenChange={setIsUploadOpen} title={locale === 'ar' ? 'رفع ملف بيانات الطلاب' : 'Bulk Upload Students'} description={locale === 'ar' ? 'قم برفع ملف بصيغة XLSX أو XLS أو CSV لاستيراد بيانات الطلاب.' : 'Upload XLSX, XLS or CSV to import students.'} uploadType="students" expectedColumns={studentImportColumns} onSuccess={() => invalidateStudents()} />
-      <StudentDetailDialog open={Boolean(profileStudent)} onOpenChange={(open) => !open && setProfileStudent(null)} student={profileQuery.data ?? profileStudent} grades={profileGradesQuery.data ?? []} complaints={profileComplaintsQuery.data ?? []} academicEmail={profileEmailQuery.data} isLoading={profileQuery.isLoading} gradesLoading={profileGradesQuery.isLoading} complaintsLoading={profileComplaintsQuery.isLoading} locale={locale} canViewSensitiveStudentData={canViewSensitiveStudentData} />
+      <StudentDetailDialog open={Boolean(profileStudent)} onOpenChange={(open) => { if (!open) { setProfileStudent(null); setDismissedProfile(profileCode); } }} student={profileQuery.data ?? profileStudent} grades={profileGradesQuery.data ?? []} complaints={profileComplaintsQuery.data ?? []} academicEmail={profileEmailQuery.data} isLoading={profileQuery.isLoading} gradesLoading={profileGradesQuery.isLoading} complaintsLoading={profileComplaintsQuery.isLoading} locale={locale} canViewSensitiveStudentData={canViewSensitiveStudentData} />
       <ResetStudentPasswordDialog
         open={isResetOpen}
         onOpenChange={(open) => {

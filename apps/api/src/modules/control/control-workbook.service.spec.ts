@@ -161,6 +161,36 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it('skips unchanged rows from an older template but rejects stale changed marks', async () => {
+    const ctx = build();
+    ctx.rows[0].components = {
+      midterm: { score: 5, status: 'present', rev: 4 },
+    };
+    const unchanged = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, score: 5, status: 'present', expectedRev: 0 },
+    ]);
+    expect(unchanged).toMatchObject({ valid: 0, skipped: 1, errors: [] });
+    const changed = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, score: 12, status: 'present', expectedRev: 0 },
+    ]);
+    expect(changed.valid).toBe(0);
+    expect(changed.errors[0]).toContain('Stale mark revision');
+  });
+  it('reports the exact maximum or increment instead of an ambiguous score error', async () => {
+    const ctx = build();
+    const maximum = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, score: 21 },
+    ]);
+    expect(maximum.errors[0]).toContain(
+      'Mark rule: above_max; max=20; step=0.5',
+    );
+    const increment = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, score: 12.2 },
+    ]);
+    expect(increment.errors[0]).toContain(
+      'Mark rule: off_step; max=20; step=0.5',
+    );
+  });
   it('skips unchanged imported marks instead of generating grade writes', async () => {
     const ctx = build();
     ctx.rows[0].components = {
@@ -458,6 +488,19 @@ describe('Control workbook import and review', () => {
       Buffer.from(await book.xlsx.writeBuffer()),
     );
     expect(result.valid).toBe(1);
+    expect(result.reviewRows[0]).toMatchObject({
+      sourceRow: 2,
+      studentCode: '260001',
+      after: 18,
+      examStatus: 'present',
+      status: 'valid',
+      issues: [],
+    });
+    expect(result.rules).toMatchObject({
+      component: 'midterm',
+      max: 20,
+      step: 0.5,
+    });
     expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
     book.getWorksheet('Marks')!.getCell('C2').value = {
       formula: '10+10',
@@ -515,6 +558,12 @@ describe('Control workbook import and review', () => {
     );
     expect(invalid.valid).toBe(0);
     expect(invalid.errors[0]).toMatch(/^Row 502:/);
+    expect(invalid.reviewRows[0]).toMatchObject({
+      sourceRow: 502,
+      studentCode: ctx.rows[500].studentCode,
+      status: 'invalid',
+    });
+    expect(invalid.reviewRows[0].issues).toHaveLength(1);
     page.getCell('A502').value = page.getCell('A2').text;
     await expect(
       ctx.service.previewFile(
@@ -531,7 +580,18 @@ describe('Control workbook import and review', () => {
       ctx.service.previewFile(ctx.user, ctx.sheetId, bytes, 2),
     ).rejects.toThrow('Invalid import batch');
   });
-  it('submits an immutable digest and prevents the submitter approving their own sheet', async () => {
+  it('explains an empty exported workbook instead of reporting a successful import', async () => {
+    const ctx = build();
+    ctx.rows.splice(0);
+    const bytes = await ctx.service.export(ctx.user, ctx.sheetId, 'missing');
+    await expect(
+      ctx.service.previewFile(ctx.user, ctx.sheetId, bytes),
+    ).rejects.toMatchObject({
+      response: { code: 'CONTROL_IMPORT_EMPTY' },
+    });
+    expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
+  });
+  it('submits an immutable digest and prevents staff approving their own sheet', async () => {
     const ctx = build();
     await ctx.service.review(ctx.user, ctx.sheetId, {
       action: 'SUBMIT',
@@ -541,11 +601,15 @@ describe('Control workbook import and review', () => {
     expect(ctx.sheet.workflowState).toBe('IN_REVIEW');
     expect(ctx.sheet.submission?.digest).toBeTruthy();
     await expect(
-      ctx.service.review(ctx.user, ctx.sheetId, {
-        action: 'APPROVE',
-        expectedRevision: 1,
-        reason: 'Reviewed',
-      }),
+      ctx.service.review(
+        { ...ctx.user, role: 'staff', permissions: Object.values(PERMISSIONS) },
+        ctx.sheetId,
+        {
+          action: 'APPROVE',
+          expectedRevision: 1,
+          reason: 'Reviewed',
+        },
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     const reviewer = { ...ctx.user, _id: String(new Types.ObjectId()) };
     await ctx.service.review(reviewer, ctx.sheetId, {
@@ -555,6 +619,27 @@ describe('Control workbook import and review', () => {
     });
     expect(ctx.sheet.workflowState).toBe('APPROVED');
     expect(ctx.audit.create).toHaveBeenCalledTimes(2);
+  });
+  it('allows the administrator to approve their own unchanged submitted sheet', async () => {
+    const ctx = build();
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT',
+      expectedRevision: 0,
+      reason: 'Admin submission',
+    });
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'APPROVE',
+      expectedRevision: 1,
+      reason: 'Admin self approval',
+    });
+    expect(ctx.sheet.workflowState).toBe('APPROVED');
+    expect(ctx.audit.create).toHaveBeenCalledTimes(2);
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'REOPEN',
+      expectedRevision: 2,
+    });
+    expect(ctx.sheet.workflowState).toBe('DRAFT');
+    expect(ctx.audit.create).toHaveBeenCalledTimes(3);
   });
   it('exports filtered missing/exception reports and scopes failed-row reports to the preview owner', async () => {
     const ctx = build();

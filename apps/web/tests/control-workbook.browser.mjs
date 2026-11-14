@@ -39,7 +39,7 @@ const server = http.createServer(async (req,res)=>{
     if(url.pathname.startsWith('/admin/control/')) {
       res.setHeader('Content-Type','application/json');
       const key=Object.keys(ids).find(k=>url.pathname.includes(ids[k])) || 'midterm';
-      if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
+      if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,componentStates:Object.fromEntries(Object.entries(states).map(([k,v])=>[k,v.workflowState])),scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
       if(req.method==='GET') return res.end(JSON.stringify(detail(key)));
       const chunks=[];for await(const chunk of req) chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
       if(url.pathname.endsWith('/entries')) {

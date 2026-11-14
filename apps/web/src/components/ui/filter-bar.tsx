@@ -19,6 +19,7 @@ interface FilterBarProps {
   className?: string;
   /** Let longer feature filters wrap without shrinking their labels. */
   wrapFilters?: boolean;
+  compact?: boolean;
 }
 
 export function FilterBar({
@@ -28,16 +29,19 @@ export function FilterBar({
   children,
   className,
   wrapFilters = false,
+  compact = false,
 }: FilterBarProps) {
   const [localSearch, setLocalSearch] = useState(search);
 
   // Synchronize internal state with incoming prop
   const [previousSearch, setPreviousSearch] = useState<unknown[] | null>(null);
-  if (previousSearch === null || previousSearch.some((value, index) => !Object.is(value, [search][index]))) {
+  if (
+    previousSearch === null ||
+    previousSearch.some((value, index) => !Object.is(value, [search][index]))
+  ) {
     setPreviousSearch([search]);
     (() => {
-    setLocalSearch(search);
-
+      setLocalSearch(search);
     })();
   }
 
@@ -58,9 +62,27 @@ export function FilterBar({
   };
 
   return (
-    <GlassCard className={cn("p-4", className)}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1 max-w-sm lg:max-w-xs xl:max-w-sm shrink-0">
+    <GlassCard
+      className={cn(
+        compact ? "p-3" : "p-4",
+        compact && "[&_input]:h-9 [&_button[aria-haspopup=listbox]]:h-9",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-col gap-3 lg:flex-row",
+          compact ? "lg:items-start" : "lg:items-center",
+        )}
+      >
+        <div
+          className={cn(
+            "relative min-w-0 shrink-0",
+            compact
+              ? "w-full lg:w-56"
+              : "flex-1 max-w-sm lg:max-w-xs xl:max-w-sm",
+          )}
+        >
           <Search className="pointer-events-none absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <label className="sr-only">{searchPlaceholder}</label>
           <Input
@@ -85,8 +107,10 @@ export function FilterBar({
         {children && (
           <div
             className={cn(
-              "flex flex-row flex-wrap items-center gap-2 lg:justify-end",
-              wrapFilters ? "min-w-0 flex-1" : "lg:flex-nowrap",
+              compact
+                ? "grid min-w-0 flex-1 grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] items-start gap-2 [&>*]:w-full [&>*]:min-w-0"
+                : "flex flex-row flex-wrap items-center gap-2 lg:justify-end",
+              !compact && (wrapFilters ? "min-w-0 flex-1" : "lg:flex-nowrap"),
             )}
           >
             {children}
