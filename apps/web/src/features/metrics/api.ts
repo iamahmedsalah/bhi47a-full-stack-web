@@ -171,6 +171,7 @@ export interface MetricsSummaryResponse {
         timestamp: string; kind: 'command' | 'checkout' | 'heartbeat' | 'operation'; command: string;
         durationMs: number; category: string; errorName: string; code?: string | number;
         requestId?: string; stage?: string; operation?: string;
+        checkoutReason?: 'timeout' | 'poolClosed' | 'connectionError' | 'other';
       }>;
     };
     totalQueries: number;

@@ -100,7 +100,7 @@ async function main() {
         return main && main.x >= -1 && main.x < 50 && main.width > window.innerWidth - 50;
       });
       await page.screenshot({ path: path.join(output, `metrics-${locale}-mobile.png`), fullPage: false, animations: 'disabled' });
-      await page.getByRole('heading', { name: locale === 'ar' ? 'تشخيص اتصال وأوامر MongoDB' : 'MongoDB connection and command diagnostics', exact: true }).locator('..').screenshot({ path: path.join(output, `driver-${locale}-mobile.png`), animations: 'disabled' });
+      await page.getByTestId('driver-diagnostics').screenshot({ path: path.join(output, `driver-${locale}-mobile.png`), animations: 'disabled' });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'No horizontal overflow');
       assert.deepEqual(errors, [], 'No browser runtime errors');
       await context.close();
@@ -108,6 +108,8 @@ async function main() {
     }
     for (const area of ['admin', 'dashboard']) {
       const context = await browser.newContext();
+      const logo = await fs.readFile(path.resolve(__dirname, '../apps/web/public/logo.webp'));
+      await context.route((url) => url.hostname === 'res.cloudinary.com' || url.pathname === '/_next/image', (route) => route.fulfill({ contentType: 'image/webp', body: logo }));
       const page = await context.newPage();
       let releaseAuth;
       const gate = new Promise((resolve) => { releaseAuth = resolve; });

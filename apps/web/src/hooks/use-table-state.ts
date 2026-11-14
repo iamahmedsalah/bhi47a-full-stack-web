@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useCallback, useState, useTransition } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export interface TableStateOptions<TFilters extends Record<string, string>> {
   defaultFilters: TFilters;
@@ -25,13 +25,14 @@ export function useTableState<TFilters extends Record<string, string>>({
   // Local selection state (row selection is ephemeral per session/view)
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
-  const page = Number(searchParams?.get('page')) || defaultPage;
-  const limit = Number(searchParams?.get('limit')) || defaultLimit;
-  const search = searchParams?.get('search') ?? '';
+  const page = Number(searchParams?.get("page")) || defaultPage;
+  const limit = Number(searchParams?.get("limit")) || defaultLimit;
+  const search = searchParams?.get("search") ?? "";
 
   const filters = Object.keys(defaultFilters).reduce((acc, key) => {
     acc[key as keyof TFilters] =
-      (searchParams?.get(key) as TFilters[keyof TFilters]) ?? defaultFilters[key];
+      (searchParams?.get(key) as TFilters[keyof TFilters]) ??
+      defaultFilters[key];
     return acc;
   }, {} as TFilters);
 
@@ -39,8 +40,8 @@ export function useTableState<TFilters extends Record<string, string>>({
     (params: URLSearchParams) => {
       const query = params.toString();
       const newUrl = query ? `${pathname}?${query}` : pathname;
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', newUrl);
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", newUrl);
         if (shallow) return;
       }
       startTransition(() => {
@@ -52,11 +53,11 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const setPage = useCallback(
     (newPage: number) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
       if (newPage <= 1) {
-        params.delete('page');
+        params.delete("page");
       } else {
-        params.set('page', String(newPage));
+        params.set("page", String(newPage));
       }
       setSelectedKeys([]);
       updateUrl(params);
@@ -66,13 +67,13 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const setLimit = useCallback(
     (newLimit: number) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
       if (newLimit === defaultLimit) {
-        params.delete('limit');
+        params.delete("limit");
       } else {
-        params.set('limit', String(newLimit));
+        params.set("limit", String(newLimit));
       }
-      params.delete('page');
+      params.delete("page");
       setSelectedKeys([]);
       updateUrl(params);
     },
@@ -81,37 +82,41 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   const setSearch = useCallback(
     (newSearch: string) => {
-      const currentSearch = (searchParams?.get('search') ?? '').trim();
+      const currentSearch = (searchParams?.get("search") ?? "").trim();
       const trimmed = newSearch.trim();
       if (trimmed === currentSearch) {
         return;
       }
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
       if (!trimmed) {
-        params.delete('search');
+        params.delete("search");
       } else {
-        params.set('search', trimmed);
+        params.set("search", trimmed);
       }
-      params.delete('page');
+      params.delete("page");
       updateUrl(params);
     },
     [searchParams, updateUrl],
   );
 
   const setFilter = useCallback(
-    <K extends keyof TFilters>(key: K, value: TFilters[K] | undefined | null) => {
-      const currentVal = searchParams?.get(String(key)) ?? defaultFilters[key] ?? '';
-      const strVal = value !== undefined && value !== null ? String(value) : '';
+    <K extends keyof TFilters>(
+      key: K,
+      value: TFilters[K] | undefined | null,
+    ) => {
+      const currentVal =
+        searchParams?.get(String(key)) ?? defaultFilters[key] ?? "";
+      const strVal = value !== undefined && value !== null ? String(value) : "";
       if (strVal === currentVal) {
         return;
       }
-      const params = new URLSearchParams(searchParams?.toString() ?? '');
-      if (!strVal || strVal === 'all' || strVal === defaultFilters[key]) {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      if (!strVal || strVal === "all" || strVal === defaultFilters[key]) {
         params.delete(String(key));
       } else {
         params.set(String(key), strVal);
       }
-      params.delete('page');
+      params.delete("page");
       updateUrl(params);
     },
     [defaultFilters, searchParams, updateUrl],
@@ -121,6 +126,29 @@ export function useTableState<TFilters extends Record<string, string>>({
     setSelectedKeys([]);
     updateUrl(new URLSearchParams());
   }, [updateUrl]);
+
+  // Update related filters/page atomically while retaining other tables' state.
+  const setFilters = useCallback(
+    (updates: Partial<TFilters>) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      for (const key of Object.keys(updates) as Array<keyof TFilters>) {
+        const value = updates[key];
+        if (
+          value == null ||
+          value === "" ||
+          value === "all" ||
+          value === defaultFilters[key]
+        ) {
+          params.delete(String(key));
+        } else {
+          params.set(String(key), String(value));
+        }
+      }
+      setSelectedKeys([]);
+      updateUrl(params);
+    },
+    [defaultFilters, searchParams, updateUrl],
+  );
 
   return {
     page,
@@ -134,6 +162,7 @@ export function useTableState<TFilters extends Record<string, string>>({
     setLimit,
     setSearch,
     setFilter,
+    setFilters,
     resetAll,
   };
 }

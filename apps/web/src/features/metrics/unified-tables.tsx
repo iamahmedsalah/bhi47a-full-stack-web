@@ -54,7 +54,7 @@ const format = (value: number | null | undefined) =>
     ? "—"
     : value.toLocaleString("en-GB", { maximumFractionDigits: 1 });
 
-function Ms({ value }: { value: number | null }) {
+export function Ms({ value }: { value: number | null }) {
   return value == null ? (
     <span className="text-muted-foreground">—</span>
   ) : (
@@ -98,7 +98,7 @@ function statusPillTone(status: string): string {
   return "border-border/60 bg-secondary/40 text-muted-foreground";
 }
 
-function Filter({
+export function Filter({
   label,
   value,
   options,
@@ -147,7 +147,7 @@ function Filter({
   );
 }
 
-function MetricsTable<T extends { _id: string }>({
+export function MetricsTable<T extends { _id: string }>({
   title,
   description,
   icon,
@@ -160,6 +160,8 @@ function MetricsTable<T extends { _id: string }>({
   isAr,
   exportRows,
   open,
+  emptyMessage,
+  filterGridClassName,
 }: {
   title: string;
   description: string;
@@ -173,6 +175,8 @@ function MetricsTable<T extends { _id: string }>({
   isAr: boolean;
   exportRows: (rows: T[]) => void;
   open: (row: T) => void;
+  emptyMessage?: string;
+  filterGridClassName?: string;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const pages = Math.max(1, Math.ceil(rows.length / size));
@@ -230,6 +234,7 @@ function MetricsTable<T extends { _id: string }>({
         </DropdownMenuTrigger>
         <DropdownMenuPortal>
           <div dir={isAr ? "rtl" : "ltr"}>
+            {/* This Radix version inherits direction from the explicit root. */}
             <DropdownMenuContent
               align="end"
               className="z-50 space-y-1 rounded-xl border border-border bg-popover p-2 text-xs text-popover-foreground shadow-lg [&_[role=menuitem]]:flex [&_[role=menuitem]]:cursor-pointer [&_[role=menuitem]]:items-center [&_[role=menuitem]]:gap-2 [&_[role=menuitem]]:rounded-squircle [&_[role=menuitem]]:p-2 [&_[role=menuitem]]:outline-none [&_[data-highlighted]]:bg-accent"
@@ -266,7 +271,7 @@ function MetricsTable<T extends { _id: string }>({
       dir={isAr ? "rtl" : "ltr"}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 pb-4">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 basis-full items-start gap-3 sm:basis-0 sm:flex-1">
           {icon ? (
             <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
               {icon}
@@ -293,7 +298,7 @@ function MetricsTable<T extends { _id: string }>({
 
       {summaryStrip}
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">{filters}</div>
+      <div className={filterGridClassName ?? "grid gap-2 sm:grid-cols-2 xl:grid-cols-5"}>{filters}</div>
       {selectedRows.length > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/10 p-3 text-xs">
           <span className="font-semibold text-primary">
@@ -313,9 +318,9 @@ function MetricsTable<T extends { _id: string }>({
         ) : (
           <TableEmpty
             message={
-              isAr
+              emptyMessage ?? (isAr
                 ? "لا توجد نتائج مطابقة. جرّب تغيير المرشحات."
-                : "No matching results. Try changing the filters."
+                : "No matching results. Try changing the filters.")
             }
           />
         )}
