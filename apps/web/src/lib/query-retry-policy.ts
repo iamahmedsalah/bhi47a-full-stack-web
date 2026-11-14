@@ -32,6 +32,8 @@ export function retryAfterDeadline(
 
 export function queryRetry(failureCount: number, error: unknown): boolean {
   if (failureCount >= 1) return false;
+  const item = record(error);
+  if (isQueryTimeout(error) || item?.code === 'ERR_CANCELED' || item?.name === 'AbortError') return false;
   const status = queryErrorStatus(error);
   const deadline = record(error)?.retryAfterAt;
   if (
@@ -47,6 +49,11 @@ export function queryRetry(failureCount: number, error: unknown): boolean {
   }
   // Permanent client/auth errors are not repaired by immediately repeating them.
   return status === undefined || status >= 500;
+}
+
+export function isQueryTimeout(error: unknown): boolean {
+  const item = record(error);
+  return item?.code === 'ECONNABORTED' || item?.code === 'ETIMEDOUT' || item?.name === 'TimeoutError';
 }
 
 export function queryRetryDelay(attempt: number, error: unknown): number {

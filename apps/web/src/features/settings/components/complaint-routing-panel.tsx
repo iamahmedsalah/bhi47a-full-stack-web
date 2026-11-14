@@ -95,12 +95,12 @@ export function ComplaintRoutingPanel({ locale }: { locale: string }) {
 
   const settingsQuery = useQuery({
     queryKey: complaintKeys.settings(),
-    queryFn: getComplaintSettings,
+    queryFn: ({ signal }) => getComplaintSettings(signal),
   });
 
   const assigneesQuery = useQuery({
     queryKey: complaintKeys.assignees(),
-    queryFn: listAssignableStaff,
+    queryFn: ({ signal }) => listAssignableStaff(signal),
   });
 
   // Local draft states

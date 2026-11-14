@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner';
 
 import { getApiErrorMessage } from '@/lib/api';
+import { isQueryTimeout } from '@/lib/query-retry-policy';
 import { useAuth } from '@/providers/auth-provider';
 import { PermissionGuard } from '@/components/ui/permission-guard';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -385,20 +386,21 @@ function AdminComplaintsContent() {
 
   const complaintsQuery = useQuery({
     queryKey: complaintKeys.adminList(complaintListParams),
-    queryFn: async () => {
-      return listAdminComplaints(complaintListParams);
+    queryFn: async ({ signal }) => {
+      return listAdminComplaints(complaintListParams, signal);
     },
+    placeholderData: keepPreviousData,
   });
 
   const statsQuery = useQuery({
     queryKey: complaintKeys.stats(),
-    queryFn: listAdminComplaintStats,
+    queryFn: ({ signal }) => listAdminComplaintStats(signal),
   });
 
   const settingsQuery = useQuery({
     queryKey: complaintKeys.settings(),
-    queryFn: async () => {
-      const settings = await getComplaintSettings();
+    queryFn: async ({ signal }) => {
+      const settings = await getComplaintSettings(signal);
       setWindowOpenAt(toDateTimeLocal(settings.complaintOpenAt));
       setWindowCloseAt(toDateTimeLocal(settings.complaintCloseAt));
       return settings;
@@ -408,16 +410,16 @@ function AdminComplaintsContent() {
 
   const assigneesQuery = useQuery({
     queryKey: complaintKeys.assignees(),
-    queryFn: listAssignableStaff,
+    queryFn: ({ signal }) => listAssignableStaff(signal),
   });
 
   const complaints = useMemo(() => complaintsQuery.data?.items ?? [], [complaintsQuery.data?.items]);
   const total = complaintsQuery.data?.total ?? 0;
   React.useEffect(() => {
-    if (complaintsQuery.data && page > Math.max(1, complaintsQuery.data.totalPages)) {
+    if (complaintsQuery.data && !complaintsQuery.isPlaceholderData && page > Math.max(1, complaintsQuery.data.totalPages)) {
       setPage(Math.max(1, complaintsQuery.data.totalPages));
     }
-  }, [complaintsQuery.data, page, setPage]);
+  }, [complaintsQuery.data, complaintsQuery.isPlaceholderData, page, setPage]);
   const settings = settingsQuery.data ?? null;
   const assignees = assigneesQuery.data ?? [];
 
@@ -425,7 +427,7 @@ function AdminComplaintsContent() {
     openedTicketId ?? complaints.find((ticket) => ticket.ticketNumber === ticketParam)?._id ?? null;
   const detailQuery = useQuery({
     queryKey: complaintKeys.detail(detailId ?? ''),
-    queryFn: () => getAdminComplaint(detailId!),
+    queryFn: ({ signal }) => getAdminComplaint(detailId!, signal),
     enabled: Boolean(detailId) && !selectedTicketOverride,
     retry: false,
   });
@@ -663,7 +665,7 @@ function AdminComplaintsContent() {
       {openingTicket && <div role="status" className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />{detailsText('loading')}</div>}
       {detailId && !selectedTicketOverride && detailQuery.isError && (
         <div role="alert" className="flex items-center gap-2 text-sm">
-          {detailsText('failed')}
+          {detailsText(isQueryTimeout(detailQuery.error) ? 'timeout' : 'failed')}
           <Button variant="outline" onClick={() => void detailQuery.refetch()}>{detailsText('retry')}</Button>
           <Button variant="ghost" onClick={() => setSelectedTicket(null)}>{detailsText('cancel')}</Button>
         </div>
@@ -752,7 +754,7 @@ function AdminComplaintsContent() {
         />
       )}
 
-      <ComplaintKpiCards stats={stats} total={complaints.length} isAr={isAr} />
+      {statsQuery.isError ? <div role="alert" className="text-sm"><p>{detailsText('statsFailed')}</p><Button variant="outline" onClick={() => void statsQuery.refetch()}>{detailsText('retry')}</Button></div> : <ComplaintKpiCards stats={stats} total={complaints.length} isAr={isAr} />}
 
       <Card className="border-border/70 bg-card/90 p-4 shadow-(--shadow-glow)">
         <div className="grid gap-3 lg:grid-cols-[1.4fr_repeat(6,minmax(0,1fr))_auto]">
@@ -810,7 +812,8 @@ function AdminComplaintsContent() {
         </div>
       </Card>
 
-      <Card className="overflow-hidden border-border/70 bg-card/90 shadow-(--shadow-glow)">
+      {complaintsQuery.isFetching && !complaintsQuery.isLoading && <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{detailsText('listUpdating')}</div>}
+      <Card aria-busy={complaintsQuery.isFetching} inert={complaintsQuery.isPlaceholderData} className="overflow-hidden border-border/70 bg-card/90 shadow-(--shadow-glow)">
         {canManageSettings && selectedTicketIds.length > 0 && (
           <div className="flex flex-col gap-2 border-b border-border/80 bg-primary/10 px-6 py-3 transition-all animate-in fade-in slide-in-from-top-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs font-semibold text-foreground">
@@ -921,6 +924,8 @@ function AdminComplaintsContent() {
             <tbody>
               {complaintsQuery.isLoading ? (
                 <tr><td colSpan={canManageSettings ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /></td></tr>
+              ) : complaintsQuery.isError && complaints.length === 0 ? (
+                <tr><td colSpan={canManageSettings ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">{detailsText('listFailed')}</td></tr>
               ) : complaints.length === 0 ? (
                 <tr><td colSpan={canManageSettings ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">{isAr ? 'لا توجد بلاغات مطابقة.' : 'No matching complaints found.'}</td></tr>
               ) : (
@@ -1054,7 +1059,7 @@ function AdminComplaintsContent() {
         </div>
       </Card>
 
-      {complaintsQuery.isError && <div role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm"><p>{getApiErrorMessage(complaintsQuery.error, isAr ? 'تعذر تحميل الشكاوى' : 'Could not load complaints')}</p><Button variant="outline" onClick={() => void complaintsQuery.refetch()}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button></div>}
+      {complaintsQuery.isError && <div role="alert" className="rounded-xl border border-destructive/40 p-4 text-sm"><p>{isQueryTimeout(complaintsQuery.error) ? detailsText('timeout') : getApiErrorMessage(complaintsQuery.error, isAr ? 'تعذر تحميل الشكاوى' : 'Could not load complaints')}</p>{complaintsQuery.data && <p>{detailsText('staleResults')}</p>}<Button variant="outline" onClick={() => void complaintsQuery.refetch()}>{isAr ? 'إعادة المحاولة' : 'Retry'}</Button></div>}
       <ComplaintPagination page={page} limit={limit} total={total} totalPages={complaintsQuery.data?.totalPages ?? 0} busy={complaintsQuery.isFetching} isAr={isAr} onPage={setPage} onLimit={setLimit} />
 
       <Sheet open={Boolean(selectedTicket)} onOpenChange={(open) => !open && setSelectedTicket(null)}>

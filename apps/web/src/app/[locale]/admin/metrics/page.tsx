@@ -24,6 +24,7 @@ import {
 } from '@/features/metrics/api';
 import { LockedAccountsModal } from './locked-accounts-modal';
 import { HttpTrafficCard, HttpTrafficDiagnostics } from '@/features/metrics/http-traffic';
+import { DriverDiagnosticsPanel } from '@/features/metrics/driver-diagnostics';
 import { UnifiedPerformanceTables } from '@/features/metrics/unified-tables';
 import type { TrafficWindow } from '@/features/metrics/api';
 
@@ -799,6 +800,7 @@ export default function AdminMetricsPage() {
           </div>
 
           <HttpTrafficDiagnostics traffic={data.traffic} isAr={isAr} />
+          <DriverDiagnosticsPanel data={data.database.driverDiagnostics} isAr={isAr} />
           <UnifiedPerformanceTables data={data} isAr={isAr} />
 
           {/* ─── ROW 7: Endpoints catalogue + Raw Prometheus exposition ─── */}

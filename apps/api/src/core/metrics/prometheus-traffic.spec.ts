@@ -37,6 +37,7 @@ describe('Prometheus traffic queries', () => {
             resultType: 'vector',
             result: [
               vector('totalRequests', '100'),
+              vector('latencyBucketsCompatible', '1'),
               vector('requestsPerSecond', '0.3'),
               vector('p95LatencyMs', '450'),
               vector('statusCounts', '20', { status_code: '401' }),
@@ -92,6 +93,7 @@ describe('Prometheus traffic queries', () => {
             resultType: 'vector',
             result: [
               { metric: { kind: 'totalRequests' }, value: [1, '10'] },
+              { metric: { kind: 'latencyBucketsCompatible' }, value: [1, '1'] },
               { metric: { kind: 'requestsPerSecond' }, value: [1, '1'] },
               {
                 metric: { kind: 'statusCounts', status_code: '500' },
@@ -105,6 +107,75 @@ describe('Prometheus traffic queries', () => {
       status5xx: 2,
       actionableErrorRatePercent: 20,
       outcomes: { unclassified_error: 2 },
+    });
+  });
+
+  it('rejects mixed bucket schemas during a rolling deployment', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          status: 'success',
+          data: {
+            resultType: 'vector',
+            result: [
+              { metric: { kind: 'totalRequests' }, value: [1, '10'] },
+              { metric: { kind: 'requestsPerSecond' }, value: [1, '1'] },
+              { metric: { kind: 'latencyBucketsCompatible' }, value: [1, '0'] },
+            ],
+          },
+        }),
+    } as Response);
+    await expect(prometheusTraffic('5m')).rejects.toThrow(
+      'Incompatible HTTP latency buckets',
+    );
+  });
+
+  it('does not present an overflow boundary as p95', async () => {
+    const vector = (kind: string, number: string, labels = {}) => ({
+      metric: { kind, ...labels },
+      value: [1, number],
+    });
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          status: 'success',
+          data: {
+            resultType: 'vector',
+            result: [
+              vector('totalRequests', '10'),
+              vector('requestsPerSecond', '1'),
+              vector('latencyBucketsCompatible', '1'),
+              vector('p95LatencyMs', '120000'),
+              vector('latencyOverflowRequests', '2'),
+              vector('overTenSeconds', '4'),
+              vector('routeCount', '10', {
+                method: 'GET',
+                route: '/api/admin/complaints',
+              }),
+              vector('routeP95', '120000', {
+                method: 'GET',
+                route: '/api/admin/complaints',
+              }),
+              vector('routeOverflow', '2', {
+                method: 'GET',
+                route: '/api/admin/complaints',
+              }),
+            ],
+          },
+        }),
+    } as Response);
+    expect(await prometheusTraffic('5m')).toMatchObject({
+      p95LatencyMs: null,
+      latencyOverflowRequests: 2,
+      overTenSeconds: 4,
+      routes: [
+        expect.objectContaining({
+          p95LatencyMs: null,
+          latencyOverflowRequests: 2,
+        }),
+      ],
     });
   });
 });

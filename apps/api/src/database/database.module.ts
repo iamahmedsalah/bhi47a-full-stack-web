@@ -193,7 +193,11 @@ const parseDatabaseError = (error: unknown): ParsedDatabaseError => {
           lookup: customLookup,
           connectionFactory: (connection: mongoose.Connection) => {
             ConnectionHolder.connection = connection;
-            attachMongoDriverMetrics(connection.getClient(), metricsService);
+            attachMongoDriverMetrics(
+              connection.getClient(),
+              metricsService,
+              logger,
+            );
             // Nest may invoke the factory after the first connected event.
             metricsService.setDbConnected(Number(connection.readyState) === 1);
 

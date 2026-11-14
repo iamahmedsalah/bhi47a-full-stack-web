@@ -34,6 +34,9 @@ export function buildRouteRows(data: MetricsSummaryResponse) {
       statuses: all?.statusCounts ?? {},
       windowCalls: current?.totalRequests ?? 0,
       p95Ms: current?.p95LatencyMs ?? null,
+      latencyOverflowRequests: current?.latencyOverflowRequests ?? 0,
+      latencyUpperBoundMs: current?.latencyUpperBoundMs ?? null,
+      overTenSeconds: current?.overTenSeconds ?? null,
       // Older servers do not provide the 4xx/5xx split. Do not invent it.
       window4xx: current?.status4xx ?? null,
       window5xx: current?.status5xx ?? null,

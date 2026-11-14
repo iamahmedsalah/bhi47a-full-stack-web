@@ -8,6 +8,10 @@ import {
 } from "../src/lib/query-retry-policy.ts";
 
 test("auth and other permanent client failures never get automatic query retries", () => {
+  for (const code of ['ERR_CANCELED', 'ECONNABORTED', 'ETIMEDOUT'])
+    assert.equal(queryRetry(0, { code }), false);
+  assert.equal(queryRetry(0, { name: 'AbortError' }), false);
+  assert.equal(queryRetry(0, { name: 'TimeoutError' }), false);
   for (const statusCode of [400, 401, 403, 404, 409, 422])
     assert.equal(queryRetry(0, { statusCode }), false);
   assert.equal(queryRetry(0, { response: { status: 401 } }), false);

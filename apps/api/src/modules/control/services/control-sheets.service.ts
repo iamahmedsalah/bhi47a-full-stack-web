@@ -107,6 +107,7 @@ export class ControlSheetsService {
           semester: query.semester,
           component: { $in: examTypes },
         })
+        .select('_id courseId component slug locked workflowState')
         .lean(),
       this.gradeModel.aggregate<{
         _id: { courseId: Types.ObjectId; examType: string };

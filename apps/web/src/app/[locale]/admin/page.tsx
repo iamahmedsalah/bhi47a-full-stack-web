@@ -486,7 +486,7 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const res = await api.get<PaginatedResponse<unknown>>(
         "/admin/complaints",
-        { params: { limit: 1 } },
+        { params: { limit: 1, view: "summary" } },
       );
       return res.data?.total || 0;
     },
@@ -517,7 +517,7 @@ export default function AdminDashboard() {
       const res = await api.get<PaginatedResponse<DashboardComplaint>>(
         "/admin/complaints",
         {
-          params: { limit: 100 },
+          params: { limit: 100, view: "summary" },
         },
       );
       return res.data.items;

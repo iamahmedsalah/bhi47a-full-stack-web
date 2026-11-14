@@ -584,6 +584,8 @@ export function UnifiedPerformanceTables({
               {format(row.windowCalls)}
             </div>
             <Ms value={row.p95Ms} />
+            {(row.overTenSeconds ?? 0) > 0 && <div className="text-xs text-amber-400"><bdi>&gt;10s: {format(row.overTenSeconds)}</bdi></div>}
+            {row.latencyOverflowRequests > 0 && <div className="text-xs text-amber-400">{text('خارج نطاق القياس', 'Histogram overflow')}: <bdi>{format(row.latencyOverflowRequests)} &gt; {format((row.latencyUpperBoundMs ?? 0) / 1000)}s</bdi></div>}
           </div>
         ),
       },

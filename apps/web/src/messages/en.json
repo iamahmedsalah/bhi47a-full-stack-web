@@ -74,6 +74,11 @@
     "waiting": "Waiting for marks"
   },
   "complaintDetails": {
+    "statsFailed": "Complaint statistics could not be loaded. The list can still be used.",
+    "listFailed": "Complaints could not be loaded. Use Retry below.",
+    "listUpdating": "Updating complaints. Previous results remain visible until loading finishes.",
+    "staleResults": "The displayed results could not be refreshed and may be out of date.",
+    "timeout": "Loading took too long. Please try again.",
     "loading": "Loading ticket details…",
     "failed": "Could not load ticket details.",
     "retry": "Retry",

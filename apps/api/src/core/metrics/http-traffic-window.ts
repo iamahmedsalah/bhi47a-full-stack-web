@@ -15,8 +15,14 @@ export const HTTP_LATENCY_BUCKETS = [
   2,
   5,
   10,
+  15,
+  30,
+  45,
+  60,
+  120,
   Infinity,
 ];
+export const HTTP_LATENCY_MAX_SECONDS = 120;
 export type HttpOutcome =
   | 'success'
   | 'redirect'
@@ -93,12 +99,8 @@ export function trafficPercentile(
     if (below + count >= rank) {
       const low = i === 0 ? 0 : HTTP_LATENCY_BUCKETS[i - 1];
       const high = HTTP_LATENCY_BUCKETS[i];
-      return (
-        1000 *
-        (Number.isFinite(high)
-          ? low + ((high - low) * (rank - below)) / count
-          : low)
-      );
+      if (!Number.isFinite(high)) return null;
+      return 1000 * (low + ((high - low) * (rank - below)) / count);
     }
     below += count;
   }
@@ -124,6 +126,13 @@ export function summarizeTraffic(stat: TrafficStat, seconds: number) {
     p50LatencyMs: trafficPercentile(stat, 0.5),
     p95LatencyMs: trafficPercentile(stat, 0.95),
     p99LatencyMs: trafficPercentile(stat, 0.99),
+    latencyUpperBoundMs: HTTP_LATENCY_MAX_SECONDS * 1000,
+    latencyOverflowRequests: stat.buckets[stat.buckets.length - 1],
+    overTenSeconds: stat.buckets.reduce(
+      (sum, count, index) =>
+        sum + (index > HTTP_LATENCY_BUCKETS.indexOf(10) ? count : 0),
+      0,
+    ),
     status2xx: group('2'),
     status3xx: group('3'),
     status4xx,

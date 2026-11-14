@@ -1,5 +1,6 @@
 import type { PaginatedResponse } from '@/lib/api';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api-client';
+import { complaintReadOptions } from './read-policy';
 
 export type ComplaintType =
   | 'complaint'
@@ -125,12 +126,12 @@ export const complaintKeys = {
 
 export type ComplaintListItem = Omit<Complaint, 'description' | 'screenshotUrl' | 'replies' | 'internalNotes' | 'statusHistory'>;
 
-export function listAdminComplaints(params: ComplaintListParams) {
-  return apiGet<PaginatedResponse<ComplaintListItem>>('/admin/complaints', { params: { ...params, view: 'summary' } });
+export function listAdminComplaints(params: ComplaintListParams, signal?: AbortSignal) {
+  return apiGet<PaginatedResponse<ComplaintListItem>>('/admin/complaints', { ...complaintReadOptions(signal), params: { ...params, view: 'summary' } });
 }
 
-export function getAdminComplaint(id: string) {
-  return apiGet<Complaint>(`/admin/complaints/${id}`);
+export function getAdminComplaint(id: string, signal?: AbortSignal) {
+  return apiGet<Complaint>(`/admin/complaints/${id}`, complaintReadOptions(signal));
 }
 
 export interface ComplaintSummary {
@@ -138,12 +139,12 @@ export interface ComplaintSummary {
   technical: number; complaints: number; high: number; avgResolutionMs: number | null;
 }
 
-export function listAdminComplaintStats() {
-  return apiGet<ComplaintSummary>('/admin/complaints/stats');
+export function listAdminComplaintStats(signal?: AbortSignal) {
+  return apiGet<ComplaintSummary>('/admin/complaints/stats', complaintReadOptions(signal));
 }
 
-export function getComplaintSettings() {
-  return apiGet<ComplaintSettings>('/admin/complaints/settings');
+export function getComplaintSettings(signal?: AbortSignal) {
+  return apiGet<ComplaintSettings>('/admin/complaints/settings', complaintReadOptions(signal));
 }
 
 export function updateComplaintSettings(payload: ComplaintSettings) {
@@ -153,8 +154,8 @@ export function updateComplaintSettings(payload: ComplaintSettings) {
   );
 }
 
-export function listAssignableStaff() {
-  return apiGet<AssignableStaff[]>('/admin/complaints/assignees');
+export function listAssignableStaff(signal?: AbortSignal) {
+  return apiGet<AssignableStaff[]>('/admin/complaints/assignees', complaintReadOptions(signal));
 }
 
 export function updateComplaint(id: string, payload: ComplaintUpdatePayload) {

@@ -39,11 +39,15 @@ describe('complaint list', () => {
       lean: jest.fn().mockResolvedValue([]),
     });
     const countDocuments = jest.fn().mockResolvedValue(25);
+    const studentLookup = {
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ studentCode: '2026001' }),
+    };
     const service = new ComplaintsService(
       { find, countDocuments } as never,
       {} as never,
       {
-        findById: jest.fn().mockResolvedValue({ studentCode: '2026001' }),
+        findById: jest.fn().mockReturnValue(studentLookup),
       } as never,
       {} as never,
       {} as never,
@@ -60,9 +64,55 @@ describe('complaint list', () => {
     expect(filter.$or).toContainEqual({
       studentId: new Types.ObjectId(studentId),
     });
+    expect(filter.$or).toContainEqual({ studentId });
+    expect(studentLookup.select).toHaveBeenCalledWith('studentCode');
     expect(filter.$and[0].$or[0].ticketNumber.$regex).toBe('ticket\\.\\*');
     expect(countDocuments).toHaveBeenCalledWith(filter);
   });
+
+  it.each([null, {}])(
+    'keeps ticket bodies, screenshots and ownership matching without a legacy student code (%p)',
+    async (student) => {
+      const studentId = new Types.ObjectId().toHexString();
+      const items = [
+        {
+          _id: 'ticket-id',
+          description: 'Full ticket body',
+          screenshotUrl: 'data:image/png;base64,c3ludGhldGlj',
+          replies: [{ message: 'Existing reply' }],
+        },
+      ];
+      const chain = {
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(items),
+      };
+      const find = jest.fn().mockReturnValue(chain);
+      const service = new ComplaintsService(
+        { find, countDocuments: jest.fn().mockResolvedValue(1) } as never,
+        {} as never,
+        {
+          findById: jest.fn().mockReturnValue({
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue(student),
+            }),
+          }),
+        } as never,
+        {} as never,
+        {} as never,
+      );
+      expect(await service.findByStudent(studentId)).toMatchObject({
+        items,
+        total: 1,
+        page: 1,
+      });
+      expect(find.mock.calls[0][0]).toEqual({
+        $or: [{ studentId: new Types.ObjectId(studentId) }, { studentId }],
+      });
+      expect(chain.sort).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
+    },
+  );
 
   it('returns zero summary values for an empty collection without fetching ticket bodies', async () => {
     const aggregate = jest

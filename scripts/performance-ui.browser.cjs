@@ -14,12 +14,17 @@ function summary(window) {
     timestamp: new Date().toISOString(), uptimeSeconds: 1000,
     system: { nodeVersion: 'test', cpuCores: 4, loadAverage: [0, 0, 0], memoryHeapUsedMb: 50, memoryHeapTotalMb: 100, memoryRssMb: 100, cpuUsage: { user: 1, system: 1 }, eventLoop: { meanMs: 1, p99Ms: 2, maxMs: 3 } },
     http: { totalRequests: 99999, requestsPerSecond: 999, avgLatencyMs: 999, status2xx: 999, status4xx: 999, status5xx: 0, routes: [], topSlowestRoutes: [] },
-    database: { status: 'connected', pingLatencyMs: 2, readyState: 1, totalQueries: 10, slowQueriesCount: 0, recentSlowQueries: [], slowQueriesByCollection: [], availableCollections: [], availableOperations: [] },
+    database: { status: 'connected', pingLatencyMs: 2, readyState: 1, totalQueries: 10, slowQueriesCount: 0, recentSlowQueries: [], slowQueriesByCollection: [], availableCollections: [], availableOperations: [],
+      driverDiagnostics: { scope: 'process', checkedOut: 2, waiters: 1, poolClears: 3, checkout: { count: 10, failures: 2, avgMs: 143, maxMs: 1100 },
+        commands: [{ command: 'find', count: 20, failures: 2, avgMs: 4500, maxMs: 45000 }],
+        recentFailures: [{ timestamp: '2026-11-14T18:00:00Z', kind: 'command', command: 'find', durationMs: 45000, category: 'socket_timeout', errorName: 'MongoNetworkTimeoutError', code: 'ETIMEDOUT', stage: 'complaints.page', requestId: 'synthetic-correlation-id' }],
+      } },
     security: { successfulLogins: 1, failedLogins: 0, rateLimitBlocks: 0, antiCheatViolations: 0 },
     academic: { activeQuizAttempts: 0, quizzesSubmitted: 0, excelRowsImported: 0 },
     traffic: { source: 'prometheus', window, prometheusAvailable: true, observedSeconds: 300, resolutionSeconds: 0,
       totalRequests: window === '15m' ? 300 : 100, requestsPerSecond: 0.33,
-      avgLatencyMs: 100, p50LatencyMs: 50, p95LatencyMs: 450, p99LatencyMs: 490, successfulP95LatencyMs: 460,
+      avgLatencyMs: 100, p50LatencyMs: 50, p95LatencyMs: 450, p99LatencyMs: null, successfulP95LatencyMs: 460,
+      overTenSeconds: 4, latencyOverflowRequests: 2, latencyUpperBoundMs: 120000,
       status2xx: 80, status3xx: 0, status4xx: 20, status5xx: 0, rawErrorRatePercent: 20, actionableErrorRatePercent: 0,
       statusCounts: { 200: 80, 401: 20 }, outcomes: { anonymous_probe: 20 }, avgDbQueries: 2, p95DbQueries: 3,
       routes: [{ route: 'GET /api/admin/complaints', totalRequests: 80, p95LatencyMs: 450, errorCount: 0 }, { route: 'GET /api/auth/me', totalRequests: 20, p95LatencyMs: 10, errorCount: 20 }],
@@ -64,8 +69,12 @@ async function main() {
       await page.getByText(locale === 'ar' ? 'جارٍ التحقق من الجلسة...' : 'Checking session...', { exact: true }).waitFor();
       assert.deepEqual(premature, [], 'Protected queries must not race /me');
       releaseAuth();
-      await page.getByRole('heading', { name: locale === 'ar' ? 'تشخيص حركة الطلبات خلال الفترة المحددة' : 'Traffic diagnostics in selected window', exact: true }).waitFor();
+      await page.getByRole('heading', { name: locale === 'ar' ? 'تشخيص حركة الطلبات وتصنيف الاستجابات خلال الفترة المحددة' : 'HTTP Traffic & Response Diagnostics in Selected Window', exact: true }).waitFor();
       await page.getByText('0.33 RPS', { exact: true }).waitFor();
+      await page.getByRole('heading', { name: locale === 'ar' ? 'تشخيص اتصال وأوامر MongoDB' : 'MongoDB connection and command diagnostics', exact: true }).waitFor();
+      await page.getByText(locale === 'ar' ? 'انتهاء مهلة اتصال قاعدة البيانات' : 'Socket timeout', { exact: true }).waitFor();
+      await page.getByText('synthetic-correlation-id', { exact: true }).waitFor();
+      assert((await page.getByRole('status').allTextContents()).some((text) => text.includes('120')));
       assert.equal(await page.getByText('999 RPS', { exact: true }).count(), 0, 'Card must not display lifetime RPS');
       assert.deepEqual(premature, []);
       assert.equal(requests.filter((url) => url.endsWith('/auth/me')).length, 1);
@@ -91,6 +100,7 @@ async function main() {
         return main && main.x >= -1 && main.x < 50 && main.width > window.innerWidth - 50;
       });
       await page.screenshot({ path: path.join(output, `metrics-${locale}-mobile.png`), fullPage: false, animations: 'disabled' });
+      await page.getByRole('heading', { name: locale === 'ar' ? 'تشخيص اتصال وأوامر MongoDB' : 'MongoDB connection and command diagnostics', exact: true }).locator('..').screenshot({ path: path.join(output, `driver-${locale}-mobile.png`), animations: 'disabled' });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'No horizontal overflow');
       assert.deepEqual(errors, [], 'No browser runtime errors');
       await context.close();

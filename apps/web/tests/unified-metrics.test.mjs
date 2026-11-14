@@ -30,3 +30,14 @@ test('merges bounded query samples without double counting lifetime aggregates',
   assert.equal(rows[1].count, 1);
   assert.equal(rows[1].coldStartCount, 1);
 });
+
+test('keeps overflow and slow-request counts in their selected route window', () => {
+  const rows = buildRouteRows({ http: {}, traffic: { routes: [{
+    route: 'GET /api/admin/complaints', totalRequests: 4, p95LatencyMs: null,
+    latencyUpperBoundMs: 120000, latencyOverflowRequests: 1, overTenSeconds: 4,
+  }] } });
+  assert.equal(rows[0].p95Ms, null);
+  assert.equal(rows[0].latencyOverflowRequests, 1);
+  assert.equal(rows[0].latencyUpperBoundMs, 120000);
+  assert.equal(rows[0].overTenSeconds, 4);
+});

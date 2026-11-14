@@ -172,7 +172,7 @@ export async function listStudentGrades(studentCode: string, limit = 100) {
 
 export function listStudentComplaints(studentCode: string, limit = 50) {
   return apiGet<PaginatedResponse<ComplaintSummary>>('/admin/complaints', {
-    params: { search: studentCode, limit },
+    params: { search: studentCode, limit, view: 'summary' },
   });
 }
 

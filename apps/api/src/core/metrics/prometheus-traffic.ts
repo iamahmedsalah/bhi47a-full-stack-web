@@ -1,5 +1,6 @@
 import {
   TRAFFIC_WINDOWS,
+  HTTP_LATENCY_MAX_SECONDS,
   type TrafficWindow,
   type HttpTrafficWindow,
   type HttpOutcome,
@@ -15,6 +16,14 @@ export function trafficPromql(window: TrafficWindow, job?: string) {
   const latency = `student_portal_http_request_duration_seconds_bucket${selector()}[${window}]`;
   const outcomes = `student_portal_http_outcomes_total${selector()}[${window}]`;
   const expressions: Record<string, string> = {
+    // A rolling deployment may contain old bucket schemas. Compare window
+    // coverage per series before aggregating incompatible histograms.
+    latencyBucketsCompatible: `sum(count_over_time(student_portal_http_request_duration_seconds_bucket${selector(`le="${HTTP_LATENCY_MAX_SECONDS}"`)}[${window}])) == bool sum(count_over_time(student_portal_http_request_duration_seconds_bucket${selector('le="+Inf"')}[${window}]))`,
+    successfulOverflow: `sum(increase(student_portal_http_request_duration_seconds_bucket${selector('status_code=~"2..",le="+Inf"')}[${window}])) - sum(increase(student_portal_http_request_duration_seconds_bucket${selector(`status_code=~"2..",le="${HTTP_LATENCY_MAX_SECONDS}"`)}[${window}]))`,
+    latencyOverflowRequests: `sum(increase(student_portal_http_request_duration_seconds_bucket${selector('le="+Inf"')}[${window}])) - sum(increase(student_portal_http_request_duration_seconds_bucket${selector(`le="${HTTP_LATENCY_MAX_SECONDS}"`)}[${window}]))`,
+    overTenSeconds: `sum(increase(student_portal_http_request_duration_seconds_bucket${selector('le="+Inf"')}[${window}])) - sum(increase(student_portal_http_request_duration_seconds_bucket${selector('le="10"')}[${window}]))`,
+    routeOverflow: `sum by (method, route) (increase(student_portal_http_request_duration_seconds_bucket${selector('le="+Inf"')}[${window}])) - sum by (method, route) (increase(student_portal_http_request_duration_seconds_bucket${selector(`le="${HTTP_LATENCY_MAX_SECONDS}"`)}[${window}]))`,
+    routeOverTen: `sum by (method, route) (increase(student_portal_http_request_duration_seconds_bucket${selector('le="+Inf"')}[${window}])) - sum by (method, route) (increase(student_portal_http_request_duration_seconds_bucket${selector('le="10"')}[${window}]))`,
     totalRequests: `sum(increase(${requests()}))`,
     requestsPerSecond: `sum(rate(${requests()}))`,
     avgLatencyMs: `1000 * sum(rate(student_portal_http_request_duration_seconds_sum${selector()}[${window}])) / sum(rate(student_portal_http_request_duration_seconds_count${selector()}[${window}]))`,
@@ -57,6 +66,9 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
         totalRequests: number;
         p95LatencyMs: number | null;
         errorCount: number;
+        latencyOverflowRequests: number;
+        latencyUpperBoundMs: number;
+        overTenSeconds: number;
       }>;
       avgDbQueries: number | null;
       p95DbQueries: number | null;
@@ -101,6 +113,9 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
       totalRequests: number;
       p95LatencyMs: number | null;
       errorCount: number;
+      latencyOverflowRequests: number;
+      latencyUpperBoundMs: number;
+      overTenSeconds: number;
     }
   >();
   for (const row of body.data.result) {
@@ -110,17 +125,31 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
     if (kind === 'outcomes')
       outcomes[row.metric.outcome as HttpOutcome] = value;
     else if (kind === 'statusCounts') statuses[row.metric.status_code] = value;
-    else if (['routeCount', 'routeP95', 'routeErrors'].includes(kind)) {
+    else if (
+      [
+        'routeCount',
+        'routeP95',
+        'routeErrors',
+        'routeOverflow',
+        'routeOverTen',
+      ].includes(kind)
+    ) {
       const key = `${row.metric.method} ${row.metric.route}`;
       const route = routes.get(key) ?? {
         route: key,
         totalRequests: 0,
         p95LatencyMs: null,
         errorCount: 0,
+        latencyOverflowRequests: 0,
+        latencyUpperBoundMs: HTTP_LATENCY_MAX_SECONDS * 1000,
+        overTenSeconds: 0,
       };
       if (kind === 'routeCount') route.totalRequests = value;
       if (kind === 'routeP95') route.p95LatencyMs = value;
       if (kind === 'routeErrors') route.errorCount = value;
+      if (kind === 'routeOverflow')
+        route.latencyOverflowRequests = Math.max(0, value);
+      if (kind === 'routeOverTen') route.overTenSeconds = Math.max(0, value);
       routes.set(key, route);
     } else values[kind] = value;
   }
@@ -129,6 +158,19 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
     values.requestsPerSecond === undefined
   )
     throw new Error('Prometheus needs at least two scrapes');
+  if (values.latencyBucketsCompatible !== 1)
+    throw new Error(
+      'Incompatible HTTP latency buckets; use process history until rollout completes',
+    );
+  const overflow = Math.max(0, values.latencyOverflowRequests ?? 0);
+  const percentile = (name: string, quantile: number) =>
+    overflow > values.totalRequests * (1 - quantile)
+      ? null
+      : (values[name] ?? null);
+  for (const route of routes.values()) {
+    if (route.latencyOverflowRequests > route.totalRequests * 0.05)
+      route.p95LatencyMs = null;
+  }
   const group = (prefix: string) =>
     Object.entries(statuses).reduce(
       (sum, [code, count]) => sum + (code.startsWith(prefix) ? count : 0),
@@ -150,9 +192,12 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
     totalRequests: values.totalRequests,
     requestsPerSecond: values.requestsPerSecond,
     avgLatencyMs: values.avgLatencyMs ?? null,
-    p50LatencyMs: values.p50LatencyMs ?? null,
-    p95LatencyMs: values.p95LatencyMs ?? null,
-    p99LatencyMs: values.p99LatencyMs ?? null,
+    p50LatencyMs: percentile('p50LatencyMs', 0.5),
+    p95LatencyMs: percentile('p95LatencyMs', 0.95),
+    p99LatencyMs: percentile('p99LatencyMs', 0.99),
+    latencyUpperBoundMs: HTTP_LATENCY_MAX_SECONDS * 1000,
+    latencyOverflowRequests: overflow,
+    overTenSeconds: Math.max(0, values.overTenSeconds ?? 0),
     status2xx: group('2'),
     status3xx: group('3'),
     status4xx: group('4'),
@@ -167,7 +212,10 @@ export async function prometheusTraffic(window: TrafficWindow): Promise<
             unclassifiedErrors)) /
         values.totalRequests
       : 0,
-    successfulP95LatencyMs: values.successfulP95LatencyMs ?? null,
+    successfulP95LatencyMs:
+      (values.successfulOverflow ?? 0) > group('2') * 0.05
+        ? null
+        : (values.successfulP95LatencyMs ?? null),
     statusCounts: statuses,
     outcomes,
     avgDbQueries: values.avgDbQueries ?? null,

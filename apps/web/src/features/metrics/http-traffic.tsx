@@ -235,6 +235,15 @@ export function HttpTrafficCard({
         </p>
       </div>
 
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        {isAr ? 'المئينات تقديرات من المدرج التكراري. طلبات تتجاوز 10 ثوانٍ:' : 'Percentiles are histogram estimates. Requests over 10 seconds:'}{' '}
+        <bdi>{value(traffic?.overTenSeconds, 0)}</bdi>
+      </p>
+      {(traffic?.latencyOverflowRequests ?? 0) > 0 && <p role="status" className="text-xs text-amber-400">
+        {isAr ? 'توجد طلبات تتجاوز نطاق القياس؛ المئينات خارج النطاق غير متاحة:' : 'Requests exceed the histogram range; overflowing percentiles are unavailable:'}{' '}
+        <bdi>{value(traffic?.latencyOverflowRequests, 0)} &gt; {value((traffic?.latencyUpperBoundMs ?? 0) / 1000)} s</bdi>
+      </p>}
+
       <div className="mt-2 flex flex-wrap gap-2 text-xs font-mono" dir="ltr">
         <span className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-squircle border border-emerald-500/20 font-bold">
           2xx {value(traffic?.status2xx, 0)}

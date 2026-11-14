@@ -25,6 +25,7 @@ import {
   type TrafficWindow,
 } from './http-traffic-window';
 import { prometheusTraffic } from './prometheus-traffic';
+import { MongoDriverDiagnostics } from '../../database/mongo-driver-diagnostics';
 import {
   getRequestQueryContext,
   type RequestQueryMetrics,
@@ -150,6 +151,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   public readonly poolCheckedOut: Gauge<string>;
   public readonly poolWaiters: Gauge<string>;
   public readonly mongoCommandSeconds: Histogram<string>;
+  public readonly mongoDiagnostics: MongoDriverDiagnostics;
   private readonly trafficWindow = new HttpTrafficWindow();
   private readonly recentSlowRequests: Array<Record<string, unknown>> = [];
 
@@ -244,6 +246,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(@Optional() private readonly cacheService?: CacheService) {
     this.registry = new Registry();
+    this.mongoDiagnostics = new MongoDriverDiagnostics(this.registry);
     let previousUtilization = performance.eventLoopUtilization();
     new Gauge({
       name: 'student_portal_nodejs_eventloop_utilization_ratio',
@@ -1023,6 +1026,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
         pingLatencyMs,
         readyState,
         pool: poolConfig,
+        driverDiagnostics: this.mongoDiagnostics.snapshot(),
         totalQueries: this.totalDbQueries,
         slowQueriesCount: this.totalDbSlowQueries,
         slowQueryThresholdMs: METRICS_SLOW_QUERY_THRESHOLD_MS,

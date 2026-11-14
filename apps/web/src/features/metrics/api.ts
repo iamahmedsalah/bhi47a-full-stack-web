@@ -163,6 +163,16 @@ export interface MetricsSummaryResponse {
     pingLatencyMs: number;
     readyState: number;
     pool?: { minPoolSize: number; maxPoolSize: number };
+    driverDiagnostics?: {
+      scope: 'process'; checkedOut: number; waiters: number; poolClears: number;
+      checkout: { count: number; failures: number; avgMs: number | null; maxMs: number | null };
+      commands: Array<{ command: string; count: number; failures: number; avgMs: number; maxMs: number }>;
+      recentFailures: Array<{
+        timestamp: string; kind: 'command' | 'checkout' | 'heartbeat' | 'operation'; command: string;
+        durationMs: number; category: string; errorName: string; code?: string | number;
+        requestId?: string; stage?: string; operation?: string;
+      }>;
+    };
     totalQueries: number;
     slowQueriesCount: number;
     slowQueryThresholdMs?: number;
@@ -210,7 +220,10 @@ export interface HttpTraffic {
   statusCounts: Record<string, number>; outcomes: Record<string, number>;
   avgDbQueries?: number | null; p95DbQueries?: number | null;
   successfulP95LatencyMs?: number | null;
-  routes: Array<{ route: string; totalRequests: number; p95LatencyMs: number | null; errorCount?: number; status4xx?: number; status5xx?: number }>;
+  latencyUpperBoundMs?: number;
+  latencyOverflowRequests?: number;
+  overTenSeconds?: number;
+  routes: Array<{ route: string; totalRequests: number; p95LatencyMs: number | null; errorCount?: number; status4xx?: number; status5xx?: number; latencyUpperBoundMs?: number; latencyOverflowRequests?: number; overTenSeconds?: number }>;
 }
 
 export interface LockedAccountItem {

@@ -198,7 +198,6 @@ UserSchema.index({ role: 1, userCode: -1 });
 UserSchema.index({ role: 1, studentCode: -1 });
 UserSchema.index({ lockUntil: 1 });
 UserSchema.index({ deactivatedAt: 1 });
-UserSchema.index({ role: 1, isActive: 1, lastLoginAt: -1 });
 
 UserSchema.set('toJSON', {
   transform: (_doc, ret) => {

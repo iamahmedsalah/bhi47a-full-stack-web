@@ -1,6 +1,28 @@
 import { HttpTrafficWindow, classifyHttpOutcome } from './http-traffic-window';
 
 describe('window traffic semantics', () => {
+  it('measures the 26-second tail and reports overflow without a fabricated percentile', () => {
+    const traffic = new HttpTrafficWindow(() => 60_000);
+    traffic.record('GET', '/api/admin/complaints', 200, 26.4, 'success');
+    expect(traffic.summary('5m')).toMatchObject({
+      overTenSeconds: 1,
+      latencyOverflowRequests: 0,
+      latencyUpperBoundMs: 120_000,
+    });
+    expect(traffic.summary('5m').p95LatencyMs).toBeGreaterThan(26_000);
+    traffic.record('GET', '/api/admin/complaints', 200, 130, 'success');
+    expect(traffic.summary('5m')).toMatchObject({
+      p95LatencyMs: null,
+      p99LatencyMs: null,
+      latencyOverflowRequests: 1,
+      routes: [
+        expect.objectContaining({
+          p95LatencyMs: null,
+          latencyOverflowRequests: 1,
+        }),
+      ],
+    });
+  });
   it('expires old traffic, reports idle RPS as zero and keeps security rejections separate from 5xx', () => {
     let now = 60_000;
     const traffic = new HttpTrafficWindow(() => now);

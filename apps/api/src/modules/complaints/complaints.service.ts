@@ -573,7 +573,10 @@ export class ComplaintsService {
 
   async findByStudent(studentId: string, query: QueryComplaintDto = {}) {
     const { page, limit, skip } = buildPaginationOptions(query);
-    const student = await this.userModel.findById(studentId);
+    const student = await this.userModel
+      .findById(studentId)
+      .select('studentCode')
+      .lean();
     const filter: any = {
       $or: [
         { studentId: new Types.ObjectId(studentId) },

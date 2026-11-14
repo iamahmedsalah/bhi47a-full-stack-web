@@ -1,4 +1,4 @@
-import type { Schema } from 'mongoose';
+import type { CallbackError, Schema } from 'mongoose';
 import type { MetricsService } from '../core/metrics/metrics.service';
 import type { AppLoggerService } from '../core/logger/logger.service';
 import { METRICS_SLOW_QUERY_THRESHOLD_MS } from '../core/metrics/metrics.constants';
@@ -168,6 +168,48 @@ export function createMongooseMetricsPlugin(
         }
       }
     });
+
+    // Query error middleware also sees server selection / acquisition failures
+    // that happen before any driver commandStarted/commandFailed event.
+    // Mongoose overloads do not type mixed query/aggregate hook arrays.
+    schema.post(
+      [...queryMethods, 'aggregate'] as any,
+      function (
+        this: { _startTime?: bigint; op?: string },
+        error: CallbackError,
+        _result: unknown,
+        next: (error?: CallbackError) => void,
+      ) {
+        try {
+          const context = getRequestQueryContext();
+          const operation = queryMethods.some((method) => method === this.op)
+            ? this.op
+            : 'aggregate';
+          const durationMs = this._startTime
+            ? Number(process.hrtime.bigint() - this._startTime) / 1e6
+            : 0;
+          const sample = metricsService?.mongoDiagnostics?.failure(
+            'operation',
+            'other',
+            durationMs,
+            error,
+            {
+              requestId: context?.request.requestId,
+              stage: context?.stage,
+              operation,
+            },
+          );
+          if (sample && metricsService?.mongoDiagnostics.shouldLogFailure())
+            logger?.warn('MongoDB operation failure', {
+              context: 'MongooseMetrics',
+              ...sample,
+            });
+        } catch {
+          // Diagnostics must never replace the original database error.
+        }
+        next(error);
+      },
+    );
 
     // 2. Aggregate hooks
     schema.pre('aggregate', function (this: any) {
