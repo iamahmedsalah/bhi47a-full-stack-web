@@ -1479,14 +1479,17 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     ).rejects.toBeInstanceOf(BadRequestException);
     const course = await connection.models.Course.findOne({
       code: dto.courseCode,
-    }).lean();
+    })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }>();
+    if (!course) throw new Error('Synthetic reset course fixture is missing');
     const before = await gradeModel.countDocuments({
       courseCode: 'SYNTH101',
       cleared: { $ne: true },
     });
     const historyCount = await connection
       .db!.collection('control_releases')
-      .countDocuments({ 'scope.courseId': course!._id });
+      .countDocuments({ 'scope.courseId': course._id });
     const leaseId = new Types.ObjectId('0000000000000000000000c1');
     await connection.db!.collection('control_reconciliation_leases').updateOne(
       { _id: leaseId },
@@ -1530,12 +1533,12 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     expect(
       await connection
         .db!.collection('control_release_pointers')
-        .countDocuments({ 'scope.courseId': course!._id, active: true }),
+        .countDocuments({ 'scope.courseId': course._id, active: true }),
     ).toBe(0);
     expect(
       await connection
         .db!.collection('control_releases')
-        .countDocuments({ 'scope.courseId': course!._id }),
+        .countDocuments({ 'scope.courseId': course._id }),
     ).toBe(historyCount);
     const summary = await sheets.listCourses(actor, {
       academicYear: year,
@@ -1553,7 +1556,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     ).toBe(true);
     expect(
       await auditModel.countDocuments({
-        courseId: course!._id,
+        courseId: course._id,
         action: 'CLEAR',
         reason: dto.reason,
       }),
