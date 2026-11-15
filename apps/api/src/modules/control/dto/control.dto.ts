@@ -54,6 +54,20 @@ export class ControlTermQueryDto {
   level?: CourseLevel;
 }
 
+export class ControlTemplateQueryDto {
+  @IsIn(CONTROL_COMPONENT_KEYS)
+  component!: ControlComponentKey;
+
+  @IsOptional()
+  @IsIn(['workbook', 'missing', 'exceptions'])
+  mode?: 'workbook' | 'missing' | 'exceptions';
+}
+
+export class ControlReportQueryDto extends ControlTermQueryDto {
+  @IsIn(['course', 'round-table'])
+  type!: 'course' | 'round-table';
+}
+
 export class OpenSheetDto extends ControlTermQueryDto {
   @ApiProperty()
   @IsMongoId()

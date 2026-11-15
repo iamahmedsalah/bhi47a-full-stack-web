@@ -161,6 +161,41 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it.each(['coursework', 'midterm', 'final'] as const)(
+    'round trips the single-sheet %s entry template without extra tabs',
+    async (component) => {
+      const ctx = build(component);
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.load(
+        await ctx.service.template(ctx.user, ctx.sheetId, component),
+      );
+      expect(book.worksheets).toHaveLength(1);
+      const page = book.worksheets[0];
+      expect(page.name).toMatch(/^رصد /);
+      expect(page.getColumn(9).hidden).toBe(true);
+      expect(page.getColumn(7).hidden).toBe(true);
+      page.getCell('C2').value = component === 'coursework' ? 17 : 18;
+      if (component === 'coursework') {
+        page.getCell('E2').value = 4;
+        page.getCell('F2').value = 13;
+      }
+      const result = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.valid).toBe(1);
+      page.getCell('N1').value = component === 'final' ? 'midterm' : 'final';
+      await expect(
+        ctx.service.previewFile(
+          ctx.user,
+          ctx.sheetId,
+          Buffer.from(await book.xlsx.writeBuffer()),
+        ),
+      ).rejects.toThrow('Download the template for this sheet');
+    },
+  );
   it('skips unchanged rows from an older template but rejects stale changed marks', async () => {
     const ctx = build();
     ctx.rows[0].components = {
@@ -461,12 +496,42 @@ describe('Control workbook import and review', () => {
     expect(computeCoursework(5, 15)).toBe(20);
     expect(computeCoursework(6, 15)).toBeNull();
   });
-  it('rejects special statuses without their additional permission and reason', async () => {
+  it('rejects special statuses without their additional permission', async () => {
     const ctx = build();
     const result = await ctx.service.preview(ctx.user, ctx.sheetId, [
       { ...ctx.row, score: '', status: 'excused' },
     ]);
     expect(result.valid).toBe(0);
+  });
+  it.each(['banned', 'incomplete', 'excused', 'withheld'] as const)(
+    'previews %s imports with an optional reason',
+    async (status) => {
+      const ctx = build();
+      ctx.access.getCapabilities = () => ({ canManageStates: true });
+      const result = await ctx.service.preview(ctx.user, ctx.sheetId, [
+        { ...ctx.row, status, score: status === 'withheld' ? 12 : '' },
+      ]);
+      expect(result.errors).toEqual([]);
+      expect(result.valid).toBe(1);
+      expect(result.changes[0].reason).toBeUndefined();
+    },
+  );
+  it('round trips a banned XLSX status without a reason', async () => {
+    const ctx = build();
+    ctx.access.getCapabilities = () => ({ canManageStates: true });
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(
+      await ctx.service.template(ctx.user, ctx.sheetId, 'midterm'),
+    );
+    book.worksheets[0].getCell('C2').value = 0;
+    book.worksheets[0].getCell('D2').value = 'محروم';
+    const result = await ctx.service.previewFile(
+      ctx.user,
+      ctx.sheetId,
+      Buffer.from(await book.xlsx.writeBuffer()),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.changes[0]).toMatchObject({ status: 'banned', score: null });
   });
   it('rejects a stale template scheme version', async () => {
     const ctx = build();

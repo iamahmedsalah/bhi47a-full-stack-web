@@ -751,9 +751,16 @@ const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>
 );
 
 const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = {
+  'Special status requires state-management permission': { ar: 'تغيير هذه الحالة يتطلب صلاحية إدارة الحالات الخاصة. السبب اختياري.', en: 'Changing this exam status requires state-management permission. The reason is optional.' },
+  'Consolidated report is too large': { ar: 'حجم التقرير المجمع يتجاوز الحد المسموح. راجع نطاق المستوى وعدد المقررات.', en: 'The consolidated report exceeds the supported size. Check the level and course scope.' },
+  'Report term must match the open workbook': { ar: 'اختر السنة والترم من قائمة الكنترول ثم افتح الكشف المطلوب قبل تنزيل التقرير.', en: 'Select the year and term in Control and open the matching workbook before downloading the report.' },
+  'Select a level for the consolidated report': { ar: 'اختر المستوى الدراسي لتنزيل التقرير المجمع.', en: 'Select a level for the consolidated report.' },
+  'Consolidated reports require all-course scope': { ar: 'التقرير المجمع يتطلب صلاحية الوصول لجميع المقررات. يمكنك تنزيل تقرير المادة ضمن نطاقك.', en: 'Consolidated reports require all-course scope. You can download an authorized course report instead.' },
+  'Report requires between 1 and 100 level courses': { ar: 'لا توجد مواد مناسبة للمستوى والترم، أو تجاوز عدد المواد 100. راجع إعدادات المقررات.', en: 'No matching level/term courses were found, or the 100-course report limit was exceeded. Check course settings.' },
+  'Maximum 10000 students per report': { ar: 'التقرير يدعم حتى 10000 طالب. راجع نطاق المستوى قبل إعادة المحاولة.', en: 'Reports support up to 10,000 students. Check the selected level scope before retrying.' },
   CONTROL_IMPORT_EMPTY: {
-    ar: 'الملف لا يحتوي على صفوف طلاب. قد يكون كشف الدرجات الناقصة فارغًا لأن الرصد مكتمل. نزّل الكشف الكامل، وعدّل الدرجة في ورقة Marks ثم أعد رفعه.',
-    en: 'This file has no student rows. A missing-grades export can be empty when entry is complete. Download the full workbook, edit the mark on Marks, then upload again.',
+    ar: 'الملف لا يحتوي على صفوف طلاب. قد يكون كشف الدرجات الناقصة فارغًا لأن الرصد مكتمل. نزّل الكشف الكامل، وعدّل الدرجة في ورقة الرصد ثم أعد رفعه.',
+    en: 'This file has no student rows. A missing-grades export can be empty when entry is complete. Download the full workbook, edit its entry worksheet, then upload again.',
   },
   SCHEME_FROZEN: {
     ar: 'لا يمكن تغيير الدرجة العظمى أو خطوة الإدخال أو تفعيل مكوّن بعد رصد درجاته. احتفظ بالإعدادات الحالية، أو استخدم فصلًا جديدًا. لتصحيح بيانات التجربة يستطيع admin تصفير المقرر أولًا؛ لا يكفي فك قفل الكشف.',

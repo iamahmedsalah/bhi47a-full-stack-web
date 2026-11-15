@@ -538,9 +538,6 @@ export class ControlGradesService {
           'Setting this state requires control.states.manage',
         );
       }
-      if (!reason || reason.length < 3) {
-        return reject('invalid', 'reason_required', 'A reason is required');
-      }
     }
 
     if (existing?.isPublished) {

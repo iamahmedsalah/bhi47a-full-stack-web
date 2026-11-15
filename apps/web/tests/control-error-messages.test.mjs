@@ -49,8 +49,8 @@ test('Strict grading DTO failures do not leak raw nested property paths to the o
 });
 
 test('empty missing-grade exports explain recovery in both languages', () => {
-  assert.match(messages('en')('Conflict', 'CONTROL_IMPORT_EMPTY'), /full workbook.*Marks/);
-  assert.match(messages('ar')('Conflict', 'CONTROL_IMPORT_EMPTY'), /الكشف الكامل.*Marks/);
+  assert.match(messages('en')('Conflict', 'CONTROL_IMPORT_EMPTY'), /full workbook.*entry worksheet/);
+  assert.match(messages('ar')('Conflict', 'CONTROL_IMPORT_EMPTY'), /الكشف الكامل.*الرصد/);
 });
 test('mark errors include the configured maximum and increment in both languages', () => {
   assert.match(messages('en')('Row 2: Mark rule: off_step; max=20; step=0.5'), /Row 2:.*increment.*20.*0.5/);

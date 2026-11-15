@@ -250,7 +250,31 @@ describe('ControlGradesService.applyChanges', () => {
     });
   });
 
-  it('requires control.states.manage and a reason for excused', async () => {
+  it.each(['banned', 'incomplete', 'excused', 'withheld'] as const)(
+    'saves %s without a reason while retaining state permissions',
+    async (status) => {
+      const score = status === 'withheld' ? 12 : undefined;
+      const allowed = build({ caps: { canManageStates: true } });
+      const result = await allowed.service.applyChanges(
+        allowed.user,
+        allowed.sheetId,
+        { changes: [allowed.change({ status, score })] },
+      );
+      expect(result.results[0].result).toBe('ok');
+      expect(allowed.auditModel.insertMany).toHaveBeenCalledTimes(1);
+      const denied = build({});
+      const forbidden = await denied.service.applyChanges(
+        denied.user,
+        denied.sheetId,
+        { changes: [denied.change({ status, score })] },
+      );
+      expect(forbidden.results[0]).toMatchObject({
+        result: 'forbidden',
+        code: 'states_permission',
+      });
+    },
+  );
+  it('requires control.states.manage but permits excused without a reason', async () => {
     const denied = build({});
     const deniedRes = await denied.service.applyChanges(
       denied.user,
@@ -278,10 +302,7 @@ describe('ControlGradesService.applyChanges', () => {
         changes: [noReason.change({ score: undefined, status: 'excused' })],
       },
     );
-    expect(noReasonRes.results[0]).toMatchObject({
-      result: 'invalid',
-      code: 'reason_required',
-    });
+    expect(noReasonRes.results[0].result).toBe('ok');
 
     const ok = build({ caps: { canManageStates: true } });
     const okRes = await ok.service.applyChanges(ok.user, ok.sheetId, {

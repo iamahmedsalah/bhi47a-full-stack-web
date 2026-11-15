@@ -176,6 +176,114 @@ export class ControlWorkbookService {
     };
   }
 
+  async template(
+    user: AuthenticatedUser,
+    sheetId: string,
+    component: (typeof CONTROL_COMPONENT_KEYS)[number],
+    mode: 'workbook' | 'missing' | 'exceptions' = 'workbook',
+  ) {
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_EXPORT);
+    const detail = await this.sheetService.getSheet(user, sheetId);
+    const { rows, scheme } = await this.workbook(user, sheetId);
+    const rules = scheme.components.find((item) => item.key === component)!;
+    const labels = {
+      coursework: 'أعمال السنة',
+      midterm: 'الميدتيرم',
+      final: 'النهائي',
+    };
+    const book = new ExcelJS.Workbook();
+    const page = book.addWorksheet(`رصد ${labels[component]}`);
+    page.addRow([
+      'كود الطالب (studentCode)',
+      'اسم الطالب (name)',
+      'الدرجة (score)',
+      'حالة الطالب (status)',
+      'درجة الحضور (attendanceMark)',
+      'درجة الاختبارات (quizzesMark)',
+      'رقم المراجعة (expectedRev)',
+      'السبب / الملاحظة (reason)',
+    ]);
+    for (const row of rows) {
+      const entry = row.components[component];
+      if (mode === 'missing' && entry?.status) continue;
+      if (
+        mode === 'exceptions' &&
+        !row.notRegistered &&
+        (!entry?.status || entry.status === 'present')
+      )
+        continue;
+      page.addRow([
+        row.studentCode,
+        row.nameAr || row.name,
+        entry?.status === 'absent' || entry?.status === 'banned'
+          ? 0
+          : (entry?.score ?? ''),
+        entry?.status ? STATUS_ARABIC_LABELS[entry.status] : '',
+        entry?.attendanceMark ?? '',
+        entry?.quizzesMark ?? '',
+        entry?.rev ?? 0,
+        '',
+      ]);
+    }
+    // Scope metadata stays in hidden columns on the same sheet, never a second tab.
+    [
+      '__control_template_v1',
+      detail.course.id,
+      scheme.version,
+      detail.sheet.academicYear,
+      detail.sheet.semester,
+      component,
+    ].forEach((value, index) => {
+      page.getRow(1).getCell(index + 9).value = value;
+      page.getColumn(index + 9).hidden = true;
+    });
+    page.getColumn(7).hidden = true;
+    if (component !== 'coursework') {
+      page.getColumn(5).hidden = true;
+      page.getColumn(6).hidden = true;
+    }
+    page.columns.forEach((column, index) => {
+      column.width = index === 1 ? 40 : 23;
+    });
+    page.views = [{ rightToLeft: true, state: 'frozen', xSplit: 2, ySplit: 1 }];
+    page.autoFilter = 'A1:H1';
+    page.getRow(1).height = 30;
+    page.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    });
+    page.eachRow((row, index) => {
+      if (index === 1) return;
+      row.height = 25;
+      row.getCell(1).numFmt = '@';
+      row.getCell(3).dataValidation = {
+        type: 'decimal',
+        operator: 'between',
+        allowBlank: true,
+        formulae: [0, rules.max],
+        showErrorMessage: true,
+        errorTitle: 'درجة غير صحيحة / Invalid mark',
+        error: `0–${rules.max}; step ${rules.step}`,
+      };
+      row.getCell(4).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${Object.values(STATUS_ARABIC_LABELS).join(',')}"`],
+      };
+      for (const column of [3, 4, 5, 6, 8])
+        row.getCell(column).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F4F1' },
+        };
+    });
+    return book.xlsx.writeBuffer();
+  }
+
   async review(user: AuthenticatedUser, sheetId: string, dto: ReviewSheetDto) {
     const { sheet: targetSheet, course } =
       await this.sheetService.requireSheetInScope(user, sheetId);
@@ -662,8 +770,8 @@ export class ControlWorkbookService {
       ],
       [
         '5. الحالات الخاصة والسبب (reason)',
-        'للغياب أو الحرمان: اترك الدرجة فارغة أو اكتب صفرًا. لبعذر أو غير مكتمل: اتركها فارغة. حالات بعذر ومحروم ومحجوبة وغير مكتمل تتطلب سببًا واضحًا (3 أحرف على الأقل). الصفوف غير المعدّلة تُتخطّى تلقائيًا. الحرمان في النهائي = FX، وغير المكتمل = IC، والرسوب = F؛ تظل درجات الميدتيرم وأعمال السنة محفوظة.',
-        'For absent/banned, leave score empty or enter 0. Excused/incomplete require an empty score. Restricted states require a reason (min 3 chars). Unchanged rows are skipped. A banned final is FX, incomplete is IC and failure is F; midterm/coursework contributions are preserved.',
+        'للغياب أو الحرمان: اترك الدرجة فارغة أو اكتب صفرًا. لبعذر أو غير مكتمل: اتركها فارغة. السبب اختياري للحالات الخاصة والأعذار؛ تظل صلاحية إدارة الحالات مطلوبة. الصفوف غير المعدلة تُتخطى تلقائيًا. الحرمان في النهائي = FX، وغير المكتمل = IC، والرسوب = F؛ تظل درجات الميدتيرم وأعمال السنة محفوظة.',
+        'For absent/banned, leave score empty or enter 0. Excused/incomplete require an empty score. Reasons are optional for special statuses; state-management permission is still required. Unchanged rows are skipped. A banned final is FX, incomplete is IC and failure is F; midterm/coursework contributions are preserved.',
       ],
       [
         '6. رقم المراجعة (expectedRev)',
@@ -764,18 +872,30 @@ export class ControlWorkbookService {
     } catch {
       throw new BadRequestException('Invalid XLSX workbook');
     }
-    const page = book.getWorksheet('Marks');
+    const compact =
+      book.worksheets.length === 1 &&
+      book.worksheets[0].getCell('I1').text === '__control_template_v1'
+        ? book.worksheets[0]
+        : undefined;
+    const page = compact ?? book.getWorksheet('Marks');
     const scope = book.getWorksheet('Scope');
     const scopeSheetId = scope?.getCell('B1').text?.trim() ?? '';
     const scopeSlug = scope?.getCell('B10').text?.trim() ?? '';
+    const compactMatch =
+      compact &&
+      compact.getCell('J1').text === detail.course.id &&
+      compact.getCell('L1').text === detail.sheet.academicYear &&
+      compact.getCell('M1').text === detail.sheet.semester &&
+      compact.getCell('N1').text === detail.sheet.component;
     const isScopeMatch =
-      Boolean(page && scope) &&
-      (scopeSheetId === sheetId ||
-        scopeSheetId === detail.sheet.id ||
-        (Boolean(detail.sheet.slug) &&
-          (scopeSheetId === detail.sheet.slug ||
-            scopeSlug === detail.sheet.slug)));
-    if (!page || !scope || !isScopeMatch)
+      compactMatch ||
+      (Boolean(page && scope) &&
+        (scopeSheetId === sheetId ||
+          scopeSheetId === detail.sheet.id ||
+          (Boolean(detail.sheet.slug) &&
+            (scopeSheetId === detail.sheet.slug ||
+              scopeSlug === detail.sheet.slug))));
+    if (!page || !isScopeMatch)
       throw new BadRequestException('Download the template for this sheet');
     if (page.rowCount > 10001 || page.columnCount > 20)
       throw new BadRequestException('Maximum 10000 rows per file');
@@ -894,7 +1014,7 @@ export class ControlWorkbookService {
       user,
       sheetId,
       rows.slice(batch * 500, (batch + 1) * 500),
-      Number(scope.getCell('B5').text),
+      Number(compact ? compact.getCell('K1').text : scope!.getCell('B5').text),
     );
     return {
       ...preview,
@@ -1045,11 +1165,9 @@ export class ControlWorkbookService {
           (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
             current?.status ?? '',
           )) &&
-        (!this.access.getCapabilities(user).canManageStates ||
-          typeof row.reason !== 'string' ||
-          row.reason.trim().length < 3)
+        !this.access.getCapabilities(user).canManageStates
       ) {
-        fail('Special status requires permission and a reason');
+        fail('Special status requires state-management permission');
         continue;
       }
       if (current?.isPublished) {

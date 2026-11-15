@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ControlWorkbookService } from './services/control-workbook.service';
+import { ControlReportsService } from './services/control-reports.service';
+import {
+  ControlTemplateQueryDto,
+  ControlReportQueryDto,
+} from './dto/control.dto';
 import {
   ReviewSheetDto,
   CommitImportDto,
@@ -61,7 +66,51 @@ export class ControlController {
     private readonly sheets: ControlSheetsService,
     private readonly grades: ControlGradesService,
     private readonly schemes: GradingSchemeService,
+    private readonly reports: ControlReportsService,
   ) {}
+
+  @Get('sheets/:id/template')
+  async template(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query() query: ControlTemplateQueryDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.workbook.template(
+      user,
+      id,
+      query.component,
+      query.mode,
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="control-${query.component}-template.xlsx"; filename*=UTF-8''control-${query.component}-template.xlsx`,
+    );
+    res.send(Buffer.from(buffer));
+  }
+
+  @Get('sheets/:id/report')
+  async report(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query() query: ControlReportQueryDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.reports.export(user, id, query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="control-${query.type}-report.xlsx"; filename*=UTF-8''control-${query.type}-report.xlsx`,
+    );
+    res.send(Buffer.from(buffer));
+  }
 
   @Get('sheets/:id/workbook')
   getWorkbook(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {

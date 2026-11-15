@@ -524,7 +524,7 @@ export function ControlGrid({
         }
       }
 
-      if (needsReasonItems.length > 0 && !providedReason) {
+      if (needsReasonItems.some((item) => rowById.get(item.studentId)?.isPublished) && !providedReason) {
         setPromptReasonText('');
         setReasonPrompt({
           open: true,
@@ -532,8 +532,8 @@ export function ControlGrid({
             ? 'سبب التعديل مطلوب للتدقيق'
             : 'Mandatory Reason Required',
           description: isAr
-            ? 'تعديل درجة منشورة أو تعيين حالة خاصة يتطلب كتابة سبب واضح يُحفظ في سجل التدقيق.'
-            : 'Editing a published mark or setting a special status requires a reason for the audit log.',
+            ? 'تعديل درجة منشورة يتطلب سببًا للتدقيق. أسباب الحالات الخاصة والأعذار اختيارية.'
+            : 'Editing a published mark requires a reason for the audit log. Exam-status reasons are optional.',
           pendingChanges: items.map(({ studentId, score, status }) => ({
             studentId,
             score,

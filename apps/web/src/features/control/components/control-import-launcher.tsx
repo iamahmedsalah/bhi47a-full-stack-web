@@ -109,8 +109,8 @@ export function ControlImportLauncher({
               </h3>
               <p className="text-xs text-muted-foreground">
                 {ar
-                  ? "عدّل ورقة Marks. باقي المكونات للعرض، وبيانات المراجعة محفوظة للتحقق."
-                  : "Edit Marks. Other components are reference only; revision metadata protects concurrent edits."}
+                  ? "عدّل ورقة الرصد للمكوّن المطلوب. احتفظ بالأعمدة المخفية؛ فهي تحمي درجاتك من استبدال تعديل أحدث."
+                  : "Edit the selected component's entry worksheet. Keep hidden columns; revision metadata protects concurrent edits."}
               </p>
             </div>
           </div>

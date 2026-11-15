@@ -17,7 +17,7 @@ await fs.mkdir(output, { recursive: true });
 const write = (name, source) => fs.writeFile(path.join(output, name), source);
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
 await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const nativeReplace=history.replaceState.bind(history);history.replaceState=(...args)=>{nativeReplace(...args);window.dispatchEvent(new PopStateEvent('popstate'));};const router={push:url=>{location.href=url;},replace:url=>{window.__serverNavigations=(window.__serverNavigations||0)+1;history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));}};export const useRouter=()=>router;export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(useSyncExternalStore(subscribe,()=>location.search));`);
-await write('api.ts', `const call=async(method,url,body,config)=>{const r=await fetch(url,{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})});if(!r.ok){const error=await r.json();throw Object.assign(new Error(error.message),error);}return config?.responseType==='blob'?r.blob():{success:true,data:await r.json(),timestamp:new Date().toISOString()};};export const getApiErrorDetails=e=>({code:e.code,message:e.message});export const getApiErrorMessage=e=>e.message;export default {get:(u,c)=>call('GET',u,null,c),post:(u,b)=>call('POST',u,b),patch:(u,b)=>call('PATCH',u,b)};`);
+await write('api.ts', `const call=async(method,url,body,config)=>{const target=new URL(url,location.origin);for(const [k,v] of Object.entries(config?.params??{}))target.searchParams.set(k,String(v));const r=await fetch(target,{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})});if(!r.ok){const error=await r.json();throw Object.assign(new Error(error.message),error);}return config?.responseType==='blob'?r.blob():{success:true,data:await r.json(),timestamp:new Date().toISOString()};};export const getApiErrorDetails=e=>({code:e.code,message:e.message});export const getApiErrorMessage=e=>e.message;export default {get:(u,c)=>call('GET',u,null,c),post:(u,b)=>call('POST',u,b),patch:(u,b)=>call('PATCH',u,b)};`);
 await write('entry.tsx', `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';import {Toaster} from 'sonner';import {ControlWorkbookGrid} from '${path.join(web, 'src/features/control/components/control-workbook-grid.tsx').replaceAll('\\','/')}';import ar from '${path.join(web,'src/messages/ar.json').replaceAll('\\','/')}';import en from '${path.join(web,'src/messages/en.json').replaceAll('\\','/')}';const locale=location.pathname.split('/')[1];const id=location.pathname.split('/').at(-1);const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});function App(){const [search,setSearch]=useState('');const [show,setShow]=useState(true);const {data}=useQuery({queryKey:['control','sheet',id],queryFn:()=>fetch('/admin/control/sheets/'+id).then(r=>r.json())});return data?<main className="p-6"><h1 className="text-2xl mb-5">{locale==='ar'?'دفتر درجات الكنترول':'Control grade workbook'}</h1><button onClick={()=>setShow(!show)}>Toggle fixture editor</button>{show&&<ControlWorkbookGrid principalId="fixture-user" sheetDetails={data} locale={locale} search={search} onSearchChange={setSearch} onOpenScheme={()=>{}} onOpenSheetAudit={()=>{}} onOpenRowAudit={()=>{}} onLockToggleRequest={()=>{}}/>}</main>:null}document.documentElement.dir=locale==='ar'?'rtl':'ltr';createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><App/><Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
 await new Promise((resolve, reject) => webpack({ mode: 'development', devtool: false, context: web,
   entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' },
@@ -28,15 +28,17 @@ const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({bas
 await write('styles.css',css.css);
 const ids = { midterm: '100000000000000000000001', coursework: '100000000000000000000002', final: '100000000000000000000003' };
 const components = Object.entries(ids).map(([key])=>({key,nameAr:{midterm:'الميدتيرم',coursework:'أعمال السنة',final:'النهائي'}[key],nameEn:key,max:key==='final'?60:20,step:0.5,enabled:true}));
+const downloadRequests=[];
 let denySave = false, writes = 0, schemeVersion = 1;
 const states = Object.fromEntries(Object.keys(ids).map(k=>[k,{revision:0,workflowState:'DRAFT'}]));
 const rows = Array.from({length:3001},(_,i)=>({studentId:(i+1).toString(16).padStart(24,'0'), studentCode:String(260001+i), name:`Synthetic Student ${i+1}`,nameAr:`طالب تجريبي ${i+1}`,notRegistered:false,components:{},result:{total:null,totalMax:100,complete:false}}));
-const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT',canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canLock:true,canUnlock:true}});
+const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT',canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
 let workbookReads=0;
 const server = http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     if(url.pathname.startsWith('/admin/control/')) {
+      if(url.pathname.endsWith('/template')||url.pathname.endsWith('/report')){downloadRequests.push({path:url.pathname,...Object.fromEntries(url.searchParams)});res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');return res.end(Buffer.from('synthetic workbook; real XLSX tested at API'));}
       res.setHeader('Content-Type','application/json');
       const key=Object.keys(ids).find(k=>url.pathname.includes(ids[k])) || 'midterm';
       if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,componentStates:Object.fromEntries(Object.entries(states).map(([k,v])=>[k,v.workflowState])),scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
@@ -64,7 +66,33 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
+  assert.equal(await page.getByRole('button',{name:'Export missing marks',exact:true}).count(),0);
+  await page.getByRole('button',{name:'Templates',exact:true}).click();
+  const templates=page.getByRole('dialog');
+  await templates.getByRole('button',{name:'Entry component',exact:true}).click();
+  await page.getByRole('option',{name:'final',exact:true}).click();
+  const templateDownload=page.waitForEvent('download');await templates.getByRole('button',{name:'Download Excel',exact:true}).click();await templateDownload;
+  assert.equal(downloadRequests.at(-1).component,'final');assert.equal(downloadRequests.at(-1).mode,'workbook');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Control reports',exact:true}).click();
+  const reports=page.getByRole('dialog');
+  await reports.getByRole('button',{name:'Report type',exact:true}).click();
+  await page.getByRole('option',{name:'Consolidated report (Round table)',exact:true}).click();
+  await reports.getByRole('button',{name:'Level',exact:true}).click();await page.getByRole('option',{name:'Level 2',exact:true}).click();
+  const reportDownload=page.waitForEvent('download');await reports.getByRole('button',{name:'Download Excel',exact:true}).click();await reportDownload;
+  assert.equal(downloadRequests.at(-1).type,'round-table');assert.equal(downloadRequests.at(-1).level,'2');assert.equal(downloadRequests.at(-1).semester,'first');
+  await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('columnheader').count(),11);
+  const optionalReason=page.getByRole('textbox',{name:'Reason (optional for exam statuses and excuses)',exact:true});
+  assert.equal(await optionalReason.inputValue(),'');
+  for(const state of ['Banned','Incomplete','Excused']) {
+    await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
+    await page.getByRole('option',{name:state,exact:true}).click();
+    await page.getByRole('status').getByText(/All changes saved/).waitFor();
+    assert.equal(await optionalReason.inputValue(),'');
+    assert.equal(rows[0].components.midterm.status,{Banned:'banned',Incomplete:'incomplete',Excused:'excused'}[state]);
+    assert.equal(rows[0].components.midterm.score,null);
+  }
   assert.equal(await page.locator('tbody tr').count(),100);
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('textbox',{name:'260101 Midterm',exact:true}).waitFor();
@@ -84,6 +112,17 @@ try {
   await page.goto(`${base}/ar/admin/control/${ids.midterm}`);await page.getByRole('textbox',{name:'260001 الميدتيرم',exact:true}).waitFor();
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
+  await page.getByRole('button',{name:'نماذج',exact:true}).click();
+  await page.getByRole('heading',{name:'نماذج الرصد',exact:true}).waitFor();
+  await page.screenshot({path:path.join(output,'arabic-templates.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'تقرير الكنترول',exact:true}).click();
+  await page.getByRole('heading',{name:'تقرير الكنترول',exact:true}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:path.join(output,'arabic-reports-mobile.png'),fullPage:true});
+  const reportAction=await page.getByRole('dialog').getByRole('button',{name:'تنزيل Excel',exact:true}).boundingBox();
+  assert.ok(reportAction && reportAction.y+reportAction.height<=844,'report download stays accessible on mobile');
+  await page.keyboard.press('Escape');await page.setViewportSize({width:1500,height:950});
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('263001');
   await page.getByRole('textbox',{name:'263001 '+messages.midterm,exact:true}).waitFor();
   assert.equal(await page.locator('tbody tr').count(),1);

@@ -1,4 +1,6 @@
 import { StudentProfileSchema } from '../../src/modules/students/schemas/student-profile.schema';
+import type { Row as ExcelRow } from 'exceljs';
+import { ControlReportsService } from '../../src/modules/control/services/control-reports.service';
 import { EXAM_TYPE_VALUES, PERMISSIONS } from '@student-portal/shared';
 import { SystemSettingsSchema } from '../../src/modules/complaints/schemas/system-settings.schema';
 import { StudentAcademicProfileSchema } from '../../src/modules/registrations/schemas/student-academic-profile.schema';
@@ -1281,8 +1283,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     });
     const { default: ExcelJS } = await import('exceljs');
     const book = new ExcelJS.Workbook();
-    await book.xlsx.load(await workbook.export(actor, detail.sheet.id));
-    const page = book.getWorksheet('Marks')!;
+    await book.xlsx.load(
+      await workbook.template(actor, detail.sheet.id, 'midterm'),
+    );
+    expect(book.worksheets).toHaveLength(1);
+    const page = book.worksheets[0];
     for (let row = 2; row <= 502; row++) page.getCell('C' + row).value = 15;
     const bytes = Buffer.from(await book.xlsx.writeBuffer());
     const first = await workbook.previewFile(actor, detail.sheet.id, bytes, 0);
@@ -1395,7 +1400,6 @@ describe('Control real replica-set persistence, approval and Grades visibility',
               status: component === 'final' ? status : 'present',
               expectedRev: 0,
               opId: randomUUID(),
-              reason: 'Synthetic exam-status acceptance',
               ...(component === 'coursework'
                 ? { attendanceMark: 4, quizzesMark: 13 }
                 : {}),
@@ -1567,5 +1571,114 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       }),
     ).toBe(1);
     await grades.processControlReleases();
+  });
+  it('exports real course and level reports with fees and missing registration', async () => {
+    const reportCourse = new Types.ObjectId();
+    const code = 'REPORT-' + randomUUID().slice(0, 8).toUpperCase();
+    const enrolled = new Types.ObjectId(),
+      unregistered = new Types.ObjectId();
+    await connection.models.Course.collection.insertOne({
+      _id: reportCourse,
+      code,
+      name: 'Report course',
+      isActive: true,
+      level: '4',
+      academicLevel: '4',
+      semester: 'second',
+      creditHours: 3,
+    });
+    await connection.models.User.collection.insertMany(
+      [enrolled, unregistered].map((_id, index) => ({
+        _id,
+        role: 'student',
+        studentCode: `${code}-${index}`,
+        name: 'Report student',
+      })),
+    );
+    await connection.models.StudentProfile.collection.insertMany(
+      [enrolled, unregistered].map((userId, index) => ({
+        userId,
+        studentCode: `${code}-${index}`,
+        fullName: 'Report student',
+        level: '4',
+        academicYear: year,
+        semester: 'second',
+        tuitionFeesStatus: index === 0 ? 'unpaid' : 'paid',
+        isBlocked: index === 0,
+      })),
+    );
+    await connection.models.CourseRegistration.collection.insertOne({
+      studentId: enrolled,
+      courses: [code],
+      academicYear: year,
+      semester: 'second',
+      status: 'approved',
+    });
+    await gradeModel.collection.insertOne({
+      studentId: enrolled,
+      courseId: reportCourse,
+      courseCode: code,
+      examType: 'midterm',
+      grade: 15,
+      maxGrade: 20,
+      status: 'present',
+      academicYear: year,
+      semester: 'second',
+      rev: 1,
+      isPublished: false,
+    });
+    const detail = await sheets.openSheet(actor, {
+      courseId: String(reportCourse),
+      component: 'midterm',
+      academicYear: year,
+      semester: 'second',
+    });
+    const access = new ControlAccessService(
+      connection.models.Course as never,
+      connection.models.CourseStaffAssignment as never,
+    );
+    const reports = new ControlReportsService(
+      access,
+      sheets,
+      workbook,
+      connection.models.Course as never,
+      connection.models.StudentProfile as never,
+      gradeModel,
+      connection.models.CourseRegistration as never,
+    );
+    const { default: ExcelJS } = await import('exceljs');
+    const courseBook = new ExcelJS.Workbook();
+    await courseBook.xlsx.load(
+      await reports.export(actor, detail.sheet.id, {
+        type: 'course',
+        academicYear: year,
+        semester: 'second',
+      }),
+    );
+    expect(courseBook.worksheets).toHaveLength(2);
+    expect(courseBook.worksheets[0].getCell('G2').value).toBe(15);
+    expect(courseBook.worksheets[0].getCell('M2').value).toBe('غير مسدد');
+    const table = new ExcelJS.Workbook();
+    await table.xlsx.load(
+      await reports.export(actor, detail.sheet.id, {
+        type: 'round-table',
+        level: '4',
+        academicYear: year,
+        semester: 'second',
+      }),
+    );
+    const page = table.worksheets[0];
+    const dataRows: ExcelRow[] = [];
+    page.eachRow((row, index) => {
+      if (index > 1) dataRows.push(row);
+    });
+    expect(
+      dataRows.find((row) => row.getCell(1).text === `${code}-0`)?.getCell(5)
+        .text,
+    ).toBe('مسجل');
+    expect(
+      dataRows.find((row) => row.getCell(1).text === `${code}-1`)?.getCell(5)
+        .text,
+    ).toBe('غير مسجل');
   });
 });

@@ -3,6 +3,11 @@ import {
   ControlImportSchema,
 } from './schemas/control-import.schema';
 import { ControlWorkbookService } from './services/control-workbook.service';
+import { ControlReportsService } from './services/control-reports.service';
+import {
+  StudentProfile,
+  StudentProfileSchema,
+} from '../students/schemas/student-profile.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
@@ -39,6 +44,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
   imports: [
     GradesModule,
     MongooseModule.forFeature([
+      { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: ControlImport.name, schema: ControlImportSchema },
       { name: ControlSheet.name, schema: ControlSheetSchema },
       { name: GradingScheme.name, schema: GradingSchemeSchema },
@@ -55,6 +61,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
   ],
   controllers: [ControlController],
   providers: [
+    ControlReportsService,
     ControlWorkbookService,
     ControlAccessService,
     ControlSheetsService,

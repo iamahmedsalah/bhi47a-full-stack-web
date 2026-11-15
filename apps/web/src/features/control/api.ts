@@ -208,6 +208,44 @@ export async function exportControlSheet(
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 }
+
+export async function downloadControlTemplate(
+  sheetId: string,
+  component: ControlComponentKey,
+  mode: "workbook" | "missing" | "exceptions" = "workbook",
+) {
+  const raw = await api.get(`/admin/control/sheets/${sheetId}/template`, {
+    responseType: "blob",
+    params: { component, mode },
+  });
+  const { downloadFileBlob } = await import("@/lib/export-utils");
+  await downloadFileBlob(
+    raw,
+    `control-${component}-${mode}.xlsx`,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+}
+
+export async function downloadControlReport(
+  sheetId: string,
+  params: {
+    type: "course" | "round-table";
+    academicYear: string;
+    semester: string;
+    level?: string;
+  },
+) {
+  const raw = await api.get(`/admin/control/sheets/${sheetId}/report`, {
+    responseType: "blob",
+    params,
+  });
+  const { downloadFileBlob } = await import("@/lib/export-utils");
+  await downloadFileBlob(
+    raw,
+    `control-${params.type}-${params.academicYear}-${params.semester}${params.level ? `-${params.level}` : ""}.xlsx`,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+}
 export async function previewControlFile(
   sheetId: string,
   file: File,

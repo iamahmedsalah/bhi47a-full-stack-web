@@ -70,7 +70,7 @@ import {
   applyControlChanges,
   commitControlImport,
   controlKeys,
-  exportControlSheet,
+  downloadControlTemplate,
   exportControlImportErrors,
   getControlWorkbook,
   getControlSheet,
@@ -81,6 +81,7 @@ import {
 import { ControlHelpNotes } from "./control-help-notes";
 import { HelpNote } from "@/components/ui/help-note";
 import { normalizeSearchText } from "@/lib/search-text";
+import { ControlDownloadDialogs } from "./control-download-dialogs";
 import { ControlImportLauncher } from "./control-import-launcher";
 import type {
   ControlImportPreview,
@@ -180,6 +181,9 @@ export function ControlWorkbookGrid({
     "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN" | "CLEAR" | null
   >(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [downloadKind, setDownloadKind] = useState<
+    "templates" | "reports" | null
+  >(null);
   const [preview, setPreview] = useState<ControlImportPreview | null>(null);
   const [undo, setUndo] = useState<GradeChangeInput[]>([]);
   const inFlight = useRef(false);
@@ -603,13 +607,6 @@ export function ControlWorkbookGrid({
         next.score = null;
         next.error = undefined;
       } else next.score = parsed.ok ? parsed.value : null;
-      if (
-        (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
-          next.status ?? "",
-        ) &&
-        reason.trim().length < 3
-      )
-        next.error = t("reasonRequired");
       if (!next.status && next.score === null) next.error = t("useClear");
       return { ...current, [row.studentId]: next };
     });
@@ -797,6 +794,14 @@ export function ControlWorkbookGrid({
 
   return (
     <div className="space-y-3" dir={rtl ? "rtl" : "ltr"}>
+      {downloadKind && (
+        <ControlDownloadDialogs
+          detail={detail}
+          locale={locale}
+          kind={downloadKind}
+          onClose={() => setDownloadKind(null)}
+        />
+      )}
       {importOpen && (
         <ControlImportLauncher
           sheetId={sheet.id}
@@ -805,12 +810,7 @@ export function ControlWorkbookGrid({
           onClose={() => setImportOpen(false)}
           onDownload={
             caps.canExport
-              ? () =>
-                  exportControlSheet(
-                    sheet.id,
-                    "workbook",
-                    sheet.slug || sheet.id,
-                  )
+              ? () => downloadControlTemplate(sheet.id, key)
               : undefined
           }
           onSaved={refresh}
@@ -1099,43 +1099,25 @@ export function ControlWorkbookGrid({
           </Button>
         )}
         {caps.canExport && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-squircle text-xs font-medium"
-            disabled={pending}
-            onClick={() =>
-              void exportControlSheet(
-                sheet.id,
-                "workbook",
-                sheet.slug || sheet.id,
-              ).catch((e) => toast.error(getApiErrorMessage(e)))
-            }
-          >
-            <Download className="size-3.5 me-1.5" />
-            {t("export")}
-          </Button>
-        )}
-        {caps.canExport && (
           <>
-            {(["missing", "exceptions"] as const).map((mode) => (
-              <Button
-                key={mode}
-                variant="outline"
-                size="sm"
-                className="h-9 rounded-squircle text-xs font-medium"
-                disabled={pending}
-                onClick={() =>
-                  void exportControlSheet(
-                    sheet.id,
-                    mode,
-                    `${sheet.slug || sheet.id}-${mode}`,
-                  ).catch((error) => toast.error(getApiErrorMessage(error)))
-                }
-              >
-                {t(mode === "missing" ? "missingExport" : "exceptionsExport")}
-              </Button>
-            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || busy}
+              onClick={() => setDownloadKind("templates")}
+            >
+              <Download className="size-3.5" />
+              {rtl ? "نماذج" : "Templates"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || busy}
+              onClick={() => setDownloadKind("reports")}
+            >
+              <Download className="size-3.5" />
+              {rtl ? "تقرير الكنترول" : "Control reports"}
+            </Button>
           </>
         )}
         {caps.canImport && caps.canEdit && (
@@ -1191,8 +1173,8 @@ export function ControlWorkbookGrid({
       </div>
       {caps.canEdit && (
         <Input
-          aria-label={t("reason")}
-          placeholder={t("reason")}
+          aria-label={t("stateReasonOptional")}
+          placeholder={t("stateReasonOptional")}
           value={reason}
           maxLength={500}
           onChange={(e) => setReason(e.target.value)}
