@@ -230,6 +230,8 @@ export default function StudentResultsPage() {
             profileQuery.data?.level,
             resultLevels,
             selectedLevel,
+            resultsQuery.isLoading,
+            profileQuery.isLoading,
           ][index],
         ),
     )
@@ -239,8 +241,13 @@ export default function StudentResultsPage() {
       profileQuery.data?.level,
       resultLevels,
       selectedLevel,
+      resultsQuery.isLoading,
+      profileQuery.isLoading,
     ]);
     (() => {
+      // Choose the initial result level only after both sources have settled.
+      // A profile-first response must not pin a student to an empty current level.
+      if (resultsQuery.isLoading || profileQuery.isLoading) return;
       if (
         selectedLevel &&
         availableLevels.includes(selectedLevel as Grade["academicLevel"])
@@ -257,7 +264,7 @@ export default function StudentResultsPage() {
     })();
   }
 
-  if (resultsQuery.isLoading || statusQuery.isLoading) {
+  if (resultsQuery.isLoading || statusQuery.isLoading || profileQuery.isLoading) {
     return <LoadingState title={tCommon("loading")} />;
   }
 

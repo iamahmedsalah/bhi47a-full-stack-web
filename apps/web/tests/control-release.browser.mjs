@@ -37,9 +37,11 @@ let studentCloseAt;
 let enabledStudentTypes;
 let absentComponent='midterm';
 let course111=false, course111Status='present', tuitionBlocked=false, resultMode='midterm';
+let studentResponseOrder='immediate';
 const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
+    if((url.pathname==='/students/me/results'&&studentResponseOrder==='profile-first')||(url.pathname==='/students/me/profile'&&studentResponseOrder==='results-first')) await new Promise(resolve=>setTimeout(resolve,200));
     const send=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(status===200?{success:true,data,timestamp:new Date().toISOString()}:data));};
     if(url.pathname==='/students/me/results-window')return send({visibleExamTypes:enabledStudentTypes,isOpen:!tuitionBlocked&&Date.now()<Date.parse(studentCloseAt),visibilityVersion:tuitionBlocked?'tuition-blocked':'tuition-clear',closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':tuitionBlocked?'tuition_blocked':undefined,studentLevel:course111?'3':'1',isLevelPublished:!course111});
     if(url.pathname==='/students/me/results' && tuitionBlocked)return send([]);
@@ -214,6 +216,7 @@ try{
     }
     resultMode='both';
     for(const status of ['absent','banned','incomplete']){
+      studentResponseOrder='profile-first';
       course111Status=status;
       await page.goto(`${base}/${locale}/dashboard/results?view=student`);
       const row=page.getByRole('row').filter({hasText:'111'});
@@ -223,6 +226,10 @@ try{
       if(status==='banned')await row.getByText('FX',{exact:true}).waitFor();
       if(status==='incomplete')await row.getByText('IC',{exact:true}).waitFor();
     }
+    studentResponseOrder='results-first';course111Status='present';
+    await page.goto(`${base}/${locale}/dashboard/results?view=student`);
+    await page.getByRole('row').filter({hasText:'111'}).getByText('15 / 20',{exact:true}).waitFor();
+    studentResponseOrder='immediate';
   }
   resultMode='midterm';enabledStudentTypes=['midterm','final'];course111Status='present';
   await page.goto(base+'/en/dashboard/results?view=student');
