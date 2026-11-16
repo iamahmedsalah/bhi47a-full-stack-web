@@ -73,6 +73,9 @@ test('deployment auth verification uses Node 24 and ships both readiness files',
   const gate = job.indexOf('name: Verify public portal after VPS deployment');
   assert.ok(setup > 0 && setup < gate);
   assert.match(job.slice(setup, gate), /uses: actions\/setup-node@v5\n        with:\n          node-version: 24/);
+  const nodeSetup = job.slice(setup, job.indexOf('      - name:', setup + 1));
+  assert.match(nodeSetup, /^          package-manager-cache: false$/m);
+  assert.doesNotMatch(nodeSetup, /^          cache:/m);
   for (const file of ['scripts/auth-readiness.cjs', 'scripts/auth-readiness.test.cjs']) {
     assert.ok(readFileSync(`${__dirname}/../${file}`, 'utf8').length > 0, `${file} must ship in checkout`);
     const ignored = spawnSync('git', ['check-ignore', '--no-index', '--', file], {
@@ -80,6 +83,14 @@ test('deployment auth verification uses Node 24 and ships both readiness files',
     });
     assert.equal(ignored.status, 1, `${file} must not be excluded by gitignore: ${ignored.stdout || ignored.stderr}`);
   }
+});
+
+test('validation installs pnpm before enabling its dependency cache', () => {
+  const validation = workflow.slice(workflow.indexOf('\n  validate:\n'), workflow.indexOf('\n  docker-validate:\n'));
+  const install = validation.indexOf('uses: pnpm/action-setup@v5');
+  const setup = validation.indexOf('uses: actions/setup-node@v5');
+  assert.ok(install > 0 && install < setup);
+  assert.match(validation.slice(setup), /^          cache: pnpm$/m);
 });
 
 test('public health gate validates the real API envelope and rejects unhealthy responses', () => {

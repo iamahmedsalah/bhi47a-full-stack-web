@@ -308,3 +308,17 @@ tests outside the sandbox. Its earlier sandboxed run timed out in the existing
 real-Jest report contract; no timeout or assertion was relaxed. Both readiness
 files are now visible as new Git files and must be included with the workflow
 and gitignore changes in the next commit. Final diff whitespace checks passed.
+
+### 2026-11-16: deployment setup-node requires an absent pnpm executable
+
+The added deployment Node setup omitted `package-manager-cache: false`.
+`actions/setup-node@v5` automatically detects the root `packageManager` field and
+tries `pnpm store path` to restore its cache. The deploy-only job does not install
+pnpm because its public checks use standalone Node scripts. Explicitly disabling
+automatic package-manager caching for that step removes this unnecessary
+dependency; validation still installs pnpm before enabling its explicit cache.
+
+Regression checks cover both configurations, the auth probe and the existing
+deployment gates: 12/12 tests passed. No application code or dependency version
+changed. The reported punycode deprecation warning is separate from the fatal
+missing-executable error. The updated remote workflow has not been run here.
