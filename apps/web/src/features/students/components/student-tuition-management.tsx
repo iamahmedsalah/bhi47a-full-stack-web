@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -929,7 +931,7 @@ export function StudentTuitionManagement({
                           </span>
                           {student.department && (
                             <span className="text-[10px] bg-secondary/60 px-1.5 py-0.5 rounded border border-border/40">
-                              {student.department}
+                              {curriculumDepartmentLabel(student.department, locale)}
                             </span>
                           )}
                         </div>

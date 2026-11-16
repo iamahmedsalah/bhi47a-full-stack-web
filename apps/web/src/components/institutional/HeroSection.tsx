@@ -71,8 +71,8 @@ export function HeroSection({ locale }: HeroSectionProps) {
           {/* Academic Subtitle */}
           <p className="mt-5 text-sm leading-relaxed text-slate-300 sm:text-base lg:text-lg">
             {isAr
-              ? 'صرح أكاديمي رائد في محافظة البحيرة يمنح درجة البكالوريوس المعتمدة في نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة بنظام الساعات المعتمدة، لإعداد خريجين متميزين مؤهلين لقيادة المستقبل الرقمي والإداري.'
-              : 'A leading academic institution in Beheira Governorate granting accredited Bachelor degrees in Business Information Systems (BIS) and Accounting under the Credit Hours System, qualifying graduates to lead the digital and business enterprise landscape.'}
+              ? 'صرح أكاديمي رائد في محافظة البحيرة يمنح درجة البكالوريوس المعتمدة في نظم معلومات الأعمال والمحاسبة والمراجعة بنظام الساعات المعتمدة، لإعداد خريجين متميزين مؤهلين لقيادة المستقبل الرقمي والإداري.'
+              : 'A leading academic institution in Beheira Governorate granting accredited Bachelor degrees in Business Information Systems and Accounting and Auditing under the Credit Hours System, qualifying graduates to lead the digital and business enterprise landscape.'}
           </p>
 
           {/* Dual CTAs */}

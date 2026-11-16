@@ -423,7 +423,7 @@ function CourseFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted">{t('department')}</label>
-              <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'عام أو نظم معلومات أو محاسبة' : 'General, BIS, Accounting'} />
+              <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'شعبة عامة أو نظم معلومات الأعمال أو المحاسبة والمراجعة' : 'General Division, Business Information Systems, Accounting and Auditing'} />
             </div>
             {/* Course Doctors Section (Up to 2 doctors) */}
             <div className="space-y-1.5 sm:col-span-2">

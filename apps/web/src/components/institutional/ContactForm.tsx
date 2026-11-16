@@ -152,7 +152,7 @@ export function ContactForm({ locale }: ContactFormProps) {
                 {isAr ? 'التحويلات ونقل القيد من كليات ومعاهد أخرى' : 'Student Transfers'}
               </option>
               <option value="programs">
-                {isAr ? 'استفسار عن الشعب والبرامج الدراسية (BIS - محاسبة ومراجعة)' : 'Academic Programs (BIS / Accounting & Auditing)'}
+                {isAr ? 'استفسار عن الشعب والبرامج الدراسية (نظم معلومات الأعمال - المحاسبة والمراجعة)' : 'Academic Programs (Business Information Systems / Accounting and Auditing)'}
               </option>
               <option value="tuition">
                 {isAr ? 'المصروفات الدراسية وطرق السداد' : 'Tuition & Payment Inquiries'}

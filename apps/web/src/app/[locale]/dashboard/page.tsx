@@ -1,4 +1,6 @@
 "use client";
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import NextImage from "next/image";
 import type { StudentQuizViewItem } from '@/features/quizzes/api';
 
@@ -719,7 +721,7 @@ export default function StudentDashboard() {
                   {locale === "ar" ? "التخصص" : "Department"}
                 </span>
                 <span className="font-semibold text-foreground">
-                  {profile?.department || "General"}
+                  {curriculumDepartmentLabel(profile?.department, locale)}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm">

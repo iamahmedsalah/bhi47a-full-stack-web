@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { useMemo, useState } from 'react';
 import { formatLoginDateTime } from '@/lib/session-presentation';
 import { useRouter } from 'next/navigation';
@@ -818,7 +820,7 @@ export function StudentDetailDialog({
                     />
                     <InfoItem
                       label={isAr ? 'القسم العلمي' : 'Department'}
-                      value={student.department || (isAr ? 'عام' : 'General')}
+                      value={curriculumDepartmentLabel(student.department, locale)}
                     />
                     <InfoItem
                       label={isAr ? 'المجموعة الدراسية' : 'Group'}

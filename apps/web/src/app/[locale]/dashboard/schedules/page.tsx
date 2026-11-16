@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { Suspense, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
@@ -409,7 +411,7 @@ function StudentSchedulesContent() {
             </SelectTrigger>
             <SelectContent dir={isAr ? 'rtl' : 'ltr'}>
               <SelectItem value="all">{isAr ? 'جميع الأقسام' : 'All Depts'}</SelectItem>
-              {[...new Set(rawSchedules.map(item => item.department).filter((value): value is string => Boolean(value)))].sort().map(department => <SelectItem key={department} value={department}><bdi>{department === 'GENERAL' ? timetableText('general') : department}</bdi></SelectItem>)}
+              {[...new Set(rawSchedules.map(item => item.department).filter((value): value is string => Boolean(value)))].sort().map(department => <SelectItem key={department} value={department}><bdi>{curriculumDepartmentLabel(department, locale)}</bdi></SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -645,7 +647,7 @@ function StudentSchedulesContent() {
                   </span>
                   <div className="text-[11px] text-muted-foreground">
                     <span>{isAr ? `المستوى ${item.level}` : `Level ${item.level}`}</span>
-                    {item.department && <span> · {item.department}</span>}
+                    {item.department && <span> · {curriculumDepartmentLabel(item.department, locale)}</span>}
                     {(item.group || item.section) && (
                       <span className="font-medium text-primary ms-1">
                         ({item.group ? `${item.group}` : ''}
@@ -746,7 +748,7 @@ function StudentSchedulesContent() {
                       <td className="px-4 py-3.5 text-foreground">
                         <div>
                           {isAr ? `المستوى ${item.level}` : `Level ${item.level}`}
-                          {item.department && ` · ${item.department}`}
+                          {item.department && ` · ${curriculumDepartmentLabel(item.department, locale)}`}
                         </div>
                         {(item.group || item.section) && (
                           <div className="text-[11px] text-muted-foreground">

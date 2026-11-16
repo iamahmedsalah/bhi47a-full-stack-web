@@ -107,10 +107,10 @@ describe('official specialization programme sheets', () => {
       'الفصل الأول',
     );
     expect(courseCurriculumSummary({ code: '326', level: '3' }, 'ar')).toBe(
-      'المحاسبة: الفصل الأول — BIS: الفصل الثاني',
+      'المحاسبة والمراجعة: الفصل الأول — نظم معلومات الأعمال: الفصل الثاني',
     );
     expect(courseCurriculumSummary({ code: '326', level: '3' }, 'en')).toBe(
-      'Accounting: First semester — BIS: Second semester',
+      'Accounting and Auditing: First semester — Business Information Systems: Second semester',
     );
   });
   it('matches legacy common courses in Accounting before pagination without a cross-placement match', () => {

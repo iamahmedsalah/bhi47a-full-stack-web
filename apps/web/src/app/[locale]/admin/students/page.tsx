@@ -739,18 +739,18 @@ function StudentsPageContent() {
                 </SelectItem>
                 <SelectItem value="GENERAL">
                   {locale === 'ar'
-                    ? 'الشعبة العامة (سنة 1 و 2)'
-                    : 'General Track (Years 1 & 2)'}
+                    ? 'شعبة عامة'
+                    : 'General Division'}
                 </SelectItem>
                 <SelectItem value="BIS">
                   {locale === 'ar'
-                    ? 'نظم معلومات الأعمال (BIS)'
-                    : 'Business Info Systems (BIS)'}
+                    ? 'نظم معلومات الأعمال'
+                    : 'Business Information Systems'}
                 </SelectItem>
                 <SelectItem value="ACCOUNTING">
                   {locale === 'ar'
-                    ? 'المحاسبة والمراجعة (Accounting)'
-                    : 'Accounting & Auditing'}
+                    ? 'المحاسبة والمراجعة'
+                    : 'Accounting and Auditing'}
                 </SelectItem>
               </SelectContent>
             </Select>

@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { useState, useMemo } from 'react';
 import { useLocale } from 'next-intl';
 import {
@@ -41,7 +43,7 @@ interface DepartmentTransferDialogProps {
 const DEPARTMENTS = [
   {
     id: 'BIS',
-    shortLabel: (isAr: boolean) => (isAr ? 'نظم معلومات الأعمال (BIS)' : 'Business Info Systems (BIS)'),
+    shortLabel: (isAr: boolean) => (isAr ? 'نظم معلومات الأعمال' : 'Business Information Systems'),
     levelHint: (isAr: boolean) => (isAr ? 'المستوى 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Laptop,
     badgeColor: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400',
@@ -49,7 +51,7 @@ const DEPARTMENTS = [
   },
   {
     id: 'ACCOUNTING',
-    shortLabel: (isAr: boolean) => (isAr ? 'المحاسبة والمراجعة' : 'Accounting & Auditing'),
+    shortLabel: (isAr: boolean) => (isAr ? 'المحاسبة والمراجعة' : 'Accounting and Auditing'),
     levelHint: (isAr: boolean) => (isAr ? 'المستوى 3 و 4 • شعبة تخصصية' : 'Levels 3 & 4 • Specialized'),
     icon: Calculator,
     badgeColor: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
@@ -57,7 +59,7 @@ const DEPARTMENTS = [
   },
   {
     id: 'GENERAL',
-    shortLabel: (isAr: boolean) => (isAr ? 'الشعبة العامة' : 'General Track'),
+    shortLabel: (isAr: boolean) => (isAr ? 'شعبة عامة' : 'General Division'),
     levelHint: (isAr: boolean) => (isAr ? 'المستوى 1 و 2 • شعبة مشتركة' : 'Levels 1 & 2 • Common Track'),
     icon: BookOpen,
     badgeColor: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
@@ -177,15 +179,8 @@ export function DepartmentTransferDialog({
     }
   };
 
-  const getDepartmentLabel = (code?: string) => {
-    if (!code) return isAr ? 'الشعبة العامة' : 'General Track';
-    const upper = code.toUpperCase();
-    if (upper.includes('BIS') || upper.includes('نظم'))
-      return isAr ? 'BIS' : 'BIS';
-    if (upper.includes('ACCOUNT') || upper.includes('محاسب'))
-      return isAr ? 'محاسبة' : 'Accounting';
-    return code;
-  };
+  const getDepartmentLabel = (code?: string) =>
+    curriculumDepartmentLabel(code || "GENERAL", locale);
 
   return (
     <Dialog
@@ -208,8 +203,8 @@ export function DepartmentTransferDialog({
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {isAr
-                  ? 'تسكين وتحويل الطلاب بين الشعب الدراسية (الشعبة العامة، نظم المعلومات BIS، المحاسبة والمراجعة)'
-                  : 'Place and transfer students between academic tracks (General, BIS, Accounting & Auditing)'}
+                  ? 'تسكين وتحويل الطلاب بين الشعب الدراسية (شعبة عامة، نظم المعلومات BIS، المحاسبة والمراجعة)'
+                  : 'Place and transfer students between academic tracks (General, BIS, Accounting and Auditing)'}
               </DialogDescription>
             </div>
           </div>

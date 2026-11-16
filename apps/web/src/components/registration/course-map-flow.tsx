@@ -1,5 +1,7 @@
 "use client";
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import { memo, useCallback, useMemo, useState } from "react";
 import {
   Background,
@@ -952,13 +954,13 @@ export function CourseMapFlow({
                 {
                   value: "auto",
                   label: isEnglish
-                    ? `My track (${studentTrack === "GENERAL" ? "General" : studentTrack === "ACCOUNTING" ? "Accounting" : "BIS"})`
-                    : `شعبتي (${studentTrack === "GENERAL" ? "الشعبة العامة" : studentTrack === "ACCOUNTING" ? "شعبة المحاسبة" : "نظم BIS"})`,
+                    ? `My track (${curriculumDepartmentLabel(studentTrack, "en")})`
+                    : `شعبتي (${curriculumDepartmentLabel(studentTrack, "ar")})`,
                 },
                 { value: "all", label: isEnglish ? "All tracks" : "كافة الشعب" },
-                { value: "GENERAL", label: isEnglish ? "General track" : "الشعبة العامة" },
-                { value: "BIS", label: isEnglish ? "BIS track" : "شعبة نظم BIS" },
-                { value: "ACCOUNTING", label: isEnglish ? "Accounting track" : "شعبة المحاسبة" },
+                { value: "GENERAL", label: isEnglish ? "General Division" : "شعبة عامة" },
+                { value: "BIS", label: curriculumDepartmentLabel("BIS", isEnglish ? "en" : "ar") },
+                { value: "ACCOUNTING", label: curriculumDepartmentLabel("ACCOUNTING", isEnglish ? "en" : "ar") },
               ]}
             />
           </div>

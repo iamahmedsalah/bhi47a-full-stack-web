@@ -1,3 +1,4 @@
+import { curriculumDepartmentLabel } from '@student-portal/shared';
 import { Controller, Get, HttpStatus, Query, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -95,7 +96,7 @@ export class StudentsExportController {
             fullNameAr: student.fullNameAr || student.fullName,
             fullNameEn: student.fullNameEn || '-',
             level: student.level,
-            department: student.department || '-',
+            department: curriculumDepartmentLabel(student.department, 'ar'),
             academicEmail: student.academicEmail || '-',
             enrollmentStatus: student.enrollmentStatus,
             group: student.group || '-',

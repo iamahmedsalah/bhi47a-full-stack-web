@@ -32,8 +32,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       ? `البرامج الأكاديمية والشعب | ${INSTITUTE_INFO.name.ar}`
       : `Academic Programs & Departments | ${INSTITUTE_INFO.name.en}`,
     description: isAr
-      ? 'تعرف على التخصصات الدراسية وشعب المعهد: نظم معلومات الأعمال (BIS) وشعبة المحاسبة والمراجعة.'
-      : 'Explore academic programs: Business Information Systems (BIS) and Accounting & Auditing at BHI47a.',
+      ? 'تعرف على التخصصات الدراسية وشعب المعهد: نظم معلومات الأعمال وشعبة المحاسبة والمراجعة.'
+      : 'Explore academic programs: Business Information Systems and Accounting and Auditing at BHI47a.',
   };
 }
 
@@ -68,8 +68,8 @@ export default async function AcademicsPage({ params }: PageProps) {
             </h1>
             <p className="mt-3 text-slate-300 max-w-3xl text-sm sm:text-base leading-relaxed">
               {isAr
-                ? 'يقدم المعهد درجات البكالوريوس المعتمدة بنظام الساعات المعتمدة في تخصصين نوعيين يخدمان الاقتصاد وسوق العمل الحديث: شعبة نظم معلومات الأعمال (BIS) وشعبة المحاسبة والمراجعة.'
-                : 'BHI47a offers accredited bachelor degrees under the credit-hour framework across two specialized business and technological domains: BIS and Accounting & Auditing.'}
+                ? 'يقدم المعهد درجات البكالوريوس المعتمدة بنظام الساعات المعتمدة في تخصصين نوعيين يخدمان الاقتصاد وسوق العمل الحديث: شعبة نظم معلومات الأعمال وشعبة المحاسبة والمراجعة.'
+                : 'BHI47a offers accredited bachelor degrees under the credit-hour framework across two specialized business and technological domains: BIS and Accounting and Auditing.'}
             </p>
           </div>
         </section>

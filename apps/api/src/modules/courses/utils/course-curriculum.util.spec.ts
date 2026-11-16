@@ -1,3 +1,4 @@
+import { curriculumDepartmentLabel } from '@student-portal/shared';
 import {
   courseForDepartment,
   coursesForDepartment,
@@ -6,7 +7,30 @@ import {
 import type { CourseDocument } from '../schemas/course.schema';
 
 describe('course-curriculum.util', () => {
+  it.each([
+    ['BIS', 'نظم معلومات الأعمال', 'Business Information Systems'],
+    ['ACCOUNTING', 'المحاسبة والمراجعة', 'Accounting and Auditing'],
+    ['GENERAL', 'شعبة عامة', 'General Division'],
+  ])(
+    'displays canonical bilingual labels for %s and legacy values',
+    (code, ar, en) => {
+      expect(curriculumDepartmentLabel(code, 'ar')).toBe(ar);
+      expect(curriculumDepartmentLabel(code, 'en')).toBe(en);
+      expect(curriculumDepartmentLabel(ar, 'en')).toBe(en);
+      expect(curriculumDepartmentLabel(en, 'ar')).toBe(ar);
+    },
+  );
   describe('normalizeDepartment', () => {
+    it.each([
+      ['نظم معلومات الأعمال', 'BIS'],
+      ['Business Information Systems', 'BIS'],
+      ['المحاسبة والمراجعة', 'ACCOUNTING'],
+      ['Accounting and Auditing', 'ACCOUNTING'],
+      ['شعبة عامة', 'GENERAL'],
+      ['General Division', 'GENERAL'],
+    ])('accepts the renamed department %s for imports', (label, code) => {
+      expect(normalizeDepartment(label)).toBe(code);
+    });
     it('normalizes various Accounting strings to ACCOUNTING', () => {
       expect(normalizeDepartment('ACCOUNTING')).toBe('ACCOUNTING');
       expect(normalizeDepartment('accounting')).toBe('ACCOUNTING');

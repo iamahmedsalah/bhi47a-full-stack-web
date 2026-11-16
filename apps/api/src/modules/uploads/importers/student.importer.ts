@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { normalizeDepartment } from '@student-portal/shared';
 import { StudentCodesService } from '../../student-codes/student-codes.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -212,7 +213,8 @@ export class StudentImporter implements Importer {
         });
 
         const normalizedLevel = normalizeStudentLevel(row.level);
-        let resolvedDept = (row.department as string)?.trim();
+        const rawDepartment = (row.department as string)?.trim();
+        let resolvedDept = normalizeDepartment(rawDepartment) ?? rawDepartment;
         if (normalizedLevel === '1' || normalizedLevel === '2') {
           resolvedDept = 'GENERAL';
         } else if (normalizedLevel === '3' || normalizedLevel === '4') {

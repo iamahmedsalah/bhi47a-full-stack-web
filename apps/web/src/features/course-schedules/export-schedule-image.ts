@@ -1,5 +1,7 @@
 "use client";
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import {
   buildTimetable,
   timetableCohorts,
@@ -148,7 +150,7 @@ function buildScheduleMarkup(
 
   const departmentLabel =
     department && department !== "all"
-      ? `${isAr ? "قسم: " : "Dept: "}${department}`
+      ? `${isAr ? "قسم: " : "Dept: "}${curriculumDepartmentLabel(department, isAr ? "ar" : "en")}`
       : "";
 
   const groupLabel =

@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -257,7 +259,7 @@ export function StudentTable({
         <TableCell className="min-w-[140px] py-2.5 px-3 text-xs">
           <div className="font-semibold text-foreground">Level {student.level} · {student.academicYear}</div>
           <div className="mt-0.5 text-muted-foreground">
-            {[student.department, student.group, student.section].filter(Boolean).join(' · ') || '—'}
+            {[curriculumDepartmentLabel(student.department, locale), student.group, student.section].filter(Boolean).join(' · ') || '—'}
           </div>
         </TableCell>
       ),
@@ -381,7 +383,7 @@ export function StudentTable({
                   label: (
                     <div className="flex items-center gap-2 text-xs py-0.5">
                       <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
-                      <span>{locale === 'ar' ? 'تحويل الشعبة (BIS ⇄ محاسبة)' : 'Transfer Department'}</span>
+                      <span>{locale === 'ar' ? 'تحويل الشعبة' : 'Transfer Department'}</span>
                     </div>
                   ),
                 },

@@ -35,8 +35,8 @@ export function FinalCTASection({ locale }: FinalCTASectionProps) {
 
         <p className="max-w-2xl mx-auto text-slate-300 text-base sm:text-lg leading-relaxed mb-10">
           {isAr
-            ? 'انضم إلى بيئة أكاديمية متطورة تجمع بين المعرفة النظرية والتطبيق العملي في مجالات نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة.'
-            : 'Join an advanced academic environment combining theoretical knowledge and practical training in Business Information Systems (BIS) and Accounting & Auditing.'}
+            ? 'انضم إلى بيئة أكاديمية متطورة تجمع بين المعرفة النظرية والتطبيق العملي في مجالات نظم معلومات الأعمال والمحاسبة والمراجعة.'
+            : 'Join an advanced academic environment combining theoretical knowledge and practical training in Business Information Systems and Accounting and Auditing.'}
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-4">

@@ -1,4 +1,6 @@
 "use client";
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import { AdmissionSection } from "@/features/admissions/admission-section";
 
 import { useEffect, useMemo, useState } from "react";
@@ -340,7 +342,7 @@ export default function StudentCodesPage({
         render: (row) => (
           <TableCell className="min-w-32.5 py-2.5 px-3 text-xs">
             <span className="font-medium text-foreground">
-              {row.department || "—"}
+              {curriculumDepartmentLabel(row.department, locale)}
             </span>
           </TableCell>
         ),
@@ -1010,9 +1012,7 @@ export default function StudentCodesPage({
                           )}
                           <div className="flex items-center gap-2 mt-1">
                             <span className="px-2 py-0.5 rounded-squircle text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
-                              {s.department === "GENERAL"
-                                ? t("generalDepartment")
-                                : s.department || "—"}
+                              {curriculumDepartmentLabel(s.department, locale)}
                             </span>
                             <span className="px-2 py-0.5 rounded-squircle text-[10px] font-semibold bg-secondary text-secondary-foreground">
                               {dir === "rtl"
@@ -1123,7 +1123,7 @@ export default function StudentCodesPage({
                 <div>
                   <dt className="text-muted-foreground">{t("department")}</dt>
                   <dd>
-                    <bdi>{finding.department || "—"}</bdi>
+                    <bdi>{curriculumDepartmentLabel(finding.department, locale)}</bdi>
                   </dd>
                 </div>
               </dl>

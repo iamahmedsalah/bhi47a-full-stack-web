@@ -1,4 +1,6 @@
 'use client';
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import { PasskeyManager } from '@/components/auth/passkey-manager';
 import { SessionManager } from '@/components/auth/session-manager';
 
@@ -588,7 +590,7 @@ export default function StudentProfilePage() {
                   {profile.department && (
                     <span className="inline-flex items-center gap-1 rounded-squircle bg-secondary/60 border border-border/70 px-2.5 py-1 text-xs font-medium text-foreground">
                       <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>{profile.department}</span>
+                      <span>{curriculumDepartmentLabel(profile.department, isEnglish ? 'en' : 'ar')}</span>
                     </span>
                   )}
 
@@ -847,7 +849,7 @@ export default function StudentProfilePage() {
                         {t('department')}
                       </span>
                       <span className="text-sm font-bold text-foreground mt-0.5 block truncate">
-                        {profile.department || '—'}
+                        {curriculumDepartmentLabel(profile.department, isEnglish ? 'en' : 'ar')}
                       </span>
                     </div>
                   </div>

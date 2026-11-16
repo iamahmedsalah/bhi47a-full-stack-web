@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
@@ -236,7 +238,7 @@ export function CourseEnrolledStudentsDialog({
             {course?.department && (
               <span className="inline-flex items-center gap-1 rounded-squircle border border-border/80 bg-secondary/40 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-medium text-muted-foreground">
                 <Layers className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
-                <span>{course.department}</span>
+                <span>{curriculumDepartmentLabel(course.department, locale)}</span>
               </span>
             )}
           </div>

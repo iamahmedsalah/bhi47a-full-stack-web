@@ -25,7 +25,7 @@ export function InstitutionalFooter({ locale }: InstitutionalFooterProps) {
   const quickLinks = [
     { href: `/${locale}`, labelAr: 'الرئيسية', labelEn: 'Home' },
     { href: `/${locale}/about`, labelAr: 'عن المعهد والرؤية', labelEn: 'About & Vision' },
-    { href: `/${locale}/academics`, labelAr: 'البرامج الدراسية (BIS والمحاسبة)', labelEn: 'Programs (BIS & Accounting)' },
+    { href: `/${locale}/academics`, labelAr: 'البرامج الدراسية (نظم معلومات الأعمال والمحاسبة والمراجعة)', labelEn: 'Programs (Business Information Systems / Accounting and Auditing)' },
     { href: `/${locale}/activities`, labelAr: 'الأنشطة الطلابية والنوادي', labelEn: 'Student Clubs & Activities' },
     { href: `/${locale}/news`, labelAr: 'الأخبار والإعلانات الرسمية', labelEn: 'Official News & Notices' },
     { href: `/${locale}/events`, labelAr: 'أجندة الفعاليات الأكاديمية', labelEn: 'Academic Events Calendar' },
@@ -73,8 +73,8 @@ export function InstitutionalFooter({ locale }: InstitutionalFooterProps) {
 
             <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
               {isAr
-                ? 'مؤسسة تعليمية جامعية معتمدة من وزارة التعليم العالي والبحث العلمي بجمهورية مصر العربية، تمنح درجتي البكالوريوس في نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة بنظام الساعات المعتمدة.'
-                : 'A distinguished higher-education institution accredited by the Egyptian Ministry of Higher Education, granting accredited Bachelor degrees in Business Information Systems (BIS) and Accounting under the Credit Hours System.'}
+                ? 'مؤسسة تعليمية جامعية معتمدة من وزارة التعليم العالي والبحث العلمي بجمهورية مصر العربية، تمنح درجتي البكالوريوس في نظم معلومات الأعمال والمحاسبة والمراجعة بنظام الساعات المعتمدة.'
+                : 'A distinguished higher-education institution accredited by the Egyptian Ministry of Higher Education, granting accredited Bachelor degrees in Business Information Systems and Accounting and Auditing under the Credit Hours System.'}
             </p>
 
             <div className="mt-2 flex items-center gap-2 rounded-squircle bg-white/5 p-3 text-xs text-slate-300 border border-white/10">

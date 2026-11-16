@@ -1,4 +1,6 @@
 'use client';
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import type { StaffMember, StaffListResponse } from '@/features/staff/types';
 import type { PaginatedResponse } from '@/lib/api';
 
@@ -543,8 +545,8 @@ function SchedulesManagementContent() {
       ) {
         conflicts.push(
           isAr
-            ? `تعارض جدول الدفعة: المستوى ${item.level} (${item.department}) لديها موعد آخر (${item.courseNameAr || item.courseName}) في نفس التوقيت`
-            : `Batch Conflict: Level ${item.level} (${item.department}) has another session (${item.courseName}) at the same time`,
+            ? `تعارض جدول الدفعة: المستوى ${item.level} (${curriculumDepartmentLabel(item.department, locale)}) لديها موعد آخر (${item.courseNameAr || item.courseName}) في نفس التوقيت`
+            : `Batch Conflict: Level ${item.level} (${curriculumDepartmentLabel(item.department, locale)}) has another session (${item.courseName}) at the same time`,
         );
       }
     }
@@ -563,6 +565,7 @@ function SchedulesManagementContent() {
     rawSchedules,
     editingItem,
     isAr,
+    locale,
   ]);
 
   const handleOpenAdd = () => {
@@ -1371,7 +1374,7 @@ function SchedulesManagementContent() {
                       <td className="px-4 py-3.5 text-foreground">
                         <div>
                           {isAr ? `المستوى ${item.level}` : `Level ${item.level}`}
-                          {item.department && ` · ${item.department}`}
+                          {item.department && ` · ${curriculumDepartmentLabel(item.department, locale)}`}
                         </div>
                         {(item.group || item.section) && (
                           <div className="text-[11px] text-muted-foreground">
@@ -1771,10 +1774,10 @@ function SchedulesManagementContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="GENERAL">{isAr ? 'عام (GENERAL)' : 'GENERAL'}</SelectItem>
-                    <SelectItem value="BIS">{isAr ? 'نظم المعلومات (BIS)' : 'BIS'}</SelectItem>
+                    <SelectItem value="GENERAL">{curriculumDepartmentLabel("GENERAL", locale)}</SelectItem>
+                    <SelectItem value="BIS">{curriculumDepartmentLabel("BIS", locale)}</SelectItem>
                     <SelectItem value="CS">{isAr ? 'علوم الحاسب (CS)' : 'CS'}</SelectItem>
-                    <SelectItem value="ACCOUNTING">{isAr ? 'محاسبة (Accounting)' : 'Accounting'}</SelectItem>
+                    <SelectItem value="ACCOUNTING">{curriculumDepartmentLabel("ACCOUNTING", locale)}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

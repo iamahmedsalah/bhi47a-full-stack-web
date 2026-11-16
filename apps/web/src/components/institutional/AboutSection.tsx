@@ -66,8 +66,8 @@ export function AboutSection({ locale }: AboutSectionProps) {
 
             <p className="text-sm leading-relaxed text-muted-foreground">
               {isAr
-                ? 'أنشئ المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (الكيلو 47 طريق الإسكندرية - القاهرة الصحراوي) بمقتضى قرار وزارة التعليم العالي، بهدف تقديم تعليم نوعي متميز في مجالات نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة.'
-                : 'The High Institute for Advanced Management Sciences and Computer (Km 47 Alexandria - Cairo Desert Road) was established under the Ministry of Higher Education decree to deliver specialized academic education in Business Information Systems (BIS) and Accounting.'}
+                ? 'أنشئ المعهد العالي للعلوم الإدارية المتقدمة والحاسبات (الكيلو 47 طريق الإسكندرية - القاهرة الصحراوي) بمقتضى قرار وزارة التعليم العالي، بهدف تقديم تعليم نوعي متميز في مجالات نظم معلومات الأعمال والمحاسبة والمراجعة.'
+                : 'The High Institute for Advanced Management Sciences and Computer (Km 47 Alexandria - Cairo Desert Road) was established under the Ministry of Higher Education decree to deliver specialized academic education in Business Information Systems and Accounting and Auditing.'}
             </p>
 
             {/* Core Values / Pillars */}

@@ -71,7 +71,7 @@ async function main() {
     async function select(label, option) { await page.getByRole('combobox',{ name:label, exact:true }).click(); await page.getByRole('option',{ name:option, exact:true }).click(); }
     await page.goto(base);
     await page.getByRole('combobox',{ name:'المقرر الدراسي', exact:true }).waitFor();
-    await select('القسم','المحاسبة');
+    await select('القسم','المحاسبة والمراجعة');
     await select('المستوى الدراسي','المستوى 3');
     await page.getByRole('combobox',{ name:'المقرر الدراسي', exact:true }).click();
     const options = await page.getByRole('option').allTextContents();
@@ -96,7 +96,7 @@ async function main() {
     await page.getByRole('button',{ name:'تأكيد وبدء التسجيل' }).click();
     await page.getByText('تم تسجيل 200 طالب باستثناء إداري موثّق.',{ exact:true }).waitFor();
     assert.equal(await page.evaluate(() => window.requests[1].options.overrideRegistrationLimits),true);
-    await select('القسم','نظم معلومات الأعمال (BIS)');
+    await select('القسم','نظم معلومات الأعمال');
     await page.getByRole('combobox',{ name:'المقرر الدراسي', exact:true }).click();
     assert.ok(!(await page.getByRole('option').allTextContents()).some((item) => item.startsWith('326')));
     await page.keyboard.press('Escape');
@@ -124,7 +124,7 @@ async function main() {
     assert.deepEqual(parsed,[{ 'كود الطالب':'000326', 'اسم الطالب':'طالب & اختبار' }]);
     assert.equal(await page.evaluate(() => window.injected),undefined,'Legacy HTML is parsed inertly');
     await page.goto(base);
-    await select('القسم','المحاسبة');
+    await select('القسم','المحاسبة والمراجعة');
     await page.getByRole('combobox',{ name:'المقرر الدراسي', exact:true }).click();
     await page.getByRole('option',{ name:/^326/ }).click();
     await page.locator('input[type=file]').setInputFiles({ name:'legacy.xls', mimeType:'application/vnd.ms-excel', buffer:Buffer.from(html) });

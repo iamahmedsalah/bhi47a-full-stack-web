@@ -1,5 +1,7 @@
 "use client";
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -377,9 +379,7 @@ export function WeeklyTimetable<T extends TimetableEntry>({
                   /
                 </span>
                 <bdi>
-                  {cohort.department === "GENERAL"
-                    ? t("general")
-                    : cohort.department}
+                  {curriculumDepartmentLabel(cohort.department, locale)}
                 </bdi>
               </>
             )}

@@ -24,15 +24,26 @@ export const COURSE_326_CURRICULA: readonly CourseCurriculum[] =
 
 const aliases: Record<string, CourseCurriculumDepartment> = {
   GENERAL: "GENERAL",
+  "GENERAL DIVISION": "GENERAL",
+  "GENERAL TRACK": "GENERAL",
+  "شعبة عامة": "GENERAL",
+  "الشعبة العامة (GENERAL)": "GENERAL",
   عام: "GENERAL",
   "الشعبة العامة": "GENERAL",
   BIS: "BIS",
   "BUSINESS INFORMATION SYSTEMS": "BIS",
   "BUSINESS INFORMATION SYSTEM": "BIS",
+  "BUSINESS INFORMATION SYSTEMS (BIS)": "BIS",
+  "نظم معلومات الأعمال (BIS)": "BIS",
   "BIS DEPARTMENT": "BIS",
   "نظم معلومات الأعمال": "BIS",
   "قسم نظم معلومات الأعمال": "BIS",
   ACCOUNTING: "ACCOUNTING",
+  ACC: "ACCOUNTING",
+  "المحاسبة والمراجعة (ACCOUNTING)": "ACCOUNTING",
+  "ACCOUNTING AND AUDITING": "ACCOUNTING",
+  "ACCOUNTING & AUDITING": "ACCOUNTING",
+  "ACCOUNTING & FINANCE": "ACCOUNTING",
   ACCOUNTANT: "ACCOUNTING",
   "ACCOUNTING DEPARTMENT": "ACCOUNTING",
   "ACCOUNTANT DEPARTMENT": "ACCOUNTING",
@@ -95,14 +106,14 @@ export function curriculumDepartmentLabel(
   const labels =
     locale === "ar"
       ? {
-          GENERAL: "الشعبة العامة",
-          BIS: "نظم معلومات الأعمال (BIS)",
-          ACCOUNTING: "المحاسبة",
+          GENERAL: "شعبة عامة",
+          BIS: "نظم معلومات الأعمال",
+          ACCOUNTING: "المحاسبة والمراجعة",
         }
       : {
-          GENERAL: "General",
-          BIS: "Business Information Systems (BIS)",
-          ACCOUNTING: "Accounting",
+          GENERAL: "General Division",
+          BIS: "Business Information Systems",
+          ACCOUNTING: "Accounting and Auditing",
         };
   return department ? labels[department] : value || "—";
 }
@@ -126,7 +137,7 @@ export function courseCurriculumSummary(
     ? placements
         .map(
           (item) =>
-            `${item.department === "BIS" ? "BIS" : curriculumDepartmentLabel(item.department, locale)}: ${labels[item.semester] ?? item.semester}`,
+            `${curriculumDepartmentLabel(item.department, locale)}: ${labels[item.semester] ?? item.semester}`,
         )
         .join(" — ")
     : (labels[course.semester ?? ""] ?? course.semester ?? "—");

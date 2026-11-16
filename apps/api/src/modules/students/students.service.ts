@@ -1,3 +1,4 @@
+import { curriculumDepartmentLabel } from '@student-portal/shared';
 import { StudentCodesService } from '../student-codes/student-codes.service';
 import {
   Injectable,
@@ -714,14 +715,14 @@ export class StudentsService {
       const departments = [
         {
           department: 'General',
-          nameAr: 'الشعبة العامة',
-          nameEn: 'General Track (Years 1 & 2)',
+          nameAr: 'شعبة عامة',
+          nameEn: 'General Division',
           levels: ['1', '2'],
           enrolled: generalEnrolled,
         },
         {
           department: 'BIS',
-          nameAr: 'نظم معلومات الأعمال (BIS)',
+          nameAr: 'نظم معلومات الأعمال',
           nameEn: 'Business Information Systems',
           levels: ['3', '4'],
           enrolled: bisEnrolled,
@@ -729,7 +730,7 @@ export class StudentsService {
         {
           department: 'ACCOUNTING',
           nameAr: 'المحاسبة والمراجعة',
-          nameEn: 'Accounting & Auditing',
+          nameEn: 'Accounting and Auditing',
           levels: ['3', '4'],
           enrolled: accEnrolled,
         },
@@ -913,14 +914,14 @@ export class StudentsService {
     const departments = [
       {
         department: 'General',
-        nameAr: 'الشعبة العامة',
-        nameEn: 'General Track (Years 1 & 2)',
+        nameAr: 'شعبة عامة',
+        nameEn: 'General Division',
         levels: ['1', '2'],
         enrolled: generalEnrolled,
       },
       {
         department: 'BIS',
-        nameAr: 'نظم معلومات الأعمال (BIS)',
+        nameAr: 'نظم معلومات الأعمال',
         nameEn: 'Business Information Systems',
         levels: ['3', '4'],
         enrolled: bisEnrolled,
@@ -928,7 +929,7 @@ export class StudentsService {
       {
         department: 'ACCOUNTING',
         nameAr: 'المحاسبة والمراجعة',
-        nameEn: 'Accounting & Auditing',
+        nameEn: 'Accounting and Auditing',
         levels: ['3', '4'],
         enrolled: accEnrolled,
       },
@@ -1294,12 +1295,7 @@ export class StudentsService {
       }
     }
 
-    const deptLabel =
-      targetDepartment === 'BIS'
-        ? 'نظم معلومات الأعمال (BIS)'
-        : targetDepartment === 'ACCOUNTING'
-          ? 'المحاسبة والمراجعة'
-          : targetDepartment;
+    const deptLabel = curriculumDepartmentLabel(targetDepartment, 'ar');
 
     this.invalidateStatsCache();
 
@@ -2343,7 +2339,7 @@ export class StudentsService {
           : '0%';
 
       const r = dashSheet.addRow([
-        deptKey === 'GENERAL' ? 'عام (الشعبة العامة)' : deptKey,
+        curriculumDepartmentLabel(deptKey, 'ar'),
         dTotal,
         dPaid,
         dBlocked,
@@ -2484,7 +2480,7 @@ export class StudentsService {
         studentCode: s.studentCode,
         studentName: s.fullNameAr || s.fullName,
         level: LEVEL_MAP[s.level] || `المستوى ${s.level}`,
-        department: s.department || 'GENERAL',
+        department: curriculumDepartmentLabel(s.department || 'GENERAL', 'ar'),
         tuitionStatus:
           TUITION_MAP[s.tuitionFeesStatus || ''] ||
           s.tuitionFeesStatus ||

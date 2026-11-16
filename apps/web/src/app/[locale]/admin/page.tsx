@@ -1,4 +1,6 @@
 "use client";
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import type { TimetableEntry } from '@/features/course-schedules/timetable-model';
 
 import React, { useState } from "react";
@@ -801,7 +803,7 @@ export default function AdminDashboard() {
 
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>
-                            {c.department || (isAr ? "عام" : "General")}
+                            {curriculumDepartmentLabel(c.department, locale)}
                           </span>
                           {c.credits ? (
                             <>
@@ -1053,7 +1055,7 @@ export default function AdminDashboard() {
                                 {isAr
                                   ? `المستوى ${slot.level}`
                                   : `Level ${slot.level}`}
-                                {slot.department && ` · ${slot.department}`}
+                                {slot.department && ` · ${curriculumDepartmentLabel(slot.department, locale)}`}
                               </div>
                               {(slot.group || slot.section) && (
                                 <div className="text-[11px] text-muted-foreground">
@@ -1899,8 +1901,8 @@ export default function AdminDashboard() {
                   </h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {isAr
-                      ? "توزيع المعدلات التراكمية، ومعدلات استبقاء المستويات الدراسية، وطاقة الأقسام العلمية (الشعبة العامة، BIS، المحاسبة)"
-                      : "GPA standing distributions, cohort retention rates, and academic department capacity (General Track, BIS, Accounting)"}
+                      ? "توزيع المعدلات التراكمية، ومعدلات استبقاء المستويات الدراسية، وطاقة الأقسام العلمية (شعبة عامة، نظم معلومات الأعمال، المحاسبة والمراجعة)"
+                      : "GPA standing distributions, cohort retention rates, and academic department capacity (General Division, Business Information Systems, Accounting and Auditing)"}
                   </p>
                 </div>
               </div>

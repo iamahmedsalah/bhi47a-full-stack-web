@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import QRCode from "qrcode";
 import {
   isAdmissionAcademicYear,
+  curriculumDepartmentLabel,
   type AdmissionAccessItem,
   type AdmissionAccessSecret,
   type AdmissionGroupItem,
@@ -824,7 +825,7 @@ export function AdmissionGroupsPanel() {
       header: t("fields.department"),
       render: (row) => (
         <TableCell>
-          <bdi>{row.department}</bdi>
+          <bdi>{curriculumDepartmentLabel(row.department, locale)}</bdi>
         </TableCell>
       ),
     },
@@ -1062,7 +1063,7 @@ function GroupStudentsDialog({
               {t("fields.department")}
             </span>
             <span className="font-mono font-bold text-foreground">
-              {group.department}
+              {curriculumDepartmentLabel(group.department, locale)}
             </span>
           </div>
           <div className="p-2.5 rounded-xl border border-border/60 bg-surface/40">
@@ -1125,7 +1126,7 @@ function GroupStudentsDialog({
                         ? st.fullNameAr || st.fullName
                         : st.fullName}
                     </td>
-                    <td className="p-2.5 font-mono">{st.department}</td>
+                    <td className="p-2.5">{curriculumDepartmentLabel(st.department, locale)}</td>
                     <td className="p-2.5 text-center">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         {t("enabled")}

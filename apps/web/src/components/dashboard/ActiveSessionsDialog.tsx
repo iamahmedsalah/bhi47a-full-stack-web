@@ -1,5 +1,7 @@
 'use client';
 
+import { curriculumDepartmentLabel } from "@student-portal/shared";
+
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -539,7 +541,7 @@ export function ActiveSessionsDialog({
 
                           {item.department && (
                             <span className="rounded-squircle bg-secondary/60 px-2 py-0.5 text-[11px] text-muted-foreground">
-                              {item.department}
+                              {curriculumDepartmentLabel(item.department, isAr ? 'ar' : 'en')}
                             </span>
                           )}
 

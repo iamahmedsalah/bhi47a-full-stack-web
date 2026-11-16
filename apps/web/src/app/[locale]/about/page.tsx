@@ -59,8 +59,8 @@ export default async function AboutPage({ params }: PageProps) {
             </h1>
             <p className="mt-3 text-slate-300 max-w-3xl text-sm sm:text-base leading-relaxed">
               {isAr
-                ? 'مؤسسة تعليمية جامعية معتمدة تهدف إلى إعداد كوادر متميزة في مجالات نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة.'
-                : 'An accredited higher education institution preparing distinguished graduates in Business Information Systems (BIS) and Accounting & Auditing.'}
+                ? 'مؤسسة تعليمية جامعية معتمدة تهدف إلى إعداد كوادر متميزة في مجالات نظم معلومات الأعمال والمحاسبة والمراجعة.'
+                : 'An accredited higher education institution preparing distinguished graduates in Business Information Systems and Accounting and Auditing.'}
             </p>
           </div>
         </section>

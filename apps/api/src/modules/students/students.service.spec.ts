@@ -321,7 +321,7 @@ describe('StudentsService Unit Tests', () => {
       );
 
       expect(result.updatedCount).toBe(2);
-      expect(result.message).toContain('نظم معلومات الأعمال (BIS)');
+      expect(result.message).toContain('نظم معلومات الأعمال');
       expect(mockStudentProfileModel.updateMany).toHaveBeenCalledWith(
         expect.any(Object),
         {

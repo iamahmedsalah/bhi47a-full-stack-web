@@ -35,8 +35,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     : `${INSTITUTE_INFO.nameEn} (BHI47) | Official Website & Student Portal`;
 
   const description = isAr
-    ? 'الموقع الرسمي للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات بالبحيرة (BHI47 / BHI47a). بوابة الطالب الإلكترونية لتسجيل الدخول، الجداول الدراسية، نتائج الامتحانات، وبرامج نظم معلومات الأعمال (BIS) والمحاسبة والمراجعة.'
-    : 'Official website of the High Institute for Advanced Management Sciences and Computer in Beheira (BHI47 / BHI47a). Student electronic portal for login, exam results, schedules, BIS, and Accounting & Auditing programs.';
+    ? 'الموقع الرسمي للمعهد العالي للعلوم الإدارية المتقدمة والحاسبات بالبحيرة (BHI47 / BHI47a). بوابة الطالب الإلكترونية لتسجيل الدخول، الجداول الدراسية، نتائج الامتحانات، وبرامج نظم معلومات الأعمال والمحاسبة والمراجعة.'
+    : 'Official website of the High Institute for Advanced Management Sciences and Computer in Beheira (BHI47 / BHI47a). Student electronic portal for login, exam results, schedules, BIS, and Accounting and Auditing programs.';
 
   const baseUrl = getSiteUrl();
 
@@ -151,7 +151,7 @@ export default async function InstitutionalHomePage({ params }: PageProps) {
         image: `${baseUrl}/images/institutional/campus-hero.jpg`,
         description: isAr
           ? 'معهد عالي مصري معتمد من وزارة التعليم العالي يمنح درجة البكالوريوس في نظم معلومات الأعمال والمحاسبة والمراجعة.'
-          : 'Accredited Egyptian Higher Institute offering bachelor degrees in Business Information Systems and Accounting & Auditing.',
+          : 'Accredited Egyptian Higher Institute offering bachelor degrees in Business Information Systems and Accounting and Auditing.',
         telephone: INSTITUTE_INFO.phones[0],
         email: INSTITUTE_INFO.email,
         address: {
@@ -167,12 +167,12 @@ export default async function InstitutionalHomePage({ params }: PageProps) {
           itemListElement: [
             {
               '@type': 'Course',
-              name: isAr ? 'شعبة نظم معلومات الأعمال (BIS)' : 'Business Information Systems (BIS)',
+              name: isAr ? 'شعبة نظم معلومات الأعمال' : 'Business Information Systems',
               description: 'Bachelor degree in Business Information Systems combining IT, software engineering, databases, and business management.',
             },
             {
               '@type': 'Course',
-              name: isAr ? 'شعبة المحاسبة والمراجعة' : 'Accounting & Auditing',
+              name: isAr ? 'شعبة المحاسبة والمراجعة' : 'Accounting and Auditing',
               description: 'Bachelor degree in Accounting, financial reporting, auditing, and corporate taxation.',
             },
           ],

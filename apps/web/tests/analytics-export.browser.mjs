@@ -107,7 +107,7 @@ try {
     await page.getByText(m.selectAtLeastOne,{exact:true}).waitFor();
     await page.getByRole('checkbox',{name:m.sheets.students,exact:true}).check();
     await select(m.level,m.levelValue.replace('{level}','3'));
-    await select(m.department,locale === 'ar'?'المحاسبة':'Accounting');
+    await select(m.department,locale === 'ar'?'المحاسبة والمراجعة':'Accounting and Auditing');
     const year=page.getByRole('textbox',{name:m.academicYear,exact:true});
     assert.equal(await year.getAttribute('dir'),'ltr');
     await year.fill('2027-2027');assert.equal(await page.getByRole('button',{name:m.downloadSelected,exact:true}).isDisabled(),true);

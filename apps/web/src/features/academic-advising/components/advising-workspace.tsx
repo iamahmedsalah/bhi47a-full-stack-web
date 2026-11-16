@@ -1,4 +1,6 @@
 "use client";
+
+import { curriculumDepartmentLabel } from "@student-portal/shared";
 import { isAxiosError } from 'axios';
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -1255,17 +1257,7 @@ export function AdvisingWorkspace() {
                       <bdi>{isArabic ? (courseMap.data?.student?.nameAr || courseMap.data?.student?.fullNameAr || active.nameAr || active.fullNameAr || active.name) : (courseMap.data?.student?.name || active.name)}</bdi>
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      {active.department
-                        ? (isArabic
-                            ? active.department.toUpperCase().includes('ACC') || active.department.includes('محاسب')
-                              ? 'شعبة المحاسبة والمراجعة'
-                              : active.department.toUpperCase().includes('BIS') || active.department.includes('نظم')
-                                ? 'نظم معلومات الأعمال (BIS)'
-                                : active.department.toUpperCase().includes('GEN') || active.department.includes('عام')
-                                  ? 'الشعبة العامة'
-                                  : active.department
-                            : active.department)
-                        : (isArabic ? 'الشعبة العامة' : 'General Track')} ·{" "}
+                      {curriculumDepartmentLabel(active.department || "GENERAL", locale)} ·{" "}
                       {semesterLabel(active.semester, locale)} ·{" "}
                       {advisingStatusLabel(
                         caseDetails.data?.status ?? active.advisingStatus,
@@ -2788,15 +2780,15 @@ function CanvasContent({
                   {
                     id: "auto",
                     label: isArabic
-                      ? `طالب (${studentTrack === "GENERAL" ? "عامة" : studentTrack === "ACCOUNTING" ? "محاسبة" : "نظم"})`
-                      : `Auto (${studentTrack === "GENERAL" ? "General" : studentTrack === "ACCOUNTING" ? "Acc" : "BIS"})`,
+                      ? `طالب (${curriculumDepartmentLabel(studentTrack, "ar")})`
+                      : `Auto (${curriculumDepartmentLabel(studentTrack, "en")})`,
                   },
                   { id: "all", label: isArabic ? "الكل" : "All" },
-                  { id: "GENERAL", label: isArabic ? "عامة" : "General" },
-                  { id: "BIS", label: isArabic ? "نظم BIS" : "BIS" },
+                  { id: "GENERAL", label: curriculumDepartmentLabel("GENERAL", locale) },
+                  { id: "BIS", label: curriculumDepartmentLabel("BIS", locale) },
                   {
                     id: "ACCOUNTING",
-                    label: isArabic ? "محاسبة" : "Accounting",
+                    label: curriculumDepartmentLabel("ACCOUNTING", locale),
                   },
                 ].map((dept) => (
                   <button
