@@ -234,6 +234,29 @@ export function normalizeRowKeys(
       continue;
     }
 
+    // Historical one-row component maxima and statuses, in either language.
+    const historicalComponentFields: Record<string, string> = {
+      courseworkmaxgrade: 'courseworkMaxGrade',
+      عظمىأعمالالسنة: 'courseworkMaxGrade',
+      courseworkstatus: 'courseworkStatus',
+      حالةأعمالالسنة: 'courseworkStatus',
+      midtermmaxgrade: 'midtermMaxGrade',
+      عظمىالميدترم: 'midtermMaxGrade',
+      midtermstatus: 'midtermStatus',
+      حالةالميدترم: 'midtermStatus',
+      finalmaxgrade: 'finalMaxGrade',
+      عظمىالنهائي: 'finalMaxGrade',
+      finalstatus: 'finalStatus',
+      حالةالنهائي: 'finalStatus',
+    };
+    const componentField = historicalComponentFields[cleanKey];
+    if (componentField && options?.strictNumbers) {
+      normalized[componentField] = componentField.endsWith('MaxGrade')
+        ? parseNumeric(val)
+        : String(val).trim();
+      continue;
+    }
+
     // Student Code
     if (
       cleanKey === 'studentcode' ||
@@ -642,6 +665,7 @@ export function normalizeRowKeys(
       cleanKey === 'midtermscore' ||
       cleanKey === 'midtermgrade' ||
       cleanKey === 'ميدترم' ||
+      cleanKey === 'الميدترم' ||
       cleanKey === 'امتحانالميدترم' ||
       cleanKey === 'درجةالميدترم' ||
       cleanKey === 'أعمالالفصل' ||
@@ -655,6 +679,7 @@ export function normalizeRowKeys(
       cleanKey === 'finalscore' ||
       cleanKey === 'finalgrade' ||
       cleanKey === 'نهائي' ||
+      cleanKey === 'النهائي' ||
       cleanKey === 'الامتحانالنهائي' ||
       cleanKey === 'درجةالنهائي' ||
       cleanKey === 'فاينل' ||

@@ -347,7 +347,7 @@ function UploadsPageContent() {
         void downloadFileBlob(
           new Blob(
             [
-              "\ufeffstudentCode,courseCode,examType,grade,maxGrade,status,academicYear,semester\r\n",
+              "\ufeffstudentCode,courseCode,coursework,midterm,final,courseworkMaxGrade,midtermMaxGrade,finalMaxGrade,courseworkStatus,midtermStatus,finalStatus,academicYear,semester\r\n",
             ],
             { type: "text/csv;charset=utf-8" },
           ),

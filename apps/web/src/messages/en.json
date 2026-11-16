@@ -1984,7 +1984,7 @@
   },
   "controlRelease": {
     "historicalImportToggle": "Import previous years — admin only",
-    "historicalImportHelp": "Enable for previous academic years, then download the new Excel template. Use one row per student/course/component (coursework / midterm / final), with an explicit academic year and semester. Defaults are 20 / 30 / 50; enter the historical maximum when different. Existing grades and Control sheets are protected; identical retries are safe. Imported marks stay hidden and are not published automatically. Do not fill breakdown columns in the standard template; use the dedicated Excel template above.",
+    "historicalImportHelp": "For previous academic years, download the Excel template and use one row per student and course with coursework, midterm and final columns, plus year and semester. Default maxima are 20 / 30 / 50; optional maximum and status columns apply to each component separately. Leave unavailable components blank; zero is a real mark. The older one-row-per-component format is also supported. Existing grades and Control sheets are protected, identical retries are safe, and imported marks stay hidden.",
     "step1": "1. Review and approve the sheet",
     "step2": "2. Preview and publish marks",
     "step3": "3. Enable student viewing",

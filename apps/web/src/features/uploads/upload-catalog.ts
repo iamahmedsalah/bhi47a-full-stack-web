@@ -393,6 +393,49 @@ export const UPLOAD_CATALOGS: Record<UploadCatalogType, UploadCatalogConfig> = {
     descEn: 'Upload midterm, final exam, practical, and coursework grades with automatic letter grade & GPA calculation.',
     fields: [
       {
+        key: "courseworkMaxGrade",
+        labelAr: "عظمى أعمال السنة",
+        labelEn: "coursework maximum",
+        type: "number",
+        aliases: ["courseworkMaxGrade", "عظمى أعمال السنة"],
+      },
+      {
+        key: "courseworkStatus",
+        labelAr: "حالة أعمال السنة",
+        labelEn: "coursework status",
+        type: "enum",
+        aliases: ["courseworkStatus", "حالة أعمال السنة"],
+      },
+      {
+        key: "midtermMaxGrade",
+        labelAr: "عظمى الميدترم",
+        labelEn: "midterm maximum",
+        type: "number",
+        aliases: ["midtermMaxGrade", "عظمى الميدترم"],
+      },
+      {
+        key: "midtermStatus",
+        labelAr: "حالة الميدترم",
+        labelEn: "midterm status",
+        type: "enum",
+        aliases: ["midtermStatus", "حالة الميدترم"],
+      },
+      {
+        key: "finalMaxGrade",
+        labelAr: "عظمى النهائي",
+        labelEn: "final maximum",
+        type: "number",
+        aliases: ["finalMaxGrade", "عظمى النهائي"],
+      },
+      {
+        key: "finalStatus",
+        labelAr: "حالة النهائي",
+        labelEn: "final status",
+        type: "enum",
+        aliases: ["finalStatus", "حالة النهائي"],
+      },
+
+      {
         key: 'studentCode',
         labelAr: 'كود الطالب',
         labelEn: 'Student Code',

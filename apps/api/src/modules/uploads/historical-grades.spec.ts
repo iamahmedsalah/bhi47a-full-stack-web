@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import { Types } from 'mongoose';
 import {
   validateHistoricalGrade,
+  validateHistoricalGradeRow,
   DEFAULT_CONTROL_COMPONENTS,
 } from '@student-portal/shared';
 import { GradeImporter } from './importers/grade.importer';
@@ -170,7 +171,7 @@ describe('historical grades', () => {
     );
     expect(grades.findOneAndUpdate).toHaveBeenCalledTimes(1);
   });
-  it('generates a single concise bilingual sheet without conflicting breakdown columns', async () => {
+  it('generates a bilingual one-course-row template with separate scores, maxima and statuses', async () => {
     for (const lang of ['ar', 'en'] as const) {
       const template = await UploadsTemplateGenerator.generate(
         'historical-grades',
@@ -179,10 +180,158 @@ describe('historical grades', () => {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(template.buffer as unknown as ExcelJS.Buffer);
       expect(workbook.worksheets).toHaveLength(1);
-      expect(workbook.worksheets[0].columnCount).toBe(8);
+      expect(workbook.worksheets[0].columnCount).toBe(13);
       expect(workbook.worksheets[0].rowCount).toBe(1);
       expect(workbook.worksheets[0].getColumn(1).numFmt).toBe('@');
       expect(workbook.worksheets[0].getColumn(2).numFmt).toBe('@');
     }
+  });
+
+  it('validates one course row without inventing omitted marks or sharing exam statuses', () => {
+    const wide = {
+      studentCode: '00123',
+      courseCode: '111',
+      academicYear: '2023-2024',
+      semester: 'first',
+      coursework: 18,
+      midterm: 0,
+      final: 0,
+      finalStatus: 'absent',
+    };
+    const parsed = validateHistoricalGradeRow(wide, now);
+    expect(parsed).toMatchObject({
+      ok: true,
+      values: [
+        { examType: 'coursework', grade: 18, maxGrade: 20, status: 'present' },
+        { examType: 'midterm', grade: 0, maxGrade: 30, status: 'present' },
+        { examType: 'final', grade: 0, maxGrade: 50, status: 'absent' },
+      ],
+    });
+    expect(
+      validateHistoricalGradeRow({ ...wide, coursework: '', midterm: '' }, now),
+    ).toMatchObject({ ok: true, values: [{ examType: 'final' }] });
+    expect(
+      validateHistoricalGradeRow(
+        { ...wide, final: 54, finalStatus: 'present', finalMaxGrade: 60 },
+        now,
+      ).ok,
+    ).toBe(true);
+    for (const changes of [
+      { final: 51 },
+      { midterm: '25%' },
+      { final: 5 },
+      { examType: 'final' },
+      { status: 'absent' },
+      { total: 18 },
+      { practical: 2 },
+      { finalMaxGrade: 'oops' },
+      { final: '', finalStatus: 'absent' },
+    ])
+      expect(validateHistoricalGradeRow({ ...wide, ...changes }, now).ok).toBe(
+        false,
+      );
+  });
+
+  it('normalizes Arabic one-row headers without changing ordinary maximum aliases', () => {
+    const input = {
+      'كود الطالب': '00123',
+      'كود المقرر': '111',
+      'أعمال السنة': 18,
+      الميدترم: 25,
+      النهائي: 0,
+      'عظمى النهائي': 60,
+      'حالة النهائي': 'غائب',
+      'السنة الدراسية': '2023-2024',
+      'الفصل الدراسي': 'first',
+    };
+    expect(
+      validateHistoricalGradeRow(
+        normalizeRowKeys(input, { strictNumbers: true }),
+        now,
+      ),
+    ).toMatchObject({
+      ok: true,
+      values: [
+        { examType: 'coursework', grade: 18 },
+        { examType: 'midterm', grade: 25 },
+        { examType: 'final', grade: 0, maxGrade: 60, status: 'absent' },
+      ],
+    });
+    expect(normalizeRowKeys({ 'عظمى النهائي': 60 })).toMatchObject({
+      maxFinal: 60,
+    });
+  });
+
+  it('counts a course row once, rejects invalid rows before writes, and retries each mark safely', async () => {
+    const saved = new Map<string, Record<string, unknown>>();
+    const grades = {
+      findOne: jest.fn((filter: { examType: string }) =>
+        chain(saved.get(filter.examType) ?? null),
+      ),
+      findOneAndUpdate: jest.fn(
+        (
+          filter: { examType: string },
+          update: { $setOnInsert: Record<string, unknown> },
+        ) => {
+          saved.set(filter.examType, update.$setOnInsert);
+          return chain(update.$setOnInsert);
+        },
+      ),
+    };
+    const service = { hasControlSheet: jest.fn().mockResolvedValue(false) };
+    const importer = new GradeImporter(
+      {
+        find: () =>
+          chain([{ _id: new Types.ObjectId(), studentCode: '00123' }]),
+      } as never,
+      {
+        find: () =>
+          chain([{ _id: new Types.ObjectId(), code: '111', name: 'Thinking' }]),
+      } as never,
+      grades as never,
+      service as never,
+    );
+    const wide = {
+      studentCode: '00123',
+      courseCode: '111',
+      academicYear: '2023-2024',
+      semester: 'first',
+      coursework: 18,
+      midterm: 25,
+      final: 0,
+      finalStatus: 'absent',
+    };
+    expect(
+      await importer.commitHistorical([{ ...wide, final: 70 }], 'actor'),
+    ).toMatchObject({ successCount: 0 });
+    expect(grades.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(await importer.commitHistorical([wide], 'actor')).toEqual({
+      successCount: 1,
+      errors: [],
+    });
+    expect(saved.size).toBe(3);
+    expect(saved.get('coursework')).toMatchObject({
+      grade: 18,
+      status: 'present',
+      isPublished: false,
+      historicalImport: true,
+    });
+    expect(saved.get('final')).toMatchObject({ grade: 0, status: 'absent' });
+    expect(await importer.commitHistorical([wide], 'actor')).toEqual({
+      successCount: 1,
+      errors: [],
+    });
+    expect(grades.findOneAndUpdate).toHaveBeenCalledTimes(3);
+    const conflict = await importer.commitHistorical(
+      [{ ...wide, coursework: 17, midterm: 24 }],
+      'actor',
+    );
+    expect(conflict.successCount).toBe(0);
+    expect(conflict.errors).toHaveLength(1);
+    service.hasControlSheet.mockResolvedValue(true);
+    expect(
+      (await importer.commitHistorical([wide], 'actor')).successCount,
+    ).toBe(0);
+    expect(grades.findOneAndUpdate).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,4 +1,4 @@
-import { validateHistoricalGrade } from "@student-portal/shared";
+import { validateHistoricalGradeRow } from "@student-portal/shared";
 import { readSheet as readXlsxFile } from "read-excel-file/browser";
 import type {
   PreFlightIssue,
@@ -275,9 +275,12 @@ export async function inspectAndValidateFile(
 
     allParsedRows.push(rowData);
 
-    const rowIssues = validateCatalogRow(type, rowNumber, rowData, isAr);
+    const rowIssues: PreFlightIssue[] =
+      options?.historicalGrades && type === "grades"
+        ? []
+        : validateCatalogRow(type, rowNumber, rowData, isAr);
     if (options?.historicalGrades && type === "grades") {
-      const historical = validateHistoricalGrade(rowData);
+      const historical = validateHistoricalGradeRow(rowData);
       if (!historical.ok)
         rowIssues.push({
           rowNumber,
@@ -291,8 +294,38 @@ export async function inspectAndValidateFile(
         });
     }
 
+    if (options?.historicalGrades && type === "grades") {
+      const parsed = validateHistoricalGradeRow(rowData);
+      if (parsed.ok) {
+        const keys = parsed.values.map((mark) =>
+          JSON.stringify([
+            mark.studentCode,
+            mark.courseCode,
+            mark.academicYear,
+            mark.semester,
+            mark.examType,
+          ]),
+        );
+        const first = keys
+          .map((key) => seenUniqueKeys.get(key))
+          .find((n) => n !== undefined);
+        if (first !== undefined)
+          rowIssues.push({
+            rowNumber,
+            field: "studentCode",
+            fieldLabel: isAr ? "كود الطالب" : "Student Code",
+            code: "DUPLICATE_STUDENT_COURSE",
+            severity: "error",
+            message: isAr
+              ? `درجة مكررة لنفس المكون والمقرر والفصل (الصف ${first})`
+              : `Duplicate course component for the same year and semester (row ${first})`,
+          });
+        else for (const key of keys) seenUniqueKeys.set(key, rowNumber);
+      }
+    }
+
     // Check for duplicate studentCode or unique identifiers within the file
-    if (rowData.studentCode) {
+    if (rowData.studentCode && !options?.historicalGrades) {
       const codeStr = String(rowData.studentCode).trim();
       const courseStr = rowData.courseCode
         ? String(rowData.courseCode).trim().toUpperCase()

@@ -1,4 +1,4 @@
-import { validateHistoricalGrade } from '@student-portal/shared';
+import { validateHistoricalGradeRow } from '@student-portal/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -69,113 +69,160 @@ export class GradeImporter implements Importer {
       Record<string, unknown>,
     ]) => {
       const rowNum = rowOffset + index + 2;
-      const parsed = validateHistoricalGrade(row);
+      const parsed = validateHistoricalGradeRow(row);
       if (!parsed.ok) {
         errors.push(`Row ${rowNum}: ${parsed.message}`);
         return;
       }
-      const mark = parsed.value;
-      const student = studentMap.get(mark.studentCode),
-        course = courseMap.get(mark.courseCode);
-      if (!student || !course) {
-        errors.push(
-          `Row ${rowNum}: Student or course not found / \u0627\u0644\u0637\u0627\u0644\u0628 \u0623\u0648 \u0627\u0644\u0645\u0642\u0631\u0631 \u063a\u064a\u0631 \u0645\u0633\u062c\u0644`,
-        );
-        return;
+      // Detect known conflicts before writing any component of a course row.
+      const first = parsed.values[0];
+      const student = studentMap.get(first.studentCode);
+      const course = courseMap.get(first.courseCode);
+      if (student && course && parsed.values.length > 1) {
+        for (const mark of parsed.values) {
+          const existing = await this.gradeModel
+            .findOne({
+              studentId: student._id,
+              courseId: course._id,
+              academicYear: mark.academicYear,
+              semester: mark.semester,
+              examType: mark.examType,
+            })
+            .lean();
+          if (
+            existing &&
+            (!existing.historicalImport ||
+              existing.controlManaged ||
+              existing.grade !== mark.grade ||
+              existing.maxGrade !== mark.maxGrade ||
+              existing.status !== mark.status)
+          ) {
+            errors.push(
+              `Row ${rowNum}: ${mark.examType}: Existing grade differs; no overwrite / درجة موجودة لن يتم استبدالها`,
+            );
+            return;
+          }
+        }
       }
-      const scope = `${course._id.toString()}|${mark.academicYear}|${mark.semester}`;
-      if (!controlScopes.has(scope))
-        controlScopes.set(
-          scope,
-          await this.gradesService.hasControlSheet(
-            course._id,
-            mark.academicYear,
-            mark.semester,
-          ),
-        );
-      if (controlScopes.get(scope)) {
-        errors.push(
-          `Row ${rowNum}: Existing Control sheet; use Control / \u064a\u0648\u062c\u062f \u0643\u0634\u0641 \u0643\u0646\u062a\u0631\u0648\u0644 \u0644\u0647\u0630\u0627 \u0627\u0644\u0645\u0642\u0631\u0631 \u0648\u0627\u0644\u0641\u0635\u0644`,
-        );
-        return;
+      let completed = 0;
+      for (const mark of parsed.values) {
+        let markSucceeded = false;
+        const processMark = async () => {
+          const student = studentMap.get(mark.studentCode),
+            course = courseMap.get(mark.courseCode);
+          if (!student || !course) {
+            errors.push(
+              `Row ${rowNum}: Student or course not found / \u0627\u0644\u0637\u0627\u0644\u0628 \u0623\u0648 \u0627\u0644\u0645\u0642\u0631\u0631 \u063a\u064a\u0631 \u0645\u0633\u062c\u0644`,
+            );
+            return;
+          }
+          const scope = `${course._id.toString()}|${mark.academicYear}|${mark.semester}`;
+          if (!controlScopes.has(scope))
+            controlScopes.set(
+              scope,
+              await this.gradesService.hasControlSheet(
+                course._id,
+                mark.academicYear,
+                mark.semester,
+              ),
+            );
+          if (controlScopes.get(scope)) {
+            errors.push(
+              `Row ${rowNum}: Existing Control sheet; use Control / \u064a\u0648\u062c\u062f \u0643\u0634\u0641 \u0643\u0646\u062a\u0631\u0648\u0644 \u0644\u0647\u0630\u0627 \u0627\u0644\u0645\u0642\u0631\u0631 \u0648\u0627\u0644\u0641\u0635\u0644`,
+            );
+            return;
+          }
+          const filter = {
+            studentId: student._id,
+            courseId: course._id,
+            academicYear: mark.academicYear,
+            semester: mark.semester,
+            examType: mark.examType,
+          };
+          const existing = await this.gradeModel.findOne(filter).lean();
+          if (existing) {
+            if (
+              existing.historicalImport &&
+              !existing.controlManaged &&
+              existing.grade === mark.grade &&
+              existing.maxGrade === mark.maxGrade &&
+              existing.status === mark.status
+            )
+              markSucceeded = true;
+            else
+              errors.push(
+                `Row ${rowNum}: Existing grade differs; no overwrite / \u062f\u0631\u062c\u0629 \u0645\u0648\u062c\u0648\u062f\u0629 \u0644\u0646 \u064a\u062a\u0645 \u0627\u0633\u062a\u0628\u062f\u0627\u0644\u0647\u0627`,
+              );
+            return;
+          }
+          const percentage =
+            Math.round((mark.grade / mark.maxGrade) * 10000) / 100;
+          const scale = calculateGradeScale(percentage, mark.status);
+          try {
+            // Atomic insert-only upsert makes a lost-response retry safe.
+            const saved = await this.gradeModel
+              .findOneAndUpdate(
+                filter,
+                {
+                  $setOnInsert: {
+                    ...filter,
+                    studentCode: mark.studentCode,
+                    courseCode: course.code,
+                    courseName: course.name,
+                    courseNameAr: course.nameAr,
+                    courseNameEn: course.nameEn || course.name,
+                    grade: mark.grade,
+                    maxGrade: mark.maxGrade,
+                    status: mark.status,
+                    percentage,
+                    letterGrade: scale.letter,
+                    gradePoints: scale.points,
+                    isPublished: false,
+                    historicalImport: true,
+                    updatedBy: actorId,
+                    rev: 1,
+                  },
+                },
+                { upsert: true, new: true },
+              )
+              .lean();
+            if (
+              saved?.historicalImport &&
+              !saved.controlManaged &&
+              saved.grade === mark.grade &&
+              saved.maxGrade === mark.maxGrade &&
+              saved.status === mark.status
+            )
+              markSucceeded = true;
+            else
+              errors.push(
+                `Row ${rowNum}: Concurrent grade conflict / \u062a\u0639\u0627\u0631\u0636 \u0645\u0639 \u062f\u0631\u062c\u0629 \u0645\u0648\u062c\u0648\u062f\u0629`,
+              );
+          } catch {
+            errors.push(
+              `Row ${rowNum}: Grade could not be saved / \u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0627\u0644\u062f\u0631\u062c\u0629`,
+            );
+          }
+        };
+        await processMark();
+        if (markSucceeded) completed++;
       }
-      const filter = {
-        studentId: student._id,
-        courseId: course._id,
-        academicYear: mark.academicYear,
-        semester: mark.semester,
-        examType: mark.examType,
-      };
-      const existing = await this.gradeModel.findOne(filter).lean();
-      if (existing) {
-        if (
-          existing.historicalImport &&
-          !existing.controlManaged &&
-          existing.grade === mark.grade &&
-          existing.maxGrade === mark.maxGrade &&
-          existing.status === mark.status
-        )
-          successCount++;
-        else
-          errors.push(
-            `Row ${rowNum}: Existing grade differs; no overwrite / \u062f\u0631\u062c\u0629 \u0645\u0648\u062c\u0648\u062f\u0629 \u0644\u0646 \u064a\u062a\u0645 \u0627\u0633\u062a\u0628\u062f\u0627\u0644\u0647\u0627`,
-          );
-        return;
-      }
-      const percentage = Math.round((mark.grade / mark.maxGrade) * 10000) / 100;
-      const scale = calculateGradeScale(percentage, mark.status);
-      try {
-        // Atomic insert-only upsert makes a lost-response retry safe.
-        const saved = await this.gradeModel
-          .findOneAndUpdate(
-            filter,
-            {
-              $setOnInsert: {
-                ...filter,
-                studentCode: mark.studentCode,
-                courseCode: course.code,
-                courseName: course.name,
-                courseNameAr: course.nameAr,
-                courseNameEn: course.nameEn || course.name,
-                grade: mark.grade,
-                maxGrade: mark.maxGrade,
-                status: mark.status,
-                percentage,
-                letterGrade: scale.letter,
-                gradePoints: scale.points,
-                isPublished: false,
-                historicalImport: true,
-                updatedBy: actorId,
-                rev: 1,
-              },
-            },
-            { upsert: true, new: true },
-          )
-          .lean();
-        if (
-          saved?.historicalImport &&
-          !saved.controlManaged &&
-          saved.grade === mark.grade &&
-          saved.maxGrade === mark.maxGrade &&
-          saved.status === mark.status
-        )
-          successCount++;
-        else
-          errors.push(
-            `Row ${rowNum}: Concurrent grade conflict / \u062a\u0639\u0627\u0631\u0636 \u0645\u0639 \u062f\u0631\u062c\u0629 \u0645\u0648\u062c\u0648\u062f\u0629`,
-          );
-      } catch {
-        errors.push(
-          `Row ${rowNum}: Grade could not be saved / \u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0627\u0644\u062f\u0631\u062c\u0629`,
-        );
-      }
+      if (completed === parsed.values.length) successCount++;
     };
     // Bound database work per request; insert-only upserts preserve safe retries.
     const indexedRows = [...rows.entries()];
     for (let offset = 0; offset < indexedRows.length; offset += 4) {
       await Promise.all(indexedRows.slice(offset, offset + 4).map(processRow));
     }
-    return { successCount, errors };
+    const rowErrors = new Map<string, string>();
+    for (const error of errors) {
+      const key = error.split(':', 1)[0];
+      rowErrors.set(
+        key,
+        rowErrors.has(key) ? rowErrors.get(key) + '; ' + error : error,
+      );
+    }
+    return { successCount, errors: [...rowErrors.values()] };
   }
 
   validate(rows: Record<string, unknown>[]) {

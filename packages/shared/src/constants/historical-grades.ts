@@ -1,5 +1,62 @@
 import { GRADE_STATUS_VALUES, type GradeStatus } from "./grade-statuses";
 
+/** Both upload formats normalize to the same independently stored exam marks. */
+export function validateHistoricalGradeRow(
+  row: Record<string, unknown>,
+  now = new Date(),
+) {
+  const has = (key: string) =>
+    row[key] !== undefined && row[key] !== null && row[key] !== "";
+  const components = ["coursework", "midterm", "final"] as const;
+  const breakdown = components.some(has);
+  const fail = (message: string) => ({ ok: false as const, message });
+  if (!breakdown) {
+    if (components.some((c) => has(`${c}Status`) || has(`${c}MaxGrade`)))
+      return fail(
+        "Component status/maximum requires its component score / حالة المكون وعظماه تتطلبان درجته",
+      );
+    const result = validateHistoricalGrade(row, now);
+    return result.ok ? { ok: true as const, values: [result.value] } : result;
+  }
+  if (
+    ["examType", "grade", "maxGrade", "status", "practical", "total"].some(has)
+  )
+    return fail(
+      "Use either component columns or grade/examType, without totals or a shared status / استخدم أعمدة المكونات أو الدرجة ونوع الامتحان، دون مجموع أو حالة مشتركة",
+    );
+  const values: HistoricalMark[] = [];
+  for (const component of components) {
+    if (!has(component)) {
+      if (has(`${component}Status`) || has(`${component}MaxGrade`))
+        return fail(
+          `${component}: enter a score (zero for absence) with its status/maximum / أدخل درجة المكون (صفر للغياب) مع حالته وحده الأقصى`,
+        );
+      continue; // Blank means omitted; an explicit zero remains a real mark.
+    }
+    const result = validateHistoricalGrade(
+      {
+        studentCode: row.studentCode,
+        courseCode: row.courseCode,
+        academicYear: row.academicYear,
+        semester: row.semester,
+        examType: component,
+        grade: row[component],
+        maxGrade: row[`${component}MaxGrade`],
+        status: row[`${component}Status`],
+      },
+      now,
+    );
+    if (!result.ok) return fail(`${component}: ${result.message}`);
+    values.push(result.value);
+  }
+  return { ok: true as const, values };
+}
+
+export type HistoricalMark = Extract<
+  ReturnType<typeof validateHistoricalGrade>,
+  { ok: true }
+>["value"];
+
 export function validateHistoricalGrade(
   row: Record<string, unknown>,
   now = new Date(),

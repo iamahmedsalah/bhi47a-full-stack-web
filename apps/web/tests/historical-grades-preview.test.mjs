@@ -60,3 +60,27 @@ test('real XLSX preview accepts a zero absent mark and a different component', a
   assert.equal(result.invalidRows, 0);
   assert.equal(result.parsedRows[0].grade, '0');
 });
+
+test('one course row previews all components and detects overlaps with legacy rows', async () => {
+  const csv = 'studentCode,courseCode,coursework,midterm,final,finalStatus,academicYear,semester,examType,grade\n'
+    + '00123,111,18,25,0,absent,2023-2024,first,,\n'
+    + '00123,111,,,,,2023-2024,1,الميدترم,25\n';
+  const result = await inspector.inspectAndValidateFile(new File([csv], 'one-row.csv'), 'grades', false, { historicalGrades: true });
+  assert.equal(result.validRows, 1);
+  assert.equal(result.invalidRows, 1);
+  assert.equal(result.parsedRows[0].studentCode, '00123');
+  assert.ok(result.issues.some(i => i.code === 'DUPLICATE_STUDENT_COURSE'));
+});
+
+test('Arabic one-row XLSX preserves maxima and separate exam statuses', async () => {
+  const { Workbook } = createRequire(path.join(web, '../api/package.json'))('exceljs');
+  const workbook = new Workbook();
+  const sheet = workbook.addWorksheet('درجات سابقة');
+  sheet.addRow(['كود الطالب', 'كود المقرر', 'أعمال السنة', 'الميدترم', 'النهائي', 'عظمى النهائي', 'حالة النهائي', 'السنة الدراسية', 'الفصل الدراسي']);
+  sheet.addRow(['00123', '111', 18, 25, 0, 60, 'غائب', '2023-2024', 'first']);
+  const result = await inspector.inspectAndValidateFile(new File([await workbook.xlsx.writeBuffer()], 'one-row.xlsx'), 'grades', true, { historicalGrades: true });
+  assert.equal(result.validRows, 1);
+  assert.equal(result.invalidRows, 0);
+  assert.equal(result.parsedRows[0].finalMaxGrade, '60');
+  assert.equal(result.parsedRows[0].finalStatus, 'غائب');
+});
