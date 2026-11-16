@@ -16,10 +16,11 @@ describe('isolated fixture index provisioning', () => {
 
   it('keeps unique, TTL and partial constraints and remains idempotent', async () => {
     const uri = new URL(process.env.MONGODB_URI ?? '');
+    // Match run-e2e.cjs: CI uses localhost, while local fixtures may use IPs.
     if (
       uri.protocol !== 'mongodb:' ||
-      uri.hostname !== '127.0.0.1' ||
-      !uri.pathname.endsWith('-e2e') ||
+      !['localhost', '127.0.0.1', '[::1]'].includes(uri.hostname) ||
+      !/\/(?:[\w-]*[-_])?(?:test|e2e)$/.test(uri.pathname) ||
       uri.username ||
       uri.password ||
       uri.search

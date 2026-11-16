@@ -257,3 +257,31 @@ API E2E fixture TypeScript completed with exit 0. The API-only replica-set retry
 | Remote GitHub workflow after these edits | Not run or certified; repository Actions require authenticated access |
 
 The standalone retry's test runner exited with process code 3221226505 before emitting JavaScript/test diagnostics, and its helper closed its own test MongoDB. No more database retries were made. This is a validation limitation, not a claim that all CI stages passed. The supplied security failure has a tested fix. Final diff check passed. No commit, push, deployment or live database mutation was performed.
+
+### 2026-11-16: CI fixture index URL mismatch
+
+The supplied GitHub API E2E log reports seven passing suites and one failing
+suite: `fixture-indexes.e2e-spec.ts` rejects the workflow's
+`mongodb://localhost:27017/student-portal-e2e` URL before any index provisioning.
+Its guard accepted only `127.0.0.1`, unlike `run-e2e.cjs`.
+
+The fixture now accepts the runner's same explicit loopback hosts and isolated
+test database naming rule. It still rejects remote hosts, credentials, query
+parameters and non-test database names. No application code, production indexes,
+test assertions or timeouts changed.
+
+Validation: changed-file ESLint and E2E TypeScript passed using the installed
+tools directly; the database runner safety tests passed 4/4. Sandboxed child
+processes stalled, and the local pnpm launcher could not verify/download its
+configured version from the registry, so those attempts are not passing checks.
+The successful checks were repeated outside the sandbox without changing
+package versions or bypassing package signature verification.
+
+The repaired fixture passed both real-MongoDB tests (2/2) on a fresh standalone
+localhost database, including idempotent index creation, unique/TTL/partial
+index metadata, duplicate rejection and rejection of a remote model before DDL.
+The broad local API retry hit the previously observed targeted-performance
+60-second setup timeout; it was stopped after recording that failure and its
+helper closed its own database. That suite passed in the supplied GitHub log.
+The targeted fixture result is not a claim that the full remote workflow has
+already passed. No commit, push, deployment or production data change occurred.
