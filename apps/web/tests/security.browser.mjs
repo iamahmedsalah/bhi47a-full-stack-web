@@ -117,7 +117,12 @@ await new Promise((resolve, reject) =>
       devtool: false,
       target: "web",
       entry: path.join(output, "entry.tsx"),
-      output: { path: output, filename: "bundle.js", publicPath: "/" },
+      output: {
+        path: output,
+        filename: "bundle.js",
+        chunkFilename: "[id].chunk.js",
+        publicPath: "/",
+      },
       resolve: {
         extensions: [".tsx", ".ts", ".jsx", ".js"],
         modules: [path.join(web, "node_modules"), "node_modules"],
@@ -176,6 +181,7 @@ const keyFixtures = () =>
       lastUsedAt: "2026-10-29T12:00:00Z",
     }),
   );
+const loadedChunks = new Set();
 const server = http.createServer(async (req, res) => {
   try {
     const pathname = new URL(req.url, "http://localhost").pathname;
@@ -282,14 +288,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const asset =
-      pathname === "/bundle.js"
-        ? path.join(output, "bundle.js")
+      /^\/[\w.-]+\.js$/.test(pathname)
+        ? path.join(output, pathname.slice(1))
         : pathname === "/styles.css"
           ? path.join(output, "styles.css")
           : pathname.startsWith("/fonts/")
             ? path.join(web, "public", pathname)
             : null;
     if (asset) {
+      if (pathname.endsWith(".chunk.js")) loadedChunks.add(pathname);
       res.setHeader(
         "Content-Type",
         pathname.endsWith(".js")
@@ -715,6 +722,10 @@ try {
       .getByRole("button", { name: /Make page available|Show syllabi card/ })
       .count(),
     0,
+  );
+  assert.ok(
+    loadedChunks.size > 0,
+    "Settings panels must load their real lazy JavaScript chunks",
   );
   assert.deepEqual(errors, []);
   console.log(

@@ -215,3 +215,45 @@ For the latest IC attempt, an approved summer registration allows copying the or
 Validation so far: full API unit run passed 105 suites / 1,017 tests. After the final IC Excel-preview validation and equal-percentage regression tests, all four affected Control suites passed 100 tests. All four Chromium acceptance suites passed: existing workbook (3,001 students), batched import, release/student results, and the new bilingual comparison/carry/undo dialog. Sixteen Node validation, real-file preview and workflow safety tests passed. Initial workspace lint and typecheck/E2E-typecheck passed; final lint/types and production build are being recorded below once complete.
 
 The MongoDB 9 local attempts timed out during index setup and one existing tuition-hold test. No behavioral test timeout or assertion was weakened. A portable official MongoDB 7 fixture matching CI's major version was downloaded into ignored outputs and SHA256-verified. On that fresh localhost replica set, both Control persistence suites passed all 30 tests, including transactional rollback, idempotent carry, stale comparison rejection, higher-attempt acceptance/retention, release-digest changes and hidden historical results. Full API E2E is a separate check. No live database, deployment, commit or push was changed.
+
+
+### Follow-up verification of commit 02463da
+
+Rechecked the implemented IC and whole-attempt workflows on the current checkout. The bilingual comparison/carry/undo Chromium suite passed again, along with all 16 validation, real XLSX preview and VPS workflow safety tests. Removed the redundant `/_next/static/:path*` Cache-Control override from `next.config.ts`: the installed Next documentation specifies that immutable asset caching is managed by Next itself. This removes its build warning while preserving the framework's production asset caching.
+
+The initial fresh local MongoDB attempt could not start before readiness expired; no application test ran in that attempt. A direct server version check passed and the isolated MongoDB 7 retry started successfully. Full lint/types, production build and database checks are recorded separately below after completion. Public GitHub Actions access returns HTTP 404 for this repository, so remote workflow status cannot be certified from this session. No commit, push, deployment or live database mutation was performed.
+
+
+The supplied GitHub run 43847229962 failed in `test:security` while waiting for the Portal services panel in Admin Settings. The isolated browser fixture served only `bundle.js`, although Settings now uses real lazy-loaded panels. Updated the fixture to serve emitted single-directory JavaScript chunks with the correct MIME type and explicitly assert that chunks were requested; retained the actual Settings components, RTL/mobile checks, permission assertions and existing timeouts. Session presentation tests now transpile the real TypeScript source into an explicit ESM data URL using the installed TypeScript package, removing the ambiguous-package-type warning without changing the web package's module mode. All four session presentation tests pass without warnings.
+
+Fresh MongoDB 7 Control persistence retry passed both suites / all 30 tests (639 seconds). The full API E2E phase follows separately. Parallel local lint/build checks were interrupted after available physical RAM fell below 500 MB; stopping only this task's process trees restored about 4.4 GB. These interrupted runs are not passes. Lint/types are being rerun with the installed Turbo's `--concurrency=1` option, then production build separately. The initial malformed local option forwarding was corrected; CI commands were not changed.
+
+The reported security browser acceptance now passes completely: Arabic/English, 290?1536px, real lazy Settings panels, per-key reauthentication, portal toggles, cancelled resets, restricted staff permissions, maps, retry and empty states. The four session presentation tests also pass with no module-type or experimental-loader warning.
+
+The fresh full API E2E attempt is not green: 4 suites passed / 4 failed (8 tests passed / 32 failed). Failures include targeted-performance and performance-remediation fixture setup timeouts, app setup timeout and MongoDB network timeouts in passkeys-store on the isolated localhost fixture. These are retained as failures; Control's separate 30 passing tests and the repaired security browser test do not constitute a passing full pipeline.
+
+Final workspace lint passed all three tasks with zero diagnostics using one package at a time (12m35s locally). The fresh production build has loaded the updated Next configuration without the previous immutable-static-cache warning. The failed broad API run left open handles after reporting its failures; only that verified isolated Jest process was stopped, allowing its helper to close its own MongoDB.
+
+Final workspace TypeScript passed all four tasks (5m07s locally). Production build of the final source passed all three tasks (6m14s, two cache hits). Next compiled, typechecked and generated every route without the redundant Cache-Control warning. Fresh artifact checks passed for the root route, removal of the duplicate static cache override and API runtime flag. A final API-only E2E retry is being run after these tools have completed, using a new isolated MongoDB 7 process.
+
+API E2E fixture TypeScript completed with exit 0. The API-only replica-set retry still exceeded targeted-performance setup/teardown deadlines while localhost createIndexes commands took 57?63 seconds, despite recovered free RAM. It was stopped after the setup failure was recorded. A final fresh standalone localhost API fixture is being checked to match CI's general API server topology (Control continues to use its separately verified replica set). No production index or test deadline was changed.
+
+
+### Final follow-up status
+
+| Check | Result |
+| --- | --- |
+| Reported security/settings Chromium failure | PASS after serving actual lazy JavaScript chunks; original assertions/timeouts retained |
+| Session presentation | PASS 4/4, repeated on final source with no module-type warning |
+| Attempt comparison Chromium | PASS, bilingual pagination, stale review, IC carry/undo |
+| Control real database workflow | PASS 30/30 across two suites |
+| Validation / real XLSX / workflow safety | PASS 16/16 |
+| Workspace lint | PASS all 3 tasks, zero diagnostics |
+| Workspace TypeScript | PASS all 4 tasks |
+| API E2E fixture TypeScript | PASS |
+| Final production build | PASS all 3 tasks; no duplicate Next static-cache warning |
+| API runtime / root route / static-cache artifacts | PASS |
+| Full API E2E on local Windows | NOT PASS: replica-set fixture setup/network timeouts; standalone retry exited before tests with Windows process code 3221226505 |
+| Remote GitHub workflow after these edits | Not run or certified; repository Actions require authenticated access |
+
+The standalone retry's test runner exited with process code 3221226505 before emitting JavaScript/test diagnostics, and its helper closed its own test MongoDB. No more database retries were made. This is a validation limitation, not a claim that all CI stages passed. The supplied security failure has a tested fix. Final diff check passed. No commit, push, deployment or live database mutation was performed.
