@@ -41,7 +41,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     key: 'midterm',
     nameAr: 'ميدتيرم',
     nameEn: 'Midterm',
-    max: 20,
+    max: 30,
     step: 0.5,
     enabled: true,
   },
@@ -49,11 +49,13 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     key: 'final',
     nameAr: 'النهائي',
     nameEn: 'Final',
-    max: 60,
+    max: 50,
     step: 0.5,
     enabled: true,
   },
 ];
+
+export const CONTROL_MIDTERM_STATES = ['present', 'absent'] as const;
 
 /** Grade states that only users holding `control.states.manage` may set. */
 export const CONTROL_RESTRICTED_STATES = [

@@ -91,9 +91,29 @@ export class StudentsService {
 
   private cachedStats: { data: any; expiresAt: number } | null = null;
   private static readonly STATS_CACHE_TTL_MS = 300_000; // 5 minutes cache
+  private onlineCounts?: {
+    expiresAt: number;
+    value: Promise<[number, number]>;
+  };
+
+  private getOnlineCounts(): Promise<[number, number]> {
+    if (this.onlineCounts && this.onlineCounts.expiresAt > Date.now()) {
+      return this.onlineCounts.value;
+    }
+    const value = Promise.all([
+      this.usersService.countActiveOnlineStudents(60),
+      this.usersService.countActiveOnlineStaff(60),
+    ]);
+    this.onlineCounts = { expiresAt: Date.now() + 15_000, value };
+    void value.catch(() => {
+      if (this.onlineCounts?.value === value) this.onlineCounts = undefined;
+    });
+    return value;
+  }
 
   invalidateStatsCache() {
     this.cachedStats = null;
+    this.onlineCounts = undefined;
   }
 
   async create(dto: CreateStudentDto, actorId?: string) {
@@ -583,10 +603,7 @@ export class StudentsService {
   async getStats() {
     const now = Date.now();
     if (this.cachedStats && this.cachedStats.expiresAt > now) {
-      const [liveOnline, liveOnlineStaff] = await Promise.all([
-        this.usersService.countActiveOnlineStudents(60),
-        this.usersService.countActiveOnlineStaff(60),
-      ]);
+      const [liveOnline, liveOnlineStaff] = await this.getOnlineCounts();
       this.cachedStats.data.liveOnline = Math.max(liveOnline ?? 0, 0);
       this.cachedStats.data.liveOnlineStaff = Math.max(liveOnlineStaff ?? 0, 0);
       return this.cachedStats.data;

@@ -240,3 +240,7 @@ ComplaintSchema.index({
   'replyEmailEvents.status': 1,
   'replyEmailEvents.nextAttemptAt': 1,
 });
+ComplaintSchema.index({
+  'replyEmailEvents.status': 1,
+  'replyEmailEvents.leaseUntil': 1,
+});

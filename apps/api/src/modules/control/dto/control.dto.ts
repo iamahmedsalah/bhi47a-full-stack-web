@@ -253,7 +253,32 @@ export class ControlFileBatchQueryDto {
   batch = 0;
 }
 
+export class AttemptPreviewQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2000)
+  page = 1;
+}
+export class UndoCarryIcDto {
+  @IsMongoId() studentId!: string;
+  @Matches(/^[a-f0-9]{64}$/) fingerprint!: string;
+}
+export class CarryIcDto {
+  @IsMongoId() sourceFinalId!: string;
+  @Matches(/^[a-f0-9]{64}$/) fingerprint!: string;
+}
 export class ReviewSheetDto {
+  @IsOptional()
+  @Matches(/^[a-f0-9]{64}$/)
+  attemptReviewDigest?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10000)
+  @IsMongoId({ each: true })
+  keepPreviousStudentIds?: string[];
+
   @IsIn(['SUBMIT', 'APPROVE', 'RETURN', 'REOPEN'])
   action!: 'SUBMIT' | 'APPROVE' | 'RETURN' | 'REOPEN';
 

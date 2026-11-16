@@ -51,6 +51,18 @@ const nextConfig: NextConfig = {
   },
   // React compiler runs babel-loader subprocesses that crash and timeout on large components in Turbopack/Docker
   reactCompiler: false,
+  experimental: {
+    optimizePackageImports: [
+      "framer-motion",
+      "@xyflow/react",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-select",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-tooltip",
+    ],
+  },
   ...(isStandaloneOutput && {
     output: "standalone",
     outputFileTracingRoot: workspaceRoot,

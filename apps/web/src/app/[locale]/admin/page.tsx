@@ -465,29 +465,13 @@ export default function AdminDashboard() {
     refetchOnWindowFocus: false,
   });
 
-  const coursesCountQuery = useQuery({
-    queryKey: ["admin-stats-courses"],
-    enabled: hasPerm("courses.read"),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const res = await api.get<PaginatedResponse<unknown>>("/admin/courses", {
-        params: { limit: 1 },
-      });
-      return res.data?.total || 0;
-    },
-  });
-
   const complaintsCountQuery = useQuery({
     queryKey: ["admin-stats-complaints"],
     enabled: hasPerm("complaints.read"),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await api.get<PaginatedResponse<unknown>>(
-        "/admin/complaints",
-        { params: { limit: 1, view: "summary" } },
-      );
+      const res = await api.get<{ total: number }>("/admin/complaints/stats");
       return res.data?.total || 0;
     },
   });
@@ -504,7 +488,7 @@ export default function AdminDashboard() {
           params: { limit: 100 },
         },
       );
-      return res.data.items;
+      return res.data;
     },
   });
 
@@ -525,7 +509,7 @@ export default function AdminDashboard() {
   });
 
   const coursesListForGrades = React.useMemo(() => {
-    return (coursesAnalyticsQuery.data ?? []).map((c) => ({
+    return (coursesAnalyticsQuery.data?.items ?? []).map((c) => ({
       _id: c._id,
       code: c.code || "",
       name: c.name || c.nameAr || c.nameEn || "",
@@ -537,14 +521,14 @@ export default function AdminDashboard() {
   const totalStudents = studentsStatsQuery.isLoading
     ? "..."
     : String(studentsStatsQuery.data?.total ?? 0);
-  const totalCourses = coursesCountQuery.isLoading
+  const totalCourses = coursesAnalyticsQuery.isLoading
     ? "..."
-    : String(coursesCountQuery.data ?? 0);
+    : String(coursesAnalyticsQuery.data?.total ?? 0);
   const activeComplaints = complaintsCountQuery.isLoading
     ? "..."
     : String(complaintsCountQuery.data ?? 0);
   const courses = React.useMemo(
-    () => coursesAnalyticsQuery.data ?? [],
+    () => coursesAnalyticsQuery.data?.items ?? [],
     [coursesAnalyticsQuery.data],
   );
   const complaints = React.useMemo(

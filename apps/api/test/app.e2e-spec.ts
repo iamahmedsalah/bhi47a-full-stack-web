@@ -32,6 +32,7 @@ import {
   type AdmissionPeriodDocument,
 } from '../src/modules/admissions/schemas/admission-period.schema';
 import { PERMISSIONS } from '@student-portal/shared';
+import { createFixtureIndexes } from './fixture-indexes';
 
 describe('API authentication and session boundaries (isolated MongoDB)', () => {
   let app: INestApplication | undefined;
@@ -101,9 +102,9 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
     users = module.get(getModelToken(User.name));
     sessions = module.get(getModelToken('AuthSession'));
     actions = module.get(getModelToken('AuthAction'));
-    await users.createIndexes();
-    await sessions.createIndexes();
-    await actions.createIndexes();
+    await createFixtureIndexes(users);
+    await createFixtureIndexes(sessions);
+    await createFixtureIndexes(actions);
     const fixture = await users.create({
       name: 'Synthetic security fixture',
       role: 'student',
@@ -577,7 +578,7 @@ describe('API authentication and session boundaries (isolated MongoDB)', () => {
     const periods = app!.get<Model<AdmissionPeriodDocument>>(
       getModelToken(AdmissionPeriod.name),
     );
-    await periods.createIndexes();
+    await createFixtureIndexes(periods);
     const code = `E2E-${String(new Types.ObjectId())}`.toUpperCase();
     const payload = {
       code,

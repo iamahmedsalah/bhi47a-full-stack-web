@@ -1,5 +1,3 @@
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 
 export interface ResultCertificateCourse {
   code: string;
@@ -704,6 +702,7 @@ export async function downloadResultCertificatePdf(
     const sheet = container.querySelector<HTMLElement>(".sheet");
     if (!sheet) return false;
 
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
     const canvas = await html2canvas(sheet, {
       scale: 2,
       useCORS: true,

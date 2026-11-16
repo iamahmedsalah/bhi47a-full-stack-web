@@ -388,6 +388,7 @@ export class StaffManagementService {
         session,
       );
     }
+    if (!session) await this.cache?.delPattern('courses:*');
     return this.getById(id, session);
   }
 
@@ -408,6 +409,7 @@ export class StaffManagementService {
     staff.permissions = after;
     staff.tokenVersion = (staff.tokenVersion ?? 0) + 1;
     await staff.save();
+    await this.cache?.delPattern('courses:*');
     await this.recordAudit(actorId, id, 'permissions_updated', {
       before,
       after,

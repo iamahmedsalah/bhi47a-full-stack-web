@@ -76,7 +76,7 @@ jobs:
           node -e "require('node:fs').mkdirSync('apps/api/coverage', { recursive: true })"
 
       - name: Verify VPS deployment trigger policy
-        run: node --test scripts/vps-workflow.test.cjs scripts/ci-test-report.test.cjs
+        run: node --test scripts/vps-workflow.test.cjs scripts/ci-test-report.test.cjs scripts/auth-readiness.test.cjs
 
       - name: Verify patched development dependency contracts
         run: node --test scripts/dependency-security.test.cjs
@@ -174,6 +174,9 @@ jobs:
       - name: Typecheck API end-to-end fixtures
         run: pnpm --filter @student-portal/api typecheck:e2e
 
+      - name: Verify session bootstrap and login navigation
+        run: node apps/web/tests/auth-bootstrap.browser.mjs
+
       - name: Test timetable views and PNG downloads in Chromium
         run: pnpm --filter @student-portal/web test:timetable:browser
 
@@ -208,6 +211,7 @@ jobs:
           pnpm run test:control:browser
           pnpm run test:control:import:browser
           pnpm run test:control:release:browser
+          pnpm run test:control:attempts:browser
 
       - name: Stop isolated admission services
         if: always()
@@ -362,6 +366,7 @@ jobs:
       group: production-vps
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v5
       - name: Deploy over SSH with pinned server host key
         id: deploy
         shell: bash
@@ -417,6 +422,7 @@ jobs:
             https://bhi47.app/api/health | python3 -c 'import json,sys; body=json.load(sys.stdin); healthy=isinstance(body,dict) and body.get("success") is True and isinstance(body.get("data"),dict) and body["data"].get("status") == "ok"; sys.exit(0 if healthy else "Public API health check failed: expected success=true and data.status=ok")'
           curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 30 \
             --output /dev/null https://bhi47.app/ar/login/student
+            node scripts/auth-readiness.cjs https://bhi47.app
 
       - name: Publish VPS deployment report
         if: always()

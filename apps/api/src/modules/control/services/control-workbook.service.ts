@@ -1,3 +1,5 @@
+import { ControlAttemptsService } from './control-attempts.service';
+import { IC_CARRIED_LOCKED_MESSAGE } from '../utils/attempt-errors.util';
 import {
   BadRequestException,
   ConflictException,
@@ -13,6 +15,7 @@ import {
   CONTROL_SCORELESS_STATES,
   CONTROL_RESTRICTED_STATES,
   GRADE_STATUS_VALUES,
+  CONTROL_MIDTERM_STATES,
   PERMISSIONS,
   computeCourseResult,
   computeCoursework,
@@ -93,6 +96,7 @@ export class ControlWorkbookService {
     private readonly sheetService: ControlSheetsService,
     private readonly mutations: ControlGradesService,
     private readonly schemes: GradingSchemeService,
+    private readonly attempts: ControlAttemptsService,
   ) {}
 
   async workbook(user: AuthenticatedUser, sheetId: string) {
@@ -116,7 +120,7 @@ export class ControlWorkbookService {
           examType: { $in: CONTROL_COMPONENT_KEYS },
         })
         .select(
-          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark',
+          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark carriedFrom',
         )
         .batchSize(500)
         .lean(),
@@ -272,7 +276,9 @@ export class ControlWorkbookService {
       row.getCell(4).dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${Object.values(STATUS_ARABIC_LABELS).join(',')}"`],
+        formulae: [
+          `"${(component === 'midterm' ? CONTROL_MIDTERM_STATES.map((state) => STATUS_ARABIC_LABELS[state]) : Object.values(STATUS_ARABIC_LABELS)).join(',')}"`,
+        ],
       };
       for (const column of [3, 4, 5, 6, 8])
         row.getCell(column).fill = {
@@ -414,6 +420,7 @@ export class ControlWorkbookService {
             sheet.component === 'coursework' &&
             docs.some(
               (d) =>
+                !d.carriedFrom &&
                 !(CONTROL_SCORELESS_STATES as readonly string[]).includes(
                   d.status,
                 ) &&
@@ -437,6 +444,15 @@ export class ControlWorkbookService {
             );
           if (sheet.submission?.digest !== digest)
             throw new ConflictException('ROSTER_OR_SCHEME_CHANGED');
+          if (sheet.component === 'final')
+            await this.attempts.approve(
+              sheet,
+              sheet._id,
+              user._id,
+              dto.attemptReviewDigest,
+              dto.keepPreviousStudentIds ?? [],
+              session,
+            );
           await this.grades.updateMany(
             { _id: { $in: docs.map((d) => d._id) } },
             [
@@ -691,7 +707,9 @@ export class ControlWorkbookService {
       row.getCell(4).dataValidation = {
         type: 'list',
         allowBlank: true,
-        formulae: [`"${Object.values(STATUS_ARABIC_LABELS).join(',')}"`],
+        formulae: [
+          `"${(details.sheet.component === 'midterm' ? CONTROL_MIDTERM_STATES.map((state) => STATUS_ARABIC_LABELS[state]) : Object.values(STATUS_ARABIC_LABELS)).join(',')}"`,
+        ],
       };
       for (const column of [3, 4, 8]) {
         row.getCell(column).fill = {
@@ -1138,6 +1156,19 @@ export class ControlWorkbookService {
         unchangedBreakdown
       )
         continue;
+      if (current?.carriedFrom) {
+        fail(IC_CARRIED_LOCKED_MESSAGE);
+        continue;
+      }
+      if (
+        detail.sheet.component === 'midterm' &&
+        !(CONTROL_MIDTERM_STATES as readonly string[]).includes(status)
+      ) {
+        fail(
+          'Midterm accepts present or absent only / \u0627\u0644\u0645\u064a\u062f\u062a\u0631\u0645 \u064a\u0642\u0628\u0644 \u062d\u0627\u0636\u0631 \u0623\u0648 \u063a\u0627\u0626\u0628 \u0641\u0642\u0637',
+        );
+        continue;
+      }
       if (scoreless && score.value !== null) {
         fail('Score must be blank for this status');
         continue;

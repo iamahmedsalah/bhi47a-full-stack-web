@@ -275,7 +275,7 @@ export class CoursesService {
     );
     const cacheKey =
       !query.search && !isSpecificStaffQuery
-        ? `courses:list:${caller?._id || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
+        ? `courses:list:v2:${caller?.role || 'public'}:${caller?._id || 'all'}:${query.department || 'all'}:${query.level || 'all'}:${query.academicLevel || 'all'}:${query.semester || 'all'}:${query.isActive ?? 'all'}:${page}:${limit}`
         : null;
 
     if (cacheKey && this.cacheService) {
@@ -291,14 +291,16 @@ export class CoursesService {
               .lean(),
             this.courseModel.countDocuments(filter),
           ]);
-          return createPaginatedResult(items, total, page, limit);
+          return createPaginatedResult(
+            await this.hydrateCoursesStaff(items),
+            total,
+            page,
+            limit,
+          );
         },
         120,
       );
-      return {
-        ...cached,
-        items: await this.hydrateCoursesStaff(cached.items as any[]),
-      };
+      return cached;
     }
 
     const [items, total] = await Promise.all([

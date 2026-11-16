@@ -54,6 +54,8 @@ test('VPS retains its protected environment and exposes the real portal link and
   assert.match(job, /environment:\n      name: production-vps\n      url: https:\/\/bhi47\.app/);
   assert.match(job, /name: Verify public portal after VPS deployment\n        id: public-health\n        shell: bash/);
   assert.match(job, /https:\/\/bhi47\.app\/api\/health/);
+  assert.match(job, /steps:\n      - uses: actions\/checkout@v5/);
+  assert.match(job, /node scripts\/auth-readiness\.cjs https:\/\/bhi47\.app/);
   assert.match(job, /name: Publish VPS deployment report\n        if: always\(\)/);
   assert.match(job, /DEPLOY_OUTCOME: \$\{\{ steps.deploy.outcome \}\}/);
   assert.match(job, /PUBLIC_HEALTH_OUTCOME: \$\{\{ steps.public-health.outcome \}\}/);

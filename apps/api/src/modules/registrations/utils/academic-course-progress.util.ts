@@ -42,8 +42,8 @@ export function mergeAcademicCourseProgress(input: {
   let weightedGradePoints = 0;
   let gradedCredits = 0;
 
-  // Never sum records from different terms into one attempt. Choose the latest
-  // finalized attempt by default; a versioned Control policy may select best.
+  // Never sum records from different terms into one attempt. Choose the best
+  // complete attempt; IC/deferred attempts do not erase an existing result.
   const attempts = new Map<string, CourseGradeRecord[]>();
   for (const grade of input.grades ?? []) {
     const key = `${grade.courseCode.trim().toUpperCase()}|${grade.academicYear ?? ''}|${grade.semester ?? ''}`;
@@ -52,6 +52,13 @@ export function mergeAcademicCourseProgress(input: {
   const candidates = new Map<string, CourseGradeRecord[][]>();
   for (const records of attempts.values()) {
     if (!records.some((r) => r.examType === 'final')) continue;
+    if (
+      records.some((r) =>
+        ['incomplete', 'excused', 'withheld'].includes(r.status),
+      ) &&
+      !records.some((r) => r.officialResult?.official)
+    )
+      continue;
     const official = records.find((r) => r.officialResult?.official);
     const chosen = official ? [official] : records;
     const code = chosen[0].courseCode.trim().toUpperCase();
@@ -61,22 +68,18 @@ export function mergeAcademicCourseProgress(input: {
   const termOrder = (records: CourseGradeRecord[]) =>
     `${records[0].academicYear ?? ''}|${({ first: '1', second: '2', summer: '3' } as Record<string, string>)[records[0].semester ?? ''] ?? ''}`;
   for (const choices of candidates.values()) {
-    choices.sort((a, b) => termOrder(b).localeCompare(termOrder(a)));
-    if (choices[0].some((r) => r.retakePolicy === 'best'))
-      choices.sort((a, b) => {
-        const percentage = (rows: CourseGradeRecord[]) =>
-          rows[0].officialResult?.percentage ??
-          (rows.reduce(
-            (n, r) => n + (r.status === 'present' ? r.grade : 0),
-            0,
-          ) /
-            rows.reduce((n, r) => n + r.maxGrade, 0)) *
-            100;
-        return (
-          percentage(b) - percentage(a) ||
-          termOrder(b).localeCompare(termOrder(a))
-        );
-      });
+    // Improvement attempts may never regress the effective result, including legacy latest policies.
+    choices.sort((a, b) => {
+      const percentage = (rows: CourseGradeRecord[]) =>
+        rows[0].officialResult?.percentage ??
+        (rows.reduce((n, r) => n + (r.status === 'present' ? r.grade : 0), 0) /
+          rows.reduce((n, r) => n + r.maxGrade, 0)) *
+          100;
+      return (
+        percentage(b) - percentage(a) ||
+        termOrder(a).localeCompare(termOrder(b))
+      );
+    });
     effective.push(...choices[0]);
   }
   for (const grade of effective) {
@@ -117,7 +120,11 @@ export function mergeAcademicCourseProgress(input: {
       (totalMax > 0 ? (totalEarned / totalMax) * 100 : 0);
     const scale = calculateGradeScale(
       percentage,
-      blockedFinal ? 'absent' : 'present',
+      finalRecords.some((record) => record.status === 'banned')
+        ? 'banned'
+        : blockedFinal
+          ? 'absent'
+          : 'present',
     );
     const gradePoints = official?.gradePoints ?? scale.points;
     const letterGrade = official?.letterGrade ?? scale.letter;

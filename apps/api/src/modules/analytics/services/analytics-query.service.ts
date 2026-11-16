@@ -165,20 +165,16 @@ export class AnalyticsQueryService {
         .lean();
       quizFilter.$and = [
         {
-          $expr: {
-            $in: [
-              { $toString: '$courseId' },
-              courses.map((course) => String(course._id)),
-            ],
+          courseId: {
+            $in: courses.flatMap((course) => [course._id, String(course._id)]),
           },
         },
       ];
     }
 
-    const quizzes = await this.quizModel
-      .find(quizFilter)
-      .sort({ createdAt: -1 })
-      .lean();
+    const quizzes = await this.quizModel.aggregate<
+      Quiz & { _id: Types.ObjectId }
+    >([{ $match: quizFilter }, { $sort: { createdAt: -1 } }]);
 
     if (quizzes.length === 0) return [];
 
@@ -821,15 +817,17 @@ export class AnalyticsQueryService {
       sharedQuizzes ?? (await this.getQuizzesAnalytics(query, user));
     const quizMap = new Map(quizzes.map((q) => [q.quizId, q]));
 
+    const quizIds = quizzes.flatMap<Types.ObjectId | string>((quiz) =>
+      Types.ObjectId.isValid(quiz.quizId)
+        ? [new Types.ObjectId(quiz.quizId), quiz.quizId]
+        : [quiz.quizId],
+    );
     return this.submissionModel
-      .find({
-        $expr: {
-          $in: [{ $toString: '$quizId' }, quizzes.map((quiz) => quiz.quizId)],
-        },
-      })
-      .sort({ submittedAt: -1 })
-      .limit(5000)
-      .lean()
+      .aggregate<QuizSubmission & { _id: Types.ObjectId }>([
+        { $match: { quizId: { $in: quizIds } } },
+        { $sort: { submittedAt: -1 } },
+        { $limit: 5000 },
+      ])
       .then((subs) =>
         subs.map((s) => {
           const q = quizMap.get(String(s.quizId));
@@ -861,50 +859,94 @@ export class AnalyticsQueryService {
     user: AuthenticatedUser,
     sharedQuizzes?: QuizItemAnalytics[],
   ): Promise<AcademicAnalyticsOverview> {
-    const [
-      totalStudents,
-      activeStudents,
-      suspendedStudents,
-      withdrawnStudents,
-      graduatedStudents,
-    ] = await Promise.all([
-      this.studentProfileModel.countDocuments(),
-      this.studentProfileModel.countDocuments({ enrollmentStatus: 'active' }),
-      this.studentProfileModel.countDocuments({
-        enrollmentStatus: 'suspended',
-      }),
-      this.studentProfileModel.countDocuments({
-        enrollmentStatus: 'withdrawn',
-      }),
-      this.studentProfileModel.countDocuments({
-        enrollmentStatus: 'graduated',
-      }),
-    ]);
-
+    const countWhen = (condition: Record<string, unknown>) => ({
+      $sum: { $cond: [condition, 1, 0] },
+    });
+    const [studentRows, courseRows, staffRows, complaintRows] =
+      await Promise.all([
+        this.studentProfileModel.aggregate<Record<string, number>>([
+          {
+            $group: {
+              _id: null,
+              totalStudents: { $sum: 1 },
+              activeStudents: countWhen({
+                $eq: ['$enrollmentStatus', 'active'],
+              }),
+              suspendedStudents: countWhen({
+                $eq: ['$enrollmentStatus', 'suspended'],
+              }),
+              withdrawnStudents: countWhen({
+                $eq: ['$enrollmentStatus', 'withdrawn'],
+              }),
+              graduatedStudents: countWhen({
+                $eq: ['$enrollmentStatus', 'graduated'],
+              }),
+            },
+          },
+        ]),
+        this.courseModel.aggregate<Record<string, number>>([
+          {
+            $group: {
+              _id: null,
+              totalCourses: { $sum: 1 },
+              activeCourses: countWhen({ $eq: ['$isActive', true] }),
+            },
+          },
+        ]),
+        this.userModel.aggregate<Record<string, number>>([
+          {
+            $match: {
+              staffType: {
+                $in: ['doctor', 'assistant_lecturer', 'teaching_assistant'],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              doctorCount: countWhen({ $eq: ['$staffType', 'doctor'] }),
+              asstLectCount: countWhen({
+                $eq: ['$staffType', 'assistant_lecturer'],
+              }),
+              taCount: countWhen({ $eq: ['$staffType', 'teaching_assistant'] }),
+            },
+          },
+        ]),
+        this.complaintModel.aggregate<Record<string, number>>([
+          {
+            $group: {
+              _id: null,
+              totalComplaints: { $sum: 1 },
+              resolvedComplaints: countWhen({
+                $in: ['$status', ['resolved', 'closed']],
+              }),
+              urgentComplaints: countWhen({ $eq: ['$priority', 'urgent'] }),
+            },
+          },
+        ]),
+      ]);
+    const {
+      totalStudents = 0,
+      activeStudents = 0,
+      suspendedStudents = 0,
+      withdrawnStudents = 0,
+      graduatedStudents = 0,
+    } = studentRows[0] ?? {};
+    const { totalCourses = 0, activeCourses = 0 } = courseRows[0] ?? {};
+    const {
+      doctorCount = 0,
+      asstLectCount = 0,
+      taCount = 0,
+    } = staffRows[0] ?? {};
+    const {
+      totalComplaints = 0,
+      resolvedComplaints = 0,
+      urgentComplaints = 0,
+    } = complaintRows[0] ?? {};
     const activeRate =
       totalStudents > 0
         ? Math.round((activeStudents / totalStudents) * 1000) / 10
         : 0;
-
-    const [totalCourses, activeCourses] = await Promise.all([
-      this.courseModel.countDocuments(),
-      this.courseModel.countDocuments({ isActive: true }),
-    ]);
-
-    const [doctorCount, asstLectCount, taCount] = await Promise.all([
-      this.userModel.countDocuments({ staffType: 'doctor' }),
-      this.userModel.countDocuments({ staffType: 'assistant_lecturer' }),
-      this.userModel.countDocuments({ staffType: 'teaching_assistant' }),
-    ]);
-
-    const [totalComplaints, resolvedComplaints, urgentComplaints] =
-      await Promise.all([
-        this.complaintModel.countDocuments(),
-        this.complaintModel.countDocuments({
-          status: { $in: ['resolved', 'closed'] },
-        }),
-        this.complaintModel.countDocuments({ priority: 'urgent' }),
-      ]);
 
     const complaintResolutionRate =
       totalComplaints > 0

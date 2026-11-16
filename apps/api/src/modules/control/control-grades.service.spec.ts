@@ -35,6 +35,7 @@ const chain = <T>(value: T) => {
 };
 
 function build(options: {
+  component?: 'midterm' | 'final';
   locked?: boolean;
   caps?: Partial<typeof baseCaps>;
   existing?: Record<string, unknown>[];
@@ -51,7 +52,7 @@ function build(options: {
     courseId,
     academicYear: '2026-2027',
     semester: 'first',
-    component: 'midterm',
+    component: options.component ?? 'midterm',
     locked: options.locked ?? false,
   };
   const course = { _id: courseId, code: 'CS101', name: 'Intro' };
@@ -106,7 +107,9 @@ function build(options: {
     getCapabilities: jest.fn(() => ({ ...baseCaps, ...options.caps })),
   } as unknown as ControlAccessService;
   const schemes = {
-    requireEnabledComponent: jest.fn().mockResolvedValue(rules),
+    requireEnabledComponent: jest
+      .fn()
+      .mockResolvedValue({ ...rules, key: options.component ?? 'midterm' }),
     freeze: jest.fn().mockResolvedValue(undefined),
   };
   const gradesService = {
@@ -154,6 +157,43 @@ function build(options: {
 }
 
 describe('ControlGradesService.applyChanges', () => {
+  it.each(['banned', 'excused', 'incomplete', 'withheld'] as const)(
+    'rejects new midterm state %s even with state permission',
+    async (status) => {
+      const ctx = build({ caps: { canManageStates: true } });
+      const result = await ctx.service.applyChanges(ctx.user, ctx.sheetId, {
+        changes: [ctx.change({ status, score: undefined })],
+      });
+      expect(result.results[0]).toMatchObject({
+        result: 'invalid',
+        code: 'midterm_status',
+      });
+      expect(ctx.auditModel.insertMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps carried IC contributions read-only even for state managers', async () => {
+    const ctx = build({
+      caps: { canManageStates: true },
+      existing: [
+        {
+          grade: 10,
+          status: 'present',
+          rev: 1,
+          carriedFrom: { academicYear: '2025-2026', semester: 'first' },
+        },
+      ],
+    });
+    const result = await ctx.service.applyChanges(ctx.user, ctx.sheetId, {
+      changes: [ctx.change({ score: 12, expectedRev: 1 })],
+    });
+    expect(result.results[0]).toMatchObject({
+      result: 'forbidden',
+      code: 'ic_carried_locked',
+    });
+    expect(ctx.auditModel.insertMany).not.toHaveBeenCalled();
+  });
+
   it('rejects the whole call when the sheet is locked', async () => {
     const { service, user, sheetId, change, gradeModel } = build({
       locked: true,
@@ -254,7 +294,10 @@ describe('ControlGradesService.applyChanges', () => {
     'saves %s without a reason while retaining state permissions',
     async (status) => {
       const score = status === 'withheld' ? 12 : undefined;
-      const allowed = build({ caps: { canManageStates: true } });
+      const allowed = build({
+        component: 'final',
+        caps: { canManageStates: true },
+      });
       const result = await allowed.service.applyChanges(
         allowed.user,
         allowed.sheetId,
@@ -262,7 +305,7 @@ describe('ControlGradesService.applyChanges', () => {
       );
       expect(result.results[0].result).toBe('ok');
       expect(allowed.auditModel.insertMany).toHaveBeenCalledTimes(1);
-      const denied = build({});
+      const denied = build({ component: 'final' });
       const forbidden = await denied.service.applyChanges(
         denied.user,
         denied.sheetId,
@@ -275,7 +318,7 @@ describe('ControlGradesService.applyChanges', () => {
     },
   );
   it('requires control.states.manage but permits excused without a reason', async () => {
-    const denied = build({});
+    const denied = build({ component: 'final' });
     const deniedRes = await denied.service.applyChanges(
       denied.user,
       denied.sheetId,
@@ -294,7 +337,10 @@ describe('ControlGradesService.applyChanges', () => {
       code: 'states_permission',
     });
 
-    const noReason = build({ caps: { canManageStates: true } });
+    const noReason = build({
+      component: 'final',
+      caps: { canManageStates: true },
+    });
     const noReasonRes = await noReason.service.applyChanges(
       noReason.user,
       noReason.sheetId,
@@ -304,7 +350,7 @@ describe('ControlGradesService.applyChanges', () => {
     );
     expect(noReasonRes.results[0].result).toBe('ok');
 
-    const ok = build({ caps: { canManageStates: true } });
+    const ok = build({ component: 'final', caps: { canManageStates: true } });
     const okRes = await ok.service.applyChanges(ok.user, ok.sheetId, {
       changes: [
         ok.change({

@@ -469,7 +469,7 @@ export class ComplaintsService {
           .select(
             query.view === 'summary'
               ? '-description -screenshotUrl -replies -internalNotes -statusHistory'
-              : '',
+              : '-screenshotUrl',
           )
           .sort({ createdAt: -1, _id: -1 })
           .skip(skip)
@@ -488,7 +488,7 @@ export class ComplaintsService {
           .map((i) => i.studentId.toString()),
       ),
     ];
-    if (missingNationalIds.length > 0) {
+    if (query.view !== 'summary' && missingNationalIds.length > 0) {
       const students = await measureDatabaseStage('complaints.enrichment', () =>
         this.userModel
           .find({ _id: { $in: missingNationalIds } })
@@ -524,6 +524,7 @@ export class ComplaintsService {
         review: number;
         working: number;
         resolved: number;
+        closed: number;
         technical: number;
         complaints: number;
         high: number;
@@ -537,6 +538,7 @@ export class ComplaintsService {
             review: countWhen({ $eq: ['$status', 'in_review'] }),
             working: countWhen({ $eq: ['$status', 'in_progress'] }),
             resolved: countWhen({ $eq: ['$status', 'resolved'] }),
+            closed: countWhen({ $eq: ['$status', 'closed'] }),
             technical: countWhen({
               $in: ['$type', ['technical_issue', 'facility']],
             }),
@@ -563,6 +565,7 @@ export class ComplaintsService {
         review: 0,
         working: 0,
         resolved: 0,
+        closed: 0,
         technical: 0,
         complaints: 0,
         high: 0,
@@ -571,12 +574,15 @@ export class ComplaintsService {
     );
   }
 
-  async findByStudent(studentId: string, query: QueryComplaintDto = {}) {
+  async findByStudent(
+    studentId: string,
+    query: QueryComplaintDto = {},
+    studentCode?: string,
+  ) {
     const { page, limit, skip } = buildPaginationOptions(query);
-    const student = await this.userModel
-      .findById(studentId)
-      .select('studentCode')
-      .lean();
+    const student = studentCode
+      ? { studentCode }
+      : await this.userModel.findById(studentId).select('studentCode').lean();
     const filter: any = {
       $or: [
         { studentId: new Types.ObjectId(studentId) },
@@ -965,6 +971,8 @@ export class ComplaintsService {
     const tickets = await this.complaintModel
       .find(filter)
       .sort({ createdAt: -1 })
+      .limit(50)
+      .maxTimeMS(10_000)
       .lean();
 
     if (!tickets || tickets.length === 0) {

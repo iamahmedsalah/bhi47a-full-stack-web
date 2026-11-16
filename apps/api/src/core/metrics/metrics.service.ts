@@ -15,6 +15,7 @@ import {
 } from 'prom-client';
 import mongoose from 'mongoose';
 import { ConnectionHolder } from '../../common/rate-limit/connection-holder';
+import { pingDatabase } from '../../database/database-ping';
 import { CacheService } from '../cache/cache.service';
 import { isServerlessRuntime } from '../../common/utils/runtime.util';
 import { METRICS_SLOW_QUERY_THRESHOLD_MS } from './metrics.constants';
@@ -803,10 +804,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     let pingLatencyMs = -1;
     if (isDbConnected && conn?.db) {
       try {
-        const start = process.hrtime.bigint();
-        await conn.db.admin().ping();
-        const diffNs = Number(process.hrtime.bigint() - start);
-        pingLatencyMs = Math.round((diffNs / 1e6) * 100) / 100;
+        pingLatencyMs = await pingDatabase(conn);
       } catch {
         pingLatencyMs = -1;
       }

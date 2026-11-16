@@ -84,6 +84,31 @@ export class Grade {
   @Prop({ type: Boolean, default: false })
   controlManaged?: boolean;
 
+  @Prop({ type: Boolean, default: false })
+  historicalImport?: boolean;
+
+  /** Frozen provenance for an IC final-only summer continuation. */
+  @Prop({ type: Object })
+  carriedFrom?: {
+    academicYear: string;
+    semester: string;
+    sourceFinalId: string;
+    fingerprint: string;
+    actorId: string;
+  };
+
+  @Prop({ type: Object })
+  attemptReview?: {
+    fingerprint: string;
+    decision: 'accept_new' | 'keep_previous';
+    previousYear: string;
+    previousSemester: string;
+    previousPercentage: number | null;
+    currentPercentage: number | null;
+    actorId: string;
+    reviewedAt: Date;
+  };
+
   @Prop({ type: Number })
   controlApprovedRev?: number;
 

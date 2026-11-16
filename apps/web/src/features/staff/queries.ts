@@ -26,6 +26,7 @@ export function useStaffList(params: StaffListParams) {
   return useQuery({
     queryKey: staffKeys.list(params),
     queryFn: () => listStaff(params),
+    staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
 }

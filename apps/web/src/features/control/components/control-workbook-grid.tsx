@@ -1,5 +1,7 @@
 "use client";
 
+import { ControlAttemptDialog } from "./control-attempt-dialog";
+
 import React, {
   useCallback,
   useEffect,
@@ -13,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Download,
+  GitCompareArrows,
   Upload,
   History,
   SlidersHorizontal,
@@ -28,6 +31,7 @@ import {
 import { toast } from "sonner";
 import {
   CONTROL_COMPONENT_KEYS,
+  CONTROL_MIDTERM_STATES,
   CONTROL_RESTRICTED_STATES,
   CONTROL_SCORELESS_STATES,
   GRADE_STATUS_VALUES,
@@ -77,6 +81,7 @@ import {
   openControlSheet,
   previewControlRows,
   reviewControlSheet,
+  getControlAttempts,
 } from "../api";
 import { ControlHelpNotes } from "./control-help-notes";
 import { HelpNote } from "@/components/ui/help-note";
@@ -152,6 +157,9 @@ export function ControlWorkbookGrid({
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [attemptDialog, setAttemptDialog] = useState<{
+    approval: boolean;
+  } | null>(null);
   const [failed, setFailed] = useState(Boolean(restoredDraft));
   const [needsSchemeRefresh, setNeedsSchemeRefresh] = useState(false);
   const view = useTableState({
@@ -314,6 +322,8 @@ export function ControlWorkbookGrid({
       }
       const code = (r.code || "").toLowerCase();
       const msg = (r.message || "").toLowerCase();
+      if (code === "ic_carried_locked") return t("icCarriedLocked");
+      if (code === "midterm_status") return t("midtermStatusOnly");
       if (code === "score_required" || msg.includes("a mark is required")) {
         return t("scoreRequired");
       }
@@ -634,11 +644,18 @@ export function ControlWorkbookGrid({
       setBusy(false);
     }
   }
-  async function transition() {
-    if (!action || !(await save())) return;
+  async function transition(
+    attemptReview?: {
+      attemptReviewDigest: string;
+      keepPreviousStudentIds: string[];
+    },
+    override?: "APPROVE",
+  ) {
+    const transitionAction = override ?? action;
+    if (!transitionAction || !(await save())) return false;
     setBusy(true);
     try {
-      if (action === "CLEAR") {
+      if (transitionAction === "CLEAR") {
         const result = await applyControlChanges(sheet.id, {
           expectedSchemeVersion: workbook.data?.scheme.version ?? 0,
           changes: selected.map((id) => ({
@@ -655,17 +672,32 @@ export function ControlWorkbookGrid({
       } else {
         // Autosave patches rows locally. Read the small sheet record just before
         // a workflow transition so its revision is authoritative.
+        if (
+          transitionAction === "APPROVE" &&
+          key === "final" &&
+          !attemptReview
+        ) {
+          const comparison = await getControlAttempts(sheet.id);
+          if (comparison.total > 0) {
+            setAttemptDialog({ approval: true });
+            setAction(null);
+            return false;
+          }
+        }
         const latest = await getControlSheet(sheet.id);
         await reviewControlSheet(sheet.id, {
-          action,
+          action: transitionAction,
+          ...attemptReview,
           expectedRevision: latest.sheet.revision,
           reason,
         });
       }
       setAction(null);
       await refresh();
+      return true;
     } catch (error) {
       toast.error(getApiErrorMessage(error));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -741,7 +773,8 @@ export function ControlWorkbookGrid({
           busy ||
           !caps.canEdit ||
           row.notRegistered ||
-          Boolean(entry?.isPublished)
+          Boolean(entry?.isPublished) ||
+          Boolean(entry?.carriedFrom)
         }
         onChange={(e) => edit(row, field, e.target.value)}
         onPaste={(e) => {
@@ -794,6 +827,19 @@ export function ControlWorkbookGrid({
 
   return (
     <div className="space-y-3" dir={rtl ? "rtl" : "ltr"}>
+      {attemptDialog && (
+        <ControlAttemptDialog
+          sheetId={sheet.id}
+          locale={locale}
+          approval={attemptDialog.approval}
+          canCarry={caps.canEdit && caps.canReview}
+          onClose={() => setAttemptDialog(null)}
+          onCarried={refresh}
+          onApproved={async (review) => {
+            if (await transition(review, "APPROVE")) setAttemptDialog(null);
+          }}
+        />
+      )}
       {downloadKind && (
         <ControlDownloadDialogs
           detail={detail}
@@ -1075,6 +1121,20 @@ export function ControlWorkbookGrid({
         >
           {onlyMissing ? t("all") : t("missing")}
         </Button>
+        {(caps.canReview || caps.canApproveFinal) && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-xs"
+            disabled={busy}
+            onClick={async () => {
+              if (await save()) setAttemptDialog({ approval: false });
+            }}
+          >
+            <GitCompareArrows className="size-3.5 me-1.5" />
+            {t("attempts")}
+          </Button>
+        )}
         {caps.canManageSchemes && (
           <Button
             variant="outline"
@@ -1445,7 +1505,8 @@ export function ControlWorkbookGrid({
                     disabled={
                       !caps.canEdit ||
                       row.notRegistered ||
-                      Boolean(row.components[key]?.isPublished)
+                      Boolean(row.components[key]?.isPublished) ||
+                      Boolean(row.components[key]?.carriedFrom)
                     }
                     onValueChange={(value) => edit(row, "status", value)}
                   >
@@ -1458,7 +1519,22 @@ export function ControlWorkbookGrid({
                       <SelectItem value="not_entered" disabled>
                         {t("notEntered")}
                       </SelectItem>
-                      {GRADE_STATUS_VALUES.map((state) => (
+                      {key === "midterm" &&
+                        row.components[key]?.status &&
+                        !(CONTROL_MIDTERM_STATES as readonly string[]).includes(
+                          row.components[key]!.status!,
+                        ) && (
+                          <SelectItem
+                            value={row.components[key]!.status!}
+                            disabled
+                          >
+                            {t(`states.${row.components[key]!.status}`)}
+                          </SelectItem>
+                        )}
+                      {(key === "midterm"
+                        ? CONTROL_MIDTERM_STATES
+                        : GRADE_STATUS_VALUES
+                      ).map((state) => (
                         <SelectItem
                           key={state}
                           value={state}

@@ -43,6 +43,7 @@ import { useUIStore } from '@/store/ui-store';
 import { useMaterialUploads } from '@/features/courses/material-upload-provider';
 import { isUploadActive } from '@/features/courses/material-upload-queue';
 import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
+import { useAuth } from '@/providers/auth-provider';
 
 const ADMIN_READ_STORAGE_KEY = 'sp_admin_read_notifications_v1';
 const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
@@ -50,6 +51,8 @@ const ADMIN_DISMISSED_STORAGE_KEY = 'sp_admin_dismissed_notifications_v1';
 export default function AdminHeader() {
   const params = useParams();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canReadNotifications = user?.role === 'admin' || Boolean(user?.permissions?.includes('notifications.read'));
   const locale = params.locale as string;
   const tNav = useTranslations('nav');
   const { adminMobileSidebarOpen, setAdminMobileSidebarOpen } = useUIStore();
@@ -104,9 +107,10 @@ export default function AdminHeader() {
     queryKey: queryKeys.notifications.adminList,
     queryFn: listAdminNotifications,
     staleTime: 60 * 1000,
+    enabled: canReadNotifications,
   });
 
-  const rawNotifications = useMemo(() => notificationsQuery.data?.items || [], [notificationsQuery.data?.items]);
+  const rawNotifications = useMemo(() => canReadNotifications ? notificationsQuery.data?.items || [] : [], [canReadNotifications, notificationsQuery.data?.items]);
 
   // Filter out any locally dismissed notifications
   const notifications = useMemo(

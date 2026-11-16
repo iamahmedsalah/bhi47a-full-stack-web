@@ -217,6 +217,16 @@ export class UploadsController {
     );
   }
 
+  @Post('historical-grades/batch')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  async uploadHistoricalBatch(
+    @Body() dto: BatchUploadDto,
+    @CurrentUser('_id') adminId: string,
+  ) {
+    return this.uploadsService.processBatchUpload(dto, adminId, true);
+  }
+
   @Post('batch')
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)

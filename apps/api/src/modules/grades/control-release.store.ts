@@ -1,3 +1,4 @@
+import { ControlAttemptStore } from '../control/control-attempt.store';
 import { ConflictException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
@@ -155,7 +156,10 @@ export class ControlReleaseStore {
     );
     return {
       version: doc?.version ?? 0,
-      rules: doc?.rules ?? DEFAULT_RESULT_POLICY,
+      rules: {
+        ...(doc?.rules ?? DEFAULT_RESULT_POLICY),
+        retake: 'best' as const,
+      },
     };
   }
 
@@ -165,6 +169,7 @@ export class ControlReleaseStore {
     version: number,
     actorId: string,
   ) {
+    rules = { ...rules, retake: 'best' };
     await this.prepare();
     const session = await this.connection.startSession();
     try {
@@ -274,6 +279,11 @@ export class ControlReleaseStore {
       marks.some((m) => m.controlApprovedRev !== (m.rev ?? 0))
     )
       throw new ConflictException('Unapproved release');
+    if (sheet.component === 'final')
+      await new ControlAttemptStore(this.connection).assertReviewed(
+        sheet,
+        session,
+      );
     const registrations = await this.db
       .collection<{ studentId: Types.ObjectId; courses: string[] }>(
         this.names.registrations,
@@ -358,6 +368,9 @@ export class ControlReleaseStore {
         m.rev,
         m.attendanceMark,
         m.quizzesMark,
+        m.attemptReview
+          ? [m.attemptReview.fingerprint, m.attemptReview.decision]
+          : null,
       ]),
     });
     const pointer = await this.pointers.findOne(
@@ -582,7 +595,15 @@ export class ControlReleaseStore {
           (r) =>
             r.scope.component === 'final' &&
             r.results.some(
-              (o) => o.studentId.equals(studentId) && o.result.withheld,
+              (o) =>
+                o.studentId.equals(studentId) &&
+                (o.result.withheld ||
+                  r.marks.some(
+                    (mark) =>
+                      mark.studentId.equals(studentId) &&
+                      mark.examType === 'final' &&
+                      mark.attemptReview?.decision === 'keep_previous',
+                  )),
             ),
         )
         .map(

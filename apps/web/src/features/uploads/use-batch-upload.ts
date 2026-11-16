@@ -1,24 +1,27 @@
-'use client';
+"use client";
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import api, { getApiErrorMessage } from '@/lib/api';
-import type { UploadCatalogType, UploadResult } from './types';
+import { useState, useRef, useCallback, useEffect } from "react";
+import api, { getApiErrorMessage } from "@/lib/api";
+import type { UploadCatalogType, UploadResult } from "./types";
 
 export function isNetworkError(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const err = value as Record<string, unknown>;
-  if (err.name === 'AxiosError' && (!err.response || err.code === 'ERR_NETWORK')) {
-    return true;
-  }
   if (
-    err.code === 'ECONNABORTED' ||
-    err.code === 'ERR_CANCELED' ||
-    err.code === 'ETIMEDOUT'
+    err.name === "AxiosError" &&
+    (!err.response || err.code === "ERR_NETWORK")
   ) {
     return true;
   }
   if (
-    typeof err.message === 'string' &&
+    err.code === "ECONNABORTED" ||
+    err.code === "ERR_CANCELED" ||
+    err.code === "ETIMEDOUT"
+  ) {
+    return true;
+  }
+  if (
+    typeof err.message === "string" &&
     /network|offline|internet|timeout|failed to fetch/i.test(err.message)
   ) {
     return true;
@@ -28,12 +31,7 @@ export function isNetworkError(value: unknown): boolean {
 }
 
 export type UploadPhase =
-  | 'idle'
-  | 'inspecting'
-  | 'uploading'
-  | 'processing'
-  | 'completed'
-  | 'error';
+  "idle" | "inspecting" | "uploading" | "processing" | "completed" | "error";
 
 export interface BatchUploadProgressState {
   isUploading: boolean;
@@ -60,7 +58,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
   const { onSuccess, onError, batchSize = 100 } = options;
 
   const [isUploading, setIsUploading] = useState(false);
-  const [phase, setPhase] = useState<UploadPhase>('idle');
+  const [phase, setPhase] = useState<UploadPhase>("idle");
   const [percentage, setPercentage] = useState(0);
   const [batchInfo, setBatchInfo] = useState<{
     currentBatch: number;
@@ -70,14 +68,16 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
   } | null>(null);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [estimatedSecondsLeft, setEstimatedSecondsLeft] = useState<number | null>(null);
+  const [estimatedSecondsLeft, setEstimatedSecondsLeft] = useState<
+    number | null
+  >(null);
   const [rowsPerSecond, setRowsPerSecond] = useState(0);
 
   const [isNetworkInterrupted, setIsNetworkInterrupted] = useState(false);
   const [retrySecondsLeft, setRetrySecondsLeft] = useState(0);
 
   const [result, setResult] = useState<UploadResult | null>(null);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState("");
 
   const isAbortedRef = useRef(false);
   const retryTriggerRef = useRef<(() => void) | null>(null);
@@ -94,7 +94,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
   const reset = useCallback(() => {
     stopTimer();
     setIsUploading(false);
-    setPhase('idle');
+    setPhase("idle");
     setPercentage(0);
     setBatchInfo(null);
     setElapsedSeconds(0);
@@ -103,7 +103,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
     setIsNetworkInterrupted(false);
     setRetrySecondsLeft(0);
     setResult(null);
-    setErrorMsg('');
+    setErrorMsg("");
     isAbortedRef.current = false;
     startTimeRef.current = null;
   }, [stopTimer]);
@@ -112,7 +112,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
     isAbortedRef.current = true;
     stopTimer();
     setIsUploading(false);
-    setPhase('idle');
+    setPhase("idle");
     if (retryTriggerRef.current) {
       retryTriggerRef.current();
     }
@@ -130,14 +130,20 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
       timerRef.current = setInterval(() => {
         if (!startTimeRef.current) return;
         const now = Date.now();
-        const elapsed = Math.max(1, Math.floor((now - startTimeRef.current) / 1000));
+        const elapsed = Math.max(
+          1,
+          Math.floor((now - startTimeRef.current) / 1000),
+        );
         setElapsedSeconds(elapsed);
 
         setBatchInfo((curr) => {
           if (curr && curr.processedRows > 0) {
             const speed = Math.round((curr.processedRows / elapsed) * 10) / 10;
             setRowsPerSecond(speed);
-            const remainingRows = Math.max(0, curr.totalRows - curr.processedRows);
+            const remainingRows = Math.max(
+              0,
+              curr.totalRows - curr.processedRows,
+            );
             if (speed > 0) {
               const eta = Math.ceil(remainingRows / speed);
               setEstimatedSecondsLeft(eta);
@@ -158,9 +164,20 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
       type: UploadCatalogType;
       parsedRows?: Record<string, unknown>[];
       isAr?: boolean;
+      historicalGrades?: boolean;
     }) => {
       const { file, type, parsedRows, isAr = true } = params;
 
+      if (
+        params.historicalGrades &&
+        (!parsedRows?.length || type !== "grades")
+      ) {
+        throw new Error(
+          isAr
+            ? "\u064a\u062c\u0628 \u0645\u0639\u0627\u064a\u0646\u0629 \u0645\u0644\u0641 \u0627\u0644\u062f\u0631\u062c\u0627\u062a \u0627\u0644\u0633\u0627\u0628\u0642\u0629 \u0623\u0648\u0644\u0627"
+            : "Preview historical grades before uploading",
+        );
+      }
       reset();
       setIsUploading(true);
       isAbortedRef.current = false;
@@ -168,7 +185,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
 
       // MODE A: Resilient Batching from parsedRows
       if (parsedRows && parsedRows.length > 0) {
-        setPhase('uploading');
+        setPhase("uploading");
         const totalRowsCount = parsedRows.length;
         const batches: Record<string, unknown>[][] = [];
         for (let i = 0; i < parsedRows.length; i += batchSize) {
@@ -217,15 +234,22 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                 successCount: number;
                 failedCount: number;
                 errors: string[];
-              }>('/admin/uploads/batch', {
-                type,
-                rows: batchRows,
-                batchIndex: bIdx,
-                totalBatches,
-                uploadSessionId: sessionId,
-                sourceFile: file.name,
-                rowOffset: batches.slice(0, bIdx).reduce((count, batch) => count + batch.length, 0),
-              });
+              }>(
+                params.historicalGrades
+                  ? "/admin/uploads/historical-grades/batch"
+                  : "/admin/uploads/batch",
+                {
+                  type,
+                  rows: batchRows,
+                  batchIndex: bIdx,
+                  totalBatches,
+                  uploadSessionId: sessionId,
+                  sourceFile: file.name,
+                  rowOffset: batches
+                    .slice(0, bIdx)
+                    .reduce((count, batch) => count + batch.length, 0),
+                },
+              );
 
               cumulativeSuccess += res.data.successCount;
               if (res.data.errors?.length) {
@@ -255,7 +279,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                   const cleanup = () => {
                     if (timer) clearInterval(timer);
                     if (onlineHandler) {
-                      window.removeEventListener('online', onlineHandler);
+                      window.removeEventListener("online", onlineHandler);
                     }
                     retryTriggerRef.current = null;
                   };
@@ -279,7 +303,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                     cleanup();
                     resolve();
                   };
-                  window.addEventListener('online', onlineHandler);
+                  window.addEventListener("online", onlineHandler);
                 });
               } else {
                 cumulativeErrors.push(
@@ -294,12 +318,12 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
         }
 
         if (isAbortedRef.current) {
-          setPhase('idle');
+          setPhase("idle");
           setIsUploading(false);
           return;
         }
 
-        setPhase('processing');
+        setPhase("processing");
         setPercentage(98);
 
         const finalResult: UploadResult = {
@@ -310,7 +334,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
         };
 
         setPercentage(100);
-        setPhase('completed');
+        setPhase("completed");
         setIsUploading(false);
         setBatchInfo(null);
         setResult(finalResult);
@@ -319,12 +343,12 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
       }
 
       // MODE B: Single File Fallback with Axios onUploadProgress
-      setPhase('uploading');
+      setPhase("uploading");
       setPercentage(5);
 
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
+      formData.append("file", file);
+      formData.append("type", type);
 
       let uploadCommitted = false;
       let attempt = 0;
@@ -332,8 +356,8 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
       while (!uploadCommitted && !isAbortedRef.current) {
         attempt++;
         try {
-          const res = await api.post<UploadResult>('/admin/uploads', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+          const res = await api.post<UploadResult>("/admin/uploads", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
                 // Scale upload bytes up to 75%
@@ -343,14 +367,14 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                 );
                 setPercentage(Math.max(5, bytePercent));
                 if (bytePercent >= 70) {
-                  setPhase('processing');
+                  setPhase("processing");
                 }
               }
             },
           });
 
           setPercentage(100);
-          setPhase('completed');
+          setPhase("completed");
           setResult(res.data);
           onSuccess?.(res.data);
           uploadCommitted = true;
@@ -368,7 +392,7 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
               const cleanup = () => {
                 if (timer) clearInterval(timer);
                 if (onlineHandler) {
-                  window.removeEventListener('online', onlineHandler);
+                  window.removeEventListener("online", onlineHandler);
                 }
                 retryTriggerRef.current = null;
               };
@@ -392,12 +416,15 @@ export function useBatchUpload(options: UseBatchUploadOptions = {}) {
                 cleanup();
                 resolve();
               };
-              window.addEventListener('online', onlineHandler);
+              window.addEventListener("online", onlineHandler);
             });
           } else {
-            const msg = getApiErrorMessage(err, isAr ? 'فشل رفع الملف' : 'Upload failed');
+            const msg = getApiErrorMessage(
+              err,
+              isAr ? "فشل رفع الملف" : "Upload failed",
+            );
             setErrorMsg(msg);
-            setPhase('error');
+            setPhase("error");
             onError?.(msg);
             uploadCommitted = true;
             setIsUploading(false);

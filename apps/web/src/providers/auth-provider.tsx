@@ -7,7 +7,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
 import { useTheme } from '@/providers/theme-provider';
-import { isAuthEntryRoute, isPublicRoute } from '@/lib/public-routes';
+import { isAuthEntryRoute, isPublicRoute, isPublicMarketingRoute } from '@/lib/public-routes';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/browser';
 import { ReauthDialog } from '@/components/auth/reauth-dialog';
 
@@ -122,7 +122,7 @@ export function AuthProvider({
     retry: false,
     retryOnMount: false,
     refetchOnWindowFocus: false,
-    enabled: !isLoggingOut,
+    enabled: !isLoggingOut && !isPublicMarketingRoute(pathname),
   });
 
   const executeLogin = useCallback(async (
@@ -346,7 +346,7 @@ export function AuthProvider({
       if (!isMounted) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       const now = Date.now();
-      if (!force && now - lastHeartbeatTimeRef.current < 30_000) return;
+      if (!force && now - lastHeartbeatTimeRef.current < 60_000) return;
       lastHeartbeatTimeRef.current = now;
       api.post('/auth/heartbeat', { route: pathname }).catch(() => {
         // Silent failure for heartbeat
@@ -354,7 +354,7 @@ export function AuthProvider({
     };
 
     sendHeartbeat();
-    const interval = setInterval(() => sendHeartbeat(true), 60_000);
+    const interval = setInterval(() => sendHeartbeat(true), 120_000);
 
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {

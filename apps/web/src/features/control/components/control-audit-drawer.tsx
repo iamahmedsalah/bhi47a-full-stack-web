@@ -50,6 +50,17 @@ function formatSnapshot(
   workflowLabel?: (state: string) => string,
 ): string {
   if (!snap) return isAr ? "لم يُرصد (—)" : "Not entered (—)";
+  if (snap.decision) {
+    const label =
+      snap.decision === "keep_previous"
+        ? isAr
+          ? "الاحتفاظ بالمحاولة السابقة"
+          : "Keep previous attempt"
+        : isAr
+          ? "اعتماد المحاولة الجديدة"
+          : "Accept new attempt";
+    return `${label} · ${snap.previousYear ?? "—"} · ${snap.previousPercentage ?? "—"}% / ${snap.currentPercentage ?? "—"}%`;
+  }
   if (snap.workflowState)
     return workflowLabel?.(snap.workflowState) ?? snap.workflowState;
   if (snap.attendanceMark != null && snap.quizzesMark != null)

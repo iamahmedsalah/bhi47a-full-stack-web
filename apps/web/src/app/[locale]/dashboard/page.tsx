@@ -119,7 +119,7 @@ export default function StudentDashboard() {
 
   // 3. Eligibility/GPA Query (static across semester registration)
   const eligibilityQuery = useQuery({
-    queryKey: ["registration-eligibility"],
+    queryKey: ["registration", "eligibility"],
     queryFn: async () => {
       const res = await api.get<Eligibility | { data: Eligibility }>("/registration/eligibility");
       return ('data' in res.data ? res.data.data : res.data);
@@ -206,7 +206,7 @@ export default function StudentDashboard() {
 
   // 8. Quizzes Query (detecting open quizzes)
   const quizzesQuery = useQuery({
-    queryKey: ["student-quizzes-dashboard"],
+    queryKey: ["student-online-quizzes"],
     queryFn: async () => {
       try {
         const res = await api.get<StudentQuizViewItem[]>("/students/me/quizzes");

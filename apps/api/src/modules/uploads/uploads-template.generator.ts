@@ -677,7 +677,42 @@ export class UploadsTemplateGenerator {
     lang: 'ar' | 'en' = 'ar',
   ): Promise<{ buffer: Buffer; filename: string }> {
     const isArabic = lang === 'ar';
-    const def = TEMPLATE_DEFINITIONS[type];
+    const def: TemplateDefinition =
+      type === 'historical-grades'
+        ? {
+            type,
+            filenameAr: 'historical-grades.xlsx',
+            filenameEn: 'historical-grades.xlsx',
+            sheetNameAr:
+              '\u062f\u0631\u062c\u0627\u062a \u0633\u0627\u0628\u0642\u0629',
+            sheetNameEn: 'Historical marks',
+            headersAr: [
+              '\u0643\u0648\u062f \u0627\u0644\u0637\u0627\u0644\u0628',
+              '\u0643\u0648\u062f \u0627\u0644\u0645\u0642\u0631\u0631',
+              '\u0646\u0648\u0639 \u0627\u0644\u0627\u0645\u062a\u062d\u0627\u0646',
+              '\u0627\u0644\u062f\u0631\u062c\u0629',
+              '\u0627\u0644\u062f\u0631\u062c\u0629 \u0627\u0644\u0639\u0638\u0645\u0649',
+              '\u062d\u0627\u0644\u0629 \u0627\u0644\u062d\u0636\u0648\u0631',
+              '\u0627\u0644\u0633\u0646\u0629 \u0627\u0644\u062f\u0631\u0627\u0633\u064a\u0629',
+              '\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a',
+            ],
+            headersEn: [
+              'studentCode',
+              'courseCode',
+              'examType',
+              'grade',
+              'maxGrade',
+              'status',
+              'academicYear',
+              'semester',
+            ],
+            widths: [18, 18, 20, 14, 16, 18, 20, 18],
+            textColumns: [1, 2, 3, 6, 7, 8],
+            numberColumns: [4, 5],
+            samplesAr: [],
+            samplesEn: [],
+          }
+        : TEMPLATE_DEFINITIONS[type];
     if (!def) {
       throw new Error(`Unknown template type: ${type}`);
     }
@@ -726,6 +761,15 @@ export class UploadsTemplateGenerator {
     });
 
     sheet.columns = def.widths.map((w) => ({ width: w }));
+    if (type === 'historical-grades') {
+      // The historical template has no sample rows: format entire columns so
+      // Excel preserves leading zeroes when users enter their own codes.
+      for (const column of def.textColumns)
+        sheet.getColumn(column).numFmt = '@';
+      for (const column of def.numberColumns)
+        sheet.getColumn(column).numFmt = '0.##';
+      sheet.views = [{ rightToLeft: isArabic, state: 'frozen', ySplit: 1 }];
+    }
 
     const raw = await workbook.xlsx.writeBuffer();
     const filename = isArabic ? def.filenameAr : def.filenameEn;

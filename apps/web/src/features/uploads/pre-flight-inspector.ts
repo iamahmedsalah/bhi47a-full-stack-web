@@ -1,11 +1,12 @@
-import { readSheet as readXlsxFile } from 'read-excel-file/browser';
+import { validateHistoricalGrade } from "@student-portal/shared";
+import { readSheet as readXlsxFile } from "read-excel-file/browser";
 import type {
   PreFlightIssue,
   PreFlightResult,
   PreFlightRow,
   UploadCatalogType,
-} from './types';
-import { UPLOAD_CATALOGS, validateCatalogRow } from './upload-catalog';
+} from "./types";
+import { UPLOAD_CATALOGS, validateCatalogRow } from "./upload-catalog";
 
 function toAsciiDigits(str: string): string {
   return str
@@ -15,12 +16,12 @@ function toAsciiDigits(str: string): string {
 
 function normalizeHeaderKey(header: string): string {
   return header
-    .replace(/^\uFEFF/, '')
-    .replace(/\([^)]*\)/g, '')
-    .replace(/\*/g, '')
+    .replace(/^\uFEFF/, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\*/g, "")
     .trim()
     .toLowerCase()
-    .replace(/[\s_-]/g, '');
+    .replace(/[\s_-]/g, "");
 }
 
 /**
@@ -30,23 +31,23 @@ function parseXmlSpreadsheet(
   xmlText: string,
 ): { headers: string[]; rows: string[][] } | null {
   try {
-    if (!xmlText.includes('<Workbook') && !xmlText.includes('<?xml')) {
+    if (!xmlText.includes("<Workbook") && !xmlText.includes("<?xml")) {
       return null;
     }
     const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, 'text/xml');
-    const parserError = doc.getElementsByTagName('parsererror');
+    const doc = parser.parseFromString(xmlText, "text/xml");
+    const parserError = doc.getElementsByTagName("parsererror");
     if (parserError.length > 0) return null;
 
-    const rowElements = Array.from(doc.getElementsByTagName('Row'));
+    const rowElements = Array.from(doc.getElementsByTagName("Row"));
     if (!rowElements.length) return null;
 
     const parsedRows: string[][] = [];
     for (const rowEl of rowElements) {
-      const cellElements = Array.from(rowEl.getElementsByTagName('Cell'));
+      const cellElements = Array.from(rowEl.getElementsByTagName("Cell"));
       const rowData = cellElements.map((c) => {
-        const dataEl = c.getElementsByTagName('Data')[0];
-        return (dataEl?.textContent ?? c.textContent ?? '').trim();
+        const dataEl = c.getElementsByTagName("Data")[0];
+        return (dataEl?.textContent ?? c.textContent ?? "").trim();
       });
       if (rowData.some((val) => val.length > 0)) {
         parsedRows.push(rowData);
@@ -66,9 +67,7 @@ function parseXmlSpreadsheet(
 /**
  * Parses raw file buffer/content into rows
  */
-export async function extractRawSheetRows(
-  file: File,
-): Promise<{
+export async function extractRawSheetRows(file: File): Promise<{
   headers: string[];
   rawRows: (string | number | boolean | null)[][];
 }> {
@@ -83,15 +82,12 @@ export async function extractRawSheetRows(
       const sheetData = await readXlsxFile(file);
       if (sheetData && sheetData.length > 0) {
         const headers = sheetData[0].map((cell) =>
-          String(cell ?? '')
-            .replace(/^\uFEFF/, '')
+          String(cell ?? "")
+            .replace(/^\uFEFF/, "")
             .trim(),
         );
         const rawRows = sheetData.slice(1) as (
-          | string
-          | number
-          | boolean
-          | null
+          string | number | boolean | null
         )[][];
         return { headers, rawRows };
       }
@@ -101,10 +97,10 @@ export async function extractRawSheetRows(
   }
 
   // 2. Secondary: XML Spreadsheet 2003
-  const text = new TextDecoder('utf-8').decode(buffer).replace(/^\uFEFF/, '');
+  const text = new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, "");
   if (
-    (text.includes('<Workbook') || text.includes('<?xml')) &&
-    !text.startsWith('PK')
+    (text.includes("<Workbook") || text.includes("<?xml")) &&
+    !text.startsWith("PK")
   ) {
     const xmlParsed = parseXmlSpreadsheet(text);
     if (xmlParsed) {
@@ -118,26 +114,27 @@ export async function extractRawSheetRows(
     .map((l) => l.trim())
     .filter(
       (l) =>
-        l.length > 0 && !l.startsWith('<?xml') && !l.startsWith('<Workbook'),
+        l.length > 0 && !l.startsWith("<?xml") && !l.startsWith("<Workbook"),
     );
 
   if (lines.length > 0) {
     const headers = lines[0]
       .split(/[,;\t]/)
-      .map((h) => h.trim().replace(/^["']|["']$/g, ''));
+      .map((h) => h.trim().replace(/^["']|["']$/g, ""));
     const rawRows = lines
       .slice(1)
       .map((line) =>
-        line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, '')),
+        line.split(/[,;\t]/).map((c) => c.trim().replace(/^["']|["']$/g, "")),
       );
     return { headers, rawRows };
   }
 
-  throw new Error('الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة');
+  throw new Error("الملف المرفوع فارغ أو لا يحتوي على بيانات صالحة");
 }
 
 export interface PreFlightInspectOptions {
   allowDuplicateStudentCode?: boolean;
+  historicalGrades?: boolean;
 }
 
 /**
@@ -160,8 +157,8 @@ export async function inspectAndValidateFile(
   if (cleanHeaders.length === 0) {
     throw new Error(
       isAr
-        ? 'الملف لا يحتوي على عناوين أعمدة صالحة'
-        : 'File has no valid headers',
+        ? "الملف لا يحتوي على عناوين أعمدة صالحة"
+        : "File has no valid headers",
     );
   }
 
@@ -264,13 +261,13 @@ export async function inspectAndValidateFile(
       const strVal =
         cellVal !== null && cellVal !== undefined
           ? toAsciiDigits(String(cellVal).trim())
-          : '';
+          : "";
       const fieldKey = headerIndexToFieldKey.get(cIdx);
       if (fieldKey) {
         rowData[fieldKey] = strVal;
       } else {
         const rawHeader = rawHeaders[cIdx];
-        if (rawHeader && strVal !== '') {
+        if (rawHeader && strVal !== "") {
           rowData[rawHeader] = strVal;
         }
       }
@@ -279,35 +276,53 @@ export async function inspectAndValidateFile(
     allParsedRows.push(rowData);
 
     const rowIssues = validateCatalogRow(type, rowNumber, rowData, isAr);
+    if (options?.historicalGrades && type === "grades") {
+      const historical = validateHistoricalGrade(rowData);
+      if (!historical.ok)
+        rowIssues.push({
+          rowNumber,
+          field: "grade",
+          fieldLabel: isAr
+            ? "\u062f\u0631\u062c\u0629 \u0633\u0627\u0628\u0642\u0629"
+            : "Historical mark",
+          code: "HISTORICAL_GRADE_INVALID",
+          message: historical.message,
+          severity: "error",
+        });
+    }
 
     // Check for duplicate studentCode or unique identifiers within the file
     if (rowData.studentCode) {
       const codeStr = String(rowData.studentCode).trim();
       const courseStr = rowData.courseCode
         ? String(rowData.courseCode).trim().toUpperCase()
-        : '';
+        : "";
       const allowDuplicate =
         options?.allowDuplicateStudentCode ??
-        (type === 'grades' || type === 'quizzes' || type === 'attendance');
+        (type === "grades" || type === "quizzes" || type === "attendance");
 
       if (allowDuplicate) {
         if (courseStr) {
           const quizNumStr =
-            type === 'quizzes' && rowData.quizNumber !== undefined
+            type === "quizzes" && rowData.quizNumber !== undefined
               ? `:::${String(rowData.quizNumber).trim()}`
-              : '';
-          const pairKey = `${codeStr}:::${courseStr}${quizNumStr}`;
+              : "";
+          const gradeScope =
+            type === "grades"
+              ? `:::${rowData.academicYear ?? ""}:::${rowData.semester ?? ""}:::${rowData.examType ?? ""}`
+              : "";
+          const pairKey = `${codeStr}:::${courseStr}${quizNumStr}${gradeScope}`;
           if (seenUniqueKeys.has(pairKey)) {
             const firstSeenRow = seenUniqueKeys.get(pairKey)!;
             rowIssues.push({
               rowNumber,
-              field: 'studentCode',
-              fieldLabel: isAr ? 'كود الطالب' : 'Student Code',
-              code: 'DUPLICATE_STUDENT_COURSE',
+              field: "studentCode",
+              fieldLabel: isAr ? "كود الطالب" : "Student Code",
+              code: "DUPLICATE_STUDENT_COURSE",
               message: isAr
                 ? `كود الطالب (${codeStr}) مكرر لنفس المقرر (${courseStr}) (ظهر لأول مرة في صف ${firstSeenRow})`
                 : `Student code (${codeStr}) is duplicated for course (${courseStr}) (first seen at row ${firstSeenRow})`,
-              severity: 'error',
+              severity: "error",
               rawValue: codeStr,
             });
           } else {
@@ -319,13 +334,13 @@ export async function inspectAndValidateFile(
           const firstSeenRow = seenUniqueKeys.get(codeStr)!;
           rowIssues.push({
             rowNumber,
-            field: 'studentCode',
-            fieldLabel: isAr ? 'كود الطالب' : 'Student Code',
-            code: 'DUPLICATE_CODE',
+            field: "studentCode",
+            fieldLabel: isAr ? "كود الطالب" : "Student Code",
+            code: "DUPLICATE_CODE",
             message: isAr
               ? `كود الطالب (${codeStr}) مكرر في الملف (ظهر لأول مرة في صف ${firstSeenRow})`
               : `Student code (${codeStr}) is duplicated (first seen at row ${firstSeenRow})`,
-            severity: 'error',
+            severity: "error",
             rawValue: codeStr,
           });
         } else {
@@ -334,7 +349,7 @@ export async function inspectAndValidateFile(
       }
     }
 
-    const isRowValid = !rowIssues.some((issue) => issue.severity === 'error');
+    const isRowValid = !rowIssues.some((issue) => issue.severity === "error");
     if (isRowValid) {
       validRowCount++;
     } else {
@@ -355,7 +370,10 @@ export async function inspectAndValidateFile(
   }
 
   const totalRows = validRowCount + invalidRowCount;
-  const canCommit = totalRows > 0 && missingRequiredColumns.length === 0;
+  const canCommit =
+    totalRows > 0 &&
+    missingRequiredColumns.length === 0 &&
+    (!options?.historicalGrades || validRowCount > 0);
 
   return {
     headers: cleanHeaders,

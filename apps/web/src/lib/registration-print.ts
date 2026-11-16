@@ -1,6 +1,4 @@
-import { toCanvas } from "html-to-image";
 import { curriculumDepartmentLabel } from "@student-portal/shared";
-import { jsPDF } from "jspdf";
 
 export interface PrintableRegistrationCourse {
   code: string;
@@ -991,6 +989,7 @@ export async function downloadRegistrationPdf(form: PrintableRegistrationForm, l
     await waitForRegistrationAssets(doc);
     const sheet = doc.querySelector<HTMLElement>(".sheet");
     if (!sheet) throw new Error("Registration sheet is missing");
+    const [{ toCanvas }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
     const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
     // Paginate whole rows and sections, keeping the title and course header on every page.
     const originalRows = Array.from(sheet.querySelectorAll("tbody tr"));

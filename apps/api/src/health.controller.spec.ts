@@ -47,4 +47,22 @@ describe('API readiness', () => {
     });
     expect(ping).toHaveBeenCalledWith({ timeoutMS: 3000 });
   });
+
+  it('coalesces concurrent probes without caching a completed healthy response', async () => {
+    connection(1);
+    let complete!: () => void;
+    ping.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const probes = [controller.check(), controller.check()];
+    expect(ping).toHaveBeenCalledTimes(1);
+    complete();
+    await Promise.all(probes);
+    ping.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(controller.check()).rejects.toMatchObject({ status: 503 });
+    expect(ping).toHaveBeenCalledTimes(2);
+  });
 });

@@ -101,8 +101,9 @@ export class ComplaintsController {
   async getMyTickets(
     @CurrentUser('_id') studentId: string,
     @Query() query: QueryComplaintDto,
+    @CurrentUser('studentCode') studentCode?: string,
   ) {
-    return this.complaintsService.findByStudent(studentId, query);
+    return this.complaintsService.findByStudent(studentId, query, studentCode);
   }
 
   @Post('students/complaints/:id/reply')

@@ -206,8 +206,18 @@ export function normalizeStudentSemester(value: unknown): Semester {
  */
 export function normalizeRowKeys(
   row: Record<string, unknown>,
+  options?: { strictNumbers?: boolean },
 ): Record<string, unknown> {
   const normalized: Record<string, unknown> = {};
+  const parseNumeric = (value: unknown): number | undefined => {
+    const raw = unwrapExcelCellValue(value);
+    if (options?.strictNumbers && typeof raw === 'string' && raw.includes('%'))
+      return Number.NaN;
+    const parsed = parseSafeNumber(value);
+    return options?.strictNumbers && parsed === undefined && raw !== ''
+      ? Number.NaN
+      : parsed;
+  };
 
   for (const key of Object.keys(row)) {
     const cleanKey = key
@@ -474,7 +484,7 @@ export function normalizeRowKeys(
       cleanKey === 'الأولوية' ||
       cleanKey === 'الاولوية'
     ) {
-      normalized.registrationPriority = parseSafeNumber(val);
+      normalized.registrationPriority = parseNumeric(val);
     } else if (
       cleanKey === 'prerequisites' ||
       cleanKey === 'prerequisitecodes' ||
@@ -579,14 +589,14 @@ export function normalizeRowKeys(
       cleanKey === 'الانذارات' ||
       cleanKey === 'إنذارات'
     ) {
-      normalized.academicWarnings = parseSafeNumber(val);
+      normalized.academicWarnings = parseNumeric(val);
     } else if (
       cleanKey === 'recommendedsemester' ||
       cleanKey === 'الفصلالموصىبه'
     ) {
-      normalized.recommendedSemester = parseSafeNumber(val);
+      normalized.recommendedSemester = parseNumeric(val);
     } else if (cleanKey === 'minimumgpa' || cleanKey === 'الحدالأدنىللمعدل') {
-      normalized.minimumGpa = parseSafeNumber(val);
+      normalized.minimumGpa = parseNumeric(val);
     }
     // Credit Hours
     else if (
@@ -597,7 +607,7 @@ export function normalizeRowKeys(
       cleanKey === 'الساعاتالمعتمدة' ||
       cleanKey === 'عددالساعات'
     ) {
-      normalized.creditHours = parseSafeNumber(val);
+      normalized.creditHours = parseNumeric(val);
     }
     // Max Grade (Checked first to avoid prefix collisions)
     else if (
@@ -610,7 +620,7 @@ export function normalizeRowKeys(
       cleanKey === 'أقصىدرجة' ||
       cleanKey === 'النهايةالعظمى'
     ) {
-      normalized.maxGrade = parseSafeNumber(val);
+      normalized.maxGrade = parseNumeric(val);
     }
     // Grade Value
     else if (
@@ -624,7 +634,7 @@ export function normalizeRowKeys(
       cleanKey === 'درجةالكويز' ||
       cleanKey === 'درجةالطالب'
     ) {
-      normalized.grade = parseSafeNumber(val);
+      normalized.grade = parseNumeric(val);
     }
     // Midterm breakdown
     else if (
@@ -637,7 +647,7 @@ export function normalizeRowKeys(
       cleanKey === 'أعمالالفصل' ||
       cleanKey === 'نصفي'
     ) {
-      normalized.midterm = parseSafeNumber(val);
+      normalized.midterm = parseNumeric(val);
     }
     // Final breakdown
     else if (
@@ -650,7 +660,7 @@ export function normalizeRowKeys(
       cleanKey === 'فاينل' ||
       cleanKey === 'تحريري'
     ) {
-      normalized.final = parseSafeNumber(val);
+      normalized.final = parseNumeric(val);
     }
     // Coursework breakdown
     else if (
@@ -663,7 +673,7 @@ export function normalizeRowKeys(
       cleanKey === 'أعمالسنة' ||
       cleanKey === 'سنة'
     ) {
-      normalized.coursework = parseSafeNumber(val);
+      normalized.coursework = parseNumeric(val);
     }
     // Practical breakdown
     else if (
@@ -677,7 +687,7 @@ export function normalizeRowKeys(
       cleanKey === 'الامتحانالعملي' ||
       cleanKey === 'درجةالعملي'
     ) {
-      normalized.practical = parseSafeNumber(val);
+      normalized.practical = parseNumeric(val);
     }
     // Total Score
     else if (
@@ -689,15 +699,15 @@ export function normalizeRowKeys(
       cleanKey === 'الدرجةالكلية' ||
       cleanKey === 'إجماليالدرجة'
     ) {
-      normalized.total = parseSafeNumber(val);
+      normalized.total = parseNumeric(val);
     } else if (cleanKey === 'maxmidterm' || cleanKey === 'عظمىالميدترم') {
-      normalized.maxMidterm = parseSafeNumber(val);
+      normalized.maxMidterm = parseNumeric(val);
     } else if (cleanKey === 'maxfinal' || cleanKey === 'عظمىالنهائي') {
-      normalized.maxFinal = parseSafeNumber(val);
+      normalized.maxFinal = parseNumeric(val);
     } else if (cleanKey === 'maxcoursework' || cleanKey === 'عظمىأعمالالسنة') {
-      normalized.maxCoursework = parseSafeNumber(val);
+      normalized.maxCoursework = parseNumeric(val);
     } else if (cleanKey === 'maxpractical' || cleanKey === 'عظمىالعملي') {
-      normalized.maxPractical = parseSafeNumber(val);
+      normalized.maxPractical = parseNumeric(val);
     }
     // Exam Type
     else if (
@@ -728,7 +738,7 @@ export function normalizeRowKeys(
       cleanKey === 'رقمالاختبار' ||
       cleanKey === 'كويزرقم'
     ) {
-      normalized.quizNumber = parseSafeNumber(val);
+      normalized.quizNumber = parseNumeric(val);
     }
     // Quiz Title
     else if (
@@ -750,7 +760,7 @@ export function normalizeRowKeys(
       cleanKey === 'اجماليالمحاضرات' ||
       cleanKey === 'عددالمحاضرات'
     ) {
-      normalized.totalLectures = parseSafeNumber(val);
+      normalized.totalLectures = parseNumeric(val);
     } else if (
       cleanKey === 'attendedlectures' ||
       cleanKey === 'attendedsessions' ||
@@ -760,7 +770,7 @@ export function normalizeRowKeys(
       cleanKey === 'عددالحضور' ||
       cleanKey === 'حضور'
     ) {
-      normalized.attendedLectures = parseSafeNumber(val);
+      normalized.attendedLectures = parseNumeric(val);
     } else if (
       cleanKey === 'absencelectures' ||
       cleanKey === 'absentlectures' ||
@@ -771,7 +781,7 @@ export function normalizeRowKeys(
       cleanKey === 'عددالغياب' ||
       cleanKey === 'غياب'
     ) {
-      normalized.absenceLectures = parseSafeNumber(val);
+      normalized.absenceLectures = parseNumeric(val);
     }
     // Academic Email
     else if (

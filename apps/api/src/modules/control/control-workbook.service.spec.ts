@@ -35,7 +35,10 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     semester: 'first',
     version: 1,
     frozenAt: null,
-    components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({ ...c })),
+    components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({
+      ...c,
+      max: c.key === 'midterm' ? 20 : c.key === 'final' ? 60 : c.max,
+    })),
     courseworkAttendanceMax: 5,
     courseworkQuizzesMax: 15,
   };
@@ -119,6 +122,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     sheetService as never,
     mutations as never,
     { getScheme: () => Promise.resolve(scheme), freeze: jest.fn() } as never,
+    { approve: jest.fn().mockResolvedValue(undefined) } as never,
   );
   const rows = [
     {
@@ -225,6 +229,27 @@ describe('Control workbook import and review', () => {
     expect(increment.errors[0]).toContain(
       'Mark rule: off_step; max=20; step=0.5',
     );
+  });
+  it('skips unchanged IC copies but marks an Excel edit invalid before commit', async () => {
+    const ctx = build();
+    ctx.rows[0].components = {
+      midterm: {
+        score: 15,
+        status: 'present',
+        rev: 1,
+        carriedFrom: { academicYear: '2025-2026', semester: 'first' },
+      },
+    };
+    expect(
+      await ctx.service.preview(ctx.user, ctx.sheetId, [
+        { ...ctx.row, score: 15, status: 'present', expectedRev: 1 },
+      ]),
+    ).toMatchObject({ valid: 0, skipped: 1, errors: [] });
+    const edited = await ctx.service.preview(ctx.user, ctx.sheetId, [
+      { ...ctx.row, score: 12, status: 'present', expectedRev: 1 },
+    ]);
+    expect(edited.valid).toBe(0);
+    expect(edited.errors[0]).toContain('IC contributions are read-only');
   });
   it('skips unchanged imported marks instead of generating grade writes', async () => {
     const ctx = build();
@@ -506,7 +531,7 @@ describe('Control workbook import and review', () => {
   it.each(['banned', 'incomplete', 'excused', 'withheld'] as const)(
     'previews %s imports with an optional reason',
     async (status) => {
-      const ctx = build();
+      const ctx = build('final');
       ctx.access.getCapabilities = () => ({ canManageStates: true });
       const result = await ctx.service.preview(ctx.user, ctx.sheetId, [
         { ...ctx.row, status, score: status === 'withheld' ? 12 : '' },
@@ -517,11 +542,11 @@ describe('Control workbook import and review', () => {
     },
   );
   it('round trips a banned XLSX status without a reason', async () => {
-    const ctx = build();
+    const ctx = build('final');
     ctx.access.getCapabilities = () => ({ canManageStates: true });
     const book = new ExcelJS.Workbook();
     await book.xlsx.load(
-      await ctx.service.template(ctx.user, ctx.sheetId, 'midterm'),
+      await ctx.service.template(ctx.user, ctx.sheetId, 'final'),
     );
     book.worksheets[0].getCell('C2').value = 0;
     book.worksheets[0].getCell('D2').value = 'محروم';

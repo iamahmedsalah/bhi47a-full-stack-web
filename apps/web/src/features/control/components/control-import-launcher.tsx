@@ -1,11 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import {
-  FileSpreadsheet,
-  UploadCloud,
-  Download,
-  AlertCircle,
-} from "lucide-react";
+import { FileSpreadsheet, UploadCloud, AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +9,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getApiErrorMessage } from "@/lib/api";
 import { ControlFileImportDialog } from "./control-file-import-dialog";
 import type { WorkbookRow } from "../types";
 
@@ -24,7 +18,6 @@ export function ControlImportLauncher({
   locale,
   onClose,
   onSaved,
-  onDownload,
   onAudit,
 }: {
   sheetId: string;
@@ -40,7 +33,6 @@ export function ControlImportLauncher({
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState("");
-  const [downloading, setDownloading] = useState(false);
   function choose(files: FileList | null) {
     setDragging(false);
     if (!files?.length) return;
@@ -100,40 +92,6 @@ export function ControlImportLauncher({
               : "Choose a workbook, review its rows and issues, then save valid rows in batches."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
-          <div className="flex items-center gap-3">
-            <FileSpreadsheet className="size-8 text-primary" />
-            <div>
-              <h3 className="font-semibold">
-                {ar ? "نموذج كشف الكنترول" : "Control workbook template"}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {ar
-                  ? "عدّل ورقة الرصد للمكوّن المطلوب. احتفظ بالأعمدة المخفية؛ فهي تحمي درجاتك من استبدال تعديل أحدث."
-                  : "Edit the selected component's entry worksheet. Keep hidden columns; revision metadata protects concurrent edits."}
-              </p>
-            </div>
-          </div>
-          {onDownload && (
-            <Button
-              variant="outline"
-              disabled={downloading}
-              onClick={async () => {
-                setDownloading(true);
-                try {
-                  await onDownload();
-                } catch (cause) {
-                  setError(getApiErrorMessage(cause));
-                } finally {
-                  setDownloading(false);
-                }
-              }}
-            >
-              <Download className="size-4" />
-              {ar ? "تنزيل الكشف الكامل" : "Download full workbook"}
-            </Button>
-          )}
-        </div>
         {onAudit && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-card p-4">
             <div>

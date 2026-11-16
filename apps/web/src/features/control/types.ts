@@ -94,6 +94,7 @@ export interface ControlSheetDetails {
 }
 
 export interface ControlEntry {
+  carriedFrom?: { academicYear: string; semester: string };
   studentId: string;
   score: number | null;
   status: string | null;
@@ -172,6 +173,10 @@ export interface ControlAuditRow {
   source: "GRID" | "XLSX" | "SYSTEM";
   component: string;
   oldValue: {
+    decision?: "keep_previous" | "accept_new";
+    previousYear?: string;
+    previousPercentage?: number | null;
+    currentPercentage?: number | null;
     workflowState?: string;
     attendanceMark?: number | null;
     quizzesMark?: number | null;
@@ -181,6 +186,10 @@ export interface ControlAuditRow {
     rev?: number | null;
   } | null;
   newValue: {
+    decision?: "keep_previous" | "accept_new";
+    previousYear?: string;
+    previousPercentage?: number | null;
+    currentPercentage?: number | null;
     workflowState?: string;
     attendanceMark?: number | null;
     quizzesMark?: number | null;
@@ -231,7 +240,7 @@ export interface ControlImportPreview {
     examStatus?: string;
     before: number | null;
     after: string | number | null;
-    status: 'valid' | 'invalid' | 'unchanged';
+    status: "valid" | "invalid" | "unchanged";
     issues: string[];
   }>;
 }

@@ -80,3 +80,6 @@ build_import_files.mjs
 !/scripts/dependency-security.test.cjs
 !/docs/ci-reports.md
 !/docs/production-dependency-audit-2026-11-13.md
+
+# Historical grade import operator guide.
+!/docs/historical-grades-import.md

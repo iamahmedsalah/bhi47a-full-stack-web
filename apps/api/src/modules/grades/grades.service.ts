@@ -245,6 +245,16 @@ export class GradesService implements OnModuleInit {
    * Rejects writes to a component whose Use the Control workbook to edit marks for this sheet. Used by every
    * non-grid write path (manual form, Excel import) so a lock holds everywhere.
    */
+  async hasControlSheet(
+    courseId: Types.ObjectId,
+    academicYear: string,
+    semester: string,
+  ): Promise<boolean> {
+    return Boolean(
+      await this.controlSheetModel.exists({ courseId, academicYear, semester }),
+    );
+  }
+
   async assertSheetEditable(
     courseId: string | Types.ObjectId,
     academicYear: string,
@@ -848,18 +858,27 @@ export class GradesService implements OnModuleInit {
       activeReleaseId: string | null;
       digest: string;
     }> = [];
-    for (const sheet of sheets) {
-      if (!dto.isPublished) continue;
-      const preview = await this.controlReleases.preview(sheet);
-      items.push({
-        sheetId: String(sheet._id),
-        courseCode: sheet.courseCode,
-        component: sheet.component,
-        students: preview.count,
-        activeReleaseId: preview.activeReleaseId,
-        digest: preview.digest,
-      });
+    // Preview only: bounded parallel reads, never concurrent operations in a
+    // MongoDB transaction. Activation still validates every returned digest.
+    if (dto.isPublished) {
+      for (let offset = 0; offset < sheets.length; offset += 4) {
+        const batch = await Promise.all(
+          sheets.slice(offset, offset + 4).map(async (sheet) => {
+            const preview = await this.controlReleases.preview(sheet);
+            return {
+              sheetId: String(sheet._id),
+              courseCode: sheet.courseCode,
+              component: sheet.component,
+              students: preview.count,
+              activeReleaseId: preview.activeReleaseId,
+              digest: preview.digest,
+            };
+          }),
+        );
+        items.push(...batch);
+      }
     }
+
     return {
       sheets: items,
       releaseDigests: Object.fromEntries(

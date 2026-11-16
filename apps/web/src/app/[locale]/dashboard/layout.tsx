@@ -8,7 +8,8 @@ import { Footer } from '@/components/ui/footer';
 import { useUIStore } from '@/store/ui-store';
 import { cn } from '@/lib/cn';
 import { FcmInitializer } from '@/providers/fcm-initializer';
-import { StudentChatWidget } from '@/features/ai/components/student-chat-widget';
+import dynamic from 'next/dynamic';
+const StudentChatWidget = dynamic(() => import('@/features/ai/components/student-chat-widget').then(m => m.StudentChatWidget), { ssr: false });
 import { useAuth } from '@/providers/auth-provider';
 import { LoadingState } from '@/components/ui/feedback';
 

@@ -3,6 +3,7 @@ import { CONTROL_SCORELESS_STATES } from '@student-portal/shared';
 /** One grid row's mark as the API exposes it. */
 export interface ControlEntry {
   studentId: string;
+  carriedFrom?: { academicYear: string; semester: string };
   score: number | null;
   /** `null` = no record yet ("not entered"); never confused with 0. */
   status: string | null;
@@ -12,6 +13,7 @@ export interface ControlEntry {
 }
 
 interface GradeLike {
+  carriedFrom?: { academicYear: string; semester: string };
   studentId: { toString(): string };
   cleared?: boolean;
   grade?: number;
@@ -31,6 +33,14 @@ export function toControlEntry(
   );
   return {
     studentId: doc.studentId.toString(),
+    ...(doc.carriedFrom
+      ? {
+          carriedFrom: {
+            academicYear: doc.carriedFrom.academicYear,
+            semester: doc.carriedFrom.semester,
+          },
+        }
+      : {}),
     score: doc.cleared || scoreless ? null : (doc.grade ?? null),
     status,
     rev: doc.rev ?? 0,

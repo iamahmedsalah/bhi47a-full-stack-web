@@ -25,6 +25,7 @@ export default function StudentAcademicEmailPage() {
 
   const emailQuery = useQuery({
     queryKey: ['student-academic-email'],
+    staleTime: 30 * 60_000,
     queryFn: async () => {
       const res = await api.get<AcademicEmailRecord | null>('/students/me/academic-email');
       return res.data;

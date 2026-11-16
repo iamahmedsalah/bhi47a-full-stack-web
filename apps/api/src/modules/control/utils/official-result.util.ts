@@ -13,7 +13,7 @@ export interface ResultPolicy {
 export const DEFAULT_RESULT_POLICY: ResultPolicy = {
   passPercentage: 50,
   finalMinimumPercentage: 0,
-  retake: 'latest',
+  retake: 'best',
 };
 
 /** Grade thresholds use integer hundredths; no partial sum becomes an official result. */

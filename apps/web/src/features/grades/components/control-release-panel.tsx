@@ -167,7 +167,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
     queryKey: ["release-courses", year, semester],
     queryFn: () => listControlCourses({ academicYear: year, semester }),
     enabled: canPublish && /^\d{4}-\d{4}$/.test(year),
-    refetchInterval: 30_000,
+    staleTime: 30_000,
   });
   const course = courses.data?.items.find((c) => c.courseId === courseId);
   const selectedComp = course?.components.find((c) => c.key === component);
@@ -744,7 +744,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             />
           </Label>
           <Select
-            value={policy.rules.retake}
+            value="best"
             onValueChange={(v) =>
               setPolicy({
                 ...policy,
@@ -756,7 +756,6 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
-              <SelectItem value="latest">{t("latest")}</SelectItem>
               <SelectItem value="best">{t("best")}</SelectItem>
             </SelectContent>
           </Select>

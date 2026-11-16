@@ -49,6 +49,7 @@ import { NotificationSchema } from '../src/modules/notifications/schemas/notific
 import { NotificationsController } from '../src/modules/notifications/notifications.controller';
 import { NotificationsService } from '../src/modules/notifications/notifications.service';
 import { ComplaintSchema } from '../src/modules/complaints/schemas/complaint.schema';
+import { createFixtureIndexes } from './fixture-indexes';
 
 // Never imports AppModule, deployment .env files or production data. No deletes,
 // collection drops or index removals, including teardown. Synthetic rows remain.
@@ -145,7 +146,8 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
     }
     connection = await mongoose
       .createConnection(uri.href, {
-        autoIndex: true,
+        autoIndex: false,
+        autoCreate: false,
         maxPoolSize: 5,
         minPoolSize: 1,
       })
@@ -178,7 +180,9 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
       prefix + '_sessions',
     );
     await Promise.all(
-      Object.values(connection.models).map((entry) => entry.init()),
+      Object.values(connection.models).map((entry) =>
+        createFixtureIndexes(entry),
+      ),
     );
     await users.collection.insertMany(
       ids.map((_id, i) => ({

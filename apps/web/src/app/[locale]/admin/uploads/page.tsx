@@ -1,5 +1,7 @@
 "use client";
 
+import { useAuth } from "@/providers/auth-provider";
+import { downloadFileBlob } from "@/lib/export-utils";
 import { useTranslations } from "next-intl";
 import React, { useState, Suspense, useMemo } from "react";
 import { useParams } from "next/navigation";
@@ -56,7 +58,11 @@ import {
   downloadCsvTemplate,
   downloadOfficialTemplate,
 } from "@/features/uploads/upload-catalog";
-import { inspectAndValidateFile } from "@/features/uploads/pre-flight-inspector";
+const inspectAndValidateFile: typeof import("@/features/uploads/pre-flight-inspector").inspectAndValidateFile =
+  async (...args) => {
+    const inspector = await import("@/features/uploads/pre-flight-inspector");
+    return inspector.inspectAndValidateFile(...args);
+  };
 import { ExcelPreviewGrid } from "@/features/uploads/components/excel-preview-grid";
 import { useBatchUpload } from "@/features/uploads/use-batch-upload";
 import { DataUploadProgress } from "@/components/ui/data-upload-progress";
@@ -78,6 +84,8 @@ function UploadsPageContent() {
   const locale = (params?.locale as string) || "ar";
   const isAr = locale === "ar";
 
+  const { user } = useAuth();
+  const [historicalGrades, setHistoricalGrades] = useState(false);
   // Form State
   const controlText = useTranslations("controlRelease");
   const [uploadType, setUploadType] = useState<UploadCatalogType>("students");
@@ -166,11 +174,14 @@ function UploadsPageContent() {
     try {
       const inspectRes = await inspectAndValidateFile(file, uploadType, isAr, {
         allowDuplicateStudentCode: newAllowDuplicate,
+        historicalGrades:
+          uploadType === "grades" && historicalGrades && user?.role === "admin",
       });
       setPreview(inspectRes);
     } catch (err: unknown) {
       setErrorMsg(
-        (err instanceof Error ? err.message : '') || (isAr ? "فشل فحص الملف" : "Inspection failed"),
+        (err instanceof Error ? err.message : "") ||
+          (isAr ? "فشل فحص الملف" : "Inspection failed"),
       );
     } finally {
       setIsInspecting(false);
@@ -273,6 +284,10 @@ function UploadsPageContent() {
         isAr,
         {
           allowDuplicateStudentCode,
+          historicalGrades:
+            uploadType === "grades" &&
+            historicalGrades &&
+            user?.role === "admin",
         },
       );
       setPreview(inspectRes);
@@ -284,7 +299,7 @@ function UploadsPageContent() {
     } catch (err: unknown) {
       setPreview(null);
       setErrorMsg(
-        (err instanceof Error ? err.message : '') ||
+        (err instanceof Error ? err.message : "") ||
           (isAr
             ? "تعذر قراءة أو فحص ملف الإكسيل"
             : "Failed to inspect workbook"),
@@ -297,7 +312,17 @@ function UploadsPageContent() {
   const handleDownloadTemplate = async () => {
     try {
       setIsDownloadingTemplate(true);
-      await downloadOfficialTemplate(uploadType, isAr ? "ar" : "en");
+      if (
+        uploadType === "grades" &&
+        historicalGrades &&
+        user?.role === "admin"
+      ) {
+        const blob = await api.get(
+          "/admin/uploads/templates/historical-grades",
+          { params: { lang: isAr ? "ar" : "en" }, responseType: "blob" },
+        );
+        downloadFileBlob(blob, "historical-grades.xlsx");
+      } else await downloadOfficialTemplate(uploadType, isAr ? "ar" : "en");
       toast.success(
         isAr
           ? "تم تحميل نموذج Excel المعتمد (.xlsx)"
@@ -314,7 +339,22 @@ function UploadsPageContent() {
 
   const handleDownloadCsv = () => {
     try {
-      downloadCsvTemplate(uploadType, isAr ? "ar" : "en");
+      if (
+        uploadType === "grades" &&
+        historicalGrades &&
+        user?.role === "admin"
+      ) {
+        void downloadFileBlob(
+          new Blob(
+            [
+              "\ufeffstudentCode,courseCode,examType,grade,maxGrade,status,academicYear,semester\r\n",
+            ],
+            { type: "text/csv;charset=utf-8" },
+          ),
+          "historical-grades.csv",
+          "text/csv;charset=utf-8",
+        );
+      } else downloadCsvTemplate(uploadType, isAr ? "ar" : "en");
       toast.success(
         isAr
           ? "تم تحميل نموذج CSV المعتمد (.csv)"
@@ -341,6 +381,8 @@ function UploadsPageContent() {
     await uploader.startUpload({
       file,
       type: uploadType,
+      historicalGrades:
+        uploadType === "grades" && historicalGrades && user?.role === "admin",
       parsedRows: preview?.parsedRows,
       isAr,
     });
@@ -463,6 +505,29 @@ function UploadsPageContent() {
       {uploadType === "grades" && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm space-y-2">
           <p>{controlText("uploadNote")}</p>
+          {user?.role === "admin" && (
+            <>
+              <Button
+                variant={historicalGrades ? "default" : "outline"}
+                aria-pressed={historicalGrades}
+                disabled={uploader.isUploading || isInspecting}
+                onClick={() => {
+                  setHistoricalGrades((value) => !value);
+                  setFile(null);
+                  setPreview(null);
+                  setResult(null);
+                  setErrorMsg("");
+                }}
+              >
+                {controlText("historicalImportToggle")}
+              </Button>
+              {historicalGrades && (
+                <p className="text-amber-500">
+                  {controlText("historicalImportHelp")}
+                </p>
+              )}
+            </>
+          )}
           <a
             className="text-primary underline"
             href={`/${locale}/admin/control`}

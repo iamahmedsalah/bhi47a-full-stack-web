@@ -38,6 +38,7 @@ import { createHttpMetricsMiddleware } from '../src/core/metrics/http-metrics.mi
 import { getRequestQueryContext } from '../src/core/metrics/request-query-context';
 import { AuthSessionSchema } from '../src/modules/auth/services/auth-session-store.service';
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter';
+import { createFixtureIndexes } from './fixture-indexes';
 
 // Synthetic, credential-free localhost fixtures. This is not a staging benchmark.
 describe('targeted performance with isolated MongoDB and real HTTP controllers', () => {
@@ -109,7 +110,11 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
       );
     }
     connection = await mongoose
-      .createConnection(uri.href, { autoIndex: true, maxPoolSize: 5 })
+      .createConnection(uri.href, {
+        autoIndex: false,
+        autoCreate: false,
+        maxPoolSize: 5,
+      })
       .asPromise();
     connection.plugin(createMongooseMetricsPlugin(metrics));
     const courses = fixtureModel('PerfCourse', CourseSchema, 'courses');
@@ -133,7 +138,9 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
     );
     complaints = fixtureModel('PerfComplaint', ComplaintSchema, 'complaints');
     await Promise.all(
-      Object.values(connection.models).map((model) => model.init()),
+      Object.values(connection.models).map((model) =>
+        createFixtureIndexes(model),
+      ),
     );
     const registrationService = new RegistrationsService(
       academic,
@@ -337,7 +344,7 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
       })),
     );
     const sessions = fixtureModel('PerfSession', AuthSessionSchema, 'sessions');
-    await sessions.init();
+    await createFixtureIndexes(sessions);
     await sessions.create({
       _id: 'a'.repeat(64),
       userId: String(ids[0]),

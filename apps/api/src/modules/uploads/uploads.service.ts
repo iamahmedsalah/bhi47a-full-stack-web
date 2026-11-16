@@ -123,7 +123,14 @@ export class UploadsService {
       rowOffset?: number;
     },
     adminId: string,
+    historical = false,
   ) {
+    if (historical && dto.type !== 'grades')
+      throw new BadRequestException('Historical import accepts grades only');
+    if (historical && dto.rows.length > 100)
+      throw new BadRequestException(
+        'Historical batches are limited to 100 rows',
+      );
     const importer = this.importerMap.get(dto.type);
     if (!importer) {
       throw new BadRequestException('Unknown upload type');
@@ -147,19 +154,30 @@ export class UploadsService {
 
     try {
       // Normalize keys on incoming rows in case of Arabic/English variations
-      const normalizedRows = dto.rows.map((row) => normalizeRowKeys(row));
+      const normalizedRows = dto.rows.map((row) =>
+        normalizeRowKeys(row, { strictNumbers: historical }),
+      );
       await this.assertReusedIdentity(normalizedRows, dto.type);
 
       const { validRows, errors: validationErrors } =
         importer.validate(normalizedRows);
-      const commitResult = await importer.commit(validRows, adminId, {
-        sourceFile: dto.sourceFile,
-        batchId: dto.uploadSessionId,
-        batchIndex: dto.batchIndex,
-        rowOffset: dto.rowOffset,
-      });
+      const commitResult = historical
+        ? await (importer as GradeImporter).commitHistorical(
+            normalizedRows,
+            adminId,
+            dto.rowOffset ?? 0,
+          )
+        : await importer.commit(validRows, adminId, {
+            sourceFile: dto.sourceFile,
+            batchId: dto.uploadSessionId,
+            batchIndex: dto.batchIndex,
+            rowOffset: dto.rowOffset,
+          });
 
-      const errors = [...validationErrors, ...commitResult.errors];
+      const errors = [
+        ...(historical ? [] : validationErrors),
+        ...commitResult.errors,
+      ];
       const { successCount } = commitResult;
 
       return {

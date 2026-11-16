@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Loader2, Send, User, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -37,7 +38,7 @@ export function StudentChatWidget() {
   const [sessionId, setSessionId] = useState<string>();
   const [remainingMessages, setRemainingMessages] = useState<number>();
   const [quotaResetAt, setQuotaResetAt] = useState<string>();
-  const [advisorEnabled, setAdvisorEnabled] = useState(true);
+  const [sessionEnabled, setAdvisorEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,18 +49,13 @@ export function StudentChatWidget() {
     { label: t("presets.faqs"), query: t("queries.faqs") },
   ];
 
-  useEffect(() => {
-    if (authLoading || user?.role !== "student") return;
-    let active = true;
-    void getChatStatus()
-      .then((status) => {
-        if (active) setAdvisorEnabled(status.enabled);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [authLoading, user?.role]);
+  const status = useQuery({
+    queryKey: ["student-chat-status", user?._id],
+    queryFn: getChatStatus,
+    enabled: !authLoading && user?.role === "student",
+    staleTime: 5 * 60_000,
+  });
+  const advisorEnabled = sessionEnabled && status.data?.enabled !== false;
 
   useEffect(() => {
     if (!isOpen) return;

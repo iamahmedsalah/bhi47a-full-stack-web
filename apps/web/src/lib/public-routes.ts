@@ -23,6 +23,13 @@ function routeSegments(pathname: string) {
   return segments;
 }
 
+// These pages never require account state. Auth entry/change-password and
+// attendance check-in and the hybrid complaint form retain session bootstrap.
+export function isPublicMarketingRoute(pathname: string) {
+  const segments = routeSegments(pathname);
+  return segments[0] !== 'complaints' && PUBLIC_ROOT_SEGMENTS.has(segments[0] ?? '');
+}
+
 export function isAuthEntryRoute(pathname: string) {
   const segments = routeSegments(pathname);
   if (segments[0] === 'forgot-password' && segments.length === 1) return true;

@@ -10,6 +10,7 @@ import { mergeAcademicCourseProgress } from '../registrations/utils/academic-cou
 
 const components = DEFAULT_CONTROL_COMPONENTS.map((c) => ({
   ...c,
+  max: c.key === 'midterm' ? 20 : c.key === 'final' ? 60 : c.max,
   enabled: true,
 }));
 const marks = {
@@ -153,17 +154,17 @@ describe('Official Control course results', () => {
     maxGrade: 100,
     status: 'present',
   });
-  it('replaces an older passing attempt with the latest failed attempt without combining marks', () => {
+  it('retains the older passing attempt when the new attempt is lower without combining marks', () => {
     const result = mergeAcademicCourseProgress({
       completedCourses: ['CS101'],
       grades: [attempt('2025-2026', 90), attempt('2026-2027', 20)],
       courseCredits: { CS101: 3 },
     });
     expect(result).toMatchObject({
-      completedCourses: [],
-      failedCourses: ['CS101'],
+      completedCourses: ['CS101'],
+      failedCourses: [],
       gradedCredits: 3,
-      calculatedGpa: 0,
+      calculatedGpa: calculateGradeScale(90, 'present').points,
     });
     expect(result.courseResults).toHaveLength(1);
   });

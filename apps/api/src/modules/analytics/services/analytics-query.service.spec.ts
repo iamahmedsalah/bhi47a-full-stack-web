@@ -29,28 +29,29 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockQuizModel = {
-    find: jest.fn().mockReturnValue({
-      sort: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          {
-            _id: quizFixtureId,
-            title: 'Quiz 1',
-            titleAr: 'الاختبار الأول',
-            courseId: new Types.ObjectId(),
-            courseCode: 'CS101',
-            courseName: 'Intro to CS',
-            creatorId: new Types.ObjectId(),
-            academicYear: '2026-2027',
-            semester: 'first',
-            durationMinutes: 20,
-            totalMarks: 20,
-            passingMarks: 10,
-            isPublished: true,
-            questions: [{}, {}],
-          },
-        ]),
-      }),
-    }),
+    find: jest
+      .fn()
+      .mockReturnValue({ sort: () => ({ lean: () => Promise.resolve([]) }) }),
+    aggregate: jest.fn((_pipeline: unknown[]) =>
+      Promise.resolve([
+        {
+          _id: quizFixtureId,
+          title: 'Quiz 1',
+          titleAr: 'الاختبار الأول',
+          courseId: new Types.ObjectId(),
+          courseCode: 'CS101',
+          courseName: 'Intro to CS',
+          creatorId: new Types.ObjectId(),
+          academicYear: '2026-2027',
+          semester: 'first',
+          durationMinutes: 20,
+          totalMarks: 20,
+          passingMarks: 10,
+          isPublished: true,
+          questions: [{}, {}],
+        },
+      ]),
+    ),
   };
 
   const mockSubmissionModel = {
@@ -92,6 +93,9 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockCourseModel = {
+    aggregate: jest
+      .fn()
+      .mockResolvedValue([{ totalCourses: 10, activeCourses: 10 }]),
     find: jest.fn().mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([]),
@@ -120,6 +124,9 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockUserModel = {
+    aggregate: jest
+      .fn()
+      .mockResolvedValue([{ doctorCount: 5, asstLectCount: 5, taCount: 5 }]),
     find: jest.fn().mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([]),
@@ -149,6 +156,15 @@ describe('AnalyticsQueryService', () => {
   };
 
   const mockStudentProfileModel = {
+    aggregate: jest.fn().mockResolvedValue([
+      {
+        totalStudents: 100,
+        activeStudents: 80,
+        suspendedStudents: 5,
+        withdrawnStudents: 5,
+        graduatedStudents: 10,
+      },
+    ]),
     countDocuments: jest.fn().mockResolvedValue(100),
     find: jest.fn().mockReturnValue({
       select: jest.fn().mockReturnValue({
@@ -230,8 +246,35 @@ describe('AnalyticsQueryService', () => {
     expect(overview.kpis).toBeDefined();
     expect(overview.kpis.totalStudents).toBe(100);
     expect(overview.kpis.totalCourses).toBe(10);
+    expect(overview.kpis.activeStudents).toBe(80);
+    expect(mockStudentProfileModel.countDocuments).not.toHaveBeenCalled();
+    expect(mockUserModel.countDocuments).not.toHaveBeenCalled();
     expect(quizzes).toHaveBeenCalledTimes(1);
     quizzes.mockRestore();
+  });
+
+  it('retains term filters and both BSON reference forms in indexed quiz matching', async () => {
+    await service.getQuizzesAnalytics(
+      {
+        department: 'BIS',
+        level: '1',
+        academicYear: '2026-2027',
+        semester: 'first',
+      },
+      mockAdminUser,
+    );
+    const [pipeline] = mockQuizModel.aggregate.mock.calls.at(-1)!;
+    const match = (pipeline[0] as { $match: Record<string, unknown> }).$match;
+    expect(match).toMatchObject({
+      academicYear: '2026-2027',
+      semester: 'first',
+    });
+    const membership = (
+      match.$and as Array<{ courseId: { $in: unknown[] } }>
+    )[0].courseId.$in;
+    expect(membership[0]).toBeInstanceOf(Types.ObjectId);
+    expect(membership[1]).toBe(String(membership[0]));
+    expect(JSON.stringify(match)).not.toContain('$expr');
   });
   it.each([
     ['ACCOUNTING', ['ACCOUNTING', 'Accounting', 'ACC', 'المحاسبة']],

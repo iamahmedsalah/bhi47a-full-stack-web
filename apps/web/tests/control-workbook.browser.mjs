@@ -85,14 +85,24 @@ try {
   assert.equal(await page.getByRole('columnheader').count(),11);
   const optionalReason=page.getByRole('textbox',{name:'Reason (optional for exam statuses and excuses)',exact:true});
   assert.equal(await optionalReason.inputValue(),'');
+  await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
+  assert.equal(await page.getByRole('option',{name:'Banned',exact:true}).count(),0);
+  assert.equal(await page.getByRole('option',{name:'Incomplete',exact:true}).count(),0);
+  await page.getByRole('option',{name:'Absent',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.status,'absent');
+  await page.goto(`${base}/en/admin/control/${ids.final}`);
+  await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
   for(const state of ['Banned','Incomplete','Excused']) {
     await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
     await page.getByRole('option',{name:state,exact:true}).click();
     await page.getByRole('status').getByText(/All changes saved/).waitFor();
     assert.equal(await optionalReason.inputValue(),'');
-    assert.equal(rows[0].components.midterm.status,{Banned:'banned',Incomplete:'incomplete',Excused:'excused'}[state]);
-    assert.equal(rows[0].components.midterm.score,null);
+    assert.equal(rows[0].components.final.status,{Banned:'banned',Incomplete:'incomplete',Excused:'excused'}[state]);
+    assert.equal(rows[0].components.final.score,null);
   }
+  await page.goto(`${base}/en/admin/control/${ids.midterm}`);
+  await mark.waitFor();
   assert.equal(await page.locator('tbody tr').count(),100);
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('textbox',{name:'260101 Midterm',exact:true}).waitFor();

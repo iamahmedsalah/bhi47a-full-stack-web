@@ -32,8 +32,7 @@ export function PasskeyLoginButton({
     queryKey: passkeyKeys.capabilities,
     queryFn: getPasskeyCapabilities,
     retry: false,
-    staleTime: 0,
-    refetchInterval: 30000,
+    staleTime: 5 * 60_000,
   });
   if (!capabilities.data?.enabled || (area === 'student' && !capabilities.data.studentLoginEnabled)) return null;
 

@@ -1,6 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from './users.service';
 import { AuthSessionService } from '../auth/services/auth-session.service';
+import {
+  AuthService,
+  mapRouteToAction,
+  parseDeviceFromUserAgent,
+} from '../auth/auth.service';
 import { runWithRequestQueryMetrics } from '../../core/metrics/request-query-context';
 
 describe('request-scoped auth user reads', () => {
@@ -82,6 +87,32 @@ describe('request-scoped auth user reads', () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it('coalesces recent route heartbeats but preserves action and navigation writes', async () => {
+    const test = setup();
+    Object.assign(test.account, {
+      lastActiveAt: new Date(),
+      sessionStartedAt: new Date(),
+      lastActionRoute: '/dashboard',
+      lastAction: mapRouteToAction('/dashboard').action,
+      lastActionAr: mapRouteToAction('/dashboard').actionAr,
+      sessionDevice: parseDeviceFromUserAgent('synthetic-agent'),
+    });
+    const auth = new AuthService(
+      {} as never,
+      {} as never,
+      {} as never,
+      test.users,
+    );
+    await auth.recordHeartbeat(id, { route: '/dashboard' }, 'synthetic-agent');
+    expect(test.updateOne).not.toHaveBeenCalled();
+    await test.users.recordUserActivity(id, {
+      route: '/dashboard',
+      action: 'Download',
+    });
+    await test.users.recordUserActivity(id, { route: '/dashboard/results' });
+    expect(test.updateOne).toHaveBeenCalledTimes(2);
   });
 
   it('preserves login and activity history on logout and clears only the session start', async () => {

@@ -1,3 +1,6 @@
+import { UndoCarryIcDto } from './dto/control.dto';
+import { ControlAttemptsService } from './services/control-attempts.service';
+import { AttemptPreviewQueryDto, CarryIcDto } from './dto/control.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   BadRequestException,
@@ -67,7 +70,35 @@ export class ControlController {
     private readonly grades: ControlGradesService,
     private readonly schemes: GradingSchemeService,
     private readonly reports: ControlReportsService,
+    private readonly attempts: ControlAttemptsService,
   ) {}
+
+  @Get('sheets/:id/attempts')
+  attemptsPreview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Query() query: AttemptPreviewQueryDto,
+  ) {
+    return this.attempts.preview(user, id, query.page);
+  }
+
+  @Post('sheets/:id/undo-carry-ic')
+  undoCarryIc(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: UndoCarryIcDto,
+  ) {
+    return this.attempts.undoCarry(user, id, dto.studentId, dto.fingerprint);
+  }
+
+  @Post('sheets/:id/carry-ic')
+  carryIc(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: CarryIcDto,
+  ) {
+    return this.attempts.carry(user, id, dto.sourceFinalId, dto.fingerprint);
+  }
 
   @Get('sheets/:id/template')
   async template(

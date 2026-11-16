@@ -183,6 +183,8 @@ export async function reviewControlSheet(
     action: "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN";
     expectedRevision: number;
     reason?: string;
+    attemptReviewDigest?: string;
+    keepPreviousStudentIds?: string[];
   },
 ) {
   const res = await api.post<ControlSheetDetails>(
@@ -292,4 +294,91 @@ export async function exportControlImportErrors(
     "control-import-errors.xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
+}
+
+export interface AttemptView {
+  academicYear: string;
+  semester: string;
+  fingerprint: string;
+  marks: Array<{
+    id: string;
+    component: string;
+    grade: number;
+    maxGrade: number;
+    status: string;
+  }>;
+  result: {
+    official: boolean;
+    incomplete: boolean;
+    percentage: number | null;
+    letterGrade: string | null;
+    total: number | null;
+    totalMax: number;
+  };
+}
+export interface AttemptComparison {
+  studentId: string;
+  studentCode: string;
+  name: string;
+  nameAr?: string;
+  previous: AttemptView;
+  current: AttemptView;
+  canAcceptNew: boolean;
+  recommendation: "keep_previous" | "accept_new";
+  fingerprint: string;
+}
+export interface AttemptPreview {
+  semester: string;
+  carriedTotal: number;
+  carried: Array<{
+    studentId: string;
+    studentCode: string;
+    academicYear: string;
+    semester: string;
+    fingerprint: string;
+  }>;
+  digest: string;
+  total: number;
+  page: number;
+  limit: number;
+  comparisons: AttemptComparison[];
+  icTotal: number;
+  icSources: Array<{
+    studentId: string;
+    studentCode: string;
+    name: string;
+    nameAr?: string;
+    alreadyCarried?: boolean;
+    source: AttemptView;
+  }>;
+}
+export async function getControlAttempts(sheetId: string, page = 1) {
+  const response = await api.get<AttemptPreview>(
+    `/admin/control/sheets/${sheetId}/attempts`,
+    { params: { page } },
+  );
+  return response.data;
+}
+export async function carryIcGrades(
+  sheetId: string,
+  sourceFinalId: string,
+  fingerprint: string,
+) {
+  const response = await api.post(`/admin/control/sheets/${sheetId}/carry-ic`, {
+    sourceFinalId,
+    fingerprint,
+  });
+  return response.data;
+}
+
+export async function undoIcCarry(
+  sheetId: string,
+  studentId: string,
+  fingerprint: string,
+) {
+  const response = await api.post(
+    `/admin/control/sheets/${sheetId}/undo-carry-ic`,
+    { studentId, fingerprint },
+  );
+  return response.data;
 }

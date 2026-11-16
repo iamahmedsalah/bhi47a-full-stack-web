@@ -10,6 +10,7 @@ import { Public } from './modules/auth/decorators/public.decorator';
 import { ConnectionHolder } from './common/rate-limit/connection-holder';
 import { CacheService } from './core/cache/cache.service';
 import { HealthStatusInterceptor } from './health-status.interceptor';
+import { pingDatabase } from './database/database-ping';
 
 @Controller()
 @UseInterceptors(HealthStatusInterceptor)
@@ -49,10 +50,7 @@ export class HealthController {
 
     if (isConnected && conn?.db) {
       try {
-        const start = process.hrtime.bigint();
-        await conn.db.admin().ping({ timeoutMS: 3000 });
-        const diffNs = Number(process.hrtime.bigint() - start);
-        pingLatencyMs = Math.round((diffNs / 1e6) * 100) / 100;
+        pingLatencyMs = await pingDatabase(conn);
         dbStatus = 'connected';
       } catch {
         dbStatus = 'ping_failed';

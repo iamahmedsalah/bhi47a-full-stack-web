@@ -1,3 +1,4 @@
+import { ControlAttemptsService } from '../../src/modules/control/services/control-attempts.service';
 import { StudentProfileSchema } from '../../src/modules/students/schemas/student-profile.schema';
 import type { Row as ExcelRow } from 'exceljs';
 import { ControlReportsService } from '../../src/modules/control/services/control-reports.service';
@@ -258,6 +259,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       sheets,
       marks,
       schemeService,
+      new ControlAttemptsService(grade as never, access, sheets, schemeService),
     );
   }, 120000);
   afterAll(async () => {
@@ -362,7 +364,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     expect(initialPolicy.rules).toMatchObject({
       passPercentage: 50,
       finalMinimumPercentage: 0,
-      retake: 'latest',
+      retake: 'best',
     });
     const updatedPolicy = await grades.updateControlPolicy(
       policySheet.sheet.id,
@@ -1169,7 +1171,8 @@ describe('Control real replica-set persistence, approval and Grades visibility',
           examType: component,
           grade:
             component === 'coursework' ? 17 : component === 'midterm' ? 15 : 48,
-          maxGrade: component === 'final' ? 60 : 20,
+          maxGrade:
+            component === 'final' ? 50 : component === 'midterm' ? 30 : 20,
           status: 'present',
           rev: 1,
           controlManaged: true,

@@ -54,7 +54,7 @@ export class UsersService {
       this.userModel
         .findById(id)
         .select(
-          '_id role staffType titlePrefix name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt',
+          '_id role staffType titlePrefix name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt lastActionRoute lastAction lastActionAr sessionDevice',
         )
         .lean(),
     );
@@ -388,6 +388,16 @@ export class UsersService {
       : 0;
     const sessionInactivityLapseMs = 25 * 60 * 1000;
     if (
+      existing.sessionStartedAt &&
+      now.getTime() - lastActiveTime < 45_000 &&
+      data.route === existing.lastActionRoute &&
+      (!data.action || data.action === existing.lastAction) &&
+      (!data.actionAr || data.actionAr === existing.lastActionAr) &&
+      (!data.device || data.device === existing.sessionDevice)
+    ) {
+      return;
+    }
+    if (
       !existing.sessionStartedAt ||
       now.getTime() - lastActiveTime > sessionInactivityLapseMs
     ) {
@@ -677,6 +687,7 @@ export class UsersService {
         '_id name nameAr role staffType userCode studentCode staffCode email nationalId failedLoginAttempts loginAttempts lockUntil lockedUntil lastLoginAt updatedAt avatarUrl',
       )
       .sort({ lockUntil: -1, lockedUntil: -1, failedLoginAttempts: -1 })
+      .limit(200)
       .lean();
   }
 

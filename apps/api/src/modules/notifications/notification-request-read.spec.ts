@@ -85,3 +85,57 @@ describe('notification identity reads', () => {
     expect(profiles.findOne).not.toHaveBeenCalled();
   });
 });
+
+describe('notification history projection', () => {
+  it('keeps exact read totals and hydrates all reference types with one lookup', async () => {
+    const id = new Types.ObjectId();
+    const userId = new Types.ObjectId();
+    const aggregate = jest.fn().mockResolvedValue([
+      {
+        _id: id,
+        sentBy: userId,
+        targetStudentId: userId,
+        readCount: 23,
+        readBy: Array.from({ length: 5 }, () => ({
+          userId,
+          readAt: new Date(),
+        })),
+      },
+    ]);
+    const find = jest.fn().mockReturnValue({
+      select: () => ({
+        lean: () =>
+          Promise.resolve([
+            {
+              _id: userId,
+              name: 'Synthetic',
+              email: 'test@example.test',
+              studentCode: '111111',
+            },
+          ]),
+      }),
+    });
+    const service: NotificationsService = Object.assign(
+      Object.create(NotificationsService.prototype) as NotificationsService,
+      {
+        notificationModel: {
+          aggregate,
+          countDocuments: () => Promise.resolve(1),
+        },
+        userModel: { find },
+      },
+    );
+    const result = await service.listSentHistory({ limit: 10 });
+    expect(result.items[0].readCount).toBe(23);
+    expect(result.items[0].readBy).toHaveLength(5);
+    expect(result.items[0].sentBy).toMatchObject({
+      email: 'test@example.test',
+    });
+    expect(result.items[0].targetStudentId).not.toHaveProperty('email');
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(find.mock.calls[0][0]._id.$in).toEqual([String(userId)]);
+    expect(aggregate.mock.calls[0][0][3].$addFields.readCount).toEqual({
+      $size: { $ifNull: ['$readBy', []] },
+    });
+  });
+});

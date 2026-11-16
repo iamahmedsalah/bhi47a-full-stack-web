@@ -27,7 +27,7 @@ describe('complaint list', () => {
     expect(chain.skip).toHaveBeenCalledWith(40);
     expect(chain.limit).toHaveBeenCalledWith(20);
     expect(countDocuments).toHaveBeenCalledWith({ status: 'open' });
-    expect(chain.select).toHaveBeenCalledWith('');
+    expect(chain.select).toHaveBeenCalledWith('-screenshotUrl');
   });
 
   it('keeps student ownership filtering when paging and searching', async () => {

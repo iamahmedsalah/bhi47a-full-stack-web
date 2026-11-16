@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -15,14 +16,15 @@ import {
 import { PageTitleBanner } from "@/components/ui/page-title-banner";
 import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
 import { PermissionGuard } from "@/components/ui/permission-guard";
-import { GpaRulesPanel } from "@/features/settings/components/gpa-rules-panel";
-import { RegistrationTermsPanel } from "@/features/settings/components/registration-terms-panel";
-import { AiSettingsPanel } from "@/features/settings/components/ai-settings-panel";
-import { AdvisingRulesPanel } from "@/features/settings/components/advising-rules-panel";
-import { ComplaintRoutingPanel } from "@/features/settings/components/complaint-routing-panel";
-import { PortalControlsPanel } from "@/features/settings/components/portal-controls-panel";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
+
+const GpaRulesPanel = dynamic(() => import("@/features/settings/components/gpa-rules-panel").then(m => m.GpaRulesPanel));
+const RegistrationTermsPanel = dynamic(() => import("@/features/settings/components/registration-terms-panel").then(m => m.RegistrationTermsPanel));
+const AiSettingsPanel = dynamic(() => import("@/features/settings/components/ai-settings-panel").then(m => m.AiSettingsPanel));
+const AdvisingRulesPanel = dynamic(() => import("@/features/settings/components/advising-rules-panel").then(m => m.AdvisingRulesPanel));
+const ComplaintRoutingPanel = dynamic(() => import("@/features/settings/components/complaint-routing-panel").then(m => m.ComplaintRoutingPanel));
+const PortalControlsPanel = dynamic(() => import("@/features/settings/components/portal-controls-panel").then(m => m.PortalControlsPanel));
 
 function AdminSettingsContent() {
   const params = useParams();

@@ -1,3 +1,4 @@
+import { IC_CARRIED_LOCKED_MESSAGE } from '../utils/attempt-errors.util';
 import {
   ConflictException,
   Injectable,
@@ -9,6 +10,7 @@ import type { ClientSession } from 'mongoose';
 import { createHash } from 'node:crypto';
 import {
   CONTROL_RESTRICTED_STATES,
+  CONTROL_MIDTERM_STATES,
   CONTROL_SCORELESS_STATES,
   PERMISSIONS,
   calculateGradeScale,
@@ -501,10 +503,28 @@ export class ControlGradesService {
       result: { result, code, message },
     });
     const { rules, caps, existing } = ctx;
+    if (existing?.carriedFrom && rules.key !== 'final')
+      return reject(
+        'forbidden',
+        'ic_carried_locked',
+        IC_CARRIED_LOCKED_MESSAGE,
+      );
     const hasScore = change.score !== undefined && change.score !== null;
     const status: GradeStatus | null =
       change.status ?? (hasScore ? 'present' : null);
     const reason = (change.reason ?? batchReason)?.trim() || undefined;
+
+    if (
+      rules.key === 'midterm' &&
+      status &&
+      !(CONTROL_MIDTERM_STATES as readonly string[]).includes(status)
+    ) {
+      return reject(
+        'invalid',
+        'midterm_status',
+        'Midterm accepts present or absent only',
+      );
+    }
 
     if (status === null) {
       if (!existing) return { kind: 'noop' };

@@ -419,24 +419,59 @@ export class NotificationsService implements OnModuleInit {
     const { page, limit, skip } = buildPaginationOptions(query);
 
     const [items, total] = await Promise.all([
-      this.notificationModel
-        .find()
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('sentBy', 'name email')
-        .populate('targetStudentId', 'name studentCode')
-        .slice('readBy', -5)
-        .populate('readBy.userId', 'name studentCode')
-        .lean(),
+      this.notificationModel.aggregate<
+        Notification & { _id: Types.ObjectId; readCount: number }
+      >([
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $addFields: {
+            readCount: { $size: { $ifNull: ['$readBy', []] } },
+            readBy: { $slice: [{ $ifNull: ['$readBy', []] }, -5] },
+          },
+        },
+        { $project: { hiddenBy: 0 } },
+      ]),
       this.notificationModel.countDocuments(),
     ]);
-
-    const enrichedItems = items.map((item: any) => ({
+    const ids = [
+      ...new Set(
+        items
+          .flatMap((item) => [
+            item.sentBy,
+            item.targetStudentId,
+            ...item.readBy.map((read) => read.userId),
+          ])
+          .filter((id): id is Types.ObjectId => Boolean(id))
+          .map(String),
+      ),
+    ];
+    const users = ids.length
+      ? await this.userModel
+          .find({ _id: { $in: ids } })
+          .select('_id name email studentCode')
+          .lean()
+      : [];
+    const byId = new Map(users.map((user) => [String(user._id), user]));
+    const reference = (id: Types.ObjectId | undefined, sender = false) => {
+      const user = id ? byId.get(String(id)) : undefined;
+      if (!user) return null;
+      return sender
+        ? { _id: user._id, name: user.name, email: user.email }
+        : { _id: user._id, name: user.name, studentCode: user.studentCode };
+    };
+    const enrichedItems = items.map((item) => ({
       ...item,
-      readCount: Array.isArray(item.readBy) ? item.readBy.length : 0,
+      sentBy: reference(item.sentBy, true),
+      targetStudentId: item.targetStudentId
+        ? reference(item.targetStudentId)
+        : undefined,
+      readBy: item.readBy.map((read) => ({
+        ...read,
+        userId: reference(read.userId),
+      })),
     }));
-
     return createPaginatedResult(enrichedItems, total, page, limit);
   }
 

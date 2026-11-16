@@ -73,6 +73,7 @@ export default function StudentExamSchedulePage() {
 
   const assignmentQuery = useQuery({
     queryKey: ['student-exam-assignment'],
+    staleTime: 10 * 60_000,
     queryFn: async () => {
       const res = await api.get<ExamAssignmentResponse>('/students/me/exam-assignment');
       return res.data;

@@ -23,3 +23,5 @@ export * from "./admission-workflow";
 export * from './analytics';
 export * from './control';
 export * from './grades-visibility';
+
+export * from './historical-grades';
