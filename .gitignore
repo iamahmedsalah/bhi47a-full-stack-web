@@ -77,6 +77,8 @@ build_import_files.mjs
 !/scripts/ensure-control-query-indexes.cjs
 !/scripts/ci-test-report.cjs
 !/scripts/ci-test-report.test.cjs
+!/scripts/auth-readiness.cjs
+!/scripts/auth-readiness.test.cjs
 !/scripts/dependency-security.test.cjs
 !/docs/ci-reports.md
 !/docs/production-dependency-audit-2026-11-13.md

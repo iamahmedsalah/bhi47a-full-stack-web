@@ -68,6 +68,20 @@ test('workflow pins Ubuntu and uses the verified Node 24 action releases', () =>
   assert.match(workflow, /uses: actions\/upload-artifact@v6/);
 });
 
+test('deployment auth verification uses Node 24 and ships both readiness files', () => {
+  const setup = job.indexOf('name: Setup deployment verification Node.js');
+  const gate = job.indexOf('name: Verify public portal after VPS deployment');
+  assert.ok(setup > 0 && setup < gate);
+  assert.match(job.slice(setup, gate), /uses: actions\/setup-node@v5\n        with:\n          node-version: 24/);
+  for (const file of ['scripts/auth-readiness.cjs', 'scripts/auth-readiness.test.cjs']) {
+    assert.ok(readFileSync(`${__dirname}/../${file}`, 'utf8').length > 0, `${file} must ship in checkout`);
+    const ignored = spawnSync('git', ['check-ignore', '--no-index', '--', file], {
+      cwd: `${__dirname}/..`, encoding: 'utf8', timeout: 10000,
+    });
+    assert.equal(ignored.status, 1, `${file} must not be excluded by gitignore: ${ignored.stdout || ignored.stderr}`);
+  }
+});
+
 test('public health gate validates the real API envelope and rejects unhealthy responses', () => {
   const check = job.match(/https:\/\/bhi47\.app\/api\/health \| python3 -c '([^'\n]+)'/);
   assert.ok(check, 'Public health JSON validator must be present');

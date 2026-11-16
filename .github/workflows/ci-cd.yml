@@ -367,6 +367,10 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
+      - name: Setup deployment verification Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - name: Deploy over SSH with pinned server host key
         id: deploy
         shell: bash
@@ -422,7 +426,7 @@ jobs:
             https://bhi47.app/api/health | python3 -c 'import json,sys; body=json.load(sys.stdin); healthy=isinstance(body,dict) and body.get("success") is True and isinstance(body.get("data"),dict) and body["data"].get("status") == "ok"; sys.exit(0 if healthy else "Public API health check failed: expected success=true and data.status=ok")'
           curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 10 --max-time 30 \
             --output /dev/null https://bhi47.app/ar/login/student
-            node scripts/auth-readiness.cjs https://bhi47.app
+          node scripts/auth-readiness.cjs https://bhi47.app
 
       - name: Publish VPS deployment report
         if: always()

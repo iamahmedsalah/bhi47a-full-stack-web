@@ -285,3 +285,26 @@ The broad local API retry hit the previously observed targeted-performance
 helper closed its own database. That suite passed in the supplied GitHub log.
 The targeted fixture result is not a claim that the full remote workflow has
 already passed. No commit, push, deployment or production data change occurred.
+
+### 2026-11-16: missing post-deployment authentication probe
+
+Release `6fc0b33a95156637eb84195f49636e938556f99c` passed its internal
+deployment health checks, but the runner could not load
+`scripts/auth-readiness.cjs`. Both that probe and its tests existed locally but
+were excluded by the broad `/scripts/*` gitignore rule and absent from the Git
+checkout. Explicit exceptions now make both files available for inclusion in the
+release. The deployment job also installs Node 24 before verification, matching
+the validation job, and the probe command indentation is corrected.
+
+The workflow regression checks require both files to exist and be allowed by
+gitignore, and require Node 24 setup before public verification. The probe uses
+only anonymous GET requests: it expects valid passkey capability JSON and a
+normal 401 response for `/api/auth/me`. Its live read-only check against
+`https://bhi47.app` passed both endpoints. This confirms those public endpoints;
+it does not claim an authenticated login or a new deployment was tested.
+
+Verification: the exact workflow policy/report/readiness command passed 19/19
+tests outside the sandbox. Its earlier sandboxed run timed out in the existing
+real-Jest report contract; no timeout or assertion was relaxed. Both readiness
+files are now visible as new Git files and must be included with the workflow
+and gitignore changes in the next commit. Final diff whitespace checks passed.
