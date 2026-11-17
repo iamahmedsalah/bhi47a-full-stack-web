@@ -25,16 +25,18 @@ function harness() {
     }),
   } as never;
   const service = new RegistrationsService(...args);
+  const getAcademicProfile = jest
+    .fn()
+    .mockResolvedValue({ completedCourses: [], academicLevel: '3', gpa: 3 });
   Object.assign(service, {
-    getAcademicProfile: jest
-      .fn()
-      .mockResolvedValue({ completedCourses: [], academicLevel: '3', gpa: 3 }),
+    getAcademicProfile,
     getRuleForGpa: jest
       .fn()
       .mockResolvedValue({ maxCourses: 6, maxCreditHours: 18 }),
   });
   return {
     service,
+    getAcademicProfile,
     course,
     codes: ['1', '2', '3', '4', '5', '6'],
     studentId: new Types.ObjectId().toHexString(),
@@ -78,17 +80,20 @@ describe('administrative course and credit limit exception', () => {
       ),
     ).toMatchObject({ proposedCourseCount: 7, proposedCreditHours: 21 });
   });
-  it.each(['prerequisite', 'gpa', 'level'])(
-    'does not waive %s eligibility',
+  it.each(['completed', 'equivalent'])(
+    'does not waive %s course protection',
     async (requirement) => {
       const h = harness();
+      h.getAcademicProfile.mockResolvedValue({
+        completedCourses: ['PASSED'],
+        academicLevel: '3',
+        gpa: 3,
+      });
       const course = {
         ...h.course,
-        ...(requirement === 'prerequisite'
-          ? { prerequisites: ['MISSING'] }
-          : requirement === 'gpa'
-            ? { minimumGpa: 4 }
-            : { academicLevel: '4' }),
+        ...(requirement === 'completed'
+          ? { code: 'PASSED' }
+          : { equivalentCourses: ['PASSED'] }),
       };
       await expect(
         h.service.assertAdministrativeCourseAddition(

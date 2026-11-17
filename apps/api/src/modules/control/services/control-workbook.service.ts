@@ -332,10 +332,14 @@ export class ControlWorkbookService {
             ? ['DRAFT', 'RETURNED']
             : dto.action === 'REOPEN'
               ? ['APPROVED']
-              : ['IN_REVIEW'];
+              : dto.action === 'APPROVE'
+                ? ['PENDING_APPROVAL']
+                : dto.action === 'RETURN'
+                  ? ['IN_REVIEW', 'PENDING_APPROVAL']
+                  : ['IN_REVIEW'];
         if (
           !allowed.includes(state) ||
-          (sheet.locked && dto.action === 'SUBMIT')
+          (sheet.locked && ['SUBMIT', 'SUBMIT_APPROVAL'].includes(dto.action))
         )
           throw new ConflictException('INVALID_WORKFLOW_TRANSITION');
         const roster = await this.sheetService.getRosterStudentIds(
@@ -345,7 +349,7 @@ export class ControlWorkbookService {
           undefined,
           session,
         );
-        if (dto.action === 'SUBMIT' || dto.action === 'APPROVE')
+        if (['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'].includes(dto.action))
           await this.schemes.freeze(
             String(sheet.courseId),
             sheet.academicYear,
@@ -389,7 +393,7 @@ export class ControlWorkbookService {
             }),
           )
           .digest('hex');
-        if (dto.action === 'SUBMIT' || dto.action === 'APPROVE') {
+        if (['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'].includes(dto.action)) {
           const rosterDocs = docs.filter((d) =>
             roster.has(String(d.studentId)),
           );
@@ -437,12 +441,13 @@ export class ControlWorkbookService {
         if (dto.action === 'APPROVE') {
           if (
             user.role !== 'admin' &&
-            sheet.submission?.submittedBy === user._id
+            (sheet.submission?.submittedBy === user._id ||
+              sheet.reviewSubmission?.submittedBy === user._id)
           )
             throw new ForbiddenException(
               'Submitter cannot approve their own sheet',
             );
-          if (sheet.submission?.digest !== digest)
+          if (sheet.reviewSubmission?.digest !== digest)
             throw new ConflictException('ROSTER_OR_SCHEME_CHANGED');
           if (sheet.component === 'final')
             await this.attempts.approve(
@@ -486,17 +491,35 @@ export class ControlWorkbookService {
         const next =
           dto.action === 'SUBMIT'
             ? 'IN_REVIEW'
-            : dto.action === 'APPROVE'
-              ? 'APPROVED'
-              : dto.action === 'RETURN'
-                ? 'RETURNED'
-                : 'DRAFT';
+            : dto.action === 'SUBMIT_APPROVAL'
+              ? 'PENDING_APPROVAL'
+              : dto.action === 'APPROVE'
+                ? 'APPROVED'
+                : dto.action === 'RETURN'
+                  ? state === 'PENDING_APPROVAL'
+                    ? 'IN_REVIEW'
+                    : 'RETURNED'
+                  : 'DRAFT';
         await this.sheets.updateOne(
           { _id: sheet._id },
           {
             $set: {
               workflowState: next,
               reviewReason: dto.reason,
+              ...(['SUBMIT', 'RETURN', 'REOPEN'].includes(dto.action)
+                ? { reviewSubmission: null }
+                : {}),
+              ...(dto.action === 'SUBMIT_APPROVAL'
+                ? {
+                    reviewSubmission: {
+                      digest,
+                      revision: dto.expectedRevision,
+                      schemeVersion: scheme.version,
+                      submittedBy: user._id,
+                      submittedAt: new Date(),
+                    },
+                  }
+                : {}),
               ...(dto.action === 'SUBMIT'
                 ? {
                     submission: {
@@ -1049,8 +1072,13 @@ export class ControlWorkbookService {
     expectedScheme?: number,
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
-    this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    this.access.assertPermission(
+      user,
+      detail.sheet.workflowState === 'IN_REVIEW'
+        ? PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT
+        : PERMISSIONS.CONTROL_GRADES_ENTER,
+    );
     if (!detail.capabilities.canEdit)
       throw new ConflictException('SHEET_NOT_EDITABLE');
     const { rows: roster, scheme } = await this.workbook(user, sheetId);
@@ -1299,8 +1327,13 @@ export class ControlWorkbookService {
 
   async commit(user: AuthenticatedUser, sheetId: string, previewId: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
-    this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    this.access.assertPermission(
+      user,
+      detail.sheet.workflowState === 'IN_REVIEW'
+        ? PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT
+        : PERMISSIONS.CONTROL_GRADES_ENTER,
+    );
     const resolvedSheetId = detail.sheet.id || sheetId;
     const batch = await this.imports
       .findOne({

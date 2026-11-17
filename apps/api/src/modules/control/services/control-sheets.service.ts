@@ -315,9 +315,12 @@ export class ControlSheetsService {
       },
       capabilities: {
         canEdit:
-          caps.canEnter &&
           !sheet.locked &&
-          ['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT'),
+          (sheet.workflowState === 'IN_REVIEW'
+            ? caps.canEditReview
+            : caps.canEnter &&
+              ['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT')),
+        canEditReview: caps.canEditReview,
         canSubmit: caps.canSubmit,
         canReview: caps.canReview,
         canApprove:

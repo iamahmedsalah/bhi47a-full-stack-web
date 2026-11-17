@@ -21,6 +21,7 @@ export interface ControlCapabilities {
   canView: boolean;
   canCreateSheets: boolean;
   canEnter: boolean;
+  canEditReview: boolean;
   canEditPublished: boolean;
   canManageStates: boolean;
   canLock: boolean;
@@ -64,6 +65,7 @@ export class ControlAccessService {
       canView: gated(PERMISSIONS.CONTROL_SHEETS_VIEW),
       canCreateSheets: gated(PERMISSIONS.CONTROL_SHEETS_CREATE),
       canEnter: gated(PERMISSIONS.CONTROL_GRADES_ENTER),
+      canEditReview: gated(PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT),
       canEditPublished: gated(PERMISSIONS.CONTROL_GRADES_EDIT_PUBLISHED),
       canManageStates: gated(PERMISSIONS.CONTROL_STATES_MANAGE),
       canLock: gated(PERMISSIONS.CONTROL_SHEETS_LOCK),

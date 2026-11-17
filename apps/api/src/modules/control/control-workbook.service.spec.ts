@@ -51,6 +51,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     workflowState: 'DRAFT',
     revision: 0,
     submission: undefined as undefined | Record<string, unknown>,
+    reviewSubmission: undefined as undefined | Record<string, unknown>,
     locked: false,
   };
   const doc = {
@@ -696,13 +697,18 @@ describe('Control workbook import and review', () => {
     });
     expect(ctx.sheet.workflowState).toBe('IN_REVIEW');
     expect(ctx.sheet.submission?.digest).toBeTruthy();
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: 1,
+      reason: 'Control checked',
+    });
     await expect(
       ctx.service.review(
         { ...ctx.user, role: 'staff', permissions: Object.values(PERMISSIONS) },
         ctx.sheetId,
         {
           action: 'APPROVE',
-          expectedRevision: 1,
+          expectedRevision: 2,
           reason: 'Reviewed',
         },
       ),
@@ -710,11 +716,66 @@ describe('Control workbook import and review', () => {
     const reviewer = { ...ctx.user, _id: String(new Types.ObjectId()) };
     await ctx.service.review(reviewer, ctx.sheetId, {
       action: 'APPROVE',
-      expectedRevision: 1,
+      expectedRevision: 2,
       reason: 'Independent review',
     });
     expect(ctx.sheet.workflowState).toBe('APPROVED');
-    expect(ctx.audit.create).toHaveBeenCalledTimes(2);
+    expect(ctx.audit.create).toHaveBeenCalledTimes(3);
+  });
+  it('freezes the corrected snapshot before approval and returns approval corrections to Control', async () => {
+    const ctx = build();
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT',
+      expectedRevision: 0,
+      reason: 'Doctor marks',
+    });
+    const original = ctx.sheet.submission?.digest;
+    await expect(
+      ctx.service.review(ctx.user, ctx.sheetId, {
+        action: 'APPROVE',
+        expectedRevision: 1,
+        reason: 'Skip review',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    ctx.doc.grade = 16;
+    const control = {
+      ...ctx.user,
+      _id: String(new Types.ObjectId()),
+      role: 'staff' as const,
+    };
+    await ctx.service.review(control, ctx.sheetId, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: 1,
+      reason: 'Control corrected',
+    });
+    expect(ctx.sheet.workflowState).toBe('PENDING_APPROVAL');
+    expect(ctx.sheet.submission?.digest).toBe(original);
+    expect(ctx.sheet.reviewSubmission?.digest).not.toBe(original);
+    await expect(
+      ctx.service.review(control, ctx.sheetId, {
+        action: 'APPROVE',
+        expectedRevision: 2,
+        reason: 'Self approval',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'RETURN',
+      expectedRevision: 2,
+      reason: 'Control recheck',
+    });
+    expect(ctx.sheet.workflowState).toBe('IN_REVIEW');
+    expect(ctx.sheet.reviewSubmission).toBeNull();
+    await ctx.service.review(control, ctx.sheetId, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: 3,
+      reason: 'Review complete',
+    });
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'APPROVE',
+      expectedRevision: 4,
+      reason: 'Admin approval',
+    });
+    expect(ctx.sheet.workflowState).toBe('APPROVED');
   });
   it('allows the administrator to approve their own unchanged submitted sheet', async () => {
     const ctx = build();
@@ -724,18 +785,23 @@ describe('Control workbook import and review', () => {
       reason: 'Admin submission',
     });
     await ctx.service.review(ctx.user, ctx.sheetId, {
-      action: 'APPROVE',
+      action: 'SUBMIT_APPROVAL',
       expectedRevision: 1,
+      reason: 'Admin review',
+    });
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'APPROVE',
+      expectedRevision: 2,
       reason: 'Admin self approval',
     });
     expect(ctx.sheet.workflowState).toBe('APPROVED');
-    expect(ctx.audit.create).toHaveBeenCalledTimes(2);
+    expect(ctx.audit.create).toHaveBeenCalledTimes(3);
     await ctx.service.review(ctx.user, ctx.sheetId, {
       action: 'REOPEN',
-      expectedRevision: 2,
+      expectedRevision: 3,
     });
     expect(ctx.sheet.workflowState).toBe('DRAFT');
-    expect(ctx.audit.create).toHaveBeenCalledTimes(3);
+    expect(ctx.audit.create).toHaveBeenCalledTimes(4);
   });
   it('exports filtered missing/exception reports and scopes failed-row reports to the preview owner', async () => {
     const ctx = build();
@@ -771,12 +837,17 @@ describe('Control workbook import and review', () => {
       expectedRevision: 0,
       reason: 'Checked',
     });
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: 1,
+      reason: 'Reviewed',
+    });
     ctx.doc.grade = 16;
     const reviewer = { ...ctx.user, _id: String(new Types.ObjectId()) };
     await expect(
       ctx.service.review(reviewer, ctx.sheetId, {
         action: 'APPROVE',
-        expectedRevision: 1,
+        expectedRevision: 2,
         reason: 'Reviewed',
       }),
     ).rejects.toBeInstanceOf(ConflictException);

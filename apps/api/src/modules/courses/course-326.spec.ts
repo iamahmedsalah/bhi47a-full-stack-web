@@ -482,7 +482,7 @@ describe('administrative enrollment', () => {
   it('reports eligibility failures without writing a registration', async () => {
     const h = harness();
     h.period.assertAdministrativeCourseAddition.mockRejectedValue(
-      new Error('Prerequisite not passed'),
+      new Error('Course is already completed'),
     );
     const result = await h.service.processEnrollmentRows(
       course as never,
@@ -490,7 +490,7 @@ describe('administrative enrollment', () => {
       { semester: 'first' },
     );
     expect(result.errorCount).toBe(1);
-    expect(result.errors[0]).toContain('Prerequisite not passed');
+    expect(result.errors[0]).toContain('Course is already completed');
     expect(h.registrations.bulkWrite).not.toHaveBeenCalled();
   });
   it.each([

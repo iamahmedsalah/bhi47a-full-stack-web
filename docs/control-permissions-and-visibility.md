@@ -132,3 +132,16 @@ Verification results, including the later batching/background/history changes an
 - An admin-only reset is available for one selected course/year/term in Grades release management. Both the role guard and service enforce administrator access, even for staff holding every named permission. The UI requires typing the course code and a nonempty reason.
 - Reset atomically deactivates scoped release pointers, clears component marks while advancing their revisions, resets sheets to unlocked drafts, removes scoped import previews and restores default scheme/result policy. It cancels superseded pending jobs and queues academic reconciliation. It does not delete courses, enrolments, instructor quizzes, immutable release snapshots, academic baselines or audit history. Audit captures prior marks and coursework inputs. Other courses and terms are outside the operation's scope.
 - Reset serializes against the reconciliation worker. A reset requested while another worker holds the lease must be retried after that work completes. No reset was executed against live data during implementation.
+# مراجعة الكنترول وتصحيح الدرجات ثم الاعتماد
+
+المسار: **مسودة الدكتور → قيد مراجعة الكنترول → بانتظار الاعتماد → معتمد**.
+
+- الرصد في المسودة أو الكشف المعاد للدكتور يحتاج `control.grades.enter`.
+- بعد الإرسال لا يستطيع صاحب صلاحية الرصد وحدها تعديل الدرجات.
+- التصحيح أثناء `IN_REVIEW` يحتاج الصلاحية المستقلة **تصحيح درجات الكنترول أثناء المراجعة** (`control.grades.review_edit`)، مع الدخول للكنترول وعرض الكشف ونطاق المقرر. لا تُمنح تلقائيًا لمجرد امتلاك صلاحية المراجعة أو الاعتماد. admin يمتلكها تلقائيًا.
+- بعد الحفظ يضغط صاحب `control.sheets.review` زر **إرسال للاعتماد**. يتحقق الخادم من اكتمال الكشف ويثبت بصمة النسخة المصححة في سجل منفصل، مع الاحتفاظ بإرسال الدكتور الأصلي.
+- `PENDING_APPROVAL` للقراءة فقط، حتى admin. اعتماد الميدترم وأعمال السنة يحتاج `control.sheets.approve`، والنهائي يحتاج `control.final.approve`. لا يعتمد الموظف كشفًا أرسله للمراجعة أو للاعتماد بنفسه؛ admin مستثنى من شرط اختلاف الشخص.
+- الإرجاع من انتظار الاعتماد يعيد الكشف لمراجعة الكنترول لتصحيحه دون فتح مسودة للدكتور. تبقى إمكانية الإرجاع للدكتور من المراجعة، وإعادة فتح كشف معتمد، للحالات الاستثنائية والتصحيحات بعد الاعتماد.
+- استيراد Excel أثناء المراجعة يحتاج صلاحية التصحيح الجديدة و`control.import`، وتظل إدارة الحالات الخاصة بصلاحية مستقلة. يسجل كل تصحيح القيمة القديمة والجديدة والموظف والتوقيت.
+- الاعتماد لا ينشر النتيجة؛ تبقى نافذة الإتاحة والمستوى والمكوّن وحجب المصروفات والإصدار المنشور تحت إدارة صفحة الدرجات. لا يتغير الإصدار السابق للطلاب أثناء التصحيح.
+- الكشوف الموجودة في المراجعة تستكمل المسار عبر «إرسال للاعتماد»؛ الكشوف المعتمدة والمنشورة السابقة لا تُعاد معايرتها أو نشرها تلقائيًا. لا يحتاج التغيير ترحيل درجات أو حذف بيانات.

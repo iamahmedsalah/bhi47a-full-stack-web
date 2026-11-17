@@ -186,7 +186,13 @@ export function ControlWorkbookGrid({
   const setFilter = (value: string) => view.setFilter("gridFilter", value);
   const [reason, setReason] = useState("");
   const [action, setAction] = useState<
-    "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN" | "CLEAR" | null
+    | "SUBMIT"
+    | "SUBMIT_APPROVAL"
+    | "APPROVE"
+    | "RETURN"
+    | "REOPEN"
+    | "CLEAR"
+    | null
   >(null);
   const [importOpen, setImportOpen] = useState(false);
   const [downloadKind, setDownloadKind] = useState<
@@ -885,7 +891,12 @@ export function ControlWorkbookGrid({
                   ? sheet.workflowState
                   : workbook.data?.componentStates?.[component]) === "APPROVED"
                   ? "bg-emerald-400"
-                  : workbook.data?.componentStates?.[component] === "IN_REVIEW"
+                  : ["IN_REVIEW", "PENDING_APPROVAL"].includes(
+                        component === key
+                          ? sheet.workflowState
+                          : (workbook.data?.componentStates?.[component] ??
+                              "DRAFT"),
+                      )
                     ? "bg-sky-400"
                     : "bg-rose-400"
               }`}
@@ -924,6 +935,14 @@ export function ControlWorkbookGrid({
           </Button>
         )}
       </div>
+      {["IN_REVIEW", "PENDING_APPROVAL"].includes(sheet.workflowState) && (
+        <HelpNote
+          title={t("reviewStageTitle")}
+          icon={<Send className="size-4 shrink-0" />}
+        >
+          {t("reviewExplanation")}
+        </HelpNote>
+      )}
       {sheet.workflowState === "APPROVED" && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
           <span>
@@ -1002,7 +1021,9 @@ export function ControlWorkbookGrid({
                 "inline-flex items-center gap-1.5 px-3 py-1 rounded-squircle text-xs font-bold border",
                 sheet.workflowState === "APPROVED"
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : sheet.workflowState === "IN_REVIEW"
+                  : ["IN_REVIEW", "PENDING_APPROVAL"].includes(
+                        sheet.workflowState,
+                      )
                     ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
                     : sheet.workflowState === "RETURNED"
                       ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
@@ -1054,21 +1075,33 @@ export function ControlWorkbookGrid({
               </Button>
             )}
 
+          {caps.canReview && sheet.workflowState === "IN_REVIEW" && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={pending || sheet.locked}
+              onClick={() => setAction("SUBMIT_APPROVAL")}
+            >
+              <Send className="size-3.5 me-1.5" />
+              {t("SUBMIT_APPROVAL")}
+            </Button>
+          )}
           {(caps.canReview || caps.canApprove) &&
-            sheet.workflowState === "IN_REVIEW" && (
+            ["IN_REVIEW", "PENDING_APPROVAL"].includes(sheet.workflowState) && (
               <>
-                {caps.canApprove && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-squircle text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm gap-1.5 h-8 px-4"
-                    disabled={pending}
-                    onClick={() => setAction("APPROVE")}
-                  >
-                    <CheckCircle2 className="size-3.5" />
-                    <span>{t("APPROVE")}</span>
-                  </Button>
-                )}
+                {caps.canApprove &&
+                  sheet.workflowState === "PENDING_APPROVAL" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-squircle text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm gap-1.5 h-8 px-4"
+                      disabled={pending}
+                      onClick={() => setAction("APPROVE")}
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      <span>{t("APPROVE")}</span>
+                    </Button>
+                  )}
                 {caps.canReview && (
                   <Button
                     type="button"
@@ -1649,7 +1682,9 @@ export function ControlWorkbookGrid({
               {t("reviewExplanation")}
             </DialogDescription>
           </DialogHeader>
-          {(action === "SUBMIT" || action === "APPROVE") && (
+          {(action === "SUBMIT" ||
+            action === "SUBMIT_APPROVAL" ||
+            action === "APPROVE") && (
             <div
               className={cn(
                 "rounded-xl border p-3 text-xs space-y-2",

@@ -403,6 +403,92 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       expectedRevision: detail.sheet.revision,
       reason: 'Office checked',
     });
+    const doctor: AuthenticatedUser = {
+      ...actor,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_VIEW,
+        PERMISSIONS.CONTROL_SCOPE_ALL,
+        PERMISSIONS.CONTROL_GRADES_ENTER,
+      ],
+    };
+    const control: AuthenticatedUser = {
+      ...reviewer,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_VIEW,
+        PERMISSIONS.CONTROL_SCOPE_ALL,
+        PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+        PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      ],
+    };
+    expect(
+      (await sheets.getSheet(doctor, detail.sheet.id)).capabilities.canEdit,
+    ).toBe(false);
+    expect(
+      (await sheets.getSheet(control, detail.sheet.id)).capabilities.canEdit,
+    ).toBe(true);
+    const beforeCorrection = await gradeModel
+      .findOne({
+        courseId,
+        studentId,
+        academicYear: year,
+        examType: 'midterm',
+        cleared: { $ne: true },
+      })
+      .lean();
+    expect(beforeCorrection).not.toBeNull();
+    await expect(
+      marks.applyChanges(doctor, detail.sheet.id, {
+        changes: [
+          change({
+            score: 12,
+            status: 'present',
+            expectedRev: beforeCorrection!.rev ?? 0,
+          }),
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const corrected = await marks.applyChanges(control, detail.sheet.id, {
+      changes: [
+        change({
+          score: 12,
+          status: 'present',
+          expectedRev: beforeCorrection!.rev ?? 0,
+        }),
+      ],
+    });
+    expect(corrected.summary.ok).toBe(1);
+    const restored = await marks.applyChanges(control, detail.sheet.id, {
+      changes: [
+        change({
+          score: ['absent', 'banned', 'excused', 'incomplete'].includes(
+            beforeCorrection!.status,
+          )
+            ? null
+            : beforeCorrection!.grade,
+          status: beforeCorrection!.status,
+          expectedRev: corrected.results[0].entry!.rev,
+        }),
+      ],
+    });
+    expect(restored.summary.ok).toBe(1);
+    detail = await sheets.getSheet(actor, detail.sheet.id);
+    detail = await workbook.review(actor, detail.sheet.id, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: detail.sheet.revision,
+      reason: 'Control review complete',
+    });
+    expect(detail.sheet.workflowState).toBe('PENDING_APPROVAL');
+    await expect(
+      marks.applyChanges(actor, detail.sheet.id, {
+        changes: [
+          change({ score: 12, expectedRev: restored.results[0].entry!.rev }),
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
     await expect(
       workbook.review(
         { ...actor, role: 'staff', permissions: Object.values(PERMISSIONS) },
@@ -896,6 +982,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         expectedRevision: detail.sheet.revision,
         reason: 'Synthetic complete result',
       });
+      detail = await workbook.review(actor, detail.sheet.id, {
+        action: 'SUBMIT_APPROVAL',
+        expectedRevision: detail.sheet.revision,
+        reason: 'Control review complete',
+      });
       await workbook.review(reviewer, detail.sheet.id, {
         action: 'APPROVE',
         expectedRevision: detail.sheet.revision,
@@ -1025,6 +1116,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       action: 'SUBMIT',
       expectedRevision: detail.sheet.revision,
       reason: 'Synthetic corrected result',
+    });
+    detail = await workbook.review(actor, detail.sheet.id, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: detail.sheet.revision,
+      reason: 'Control review complete',
     });
     await workbook.review(reviewer, detail.sheet.id, {
       action: 'APPROVE',
@@ -1198,10 +1294,15 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       expect(new Set(view.rows.map((row) => row.studentId)).size).toBe(count);
       expect(view.rows[0].components.final?.score).toBe(48);
       expect(view.rows.at(-1)?.studentCode).toBe('SCALE03000');
-      const submitted = await workbook.review(actor, detail.sheet.id, {
+      let submitted = await workbook.review(actor, detail.sheet.id, {
         action: 'SUBMIT',
         expectedRevision: view.revision,
         reason: 'Synthetic scale submission',
+      });
+      submitted = await workbook.review(actor, detail.sheet.id, {
+        action: 'SUBMIT_APPROVAL',
+        expectedRevision: submitted.sheet.revision,
+        reason: 'Control scale review complete',
       });
       await workbook.review(reviewer, detail.sheet.id, {
         action: 'APPROVE',
@@ -1415,6 +1516,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
           action: 'SUBMIT',
           expectedRevision: detail.sheet.revision,
           reason: 'Synthetic status submission',
+        });
+        detail = await workbook.review(actor, detail.sheet.id, {
+          action: 'SUBMIT_APPROVAL',
+          expectedRevision: detail.sheet.revision,
+          reason: 'Control review complete',
         });
         await workbook.review(actor, detail.sheet.id, {
           action: 'APPROVE',

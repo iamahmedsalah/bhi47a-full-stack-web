@@ -16,6 +16,7 @@ export interface ControlCapabilities {
   canView: boolean;
   canCreateSheets: boolean;
   canEnter: boolean;
+  canEditReview: boolean;
   canEditPublished: boolean;
   canManageStates: boolean;
   canLock: boolean;
@@ -54,7 +55,8 @@ export interface ControlSheetDetails {
     academicYear: string;
     semester: Semester;
     component: ControlComponentKey;
-    workflowState: "DRAFT" | "IN_REVIEW" | "RETURNED" | "APPROVED";
+    workflowState:
+      "DRAFT" | "IN_REVIEW" | "PENDING_APPROVAL" | "RETURNED" | "APPROVED";
     revision: number;
     reviewReason: string | null;
     locked: boolean;
@@ -84,6 +86,7 @@ export interface ControlSheetDetails {
     canImport: boolean;
     canExport: boolean;
     canEdit: boolean;
+    canEditReview?: boolean;
     canEditPublished: boolean;
     canManageStates: boolean;
     canLock: boolean;
@@ -165,6 +168,7 @@ export interface ControlAuditRow {
     | "UNLOCK"
     | "SCHEME_CHANGE"
     | "SUBMIT"
+    | "SUBMIT_APPROVAL"
     | "APPROVE"
     | "RETURN"
     | "REOPEN"

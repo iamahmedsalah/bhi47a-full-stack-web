@@ -180,7 +180,7 @@ export async function getControlWorkbook(sheetId: string) {
 export async function reviewControlSheet(
   sheetId: string,
   dto: {
-    action: "SUBMIT" | "APPROVE" | "RETURN" | "REOPEN";
+    action: "SUBMIT" | "SUBMIT_APPROVAL" | "APPROVE" | "RETURN" | "REOPEN";
     expectedRevision: number;
     reason?: string;
     attemptReviewDigest?: string;

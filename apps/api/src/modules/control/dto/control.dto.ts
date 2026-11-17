@@ -279,8 +279,8 @@ export class ReviewSheetDto {
   @IsMongoId({ each: true })
   keepPreviousStudentIds?: string[];
 
-  @IsIn(['SUBMIT', 'APPROVE', 'RETURN', 'REOPEN'])
-  action!: 'SUBMIT' | 'APPROVE' | 'RETURN' | 'REOPEN';
+  @IsIn(['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE', 'RETURN', 'REOPEN'])
+  action!: 'SUBMIT' | 'SUBMIT_APPROVAL' | 'APPROVE' | 'RETURN' | 'REOPEN';
 
   @IsInt()
   @Min(0)

@@ -383,3 +383,33 @@ attempt comparison. Final diff whitespace checks passed. This change is limited
 to browser-test synchronization and this report; no commit, push, deployment,
 or production data mutation was performed. Remote workflow status must be checked
 on a new run containing the fix.
+
+### 2026-11-17: audited Control correction before approval
+
+Added separately assignable `control.grades.review_edit`. During `IN_REVIEW`,
+only that permission permits grid/Excel corrections; ordinary entry permission
+continues to govern drafts and returned sheets. Scope, lock, special-state,
+published-grade, revision, audit and transaction protections remain enforced.
+
+The reviewer sends `SUBMIT_APPROVAL`, which validates completeness, captures a
+new digest independently of the doctor's original submission and moves to
+`PENDING_APPROVAL`. Editing is then blocked for everyone. Approval requires this
+stage and the appropriate component approval permission; staff who submitted
+either stage cannot self-approve, while admins retain the existing exception.
+Returning from pending approval resumes Control review without reopening the
+doctor's draft. Existing approved releases and student publishing gates remain
+unchanged. Staff permission controls, bilingual help/state/action labels and
+the operator guide describe the new flow.
+
+Passed so far: full workspace lint (3/3, no diagnostics), workspace TypeScript
+(4/4), API E2E fixture TypeScript, 86 focused workflow/permission/mutation tests
+and all four Control browser stages, including actual review correction,
+readonly doctor/pending-approval views and final approval. Initial overlapping
+checks were stopped after local memory pressure and rerun sequentially.
+
+The first full unit attempt saw an enrollment test while unrelated registration
+files were changing concurrently; those external edits are not part of this
+Control commit. A subsequent in-process Windows test runner exited natively.
+The complete suite is being verified with one recyclable local Jest worker;
+assertions and timeouts are unchanged. Scratch runners/configuration stay in
+ignored `outputs/`; they are not production configuration.

@@ -222,5 +222,5 @@ export function computeCoursework(attendance: number, quizzes: number): number |
   return hundredths <= 2000 ? hundredths / 100 : null;
 }
 
-export const CONTROL_WORKFLOW_STATES = ['DRAFT', 'IN_REVIEW', 'RETURNED', 'APPROVED'] as const;
+export const CONTROL_WORKFLOW_STATES = ['DRAFT', 'IN_REVIEW', 'PENDING_APPROVAL', 'RETURNED', 'APPROVED'] as const;
 export type ControlWorkflowState = (typeof CONTROL_WORKFLOW_STATES)[number];

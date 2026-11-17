@@ -1800,8 +1800,11 @@ export class RegistrationsService {
     return counts[0].advisor._id;
   }
 
-  /** Bulk imports build a registration one course at a time; enforce upper limits
-   * and academic eligibility without applying the final minimum to each row. */
+  /** Administrative imports record an institute-approved roster, including when
+   * historical results have not been migrated yet. Academic prerequisites, GPA,
+   * level and co-requisites belong to student/advisor selection, not this import.
+   * Keep completed-course protection and upper limits; do not apply a final minimum
+   * to a roster built one course at a time. */
   async assertAdministrativeCourseAddition(
     studentId: string,
     course: CourseDocument,
@@ -1816,36 +1819,15 @@ export class RegistrationsService {
     const completed = new Set(normalizeCourseCodes(profile.completedCourses));
     if (
       completed.has(course.code.toUpperCase()) ||
-      !hasPassedPrerequisites(course, completed) ||
       course.equivalentCourses?.some((code) =>
         completed.has(code.toUpperCase()),
       )
     ) {
       throw new BadRequestException(
-        'Course is already completed or prerequisites are not passed / المقرر ناجح سابقًا أو متطلباته غير مكتملة',
-      );
-    }
-    if (
-      Number(course.academicLevel ?? course.level) >
-        Number(profile.academicLevel) ||
-      (course.minimumGpa != null && profile.gpa < course.minimumGpa)
-    ) {
-      throw new BadRequestException(
-        'Course level or GPA requirement is not met / لم تتحقق شروط المستوى أو المعدل',
+        'Course or equivalent is already completed / المقرر أو مقرره المعادل ناجح سابقًا',
       );
     }
     const selected = normalizeCourseCodes([...existingCodes, course.code]);
-    if (
-      course.coRequisites?.some(
-        (code) =>
-          !completed.has(code.toUpperCase()) &&
-          !selected.includes(code.toUpperCase()),
-      )
-    ) {
-      throw new BadRequestException(
-        'Required co-requisite is not registered / المتطلب المتزامن غير مسجل',
-      );
-    }
     const [rule, courses] = await Promise.all([
       context
         ? this.effectiveRule(

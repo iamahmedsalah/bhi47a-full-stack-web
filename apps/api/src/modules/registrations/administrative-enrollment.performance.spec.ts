@@ -140,6 +140,62 @@ function setup(size: number) {
 }
 
 describe('administrative enrollment read workload', () => {
+  it.each(['2', '3', '4'])(
+    'imports successive level %s courses without historical results in either validation path',
+    async (level) => {
+      const h = setup(1);
+      // Initial migration: the academic profile still has its default level/GPA.
+      Object.assign(h.profiles[0], {
+        academicLevel: '1',
+        gpa: 0,
+        completedCourses: [],
+      });
+      h.courseRecords.push({ code: 'NEXT', creditHours: 3 });
+      const context = await h.service.prepareAdministrativeEnrollment(
+        h.ids.map(String),
+        ['TARGET', 'NEXT'],
+      );
+      for (const snapshot of [undefined, context]) {
+        const existing: string[] = [];
+        for (const code of ['TARGET', 'NEXT']) {
+          await expect(
+            h.service.assertAdministrativeCourseAddition(
+              String(h.ids[0]),
+              {
+                ...h.course,
+                code,
+                academicLevel: level,
+                minimumGpa: 2,
+                prerequisites: ['UNIMPORTED_HISTORY'],
+                coRequisites: ['LATER_IMPORT'],
+              } as never,
+              existing,
+              'first',
+              false,
+              snapshot,
+            ),
+          ).resolves.toBeUndefined();
+          existing.push(code);
+        }
+      }
+      expect(h.profiles[0].completedCourses).toEqual([]);
+    },
+  );
+
+  it('still rejects missing prerequisites in student course selection', async () => {
+    const h = setup(1);
+    Object.assign(h.courseRecords[0], {
+      ...h.course,
+      department: 'BIS',
+      prerequisites: ['UNIMPORTED_HISTORY'],
+    });
+    const profile = await h.service['getAcademicProfile'](String(h.ids[0]));
+    const rule = await h.service['getRuleForGpa'](profile.gpa);
+    await expect(
+      h.service['validateCourseSelection'](profile, ['TARGET'], rule, false),
+    ).rejects.toThrow('prerequisites');
+  });
+
   it.each([25, 100, 500])(
     'keeps identical decisions for %i students with bounded reads',
     async (size) => {
@@ -190,7 +246,7 @@ describe('administrative enrollment read workload', () => {
     },
   );
 
-  it('preserves overlapping-rule precedence, limits, overrides and prerequisite rejection', async () => {
+  it('preserves overlapping-rule precedence, limits and overrides without requiring historical prerequisites', async () => {
     const h = setup(1);
     const context = await h.service.prepareAdministrativeEnrollment(
       h.ids.map(String),
@@ -232,7 +288,7 @@ describe('administrative enrollment read workload', () => {
         true,
         context,
       ),
-    ).rejects.toThrow('prerequisites');
+    ).resolves.toBeUndefined();
     await expect(
       h.service.assertAdministrativeCourseAddition(
         id,
@@ -242,7 +298,7 @@ describe('administrative enrollment read workload', () => {
         true,
         context,
       ),
-    ).rejects.toThrow('level');
+    ).resolves.toBeUndefined();
     // A new import reloads rules, so edits never use a cross-request policy cache.
     await h.service.prepareAdministrativeEnrollment(h.ids.map(String), [
       'TARGET',
@@ -324,7 +380,7 @@ describe('administrative enrollment read workload', () => {
             false,
             snapshot,
           ),
-        ).rejects.toThrow('GPA');
+        ).resolves.toBeUndefined();
         await expect(
           h.service.assertAdministrativeCourseAddition(
             String(id),

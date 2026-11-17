@@ -53,6 +53,15 @@ export class ControlSheet {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   approvedBy?: Types.ObjectId;
 
+  @Prop({ type: Object })
+  reviewSubmission?: {
+    digest: string;
+    schemeVersion: number;
+    revision: number;
+    submittedBy: string;
+    submittedAt: Date;
+  };
+
   @Prop({ type: Date })
   approvedAt?: Date;
 

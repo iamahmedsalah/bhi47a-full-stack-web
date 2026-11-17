@@ -20,6 +20,30 @@ describe('ControlAccessService', () => {
   const staffId = new Types.ObjectId().toString();
   const courseId = new Types.ObjectId();
 
+  it('keeps review correction separate from doctor entry and approval', () => {
+    const service = buildAccess();
+    const staff = {
+      _id: staffId,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_GRADES_ENTER,
+        PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      ],
+    } as Parameters<ControlAccessService['getCapabilities']>[0];
+    expect(service.getCapabilities(staff).canEditReview).toBe(false);
+    staff.permissions = [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+    ];
+    expect(service.getCapabilities(staff)).toMatchObject({
+      canEditReview: true,
+      canEnter: false,
+      canApprove: false,
+      canApproveFinal: false,
+    });
+  });
+
   it('retains every capability for admins while final approval remains explicit for staff', () => {
     const service = buildAccess();
     const admin = {

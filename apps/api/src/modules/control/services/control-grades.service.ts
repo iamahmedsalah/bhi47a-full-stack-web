@@ -151,7 +151,6 @@ export class ControlGradesService {
     source: 'GRID' | 'XLSX',
     session: ClientSession,
   ) {
-    this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     const caps = this.access.getCapabilities(user);
 
     const sheet = await this.sheetModel
@@ -159,6 +158,12 @@ export class ControlGradesService {
       .session(session)
       .lean();
     if (!sheet) throw new NotFoundException('Sheet not found');
+    this.access.assertPermission(
+      user,
+      sheet.workflowState === 'IN_REVIEW'
+        ? PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT
+        : PERMISSIONS.CONTROL_GRADES_ENTER,
+    );
     const course = await this.courseModel.findById(sheet.courseId).lean();
     if (!course) throw new NotFoundException('Course not found');
     await this.access.assertCourseScope(
@@ -169,7 +174,9 @@ export class ControlGradesService {
     );
     if (
       sheet.locked ||
-      !['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT')
+      !['DRAFT', 'RETURNED', 'IN_REVIEW'].includes(
+        sheet.workflowState ?? 'DRAFT',
+      )
     ) {
       throw new ConflictException({
         code: 'SHEET_LOCKED',
@@ -438,7 +445,7 @@ export class ControlGradesService {
           _id: sheet._id,
           locked: false,
           $or: [
-            { workflowState: { $in: ['DRAFT', 'RETURNED'] } },
+            { workflowState: sheet.workflowState ?? 'DRAFT' },
             { workflowState: { $exists: false } },
           ],
         },

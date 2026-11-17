@@ -11,6 +11,7 @@ export const GRADE_AUDIT_ACTIONS = [
   'UNLOCK',
   'SCHEME_CHANGE',
   'SUBMIT',
+  'SUBMIT_APPROVAL',
   'APPROVE',
   'RETURN',
   'REOPEN',

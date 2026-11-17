@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { ControlGradesService } from './services/control-grades.service';
 import { ControlAccessService } from './services/control-access.service';
+import { PERMISSIONS } from '@student-portal/shared';
 
 const rules = {
   key: 'midterm',
@@ -37,6 +38,7 @@ const chain = <T>(value: T) => {
 function build(options: {
   component?: 'midterm' | 'final';
   locked?: boolean;
+  workflowState?: string;
   caps?: Partial<typeof baseCaps>;
   existing?: Record<string, unknown>[];
   inRoster?: boolean;
@@ -54,6 +56,7 @@ function build(options: {
     semester: 'first',
     component: options.component ?? 'midterm',
     locked: options.locked ?? false,
+    workflowState: options.workflowState ?? 'DRAFT',
   };
   const course = { _id: courseId, code: 'CS101', name: 'Intro' };
   const existing = (options.existing ?? []).map((d) => ({
@@ -153,10 +156,52 @@ function build(options: {
     auditModel,
     schemes,
     gradesService,
+    access,
   };
 }
 
 describe('ControlGradesService.applyChanges', () => {
+  it('requires the separate correction permission during review and freezes pending approval', async () => {
+    const actual = new ControlAccessService({} as never, {} as never);
+    const ctx = build({ workflowState: 'IN_REVIEW' });
+    jest
+      .spyOn(ctx.access, 'assertPermission')
+      .mockImplementation((user, permission) =>
+        actual.assertPermission(user, permission),
+      );
+    const doctor = {
+      ...ctx.user,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_GRADES_ENTER,
+      ],
+    } as never;
+    await expect(
+      ctx.service.applyChanges(doctor, ctx.sheetId, {
+        changes: [ctx.change()],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const control = {
+      ...ctx.user,
+      role: 'staff',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+      ],
+    } as never;
+    const saved = await ctx.service.applyChanges(control, ctx.sheetId, {
+      changes: [ctx.change()],
+    });
+    expect(saved.summary.ok).toBe(1);
+    expect(ctx.auditModel.insertMany).toHaveBeenCalledTimes(1);
+    const pending = build({ workflowState: 'PENDING_APPROVAL' });
+    await expect(
+      pending.service.applyChanges(pending.user, pending.sheetId, {
+        changes: [pending.change()],
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
   it.each(['excused', 'incomplete', 'withheld'] as const)(
     'rejects new midterm state %s even with state permission',
     async (status) => {

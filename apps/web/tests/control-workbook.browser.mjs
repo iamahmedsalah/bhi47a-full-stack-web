@@ -29,10 +29,10 @@ await write('styles.css',css.css);
 const ids = { midterm: '100000000000000000000001', coursework: '100000000000000000000002', final: '100000000000000000000003' };
 const components = Object.entries(ids).map(([key])=>({key,nameAr:{midterm:'الميدتيرم',coursework:'أعمال السنة',final:'النهائي'}[key],nameEn:key,max:key==='final'?60:20,step:0.5,enabled:true}));
 const downloadRequests=[];
-let denySave = false, writes = 0, schemeVersion = 1;
+let denySave = false, writes = 0, schemeVersion = 1, reviewEditor = false;
 const states = Object.fromEntries(Object.keys(ids).map(k=>[k,{revision:0,workflowState:'DRAFT'}]));
 const rows = Array.from({length:3001},(_,i)=>({studentId:(i+1).toString(16).padStart(24,'0'), studentCode:String(260001+i), name:`Synthetic Student ${i+1}`,nameAr:`طالب تجريبي ${i+1}`,notRegistered:false,components:{},result:{total:null,totalMax:100,complete:false}}));
-const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT',canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
+const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT'||(states[key].workflowState==='IN_REVIEW'&&reviewEditor),canEditReview:reviewEditor,canApprove:true,canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
 let workbookReads=0;
 const server = http.createServer(async (req,res)=>{
   try {
@@ -51,7 +51,7 @@ const server = http.createServer(async (req,res)=>{
         const results=body.changes.map(change=>{const row=rows.find(r=>r.studentId===change.studentId);const entry={studentId:row.studentId,score:change.score,status:change.status||'present',rev:(row.components[key]?.rev||0)+1,isPublished:false,attendanceMark:change.attendanceMark,quizzesMark:change.quizzesMark};row.components[key]=entry;return {studentId:row.studentId,opId:change.opId,result:'ok',entry};});
         states[key].revision++;return res.end(JSON.stringify({results,summary:{ok:results.length,invalid:0,conflict:0,forbidden:0}}));
       }
-      if(url.pathname.endsWith('/review')) {assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
+      if(url.pathname.endsWith('/review')) {assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='SUBMIT_APPROVAL'?'PENDING_APPROVAL':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
       if(url.pathname==='/admin/control/sheets') return res.end(JSON.stringify(detail(body.component)));
     }
     if(/\.(js|css)$/.test(url.pathname)) {res.setHeader('Content-Type',url.pathname.endsWith('.js')?'text/javascript':'text/css');return res.end(await fs.readFile(path.join(output,path.basename(url.pathname))));}
@@ -160,6 +160,26 @@ try {
   assert.equal((await reviewResponse).status(),200);
   await page.waitForLoadState('networkidle');
   assert.equal(states.midterm.workflowState,'IN_REVIEW');
+  assert.equal(await freshMark.getAttribute('readonly'),'');
+  assert.equal(await page.getByRole('button',{name:'Approve sheet',exact:true}).count(),0);
+  reviewEditor=true;
+  await page.reload();
+  const controlMark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});
+  await controlMark.waitFor();
+  await controlMark.fill('16');
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.score,16);
+  await page.getByRole('button',{name:'Send for approval',exact:true}).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('Control correction complete');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await page.getByRole('status').getByText(/Awaiting approval/).waitFor();
+  assert.equal(states.midterm.workflowState,'PENDING_APPROVAL');
+  assert.equal(await controlMark.getAttribute('readonly'),'');
+  await page.getByRole('button',{name:'Approve sheet',exact:true}).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('Independent approval');
+  await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+  await page.getByRole('status').getByText(/Approved/).waitFor();
+  assert.equal(states.midterm.workflowState,'APPROVED');
   assert.equal(await page.evaluate(()=>window.__serverNavigations||0),0,'client grid filters must not trigger server navigations');assert.deepEqual(errors,[]);assert.ok(writes>=3);
   console.log('Control browser acceptance passed: 3001-student paginated/searchable bilingual real grid, all grade columns, autosave/retry, keyboard navigation, coursework 5/15, desktop/mobile screenshots. API persistence is covered separately.');
 } catch(error) { if(page) await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});throw error; }
