@@ -34,12 +34,24 @@ test('historical preview accepts distinct components/years and preserves leading
   assert.equal(result.parsedRows[0].studentCode, '00123');
 });
 test('invalid historical rows are red and cannot all be committed', async () => {
-  const result = await inspect(['00123,111,midterm,25,30,banned,2023-2024,first'], true);
+  const result = await inspect(['00123,111,midterm,25,30,incomplete,2023-2024,first'], true);
   assert.equal(result.validRows, 0);
   assert.equal(result.invalidRows, 1);
   assert.equal(result.canCommit, false);
   assert.equal(result.previewRows[0].isValid, false);
   assert.ok(result.issues.some((issue) => issue.code === 'HISTORICAL_GRADE_INVALID' && /حالة/.test(issue.message)));
+});
+
+test('historical midterm accepts banned with zero but rejects other restricted states', async () => {
+  for (const status of ['banned', 'محروم']) {
+    const result = await inspect([`00123,111,midterm,0,30,${status},2023-2024,first`], true);
+    assert.equal(result.validRows, 1);
+    assert.equal(result.invalidRows, 0);
+  }
+  const invalid = await inspect(['00123,111,midterm,0,30,incomplete,2023-2024,first']);
+  assert.equal(invalid.validRows, 0);
+  const nonzero = await inspect(['00123,111,midterm,25,30,banned,2023-2024,first']);
+  assert.equal(nonzero.validRows, 0);
 });
 test('preview rejects a duplicate within the same component/year/term', async () => {
   const line = '00123,111,midterm,25,30,present,2023-2024,first';

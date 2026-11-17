@@ -45,6 +45,7 @@ import { listAdminGrades, type GradeItem } from "@/features/grades/api";
 import { RecalculateLevelsModal } from "@/features/grades/components/recalculate-levels-modal";
 import { AuditWarningsModal } from "@/features/grades/components/audit-warnings-modal";
 import { GradesPublishingModal } from "@/features/grades/components/grades-publishing-modal";
+import { HistoricalPublicationModal } from "@/features/grades/components/historical-publication-modal";
 import { calculateGradeScale } from "@student-portal/shared";
 
 interface CourseOption {
@@ -88,11 +89,17 @@ function GradesPageContent() {
     "coursework",
     "total",
   ].includes(activeTab);
-  const canWriteGrades =
-    !isControlComponent &&
-    (isAdmin || Boolean(user?.permissions?.includes("grades.write")));
+  // Academic maintenance is independent of Control's restriction on mark editing.
+  const canManageAcademicProgress =
+    isAdmin ||
+    (user?.role === "staff" &&
+      Boolean(user.permissions?.includes("grades.write")));
   const canManageVisibility =
     isAdmin || Boolean(user?.permissions?.includes("grades.visibility.manage"));
+  const canPublishHistorical =
+    isAdmin ||
+    (user?.role === "staff" &&
+      Boolean(user.permissions?.includes("grades.historical.publish")));
   const canUploadGrades =
     isAdmin || Boolean(user?.permissions?.includes("uploads.import"));
 
@@ -106,6 +113,7 @@ function GradesPageContent() {
   const [isRecalculateOpen, setIsRecalculateOpen] = useState(false);
   const [isAuditWarningsOpen, setIsAuditWarningsOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isHistoricalPublishOpen, setIsHistoricalPublishOpen] = useState(false);
   const [sortBy, setSortBy] = useState<string>("studentCode");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const limit = 10;
@@ -393,6 +401,16 @@ function GradesPageContent() {
           )}
           {isAr ? "تصدير" : "Export"}
         </Button>
+        {canPublishHistorical && (
+          <Button
+            variant="outline"
+            className="rounded-squircle"
+            onClick={() => setIsHistoricalPublishOpen(true)}
+          >
+            <UploadCloud className="h-4 w-4" />
+            {isAr ? "نشر الدرجات التاريخية" : "Publish historical grades"}
+          </Button>
+        )}
         {canManageVisibility && (
           <Button variant="outline" onClick={() => setIsPublishModalOpen(true)}>
             <CalendarClock className="h-4 w-4" />
@@ -401,7 +419,7 @@ function GradesPageContent() {
               : "Results visibility and schedule"}
           </Button>
         )}
-        {canWriteGrades && (
+        {canManageAcademicProgress && (
           <>
             <Button
               variant="outline"
@@ -409,7 +427,9 @@ function GradesPageContent() {
               className="rounded-squircle border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
             >
               <RefreshCw className="h-4 w-4 text-sky-400" />
-              {isAr ? "إعادة حساب المستويات" : "Recalculate levels"}
+              {isAr
+                ? "إعادة حساب المعدل والمستويات"
+                : "Recalculate GPA and levels"}
             </Button>
             <Button
               variant="outline"
@@ -422,6 +442,13 @@ function GradesPageContent() {
           </>
         )}
       </PageTitleBanner>
+      {canPublishHistorical && (
+        <HistoricalPublicationModal
+          open={isHistoricalPublishOpen}
+          onOpenChange={setIsHistoricalPublishOpen}
+          isAr={isAr}
+        />
+      )}
       <ControlReleasePanel locale={locale} />
       <HelpNote
         title={isAr ? "ملاحظات إتاحة النتائج" : "Result visibility notes"}

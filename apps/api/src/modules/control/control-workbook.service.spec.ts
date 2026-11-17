@@ -541,23 +541,29 @@ describe('Control workbook import and review', () => {
       expect(result.changes[0].reason).toBeUndefined();
     },
   );
-  it('round trips a banned XLSX status without a reason', async () => {
-    const ctx = build('final');
-    ctx.access.getCapabilities = () => ({ canManageStates: true });
-    const book = new ExcelJS.Workbook();
-    await book.xlsx.load(
-      await ctx.service.template(ctx.user, ctx.sheetId, 'final'),
-    );
-    book.worksheets[0].getCell('C2').value = 0;
-    book.worksheets[0].getCell('D2').value = 'محروم';
-    const result = await ctx.service.previewFile(
-      ctx.user,
-      ctx.sheetId,
-      Buffer.from(await book.xlsx.writeBuffer()),
-    );
-    expect(result.errors).toEqual([]);
-    expect(result.changes[0]).toMatchObject({ status: 'banned', score: null });
-  });
+  it.each(['midterm', 'final'] as const)(
+    'round trips a banned %s XLSX status without a reason',
+    async (component) => {
+      const ctx = build(component);
+      ctx.access.getCapabilities = () => ({ canManageStates: true });
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.load(
+        await ctx.service.template(ctx.user, ctx.sheetId, component),
+      );
+      book.worksheets[0].getCell('C2').value = 0;
+      book.worksheets[0].getCell('D2').value = 'محروم';
+      const result = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.changes[0]).toMatchObject({
+        status: 'banned',
+        score: null,
+      });
+    },
+  );
   it('rejects a stale template scheme version', async () => {
     const ctx = build();
     await expect(

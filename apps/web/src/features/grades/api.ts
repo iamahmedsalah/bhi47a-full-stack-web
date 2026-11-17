@@ -1,5 +1,73 @@
 import api from "@/lib/api";
 
+export interface HistoricalPublicationScope {
+  academicYear: string;
+  semester: "first" | "second" | "summer";
+  level: string;
+}
+export interface HistoricalPublicationPreview {
+  scope: HistoricalPublicationScope;
+  digest: string;
+  totalStudents: number;
+  courseAttempts: number;
+  totalMarks: number;
+  unpublishedMarks: number;
+  alreadyPublishedMarks: number;
+  issueCount: number;
+  issues: string[];
+  canPublish: boolean;
+}
+export interface HistoricalPublicationJob {
+  id: string;
+  scope: HistoricalPublicationScope;
+  status: "pending" | "complete";
+  publishedAt: string;
+  gradeCount: number;
+  totalStudents: number;
+  processedStudents: number;
+  reconciliationPending: boolean;
+}
+const historicalPublicationPath = "/admin/grades/historical-publication";
+export async function previewHistoricalPublication(
+  scope: HistoricalPublicationScope,
+) {
+  return (
+    await api.post<HistoricalPublicationPreview>(
+      `${historicalPublicationPath}/preview`,
+      scope,
+    )
+  ).data;
+}
+export async function latestHistoricalPublication(
+  scope: HistoricalPublicationScope,
+) {
+  return (
+    await api.post<{ job: HistoricalPublicationJob | null }>(
+      `${historicalPublicationPath}/status`,
+      scope,
+    )
+  ).data;
+}
+export async function publishHistoricalPublication(
+  scope: HistoricalPublicationScope,
+  digest: string,
+) {
+  return (
+    await api.post<HistoricalPublicationJob>(
+      `${historicalPublicationPath}/publish`,
+      { ...scope, digest },
+    )
+  ).data;
+}
+export async function processHistoricalPublication(id: string) {
+  return (
+    await api.post<HistoricalPublicationJob>(
+      `${historicalPublicationPath}/${encodeURIComponent(id)}/process`,
+      {},
+    )
+  ).data;
+}
+
 export interface GradeItem {
   _id: string;
   studentCode: string;

@@ -289,6 +289,7 @@ export class GradesService implements OnModuleInit {
     options?: {
       dryRun?: boolean;
       maxAllowedCarriedCourses?: number;
+      promoteLevels?: boolean;
     },
   ) {
     const uniqueIds = [
@@ -411,8 +412,12 @@ export class GradesService implements OnModuleInit {
         maxAllowedCarriedCourses: options?.maxAllowedCarriedCourses ?? 2,
       });
 
-      const promotedLevel = evaluation.promotedLevel;
-      const wasPromoted = evaluation.willPromote;
+      const promotedLevel =
+        options?.promoteLevels === false
+          ? currentLevel
+          : evaluation.promotedLevel;
+      const wasPromoted =
+        options?.promoteLevels !== false && evaluation.willPromote;
 
       const currentRequirements = curriculumCourses.filter(
         (course) =>
@@ -474,7 +479,8 @@ export class GradesService implements OnModuleInit {
           }
           academic.academicLevel = promotedLevel;
           if (wasPromoted) academic.semester = 'first';
-          else if (baseline?.semester) academic.semester = baseline.semester;
+          else if (options?.promoteLevels !== false && baseline?.semester)
+            academic.semester = baseline.semester;
           if (warningCount !== undefined) {
             academic.academicWarnings = warningCount;
           }
@@ -488,7 +494,7 @@ export class GradesService implements OnModuleInit {
           ) {
             studentProfile.level = promotedLevel;
             if (wasPromoted) studentProfile.semester = 'first';
-            else if (baseline?.semester)
+            else if (options?.promoteLevels !== false && baseline?.semester)
               studentProfile.semester = baseline.semester;
             shouldSaveProfile = true;
           }
@@ -1190,8 +1196,13 @@ export class GradesService implements OnModuleInit {
 
     const affectedGrades = await this.gradeModel
       .find(filter)
-      .select('studentId controlManaged')
+      .select('studentId controlManaged historicalImport')
       .lean();
+    if (affectedGrades.some(g => g.historicalImport && !g.controlManaged)) {
+      throw new ConflictException(
+        'Use historical publication by level / استخدم نشر الدرجات التاريخية حسب المستوى',
+      );
+    }
     if (dto.level && affectedGrades.some((g) => g.controlManaged))
       throw new ConflictException(
         'Control releases require an entire course/term; use level settings to control student access',

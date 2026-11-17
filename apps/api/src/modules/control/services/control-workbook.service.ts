@@ -1165,7 +1165,7 @@ export class ControlWorkbookService {
         !(CONTROL_MIDTERM_STATES as readonly string[]).includes(status)
       ) {
         fail(
-          'Midterm accepts present or absent only / \u0627\u0644\u0645\u064a\u062f\u062a\u0631\u0645 \u064a\u0642\u0628\u0644 \u062d\u0627\u0636\u0631 \u0623\u0648 \u063a\u0627\u0626\u0628 \u0641\u0642\u0637',
+          'Midterm accepts present, absent or banned only / الميدترم يقبل حاضر أو غائب أو محروم فقط',
         );
         continue;
       }

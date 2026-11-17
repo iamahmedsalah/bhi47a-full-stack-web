@@ -198,6 +198,22 @@ export class PublishGradesDto {
   isPublished!: boolean;
 }
 
+export class HistoricalPublicationScopeDto {
+  @Matches(/^\d{4}-\d{4}$/)
+  academicYear!: string;
+
+  @IsIn(['first', 'second', 'summer'])
+  semester!: 'first' | 'second' | 'summer';
+
+  @IsIn(['1', '2', '3', '4'])
+  level!: string;
+}
+
+export class PublishHistoricalGradesDto extends HistoricalPublicationScopeDto {
+  @Matches(/^[a-f0-9]{64}$/)
+  digest!: string;
+}
+
 export class ControlResultPolicyDto {
   @IsNumber()
   @Min(0)

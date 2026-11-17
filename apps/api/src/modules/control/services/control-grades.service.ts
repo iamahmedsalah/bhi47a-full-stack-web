@@ -522,7 +522,7 @@ export class ControlGradesService {
       return reject(
         'invalid',
         'midterm_status',
-        'Midterm accepts present or absent only',
+        'Midterm accepts present, absent or banned only',
       );
     }
 

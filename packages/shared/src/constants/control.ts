@@ -55,7 +55,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
   },
 ];
 
-export const CONTROL_MIDTERM_STATES = ['present', 'absent'] as const;
+export const CONTROL_MIDTERM_STATES = ['present', 'absent', 'banned'] as const;
 
 /** Grade states that only users holding `control.states.manage` may set. */
 export const CONTROL_RESTRICTED_STATES = [

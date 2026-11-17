@@ -86,8 +86,14 @@ try {
   const optionalReason=page.getByRole('textbox',{name:'Reason (optional for exam statuses and excuses)',exact:true});
   assert.equal(await optionalReason.inputValue(),'');
   await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
-  assert.equal(await page.getByRole('option',{name:'Banned',exact:true}).count(),0);
+  assert.equal(await page.getByRole('option',{name:'Banned',exact:true}).count(),1);
   assert.equal(await page.getByRole('option',{name:'Incomplete',exact:true}).count(),0);
+  await page.getByRole('option',{name:'Banned',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.status,'banned');
+  assert.equal(rows[0].components.midterm.score,null);
+  assert.equal(await optionalReason.inputValue(),'');
+  await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
   await page.getByRole('option',{name:'Absent',exact:true}).click();
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.status,'absent');

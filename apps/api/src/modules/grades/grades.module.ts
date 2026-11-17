@@ -10,6 +10,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { GradesService } from './grades.service';
 import { GradesController } from './grades.controller';
+import { HistoricalPublicationController } from './historical-publication.controller';
+import { HistoricalPublicationService } from './historical-publication.service';
 import {
   ControlSheet,
   ControlSheetSchema,
@@ -46,8 +48,8 @@ import {
     ]),
     NotificationsModule,
   ],
-  controllers: [GradesController],
-  providers: [GradesService],
+  controllers: [GradesController, HistoricalPublicationController],
+  providers: [GradesService, HistoricalPublicationService],
   exports: [GradesService],
 })
 export class GradesModule {}

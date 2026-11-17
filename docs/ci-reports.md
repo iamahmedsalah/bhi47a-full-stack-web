@@ -322,3 +322,24 @@ Regression checks cover both configurations, the auth probe and the existing
 deployment gates: 12/12 tests passed. No application code or dependency version
 changed. The reported punycode deprecation warning is separate from the fatal
 missing-executable error. The updated remote workflow has not been run here.
+
+### 2026-11-17: restore banned midterm entry
+
+Restored `banned` alongside `present` and `absent` in the shared midterm state
+contract. The real workbook select, Excel validation lists, mutation validation
+and historical CSV/XLSX validation now use that contract. Other special midterm
+states remain unavailable. Control state-management permission is still required
+for banning, with no mandatory reason. The component contributes zero while
+retaining its status; coursework and final remain independent. A banned midterm
+does not by itself produce a final FX outcome. Arabic/English help and validation
+messages reflect the updated rule.
+
+Validation passed: 93 tests across Control mutation, workbook XLSX round-trip and
+official-result suites; seven historical preview tests; real bilingual workbook
+browser acceptance with 3,001 synthetic students, banned-midterm autosave without
+a reason and existing retry/navigation checks; API and web TypeScript; changed
+API file ESLint; shared build. A new test fixture argument and an old invalid-status
+expectation were corrected before these final passing runs. No production data
+was changed and no deployment was performed. Existing in-progress historical
+publication changes were preserved; these results do not certify that separate
+feature or the complete remote CI workflow.

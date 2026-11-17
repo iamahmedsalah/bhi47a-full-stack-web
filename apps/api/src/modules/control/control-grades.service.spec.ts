@@ -157,7 +157,7 @@ function build(options: {
 }
 
 describe('ControlGradesService.applyChanges', () => {
-  it.each(['banned', 'excused', 'incomplete', 'withheld'] as const)(
+  it.each(['excused', 'incomplete', 'withheld'] as const)(
     'rejects new midterm state %s even with state permission',
     async (status) => {
       const ctx = build({ caps: { canManageStates: true } });
@@ -171,6 +171,31 @@ describe('ControlGradesService.applyChanges', () => {
       expect(ctx.auditModel.insertMany).not.toHaveBeenCalled();
     },
   );
+
+  it('saves a banned midterm without a reason only with state permission', async () => {
+    const allowed = build({ caps: { canManageStates: true } });
+    const result = await allowed.service.applyChanges(
+      allowed.user,
+      allowed.sheetId,
+      {
+        changes: [allowed.change({ status: 'banned', score: undefined })],
+      },
+    );
+    expect(result.results[0].result).toBe('ok');
+    expect(allowed.auditModel.insertMany).toHaveBeenCalledTimes(1);
+    const denied = build({});
+    const forbidden = await denied.service.applyChanges(
+      denied.user,
+      denied.sheetId,
+      {
+        changes: [denied.change({ status: 'banned', score: undefined })],
+      },
+    );
+    expect(forbidden.results[0]).toMatchObject({
+      result: 'forbidden',
+      code: 'states_permission',
+    });
+  });
 
   it('keeps carried IC contributions read-only even for state managers', async () => {
     const ctx = build({

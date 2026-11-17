@@ -1,4 +1,5 @@
 import { GRADE_STATUS_VALUES, type GradeStatus } from "./grade-statuses";
+import { CONTROL_MIDTERM_STATES } from "./control";
 
 /** Both upload formats normalize to the same independently stored exam marks. */
 export function validateHistoricalGradeRow(
@@ -148,10 +149,11 @@ export function validateHistoricalGrade(
     )[statusInput] ?? statusInput;
   if (
     !(GRADE_STATUS_VALUES as readonly string[]).includes(status) ||
-    (examType === "midterm" && !["present", "absent"].includes(status))
+    (examType === "midterm" &&
+      !(CONTROL_MIDTERM_STATES as readonly string[]).includes(status))
   )
     return fail(
-      "Invalid exam status; midterm accepts present/absent only / حالة غير صحيحة؛ الميدترم حاضر أو غائب فقط",
+      "Invalid exam status; midterm accepts present/absent/banned only / حالة غير صحيحة؛ الميدترم حاضر أو غائب أو محروم فقط",
     );
   const defaults: Record<string, number> = {
     coursework: 20,
