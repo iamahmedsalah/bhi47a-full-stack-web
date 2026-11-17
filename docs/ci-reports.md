@@ -408,8 +408,17 @@ readonly doctor/pending-approval views and final approval. Initial overlapping
 checks were stopped after local memory pressure and rerun sequentially.
 
 The first full unit attempt saw an enrollment test while unrelated registration
-files were changing concurrently; those external edits are not part of this
-Control commit. A subsequent in-process Windows test runner exited natively.
-The complete suite is being verified with one recyclable local Jest worker;
-assertions and timeouts are unchanged. Scratch runners/configuration stay in
-ignored `outputs/`; they are not production configuration.
+files were changing concurrently. Those edits are outside this task; a concurrent
+commit (`a1028be`) subsequently included them together with the Control changes.
+That commit was not reset or rewritten, and its presence on GitHub main was
+verified. A subsequent in-process Windows test runner exited natively. The full
+working-tree API suite then passed 107/107 suites and 1,059/1,059 tests using one
+recyclable local Jest worker; assertions and timeouts were unchanged. Scratch
+runners/configuration stay in ignored `outputs/`, not production configuration.
+
+The real MongoDB Control workflow suite passed all 25 tests, including denied
+doctor edits during review, permitted correction, audited persistence, frozen
+pending-approval edits, independent approval and existing publishing gates. The
+separate IC/attempt integration suite did not pass: its 120-second index/setup
+hook timed out before its five test bodies ran. No timeout was increased.
+The new workflow is tested, but these results do not certify all remote CI stages.

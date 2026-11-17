@@ -19,6 +19,18 @@ export interface CourseCurriculum {
   type: CourseType;
 }
 
+/** Build mutation input without database subdocument IDs or response metadata. */
+export function serializeCourseCurricula(
+  curricula: readonly CourseCurriculum[],
+): CourseCurriculum[] {
+  return curricula.map(({ department, academicLevel, semester, type }) => ({
+    department,
+    academicLevel,
+    semester,
+    type,
+  }));
+}
+
 export const COURSE_326_CURRICULA: readonly CourseCurriculum[] =
   approvedCourseCurricula("326");
 

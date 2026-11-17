@@ -33,6 +33,7 @@ import {
   COURSE_LEVEL_VALUES,
   COURSE_BOOK_MAX_BYTES,
   getCourseCurricula,
+  serializeCourseCurricula,
   courseCurriculumSummary,
   formatStaffDisplayName,
   getCleanStaffName,
@@ -328,7 +329,7 @@ function CourseFormDialog({
         semester: placements[0]?.semester ?? semester,
         creditHours,
         department,
-        curricula: placements,
+        curricula: serializeCourseCurricula(placements),
         prerequisites: prerequisites
           .split(',')
           .map((item) => item.trim().toUpperCase())

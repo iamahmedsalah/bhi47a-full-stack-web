@@ -45,6 +45,7 @@ export class Course {
   @Prop({
     type: [
       {
+        _id: false,
         department: {
           type: String,
           required: true,
