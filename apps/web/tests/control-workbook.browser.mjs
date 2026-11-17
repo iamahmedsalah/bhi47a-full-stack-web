@@ -86,9 +86,13 @@ try {
   const optionalReason=page.getByRole('textbox',{name:'Reason (optional for exam statuses and excuses)',exact:true});
   assert.equal(await optionalReason.inputValue(),'');
   await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
-  assert.equal(await page.getByRole('option',{name:'Banned',exact:true}).count(),1);
-  assert.equal(await page.getByRole('option',{name:'Incomplete',exact:true}).count(),0);
-  await page.getByRole('option',{name:'Banned',exact:true}).click();
+  const midtermStatusMenu=page.getByRole('listbox');
+  const bannedMidterm=midtermStatusMenu.getByRole('option',{name:'Banned',exact:true});
+  // Radix mounts its portaled options after the trigger click; count() does not wait.
+  await bannedMidterm.waitFor({state:'visible'});
+  assert.equal(await bannedMidterm.count(),1);
+  assert.equal(await midtermStatusMenu.getByRole('option',{name:'Incomplete',exact:true}).count(),0);
+  await bannedMidterm.click();
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.status,'banned');
   assert.equal(rows[0].components.midterm.score,null);

@@ -361,3 +361,25 @@ changed. Full remote CI is not certified by these local results.
 The full web lint command (`eslint --max-warnings 5`) also completed with exit
 zero and no diagnostics, completing both linted workspaces in the reported CI
 stage. Final diff whitespace checks passed.
+
+### 2026-11-17: workbook midterm menu assertion race
+
+Reproduced the reported line-89 `0 !== 1` failure on the unchanged browser test.
+Its failure screenshot showed the Banned option in the open menu after the
+immediate locator count had returned zero. The test now waits for the visible
+option inside the Radix listbox before checking its count and selecting it.
+The option must still be unique; Incomplete must still be absent; the saved
+midterm must still be banned with no score and no mandatory reason. No UI
+permission, status rule, timeout, or application behavior was changed.
+
+The repaired real workbook browser acceptance passed with 3,001 synthetic
+students, bilingual layout, status autosave, retry and keyboard navigation.
+The import browser stage also passed its 501-row batching and retry checks.
+
+Final verification: `pnpm run lint` passed all three tasks with zero diagnostics
+(4m18s); `pnpm run typecheck` passed all four tasks (1m03s, one shared-build cache
+hit). All four Control Chromium stages passed: workbook, import, release and
+attempt comparison. Final diff whitespace checks passed. This change is limited
+to browser-test synchronization and this report; no commit, push, deployment,
+or production data mutation was performed. Remote workflow status must be checked
+on a new run containing the fix.
