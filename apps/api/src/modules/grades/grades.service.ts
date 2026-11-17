@@ -1198,7 +1198,7 @@ export class GradesService implements OnModuleInit {
       .find(filter)
       .select('studentId controlManaged historicalImport')
       .lean();
-    if (affectedGrades.some(g => g.historicalImport && !g.controlManaged)) {
+    if (affectedGrades.some((g) => g.historicalImport && !g.controlManaged)) {
       throw new ConflictException(
         'Use historical publication by level / استخدم نشر الدرجات التاريخية حسب المستوى',
       );

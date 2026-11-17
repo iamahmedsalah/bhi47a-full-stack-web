@@ -17,7 +17,7 @@ const query = <T>(value: T) => {
     select: () => q,
     session: () => q,
     sort: () => q,
-    lean: async () => value,
+    lean: () => Promise.resolve(value),
   };
   return q;
 };
@@ -53,15 +53,17 @@ function fixture() {
           : doc[key]) === value,
     );
   const store = {
-    findOne: jest.fn(
-      async (filter: Record<string, unknown>) =>
+    findOne: jest.fn((filter: Record<string, unknown>) =>
+      Promise.resolve(
         [...jobs.values()].find((j) => matches(j, filter)) ?? null,
+      ),
     ),
-    insertOne: jest.fn(async (doc: Record<string, unknown>) => {
+    insertOne: jest.fn((doc: Record<string, unknown>) => {
       jobs.set(String(doc._id), { ...doc });
+      return Promise.resolve();
     }),
     findOneAndUpdate: jest.fn(
-      async (
+      (
         filter: Record<string, unknown>,
         update: {
           $set: Record<string, unknown>;
@@ -69,20 +71,20 @@ function fixture() {
         },
       ) => {
         const job = jobs.get(String(filter._id));
-        if (!job || !matches(job, filter)) return null;
+        if (!job || !matches(job, filter)) return Promise.resolve(null);
         if (
           filter.$or &&
           job.leaseExpiresAt &&
           (job.leaseExpiresAt as Date) > new Date()
         )
-          return null;
+          return Promise.resolve(null);
         Object.assign(job, update.$set);
         for (const key of Object.keys(update.$unset ?? {})) delete job[key];
-        return { ...job };
+        return Promise.resolve({ ...job });
       },
     ),
     updateOne: jest.fn(
-      async (
+      (
         filter: Record<string, unknown>,
         update: {
           $set: Record<string, unknown>;
@@ -94,6 +96,7 @@ function fixture() {
           Object.assign(job, update.$set);
           for (const key of Object.keys(update.$unset ?? {})) delete job[key];
         }
+        return Promise.resolve();
       },
     ),
   };
@@ -113,7 +116,7 @@ function fixture() {
     db: {
       db: { collection: () => store },
       collection: () => leases,
-      startSession: async () => session,
+      startSession: () => Promise.resolve(session),
     },
   };
   const profiles = {

@@ -149,11 +149,9 @@ export class HistoricalPublicationService {
       if (issues.length < 10) issues.push(message);
     };
     for (const mark of marks) {
-      const key = `${mark.studentId}|${mark.courseId}`;
+      const key = `${String(mark.studentId)}|${String(mark.courseId)}`;
       groups.set(key, [...(groups.get(key) ?? []), mark]);
-      const valid = validateHistoricalGrade(
-        mark as unknown as Record<string, unknown>,
-      );
+      const valid = validateHistoricalGrade(mark);
       if (!valid.ok)
         addIssue(`${mark.studentCode} / ${mark.courseCode}: ${valid.message}`);
     }
@@ -285,7 +283,7 @@ export class HistoricalPublicationService {
           throw new ConflictException(
             'راجع المكونات وكشوف الكنترول قبل النشر / Publication blocked',
           );
-        const ids = snapshot.marks.map((m) => m._id as Types.ObjectId);
+        const ids = snapshot.marks.map((m) => m._id);
         const updated = await this.grades.updateMany(
           {
             _id: { $in: ids },

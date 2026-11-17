@@ -343,3 +343,21 @@ expectation were corrected before these final passing runs. No production data
 was changed and no deployment was performed. Existing in-progress historical
 publication changes were preserved; these results do not certify that separate
 feature or the complete remote CI workflow.
+
+### 2026-11-17: historical publication lint corrections
+
+Fixed the 11 reported API lint errors without suppressing rules: explicitly
+stringify ObjectIds for the student/course grouping key, remove redundant type
+assertions, format the grades callback and return resolved Promises from test
+doubles that have no asynchronous work. The test doubles retain their
+Promise-returning behavior, including early null results and void writes.
+
+Validation passed: changed-file lint; full API lint with the CI glob; API
+TypeScript; shared package build; all eight historical publication tests covering
+permissions, strict scopes, invalid/stale previews, atomic publication,
+idempotent retry and resumable GPA work. No production data or deployment was
+changed. Full remote CI is not certified by these local results.
+
+The full web lint command (`eslint --max-warnings 5`) also completed with exit
+zero and no diagnostics, completing both linted workspaces in the reported CI
+stage. Final diff whitespace checks passed.
