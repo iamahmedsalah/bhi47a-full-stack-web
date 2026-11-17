@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -31,34 +32,10 @@ export function FilterBar({
   wrapFilters = false,
   compact = false,
 }: FilterBarProps) {
-  const [localSearch, setLocalSearch] = useState(search);
-
-  // Synchronize internal state with incoming prop
-  const [previousSearch, setPreviousSearch] = useState<unknown[] | null>(null);
-  if (
-    previousSearch === null ||
-    previousSearch.some((value, index) => !Object.is(value, [search][index]))
-  ) {
-    setPreviousSearch([search]);
-    (() => {
-      setLocalSearch(search);
-    })();
-  }
-
-  // Debounce notification back to parent
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (localSearch !== search) {
-        onSearchChange(localSearch);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [localSearch, onSearchChange, search]);
+  const [localSearch, setLocalSearch] = useDebouncedSearch(search, onSearchChange);
 
   const handleClear = () => {
-    setLocalSearch("");
-    onSearchChange("");
+    setLocalSearch("", true);
   };
 
   return (

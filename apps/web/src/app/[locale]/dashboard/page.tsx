@@ -2,7 +2,7 @@
 
 import { curriculumDepartmentLabel } from "@student-portal/shared";
 import NextImage from "next/image";
-import type { StudentQuizViewItem } from '@/features/quizzes/api';
+import { getStudentQuizzesWithTiming } from '@/features/quizzes/api';
 
 import React from "react";
 import { useParams } from "next/navigation";
@@ -209,14 +209,7 @@ export default function StudentDashboard() {
   // 8. Quizzes Query (detecting open quizzes)
   const quizzesQuery = useQuery({
     queryKey: ["student-online-quizzes"],
-    queryFn: async () => {
-      try {
-        const res = await api.get<StudentQuizViewItem[]>("/students/me/quizzes");
-        return res.data || [];
-      } catch {
-        return [];
-      }
-    },
+    queryFn: getStudentQuizzesWithTiming,
     staleTime: 60 * 1000,
     refetchInterval: 60000,
     refetchIntervalInBackground: false,
@@ -239,7 +232,7 @@ export default function StudentDashboard() {
   const activeLiveSession =
     liveSessions.find((s) => !s.alreadyCheckedIn && s.remainingSeconds > 0) ||
     liveSessions[0];
-  const openQuizzes = (quizzesQuery.data || []).filter(
+  const openQuizzes = (quizzesQuery.data?.quizzes || []).filter(
     (q) => q.isOpen && !q.isSubmitted,
   );
   const activeQuiz = openQuizzes[0] || null;

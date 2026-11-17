@@ -135,6 +135,11 @@ export class StudentImporter implements Importer {
           existingUser ? String(existingUser._id) : undefined,
         );
         const isForcedReset = explicitPasswordReset(row.mustChangePassword);
+        const skipsPasswordChange =
+          row.mustChangePassword === false ||
+          row.mustChangePassword === 'false' ||
+          row.mustChangePassword === 0 ||
+          row.mustChangePassword === '0';
         if (existingUser && existingUser.role !== 'student')
           throw new Error('Student code belongs to a different account role');
 
@@ -191,6 +196,8 @@ export class StudentImporter implements Importer {
           nationalIdHash,
           nationalIdMasked: maskedId,
           nationalId,
+          // An explicit false clears the gate without resetting credentials.
+          ...(skipsPasswordChange ? { mustChangePassword: false } : {}),
         };
 
         const userUpdateDoc: Record<string, unknown> = {
@@ -199,7 +206,10 @@ export class StudentImporter implements Importer {
             permissions: [],
             isActive: true,
             ...(!existingUser
-              ? { passwordHash, mustChangePassword: true }
+              ? {
+                  passwordHash,
+                  ...(!skipsPasswordChange ? { mustChangePassword: true } : {}),
+                }
               : {}),
           },
         };

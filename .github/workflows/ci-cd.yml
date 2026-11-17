@@ -183,6 +183,9 @@ jobs:
       - name: Test automatic quiz release in Chromium
         run: pnpm --filter @student-portal/web test:quiz-release:browser
 
+      - name: Test portal search, quiz navigation and password controls in Chromium
+        run: pnpm --filter @student-portal/web test:portal-regressions:browser
+
       - name: Test background uploads and notification progress in Chromium
         run: pnpm --filter @student-portal/web test:materials:browser
 

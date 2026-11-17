@@ -40,9 +40,11 @@ export function useTableState<TFilters extends Record<string, string>>({
     (params: URLSearchParams) => {
       const query = params.toString();
       const newUrl = query ? `${pathname}?${query}` : pathname;
-      if (typeof window !== "undefined") {
+      // Use one URL update path. Doing both emits an immediate history value
+      // and a delayed navigation value that can rewind an actively edited input.
+      if (shallow && typeof window !== "undefined") {
         window.history.replaceState(null, "", newUrl);
-        if (shallow) return;
+        return;
       }
       startTransition(() => {
         router.replace(newUrl, { scroll: false });

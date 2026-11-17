@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
 import {
   CreateStudentDto,
+  PasswordRequirementCodesQuery,
   UpdateStudentDto,
   SearchStudentQuery,
   ResetPasswordDto,
@@ -149,6 +150,18 @@ export class StudentsController {
   })
   async getMustChangePasswordSummary() {
     return this.studentsService.getMustChangePasswordSummary();
+  }
+
+  @Get('admin/students-must-change-password-codes')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_READ)
+  async getMustChangePasswordCodes(
+    @Query() query: PasswordRequirementCodesQuery,
+  ) {
+    return this.studentsService.getMustChangePasswordCodes(
+      query.page,
+      query.limit,
+    );
   }
 
   @Post('admin/students-toggle-all-must-change-password')

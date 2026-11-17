@@ -46,7 +46,7 @@ describe('student import credential preservation', () => {
     nationalId: existing.nationalId,
     level: '3',
   };
-  it.each([false, 'false', '0', '', undefined])(
+  it.each([false, 'false', 0, '0', '', undefined])(
     'does not interpret %j as a reset or reactivate an existing account',
     async (value) => {
       expect(explicitPasswordReset(value)).toBe(false);
@@ -66,7 +66,29 @@ describe('student import credential preservation', () => {
       });
       expect(op.update.$set).not.toHaveProperty('passwordHash');
       expect(op.update.$set).not.toHaveProperty('isActive');
-      expect(op.update.$set).not.toHaveProperty('mustChangePassword');
+      if ([false, 'false', 0, '0'].includes(value as never)) {
+        expect(op.update.$set.mustChangePassword).toBe(false);
+      } else {
+        expect(op.update.$set).not.toHaveProperty('mustChangePassword');
+      }
+    },
+  );
+  it.each([false, 'false', 0, '0'])(
+    'honors %j for a new student without conflicting Mongo update paths',
+    async (value) => {
+      const { model, importer } = fixture([]);
+      await importer.commit([
+        { row: { ...row, mustChangePassword: value }, rowNum: 2 },
+      ]);
+      const update = model.bulkWrite.mock.calls[0][0][0].updateOne.update;
+      expect(update.$set.mustChangePassword).toBe(false);
+      expect(update.$setOnInsert).not.toHaveProperty('mustChangePassword');
+      expect(
+        await defaultPasswordHasher.verify(
+          row.nationalId,
+          update.$setOnInsert.passwordHash,
+        ),
+      ).toBe(true);
     },
   );
   it('writes new bcrypt credentials with independent salts', async () => {

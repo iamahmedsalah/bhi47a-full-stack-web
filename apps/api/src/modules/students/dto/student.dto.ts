@@ -10,8 +10,11 @@ import {
   MaxLength,
   IsArray,
   ArrayMinSize,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   STUDENT_PASSWORD_MAX_LENGTH,
@@ -20,6 +23,22 @@ import {
   ENROLLMENT_STATUS_VALUES,
   type EnrollmentStatus,
 } from '@student-portal/shared';
+
+export class PasswordRequirementCodesQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 100;
+}
 
 export class CreateStudentDto {
   @ApiPropertyOptional({

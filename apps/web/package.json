@@ -17,6 +17,7 @@
     "test:staff:browser": "node tests/quiz-release.browser.mjs --staff-only",
     "test:quiz-release": "node --test tests/quiz-release.test.mjs tests/quiz-time-import.test.mjs",
     "test:quiz-release:browser": "node tests/quiz-release.browser.mjs",
+    "test:portal-regressions:browser": "node tests/portal-regressions.browser.mjs",
     "test:timetable": "node --test tests/course-timetable.test.mjs",
     "test:timetable:browser": "node tests/course-timetable.browser.mjs",
     "test:enrollment": "node tests/course-enrollment.browser.mjs",

@@ -6,20 +6,19 @@ import api from '@/lib/api';
 
 export function FcmInitializer() {
   const { user } = useAuth();
+  const studentId = user?.role === 'student' && !user.mustChangePassword ? user._id : undefined;
 
   useEffect(() => {
-    if (!user || user.role !== 'student') return;
+    if (!studentId) return;
+    let cancelled = false;
 
     const initializeFcm = async () => {
       try {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-          console.log('Browser does not support service workers or push notifications');
-          return;
-        }
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+        if (Notification.permission === 'denied') return;
 
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-          console.log('Notification permission denied');
           return;
         }
 
@@ -45,12 +44,11 @@ export function FcmInitializer() {
           serviceWorkerRegistration: activeRegistration,
         });
 
-        if (token) {
+        if (token && !cancelled) {
           await api.post('/students/me/fcm-token', {
             token,
             platform: 'web',
           });
-          console.log('FCM token registered successfully');
         }
       } catch (err) {
         console.error('Error during FCM registration:', err);
@@ -58,7 +56,8 @@ export function FcmInitializer() {
     };
 
     void initializeFcm();
-  }, [user]);
+    return () => { cancelled = true; };
+  }, [studentId]);
 
   return null;
 }

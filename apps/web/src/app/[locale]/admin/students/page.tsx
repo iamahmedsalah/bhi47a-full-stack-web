@@ -76,6 +76,7 @@ import { Button } from '@/components/ui/button';
 import { CreditCard } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PasswordRequirementDialog } from '@/features/students/components/password-requirement-dialog';
 import { FilterBar } from '@/components/ui/filter-bar';
 import { Input } from '@/components/ui/input';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
@@ -423,10 +424,8 @@ function StudentsPageContent() {
     queryFn: getMustChangePasswordSummary,
   });
 
-  const handleToggleAllMustChange = async () => {
+  const handleToggleAllMustChange = async (targetState: boolean) => {
     setIsTogglingMustChange(true);
-    setIsBulkMustChangeOpen(false);
-    const targetState = !mustChangeSummaryQuery.data?.allEnabled;
     const toastId = toast.loading(
       locale === 'ar'
         ? 'جاري تحديث حالة إعادة تعيين كلمة المرور لجميع الطلاب...'
@@ -447,6 +446,8 @@ function StudentsPageContent() {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'students', 'must-change-summary'],
       });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'students', 'must-change-codes'] });
+      setIsBulkMustChangeOpen(false);
       invalidateStudents();
     } catch (err) {
       toast.error(
@@ -555,7 +556,7 @@ function StudentsPageContent() {
           <Button
             variant="outline"
             size="sm"
-            disabled={isTogglingMustChange || mustChangeSummaryQuery.isLoading}
+            disabled={isTogglingMustChange || !mustChangeSummaryQuery.data || mustChangeSummaryQuery.isError}
             onClick={() => setIsBulkMustChangeOpen(true)}
             className={cn(
               'h-9 rounded-squircle border-amber-500/40 bg-card/60 px-3 text-xs font-medium text-amber-500 hover:bg-amber-500/10 hover:text-amber-400',
@@ -1162,41 +1163,13 @@ function StudentsPageContent() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={isBulkMustChangeOpen}
-        onOpenChange={setIsBulkMustChangeOpen}
-        title={
-          locale === 'ar'
-            ? mustChangeSummaryQuery.data?.allEnabled
-              ? 'إلغاء إلزام تغيير كلمة المرور لجميع الطلاب'
-              : 'إلزام جميع الطلاب بتغيير كلمة المرور'
-            : mustChangeSummaryQuery.data?.allEnabled
-              ? 'Disable Forced Password Change for All Students'
-              : 'Enforce Password Change for All Students'
-        }
-        description={
-          locale === 'ar'
-            ? mustChangeSummaryQuery.data?.allEnabled
-              ? `سيتم إيقاف فرض تغيير كلمة المرور لجميع الطلاب (${mustChangeSummaryQuery.data?.totalStudents ?? 0} طالب)، ولن يُطلب منهم تغيير كلمة المرور في تسجيل الدخول القادم.`
-              : `سيتم إلزام جميع الطلاب (${mustChangeSummaryQuery.data?.totalStudents ?? 0} طالب) بتعيين كلمة مرور جديدة عند تسجيل الدخول باستخدام رقمهم القومي، وإعادة تعيين عداد المحاولات الفاشلة وفك أي حظر مؤقت على الحسابات.`
-            : mustChangeSummaryQuery.data?.allEnabled
-              ? `This will remove the mandatory password change flag for all ${mustChangeSummaryQuery.data?.totalStudents ?? 0} students.`
-              : `This will require all ${mustChangeSummaryQuery.data?.totalStudents ?? 0} students to change their password on next login using their National ID, while unlocking any locked accounts.`
-        }
-        confirmLabel={
-          locale === 'ar'
-            ? mustChangeSummaryQuery.data?.allEnabled
-              ? 'تأكيد الإلغاء'
-              : 'تأكيد الإلزام للكل'
-            : mustChangeSummaryQuery.data?.allEnabled
-              ? 'Confirm Disable'
-              : 'Confirm Enforce'
-        }
-        cancelLabel={tCommon('cancel')}
-        destructive={!mustChangeSummaryQuery.data?.allEnabled}
-        onConfirm={handleToggleAllMustChange}
-        disabled={isTogglingMustChange}
-      />
+      {isBulkMustChangeOpen && mustChangeSummaryQuery.data && <PasswordRequirementDialog
+        summary={mustChangeSummaryQuery.data}
+        isAr={locale === 'ar'}
+        busy={isTogglingMustChange}
+        onClose={() => setIsBulkMustChangeOpen(false)}
+        onSave={handleToggleAllMustChange}
+      />}
     </div>
   );
 }

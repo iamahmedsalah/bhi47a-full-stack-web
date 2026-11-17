@@ -1153,6 +1153,10 @@ export class StudentsService {
     return this.usersService.getStudentsMustChangePasswordSummary();
   }
 
+  async getMustChangePasswordCodes(page?: number, limit?: number) {
+    return this.usersService.getStudentsMustChangePasswordCodes(page, limit);
+  }
+
   async toggleAllMustChangePassword(enabled: boolean) {
     return this.usersService.toggleAllStudentsMustChangePassword(enabled);
   }

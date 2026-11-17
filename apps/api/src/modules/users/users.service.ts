@@ -301,6 +301,27 @@ export class UsersService {
     };
   }
 
+  async getStudentsMustChangePasswordCodes(page = 1, limit = 100) {
+    const filter = { role: 'student', mustChangePassword: true };
+    const [students, total] = await Promise.all([
+      this.userModel
+        .find(filter)
+        .select('studentCode -_id')
+        .sort({ studentCode: 1, _id: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.userModel.countDocuments(filter),
+    ]);
+    return {
+      items: students.map((student) => student.studentCode),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async toggleAllStudentsMustChangePassword(enabled: boolean) {
     if (!enabled) {
       const result = await this.userModel.updateMany(

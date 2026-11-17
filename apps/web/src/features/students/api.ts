@@ -306,6 +306,10 @@ export interface MustChangePasswordSummary {
   anyEnabled: boolean;
 }
 
+export function getMustChangePasswordCodes(page = 1) {
+  return apiGet<{ items: string[]; total: number; totalPages: number }>('/admin/students-must-change-password-codes', { params: { page, limit: 100 } });
+}
+
 export async function getMustChangePasswordSummary(): Promise<MustChangePasswordSummary> {
   return apiGet<MustChangePasswordSummary>(
     '/admin/students-must-change-password-summary',
