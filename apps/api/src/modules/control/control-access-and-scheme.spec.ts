@@ -216,6 +216,33 @@ describe('ControlAccessService', () => {
 });
 
 describe('GradingSchemeService', () => {
+  it('defaults every new component to whole marks while preserving saved fractional steps', async () => {
+    const stored = {
+      components: [{ key: 'midterm', max: 20, step: 0.5, enabled: true }],
+    };
+    const model = { findOne: jest.fn(() => chain(null)) };
+    const svc = new GradingSchemeService(
+      model as never,
+      {} as never,
+      {} as never,
+    );
+    const fresh = await svc.getScheme(
+      String(new Types.ObjectId()),
+      '2026-2027',
+      'first',
+    );
+    expect(fresh.components.map((c) => c.step)).toEqual([1, 1, 1]);
+    model.findOne.mockReturnValue(chain(stored));
+    const saved = await svc.getScheme(
+      String(new Types.ObjectId()),
+      '2026-2027',
+      'first',
+    );
+    expect(saved.components.find((c) => c.key === 'midterm')).toMatchObject({
+      max: 20,
+      step: 0.5,
+    });
+  });
   const courseId = new Types.ObjectId().toString();
   const actorId = new Types.ObjectId().toString();
 

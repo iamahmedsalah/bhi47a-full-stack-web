@@ -40,6 +40,21 @@ export class PasswordRequirementCodesQuery {
   limit = 100;
 }
 
+export class StudentPasswordRequirementDto {
+  @ApiProperty({ example: '20260001' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @Matches(/^\d{4,12}$/)
+  studentCode!: string;
+
+  @ApiProperty()
+  @IsBoolean()
+  @Type(() => Object)
+  enabled!: boolean;
+}
+
 export class CreateStudentDto {
   @ApiPropertyOptional({
     enum: ENROLLMENT_STATUS_VALUES,

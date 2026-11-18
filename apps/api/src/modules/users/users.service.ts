@@ -352,6 +352,25 @@ export class UsersService {
     };
   }
 
+  async setStudentPasswordRequirement(studentCode: string, enabled: boolean) {
+    const student = await this.userModel
+      .findOneAndUpdate(
+        { role: 'student', studentCode },
+        { $set: { mustChangePassword: enabled } },
+        { new: true },
+      )
+      .select('_id studentCode mustChangePassword')
+      .lean();
+    if (!student) {
+      throw new NotFoundException('Student not found / الطالب غير موجود');
+    }
+    invalidateRequestRead(`auth-user:${student._id.toString()}`);
+    return {
+      studentCode: student.studentCode,
+      enabled: student.mustChangePassword,
+    };
+  }
+
   async updateLastLogin(
     userId: string,
     meta?: {

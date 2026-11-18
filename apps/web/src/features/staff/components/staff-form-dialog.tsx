@@ -609,6 +609,7 @@ function StaffFormDialogState({
                     </legend>
                     <p className="text-xs text-muted-foreground">
                       {t("details.assignedCoursesDescription")}
+                      {' '}{isAr ? 'اختيار المقررات اختياري، ويمكن تعيين حتى 3 دكاترة لكل مقرر.' : 'Course selection is optional. Each course can have up to 3 doctors.'}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Input aria-label={isAr ? "البحث عن مقرر" : "Search courses"} placeholder={isAr ? "ابحث بالاسم أو الكود" : "Search by name or code"} value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} className="flex-1 rounded-squircle" />

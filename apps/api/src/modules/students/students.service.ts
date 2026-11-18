@@ -1161,6 +1161,13 @@ export class StudentsService {
     return this.usersService.toggleAllStudentsMustChangePassword(enabled);
   }
 
+  async setStudentPasswordRequirement(studentCode: string, enabled: boolean) {
+    return this.usersService.setStudentPasswordRequirement(
+      studentCode,
+      enabled,
+    );
+  }
+
   async getPortalSettings() {
     let settings = await this.systemSettingsModel.findOne();
     if (!settings) {

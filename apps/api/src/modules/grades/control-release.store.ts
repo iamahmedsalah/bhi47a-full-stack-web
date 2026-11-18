@@ -265,7 +265,7 @@ export class ControlReleaseStore {
       throw new ConflictException(
         'Approve all required component sheets before releasing the final result',
       );
-    const marks = await this.db
+    const allMarks = await this.db
       .collection<Mark>(this.names.grades)
       .find(
         { ...filter, examType: { $in: needed }, cleared: { $ne: true } },
@@ -274,10 +274,7 @@ export class ControlReleaseStore {
       .sort({ studentId: 1, examType: 1 })
       .batchSize(500)
       .toArray();
-    if (
-      !marks.length ||
-      marks.some((m) => m.controlApprovedRev !== (m.rev ?? 0))
-    )
+    if (allMarks.some((m) => m.controlApprovedRev !== (m.rev ?? 0)))
       throw new ConflictException('Unapproved release');
     if (sheet.component === 'final')
       await new ControlAttemptStore(this.connection).assertReviewed(
@@ -300,14 +297,40 @@ export class ControlReleaseStore {
       .batchSize(500)
       .toArray();
     const roster = new Set(registrations.map((r) => String(r.studentId)));
-    if (
-      !roster.size ||
-      marks.length !== roster.size * needed.length ||
-      marks.some((m) => !roster.has(String(m.studentId)))
-    )
+    const presentComponents = new Map<string, Set<string>>();
+    for (const mark of allMarks) {
+      const id = String(mark.studentId);
+      const keys = presentComponents.get(id) ?? new Set<string>();
+      if (keys.has(mark.examType))
+        throw new ConflictException('Duplicate component marks');
+      keys.add(mark.examType);
+      presentComponents.set(id, keys);
+    }
+    const deferredByComponent = new Map(
+      sheets.map((s) => [
+        s.component,
+        new Set(s.tuitionDeferredStudentIds ?? []),
+      ]),
+    );
+    const deferredStudents: string[] = [];
+    for (const id of roster) {
+      const missing = needed.filter(
+        (key) => !presentComponents.get(id)?.has(key),
+      );
+      if (!missing.length) continue;
+      if (missing.some((key) => !deferredByComponent.get(key)?.has(id)))
+        throw new ConflictException('RESULT_INCOMPLETE');
+      deferredStudents.push(id);
+    }
+    if (!roster.size || allMarks.some((m) => !roster.has(String(m.studentId))))
       throw new ConflictException(
         'Roster changed; reopen and review the sheet',
       );
+    const deferredIds = new Set(deferredStudents);
+    // Publish complete attempts only. Never fabricate a zero or partial final
+    // total for a student whose exam was deferred; keep their other marks intact.
+    const releasedRoster = [...roster].filter((id) => !deferredIds.has(id));
+    const marks = allMarks.filter((m) => !deferredIds.has(String(m.studentId)));
     // Legacy grades cannot be inferred to be exam components or whole-course totals.
     if (
       sheet.component === 'final' &&
@@ -333,7 +356,7 @@ export class ControlReleaseStore {
     }
     const results =
       sheet.component === 'final'
-        ? [...roster].sort().map((id) => ({
+        ? releasedRoster.sort().map((id) => ({
             studentId: new Types.ObjectId(id),
             result: evaluateOfficialResult(
               components,
@@ -359,6 +382,7 @@ export class ControlReleaseStore {
       scope,
       policy,
       schemeVersion: scheme?.version ?? 0,
+      deferredStudents: deferredStudents.sort(),
       marks: marks.map((m) => [
         String(m.studentId),
         m.examType,
@@ -384,7 +408,7 @@ export class ControlReleaseStore {
       policy: policy.rules,
       schemeVersion: scheme?.version ?? 0,
       digest,
-      count: roster.size,
+      count: releasedRoster.length,
       activeReleaseId: pointer?.active ? String(pointer.releaseId) : null,
     };
   }
@@ -447,7 +471,10 @@ export class ControlReleaseStore {
       };
       await this.releases.insertOne(release, { session });
     }
-    if (preview.activeReleaseId !== String(release._id)) {
+    if (
+      preview.activeReleaseId !== String(release._id) &&
+      release.marks.length
+    ) {
       const students = [
         ...new Set(release.marks.map((m) => String(m.studentId))),
       ];

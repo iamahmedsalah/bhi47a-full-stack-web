@@ -21,6 +21,7 @@ import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   COURSE_LEVEL_VALUES,
+  MAX_COURSE_DOCTORS,
   SEMESTER_VALUES,
   type CourseLevel,
   type Semester,
@@ -194,13 +195,15 @@ export class CreateCourseDto {
   doctorId?: string;
 
   @ApiPropertyOptional({
-    description: 'User IDs of assigned doctors (max 2 doctors)',
+    description: 'User IDs of assigned doctors (optional, max 3 doctors)',
     type: [String],
     example: ['507f1f77bcf86cd799439011'],
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(2, { message: 'لا يمكن تعيين أكثر من دكتورين للمقرر الدراسي' })
+  @ArrayMaxSize(MAX_COURSE_DOCTORS, {
+    message: 'لا يمكن تعيين أكثر من ثلاثة دكاترة للمقرر الدراسي',
+  })
   @IsString({ each: true })
   doctorIds?: string[];
 
@@ -375,7 +378,7 @@ export class UpdateCourseDto {
   doctorId?: string | null;
 
   @ApiPropertyOptional({
-    description: 'User IDs of assigned doctors (max 2 doctors)',
+    description: 'User IDs of assigned doctors (optional, max 3 doctors)',
     type: [String],
     example: ['507f1f77bcf86cd799439011'],
     nullable: true,
@@ -383,7 +386,9 @@ export class UpdateCourseDto {
   @IsOptional()
   @ValidateIf((_, val) => val !== null)
   @IsArray()
-  @ArrayMaxSize(2, { message: 'لا يمكن تعيين أكثر من دكتورين للمقرر الدراسي' })
+  @ArrayMaxSize(MAX_COURSE_DOCTORS, {
+    message: 'لا يمكن تعيين أكثر من ثلاثة دكاترة للمقرر الدراسي',
+  })
   @IsString({ each: true })
   doctorIds?: string[] | null;
 

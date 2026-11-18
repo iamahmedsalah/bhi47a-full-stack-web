@@ -422,3 +422,43 @@ pending-approval edits, independent approval and existing publishing gates. The
 separate IC/attempt integration suite did not pass: its 120-second index/setup
 hook timed out before its five test bodies ran. No timeout was increased.
 The new workflow is tested, but these results do not certify all remote CI stages.
+
+### 2026-11-18: tuition hold in the Control workbook
+
+The workbook reads only `userId`, `isBlocked` and `tuitionFeesStatus` from the
+student profiles using one roster-scoped query. The UI displays a bilingual hold
+label and a subtle theme-aware red background across every cell, including the
+sticky code cell. An unpaid student without an active hold is not labelled
+blocked. Clearing the hold is reflected on the next workbook fetch; missing
+tuition data is not presented as paid.
+
+All three single-sheet entry templates and the full workbook export contain a
+separate informational tuition column with pale red fill and Excel conditional
+formatting for held rows. Existing metadata columns stay in place and imports
+ignore the tuition column; it cannot change payment flags or exam status. Grade
+entry, approval and student visibility rules are unchanged.
+
+Passed: 55 workbook tests including a real XLSX round-trip for every component,
+one-query current-profile lookup, cleared holds and missing profiles; full
+workspace lint (3 tasks) and TypeScript (4 tasks); E2E fixture TypeScript; real
+bilingual workbook browser acceptance with 3,001 students. Final screenshots
+were visually reviewed for the complete highlighted row. A browser retry exposed
+an existing download/Escape race; the fixture now waits for the download button
+to leave its busy state before closing the dialog, without changing timeouts or
+assertions. An initial new test fixture was completed with its missing model
+methods before the final passing test run. Existing unrelated student/password
+changes in the workspace were preserved.
+
+Final production build passed all three tasks (one shared-build cache hit),
+including web compilation, TypeScript and static page generation. The root route
+artifact check passed. The final theme-aware browser run passed after the
+download-dialog synchronization fix. No commit, push, production data mutation
+or VPS deployment was performed for this change. The full API unit and MongoDB
+integration suites were not rerun for this tuition-display change; the 55
+workbook tests and browser acceptance are the behavioral evidence reported here.
+
+Local process limitation: after Turbo printed all three build tasks successful,
+its wrapper remained open and was stopped. A redundant late changed-file lint
+rerun also stalled and was stopped; it is not counted as another passing check.
+The earlier full lint, typecheck, 55 workbook tests and final browser run exited
+successfully. Only the verified verification process trees were stopped.

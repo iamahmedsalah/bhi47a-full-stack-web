@@ -214,6 +214,7 @@ export interface WorkbookEntry extends ControlEntry {
   quizzesMark: number | null;
 }
 export interface WorkbookRow extends ControlRosterRow {
+  tuition?: { isBlocked: boolean; status: "paid" | "unpaid" | "exempt" | null };
   components: Partial<Record<ControlComponentKey, WorkbookEntry>>;
   result: { total: number | null; totalMax: number; complete: boolean };
 }

@@ -5,7 +5,7 @@ import {
   type CourseCurriculum,
 } from '@student-portal/shared';
 import { CourseSchema } from '../schemas/course.schema';
-import { UpdateCourseDto } from './course.dto';
+import { CreateCourseDto, UpdateCourseDto } from './course.dto';
 
 describe('course edit curriculum round trip', () => {
   const pipe = new ValidationPipe({
@@ -22,6 +22,41 @@ describe('course edit curriculum round trip', () => {
     type: 'required',
   };
   const legacyPlacements = [{ ...placement, _id: '507f1f77bcf86cd799439012' }];
+
+  describe.each([CreateCourseDto, UpdateCourseDto])(
+    '%p doctor limits',
+    (metatype) => {
+      const course = {
+        name: 'Course',
+        nameAr: 'Course',
+        nameEn: 'Course',
+        code: 'TEST',
+        level: '1',
+        semester: 'first',
+      };
+      it.each([0, 1, 2, 3])('accepts %i doctors', async (count) => {
+        const doctorIds = Array.from({ length: count }, () =>
+          new mongoose.Types.ObjectId().toString(),
+        );
+        await expect(
+          pipe.transform({ ...course, doctorIds }, { ...metadata, metatype }),
+        ).resolves.toMatchObject({ doctorIds });
+      });
+      it('allows omitting staff assignments', async () => {
+        await expect(
+          pipe.transform(course, { ...metadata, metatype }),
+        ).resolves.toBeInstanceOf(metatype);
+      });
+      it('rejects a fourth doctor', async () => {
+        const doctorIds = Array.from({ length: 4 }, () =>
+          new mongoose.Types.ObjectId().toString(),
+        );
+        await expect(
+          pipe.transform({ ...course, doctorIds }, { ...metadata, metatype }),
+        ).rejects.toThrow(BadRequestException);
+      });
+    },
+  );
 
   it('reproduces the rejected legacy response payload', async () => {
     await expect(

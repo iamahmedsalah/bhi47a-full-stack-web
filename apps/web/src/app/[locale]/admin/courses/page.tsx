@@ -31,6 +31,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
 import {
   COURSE_LEVEL_VALUES,
+  MAX_COURSE_DOCTORS,
   COURSE_BOOK_MAX_BYTES,
   getCourseCurricula,
   serializeCourseCurricula,
@@ -339,7 +340,7 @@ function CourseFormDialog({
         syllabusFile: removeSyllabus ? null : syllabusFile,
         coverImageFile: removeCover ? null : coverImageFile,
         ...(!initialValues._id || doctorIds.join(',') !== getCourseStaffIds(initialValues).doctorIds.join(',')
-          ? { doctorId: doctorIds[0] || null, doctorIds: doctorIds.slice(0, 2) } : {}),
+          ? { doctorId: doctorIds[0] || null, doctorIds: doctorIds.slice(0, MAX_COURSE_DOCTORS) } : {}),
         ...(!initialValues._id || teachingAssistantIds.join(',') !== getCourseStaffIds(initialValues).teachingAssistantIds.join(',')
           ? { teachingAssistantIds } : {}),
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
@@ -426,31 +427,31 @@ function CourseFormDialog({
               <label className="text-xs font-semibold text-muted">{t('department')}</label>
               <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'شعبة عامة أو نظم معلومات الأعمال أو المحاسبة والمراجعة' : 'General Division, Business Information Systems, Accounting and Auditing'} />
             </div>
-            {/* Course Doctors Section (Up to 2 doctors) */}
+            {/* Optional course doctors */}
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-muted">
-                  {locale === 'ar' ? 'أساتذة المقرر (بحد أقصى دكتورين)' : 'Course Doctors (Max 2)'}
+                  {locale === 'ar' ? 'أساتذة المقرر (اختياري، بحد أقصى 3)' : 'Course Doctors (Optional, Max 3)'}
                 </label>
                 <span className="text-[11px] font-medium text-muted-foreground">
-                  {doctorIds.length}/2
+                  {doctorIds.length}/{MAX_COURSE_DOCTORS}
                 </span>
               </div>
               <div className="flex flex-col gap-2">
                 <Select
                   value=""
-                  disabled={doctorIds.length >= 2}
+                  disabled={doctorIds.length >= MAX_COURSE_DOCTORS}
                   onValueChange={(val) => {
-                    if (val && !doctorIds.includes(val) && doctorIds.length < 2) {
+                    if (val && !doctorIds.includes(val) && doctorIds.length < MAX_COURSE_DOCTORS) {
                       setDoctorIds((prev) => [...prev, val]);
                     }
                   }}
                 >
-                  <SelectTrigger className="bg-secondary/50 border-border" disabled={doctorIds.length >= 2}>
+                  <SelectTrigger className="bg-secondary/50 border-border" disabled={doctorIds.length >= MAX_COURSE_DOCTORS}>
                     <SelectValue
                       placeholder={
-                        doctorIds.length >= 2
-                          ? (locale === 'ar' ? 'تم اختيار دكتورين كحد أقصى للمقرر' : 'Maximum 2 doctors reached')
+                        doctorIds.length >= MAX_COURSE_DOCTORS
+                          ? (locale === 'ar' ? 'تم اختيار 3 دكاترة كحد أقصى للمقرر' : 'Maximum 3 doctors reached')
                           : (locale === 'ar' ? 'اختر أستاذاً لإضافته للمقرر...' : 'Select doctor to assign...')
                       }
                     />

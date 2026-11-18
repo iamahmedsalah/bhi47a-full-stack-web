@@ -33,6 +33,8 @@ let denySave = false, writes = 0, schemeVersion = 1, reviewEditor = false;
 const states = Object.fromEntries(Object.keys(ids).map(k=>[k,{revision:0,workflowState:'DRAFT'}]));
 const rows = Array.from({length:3001},(_,i)=>({studentId:(i+1).toString(16).padStart(24,'0'), studentCode:String(260001+i), name:`Synthetic Student ${i+1}`,nameAr:`طالب تجريبي ${i+1}`,notRegistered:false,components:{},result:{total:null,totalMax:100,complete:false}}));
 const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT'||(states[key].workflowState==='IN_REVIEW'&&reviewEditor),canEditReview:reviewEditor,canApprove:true,canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
+rows[0].tuition={isBlocked:true,status:'unpaid'};
+rows[1].tuition={isBlocked:false,status:'paid'};
 let workbookReads=0;
 const server = http.createServer(async (req,res)=>{
   try {
@@ -66,6 +68,11 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
+  const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
+  await heldRow.getByText('Blocked — unpaid tuition',{exact:true}).waitFor();
+  assert.equal(await heldRow.getAttribute('data-tuition-blocked'),'true');
+  assert.equal(await page.locator('tbody tr').filter({hasText:'260002'}).getAttribute('data-tuition-blocked'),null);
+  assert.ok(await heldRow.locator('td').evaluateAll(cells=>cells.every(cell=>getComputedStyle(cell).backgroundColor!=='rgba(0, 0, 0, 0)')));
   assert.equal(await page.getByRole('button',{name:'Export missing marks',exact:true}).count(),0);
   await page.getByRole('button',{name:'Templates',exact:true}).click();
   const templates=page.getByRole('dialog');
@@ -73,7 +80,9 @@ try {
   await page.getByRole('option',{name:'final',exact:true}).click();
   const templateDownload=page.waitForEvent('download');await templates.getByRole('button',{name:'Download Excel',exact:true}).click();await templateDownload;
   assert.equal(downloadRequests.at(-1).component,'final');assert.equal(downloadRequests.at(-1).mode,'workbook');
+  await templates.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
   await page.keyboard.press('Escape');
+  await templates.waitFor({state:'hidden'});
   await page.getByRole('button',{name:'Control reports',exact:true}).click();
   const reports=page.getByRole('dialog');
   await reports.getByRole('button',{name:'Report type',exact:true}).click();
@@ -81,6 +90,7 @@ try {
   await reports.getByRole('button',{name:'Level',exact:true}).click();await page.getByRole('option',{name:'Level 2',exact:true}).click();
   const reportDownload=page.waitForEvent('download');await reports.getByRole('button',{name:'Download Excel',exact:true}).click();await reportDownload;
   assert.equal(downloadRequests.at(-1).type,'round-table');assert.equal(downloadRequests.at(-1).level,'2');assert.equal(downloadRequests.at(-1).semester,'first');
+  await reports.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.getByRole('columnheader').count(),11);
   const optionalReason=page.getByRole('textbox',{name:'Reason (optional for exam statuses and excuses)',exact:true});
@@ -130,7 +140,7 @@ try {
   await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});
   await page.screenshot({path:path.join(output,'english-workbook.png'),fullPage:true});
   await page.goto(`${base}/ar/admin/control/${ids.midterm}`);await page.getByRole('textbox',{name:'260001 الميدتيرم',exact:true}).waitFor();
-  assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
+  assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب — غير مسدد المصروفات',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
   await page.getByRole('button',{name:'نماذج',exact:true}).click();
   await page.getByRole('heading',{name:'نماذج الرصد',exact:true}).waitFor();
@@ -149,11 +159,15 @@ try {
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('');
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
   for(const row of rows)if(!row.components.midterm)row.components.midterm={studentId:row.studentId,score:10,status:'present',rev:1,isPublished:false};
+  rows[1].tuition={isBlocked:true,status:'unpaid'};
+  delete rows[1].components.midterm;
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const freshMark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});
   await freshMark.fill('14.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();
   await page.getByRole('button',{name:'Submit for review',exact:true}).click();
   const workflowDialog=page.getByRole('dialog');
+  await workflowDialog.getByText('Deferred for a tuition hold: 1.',{exact:false}).waitFor();
+  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'a financially deferred blank must not block submission');
   await workflowDialog.getByRole('textbox').fill('Synthetic autosave and review acceptance');
   const reviewResponse=page.waitForResponse(response=>response.url().endsWith('/review')&&response.request().method()==='POST');
   await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).click();

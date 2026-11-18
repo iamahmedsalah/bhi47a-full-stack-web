@@ -227,6 +227,51 @@ describe('Staff management security contracts', () => {
     expect(errors.some((error) => error.property === 'password')).toBe(true);
   });
 
+  it.each([{ courseIds: undefined }, { courseIds: [] }])(
+    'creates an account without course assignments: %j',
+    async ({ courseIds }) => {
+      const record = {
+        _id: new Types.ObjectId(),
+        role: 'staff',
+        staffType: 'doctor',
+      };
+      const query = {
+        select: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(null),
+      };
+      const users = {
+        findOne: jest.fn().mockReturnValue(query),
+        create: jest.fn().mockResolvedValue(record),
+        db: { transaction: jest.fn() },
+      };
+      const assignments = { sync: jest.fn() };
+      const service = new StaffManagementService(
+        users as never,
+        { create: jest.fn().mockResolvedValue({}) } as never,
+        { hash: jest.fn().mockResolvedValue('hashed') } as never,
+        assignments as never,
+      );
+      jest.spyOn(service, 'getById').mockResolvedValue(record as never);
+      await expect(
+        service.create(
+          {
+            name: 'Doctor',
+            email: 'doctor@example.edu',
+            password: 'TemporaryPassword123!',
+            staffType: 'doctor',
+            courseIds,
+          },
+          new Types.ObjectId().toString(),
+          'admin',
+        ),
+      ).resolves.toBe(record);
+      expect(users.create).toHaveBeenCalled();
+      expect(users.db.transaction).not.toHaveBeenCalled();
+      expect(assignments.sync).not.toHaveBeenCalled();
+    },
+  );
+
   it('prevents non-admin actors from creating admin accounts', async () => {
     const users = {
       exists: jest.fn().mockResolvedValue(false),

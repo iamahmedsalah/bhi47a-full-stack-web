@@ -34,7 +34,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     nameAr: 'أعمال السنة',
     nameEn: 'Coursework',
     max: 20,
-    step: 0.5,
+    step: 1,
     enabled: true,
   },
   {
@@ -42,7 +42,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     nameAr: 'ميدتيرم',
     nameEn: 'Midterm',
     max: 30,
-    step: 0.5,
+    step: 1,
     enabled: true,
   },
   {
@@ -50,7 +50,7 @@ export const DEFAULT_CONTROL_COMPONENTS: readonly ControlSchemeComponent[] = [
     nameAr: 'النهائي',
     nameEn: 'Final',
     max: 50,
-    step: 0.5,
+    step: 1,
     enabled: true,
   },
 ];

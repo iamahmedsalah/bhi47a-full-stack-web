@@ -37,6 +37,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     frozenAt: null,
     components: DEFAULT_CONTROL_COMPONENTS.map((c) => ({
       ...c,
+      step: 0.5,
       max: c.key === 'midterm' ? 20 : c.key === 'final' ? 60 : c.max,
     })),
     courseworkAttendanceMax: 5,
@@ -55,6 +56,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     locked: false,
   };
   const doc = {
+    examType: component,
     _id: new Types.ObjectId(),
     studentId: new Types.ObjectId(studentId),
     grade: 15,
@@ -73,6 +75,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
       collection: () => ({ findOne: () => Promise.resolve(null) }),
     },
     findById: () => chain(sheet),
+    find: () => chain([sheet]),
     updateOne: jest.fn(
       (_filter: unknown, update: { $set: Partial<typeof sheet> }) => {
         Object.assign(sheet, update.$set);
@@ -93,6 +96,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     getCapabilities: () => ({ canManageStates: false }),
   };
   const sheetService = {
+    listEntries: jest.fn(),
     getSheet: jest.fn(() =>
       Promise.resolve({
         sheet: { id: sheetId, ...sheet },
@@ -114,6 +118,17 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     find: () => chain([doc]),
     updateMany: jest.fn().mockResolvedValue({}),
   };
+  const profiles = {
+    find: jest.fn(() =>
+      chain(
+        [] as Array<{
+          userId: Types.ObjectId;
+          isBlocked: boolean;
+          tuitionFeesStatus: string;
+        }>,
+      ),
+    ),
+  };
   const service = new ControlWorkbookService(
     grades as never,
     sheets as never,
@@ -124,6 +139,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     mutations as never,
     { getScheme: () => Promise.resolve(scheme), freeze: jest.fn() } as never,
     { approve: jest.fn().mockResolvedValue(undefined) } as never,
+    profiles as never,
   );
   const rows = [
     {
@@ -150,6 +166,9 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     expectedRev: 0,
   };
   return {
+    grades,
+    profiles,
+    sheetService,
     service,
     user,
     row,
@@ -166,6 +185,92 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
 }
 
 describe('Control workbook import and review', () => {
+  it('reads current tuition flags in one scoped query without changing exam marks', async () => {
+    const ctx = build();
+    jest.restoreAllMocks();
+    ctx.sheetService.listEntries.mockResolvedValue({ entries: ctx.rows });
+    ctx.profiles.find.mockReturnValue(
+      chain([
+        {
+          userId: new Types.ObjectId(ctx.rows[0].studentId),
+          isBlocked: true,
+          tuitionFeesStatus: 'unpaid',
+        },
+      ]),
+    );
+    const result = await ctx.service.workbook(ctx.user, ctx.sheetId);
+    expect(result.rows[0].tuition).toEqual({
+      isBlocked: true,
+      status: 'unpaid',
+    });
+    expect(result.rows[0].components.midterm).toMatchObject({
+      score: 15,
+      status: 'present',
+    });
+    expect(ctx.profiles.find).toHaveBeenCalledTimes(1);
+    expect(ctx.profiles.find).toHaveBeenCalledWith({
+      userId: { $in: [new Types.ObjectId(ctx.rows[0].studentId)] },
+    });
+    ctx.profiles.find.mockReturnValue(
+      chain([
+        {
+          userId: new Types.ObjectId(ctx.rows[0].studentId),
+          isBlocked: false,
+          tuitionFeesStatus: 'paid',
+        },
+      ]),
+    );
+    expect(
+      (await ctx.service.workbook(ctx.user, ctx.sheetId)).rows[0].tuition,
+    ).toEqual({ isBlocked: false, status: 'paid' });
+    ctx.profiles.find.mockReturnValue(chain([]));
+    expect(
+      (await ctx.service.workbook(ctx.user, ctx.sheetId)).rows[0].tuition,
+    ).toEqual({ isBlocked: false, status: null });
+  });
+  it.each(['midterm', 'coursework', 'final'] as const)(
+    'highlights held %s Excel rows and keeps tuition informational on import',
+    async (component) => {
+      const ctx = build(component);
+      Object.assign(ctx.rows[0], {
+        tuition: { isBlocked: true, status: 'unpaid' },
+      });
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.load(
+        await ctx.service.template(ctx.user, ctx.sheetId, component),
+      );
+      const page = book.worksheets[0];
+      expect(page.getCell('O2').text).toContain('محجوب');
+      for (const col of [1, 2, 3, 4, 8, 15])
+        expect(page.getCell(2, col).fill).toMatchObject({
+          fgColor: { argb: 'FFFDE9E7' },
+        });
+      expect(page.conditionalFormattings[0].ref).toBe('A2:O2');
+      page.getCell('C2').value = component === 'coursework' ? 17 : 18;
+      page.getCell('D2').value = 'حاضر';
+      if (component === 'coursework') {
+        page.getCell('E2').value = 4;
+        page.getCell('F2').value = 13;
+      }
+      page.getCell('O2').value = 'مسدد / Paid';
+      const result = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.changes[0].status).toBe('present');
+      expect(result.changes[0]).not.toHaveProperty('tuition');
+      const exported = new ExcelJS.Workbook();
+      await exported.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+      expect(exported.getWorksheet('Marks')!.getCell('O2').text).toContain(
+        'محجوب',
+      );
+      expect(
+        exported.getWorksheet('CourseContext')!.getCell('I2').text,
+      ).toContain('محجوب');
+    },
+  );
   it.each(['coursework', 'midterm', 'final'] as const)(
     'round trips the single-sheet %s entry template without extra tabs',
     async (component) => {
@@ -687,6 +792,117 @@ describe('Control workbook import and review', () => {
       response: { code: 'CONTROL_IMPORT_EMPTY' },
     });
     expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
+  });
+  it.each(['midterm', 'final'] as const)(
+    'defers a held blank %s through submission, review and approval without inserting a grade',
+    async (key) => {
+      const ctx = build(key);
+      jest.spyOn(ctx.grades, 'find').mockReturnValue(chain([]));
+      ctx.profiles.find.mockReturnValue(
+        chain([
+          {
+            userId: ctx.doc.studentId,
+            isBlocked: true,
+            tuitionFeesStatus: 'unpaid',
+          },
+        ]),
+      );
+      for (const [index, action] of (
+        ['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'] as const
+      ).entries()) {
+        await ctx.service.review(ctx.user, ctx.sheetId, {
+          action,
+          expectedRevision: index,
+        });
+      }
+      expect(ctx.sheet.workflowState).toBe('APPROVED');
+      expect(ctx.sheet).toMatchObject({
+        tuitionDeferredStudentIds: [String(ctx.doc.studentId)],
+      });
+      expect(ctx.grades.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: [] } },
+        expect.any(Array),
+        expect.any(Object),
+      );
+      expect(ctx.audit.create).toHaveBeenLastCalledWith(
+        [
+          expect.objectContaining({
+            newValue: expect.objectContaining({
+              tuitionDeferredStudentIds: [String(ctx.doc.studentId)],
+            }),
+          }),
+        ],
+        expect.any(Object),
+      );
+    },
+  );
+  it.each(['midterm', 'final', 'coursework'] as const)(
+    'still rejects missing %s without an eligible financial deferral',
+    async (key) => {
+      const ctx = build(key);
+      jest.spyOn(ctx.grades, 'find').mockReturnValue(chain([]));
+      // Coursework is required even when the student has a financial hold.
+      if (key === 'coursework')
+        ctx.profiles.find.mockReturnValue(
+          chain([
+            {
+              userId: ctx.doc.studentId,
+              isBlocked: true,
+              tuitionFeesStatus: 'unpaid',
+            },
+          ]),
+        );
+      await expect(
+        ctx.service.review(ctx.user, ctx.sheetId, {
+          action: 'SUBMIT',
+          expectedRevision: 0,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'RESULT_INCOMPLETE', details: { missingCount: 1 } },
+      });
+      expect(ctx.sheet.workflowState).toBe('DRAFT');
+    },
+  );
+  it('rechecks a lifted hold before approval instead of treating the blank as zero', async () => {
+    const ctx = build();
+    jest.spyOn(ctx.grades, 'find').mockReturnValue(chain([]));
+    ctx.profiles.find.mockReturnValue(
+      chain([
+        {
+          userId: ctx.doc.studentId,
+          isBlocked: true,
+          tuitionFeesStatus: 'unpaid',
+        },
+      ]),
+    );
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT',
+      expectedRevision: 0,
+    });
+    await ctx.service.review(ctx.user, ctx.sheetId, {
+      action: 'SUBMIT_APPROVAL',
+      expectedRevision: 1,
+    });
+    ctx.profiles.find.mockReturnValue(chain([]));
+    await expect(
+      ctx.service.review(ctx.user, ctx.sheetId, {
+        action: 'APPROVE',
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject({ response: { code: 'RESULT_INCOMPLETE' } });
+    expect(ctx.sheet.workflowState).toBe('PENDING_APPROVAL');
+  });
+  it('does not waive invalid entered marks because a student is financially blocked', async () => {
+    const ctx = build();
+    ctx.doc.grade = 21;
+    await expect(
+      ctx.service.review(ctx.user, ctx.sheetId, {
+        action: 'SUBMIT',
+        expectedRevision: 0,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: 'RESULT_INCOMPLETE', details: { invalidCount: 1 } },
+    });
   });
   it('submits an immutable digest and prevents staff approving their own sheet', async () => {
     const ctx = build();

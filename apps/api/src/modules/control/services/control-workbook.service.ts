@@ -23,6 +23,10 @@ import {
   validateMark,
 } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
+import {
+  StudentProfile,
+  type StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
 import { Grade, type GradeDocument } from '../../grades/schemas/grade.schema';
 import {
   ControlSheet,
@@ -97,6 +101,8 @@ export class ControlWorkbookService {
     private readonly mutations: ControlGradesService,
     private readonly schemes: GradingSchemeService,
     private readonly attempts: ControlAttemptsService,
+    @InjectModel(StudentProfile.name)
+    private readonly profiles: Model<StudentProfileDocument>,
   ) {}
 
   async workbook(user: AuthenticatedUser, sheetId: string) {
@@ -134,6 +140,23 @@ export class ControlWorkbookService {
         .lean(),
     ]);
     const byStudent = new Map<string, typeof docs>();
+    const profiles = await this.profiles
+      .find({
+        userId: {
+          $in: roster.entries.map((row) => new Types.ObjectId(row.studentId)),
+        },
+      })
+      .select('userId isBlocked tuitionFeesStatus')
+      .lean();
+    const tuitionByStudent = new Map(
+      profiles.map((profile) => [
+        String(profile.userId),
+        {
+          isBlocked: profile.isBlocked === true,
+          status: profile.tuitionFeesStatus ?? null,
+        },
+      ]),
+    );
     for (const doc of docs) {
       const id = String(doc.studentId);
       byStudent.set(id, [...(byStudent.get(id) ?? []), doc]);
@@ -175,7 +198,15 @@ export class ControlWorkbookService {
           scheme.components.map((c) => ({ ...c, enabled: true })),
           components,
         );
-        return { ...row, components, result };
+        return {
+          ...row,
+          components,
+          result,
+          tuition: tuitionByStudent.get(row.studentId) ?? {
+            isBlocked: false,
+            status: null,
+          },
+        };
       }),
     };
   }
@@ -287,7 +318,67 @@ export class ControlWorkbookService {
           fgColor: { argb: 'FFE6F4F1' },
         };
     });
+    this.annotateTuition(page, rows, 15);
     return book.xlsx.writeBuffer();
+  }
+
+  /** Informational only: never replace an exam status or change import metadata. */
+  private annotateTuition(
+    page: ExcelJS.Worksheet,
+    rows: Array<{
+      studentCode: string;
+      tuition?: { isBlocked: boolean; status: string | null };
+    }>,
+    column: number,
+  ) {
+    const byCode = new Map(rows.map((row) => [row.studentCode, row.tuition]));
+    const letter = page.getColumn(column).letter;
+    page.getCell(1, column).value = 'حالة المصروفات والحجب / Tuition & hold';
+    page.getCell(1, column).style = { ...page.getCell('B1').style };
+    page.getColumn(column).width = 34;
+    page.getColumn(column).hidden = false;
+    page.eachRow((row, index) => {
+      if (index === 1) return;
+      const tuition = byCode.get(row.getCell(1).text);
+      row.getCell(column).value = tuition?.isBlocked
+        ? tuition.status === 'unpaid'
+          ? 'محجوب — غير مسدد / Blocked — unpaid'
+          : 'محجوب / Blocked'
+        : tuition?.status === 'paid'
+          ? 'مسدد / Paid'
+          : tuition?.status === 'exempt'
+            ? 'معفى / Exempt'
+            : tuition?.status === 'unpaid'
+              ? 'غير مسدد / Unpaid'
+              : 'غير متاح / Unavailable';
+      if (tuition?.isBlocked) {
+        for (let cell = 1; cell <= column; cell++) {
+          row.getCell(cell).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFDE9E7' },
+          };
+        }
+      }
+    });
+    if (page.rowCount > 1)
+      page.addConditionalFormatting({
+        ref: `A2:${letter}${page.rowCount}`,
+        rules: [
+          {
+            type: 'expression',
+            priority: 1,
+            formulae: [`LEFT($${letter}2,5)="محجوب"`],
+            style: {
+              fill: {
+                type: 'pattern',
+                pattern: 'solid',
+                bgColor: { argb: 'FFFDE9E7' },
+              },
+            },
+          },
+        ],
+      });
   }
 
   async review(user: AuthenticatedUser, sheetId: string, dto: ReviewSheetDto) {
@@ -377,11 +468,33 @@ export class ControlWorkbookService {
         const component = scheme.components.find(
           (c) => c.key === sheet.component,
         )!;
+        const enteredIds = new Set(docs.map((d) => String(d.studentId)));
+        const missingIds = [...roster].filter((id) => !enteredIds.has(id));
+        // A financial hold is not an exam status or a zero mark. Only missing
+        // exam entries may be deferred; existing marks still need validation.
+        const heldProfiles =
+          sheet.component !== 'coursework' && missingIds.length
+            ? await this.profiles
+                .find({
+                  userId: {
+                    $in: missingIds.map((id) => new Types.ObjectId(id)),
+                  },
+                  isBlocked: true,
+                })
+                .session(session)
+                .select('userId')
+                .lean()
+            : [];
+        const tuitionDeferredStudentIds = heldProfiles
+          .map((profile) => String(profile.userId))
+          .sort();
+        const deferredIds = new Set(tuitionDeferredStudentIds);
         const digest = createHash('sha256')
           .update(
             JSON.stringify({
               roster: [...roster].sort(),
               scheme,
+              tuitionDeferredStudentIds,
               marks: docs.map((d) => [
                 String(d.studentId),
                 d.grade,
@@ -403,11 +516,13 @@ export class ControlWorkbookService {
               ((d.status === 'present' || d.status === 'withheld') &&
                 Boolean(validateMark(d.grade, component))),
           );
-          const missingCount = Math.max(0, roster.size - rosterDocs.length);
+          const missingCount = missingIds.filter(
+            (id) => !deferredIds.has(id),
+          ).length;
           if (
             !roster.size ||
-            docs.length !== roster.size ||
-            rosterDocs.length !== roster.size ||
+            docs.length !== rosterDocs.length ||
+            missingCount > 0 ||
             invalidRosterDocs.length > 0
           )
             throw new ConflictException({
@@ -417,6 +532,7 @@ export class ControlWorkbookService {
                 rosterSize: roster.size,
                 enteredCount: rosterDocs.length,
                 missingCount,
+                deferredCount: deferredIds.size,
                 invalidCount: invalidRosterDocs.length,
               },
             });
@@ -506,6 +622,7 @@ export class ControlWorkbookService {
             $set: {
               workflowState: next,
               reviewReason: dto.reason,
+              tuitionDeferredStudentIds,
               ...(['SUBMIT', 'RETURN', 'REOPEN'].includes(dto.action)
                 ? { reviewSubmission: null }
                 : {}),
@@ -554,7 +671,11 @@ export class ControlWorkbookService {
               source: 'GRID',
               actorId: new Types.ObjectId(user._id),
               oldValue: { workflowState: state },
-              newValue: { workflowState: next, digest },
+              newValue: {
+                workflowState: next,
+                digest,
+                tuitionDeferredStudentIds,
+              },
               reason: dto.reason,
             },
           ],
@@ -743,6 +864,8 @@ export class ControlWorkbookService {
       }
     });
 
+    this.annotateTuition(page, rows, 15);
+    this.annotateTuition(context, rows, 9);
     const instructions = book.addWorksheet('إرشادات الرصد');
     instructions.views = [{ rightToLeft: true }];
     const courseLabel = [
@@ -786,8 +909,8 @@ export class ControlWorkbookService {
       ],
       [
         'الدرجة العظمى والخطوة (Max & Step)',
-        `الدرجة العظمى لهذا المكوّن: ${details.rules?.max ?? 20} درجة — خطوة الرصد المسموح بها: ${details.rules?.step ?? 0.5}`,
-        `Max mark: ${details.rules?.max ?? 20} — Allowed step increment: ${details.rules?.step ?? 0.5}`,
+        `الدرجة العظمى لهذا المكوّن: ${details.rules?.max ?? 20} درجة — خطوة الرصد المسموح بها: ${details.rules?.step ?? 1}`,
+        `Max mark: ${details.rules?.max ?? 20} — Allowed step increment: ${details.rules?.step ?? 1}`,
       ],
       [
         '1. كود الطالب (studentCode)',

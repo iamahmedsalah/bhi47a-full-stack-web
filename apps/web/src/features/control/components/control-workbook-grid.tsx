@@ -258,8 +258,20 @@ export function ControlWorkbookGrid({
     const entered = registeredRows.filter((r) =>
       Boolean(r.components[key]?.status),
     ).length;
-    const missing = Math.max(0, total - entered);
-    return { total, entered, missing, ready: total > 0 && missing === 0 };
+    const deferred =
+      key === "coursework"
+        ? 0
+        : registeredRows.filter(
+            (r) => r.tuition?.isBlocked && !r.components[key]?.status,
+          ).length;
+    const missing = Math.max(0, total - entered - deferred);
+    return {
+      total,
+      entered,
+      missing,
+      deferred,
+      ready: total > 0 && missing === 0,
+    };
   }, [rows, key]);
   const sortedRows = useMemo(
     () =>
@@ -1429,7 +1441,16 @@ export function ControlWorkbookGrid({
           </thead>
           <tbody>
             {visible.map((row, index) => (
-              <tr key={row.studentId} className="border-t hover:bg-muted/30">
+              <tr
+                key={row.studentId}
+                data-tuition-blocked={row.tuition?.isBlocked || undefined}
+                className={cn(
+                  "border-t",
+                  row.tuition?.isBlocked
+                    ? "[&>td]:bg-[color-mix(in_srgb,var(--card)_92%,#f43f5e_8%)] hover:[&>td]:bg-[color-mix(in_srgb,var(--card)_88%,#f43f5e_12%)]"
+                    : "hover:bg-muted/30",
+                )}
+              >
                 <td className="p-2 text-center">
                   <Checkbox
                     aria-label={`${t("select")} ${row.studentCode}`}
@@ -1443,11 +1464,26 @@ export function ControlWorkbookGrid({
                     }
                   />
                 </td>
-                <td className="sticky start-0 z-10 bg-card p-3 font-mono">
+                <td
+                  className={cn(
+                    "sticky start-0 z-10 p-3 font-mono",
+                    !row.tuition?.isBlocked && "bg-card",
+                  )}
+                >
                   <bdi dir="ltr">{row.studentCode}</bdi>
                 </td>
                 <td className="p-3">
                   {rtl ? row.nameAr || row.name : row.name}
+                  {row.tuition?.isBlocked && (
+                    <span className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-400">
+                      <Lock className="size-3 shrink-0" aria-hidden="true" />
+                      {t(
+                        row.tuition.status === "unpaid"
+                          ? "tuitionBlockedUnpaid"
+                          : "tuitionBlocked",
+                      )}
+                    </span>
+                  )}
                   {row.notRegistered && (
                     <span className="block text-amber-500 text-xs">
                       {t("unregistered")}
@@ -1714,6 +1750,11 @@ export function ControlWorkbookGrid({
                       missing: readiness.missing,
                     })}
               </p>
+              {readiness.deferred > 0 && (
+                <p className="leading-relaxed">
+                  {t("readinessTuitionDeferred", { count: readiness.deferred })}
+                </p>
+              )}
               {!readiness.ready && readiness.missing > 0 && (
                 <div>
                   <Button

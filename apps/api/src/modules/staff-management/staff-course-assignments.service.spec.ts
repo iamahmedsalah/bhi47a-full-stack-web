@@ -128,9 +128,42 @@ describe('staff course assignments', () => {
     ).rejects.toThrow('do not exist');
     expect(courses.updateOne).not.toHaveBeenCalled();
   });
-  it('rejects nonteaching assignment and a third doctor', async () => {
+  it.each([0, 1, 2])(
+    'allows a doctor to join a course with %i existing doctors',
+    async (count) => {
+      const existing = Array.from(
+        { length: count },
+        () => new Types.ObjectId(),
+      );
+      const { service, courses } = setup([
+        { _id: courseId, doctorIds: existing },
+      ]);
+      await service.sync(staff, [String(courseId)], session);
+      expect(courses.updateOne.mock.calls[0][1].$set.doctorIds).toEqual([
+        ...existing,
+        staffId,
+      ]);
+    },
+  );
+  it('allows refreshing an existing assignment on a course with three doctors', async () => {
+    const existing = [colleagueId, new Types.ObjectId(), staffId];
     const { service, courses } = setup([
-      { _id: courseId, doctorIds: [colleagueId, new Types.ObjectId()] },
+      { _id: courseId, doctorIds: existing },
+    ]);
+    await service.sync(staff, [String(courseId)], session);
+    expect(courses.updateOne.mock.calls[0][1].$set.doctorIds).toEqual(existing);
+  });
+  it('allows an empty course selection for a new staff member', async () => {
+    const { service, courses } = setup([]);
+    await expect(service.sync(staff, [], session)).resolves.toBeUndefined();
+    expect(courses.updateOne).not.toHaveBeenCalled();
+  });
+  it('rejects nonteaching assignment and a fourth doctor', async () => {
+    const { service, courses } = setup([
+      {
+        _id: courseId,
+        doctorIds: [colleagueId, new Types.ObjectId(), new Types.ObjectId()],
+      },
     ]);
     await expect(
       service.sync(
@@ -141,7 +174,7 @@ describe('staff course assignments', () => {
     ).rejects.toThrow('teaching staff');
     await expect(
       service.sync(staff, [String(courseId)], session),
-    ).rejects.toThrow('at most two');
+    ).rejects.toThrow('at most 3');
     expect(courses.updateOne).not.toHaveBeenCalled();
   });
 });

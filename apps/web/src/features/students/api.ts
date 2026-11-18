@@ -306,6 +306,13 @@ export interface MustChangePasswordSummary {
   anyEnabled: boolean;
 }
 
+export function setStudentPasswordRequirement(studentCode: string, enabled: boolean) {
+  return apiPost<{ studentCode: string; enabled: boolean }>(
+    '/admin/students-password-requirement',
+    { studentCode, enabled },
+  );
+}
+
 export function getMustChangePasswordCodes(page = 1) {
   return apiGet<{ items: string[]; total: number; totalPages: number }>('/admin/students-must-change-password-codes', { params: { page, limit: 100 } });
 }

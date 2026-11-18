@@ -116,6 +116,54 @@ describe('CoursesService Unit Tests', () => {
     });
   });
 
+  describe('optional doctor assignments', () => {
+    it.each([0, 1, 2, 3])(
+      'persists all %i doctors when creating and updating a course',
+      async (count) => {
+        const doctorIds = Array.from(
+          { length: count },
+          () => new Types.ObjectId(),
+        );
+        const users = doctorIds.map((_id) => ({ _id, name: 'Doctor' }));
+        mockCourseModel.findOne.mockResolvedValue(null);
+        mockUserModel.find = jest.fn().mockReturnValue({
+          select: jest
+            .fn()
+            .mockReturnValue({ lean: jest.fn().mockResolvedValue(users) }),
+        });
+        mockCourseModel.mockImplementation(function (this: any, data: any) {
+          Object.assign(this, data);
+          this.save = jest.fn().mockResolvedValue(data);
+        });
+        const dto = {
+          name: 'Course',
+          nameAr: 'Course',
+          nameEn: 'Course',
+          code: 'TEST',
+          level: '1' as const,
+          semester: 'first' as const,
+          doctorIds: doctorIds.map(String),
+        };
+        await expect(service.create(dto)).resolves.toMatchObject({ doctorIds });
+        jest
+          .spyOn(service, 'findOne')
+          .mockResolvedValue({ code: 'TEST' } as never);
+        mockCourseModel.findByIdAndUpdate = jest
+          .fn()
+          .mockResolvedValue({ _id: courseId });
+        await service.update(courseId, { doctorIds: doctorIds.map(String) });
+        expect(mockCourseModel.findByIdAndUpdate).toHaveBeenCalledWith(
+          courseId,
+          expect.objectContaining({
+            $set: expect.objectContaining({ doctorIds }),
+          }),
+          { new: true },
+        );
+        jest.restoreAllMocks();
+      },
+    );
+  });
+
   describe('findDoctorCourses()', () => {
     it('returns active courses assigned to the specified doctor ID', async () => {
       const assignedCourses = [

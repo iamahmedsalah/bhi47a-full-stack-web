@@ -15,6 +15,7 @@ import { StudentsService } from './students.service';
 import {
   CreateStudentDto,
   PasswordRequirementCodesQuery,
+  StudentPasswordRequirementDto,
   UpdateStudentDto,
   SearchStudentQuery,
   ResetPasswordDto,
@@ -174,6 +175,19 @@ export class StudentsController {
     @Body() dto: ToggleAllMustChangePasswordDto,
   ) {
     return this.studentsService.toggleAllMustChangePassword(dto.enabled);
+  }
+
+  @Post('admin/students-password-requirement')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.STUDENTS_RESET_PASSWORD)
+  @ApiOperation({ summary: 'Set password change requirement for one student' })
+  async setStudentPasswordRequirement(
+    @Body() dto: StudentPasswordRequirementDto,
+  ) {
+    return this.studentsService.setStudentPasswordRequirement(
+      dto.studentCode,
+      dto.enabled,
+    );
   }
 
   @Post('admin/students/transfer-department')

@@ -1,5 +1,20 @@
 # Control permissions and student result visibility — 13 November 2026
 
+## Tuition hold indicator in the workbook
+
+The Control workbook reads the current student profile's tuition status in one
+batched query for the roster. A blocked student has a light red whole-row
+highlight and a localized hold label; unpaid blocked students explicitly show
+«محجوب — غير مسدد المصروفات». Removing the hold in Tuition removes the indicator
+on the next workbook refresh. An unpaid student without an active hold is not
+marked blocked. Missing profile/payment data is treated as unavailable, not paid.
+
+Entry templates and exported workbooks include a separate informational tuition
+column and pale red row fills plus conditional formatting. Editing that column
+in Excel has no effect on import. The hold does not change exam attendance,
+marks, approval, or entry permissions, and is never substituted for the exam
+status «محجوبة». Existing student result-hiding rules continue to apply.
+
 ## Independent permissions
 
 Admins retain full access. Staff need explicit permissions; changing a staff member's permissions takes effect on their next authenticated API request.

@@ -264,7 +264,11 @@ export default function StudentResultsPage() {
     })();
   }
 
-  if (resultsQuery.isLoading || statusQuery.isLoading || profileQuery.isLoading) {
+  if (
+    resultsQuery.isLoading ||
+    statusQuery.isLoading ||
+    profileQuery.isLoading
+  ) {
     return <LoadingState title={tCommon("loading")} />;
   }
 
@@ -679,116 +683,125 @@ export default function StudentResultsPage() {
             : "عمود النهائي متاح. تظهر درجاته بعد نشر الإدارة لنسخة نهائي معتمدة. يشمل المجموع الرسمي أعمال السنة، مع بقاء عمودها مخفيًا."}
         </p>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
-        {/* Total Cumulative Letter Grade Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/40 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? "Cumulative Grade" : "التقدير العام التراكمي"}
-              </span>
-              <Award className="h-4.5 w-4.5 text-amber-400" />
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-primary">
-                {officialGpaScale.letter}
-              </span>
-              <span className="text-xs font-bold text-muted-foreground">
-                ({isEnglish ? officialGpaScale.nameEn : officialGpaScale.nameAr}
-                )
-              </span>
-            </div>
-          </Card>
-        </motion.div>
+      {selectedLevelGroups.some(
+        (course) => course.officialResult?.official,
+      ) && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
+          {/* Total Cumulative Letter Grade Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/40 transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] font-black uppercase text-muted-foreground">
+                  {isEnglish ? "Cumulative Grade" : "التقدير العام التراكمي"}
+                </span>
+                <Award className="h-4.5 w-4.5 text-amber-400" />
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black font-mono text-primary">
+                  {officialGpaScale.letter}
+                </span>
+                <span className="text-xs font-bold text-muted-foreground">
+                  (
+                  {isEnglish
+                    ? officialGpaScale.nameEn
+                    : officialGpaScale.nameAr}
+                  )
+                </span>
+              </div>
+            </Card>
+          </motion.div>
 
-        {/* Cumulative GPA */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.03 }}
-        >
-          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? "Cumulative GPA" : "المعدل التراكمي"}
-              </span>
-              <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
-            </div>
-            <span className="text-2xl font-black font-mono text-foreground">
-              <bdi dir="ltr" className="whitespace-nowrap text-xl sm:text-2xl">
-                {officialGpa.toFixed(2)} / 4.00
-              </bdi>
-            </span>
-          </Card>
-        </motion.div>
-
-        {/* Completed Credit Hours */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.05 }}
-        >
-          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? "Completed Credits" : "الساعات المكتملة"}
-              </span>
-              <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
-            </div>
-            <div className="flex items-baseline gap-1">
+          {/* Cumulative GPA */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.03 }}
+          >
+            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] font-black uppercase text-muted-foreground">
+                  {isEnglish ? "Cumulative GPA" : "المعدل التراكمي"}
+                </span>
+                <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
+              </div>
               <span className="text-2xl font-black font-mono text-foreground">
-                {officialCompletedCredits}
+                <bdi
+                  dir="ltr"
+                  className="whitespace-nowrap text-xl sm:text-2xl"
+                >
+                  {officialGpa.toFixed(2)} / 4.00
+                </bdi>
               </span>
-              <span className="text-xs font-bold text-muted-foreground">
-                {isEnglish ? "credits" : "ساعة"}
-              </span>
-            </div>
-          </Card>
-        </motion.div>
+            </Card>
+          </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Card className="p-4 bg-card/45 border-border/70 flex flex-col justify-between h-28">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-black text-muted-foreground">
-                {isEnglish ? "Academic warnings" : "عدد الإنذارات الأكاديمية"}
-              </span>
-              <AlertTriangle className="h-4.5 w-4.5 text-amber-400" />
-            </div>
-            <span className="text-2xl font-black font-mono">
-              {profileQuery.data?.academicWarnings ?? 0}
-            </span>
-          </Card>
-        </motion.div>
+          {/* Completed Credit Hours */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.05 }}
+          >
+            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] font-black uppercase text-muted-foreground">
+                  {isEnglish ? "Completed Credits" : "الساعات المكتملة"}
+                </span>
+                <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black font-mono text-foreground">
+                  {officialCompletedCredits}
+                </span>
+                <span className="text-xs font-bold text-muted-foreground">
+                  {isEnglish ? "credits" : "ساعة"}
+                </span>
+              </div>
+            </Card>
+          </motion.div>
 
-        {/* Passed courses */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.11 }}
-        >
-          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-black uppercase text-muted-foreground">
-                {isEnglish ? "Passed Courses" : "المواد الناجح بها"}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <Card className="p-4 bg-card/45 border-border/70 flex flex-col justify-between h-28">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] font-black text-muted-foreground">
+                  {isEnglish ? "Academic warnings" : "عدد الإنذارات الأكاديمية"}
+                </span>
+                <AlertTriangle className="h-4.5 w-4.5 text-amber-400" />
+              </div>
+              <span className="text-2xl font-black font-mono">
+                {profileQuery.data?.academicWarnings ?? 0}
               </span>
-              <Award className="h-4.5 w-4.5 text-primary" />
-            </div>
-            <span className="text-2xl font-black font-mono text-foreground">
-              <bdi dir="ltr">
-                {selectedLevelStats.passed} / {selectedLevelGroups.length}
-              </bdi>
-            </span>
-          </Card>
-        </motion.div>
-      </div>
+            </Card>
+          </motion.div>
 
+          {/* Passed courses */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.11 }}
+          >
+            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] font-black uppercase text-muted-foreground">
+                  {isEnglish ? "Passed Courses" : "المواد الناجح بها"}
+                </span>
+                <Award className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <span className="text-2xl font-black font-mono text-foreground">
+                <bdi dir="ltr">
+                  {selectedLevelStats.passed} / {selectedLevelGroups.length}
+                </bdi>
+              </span>
+            </Card>
+          </motion.div>
+        </div>
+      )}
       <Tabs
         value={selectedLevel}
         onValueChange={setSelectedLevel}

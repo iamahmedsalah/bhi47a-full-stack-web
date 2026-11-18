@@ -68,6 +68,10 @@ export class ControlSheet {
   @Prop({ type: String, maxlength: 500 })
   reviewReason?: string;
 
+  /** Missing exam marks deferred because of a financial hold at review time. */
+  @Prop({ type: [String], default: [] })
+  tuitionDeferredStudentIds!: string[];
+
   @Prop({ default: false })
   locked!: boolean;
 

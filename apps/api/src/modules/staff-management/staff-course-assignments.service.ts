@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { MAX_COURSE_DOCTORS } from '@student-portal/shared';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type ClientSession, type Model } from 'mongoose';
 import { Course, type CourseDocument } from '../courses/schemas/course.schema';
@@ -127,8 +128,10 @@ export class StaffCourseAssignmentsService {
         };
         (staff.staffType === 'doctor' ? doctors : assistants).set(id, member);
       }
-      if (doctors.size > 2)
-        throw new BadRequestException('A course can have at most two doctors');
+      if (doctors.size > MAX_COURSE_DOCTORS)
+        throw new BadRequestException(
+          `A course can have at most ${MAX_COURSE_DOCTORS} doctors`,
+        );
       const doctorList = [...doctors.values()];
       const assistantList = [...assistants.values()];
       await this.courses.updateOne(

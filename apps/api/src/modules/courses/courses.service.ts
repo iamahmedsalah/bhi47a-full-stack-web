@@ -22,6 +22,7 @@ import {
 } from './utils/course-curriculum.util';
 import {
   getCourseCurricula,
+  MAX_COURSE_DOCTORS,
   normalizeDepartment,
   type Semester,
   type CourseLevel,
@@ -135,7 +136,7 @@ export class CoursesService {
 
     const incomingDoctorIds: string[] =
       Array.isArray(dto.doctorIds) && dto.doctorIds.length > 0
-        ? dto.doctorIds.slice(0, 2)
+        ? dto.doctorIds.slice(0, MAX_COURSE_DOCTORS)
         : dto.doctorId
           ? [dto.doctorId]
           : [];
@@ -597,7 +598,7 @@ export class CoursesService {
 
     if (dto.doctorIds !== undefined || dto.doctorId !== undefined) {
       const incomingDoctorIds: string[] = Array.isArray(dto.doctorIds)
-        ? dto.doctorIds.filter(Boolean).slice(0, 2)
+        ? dto.doctorIds.filter(Boolean).slice(0, MAX_COURSE_DOCTORS)
         : dto.doctorId
           ? [dto.doctorId]
           : [];

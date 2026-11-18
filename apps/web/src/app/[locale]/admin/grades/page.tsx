@@ -310,7 +310,7 @@ function GradesPageContent() {
         return (
           <TableCell className="p-4 font-mono">
             <div className="flex items-center gap-2 whitespace-nowrap">
-              {item.examType !== "midterm" && (
+              {item.examType === "final" && (
                 <span
                   className={`rounded-squircle border px-2 py-0.5 text-xs font-semibold ${letterBadgeClass}`}
                 >
@@ -318,7 +318,7 @@ function GradesPageContent() {
                 </span>
               )}
               <span className="text-xs text-muted-foreground font-mono">
-                {item.examType === "midterm"
+                {item.examType !== "final"
                   ? `${item.grade} / ${item.maxGrade}`
                   : `(${pct}%)`}
               </span>

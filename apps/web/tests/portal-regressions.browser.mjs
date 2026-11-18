@@ -21,7 +21,7 @@ await write('dynamic.tsx', `export default ()=>()=>null;`);
 await write('link.tsx', `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>;}`);
 await write('attendance.ts', `export const attendanceApi={getMyAttendanceHistory:async()=>({summary:{totalSessions:0,presentCount:0,lateCount:0,attendanceRate:0}}),getStudentLiveSessions:async()=>({sessions:[]})};`);
 await write('api.ts', `const request=async({url,params})=>{const response=await fetch('/fixture'+url+(params?'?'+new URLSearchParams(params):''));return response.json();};export const apiBaseUrl='';export const getApiErrorMessage=e=>e.message||'Error';export const getApiErrorDetails=e=>e;export default {request,get:(url,config)=>request({url,...config})};`);
-await write('api-client.ts', `import api from './api';export const apiGet=async(url,config)=>(await api.get(url,config)).data;export const apiPost=async()=>({});export const apiPatch=apiPost;export const apiDelete=apiPost;`);
+await write('api-client.ts', `import api from './api';export const apiGet=async(url,config)=>(await api.get(url,config)).data;export const apiPost=async(url,body)=>{const response=await fetch('/fixture'+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.message);return result.data};export const apiPatch=apiPost;export const apiDelete=apiPost;`);
 await write('entry.tsx', `
   import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';
   import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
@@ -48,6 +48,8 @@ await new Promise((resolve, reject) => webpack({
   module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] },
 }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
 const quiz = { _id:'quiz-fixture', title:'Portal fixture quiz', courseId:'course-fixture', courseCode:'TEST', courseName:'Synthetic course', durationMinutes:10, totalMarks:10, passingMarks:5, questionsCount:1, isOpen:true, isEnded:false, isSubmitted:false };
+let requiredCodes = ['20260001', '20260002'];
+const studentUpdates = [];
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname.startsWith('/fixture')) {
@@ -57,7 +59,17 @@ const server = http.createServer(async (req, res) => {
     else if (endpoint === '/students/me/course-quizzes') data = [];
     else if (endpoint === '/students/me/profile') data = { studentCode:'TEST',fullName:'Synthetic',level:'1' };
     else if (endpoint === '/students/me/syllabi') data = { registeredCourses:[],availableLevelCourses:[] };
-    else if (endpoint === '/admin/students-must-change-password-codes') data = {items:['20260001','20260002'],total:2,totalPages:1};
+    else if (endpoint === '/admin/students-must-change-password-codes') data = {items:requiredCodes,total:requiredCodes.length,totalPages:1};
+    else if (endpoint === '/admin/students-password-requirement' && req.method === 'POST') {
+      let body = '';for await (const chunk of req) body += chunk;
+      const update = JSON.parse(body);studentUpdates.push(update);
+      if (!['20260001','20260002'].includes(update.studentCode)) {
+        res.writeHead(404, {'Content-Type':'application/json'});res.end(JSON.stringify({message:'Student not found'}));return;
+      }
+      requiredCodes = requiredCodes.filter(code => code !== update.studentCode);
+      if (update.enabled) requiredCodes.push(update.studentCode);
+      data = update;
+    }
     res.setHeader('Content-Type', 'application/json');res.end(JSON.stringify({success:true,data,timestamp:new Date().toISOString()}));return;
   }
   if (url.pathname.endsWith('.js')) {res.setHeader('Content-Type','text/javascript');res.end(await fs.readFile(path.join(output,path.basename(url.pathname))));return;}
@@ -68,6 +80,7 @@ let browser;
 try {
   browser = await chromium.launch({headless:true});
   for (const locale of ['en','ar']) {
+    requiredCodes = ['20260001', '20260002'];studentUpdates.length = 0;
     const page = await browser.newPage();const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error(e.message);});
     await page.goto(`http://127.0.0.1:${server.address().port}/${locale}/dashboard`);
     const input = page.getByRole('textbox');await input.fill('20');
@@ -82,10 +95,28 @@ try {
       assert.equal(await page.evaluate(()=>Array.isArray(window.client.getQueryData(['student-online-quizzes']).quizzes)),true);
     }
     await page.evaluate(()=>window.view('passwords'));const dialog=page.getByRole('dialog');await dialog.getByText('20260001',{exact:true}).waitFor();
-    const toggle=dialog.getByRole('switch');assert.equal(await toggle.getAttribute('aria-checked'),'false');
+    const toggle=dialog.getByRole('switch',{name:locale==='ar'?'إلزام جميع الطلاب بتغيير كلمة المرور':'Require all students to change their password'});assert.equal(await toggle.getAttribute('aria-checked'),'false');
     const save=dialog.getByRole('button',{name:locale==='ar'?'حفظ للجميع':'Save for all students',exact:true});
     await save.click();assert.equal(await page.evaluate(()=>window.saved),false);
     await toggle.click();await save.click();assert.equal(await page.evaluate(()=>window.saved),true);
+    const codeInput=dialog.getByRole('textbox',{name:locale==='ar'?'كود الطالب':'Student code'});
+    const individualToggle=dialog.getByRole('switch',{name:locale==='ar'?'إلزام هذا الطالب بتغيير كلمة المرور':'Require this student to change their password'});
+    const individualSave=dialog.getByRole('button',{name:locale==='ar'?'حفظ لهذا الطالب فقط':'Save for this student only',exact:true});
+    await dialog.getByRole('button',{name:'20260001',exact:true}).click();
+    assert.equal(await codeInput.inputValue(),'20260001');assert.equal(await individualToggle.getAttribute('aria-checked'),'true');
+    await individualToggle.click();await individualSave.click();
+    await dialog.getByRole('status').waitFor();
+    await dialog.getByRole('button',{name:'20260001',exact:true}).waitFor({state:'detached'});
+    assert.deepEqual(studentUpdates,[{studentCode:'20260001',enabled:false}]);
+    await dialog.getByRole('button',{name:'20260002',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.saved),true);
+    await codeInput.fill('20260001');await individualToggle.click();await individualSave.click();
+    await dialog.getByRole('button',{name:'20260001',exact:true}).waitFor();
+    assert.deepEqual(studentUpdates.at(-1),{studentCode:'20260001',enabled:true});
+    await codeInput.fill('unknown');await individualSave.click();await dialog.getByRole('alert').waitFor();
+    assert.equal(studentUpdates.length,2);
+    await codeInput.fill('99999999');await individualSave.click();await dialog.getByRole('alert').filter({hasText:'Student not found'}).waitFor();
+    assert.deepEqual(requiredCodes.sort(),['20260001','20260002']);
     assert.deepEqual(errors,[]);await page.close();
   }
   console.log('Portal regressions passed in Arabic and English: delayed search echoes, continuous parent renders, clear/reset, dashboard ↔ quizzes shared cache, and mixed password flags with explicit bulk enable/disable.');

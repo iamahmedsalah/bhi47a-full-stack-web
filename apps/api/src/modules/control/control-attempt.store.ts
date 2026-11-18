@@ -270,6 +270,11 @@ export class ControlAttemptStore {
       nameAr?: string;
       source: Source;
     }> = [];
+    const enteredFinalIds = new Set(
+      current
+        .filter((mark) => mark.examType === 'final')
+        .map((mark) => String(mark.studentId)),
+    );
     for (const id of ids.map(String)) {
       const identity = {
         studentId: id,
@@ -303,7 +308,9 @@ export class ControlAttemptStore {
       )[0];
       if (incomplete?.result.incomplete)
         icSources.push({ ...identity, source: incomplete });
-      if (previous)
+      // No final entry means no new whole-course attempt to compare. Financial
+      // deferrals are checked by sheet approval and never replace an old result.
+      if (previous && enteredFinalIds.has(id))
         comparisons.push({
           ...identity,
           ...compareAttempts(
