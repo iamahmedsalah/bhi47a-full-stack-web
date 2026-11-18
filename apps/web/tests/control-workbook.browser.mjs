@@ -167,8 +167,13 @@ try {
   await page.getByRole('button',{name:'Submit for review',exact:true}).click();
   const workflowDialog=page.getByRole('dialog');
   await workflowDialog.getByText('Deferred for a tuition hold: 1.',{exact:false}).waitFor();
-  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'a financially deferred blank must not block submission');
+  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),false,'the review reason is still required independently of financial deferrals');
   await workflowDialog.getByRole('textbox').fill('Synthetic autosave and review acceptance');
+  await page.waitForFunction(()=>{
+    const dialog=document.querySelector('[role="dialog"]');
+    return [...(dialog?.querySelectorAll('button')??[])].some(button=>button.textContent.trim()==='Confirm'&&!button.disabled);
+  });
+  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'a financially deferred blank must not block submission once the review reason is supplied');
   const reviewResponse=page.waitForResponse(response=>response.url().endsWith('/review')&&response.request().method()==='POST');
   await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).click();
   assert.equal((await reviewResponse).status(),200);
