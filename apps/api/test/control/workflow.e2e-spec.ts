@@ -860,23 +860,25 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         expectedRev: 1,
       },
     ]);
-    await marks.applyChanges(actor, detail.sheet.id, {
+    const newerEdit = await marks.applyChanges(actor, detail.sheet.id, {
       changes: [
         change({
-          score: 18.5,
-          attendanceMark: 4.5,
+          score: 19,
+          attendanceMark: 5,
           quizzesMark: 14,
           expectedRev: 1,
         }),
       ],
     });
+    expect(newerEdit.summary).toMatchObject({ ok: 1, invalid: 0, conflict: 0 });
+    expect(newerEdit.results[0].entry).toMatchObject({ score: 19, rev: 2 });
     await expect(
       workbook.commit(actor, detail.sheet.id, preview.previewId),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(
       (await workbook.workbook(actor, detail.sheet.id)).rows[0].components
         .coursework?.score,
-    ).toBe(18.5);
+    ).toBe(19);
   });
 
   it('serializes a lock against a concurrent final draft write', async () => {
