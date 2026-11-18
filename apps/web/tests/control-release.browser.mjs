@@ -209,7 +209,9 @@ try{
       assert.equal(headers.some(value=>/Midterm Exam/.test(value)),locale==='en'&&mode!=='final');
       assert.equal(headers.some(value=>/Final Exam/.test(value)),locale==='en'&&mode!=='midterm');
       if(mode!=='midterm')await page.getByRole('row').filter({hasText:'111'}).getByText('80.0%' ,{exact:true}).waitFor();
-      await page.getByText(locale==='en'?'Academic warnings':'عدد الإنذارات الأكاديمية',{exact:true}).waitFor();
+      const academicWarnings=page.getByText(locale==='en'?'Academic warnings':'عدد الإنذارات الأكاديمية',{exact:true});
+      if(mode==='midterm')assert.equal(await academicWarnings.count(),0,'midterm-only results must not display official academic summary cards');
+      else await academicWarnings.waitFor();
       assert.equal(await page.getByText('Level Performance',{exact:true}).count(),0);
       await page.evaluate(()=>Promise.all(document.getAnimations().filter(animation=>animation.effect?.getTiming().iterations!==Infinity).map(animation=>animation.finished.catch(()=>{}))));
       await page.screenshot({path:path.join(output,`student-${locale}-${mode}.png`),fullPage:true});
@@ -225,6 +227,9 @@ try{
       if(status!=='incomplete')await row.getByText('32.0%' ,{exact:true}).waitFor();
       if(status==='banned')await row.getByText('FX',{exact:true}).waitFor();
       if(status==='incomplete')await row.getByText('IC',{exact:true}).waitFor();
+      const academicWarnings=page.getByText(locale==='en'?'Academic warnings':'عدد الإنذارات الأكاديمية',{exact:true});
+      if(status==='incomplete')assert.equal(await academicWarnings.count(),0,'an incomplete result must not display official academic summary cards');
+      else await academicWarnings.waitFor();
     }
     studentResponseOrder='results-first';course111Status='present';
     await page.goto(`${base}/${locale}/dashboard/results?view=student`);
