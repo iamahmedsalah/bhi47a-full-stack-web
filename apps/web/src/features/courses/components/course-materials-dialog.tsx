@@ -2,7 +2,22 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, UploadCloud, Download, Trash2, Loader2, Lock, Layers, BookOpen, User, Plus, X, FileCheck } from 'lucide-react';
+import {
+  FileText,
+  UploadCloud,
+  Download,
+  Trash2,
+  Loader2,
+  Lock,
+  Layers,
+  BookOpen,
+  User,
+  Plus,
+  X,
+  FileCheck,
+  Video,
+  ExternalLink,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
 import { downloadFileBlob } from '@/lib/export-utils';
@@ -23,6 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useMaterialUploadActions } from '@/features/courses/material-upload-provider';
 import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
@@ -75,6 +91,22 @@ export function CourseMaterialsDialog({
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [contentSource, setContentSource] = useState<'file' | 'video'>('file');
+  const [videoUrl, setVideoUrl] = useState('');
+  const isValidVideoUrl = (() => {
+    try {
+      const url = new URL(videoUrl.trim());
+      return (
+        url.protocol === 'https:' &&
+        Boolean(url.hostname.includes('.')) &&
+        !url.username &&
+        !url.password &&
+        videoUrl.trim().length <= 2048
+      );
+    } catch {
+      return false;
+    }
+  })();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -108,7 +140,14 @@ export function CourseMaterialsDialog({
   const { data, isLoading, refetch } = useQuery<CourseMaterialsResponse>({
     queryKey: ['course-materials', courseId],
     queryFn: async () => {
-      if (!courseId) return { courseId: '', courseCode: '', courseName: '', materials: [], totalCount: 0 };
+      if (!courseId)
+        return {
+          courseId: '',
+          courseCode: '',
+          courseName: '',
+          materials: [],
+          totalCount: 0,
+        };
       const res = await api.get<CourseMaterialsResponse>(`/courses/${courseId}/materials`);
       return res.data;
     },
@@ -117,13 +156,51 @@ export function CourseMaterialsDialog({
 
   const materials = data?.materials || [];
   const filteredMaterials =
-    activeTab === 'all'
-      ? materials
-      : materials.filter((m) => m.type === activeTab);
+    activeTab === 'all' ? materials : materials.filter((m) => m.type === activeTab);
 
   // Create material mutation
+  const resetForm = () => {
+    setTitle('');
+    setWeekNumber('');
+    setDescription('');
+    setFile(null);
+    setVideoUrl('');
+    setContentSource('file');
+    setIsUploadFormOpen(false);
+  };
+  const recordingMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/courses/${courseId}/materials`, {
+        title: title.trim(),
+        type: uploadType,
+        videoUrl: videoUrl.trim(),
+        ...(weekNumber ? { weekNumber: Number(weekNumber) } : {}),
+        ...(description.trim() ? { description: description.trim() } : {}),
+      }),
+    onSuccess: () => {
+      toast.success(isAr ? 'تم حفظ رابط التسجيل بنجاح' : 'Recording link saved');
+      resetForm();
+      void queryClient.invalidateQueries({
+        queryKey: ['course-materials', courseId],
+      });
+    },
+    onError: (err) =>
+      toast.error(
+        getApiErrorMessage(err, isAr ? 'تعذر حفظ رابط التسجيل' : 'Failed to save recording link'),
+      ),
+  });
   const handleUpload = () => {
     try {
+      if (!title.trim())
+        throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
+      if (contentSource === 'video') {
+        if (!isValidVideoUrl)
+          throw new Error(
+            isAr ? 'أدخل رابط فيديو صحيح يبدأ بـ https://' : 'Enter a valid HTTPS video URL',
+          );
+        recordingMutation.mutate();
+        return;
+      }
       if (!file) throw new Error(isAr ? 'يرجى اختيار ملف' : 'Please select a file');
       if (file.size > MAX_MATERIAL_FILE_SIZE) {
         throw new Error(
@@ -132,17 +209,23 @@ export function CourseMaterialsDialog({
             : 'File size exceeds 25 MB limit',
         );
       }
-      if (!title.trim()) throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
+      if (!title.trim())
+        throw new Error(isAr ? 'يرجى إدخال عنوان للمحتوى' : 'Please enter a title');
 
       const selectedFile = file;
-      const payload = { title: title.trim(), type: uploadType, weekNumber, description: description.trim() };
+      const payload = {
+        title: title.trim(),
+        type: uploadType,
+        weekNumber,
+        description: description.trim(),
+      };
       startUpload({
         key: `material:${courseId}:${JSON.stringify(payload)}:${file.name}:${file.size}:${file.lastModified}`,
         courseId,
         label: `${courseCode} · ${payload.title}`,
         fileName: file.name,
         fileSize: file.size,
-        request: config => {
+        request: (config) => {
           const fd = new FormData();
           fd.append('file', selectedFile);
           fd.append('title', payload.title);
@@ -153,11 +236,7 @@ export function CourseMaterialsDialog({
         },
       });
       // Reset form
-      setTitle('');
-      setWeekNumber('');
-      setDescription('');
-      setFile(null);
-      setIsUploadFormOpen(false);
+      resetForm();
     } catch (err) {
       toast.error(getApiErrorMessage(err, isAr ? 'فشل رفع الملف' : 'Failed to upload file'));
     }
@@ -173,7 +252,9 @@ export function CourseMaterialsDialog({
       toast.success(isAr ? 'تم حذف الملف بنجاح' : 'Material deleted successfully');
       setMaterialToDelete(null);
       void refetch();
-      void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['course-materials', courseId],
+      });
     },
     onError: (err) => {
       toast.error(getApiErrorMessage(err, isAr ? 'فشل حذف الملف' : 'Failed to delete material'));
@@ -201,9 +282,7 @@ export function CourseMaterialsDialog({
         material.mimeType || 'application/octet-stream',
       );
     } catch (err) {
-      toast.error(
-        getApiErrorMessage(err, isAr ? 'فشل تحميل الملف' : 'Failed to download file'),
-      );
+      toast.error(getApiErrorMessage(err, isAr ? 'فشل تحميل الملف' : 'Failed to download file'));
     }
   };
 
@@ -239,17 +318,13 @@ export function CourseMaterialsDialog({
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="text-base font-bold flex items-center gap-2 text-foreground">
                 <BookOpen className="h-5 w-5 text-primary" />
-                <span>
-                  {isAr ? 'المحاضرات والسكاشن التعليمية' : 'Course Lectures & Sections'}
-                </span>
+                <span>{isAr ? 'المحاضرات والسكاشن التعليمية' : 'Course Lectures & Sections'}</span>
               </DialogTitle>
               <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-squircle bg-primary/10 text-primary border border-primary/20">
                 {courseCode}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground font-medium truncate">
-              {courseName}
-            </p>
+            <p className="text-xs text-muted-foreground font-medium truncate">{courseName}</p>
           </DialogHeader>
 
           {/* Student Withholding Alert */}
@@ -347,7 +422,10 @@ export function CourseMaterialsDialog({
 
           {/* Upload Form Box */}
           {isUploadFormOpen && canUploadAny && (
-            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-start space-y-3 animate-in fade-in">
+            <fieldset
+              disabled={recordingMutation.isPending}
+              className="min-w-0 rounded-xl border border-primary/30 bg-primary/5 p-4 text-start space-y-3 animate-in fade-in"
+            >
               <div className="flex items-center justify-between pb-1 border-b border-primary/20">
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <UploadCloud className="h-4 w-4 text-primary" />
@@ -420,7 +498,7 @@ export function CourseMaterialsDialog({
                   <Input
                     type="number"
                     min={1}
-                    max={16}
+                    max={20}
                     value={weekNumber}
                     onChange={(e) => setWeekNumber(e.target.value)}
                     placeholder={isAr ? 'مثال: 1, 2, 3...' : 'e.g., 1, 2, 3...'}
@@ -463,114 +541,189 @@ export function CourseMaterialsDialog({
                 />
               </div>
 
-              {/* Modern Drag-and-Drop File Upload Zone */}
-              <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                  {isAr ? 'ملف المحتوى التعليمي (الحد الأقصى: 25 ميجابايت) *' : 'Material File (Max 25 MB) *'}
-                </label>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.rar"
-                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
-                  className="hidden"
-                />
-
-                {!file ? (
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setIsDragging(false);
-                      const droppedFile = e.dataTransfer.files?.[0] || null;
-                      handleFileSelect(droppedFile);
-                    }}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 text-center ${
-                      isDragging
-                        ? 'border-primary bg-primary/10 shadow-sm scale-[1.01]'
-                        : 'border-border/80 hover:border-primary/50 bg-secondary/20 hover:bg-secondary/40'
-                    }`}
+              <Tabs
+                value={contentSource}
+                onValueChange={(value) => setContentSource(value as 'file' | 'video')}
+                dir={isAr ? 'rtl' : 'ltr'}
+              >
+                <TabsList
+                  className="grid w-full grid-cols-2"
+                  aria-label={isAr ? 'مصدر المحتوى' : 'Content source'}
+                >
+                  <TabsTrigger value="file" className="gap-2 rounded-squircle">
+                    <FileText className="h-4 w-4" />
+                    {isAr ? 'ملف تعليمي' : 'Material file'}
+                  </TabsTrigger>
+                  <TabsTrigger value="video" className="gap-2 rounded-squircle">
+                    <Video className="h-4 w-4" />
+                    {isAr ? 'رابط تسجيل فيديو' : 'Video recording link'}
+                  </TabsTrigger>
+                </TabsList>
+                {contentSource === 'video' ? (
+                  <TabsContent
+                    value="video"
+                    className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-2">
-                      <UploadCloud className="h-5 w-5" />
-                    </div>
-                    <p className="text-xs font-semibold text-foreground">
+                    <label htmlFor="material-video-url" className="block text-xs font-semibold">
+                      {isAr ? 'رابط الفيديو المسجل *' : 'Recorded video URL *'}
+                    </label>
+                    <Input
+                      id="material-video-url"
+                      type="url"
+                      dir="ltr"
+                      maxLength={2048}
+                      value={videoUrl}
+                      onChange={(event) => setVideoUrl(event.target.value)}
+                      placeholder="https://drive.google.com/file/d/.../view"
+                      className="rounded-squircle text-left text-xs"
+                      aria-describedby="material-video-help"
+                      aria-invalid={Boolean(videoUrl) && !isValidVideoUrl}
+                    />
+                    <p id="material-video-help" className="text-xs text-muted-foreground">
                       {isAr
-                        ? 'اسحب وأفلت الملف هنا أو انقر لاختياره'
-                        : 'Drag & drop file here or click to browse'}
+                        ? 'أضف رابط فيديو من Google Drive أو YouTube أو منصة أخرى. تأكد من منح الطلاب صلاحية المشاهدة؛ سيفتح التسجيل في تبويب جديد.'
+                        : 'Paste a Google Drive, YouTube or other hosted video link. Give students viewing access; the recording opens in a new tab.'}
                     </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {isAr
-                        ? 'PDF, Word, PowerPoint, Excel — الحد الأقصى 25 ميجابايت'
-                        : 'PDF, Word, PowerPoint, Excel — Max size 25 MB'}
-                    </p>
-                  </div>
+                    {videoUrl && !isValidVideoUrl && (
+                      <p role="alert" className="text-xs text-destructive">
+                        {isAr
+                          ? 'أدخل رابطًا صحيحًا يبدأ بـ https://'
+                          : 'Enter a valid URL starting with https://'}
+                      </p>
+                    )}
+                  </TabsContent>
                 ) : (
-                  <div className="flex items-center justify-between rounded-xl border border-teal-500/30 bg-teal-500/5 dark:bg-teal-500/10 p-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400">
-                        <FileCheck className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 text-start">
-                        <p className="text-xs font-semibold text-foreground truncate">
-                          {file.name}
-                        </p>
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
-                          <span className="font-mono">{formatFileSize(file.size)}</span>
-                          <span>•</span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            {isAr ? 'جاهز للرفع (أقل من 25 ميجابايت)' : 'Ready to upload (< 25 MB)'}
-                          </span>
+                  /* Modern Drag-and-Drop File Upload Zone */
+                  <TabsContent value="file">
+                    <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+                      {isAr
+                        ? 'ملف المحتوى التعليمي (الحد الأقصى: 25 ميجابايت) *'
+                        : 'Material File (Max 25 MB) *'}
+                    </label>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.rar"
+                      onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+
+                    {!file ? (
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDragging(true);
+                        }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDragging(false);
+                          const droppedFile = e.dataTransfer.files?.[0] || null;
+                          handleFileSelect(droppedFile);
+                        }}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 text-center ${
+                          isDragging
+                            ? 'border-primary bg-primary/10 shadow-sm scale-[1.01]'
+                            : 'border-border/80 hover:border-primary/50 bg-secondary/20 hover:bg-secondary/40'
+                        }`}
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-2">
+                          <UploadCloud className="h-5 w-5" />
                         </div>
+                        <p className="text-xs font-semibold text-foreground">
+                          {isAr
+                            ? 'اسحب وأفلت الملف هنا أو انقر لاختياره'
+                            : 'Drag & drop file here or click to browse'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {isAr
+                            ? 'PDF, Word, PowerPoint, Excel — الحد الأقصى 25 ميجابايت'
+                            : 'PDF, Word, PowerPoint, Excel — Max size 25 MB'}
+                        </p>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex items-center justify-between rounded-xl border border-teal-500/30 bg-teal-500/5 dark:bg-teal-500/10 p-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400">
+                            <FileCheck className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 text-start">
+                            <p className="text-xs font-semibold text-foreground truncate">
+                              {file.name}
+                            </p>
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                              <span className="font-mono">{formatFileSize(file.size)}</span>
+                              <span>•</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                {isAr
+                                  ? 'جاهز للرفع (أقل من 25 ميجابايت)'
+                                  : 'Ready to upload (< 25 MB)'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setFile(null);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                      }}
-                      className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer shrink-0"
-                      title={isAr ? 'إلغاء اختيار الملف' : 'Remove selected file'}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFile(null);
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                          className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer shrink-0"
+                          title={isAr ? 'إلغاء اختيار الملف' : 'Remove selected file'}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </TabsContent>
                 )}
-              </div>
-
+              </Tabs>
               {/* Form Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-primary/20">
+              <div className="flex items-center justify-end rtl:justify-start gap-2 pt-2 border-t border-primary/20">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => setIsUploadFormOpen(false)}
-                  className="h-8 rounded-squircle text-xs"
+                  className="order-2 h-8 rounded-squircle text-xs"
                 >
                   {isAr ? 'إلغاء' : 'Cancel'}
                 </Button>
                 <Button
                   type="button"
                   size="sm"
-                  disabled={!file || !title.trim()}
+                  disabled={
+                    recordingMutation.isPending ||
+                    !title.trim() ||
+                    (contentSource === 'video' ? !isValidVideoUrl : !file)
+                  }
                   onClick={handleUpload}
                   className="h-8 rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
                 >
-                  <UploadCloud className="h-3.5 w-3.5" />
-                  <span>{isAr ? 'رفع وحفظ' : 'Upload & Save'}</span>
+                  {recordingMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : contentSource === 'video' ? (
+                    <Video className="h-3.5 w-3.5" />
+                  ) : (
+                    <UploadCloud className="h-3.5 w-3.5" />
+                  )}
+                  <span>
+                    {contentSource === 'video'
+                      ? isAr
+                        ? 'حفظ رابط التسجيل'
+                        : 'Save recording link'
+                      : isAr
+                        ? 'رفع وحفظ'
+                        : 'Upload & Save'}
+                  </span>
                 </Button>
               </div>
-            </div>
+            </fieldset>
           )}
 
           {/* Materials List */}
@@ -617,7 +770,11 @@ export function CourseMaterialsDialog({
                               : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
                           }`}
                         >
-                          <FileText className="h-4 w-4" />
+                          {item.videoUrl ? (
+                            <Video className="h-4 w-4" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
                         </div>
 
                         {/* Details */}
@@ -630,7 +787,13 @@ export function CourseMaterialsDialog({
                                   : 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
                               }`}
                             >
-                              {isLecture ? (isAr ? 'محاضرة' : 'Lecture') : isAr ? 'سكشن' : 'Section'}
+                              {isLecture
+                                ? isAr
+                                  ? 'محاضرة'
+                                  : 'Lecture'
+                                : isAr
+                                  ? 'سكشن'
+                                  : 'Section'}
                             </span>
 
                             {item.weekNumber ? (
@@ -658,13 +821,9 @@ export function CourseMaterialsDialog({
                               </span>
                             ) : null}
 
-                            {item.fileSize ? (
-                              <span>• {formatFileSize(item.fileSize)}</span>
-                            ) : null}
+                            {item.fileSize ? <span>• {formatFileSize(item.fileSize)}</span> : null}
 
-                            {item.createdAt ? (
-                              <span>• {formatDate(item.createdAt)}</span>
-                            ) : null}
+                            {item.createdAt ? <span>• {formatDate(item.createdAt)}</span> : null}
                           </div>
                         </div>
                       </div>
@@ -684,6 +843,24 @@ export function CourseMaterialsDialog({
                             <Lock className="h-3 w-3" />
                             <span>{isAr ? 'محجوب' : 'Locked'}</span>
                           </div>
+                        ) : item.videoUrl ? (
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-squircle text-xs gap-1.5"
+                          >
+                            <a
+                              href={
+                                item.videoUrl.startsWith('https://') ? item.videoUrl : undefined
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                              {isAr ? 'مشاهدة التسجيل' : 'Watch recording'}
+                            </a>
+                          </Button>
                         ) : (
                           <Button
                             type="button"

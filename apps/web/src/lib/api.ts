@@ -636,6 +636,10 @@ Object.assign(ERROR_TRANSLATIONS, {
     ar: 'الحالة الاستثنائية تتطلب صلاحية إدارة الحالات وسببًا من 3 أحرف على الأقل.',
     en: 'A special status requires state-management permission and a reason of at least 3 characters.',
   },
+  'Grade entry is locked while the student has a tuition hold': {
+    ar: 'الرصد مقفل أثناء حجب المصروفات. ارفع الحجب ثم أعد تحميل الكشف. الدرجات الموجودة محفوظة.',
+    en: 'Grade entry is locked during the tuition hold. Lift the hold and reload the sheet. Existing marks are preserved.',
+  },
   'Hide published marks before importing': {
     ar: 'الدرجة منشورة. أخفِها من صفحة الدرجات واتبع إجراءات التصحيح قبل الاستيراد.',
     en: 'This mark is published. Hide it in Grades and follow the correction workflow before importing.',

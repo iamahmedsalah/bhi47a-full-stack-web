@@ -8,6 +8,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsUrl,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -16,6 +17,20 @@ import {
 } from '@student-portal/shared';
 
 export class CreateCourseMaterialDto {
+  @ApiPropertyOptional({
+    description: 'HTTPS URL of an externally hosted recording',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @IsUrl({
+    protocols: ['https'],
+    require_protocol: true,
+    require_valid_protocol: true,
+    disallow_auth: true,
+  })
+  videoUrl?: string;
+
   @ApiProperty({
     enum: COURSE_MATERIAL_TYPE_VALUES,
     description: 'Type of material: lecture or section',

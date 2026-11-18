@@ -76,9 +76,17 @@ try {
     await expectRows(1);
     assert.equal(new URL(page.url()).searchParams.get('driverPage'), null);
     const select = async (label, option) => {
+      const filter = label === messages.command ? ['driverCommand', option]
+        : label === messages.category ? ['driverCategory', 'socket_timeout']
+        : label === messages.kind ? ['driverKind', 'heartbeat']
+        : label === messages.durationFilter ? ['driverThreshold', '10000']
+        : label === messages.view ? ['driverView', 'commands']
+        : ['driverSort', 'failures'];
       await panel.getByRole('combobox', { name: label, exact: true }).click();
       assert.equal(await page.getByRole('option', { name: option, exact: true }).locator('..').evaluate((node) => node.closest('[dir]')?.getAttribute('dir')), locale === 'ar' ? 'rtl' : 'ltr');
       await page.getByRole('option', { name: option, exact: true }).click();
+      await page.waitForFunction(([key, value]) => new URL(location.href).searchParams.get(key) === value, filter);
+      await panel.getByRole('combobox', { name: label, exact: true }).filter({ hasText: option }).waitFor();
     };
     await select(messages.category, messages.categories.socket_timeout);
     await expectRows(1);
@@ -102,6 +110,8 @@ try {
     await dialog.getByText('request-4', { exact: true }).waitFor();
     await page.keyboard.press('Escape');
     await panel.getByRole('button', { name: messages.clearFilters }).click();
+    await expectRows(25);
+    await page.waitForFunction(() => ![...new URL(location.href).searchParams.keys()].some(key => key.startsWith('driver')));
     assert.equal(new URL(page.url()).searchParams.get('routeSearch'), 'health');
     assert.equal(new URL(page.url()).searchParams.get('dbOperation'), 'find');
     await select(messages.command, 'ping');
@@ -111,6 +121,8 @@ try {
     await panel.getByText(locale === 'ar' ? 'لا توجد نتائج مطابقة. جرّب تغيير المرشحات.' : 'No matching results. Try changing the filters.', { exact: true }).waitFor();
     assert(await panel.getByRole('button', { name: exportName }).isDisabled());
     await panel.getByRole('button', { name: messages.clearFilters }).click();
+    await expectRows(25);
+    await page.waitForFunction(() => ![...new URL(location.href).searchParams.keys()].some(key => key.startsWith('driver')));
     await select(messages.view, messages.commandSummary);
     await expectRows(3);
     await select(messages.sort, messages.mostFailures);

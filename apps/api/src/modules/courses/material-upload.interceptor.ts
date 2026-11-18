@@ -57,6 +57,8 @@ export function MaterialUploadInterceptor(
         request.user,
         book,
       );
+      // Recording links carry JSON metadata and do not consume file capacity.
+      if (!book && request.is?.('application/json')) return next.handle();
       await this.storage.checkCapacity();
       const Interceptor = FileInterceptor('file', {
         dest: this.storage.temporaryDirectory,

@@ -1,5 +1,9 @@
 import { IC_CARRIED_LOCKED_MESSAGE } from '../utils/attempt-errors.util';
 import {
+  StudentProfile,
+  StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
+import {
   ConflictException,
   Injectable,
   NotFoundException,
@@ -76,6 +80,8 @@ export class ControlGradesService {
     private readonly access: ControlAccessService,
     private readonly sheets: ControlSheetsService,
     private readonly schemes: GradingSchemeService,
+    @InjectModel(StudentProfile.name)
+    private readonly profiles: Model<StudentProfileDocument>,
   ) {}
 
   /**
@@ -217,6 +223,14 @@ export class ControlGradesService {
       studentObjectIds,
       session,
     );
+    const heldProfiles = await this.profiles
+      .find({ userId: { $in: studentObjectIds }, isBlocked: true })
+      .select('userId')
+      .session(session)
+      .lean();
+    const heldIds = new Set(
+      heldProfiles.map((profile) => String(profile.userId)),
+    );
     const priorOps = await this.auditModel
       .find({ opId: { $in: dto.changes.map((c) => c.opId) } })
       .select('opId payloadHash actorId sheetId')
@@ -320,6 +334,15 @@ export class ControlGradesService {
 
       const student = studentById.get(change.studentId);
       const existing = docByStudent.get(change.studentId);
+      if (heldIds.has(change.studentId)) {
+        results.push({
+          ...base,
+          result: 'forbidden',
+          code: 'tuition_blocked',
+          message: 'Grade entry is locked while the student has a tuition hold',
+        });
+        continue;
+      }
       if ((existing?.rev ?? 0) !== change.expectedRev) {
         results.push({
           ...base,

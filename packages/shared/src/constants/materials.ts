@@ -40,6 +40,8 @@ export interface CourseMaterialDto {
   titleAr?: string;
   fileUrl: string;
   fileName: string;
+  /** External recording; absent on existing uploaded materials. */
+  videoUrl?: string;
   fileSize?: number;
   mimeType?: string;
   weekNumber?: number;

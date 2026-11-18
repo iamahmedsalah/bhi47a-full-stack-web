@@ -1925,6 +1925,8 @@
     "schemeHelpTitle": "How does the grading scheme work?",
     "midtermStatusOnly": "Midterm accepts present, absent or banned only.",
     "tuitionBlockedUnpaid": "Blocked — unpaid tuition",
+    "tuitionBlockedShort": "Blocked",
+    "tuitionEntryLocked": "Grade entry is locked during the tuition hold. Lift the hold in the student record and reload the sheet. Existing marks are preserved.",
     "tuitionBlocked": "Blocked by tuition management",
     "attempts": "Attempt comparison / IC",
     "icCarriedLocked": "IC contributions are retained; enter the summer final only.",

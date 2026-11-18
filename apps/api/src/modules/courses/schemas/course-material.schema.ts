@@ -39,6 +39,9 @@ export class CourseMaterial {
   @Prop({ required: true, trim: true })
   fileName!: string;
 
+  @Prop({ trim: true, maxlength: 2048 })
+  videoUrl?: string;
+
   @Prop({ type: Number })
   fileSize?: number;
 

@@ -433,18 +433,18 @@ export class CoursesController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_WRITE)
   @UseInterceptors(MaterialUploadInterceptor(false))
-  @ApiConsumes('multipart/form-data')
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({
     summary:
       'Upload academic lecture (by Doctor) or section (by TA) for a course',
   })
   async uploadMaterial(
     @Param('id', ParseObjectIdPipe) id: string,
-    @UploadedFile() file: MaterialUpload,
+    @UploadedFile() file: MaterialUpload | undefined,
     @Body() dto: CreateCourseMaterialDto,
     @CurrentUser() caller: any,
   ) {
-    if (!file || !file.path) {
+    if (!dto.videoUrl && (!file || !file.path)) {
       throw new BadRequestException('يرجى اختيار ملف المحاضرة أو السكشن لرفعه');
     }
     return this.coursesService.uploadCourseMaterial(id, file, dto, caller);

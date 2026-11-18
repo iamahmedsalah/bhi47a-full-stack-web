@@ -23,6 +23,7 @@ import {
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Button } from '@/components/ui/button';
 import { TableCell } from '@/components/ui/table';
 import { CopyButton } from '@/components/ui/copy-button';
 import { CustomDropdown, type CustomDropdownOption } from '@/components/ui/custom-dropdown';
@@ -172,6 +173,8 @@ export function StudentTable({
   const [studentToDeactivate, setStudentToDeactivate] = React.useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = React.useState<Student | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
+  const [deletingSelected, setDeletingSelected] = React.useState(false);
 
   const columns: ColumnDef<Student>[] = [
     {
@@ -472,6 +475,77 @@ export function StudentTable({
 
   return (
     <>
+      {isAdmin && selectedKeys.length > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger/5 p-3 text-sm">
+          <span>
+            {locale === "ar"
+              ? `حذف نهائي للمحددين (${selectedKeys.length})`
+              : `Permanently delete selected (${selectedKeys.length})`}
+          </span>
+          <Button
+            variant="destructive"
+            disabled={deletingSelected}
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            {locale === "ar" ? "حذف المحددين" : "Delete selected"}
+          </Button>
+        </div>
+      )}
+      <ConfirmDialog
+        dir={locale === 'ar' ? 'rtl' : 'ltr'}
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={
+          locale === "ar"
+            ? "حذف الطلاب المحددين نهائيًا"
+            : "Permanently delete selected students"
+        }
+        description={
+          locale === "ar"
+            ? `سيتم حذف ${selectedKeys.length} طالب وبياناتهم نهائيًا. هذا إجراء مختلف عن تعطيل الحساب ولا يمكن التراجع عنه.`
+            : `Permanently delete ${selectedKeys.length} students and their data. This differs from deactivation and cannot be undone.`
+        }
+        confirmLabel={
+          locale === "ar" ? "تأكيد الحذف النهائي" : "Confirm permanent deletion"
+        }
+        cancelLabel={tCommon("cancel")}
+        destructive
+        disabled={deletingSelected}
+        onConfirm={async () => {
+          if (!isAdmin || deletingSelected) return;
+          setDeletingSelected(true);
+          const failed: string[] = [];
+          try {
+            // Bound requests and retain failed selections so retries never repeat
+            // successful deletions, including when one account is protected.
+            for (const id of selectedKeys) {
+              try {
+                await deleteStudent(id);
+              } catch {
+                failed.push(id);
+              }
+            }
+            onSelectedKeysChange(failed);
+            setBulkDeleteOpen(false);
+            if (failed.length)
+              toast.error(
+                locale === "ar"
+                  ? `تعذر حذف ${failed.length} طالب؛ ظلوا محددين لإعادة المحاولة.`
+                  : `${failed.length} students could not be deleted and remain selected.`,
+              );
+            else
+              toast.success(
+                locale === "ar"
+                  ? "تم حذف الطلاب المحددين"
+                  : "Selected students deleted",
+              );
+            onRetry();
+          } finally {
+            setDeletingSelected(false);
+          }
+        }}
+      />
       <DataTableShell
         columns={columns}
         data={students}

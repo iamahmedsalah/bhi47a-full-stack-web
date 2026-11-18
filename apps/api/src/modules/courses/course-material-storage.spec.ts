@@ -81,6 +81,87 @@ describe('course materials storage boundaries', () => {
     );
   });
 
+  it.each([
+    ['lecture', doctor],
+    ['section', ta],
+  ] as const)(
+    'saves a %s recording without storing file bytes',
+    async (type, caller) => {
+      const videoUrl = 'https://drive.google.com/file/d/recording/view';
+      const result = await service.uploadCourseMaterial(
+        course._id.toString(),
+        undefined,
+        {
+          type,
+          title: 'Recorded class',
+          videoUrl,
+        },
+        caller,
+      );
+      expect(result.material).toMatchObject({
+        videoUrl,
+        type,
+        uploadedByRole: caller.staffType,
+      });
+      expect(storage.save).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects ambiguous or missing recording sources and unsafe URLs', async () => {
+    for (const [upload, videoUrl] of [
+      [undefined, undefined],
+      [file, 'https://example.com/video'],
+      [undefined, 'javascript:alert(1)'],
+      [undefined, 'https://user:password@example.com/video'],
+    ] as const) {
+      await expect(
+        service.uploadCourseMaterial(
+          course._id.toString(),
+          upload,
+          {
+            type: 'lecture',
+            title: 'Recording',
+            videoUrl,
+          },
+          doctor,
+        ),
+      ).rejects.toThrow();
+    }
+    expect(storage.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves assignment and type permissions for recording links', async () => {
+    for (const caller of [
+      ta,
+      { ...doctor, _id: new Types.ObjectId() },
+      { ...doctor, role: 'student' },
+    ]) {
+      await expect(
+        service.uploadCourseMaterial(
+          course._id.toString(),
+          undefined,
+          {
+            type: 'lecture',
+            title: 'Recording',
+            videoUrl: 'https://example.com/video',
+          },
+          caller,
+        ),
+      ).rejects.toThrow();
+    }
+  });
+
+  it('does not stream an external recording through file storage', async () => {
+    materials.findById.mockResolvedValue({
+      isPublished: true,
+      videoUrl: 'https://example.com/video',
+    });
+    await expect(
+      service.downloadCourseMaterial('id', {}, admin),
+    ).rejects.toThrow('recording link');
+    expect(storage.deliver).not.toHaveBeenCalled();
+  });
+
   it('stores book metadata without file bytes', async () => {
     await service.uploadSyllabus(course._id.toString(), file, doctor);
     expect(course.syllabusFile).toEqual(stored);

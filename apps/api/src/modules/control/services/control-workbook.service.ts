@@ -1307,6 +1307,10 @@ export class ControlWorkbookService {
         unchangedBreakdown
       )
         continue;
+      if (student.tuition?.isBlocked) {
+        fail('Grade entry is locked while the student has a tuition hold');
+        continue;
+      }
       if (current?.carriedFrom) {
         fail(IC_CARRIED_LOCKED_MESSAGE);
         continue;

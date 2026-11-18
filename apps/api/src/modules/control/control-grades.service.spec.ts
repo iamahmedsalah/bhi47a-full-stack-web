@@ -43,6 +43,7 @@ function build(options: {
   existing?: Record<string, unknown>[];
   inRoster?: boolean;
   priorOps?: string[];
+  tuitionBlocked?: boolean;
   updateResult?: Record<string, unknown> | null;
   upsertError?: { code: number };
 }) {
@@ -137,6 +138,9 @@ function build(options: {
         ),
     } as never,
     schemes as never,
+    {
+      find: () => chain(options.tuitionBlocked ? [{ userId: studentId }] : []),
+    } as never,
   );
 
   const user = { _id: new Types.ObjectId().toString(), role: 'staff' } as never;
@@ -161,6 +165,26 @@ function build(options: {
 }
 
 describe('ControlGradesService.applyChanges', () => {
+  it.each(['GRID', 'XLSX'] as const)(
+    'rejects %s writes for tuition-held students without changing existing grades',
+    async (source) => {
+      const ctx = build({ tuitionBlocked: true });
+      const result = await ctx.service.applyChanges(
+        ctx.user,
+        ctx.sheetId,
+        { changes: [ctx.change()] },
+        source,
+      );
+      expect(result.results[0]).toMatchObject({
+        result: 'forbidden',
+        code: 'tuition_blocked',
+      });
+      expect(result.summary.ok).toBe(0);
+      expect(ctx.gradeModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(ctx.gradeModel.findOneAndDelete).not.toHaveBeenCalled();
+      expect(ctx.auditModel.insertMany).not.toHaveBeenCalled();
+    },
+  );
   it('requires the separate correction permission during review and freezes pending approval', async () => {
     const actual = new ControlAccessService({} as never, {} as never);
     const ctx = build({ workflowState: 'IN_REVIEW' });

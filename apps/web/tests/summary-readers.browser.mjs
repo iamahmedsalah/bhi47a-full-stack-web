@@ -30,6 +30,7 @@ async function run(locale, mode, empty = false, denied = false) {
   const errors = [];
   const reads = [];
   let bytes = 0;
+  let complaintStatsReads = 0;
   page.on('pageerror', (error) => errors.push(error.message));
   await context.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -43,7 +44,10 @@ async function run(locale, mode, empty = false, denied = false) {
       data = pageData(mode === 'summary' ? items.map(summary) : items, empty ? 0 : complaints.length, limit);
       bytes += Buffer.byteLength(JSON.stringify(data));
     } else if (/\/admin\/complaints\/[a-f\d]{24}$/.test(path)) data = { ...complaints[0], description: 'Complete ticket details', screenshotUrl: undefined };
-    else if (path.endsWith('/admin/complaints/stats')) data = { total: 137, open: 28, review: 28, working: 27, resolved: 27, technical: 0, complaints: 137, high: 69, avgResolutionMs: null };
+    else if (path.endsWith('/admin/complaints/stats')) {
+      complaintStatsReads++;
+      data = { total: empty ? 0 : 137, open: 28, review: 28, working: 27, resolved: 27, technical: 0, complaints: 137, high: 69, avgResolutionMs: null };
+    }
     else if (path.endsWith('/admin/complaints/assignees')) data = [];
     else if (path.endsWith('/admin/complaints/settings')) data = { complaintsSystemOpen: true, blacklistedStudentCodes: [] };
     else if (path.endsWith('/admin/students-stats')) data = { total: 22, active: 22, suspended: 0, graduated: 0, withdrawn: 0, liveOnline: 0, liveOnlineStaff: 0, byLevel: [], departments: [], cohortRetention: [], gpaDistribution: [] };
@@ -58,12 +62,13 @@ async function run(locale, mode, empty = false, denied = false) {
   try {
     await page.goto(`${base}/${locale}/admin`, { waitUntil: 'networkidle' });
     await page.locator('#analytics-dashboard-export').waitFor();
-    assert.equal(reads.length, denied ? 0 : 2, 'Keep both existing dashboard queries and their permission gate');
+    assert.equal(reads.length, denied ? 0 : 1, 'Dashboard must fetch one bounded complaint sample with a permission gate');
+    assert.equal(complaintStatsReads, denied ? 0 : 1, 'Collection-wide totals must use the separate statistics endpoint with a permission gate');
     if (denied) {
       assert.deepEqual(errors, []);
       return;
     }
-    assert.deepEqual(reads.map(({ limit, view }) => ({ limit, view })).sort((a, b) => a.limit - b.limit), [{ limit: 1, view: 'summary' }, { limit: 100, view: 'summary' }]);
+    assert.deepEqual(reads.map(({ limit, view }) => ({ limit, view })), [{ limit: 100, view: 'summary' }]);
     assert(reads.every((read) => read.search === null));
     const dashboardText = await page.locator('#analytics-dashboard-export').innerText();
     if (!empty) assert(dashboardText.includes('137'), 'Total must remain collection-wide, not the 100-row sample size');

@@ -34,8 +34,9 @@ class UploadFixtureController {
   @UseInterceptors(MaterialUploadInterceptor(false))
   async upload(
     @UploadedFile() file: MaterialUpload,
-    @Body() _dto: CreateCourseMaterialDto,
+    @Body() dto: CreateCourseMaterialDto,
   ) {
+    if (dto.videoUrl) return { videoUrl: dto.videoUrl };
     const reference = await this.storage.save(file, false);
     return { size: reference.size, mimeType: reference.mimeType };
   }
@@ -98,6 +99,40 @@ describe('disk multipart upload lifecycle', () => {
     });
     expect(await readdir(join(root, '.tmp'))).toEqual([]);
     expect(await readdir(join(root, '.writers'))).toEqual([]);
+  });
+
+  it('accepts JSON recording metadata without a multipart file', async () => {
+    const videoUrl = 'https://drive.google.com/file/d/recording/view';
+    const result = await request(app.getHttpServer())
+      .post('/test-materials/course')
+      .send({ type: 'lecture', title: 'Recording', videoUrl })
+      .expect(201);
+    expect(result.body).toEqual({ videoUrl });
+    expect(await readdir(join(root, '.writers'))).toEqual([]);
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'http://example.com/video',
+    'https://user:pass@example.com/video',
+    'not a URL',
+  ])('rejects unsafe recording URL %s', async (videoUrl) => {
+    await request(app.getHttpServer())
+      .post('/test-materials/course')
+      .send({ type: 'lecture', title: 'Recording', videoUrl })
+      .expect(400);
+  });
+
+  it('checks assignment for JSON recording links', async () => {
+    authorize.mockRejectedValueOnce(new ForbiddenException('Unassigned'));
+    await request(app.getHttpServer())
+      .post('/test-materials/course')
+      .send({
+        type: 'lecture',
+        title: 'Recording',
+        videoUrl: 'https://example.com/video',
+      })
+      .expect(403);
   });
 
   it('cleans parsed files when DTO validation fails', async () => {

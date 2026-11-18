@@ -1174,7 +1174,7 @@ export class CoursesService {
    */
   async uploadCourseMaterial(
     courseId: string,
-    file: MaterialUpload,
+    file: MaterialUpload | undefined,
     dto: CreateCourseMaterialDto,
     caller: any,
   ) {
@@ -1228,7 +1228,31 @@ export class CoursesService {
       throw new ForbiddenException('صلاحية غير كافية لرفع المحتوى');
     }
 
-    const stored = await this.materialStorage!.save(file, false);
+    const videoUrl = dto.videoUrl?.trim();
+    if (Boolean(file) === Boolean(videoUrl)) {
+      throw new BadRequestException('Provide either a file or a recording URL');
+    }
+    if (videoUrl) {
+      let parsed: URL;
+      try {
+        parsed = new URL(videoUrl);
+      } catch {
+        throw new BadRequestException('Invalid recording URL');
+      }
+      if (
+        parsed.protocol !== 'https:' ||
+        parsed.username ||
+        parsed.password ||
+        videoUrl.length > 2048
+      ) {
+        throw new BadRequestException(
+          'Recording URL must use HTTPS without credentials',
+        );
+      }
+    }
+    const stored = file
+      ? await this.materialStorage!.save(file, false)
+      : undefined;
     const material = new this.courseMaterialModel({
       courseId: course._id,
       type: dto.type,
@@ -1236,9 +1260,10 @@ export class CoursesService {
       titleAr: dto.titleAr?.trim(),
       fileUrl: `/api/courses/materials/pending/download`,
       storedFile: stored,
-      fileName: stored.originalName,
-      fileSize: stored.size,
-      mimeType: stored.mimeType,
+      fileName: stored?.originalName || dto.title.trim(),
+      fileSize: stored?.size,
+      mimeType: stored?.mimeType,
+      videoUrl,
       weekNumber: dto.weekNumber,
       description: dto.description?.trim(),
       isPublished: true,
@@ -1252,12 +1277,13 @@ export class CoursesService {
     try {
       saved = await material.save();
     } catch (error) {
-      await this.cleanupFailedMaterialCommit(
-        stored,
-        material._id,
-        false,
-        error,
-      );
+      if (stored)
+        await this.cleanupFailedMaterialCommit(
+          stored,
+          material._id,
+          false,
+          error,
+        );
       throw error;
     }
     void this.cacheService?.delPattern(`courses:${courseId}:materials*`);
@@ -1340,6 +1366,11 @@ export class CoursesService {
 
     if (caller?.role === 'student' && !material.isPublished)
       throw new NotFoundException('Material is unavailable');
+    if (material.videoUrl) {
+      throw new BadRequestException(
+        'Open the recording link instead of downloading a file',
+      );
+    }
     if (material.storedFile)
       return this.materialStorage!.deliver(material.storedFile, res);
 

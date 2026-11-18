@@ -69,10 +69,15 @@ try {
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
   const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
-  await heldRow.getByText('Blocked — unpaid tuition',{exact:true}).waitFor();
+  await heldRow.getByText('Blocked',{exact:true}).waitFor();
+  assert.equal(await mark.isDisabled(),true,'financial hold locks grade inputs');
+  assert.equal(await heldRow.getByRole('button',{name:'260001 Component status',exact:true}).isDisabled(),true,'financial hold locks exam status');
   assert.equal(await heldRow.getAttribute('data-tuition-blocked'),'true');
   assert.equal(await page.locator('tbody tr').filter({hasText:'260002'}).getAttribute('data-tuition-blocked'),null);
   assert.ok(await heldRow.locator('td').evaluateAll(cells=>cells.every(cell=>getComputedStyle(cell).backgroundColor!=='rgba(0, 0, 0, 0)')));
+  rows[0].tuition={isBlocked:false,status:'paid'};
+  await page.reload();await mark.waitFor();
+  assert.equal(await mark.isEnabled(),true,'lifting financial hold restores entry');
   assert.equal(await page.getByRole('button',{name:'Export missing marks',exact:true}).count(),0);
   await page.getByRole('button',{name:'Templates',exact:true}).click();
   const templates=page.getByRole('dialog');
@@ -139,8 +144,9 @@ try {
   await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.coursework.score,17);assert.equal(rows[0].components.coursework.attendanceMark,4);
   await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});
   await page.screenshot({path:path.join(output,'english-workbook.png'),fullPage:true});
+  rows[0].tuition={isBlocked:true,status:'unpaid'};
   await page.goto(`${base}/ar/admin/control/${ids.midterm}`);await page.getByRole('textbox',{name:'260001 الميدتيرم',exact:true}).waitFor();
-  assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب — غير مسدد المصروفات',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
+  assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
   await page.getByRole('button',{name:'نماذج',exact:true}).click();
   await page.getByRole('heading',{name:'نماذج الرصد',exact:true}).waitFor();
@@ -160,6 +166,7 @@ try {
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
   for(const row of rows)if(!row.components.midterm)row.components.midterm={studentId:row.studentId,score:10,status:'present',rev:1,isPublished:false};
   rows[1].tuition={isBlocked:true,status:'unpaid'};
+  rows[0].tuition={isBlocked:false,status:'paid'};
   delete rows[1].components.midterm;
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const freshMark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});

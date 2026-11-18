@@ -249,6 +249,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       access,
       sheets,
       schemeService,
+      studentProfile as never,
     );
     workbook = new ControlWorkbookService(
       grade as never,

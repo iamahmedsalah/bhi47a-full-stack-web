@@ -340,6 +340,7 @@ export function ControlWorkbookGrid({
       }
       const code = (r.code || "").toLowerCase();
       const msg = (r.message || "").toLowerCase();
+      if (code === "tuition_blocked") return t("tuitionEntryLocked");
       if (code === "ic_carried_locked") return t("icCarriedLocked");
       if (code === "midterm_status") return t("midtermStatusOnly");
       if (code === "score_required" || msg.includes("a mark is required")) {
@@ -578,7 +579,12 @@ export function ControlWorkbookGrid({
     field: "raw" | "attendance" | "quizzes" | "status",
     value: string,
   ) {
-    if (!caps.canEdit || row.notRegistered || row.components[key]?.isPublished)
+    if (
+      !caps.canEdit ||
+      row.tuition?.isBlocked ||
+      row.notRegistered ||
+      row.components[key]?.isPublished
+    )
       return;
     const prior = row.components[key];
     setFailed(false);
@@ -786,6 +792,7 @@ export function ControlWorkbookGrid({
           draft?.error && component === key && "border-rose-500",
         )}
         value={value}
+        disabled={Boolean(row.tuition?.isBlocked)}
         readOnly={
           component !== key ||
           busy ||
@@ -1477,11 +1484,7 @@ export function ControlWorkbookGrid({
                   {row.tuition?.isBlocked && (
                     <span className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-400">
                       <Lock className="size-3 shrink-0" aria-hidden="true" />
-                      {t(
-                        row.tuition.status === "unpaid"
-                          ? "tuitionBlockedUnpaid"
-                          : "tuitionBlocked",
-                      )}
+                      {t("tuitionBlockedShort")}
                     </span>
                   )}
                   {row.notRegistered && (
@@ -1572,6 +1575,7 @@ export function ControlWorkbookGrid({
                       "not_entered"
                     }
                     disabled={
+                      Boolean(row.tuition?.isBlocked) ||
                       !caps.canEdit ||
                       row.notRegistered ||
                       Boolean(row.components[key]?.isPublished) ||
@@ -1647,7 +1651,11 @@ export function ControlWorkbookGrid({
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
-                            disabled={!caps.canEdit || pending}
+                            disabled={
+                              !caps.canEdit ||
+                              pending ||
+                              Boolean(row.tuition?.isBlocked)
+                            }
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-400 outline-none disabled:opacity-50 disabled:pointer-events-none"
                             onSelect={() => {
                               setSelected([row.studentId]);

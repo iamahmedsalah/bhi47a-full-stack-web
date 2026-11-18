@@ -229,7 +229,7 @@ describe('Control workbook import and review', () => {
     ).toEqual({ isBlocked: false, status: null });
   });
   it.each(['midterm', 'coursework', 'final'] as const)(
-    'highlights held %s Excel rows and keeps tuition informational on import',
+    'highlights held %s Excel rows and rejects edits even if the file claims tuition was paid',
     async (component) => {
       const ctx = build(component);
       Object.assign(ctx.rows[0], {
@@ -258,9 +258,24 @@ describe('Control workbook import and review', () => {
         ctx.sheetId,
         Buffer.from(await book.xlsx.writeBuffer()),
       );
-      expect(result.errors).toEqual([]);
-      expect(result.changes[0].status).toBe('present');
-      expect(result.changes[0]).not.toHaveProperty('tuition');
+      expect(result.errors).toEqual([
+        'Row 2: Grade entry is locked while the student has a tuition hold',
+      ]);
+      expect(result.changes).toEqual([]);
+      Object.assign(ctx.rows[0], {
+        tuition: { isBlocked: false, status: 'paid' },
+      });
+      const unblocked = await ctx.service.previewFile(
+        ctx.user,
+        ctx.sheetId,
+        Buffer.from(await book.xlsx.writeBuffer()),
+      );
+      expect(unblocked.errors).toEqual([]);
+      expect(unblocked.changes[0].status).toBe('present');
+      expect(unblocked.changes[0]).not.toHaveProperty('tuition');
+      Object.assign(ctx.rows[0], {
+        tuition: { isBlocked: true, status: 'unpaid' },
+      });
       const exported = new ExcelJS.Workbook();
       await exported.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
       expect(exported.getWorksheet('Marks')!.getCell('O2').text).toContain(
