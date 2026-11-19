@@ -89,9 +89,86 @@ function fixture() {
     _id: String(new Types.ObjectId()),
     role: 'admin',
   } as AuthenticatedUser;
-  return { service, user, access, courses, profiles, grades, registrations };
+  return {
+    service,
+    user,
+    access,
+    courses,
+    profiles,
+    grades,
+    registrations,
+    rows,
+  };
 }
 describe('Control XLSX reports', () => {
+  it('uses strict exam thresholds and all course students as denominator with flat fills', async () => {
+    const ctx = fixture();
+    const original = ctx.rows[0];
+    ctx.rows.splice(
+      0,
+      ctx.rows.length,
+      ...[
+        { midterm: 18, final: 30, status: 'present' },
+        { midterm: 19, final: 31, status: 'present' },
+        { midterm: 30, final: 50, status: 'present' },
+        { midterm: 30, final: 50, status: 'absent' },
+        { midterm: null, final: null, status: null },
+      ].map((mark) => ({
+        ...original,
+        components: {
+          ...original.components,
+          midterm: { score: mark.midterm, status: mark.status },
+          final: { score: mark.final, status: mark.status },
+        },
+      })),
+    );
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(
+      await ctx.service.export(ctx.user, 'sheet', {
+        type: 'course',
+        academicYear: '2026-2027',
+        semester: 'first',
+      }),
+    );
+    const analysis = book.worksheets[1];
+    const rates: ExcelJS.Cell[] = [];
+    analysis.eachRow((row) => {
+      const label = row.getCell(1).value;
+      if (typeof label === 'string' && label.includes('نسبة النجاح'))
+        rates.push(row.getCell(2));
+    });
+    expect(rates).toHaveLength(2);
+    for (const cell of rates) {
+      expect(cell.value).toBe(0.4);
+      expect(cell.numFmt).toBe('0.00%');
+      expect(cell.fill).toEqual({
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0F2F1' },
+      });
+    }
+    expect(analysis.model.conditionalFormattings ?? []).toHaveLength(0);
+  });
+
+  it('exports zero success rates for an empty course without division by zero', async () => {
+    const ctx = fixture();
+    ctx.rows.length = 0;
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(
+      await ctx.service.export(ctx.user, 'sheet', {
+        type: 'course',
+        academicYear: '2026-2027',
+        semester: 'first',
+      }),
+    );
+    const rates: ExcelJS.CellValue[] = [];
+    book.worksheets[1].eachRow((row) => {
+      const label = row.getCell(1).value;
+      if (typeof label === 'string' && label.includes('نسبة النجاح'))
+        rates.push(row.getCell(2).value);
+    });
+    expect(rates).toEqual([0, 0]);
+  });
   it('exports course marks, exam status, registration, fees and a separate analysis', async () => {
     const ctx = fixture();
     const book = new ExcelJS.Workbook();

@@ -206,6 +206,26 @@ export class ControlReportsService {
               : '',
           ],
         ]);
+        if (key === 'midterm' || key === 'final') {
+          const threshold = key === 'midterm' ? 18 : 30;
+          const passed = rows.filter((row) => {
+            const mark = row.components[key];
+            return (
+              mark?.status === 'present' &&
+              mark.score != null &&
+              mark.score > threshold
+            );
+          }).length;
+          analysis.addRow([
+            `${label} - عدد الطلاب بدرجة أكبر من ${threshold}`,
+            passed,
+          ]);
+          const percentage = analysis.addRow([
+            `${label} - نسبة النجاح (أكبر من ${threshold} ÷ إجمالي طلاب المادة)`,
+            rows.length ? passed / rows.length : 0,
+          ]);
+          percentage.getCell(2).numFmt = '0.00%';
+        }
         for (const [state, name] of Object.entries(states))
           analysis.addRow([
             `${label} - ${name}`,
@@ -215,22 +235,13 @@ export class ControlReportsService {
       }
       style(analysis);
       analysis.getColumn(1).width = 42;
-      // ExcelJS writes dataBar.color; its bundled declaration omits the field.
-      const dataBar: ExcelJS.DataBarRuleType & {
-        color: Partial<ExcelJS.Color>;
-      } = {
-        type: 'dataBar',
-        priority: 1,
-        minLength: 0,
-        maxLength: 100,
-        gradient: true,
-        showValue: true,
-        cfvo: [{ type: 'num', value: 0 }, { type: 'max' }],
-        color: { argb: 'FF0D9488' },
-      };
-      analysis.addConditionalFormatting({
-        ref: `B5:B${analysis.rowCount}`,
-        rules: [dataBar],
+      analysis.getColumn(2).eachCell((cell, rowNumber) => {
+        if (rowNumber > 1 && typeof cell.value === 'number')
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0F2F1' },
+          };
       });
     } else {
       if (!query.level)
