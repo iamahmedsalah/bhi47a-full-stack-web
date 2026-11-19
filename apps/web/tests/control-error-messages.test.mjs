@@ -8,6 +8,26 @@ import { fileURLToPath } from 'node:url';
 
 const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireWeb = createRequire(path.join(web, 'package.json'));
+const { createTranslator } = requireWeb('next-intl');
+test('Control review dialogs render readable bilingual messages with real counts', () => {
+  const keys = [
+    'reviewExplanation', 'sendApprovalExplanation', 'approvalExplanation',
+    'returnExplanation', 'reopenExplanation', 'clearExplanation',
+    'readinessTitle', 'readinessStats', 'readinessWarning', 'readinessReady',
+  ];
+  for (const locale of ['ar', 'en']) {
+    const messages = JSON.parse(fs.readFileSync(path.join(web, `src/messages/${locale}.json`), 'utf8'));
+    const t = createTranslator({ locale, messages, namespace: 'control', onError: (error) => { throw error; } });
+    for (const key of keys) {
+      const rendered = t(key, { total: 2147, entered: 1679, missing: 468 });
+      assert.doesNotMatch(rendered, /\?{2,}|\uFFFD|\{(?:total|entered|missing)\}/);
+      if (locale === 'ar') assert.match(rendered, /[\u0600-\u06ff]/);
+    }
+    const stats = t('readinessStats', { total: 2147, entered: 1679, missing: 468 });
+    for (const count of ['2147', '1679', '468']) assert.ok(stats.includes(count));
+    assert.ok(t('readinessWarning', { missing: 468 }).includes('468'));
+  }
+});
 const ts = requireWeb('typescript');
 const source = ts.transpileModule(fs.readFileSync(path.join(web, 'src/lib/api.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },

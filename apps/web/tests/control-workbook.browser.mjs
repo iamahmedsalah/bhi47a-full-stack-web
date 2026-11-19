@@ -163,6 +163,13 @@ try {
   await page.goto(`${base}/ar/admin/control/${ids.midterm}`);await page.getByRole('textbox',{name:'260001 الميدتيرم',exact:true}).waitFor();
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
+  await page.getByRole('button',{name:messages.SUBMIT,exact:true}).click();
+  const arabicReview=page.getByRole('dialog');
+  await arabicReview.getByText('مراجعة الكشف قبل المتابعة',{exact:true}).waitFor();
+  await arabicReview.getByText(messages.reviewExplanation,{exact:true}).waitFor();
+  assert.doesNotMatch(await arabicReview.innerText(),/\?{2,}|\uFFFD/,'Arabic review text must not contain corrupted characters');
+  await page.screenshot({path:path.join(output,'arabic-review-dialog.png'),fullPage:true});
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'نماذج',exact:true}).click();
   await page.getByRole('heading',{name:'نماذج الرصد',exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'arabic-templates.png'),fullPage:true});
@@ -189,6 +196,7 @@ try {
   await freshMark.fill('14.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();
   await page.getByRole('button',{name:'Submit for review',exact:true}).click();
   const workflowDialog=page.getByRole('dialog');
+  assert.doesNotMatch(await workflowDialog.innerText(),/\?{2,}|\uFFFD/,'English review text must not contain corrupted characters');
   await workflowDialog.getByText('There are 2 students without marks.',{exact:false}).waitFor();
   assert.equal(await workflowDialog.getByRole('textbox').count(),0,'workflow does not ask for reasons');
   assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'explicit confirmation permits blank entries without a reason');
