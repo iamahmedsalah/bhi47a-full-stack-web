@@ -309,7 +309,10 @@ export class ControlReleaseStore {
     const deferredByComponent = new Map(
       sheets.map((s) => [
         s.component,
-        new Set(s.tuitionDeferredStudentIds ?? []),
+        new Set([
+          ...(s.tuitionDeferredStudentIds ?? []),
+          ...(s.unenteredStudentIds ?? []),
+        ]),
       ]),
     );
     const deferredStudents: string[] = [];

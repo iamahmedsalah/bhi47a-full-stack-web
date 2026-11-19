@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ControlTransferProgress } from "./control-transfer-progress";
 import { useTranslations } from "next-intl";
 import {
   FileSpreadsheet,
@@ -69,6 +70,7 @@ export function ControlFileImportDialog({
   const [batches, setBatches] = useState<Batch[]>([]);
   const plans = useRef<Batch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transferPercent, setTransferPercent] = useState<number | null>(null);
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -89,13 +91,27 @@ export function ControlFileImportDialog({
           throw new Error(t("fileTypeError"));
         if (!file.size || file.size > 2 * 1024 * 1024)
           throw new Error(t("fileSizeError"));
-        const first = await previewControlFile(sheetId, file, 0);
+        const reportProgress = (percent: number | null) => {
+          if (alive) setTransferPercent(percent);
+        };
+        const first = await previewControlFile(
+          sheetId,
+          file,
+          0,
+          reportProgress,
+        );
         const next: Batch[] = [{ preview: first }];
         if (alive) setBatches([...next]);
         for (let batch = 1; batch < (first.totalBatches ?? 1); batch++) {
           if (!alive) return;
+          setTransferPercent(null);
           next.push({
-            preview: await previewControlFile(sheetId, file, batch),
+            preview: await previewControlFile(
+              sheetId,
+              file,
+              batch,
+              reportProgress,
+            ),
           });
           if (alive) setBatches([...next]);
         }
@@ -295,7 +311,12 @@ export function ControlFileImportDialog({
               {t("noImportChanges")}
             </p>
           )}
-          <p className="text-sm">{t("savedProgress", { saved, valid })}</p>
+          <p className="flex justify-between gap-3 text-sm">
+            <span>{t("savedProgress", { saved, valid })}</span>
+            <bdi dir="ltr" className="font-mono">
+              {valid ? Math.floor(Math.min(100, (saved / valid) * 100)) : 0}%
+            </bdi>
+          </p>
           <div
             className="h-2 w-full overflow-hidden rounded-full bg-muted"
             role="progressbar"
@@ -321,10 +342,18 @@ export function ControlFileImportDialog({
             {t("batchWarning")}
           </HelpNote>
           {loading && (
-            <p className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              {t("loading")}
-            </p>
+            <ControlTransferProgress
+              percent={transferPercent}
+              label={
+                transferPercent === 100
+                  ? locale === "ar"
+                    ? "تم نقل الملف؛ جارٍ فحص صفوف الدفعة"
+                    : "File transferred; validating batch rows"
+                  : locale === "ar"
+                    ? "نقل الملف للفحص"
+                    : "Uploading file for validation"
+              }
+            />
           )}
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -443,29 +472,34 @@ export function ControlFileImportDialog({
                       .slice((page - 1) * 50, page * 50)
                       .map((row) => ({ ...row, _id: String(row.sourceRow) }))}
                     columns={[
-                      { key: "row", header: "#", className: 'w-8', cell: (row) => row.sourceRow },
+                      {
+                        key: "row",
+                        header: "#",
+                        className: "w-8",
+                        cell: (row) => row.sourceRow,
+                      },
                       {
                         key: "code",
-                        className: 'w-24',
+                        className: "w-24",
                         header: t("studentCode"),
                         cell: (row) => <bdi>{row.studentCode}</bdi>,
                       },
                       {
                         key: "name",
-                        className: 'w-44 break-words',
+                        className: "w-44 break-words",
                         header: t("studentName"),
                         cell: (row) =>
                           locale === "ar" ? row.nameAr || row.name : row.name,
                       },
                       {
                         key: "before",
-                        className: 'w-20',
+                        className: "w-20",
                         header: t("beforeValue"),
                         cell: (row) => row.before ?? "—",
                       },
                       {
                         key: "after",
-                        className: 'w-20',
+                        className: "w-20",
                         header: t("afterValue"),
                         cell: (row) => row.after ?? "—",
                       },

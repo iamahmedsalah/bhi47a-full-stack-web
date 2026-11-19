@@ -294,6 +294,7 @@ export class ControlSheetsService {
         workflowState: sheet.workflowState ?? 'DRAFT',
         revision: sheet.revision ?? 0,
         reviewReason: sheet.reviewReason ?? null,
+        grace: sheet.grace ?? null,
         locked: sheet.locked,
         lockedAt: sheet.lockedAt ?? null,
         lockReason: sheet.lockReason ?? null,
@@ -314,6 +315,7 @@ export class ControlSheetsService {
         step: rules.step,
       },
       capabilities: {
+        canGrace: caps.canGrace,
         canEdit:
           !sheet.locked &&
           (sheet.workflowState === 'IN_REVIEW'

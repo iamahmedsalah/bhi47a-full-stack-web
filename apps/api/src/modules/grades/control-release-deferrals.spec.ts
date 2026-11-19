@@ -75,6 +75,25 @@ function fixture(component: 'midterm' | 'final' = 'final') {
 }
 
 describe('financially deferred release entries', () => {
+  it('omits explicitly approved blank attempts without a financial hold or invented zero marks', async () => {
+    const ctx = fixture();
+    for (const sheet of ctx.sheets) {
+      sheet.tuitionDeferredStudentIds = [];
+      Object.assign(sheet, {
+        unenteredStudentIds:
+          sheet.component === 'coursework' ? [] : [String(ctx.heldId)],
+      });
+    }
+    const preview = await ctx.store.preview(ctx.sheet);
+    expect(preview.count).toBe(1);
+    expect(preview.results).toHaveLength(1);
+    expect(preview.results[0].result.total).toBe(100);
+    expect(
+      preview.marks.some(
+        (mark) => String(mark.studentId) === String(ctx.heldId),
+      ),
+    ).toBe(false);
+  });
   beforeEach(() =>
     jest
       .spyOn(ControlAttemptStore.prototype, 'assertReviewed')

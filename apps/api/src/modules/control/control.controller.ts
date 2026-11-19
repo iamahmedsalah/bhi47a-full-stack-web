@@ -35,6 +35,8 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@student-portal/shared';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ControlGraceService } from './services/control-grace.service';
+import { GracePreviewDto, ApplyGraceDto } from './dto/control.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
@@ -71,7 +73,26 @@ export class ControlController {
     private readonly schemes: GradingSchemeService,
     private readonly reports: ControlReportsService,
     private readonly attempts: ControlAttemptsService,
+    private readonly grace: ControlGraceService,
   ) {}
+
+  @Post('sheets/:id/grace/preview')
+  previewGrace(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: GracePreviewDto,
+  ) {
+    return this.grace.preview(user, id, dto);
+  }
+
+  @Post('sheets/:id/grace')
+  applyGrace(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: ApplyGraceDto,
+  ) {
+    return this.grace.apply(user, id, dto);
+  }
 
   @Get('sheets/:id/attempts')
   attemptsPreview(

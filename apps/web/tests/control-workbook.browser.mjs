@@ -29,10 +29,10 @@ await write('styles.css',css.css);
 const ids = { midterm: '100000000000000000000001', coursework: '100000000000000000000002', final: '100000000000000000000003' };
 const components = Object.entries(ids).map(([key])=>({key,nameAr:{midterm:'الميدتيرم',coursework:'أعمال السنة',final:'النهائي'}[key],nameEn:key,max:key==='final'?60:20,step:0.5,enabled:true}));
 const downloadRequests=[];
-let denySave = false, writes = 0, schemeVersion = 1, reviewEditor = false;
+let denySave = false, writes = 0, schemeVersion = 1, reviewEditor = false, graceAllowed = false, graceReceipt = null;
 const states = Object.fromEntries(Object.keys(ids).map(k=>[k,{revision:0,workflowState:'DRAFT'}]));
 const rows = Array.from({length:3001},(_,i)=>({studentId:(i+1).toString(16).padStart(24,'0'), studentCode:String(260001+i), name:`Synthetic Student ${i+1}`,nameAr:`طالب تجريبي ${i+1}`,notRegistered:false,components:{},result:{total:null,totalMax:100,complete:false}}));
-const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canEdit:states[key].workflowState==='DRAFT'||(states[key].workflowState==='IN_REVIEW'&&reviewEditor),canEditReview:reviewEditor,canApprove:true,canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
+const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,grace:key==='midterm'?graceReceipt:null,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canGrace:graceAllowed,canEdit:states[key].workflowState==='DRAFT'||(states[key].workflowState==='IN_REVIEW'&&reviewEditor),canEditReview:reviewEditor,canApprove:true,canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
 rows[0].tuition={isBlocked:true,status:'unpaid'};
 rows[1].tuition={isBlocked:false,status:'paid'};
 let workbookReads=0;
@@ -46,6 +46,8 @@ const server = http.createServer(async (req,res)=>{
       if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,componentStates:Object.fromEntries(Object.entries(states).map(([k,v])=>[k,v.workflowState])),scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
       if(req.method==='GET') return res.end(JSON.stringify(detail(key)));
       const chunks=[];for await(const chunk of req) chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
+      if(url.pathname.endsWith('/grace/preview')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.amount,5);return res.end(JSON.stringify({digest:'a'.repeat(64),revision:states[key].revision,amount:5,max:20,counts:{registered:3001,changed:3,capped:1,atMaximum:1,absentOrBanned:2,held:0,unentered:0,other:2995},sample:[{studentCode:rows[0].studentCode,before:0,added:5,after:5},{studentCode:rows[1].studentCode,before:1,added:5,after:6},{studentCode:rows[2].studentCode,before:18,added:2,after:20}]}));}
+      if(url.pathname.endsWith('/grace')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.digest,'a'.repeat(64));assert.equal(body.expectedRevision,states[key].revision);assert.ok(body.operationId);graceReceipt={amount:5,changed:3,capped:1,appliedAt:new Date().toISOString()};[5,6,20].forEach((score,i)=>rows[i].components.midterm={...rows[i].components.midterm,score,rev:rows[i].components.midterm.rev+1});states[key].revision++;return res.end(JSON.stringify(graceReceipt));}
       if(url.pathname.endsWith('/entries')) {
         if(body.expectedSchemeVersion!==schemeVersion){res.statusCode=409;return res.end(JSON.stringify({code:'SCHEME_CHANGED',message:'Synthetic scheme changed'}));}
         if(denySave){res.statusCode=503;return res.end(JSON.stringify({message:'Synthetic save failure'}));}
@@ -53,7 +55,7 @@ const server = http.createServer(async (req,res)=>{
         const results=body.changes.map(change=>{const row=rows.find(r=>r.studentId===change.studentId);const entry={studentId:row.studentId,score:change.score,status:change.status||'present',rev:(row.components[key]?.rev||0)+1,isPublished:false,attendanceMark:change.attendanceMark,quizzesMark:change.quizzesMark};row.components[key]=entry;return {studentId:row.studentId,opId:change.opId,result:'ok',entry};});
         states[key].revision++;return res.end(JSON.stringify({results,summary:{ok:results.length,invalid:0,conflict:0,forbidden:0}}));
       }
-      if(url.pathname.endsWith('/review')) {assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='SUBMIT_APPROVAL'?'PENDING_APPROVAL':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
+      if(url.pathname.endsWith('/review')) {assert.equal(body.reason,undefined,'workflow does not send a reason');assert.equal(body.allowMissing,true,'blank entries require explicit confirmation');assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='SUBMIT_APPROVAL'?'PENDING_APPROVAL':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
       if(url.pathname==='/admin/control/sheets') return res.end(JSON.stringify(detail(body.component)));
     }
     if(/\.(js|css)$/.test(url.pathname)) {res.setHeader('Content-Type',url.pathname.endsWith('.js')?'text/javascript':'text/css');return res.end(await fs.readFile(path.join(output,path.basename(url.pathname))));}
@@ -76,8 +78,15 @@ try {
   assert.equal(await page.locator('tbody tr').filter({hasText:'260002'}).getAttribute('data-tuition-blocked'),null);
   assert.ok(await heldRow.locator('td').evaluateAll(cells=>cells.every(cell=>getComputedStyle(cell).backgroundColor!=='rgba(0, 0, 0, 0)')));
   rows[0].tuition={isBlocked:false,status:'paid'};
+  rows[1].tuition={isBlocked:true,status:'unpaid'};
   await page.reload();await mark.waitFor();
   assert.equal(await mark.isEnabled(),true,'lifting financial hold restores entry');
+  await mark.press('Enter');
+  assert.equal(await page.getByRole('textbox',{name:'260003 Midterm',exact:true}).evaluate(el=>document.activeElement===el),true,'Enter skips a tuition-held row');
+  await page.getByRole('textbox',{name:'260003 Midterm',exact:true}).press('ArrowUp');
+  assert.equal(await mark.evaluate(el=>document.activeElement===el),true,'ArrowUp skips a tuition-held row');
+  rows[1].tuition={isBlocked:false,status:'paid'};
+  await page.reload();await mark.waitFor();
   assert.equal(await page.getByRole('button',{name:'Export missing marks',exact:true}).count(),0);
   await page.getByRole('button',{name:'Templates',exact:true}).click();
   const templates=page.getByRole('dialog');
@@ -86,6 +95,8 @@ try {
   const templateDownload=page.waitForEvent('download');await templates.getByRole('button',{name:'Download Excel',exact:true}).click();await templateDownload;
   assert.equal(downloadRequests.at(-1).component,'final');assert.equal(downloadRequests.at(-1).mode,'workbook');
   await templates.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
+  await templates.getByRole('progressbar',{name:'Download complete',exact:true}).waitFor();
+  assert.equal(await templates.getByRole('progressbar',{name:'Download complete',exact:true}).getAttribute('aria-valuenow'),'100');
   await page.keyboard.press('Escape');
   await templates.waitFor({state:'hidden'});
   await page.getByRole('button',{name:'Control reports',exact:true}).click();
@@ -129,10 +140,14 @@ try {
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   await mark.waitFor();
   assert.equal(await page.locator('tbody tr').count(),100);
+  await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('textbox',{name:'260101 Midterm',exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
+  await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Previous',exact:true}).click();
   await mark.waitFor();
+  await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
   const readsBeforeSave=workbookReads;await mark.fill('17.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,17.5);await page.waitForLoadState('networkidle');assert.equal(workbookReads,readsBeforeSave,'autosave must patch acknowledged rows instead of downloading the whole roster');
   await mark.press('Enter');assert.equal(await page.getByRole('textbox',{name:'260002 Midterm',exact:true}).evaluate(el=>document.activeElement===el),true);
   denySave=true;await mark.fill('16');await page.getByText('Synthetic save failure').waitFor();assert.equal(await mark.inputValue(),'16');await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByText('Your unsaved draft was restored. Review the current marks and scheme, then retry saving.',{exact:true}).waitFor();assert.equal(await mark.inputValue(),'16');denySave=false;
@@ -168,19 +183,15 @@ try {
   rows[1].tuition={isBlocked:true,status:'unpaid'};
   rows[0].tuition={isBlocked:false,status:'paid'};
   delete rows[1].components.midterm;
+  delete rows[2].components.midterm;
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const freshMark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});
   await freshMark.fill('14.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();
   await page.getByRole('button',{name:'Submit for review',exact:true}).click();
   const workflowDialog=page.getByRole('dialog');
-  await workflowDialog.getByText('Deferred for a tuition hold: 1.',{exact:false}).waitFor();
-  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),false,'the review reason is still required independently of financial deferrals');
-  await workflowDialog.getByRole('textbox').fill('Synthetic autosave and review acceptance');
-  await page.waitForFunction(()=>{
-    const dialog=document.querySelector('[role="dialog"]');
-    return [...(dialog?.querySelectorAll('button')??[])].some(button=>button.textContent.trim()==='Confirm'&&!button.disabled);
-  });
-  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'a financially deferred blank must not block submission once the review reason is supplied');
+  await workflowDialog.getByText('There are 2 students without marks.',{exact:false}).waitFor();
+  assert.equal(await workflowDialog.getByRole('textbox').count(),0,'workflow does not ask for reasons');
+  assert.equal(await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).isEnabled(),true,'explicit confirmation permits blank entries without a reason');
   const reviewResponse=page.waitForResponse(response=>response.url().endsWith('/review')&&response.request().method()==='POST');
   await workflowDialog.getByRole('button',{name:'Confirm',exact:true}).click();
   assert.equal((await reviewResponse).status(),200);
@@ -196,17 +207,32 @@ try {
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.score,16);
   await page.getByRole('button',{name:'Send for approval',exact:true}).click();
-  await page.getByRole('dialog').getByRole('textbox').fill('Control correction complete');
   await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
   await page.getByRole('status').getByText(/Awaiting approval/).waitFor();
   assert.equal(states.midterm.workflowState,'PENDING_APPROVAL');
   assert.equal(await controlMark.getAttribute('readonly'),'');
   await page.getByRole('button',{name:'Approve sheet',exact:true}).click();
-  await page.getByRole('dialog').getByRole('textbox').fill('Independent approval');
   await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
   await page.getByRole('status').getByText(/Approved/).waitFor();
   assert.equal(states.midterm.workflowState,'APPROVED');
   assert.equal(await page.evaluate(()=>window.__serverNavigations||0),0,'client grid filters must not trigger server navigations');assert.deepEqual(errors,[]);assert.ok(writes>=3);
+  assert.equal(await page.getByRole('button',{name:'Grace marks',exact:true}).count(),0,'permission required to display grace action');
+  graceAllowed=true;states.midterm.workflowState='IN_REVIEW';
+  [0,1,18].forEach((score,i)=>{rows[i].tuition={isBlocked:false,status:'paid'};rows[i].components.midterm={studentId:rows[i].studentId,score,status:'present',rev:1,isPublished:false};});
+  await page.goto(`${base}/en/admin/control/${ids.final}`);
+  await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Grace marks',exact:true}).count(),0,'grace never appears on finals');
+  await page.goto(`${base}/en/admin/control/${ids.midterm}`);
+  await page.getByRole('button',{name:'Grace marks',exact:true}).click();
+  const grace=page.getByRole('dialog');
+  await grace.getByRole('spinbutton',{name:'Grace marks',exact:true}).fill('5');
+  await grace.getByRole('button',{name:'Preview grace marks',exact:true}).click();
+  await grace.getByText('Capped at maximum',{exact:true}).waitFor();
+  assert.equal(await grace.getByRole('row').count(),4);
+  await grace.getByRole('button',{name:'Confirm once-only grace marks',exact:true}).click();
+  await grace.getByText('Grace marks applied and recorded in the audit log.',{exact:true}).waitFor();
+  await grace.getByRole('button',{name:'Close grace marks',exact:true}).click();
+  await page.getByRole('button',{name:'Grace marks applied',exact:true,disabled:true}).waitFor();
   console.log('Control browser acceptance passed: 3001-student paginated/searchable bilingual real grid, all grade columns, autosave/retry, keyboard navigation, coursework 5/15, desktop/mobile screenshots. API persistence is covered separately.');
 } catch(error) { if(page) await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});throw error; }
 finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

@@ -72,6 +72,20 @@ export class ControlSheet {
   @Prop({ type: [String], default: [] })
   tuitionDeferredStudentIds!: string[];
 
+  /** Explicitly confirmed unentered marks; never interpreted as zero. */
+  @Prop({ type: [String], default: [] })
+  unenteredStudentIds!: string[];
+
+  @Prop({ type: Object })
+  grace?: {
+    operationId: string;
+    amount: number;
+    actorId: string;
+    appliedAt: Date;
+    changed: number;
+    capped: number;
+  };
+
   @Prop({ default: false })
   locked!: boolean;
 

@@ -17,6 +17,7 @@ export interface ControlCapabilities {
   canCreateSheets: boolean;
   canEnter: boolean;
   canEditReview: boolean;
+  canGrace?: boolean;
   canEditPublished: boolean;
   canManageStates: boolean;
   canLock: boolean;
@@ -59,6 +60,12 @@ export interface ControlSheetDetails {
       "DRAFT" | "IN_REVIEW" | "PENDING_APPROVAL" | "RETURNED" | "APPROVED";
     revision: number;
     reviewReason: string | null;
+    grace?: {
+      amount: number;
+      changed: number;
+      capped: number;
+      appliedAt: string;
+    } | null;
     locked: boolean;
     lockedAt: string | null;
     lockReason: string | null;
@@ -79,6 +86,7 @@ export interface ControlSheetDetails {
     step: number;
   };
   capabilities: {
+    canGrace?: boolean;
     canSubmit: boolean;
     canReview: boolean;
     canApprove?: boolean;

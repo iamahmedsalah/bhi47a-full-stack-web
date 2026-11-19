@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { ControlTransferProgress } from "./control-transfer-progress";
 import { Download, FileSpreadsheet, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +41,8 @@ export function ControlDownloadDialogs({
   const [level, setLevel] = useState("1");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [percent, setPercent] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
   return (
     <Dialog
       open
@@ -180,21 +183,50 @@ export function ControlDownloadDialogs({
             {error}
           </p>
         )}
+        {started && !error && (
+          <ControlTransferProgress
+            percent={percent}
+            label={
+              busy
+                ? percent === null
+                  ? ar
+                    ? "جارٍ تجهيز الملف؛ ستظهر نسبة النقل عند توفر حجمه"
+                    : "Preparing file; transfer percentage appears when its size is available"
+                  : ar
+                    ? "تنزيل الملف"
+                    : "Downloading file"
+                : ar
+                  ? "اكتمل تنزيل الملف"
+                  : "Download complete"
+            }
+          />
+        )}
         <Button
           disabled={busy}
           onClick={async () => {
             setBusy(true);
             setError("");
+            setPercent(null);
+            setStarted(true);
             try {
               if (kind === "templates")
-                await downloadControlTemplate(detail.sheet.id, component, mode);
+                await downloadControlTemplate(
+                  detail.sheet.id,
+                  component,
+                  mode,
+                  setPercent,
+                );
               else
-                await downloadControlReport(detail.sheet.id, {
-                  type,
-                  academicYear: detail.sheet.academicYear,
-                  semester: detail.sheet.semester,
-                  ...(type === "round-table" ? { level } : {}),
-                });
+                await downloadControlReport(
+                  detail.sheet.id,
+                  {
+                    type,
+                    academicYear: detail.sheet.academicYear,
+                    semester: detail.sheet.semester,
+                    ...(type === "round-table" ? { level } : {}),
+                  },
+                  setPercent,
+                );
             } catch (cause) {
               setError(getApiErrorMessage(cause));
             } finally {

@@ -919,6 +919,56 @@ describe('Control workbook import and review', () => {
       response: { code: 'RESULT_INCOMPLETE', details: { invalidCount: 1 } },
     });
   });
+  it.each(['midterm', 'final', 'coursework'] as const)(
+    'requires explicit confirmation then reviews and approves a blank %s without a reason',
+    async (key) => {
+      const ctx = build(key);
+      jest.spyOn(ctx.grades, 'find').mockReturnValue(chain([]));
+      await expect(
+        ctx.service.review(ctx.user, ctx.sheetId, {
+          action: 'SUBMIT',
+          expectedRevision: 0,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'RESULT_INCOMPLETE' } });
+      for (const [revision, action] of (
+        ['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'] as const
+      ).entries()) {
+        if (revision > 0)
+          await expect(
+            ctx.service.review(ctx.user, ctx.sheetId, {
+              action,
+              expectedRevision: revision,
+            }),
+          ).rejects.toMatchObject({ response: { code: 'RESULT_INCOMPLETE' } });
+        await ctx.service.review(ctx.user, ctx.sheetId, {
+          action,
+          expectedRevision: revision,
+          allowMissing: true,
+        });
+      }
+      expect(ctx.sheet).toMatchObject({
+        workflowState: 'APPROVED',
+        unenteredStudentIds: [String(ctx.doc.studentId)],
+      });
+      expect(ctx.audit.create).toHaveBeenLastCalledWith(
+        [
+          expect.objectContaining({
+            actorId: new Types.ObjectId(ctx.user._id),
+            action: 'APPROVE',
+            newValue: expect.objectContaining({
+              unenteredStudentIds: [String(ctx.doc.studentId)],
+            }),
+          }),
+        ],
+        expect.any(Object),
+      );
+      expect(ctx.grades.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: [] } },
+        expect.any(Array),
+        expect.any(Object),
+      );
+    },
+  );
   it('submits an immutable digest and prevents staff approving their own sheet', async () => {
     const ctx = build();
     await ctx.service.review(ctx.user, ctx.sheetId, {

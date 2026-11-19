@@ -17,6 +17,7 @@ export const GRADE_AUDIT_ACTIONS = [
   'REOPEN',
   'PUBLISH',
   'HIDE',
+  'GRACE',
 ] as const;
 export type GradeAuditAction = (typeof GRADE_AUDIT_ACTIONS)[number];
 

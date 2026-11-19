@@ -35,6 +35,7 @@ import { ControlSheetsService } from '../../src/modules/control/services/control
 import { ControlGradesService } from '../../src/modules/control/services/control-grades.service';
 import { GradingSchemeService } from '../../src/modules/control/services/grading-scheme.service';
 import { ControlWorkbookService } from '../../src/modules/control/services/control-workbook.service';
+import { ControlGraceService } from '../../src/modules/control/services/control-grace.service';
 import { GradesService } from '../../src/modules/grades/grades.service';
 import type { AuthenticatedUser } from '../../src/modules/auth/types/authenticated-request';
 
@@ -1227,15 +1228,153 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
-  it('approves and publishes the rest of a course with financially deferred blank exams', async () => {
+  it.each([true, false])(
+    'approves confirmed blank exams and publishes complete students (financial hold: %s)',
+    async (financialHold) => {
+      const id = new Types.ObjectId();
+      const code = 'HOLD-' + randomUUID().slice(0, 8).toUpperCase();
+      const entered = new Types.ObjectId(),
+        held = new Types.ObjectId();
+      await connection.models.Course.collection.insertOne({
+        _id: id,
+        code,
+        name: 'Financial deferral fixture',
+        isActive: true,
+        department: 'BIS',
+        level: '1',
+        semester: 'first',
+        creditHours: 3,
+      });
+      await connection.models.User.collection.insertMany(
+        [entered, held].map((studentId, i) => ({
+          _id: studentId,
+          name: 'Hold fixture ' + i,
+          studentCode: code + i,
+          role: 'student',
+          isActive: true,
+        })),
+      );
+      await connection.models.CourseRegistration.collection.insertMany(
+        [entered, held].map((studentId) => ({
+          studentId,
+          courses: [code],
+          academicYear: year,
+          semester: 'first',
+          status: 'approved',
+        })),
+      );
+      await connection.models.StudentProfile.collection.insertOne({
+        userId: held,
+        isBlocked: financialHold,
+        tuitionFeesStatus: financialHold ? 'unpaid' : 'paid',
+      });
+      await gradeModel.collection.insertMany(
+        (['coursework', 'midterm', 'final'] as const).flatMap((component) =>
+          [entered, held]
+            .filter(
+              (studentId) =>
+                studentId === entered || component === 'coursework',
+            )
+            .map((studentId) => ({
+              studentId,
+              studentCode: code + (studentId === entered ? 0 : 1),
+              courseId: id,
+              courseCode: code,
+              academicYear: year,
+              semester: 'first',
+              examType: component,
+              grade:
+                component === 'coursework'
+                  ? 17
+                  : component === 'midterm'
+                    ? 25
+                    : 38,
+              maxGrade:
+                component === 'coursework'
+                  ? 20
+                  : component === 'midterm'
+                    ? 30
+                    : 50,
+              status: 'present',
+              rev: 1,
+              controlManaged: true,
+              isPublished: false,
+              ...(component === 'coursework'
+                ? { attendanceMark: 4, quizzesMark: 13 }
+                : {}),
+            })),
+        ),
+      );
+      for (const component of ['coursework', 'midterm', 'final'] as const) {
+        let detail = await sheets.openSheet(actor, {
+          courseId: String(id),
+          academicYear: year,
+          semester: 'first',
+          component,
+        });
+        for (const action of ['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'] as const)
+          detail = await workbook.review(actor, detail.sheet.id, {
+            action,
+            expectedRevision: detail.sheet.revision,
+            allowMissing: true,
+          });
+        const snapshot = await connection.models.ControlSheet.findById(
+          detail.sheet.id,
+        ).lean<{
+          tuitionDeferredStudentIds: string[];
+          unenteredStudentIds: string[];
+        }>();
+        expect(snapshot?.tuitionDeferredStudentIds).toEqual(
+          component === 'coursework' || !financialHold ? [] : [String(held)],
+        );
+        expect(snapshot?.unenteredStudentIds).toEqual(
+          component === 'coursework' ? [] : [String(held)],
+        );
+      }
+      const scope = {
+        academicYear: year,
+        semester: 'first' as const,
+        courseCode: code,
+        examType: 'final' as const,
+        isPublished: true,
+      };
+      const preview = await grades.previewControlRelease(scope);
+      expect(preview.sheets[0].students).toBe(1);
+      await grades.publishGrades(
+        { ...scope, releaseDigests: preview.releaseDigests },
+        actor._id,
+      );
+      // Removing the financial hold does not fabricate a grade or a new result.
+      await connection.models.StudentProfile.updateOne(
+        { userId: held },
+        { $set: { isBlocked: false, tuitionFeesStatus: 'paid' } },
+      );
+      expect(
+        await gradeModel.countDocuments({
+          courseId: id,
+          studentId: held,
+          examType: { $in: ['midterm', 'final'] },
+        }),
+      ).toBe(0);
+      const release = await connection
+        .db!.collection('control_releases')
+        .findOne({ 'scope.courseId': id, 'scope.component': 'final' });
+      expect(release?.results).toHaveLength(1);
+      expect(String(release?.results[0].studentId)).toBe(String(entered));
+      expect(release?.results[0].result.total).toBe(80);
+      expect(
+        (await grades.previewControlRelease(scope)).sheets[0].students,
+      ).toBe(1);
+    },
+  );
+  it('applies midterm grace once, caps marks and safely retries concurrent requests', async () => {
     const id = new Types.ObjectId();
-    const code = 'HOLD-' + randomUUID().slice(0, 8).toUpperCase();
-    const entered = new Types.ObjectId(),
-      held = new Types.ObjectId();
+    const code = 'GRACE-' + randomUUID().slice(0, 8).toUpperCase();
+    const students = Array.from({ length: 8 }, () => new Types.ObjectId());
     await connection.models.Course.collection.insertOne({
       _id: id,
       code,
-      name: 'Financial deferral fixture',
+      name: 'Grace fixture',
       isActive: true,
       department: 'BIS',
       level: '1',
@@ -1243,16 +1382,16 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       creditHours: 3,
     });
     await connection.models.User.collection.insertMany(
-      [entered, held].map((studentId, i) => ({
-        _id: studentId,
-        name: 'Hold fixture ' + i,
+      students.map((_id, i) => ({
+        _id,
         studentCode: code + i,
+        name: 'Grace student ' + i,
         role: 'student',
         isActive: true,
       })),
     );
     await connection.models.CourseRegistration.collection.insertMany(
-      [entered, held].map((studentId) => ({
+      students.map((studentId) => ({
         studentId,
         courses: [code],
         academicYear: year,
@@ -1261,99 +1400,91 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       })),
     );
     await connection.models.StudentProfile.collection.insertOne({
-      userId: held,
+      userId: students[6],
       isBlocked: true,
       tuitionFeesStatus: 'unpaid',
     });
     await gradeModel.collection.insertMany(
-      (['coursework', 'midterm', 'final'] as const).flatMap((component) =>
-        [entered, held]
-          .filter(
-            (studentId) => studentId === entered || component === 'coursework',
-          )
-          .map((studentId) => ({
-            studentId,
-            studentCode: code + (studentId === entered ? 0 : 1),
-            courseId: id,
-            courseCode: code,
-            academicYear: year,
-            semester: 'first',
-            examType: component,
-            grade:
-              component === 'coursework'
-                ? 17
-                : component === 'midterm'
-                  ? 25
-                  : 38,
-            maxGrade:
-              component === 'coursework'
-                ? 20
-                : component === 'midterm'
-                  ? 30
-                  : 50,
-            status: 'present',
-            rev: 1,
-            controlManaged: true,
-            isPublished: false,
-            ...(component === 'coursework'
-              ? { attendanceMark: 4, quizzesMark: 13 }
-              : {}),
-          })),
-      ),
-    );
-    for (const component of ['coursework', 'midterm', 'final'] as const) {
-      let detail = await sheets.openSheet(actor, {
-        courseId: String(id),
+      [0, 1, 28, 30, 0, 0, 10].map((grade, i) => ({
+        studentId: students[i],
+        studentCode: code + i,
+        courseId: id,
+        courseCode: code,
         academicYear: year,
         semester: 'first',
-        component,
-      });
-      for (const action of ['SUBMIT', 'SUBMIT_APPROVAL', 'APPROVE'] as const)
-        detail = await workbook.review(actor, detail.sheet.id, {
-          action,
-          expectedRevision: detail.sheet.revision,
-        });
-      const snapshot = await connection.models.ControlSheet.findById(
-        detail.sheet.id,
-      ).lean<{ tuitionDeferredStudentIds: string[] }>();
-      expect(snapshot?.tuitionDeferredStudentIds).toEqual(
-        component === 'coursework' ? [] : [String(held)],
-      );
-    }
-    const scope = {
+        examType: 'midterm',
+        grade,
+        maxGrade: 30,
+        status: i === 4 ? 'absent' : i === 5 ? 'banned' : 'present',
+        rev: 1,
+        isPublished: false,
+      })),
+    );
+    const detail = await sheets.openSheet(actor, {
+      courseId: String(id),
       academicYear: year,
-      semester: 'first' as const,
-      courseCode: code,
-      examType: 'final' as const,
-      isPublished: true,
+      semester: 'first',
+      component: 'midterm',
+    });
+    const grace = new ControlGraceService(
+      connection.models.ControlSheet as never,
+      gradeModel,
+      connection.models.StudentProfile as never,
+      auditModel,
+      new ControlAccessService(
+        connection.models.Course as never,
+        connection.models.CourseStaffAssignment as never,
+      ),
+      sheets,
+      new GradingSchemeService(
+        connection.models.GradingScheme as never,
+        gradeModel,
+        auditModel,
+      ),
+    );
+    const preview = await grace.preview(actor, detail.sheet.id, {
+      amount: 5,
+      expectedRevision: detail.sheet.revision,
+    });
+    expect(preview.counts).toMatchObject({
+      changed: 3,
+      capped: 1,
+      absentOrBanned: 2,
+      held: 1,
+      unentered: 1,
+    });
+    const dto = {
+      amount: 5,
+      expectedRevision: detail.sheet.revision,
+      digest: preview.digest,
+      operationId: randomUUID(),
     };
-    const preview = await grades.previewControlRelease(scope);
-    expect(preview.sheets[0].students).toBe(1);
-    await grades.publishGrades(
-      { ...scope, releaseDigests: preview.releaseDigests },
-      actor._id,
-    );
-    // Removing the financial hold does not fabricate a grade or a new result.
-    await connection.models.StudentProfile.updateOne(
-      { userId: held },
-      { $set: { isBlocked: false, tuitionFeesStatus: 'paid' } },
-    );
+    const [first, retry] = await Promise.all([
+      grace.apply(actor, detail.sheet.id, dto),
+      grace.apply(actor, detail.sheet.id, dto),
+    ]);
+    expect(first).toEqual(retry);
+    const stored = await gradeModel
+      .find({ courseId: id })
+      .sort({ studentCode: 1 })
+      .lean();
+    expect(stored.map((mark) => mark.grade)).toEqual([5, 6, 30, 30, 0, 0, 10]);
+    expect(stored.map((mark) => mark.rev)).toEqual([2, 2, 2, 1, 1, 1, 1]);
     expect(
-      await gradeModel.countDocuments({
-        courseId: id,
-        studentId: held,
-        examType: { $in: ['midterm', 'final'] },
-      }),
+      await gradeModel.countDocuments({ courseId: id, studentId: students[7] }),
     ).toBe(0);
-    const release = await connection
-      .db!.collection('control_releases')
-      .findOne({ 'scope.courseId': id, 'scope.component': 'final' });
-    expect(release?.results).toHaveLength(1);
-    expect(String(release?.results[0].studentId)).toBe(String(entered));
-    expect(release?.results[0].result.total).toBe(80);
-    expect((await grades.previewControlRelease(scope)).sheets[0].students).toBe(
-      1,
-    );
+    expect(
+      await auditModel.countDocuments({ courseId: id, action: 'GRACE' }),
+    ).toBe(4);
+    await expect(
+      grace.apply(actor, detail.sheet.id, {
+        ...dto,
+        operationId: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(
+      (await sheets.getSheet(actor, detail.sheet.id)).sheet.grace,
+    ).toMatchObject({ amount: 5, changed: 3 });
   });
   it('loads, independently reviews and previews a full 3001-student course without truncating any component', async () => {
     const largeCourse = new Types.ObjectId();

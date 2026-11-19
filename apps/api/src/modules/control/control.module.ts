@@ -1,4 +1,5 @@
 import { ControlAttemptsService } from './services/control-attempts.service';
+import { ControlGraceService } from './services/control-grace.service';
 import {
   ControlImport,
   ControlImportSchema,
@@ -62,6 +63,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
   ],
   controllers: [ControlController],
   providers: [
+    ControlGraceService,
     ControlAttemptsService,
     ControlReportsService,
     ControlWorkbookService,

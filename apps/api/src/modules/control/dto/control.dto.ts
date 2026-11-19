@@ -12,13 +12,13 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
   ValidateNested,
-  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -271,6 +271,9 @@ export class CarryIcDto {
 }
 export class ReviewSheetDto {
   @IsOptional()
+  @IsBoolean()
+  allowMissing?: boolean;
+  @IsOptional()
   @Matches(/^[a-f0-9]{64}$/)
   attemptReviewDigest?: string;
   @IsOptional()
@@ -289,14 +292,29 @@ export class ReviewSheetDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() || undefined : value,
   )
-  @ValidateIf(
-    (dto: ReviewSheetDto) =>
-      dto.action !== 'REOPEN' || dto.reason !== undefined,
-  )
+  @IsOptional()
   @IsString()
-  @MinLength(3)
   @MaxLength(500)
   reason?: string;
+}
+
+export class GracePreviewDto {
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01)
+  @Max(1000)
+  amount!: number;
+
+  @IsInt()
+  @Min(0)
+  expectedRevision!: number;
+}
+
+export class ApplyGraceDto extends GracePreviewDto {
+  @IsUUID()
+  operationId!: string;
+
+  @Matches(/^[a-f0-9]{64}$/)
+  digest!: string;
 }
 
 export class ImportRowsDto {

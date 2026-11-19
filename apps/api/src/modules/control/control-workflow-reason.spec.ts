@@ -19,13 +19,19 @@ describe('Optional workbook open/close reasons', () => {
       ).toHaveLength(0);
     }
   });
-  it('retains validation for review decisions and malformed supplied reasons', async () => {
-    for (const action of ['SUBMIT', 'APPROVE', 'RETURN']) {
+  it('accepts every review decision without a reason and validates supplied reasons', async () => {
+    for (const action of [
+      'SUBMIT',
+      'SUBMIT_APPROVAL',
+      'APPROVE',
+      'RETURN',
+      'REOPEN',
+    ]) {
       expect(
         await validate(
           plainToInstance(ReviewSheetDto, { action, expectedRevision: 2 }),
         ),
-      ).not.toHaveLength(0);
+      ).toHaveLength(0);
     }
     for (const reason of [123, 'x'.repeat(501)]) {
       expect(

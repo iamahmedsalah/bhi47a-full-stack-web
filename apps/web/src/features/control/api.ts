@@ -1,4 +1,6 @@
 import api, { type PaginatedResponse } from "@/lib/api";
+import type { AxiosProgressEvent } from "axios";
+
 import type {
   ControlComponentKey,
   ControlSchemeComponent,
@@ -14,6 +16,16 @@ import type {
   GradeChangeInput,
   ResolvedGradingScheme,
 } from "./types";
+
+export type ControlTransferProgress = (percent: number | null) => void;
+const transferProgress =
+  (report?: ControlTransferProgress) => (event: AxiosProgressEvent) => {
+    report?.(
+      event.total && event.total > 0
+        ? Math.min(100, Math.floor((event.loaded / event.total) * 100))
+        : null,
+    );
+  };
 
 export const controlKeys = {
   all: ["control"] as const,
@@ -182,6 +194,7 @@ export async function reviewControlSheet(
   dto: {
     action: "SUBMIT" | "SUBMIT_APPROVAL" | "APPROVE" | "RETURN" | "REOPEN";
     expectedRevision: number;
+    allowMissing?: boolean;
     reason?: string;
     attemptReviewDigest?: string;
     keepPreviousStudentIds?: string[];
@@ -191,6 +204,53 @@ export async function reviewControlSheet(
     `/admin/control/sheets/${sheetId}/review`,
     dto,
   );
+  return res.data;
+}
+
+export interface GracePreview {
+  digest: string;
+  revision: number;
+  amount: number;
+  max: number;
+  counts: {
+    registered: number;
+    changed: number;
+    capped: number;
+    atMaximum: number;
+    absentOrBanned: number;
+    held: number;
+    unentered: number;
+    other: number;
+  };
+  sample: Array<{
+    studentCode: string;
+    before: number;
+    added: number;
+    after: number;
+  }>;
+}
+export async function previewControlGrace(
+  sheetId: string,
+  amount: number,
+  expectedRevision: number,
+) {
+  const res = await api.post<GracePreview>(
+    `/admin/control/sheets/${sheetId}/grace/preview`,
+    { amount, expectedRevision },
+  );
+  return res.data;
+}
+export async function applyControlGrace(
+  sheetId: string,
+  preview: GracePreview,
+  operationId: string,
+) {
+  const res = await api.post(`/admin/control/sheets/${sheetId}/grace`, {
+    amount: preview.amount,
+    expectedRevision: preview.revision,
+    digest: preview.digest,
+    operationId,
+  });
   return res.data;
 }
 export async function exportControlSheet(
@@ -215,10 +275,12 @@ export async function downloadControlTemplate(
   sheetId: string,
   component: ControlComponentKey,
   mode: "workbook" | "missing" | "exceptions" = "workbook",
+  onProgress?: ControlTransferProgress,
 ) {
   const raw = await api.get(`/admin/control/sheets/${sheetId}/template`, {
     responseType: "blob",
     params: { component, mode },
+    onDownloadProgress: transferProgress(onProgress),
   });
   const { downloadFileBlob } = await import("@/lib/export-utils");
   await downloadFileBlob(
@@ -226,6 +288,7 @@ export async function downloadControlTemplate(
     `control-${component}-${mode}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
+  onProgress?.(100);
 }
 
 export async function downloadControlReport(
@@ -236,10 +299,12 @@ export async function downloadControlReport(
     semester: string;
     level?: string;
   },
+  onProgress?: ControlTransferProgress,
 ) {
   const raw = await api.get(`/admin/control/sheets/${sheetId}/report`, {
     responseType: "blob",
     params,
+    onDownloadProgress: transferProgress(onProgress),
   });
   const { downloadFileBlob } = await import("@/lib/export-utils");
   await downloadFileBlob(
@@ -247,18 +312,20 @@ export async function downloadControlReport(
     `control-${params.type}-${params.academicYear}-${params.semester}${params.level ? `-${params.level}` : ""}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
+  onProgress?.(100);
 }
 export async function previewControlFile(
   sheetId: string,
   file: File,
   batch = 0,
+  onProgress?: ControlTransferProgress,
 ) {
   const body = new FormData();
   body.append("file", file);
   const res = await api.post<import("./types").ControlImportPreview>(
     `/admin/control/sheets/${sheetId}/import/preview`,
     body,
-    { params: { batch } },
+    { params: { batch }, onUploadProgress: transferProgress(onProgress) },
   );
   return res.data;
 }

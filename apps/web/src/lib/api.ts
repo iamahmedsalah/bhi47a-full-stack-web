@@ -755,6 +755,13 @@ const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>
 );
 
 const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = {
+  GRACE_MIDTERM_ONLY: { ar: 'درجات الرأفة متاحة للميدترم فقط.', en: 'Grace marks are available for midterm sheets only.' },
+  GRACE_ALREADY_APPLIED: { ar: 'أُضيفت الرأفة لهذا الكشف بالفعل؛ لا يمكن إضافتها مرة ثانية.', en: 'Grace marks have already been applied to this sheet and cannot be added again.' },
+  GRACE_PREVIEW_STALE: { ar: 'تغيرت درجات الكشف أو حالته. أعد تحميل الكشف ومعاينة الزيادة قبل التأكيد.', en: 'The sheet or its marks changed. Reload and preview the addition again before confirming.' },
+  GRACE_INVALID_AMOUNT: { ar: 'أدخل زيادة موجبة تتوافق مع خطوة الإدخال ولا تتجاوز الدرجة العظمى للميدترم.', en: 'Enter a positive addition matching the entry increment and not exceeding the midterm maximum.' },
+  GRACE_INVALID_MARKS: { ar: 'توجد درجات مكررة أو غير متوافقة مع توزيع الدرجات. راجع الكشف أولًا.', en: 'Some marks are duplicated or do not match the grading scheme. Review the sheet first.' },
+  GRACE_NO_CHANGES: { ar: 'لا توجد درجات مرصودة مؤهلة للزيادة. لم تُسجل إضافة رأفة لهذا الكشف.', en: 'No entered marks are eligible for an increase. No grace operation was recorded.' },
+
   'Special status requires state-management permission': { ar: 'تغيير هذه الحالة يتطلب صلاحية إدارة الحالات الخاصة. السبب اختياري.', en: 'Changing this exam status requires state-management permission. The reason is optional.' },
   'Consolidated report is too large': { ar: 'حجم التقرير المجمع يتجاوز الحد المسموح. راجع نطاق المستوى وعدد المقررات.', en: 'The consolidated report exceeds the supported size. Check the level and course scope.' },
   'Report term must match the open workbook': { ar: 'اختر السنة والترم من قائمة الكنترول ثم افتح الكشف المطلوب قبل تنزيل التقرير.', en: 'Select the year and term in Control and open the matching workbook before downloading the report.' },

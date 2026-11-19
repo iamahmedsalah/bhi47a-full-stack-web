@@ -124,7 +124,7 @@ Midterm rows and printed certificates show marks/status only, without a course l
 
 ### Workbook usability and import review
 
-Opening/closing locks and reopening a sheet as a draft accept an omitted reason for all three components. Exam-status changes, including banned, incomplete, excused and withheld, also accept an omitted reason in the workbook and imports. Permission checks, revisions and audit records remain enforced. Approval/return decisions and administrator course reset retain their reason requirements. Colored explanatory notes in Control, scheme editing, import and Grades publication are collapsed by default and support keyboard activation; error alerts remain visible.
+Opening/closing locks and reopening a sheet as a draft accept an omitted reason for all three components. Exam-status changes, including banned, incomplete, excused and withheld, also accept an omitted reason in the workbook and imports. Permission checks, revisions and audit records remain enforced. Review, approval and return decisions also accept omitted reasons; administrator course reset retains its separate reason requirement. Colored explanatory notes in Control, scheme editing, import and Grades publication are collapsed by default and support keyboard activation; error alerts remain visible.
 
 XLSX preview now returns each source row with its student identity, previous/input values, validation state and row-specific issues. The dialog offers all-row and invalid-row views, search and 50-row display pages independently of the 500-row commit batches. This avoids an apparently empty preview when rows are unchanged or invalid. An empty missing-grades report explicitly directs the operator to the full workbook. See [the import and search plan](control-import-and-search-plan.md).
 
@@ -160,3 +160,13 @@ Verification results, including the later batching/background/history changes an
 - استيراد Excel أثناء المراجعة يحتاج صلاحية التصحيح الجديدة و`control.import`، وتظل إدارة الحالات الخاصة بصلاحية مستقلة. يسجل كل تصحيح القيمة القديمة والجديدة والموظف والتوقيت.
 - الاعتماد لا ينشر النتيجة؛ تبقى نافذة الإتاحة والمستوى والمكوّن وحجب المصروفات والإصدار المنشور تحت إدارة صفحة الدرجات. لا يتغير الإصدار السابق للطلاب أثناء التصحيح.
 - الكشوف الموجودة في المراجعة تستكمل المسار عبر «إرسال للاعتماد»؛ الكشوف المعتمدة والمنشورة السابقة لا تُعاد معايرتها أو نشرها تلقائيًا. لا يحتاج التغيير ترحيل درجات أو حذف بيانات.
+
+### Confirmed blank marks in review and approval
+
+Sending for review, sending for approval, and approval may proceed with unentered marks after an explicit confirmation showing their count. API callers must send `allowMissing: true` when non-financial blanks remain. Existing mark validation, course scope, permissions, revisions and independent staff approval still apply. Blank entries are recorded on the approved sheet and in the audit snapshot with the actor and automatic timestamp; no grade, absence or IC is fabricated. Release publishes complete students only and omits an entire incomplete attempt from official totals/GPA until its missing marks have been entered, reviewed and approved. Review dialogs request no reason.
+
+### Once-only midterm grace marks
+
+`control.grades.grace` is an independently assignable staff permission under Control. Admin retains access. Course scope and unlocked DRAFT/RETURNED/IN_REVIEW states remain mandatory; coursework, final, pending approval and approved sheets cannot receive grace marks. Preview lists changed/capped/maximum/absent-banned/financial-hold/unentered/other counts and the first 20 affected students. Only registered, entered, present and unpublished marks qualify, including zero and one. New score = min(midterm maximum, old score + addition). Existing grades and statuses for all excluded students remain unchanged. The requested addition must match the saved entry increment.
+
+Confirmation uses a revision and content digest; edits, roster, tuition or scheme changes require a fresh preview. A single MongoDB transaction claims the sheet, updates marks and revisions, and appends sheet/per-student audit evidence with actual additions, actor and time. Repeating the same operation returns its stored receipt. A new operation on that sheet is refused, including after reopening; no eligible changes do not consume the once-only operation. Grace does not publish results and still passes through normal review/approval/release.

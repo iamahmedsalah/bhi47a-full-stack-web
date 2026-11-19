@@ -52,6 +52,23 @@ test('empty missing-grade exports explain recovery in both languages', () => {
   assert.match(messages('en')('Conflict', 'CONTROL_IMPORT_EMPTY'), /full workbook.*entry worksheet/);
   assert.match(messages('ar')('Conflict', 'CONTROL_IMPORT_EMPTY'), /الكشف الكامل.*الرصد/);
 });
+
+test('midterm grace validation and once-only protection have bilingual guidance', () => {
+  for (const locale of ['ar', 'en']) {
+    const translations = JSON.parse(fs.readFileSync(path.join(web, 'src/messages', locale + '.json'), 'utf8'));
+    assert.ok(translations.control.auditActions.GRACE);
+    assert.ok(translations.staff.permissions.labels.control_grades_grace);
+  }
+  for (const code of ['GRACE_MIDTERM_ONLY', 'GRACE_ALREADY_APPLIED', 'GRACE_PREVIEW_STALE', 'GRACE_INVALID_AMOUNT', 'GRACE_INVALID_MARKS', 'GRACE_NO_CHANGES']) {
+    for (const locale of ['ar', 'en']) {
+      const message = messages(locale)('Conflict', code);
+      assert.notEqual(message, 'Conflict');
+      assert.ok(!message.includes(code));
+      if (locale === 'ar') assert.match(message, /[\u0600-\u06ff]/);
+    }
+  }
+  assert.match(messages('en')('Conflict', 'GRACE_ALREADY_APPLIED'), /cannot be added again/);
+});
 test('mark errors include the configured maximum and increment in both languages', () => {
   assert.match(messages('en')('Row 2: Mark rule: off_step; max=20; step=0.5'), /Row 2:.*increment.*20.*0.5/);
   assert.match(messages('ar')('Row 2: Mark rule: above_max; max=20; step=0.5'), /الصف 2:.*الحد الأقصى.*20.*0.5/);

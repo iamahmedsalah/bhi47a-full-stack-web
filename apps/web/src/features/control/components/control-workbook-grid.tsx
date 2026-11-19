@@ -87,6 +87,7 @@ import { ControlHelpNotes } from "./control-help-notes";
 import { HelpNote } from "@/components/ui/help-note";
 import { normalizeSearchText } from "@/lib/search-text";
 import { ControlDownloadDialogs } from "./control-download-dialogs";
+import { ControlGraceDialog } from "./control-grace-dialog";
 import { ControlImportLauncher } from "./control-import-launcher";
 import type {
   ControlImportPreview,
@@ -140,6 +141,7 @@ export function ControlWorkbookGrid({
   const query = useQueryClient();
   const { sheet, capabilities: caps } = detail;
   const key = sheet.component;
+  const [graceOpen, setGraceOpen] = useState(false);
   const workbook = useQuery({
     queryKey: [...controlKeys.sheet(sheet.id), "workbook"],
     queryFn: () => getControlWorkbook(sheet.id),
@@ -182,6 +184,17 @@ export function ControlWorkbookGrid({
     view.setFilter("gridDirection", value ? "desc" : "asc");
   const page = view.page;
   const setPage = view.setPage;
+  const tableViewport = useRef<HTMLDivElement>(null);
+  const previousPage = useRef(view.page);
+  useEffect(() => {
+    if (previousPage.current === view.page) return;
+    previousPage.current = view.page;
+    tableViewport.current?.scrollTo({ top: 0, behavior: "instant" });
+    tableViewport.current?.scrollIntoView({
+      block: "start",
+      behavior: "instant",
+    });
+  }, [view.page]);
   const filter = view.filters.gridFilter;
   const setFilter = (value: string) => view.setFilter("gridFilter", value);
   const [reason, setReason] = useState("");
@@ -713,7 +726,7 @@ export function ControlWorkbookGrid({
           action: transitionAction,
           ...attemptReview,
           expectedRevision: latest.sheet.revision,
-          reason,
+          allowMissing: readiness.total > readiness.entered,
         });
       }
       setAction(null);
@@ -818,11 +831,22 @@ export function ControlWorkbookGrid({
             e.key === "ArrowUp"
           ) {
             e.preventDefault();
-            document
-              .querySelector<HTMLInputElement>(
-                `[data-cell="${component}-${index + (e.key === "ArrowUp" ? -1 : 1)}-${field}"]`,
-              )
-              ?.focus();
+            const cells = Array.from(
+              tableViewport.current?.querySelectorAll<HTMLInputElement>(
+                `[data-cell^="${component}-"][data-cell$="-${field}"]`,
+              ) ?? [],
+            );
+            const direction = e.key === "ArrowUp" ? -1 : 1;
+            for (
+              let next = cells.indexOf(e.currentTarget) + direction;
+              next >= 0 && next < cells.length;
+              next += direction
+            ) {
+              if (!cells[next].disabled && !cells[next].readOnly) {
+                cells[next].focus();
+                break;
+              }
+            }
           }
           if (e.key === "Escape")
             setDrafts((current) => {
@@ -852,6 +876,17 @@ export function ControlWorkbookGrid({
 
   return (
     <div className="space-y-3" dir={rtl ? "rtl" : "ltr"}>
+      {graceOpen && (
+        <ControlGraceDialog
+          detail={detail}
+          locale={locale}
+          onClose={() => setGraceOpen(false)}
+          onSaved={async () => {
+            setUndo([]);
+            await refresh();
+          }}
+        />
+      )}
       {attemptDialog && (
         <ControlAttemptDialog
           sheetId={sheet.id}
@@ -1187,6 +1222,32 @@ export function ControlWorkbookGrid({
             {t("attempts")}
           </Button>
         )}
+        {key === "midterm" && caps.canGrace && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-xs"
+            disabled={
+              busy ||
+              saving ||
+              Boolean(sheet.grace) ||
+              sheet.locked ||
+              !["DRAFT", "RETURNED", "IN_REVIEW"].includes(sheet.workflowState)
+            }
+            onClick={async () => {
+              if (await save()) setGraceOpen(true);
+            }}
+          >
+            <CheckCircle2 className="size-3.5 me-1.5" />
+            {sheet.grace
+              ? rtl
+                ? "تمت إضافة الرأفة"
+                : "Grace marks applied"
+              : rtl
+                ? "درجات الرأفة"
+                : "Grace marks"}
+          </Button>
+        )}
         {caps.canManageSchemes && (
           <Button
             variant="outline"
@@ -1386,7 +1447,10 @@ export function ControlWorkbookGrid({
           {t("undo")}
         </Button>
       )}
-      <div className="max-h-[65vh] overflow-auto rounded-xl border bg-card">
+      <div
+        ref={tableViewport}
+        className="max-h-[65vh] overflow-auto scroll-mt-6 rounded-xl border bg-card"
+      >
         <table
           className="w-full text-sm border-collapse"
           aria-label={t("workbook")}
@@ -1723,7 +1787,19 @@ export function ControlWorkbookGrid({
               {action ? t(action) : ""}
             </DialogTitle>
             <DialogDescription className="text-start">
-              {t("reviewExplanation")}
+              {t(
+                action === "SUBMIT_APPROVAL"
+                  ? "sendApprovalExplanation"
+                  : action === "APPROVE"
+                    ? "approvalExplanation"
+                    : action === "RETURN"
+                      ? "returnExplanation"
+                      : action === "REOPEN"
+                        ? "reopenExplanation"
+                        : action === "CLEAR"
+                          ? "clearExplanation"
+                          : "reviewExplanation",
+              )}
             </DialogDescription>
           </DialogHeader>
           {(action === "SUBMIT" ||
@@ -1732,7 +1808,7 @@ export function ControlWorkbookGrid({
             <div
               className={cn(
                 "rounded-xl border p-3 text-xs space-y-2",
-                readiness.ready
+                readiness.total === readiness.entered
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                   : "border-amber-500/40 bg-amber-500/10 text-amber-300",
               )}
@@ -1747,22 +1823,17 @@ export function ControlWorkbookGrid({
                 {t("readinessStats", {
                   total: readiness.total,
                   entered: readiness.entered,
-                  missing: readiness.missing,
+                  missing: readiness.total - readiness.entered,
                 })}
               </p>
               <p className="leading-relaxed">
-                {readiness.ready
+                {readiness.total === readiness.entered
                   ? t("readinessReady", { total: readiness.total })
                   : t("readinessWarning", {
                       total: readiness.total,
-                      missing: readiness.missing,
+                      missing: readiness.total - readiness.entered,
                     })}
               </p>
-              {readiness.deferred > 0 && (
-                <p className="leading-relaxed">
-                  {t("readinessTuitionDeferred", { count: readiness.deferred })}
-                </p>
-              )}
               {!readiness.ready && readiness.missing > 0 && (
                 <div>
                   <Button
@@ -1781,37 +1852,17 @@ export function ControlWorkbookGrid({
               )}
             </div>
           )}
-          <Input
-            aria-label={t("reason")}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            maxLength={500}
-            placeholder={
-              action === "REOPEN"
-                ? rtl
-                  ? "السبب (اختياري)"
-                  : "Reason (optional)"
-                : t("reason")
-            }
-          />
           <DialogFooter className="rtl:sm:justify-start">
             <Button
               variant="outline"
               disabled={busy}
               onClick={() => setAction(null)}
             >
-              {t("cancel")}
+              {rtl ? "لا، رجوع" : "No, go back"}
             </Button>
-            <Button
-              disabled={
-                busy ||
-                saving ||
-                (action !== "REOPEN" && reason.trim().length < 3)
-              }
-              onClick={() => void transition()}
-            >
+            <Button disabled={busy || saving} onClick={() => void transition()}>
               {busy && <Loader2 className="size-4 animate-spin me-2" />}
-              {t("confirm")}
+              {rtl ? "نعم، متابعة" : t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

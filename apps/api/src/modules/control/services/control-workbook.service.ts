@@ -522,7 +522,7 @@ export class ControlWorkbookService {
           if (
             !roster.size ||
             docs.length !== rosterDocs.length ||
-            missingCount > 0 ||
+            (missingCount > 0 && dto.allowMissing !== true) ||
             invalidRosterDocs.length > 0
           )
             throw new ConflictException({
@@ -623,6 +623,7 @@ export class ControlWorkbookService {
               workflowState: next,
               reviewReason: dto.reason,
               tuitionDeferredStudentIds,
+              unenteredStudentIds: [...missingIds].sort(),
               ...(['SUBMIT', 'RETURN', 'REOPEN'].includes(dto.action)
                 ? { reviewSubmission: null }
                 : {}),
@@ -675,6 +676,7 @@ export class ControlWorkbookService {
                 workflowState: next,
                 digest,
                 tuitionDeferredStudentIds,
+                unenteredStudentIds: [...missingIds].sort(),
               },
               reason: dto.reason,
             },
