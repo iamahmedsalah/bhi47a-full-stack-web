@@ -993,6 +993,15 @@
       "failed": "تعذر إكمال إجراء إدارة الموظف."
     },
     "permissions": {
+      "search": "ابحث باسم الصلاحية أو كودها…",
+      "section": "قسم الصلاحيات",
+      "allSections": "كل الأقسام",
+      "selection": "فلتر التعيين",
+      "allPermissions": "كل الصلاحيات",
+      "selectedOnly": "الممنوحة فقط",
+      "unselectedOnly": "غير الممنوحة فقط",
+      "visibleCount": "عرض {count} من {total} صلاحية",
+      "noMatches": "لا توجد صلاحيات تطابق الفلاتر.",
       "title": "صلاحيات {name}",
       "description": "لن تتاح لهذا الحساب إلا الإمكانات المحددة.",
       "presets": "قوالب الأدوار الجاهزة",

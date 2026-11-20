@@ -208,7 +208,7 @@ export function resetStudentPassword(id: string, newPassword?: string, mustChang
 }
 
 export function deactivateStudent(id: string) {
-  return apiDelete(`/admin/students/${id}`);
+  return apiPost<{ message: string }>(`/admin/students/${id}/deactivate`);
 }
 
 export function activateStudent(id: string) {

@@ -16,6 +16,7 @@ import {
   ArrayUnique,
   MinLength,
   MaxLength,
+  Matches,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -468,6 +469,19 @@ export class QueryCourseDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+}
+
+export class WithdrawStudentsOptionsDto {
+  @ApiProperty({ example: '2026-2027' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(9)
+  @Matches(/^\d{4}-\d{4}$/)
+  academicYear!: string;
+
+  @ApiProperty({ enum: ['first', 'second', 'summer'] })
+  @IsIn(['first', 'second', 'summer'])
+  semester!: 'first' | 'second' | 'summer';
 }
 
 export class EnrollmentOptionsDto {

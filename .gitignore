@@ -69,6 +69,7 @@ build_import_files.mjs
 !/docs/admissions-code-lifecycle.md
 !/docs/control-system-plan.md
 !/docs/control-permissions-and-visibility.md
+!/docs/permissions-catalog-audit.md
 !/docs/control-testing.md
 !/docs/control-import-and-search-plan.md
 !/docs/control-production-acceptance.md

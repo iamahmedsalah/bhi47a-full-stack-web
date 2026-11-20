@@ -53,7 +53,6 @@ const ENROLLMENT_STATUS_OPTIONS = [
   { value: 'inactive', ar: 'غير نشط', en: 'Inactive' },
   { value: 'graduated', ar: 'خريج', en: 'Graduated' },
   { value: 'suspended', ar: 'موقوف قيده', en: 'Suspended' },
-  { value: 'withdrawn', ar: 'منسحب', en: 'Withdrawn' },
 ];
 
 const LEVEL_OPTIONS = [
@@ -438,7 +437,7 @@ function StudentFormDialogState({
                         <SelectTrigger className="rounded-squircle border-white/15 bg-background/60 text-sm">
                           <SelectValue placeholder={isAr ? 'اختر الحالة' : 'Select Status'} />
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl border-white/15 bg-card/95">
+                        <SelectContent dir={isAr ? 'rtl' : 'ltr'} className="rounded-xl border-white/15 bg-card/95">
                           {ENROLLMENT_STATUS_OPTIONS.map((st) => (
                             <SelectItem key={st.value} value={st.value}>
                               <div className="flex items-center gap-2">

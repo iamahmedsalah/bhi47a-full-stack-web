@@ -993,6 +993,15 @@
       "failed": "Could not complete the staff management action."
     },
     "permissions": {
+      "search": "Search permissions by name or code…",
+      "section": "Permission section",
+      "allSections": "All sections",
+      "selection": "Assignment filter",
+      "allPermissions": "All permissions",
+      "selectedOnly": "Assigned only",
+      "unselectedOnly": "Unassigned only",
+      "visibleCount": "Showing {count} of {total} permissions",
+      "noMatches": "No permissions match these filters.",
       "title": "Permissions for {name}",
       "description": "Only the selected capabilities will be available to this staff account.",
       "presets": "Role presets",

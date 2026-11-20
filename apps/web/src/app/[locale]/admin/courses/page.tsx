@@ -18,6 +18,7 @@ import {
   UploadCloud,
   FileText,
   UserCheck,
+  UserMinus,
   Eye,
   MoreVertical,
   HelpCircle,
@@ -1149,6 +1150,7 @@ function CoursesPageContent() {
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
+  const [isWithdrawalDialogOpen, setIsWithdrawalDialogOpen] = useState(false);
   const [isStudentEnrollmentOpen, setIsStudentEnrollmentOpen] = useState(false);
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
   const [selectedEnrolledCourse, setSelectedEnrolledCourse] = useState<Course | null>(null);
@@ -1705,6 +1707,12 @@ function CoursesPageContent() {
             <span>{locale === 'ar' ? 'تسجيل طلاب بمقرر (Excel)' : 'Enroll Students (Excel)'}</span>
           </Button>
         )}
+        {isAdmin && canManageStudentEnrollment && (
+          <Button variant="outline" className="text-danger" onClick={() => setIsWithdrawalDialogOpen(true)}>
+            <UserMinus className="h-4 w-4" />
+            {locale === 'ar' ? 'سحب طلاب من مقرر (Excel)' : 'Withdraw Students (Excel)'}
+          </Button>
+        )}
         {canManageStudentEnrollment && (
           <Button variant="outline" onClick={() => setIsStudentEnrollmentOpen(true)}>
             <UserCheck className="h-4 w-4" />
@@ -2202,6 +2210,16 @@ function CoursesPageContent() {
       {canManageStudentEnrollment && isStudentEnrollmentOpen && (
         <StudentCourseEnrollmentDialog locale={locale} principalId={user?._id ?? ''} onClose={() => setIsStudentEnrollmentOpen(false)} />
       )}
+      <CourseStudentEnrollmentDialog
+        mode="withdraw"
+        open={isWithdrawalDialogOpen}
+        onOpenChange={setIsWithdrawalDialogOpen}
+        locale={locale}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: ['courses'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin-course-enrolled-students'] });
+        }}
+      />
       <CourseStudentEnrollmentDialog
         open={isEnrollmentDialogOpen}
         onOpenChange={setIsEnrollmentDialogOpen}

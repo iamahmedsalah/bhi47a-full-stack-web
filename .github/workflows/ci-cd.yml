@@ -100,7 +100,7 @@ jobs:
         run: node --test apps/web/tests/canonical-redirect.test.mjs
 
       - name: Verify bilingual student form validation
-        run: node --test apps/web/tests/student-form-validation.test.mjs
+        run: node --test apps/web/tests/student-form-validation.test.mjs apps/web/tests/student-account-actions.test.mjs
 
       - name: Verify quiz release deadlines and states
         run: pnpm --filter @student-portal/web test:quiz-release
@@ -225,6 +225,11 @@ jobs:
 
       - name: Test responsive security and settings in Chromium
         run: pnpm --filter @student-portal/web test:security
+
+      - name: Test staff permission catalog and bilingual filters
+        run: |
+          pnpm --filter @student-portal/web test:staff
+          pnpm --filter @student-portal/web test:staff-permissions:browser
 
       - name: Test API end to end with browser passkeys
         id: api-e2e

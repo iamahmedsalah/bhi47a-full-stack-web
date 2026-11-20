@@ -28,6 +28,11 @@ async function main() {
       post: async (url, body, options) => {
         const opts = body instanceof FormData ? options.params : body;
         window.requests.push({ url, options: opts });
+        if (url.endsWith('/withdraw-students-excel')) {
+          return { data: { courseId:'326', courseCode:'326', courseName:'Governmental Accounting', totalRows:4,
+            withdrawnCount:1, notEnrolledCount:1, duplicateCount:1, errorCount:1,
+            errors:['السطر 5: الطالب غير موجود / Student not found'] } };
+        }
         const allowed = opts.overrideRegistrationLimits === true;
         const total = opts.rows?.length ?? 200;
         return { data: { courseId:'326', courseCode:'326', courseName:'Governmental Accounting', totalRows:total, enrolledCount:allowed ? total : 0, alreadyEnrolledCount:0, skippedBlockedCount:0, overriddenCount:allowed ? total : 0, errorCount:allowed ? 0 : total,
@@ -44,7 +49,8 @@ async function main() {
     import { CourseStudentEnrollmentDialog } from '${path.join(web, 'src/features/courses/components/course-student-enrollment-dialog').replaceAll('\\', '/')}';
     const locale = new URLSearchParams(location.search).get('locale') || 'ar';
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
-    createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry:false } } })}><CourseStudentEnrollmentDialog open onOpenChange={() => {}} locale={locale}/><Toaster/></QueryClientProvider>);`);
+    const mode = new URLSearchParams(location.search).get('mode') === 'withdraw' ? 'withdraw' : 'enroll';
+    createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry:false } } })}><CourseStudentEnrollmentDialog open onOpenChange={() => {}} locale={locale} mode={mode}/><Toaster/></QueryClientProvider>);`);
   await new Promise((resolve, reject) => webpack({ mode:'development', devtool:false, target:'web', entry:path.join(output, 'entry.tsx'),
     output: { path:output, filename:'bundle.js', publicPath:'/' },
     resolve: { extensions:['.tsx','.ts','.jsx','.js'], modules:[path.join(web, 'node_modules'), 'node_modules'], alias: { '@/lib/api':path.join(output,'api.ts'), '@/providers/auth-provider':path.join(output,'auth.ts'), '@':path.join(web,'src') } },
@@ -150,6 +156,38 @@ async function main() {
       const counts = await page.evaluate((bytes) => { const rows = window.enrollmentHtmlRows(new Uint8Array(bytes).buffer); return { rows:rows?.length, codesAreText:rows?.every((row) => typeof row['كود الطالب'] === 'string') }; },bytes);
       assert.ok(counts.rows > 0 && counts.codesAreText);
       console.log(`Optional legacy sheet: ${counts.rows} rows parsed; student values were not logged or uploaded.`);
+    }
+    for (const locale of ['ar','en']) {
+      const ar = locale === 'ar';
+      await page.setViewportSize({ width:1280, height:960 });
+      await page.goto(`${base}/?locale=${locale}&mode=withdraw`);
+      await page.getByRole('dialog').waitFor();
+      assert.equal(await page.getByRole('checkbox').count(),0,'Withdrawal never offers registration limit overrides');
+      await page.getByRole('combobox',{name:ar?'القسم':'Department',exact:true}).click();
+      await page.getByRole('option',{name:ar?'المحاسبة والمراجعة':'Accounting and Auditing',exact:true}).click();
+      await page.getByRole('combobox',{name:ar?'المقرر الدراسي':'Course',exact:true}).click();
+      await page.getByRole('option',{name:/^326/}).click();
+      assert.equal(await page.getByRole('button',{name:ar?'تصفير تسجيلات المقرر':'Reset course enrollments',exact:true}).count(),0);
+      await page.locator('input[type=file]').setInputFiles({ name:'withdraw.csv',mimeType:'text/csv',buffer:Buffer.from('student_code\n001\n002\n002\n003') });
+      const submit = page.getByRole('button',{name:ar?'سحب الطلاب':'Withdraw students',exact:true});
+      await submit.click();
+      await page.getByRole('alertdialog').waitFor();
+      assert.equal(await page.evaluate(()=>window.requests.length),0,'Withdrawal requires explicit confirmation');
+      await page.getByRole('alertdialog').getByRole('button',{name:ar?'رجوع':'Back',exact:true}).click();
+      assert.equal(await page.evaluate(()=>window.requests.length),0,'Cancel must not withdraw students');
+      await submit.click();
+      await page.getByRole('alertdialog').getByRole('button',{name:ar?'تأكيد السحب':'Confirm withdrawal',exact:true}).click();
+      await page.getByText(ar?'نتيجة سحب الطلاب':'Student withdrawal results',{exact:true}).waitFor();
+      const written = await page.evaluate(()=>window.requests);
+      assert.equal(written.length,1);
+      assert.match(written[0].url,/withdraw-students-excel$/);
+      assert.deepEqual(written[0].options,{academicYear:'2026-2027',semester:'first'});
+      await page.getByText(ar?'تم تجاهل 1 كود مكرر.':'1 duplicate codes skipped.',{exact:true}).waitFor();
+      await page.getByText(ar?'غير مسجلين':'Not enrolled',{exact:true}).waitFor();
+      await page.setViewportSize({width:375,height:812});
+      await page.getByRole('dialog').evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished.catch(()=>{}))));
+      await page.screenshot({path:path.join(output,`${locale}-withdrawal-mobile.png`),fullPage:true});
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Withdrawal modal fits mobile viewport');
     }
     assert.deepEqual(errors,[]);
     console.log('Arabic/English, desktop/mobile, same-placement filtering, exact error totals, explicit exception confirmation and staff restrictions passed.');

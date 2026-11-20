@@ -29,6 +29,8 @@ describe('StudentsService Unit Tests', () => {
     MockProfileConstructor.aggregate = jest.fn();
     MockProfileConstructor.find = jest.fn();
     MockProfileConstructor.findOne = jest.fn();
+    MockProfileConstructor.findById = jest.fn();
+    MockProfileConstructor.findByIdAndDelete = jest.fn();
     MockProfileConstructor.create = jest.fn();
     MockProfileConstructor.updateMany = jest.fn();
     MockProfileConstructor.updateOne = jest.fn();
@@ -82,6 +84,8 @@ describe('StudentsService Unit Tests', () => {
       countActiveOnlineStudents: jest.fn(),
       countActiveOnlineStaff: jest.fn().mockResolvedValue(5),
       createUser: jest.fn(),
+      activateUser: jest.fn().mockResolvedValue(undefined),
+      deactivateUser: jest.fn().mockResolvedValue(undefined),
     };
 
     mockEmailsService = {
@@ -115,6 +119,99 @@ describe('StudentsService Unit Tests', () => {
       mockEmailsService,
       mockStudentQueryService,
       {} as import('../student-codes/student-codes.service').StudentCodesService,
+    );
+  });
+
+  describe('account status changes preserve student records', () => {
+    it.each(['240512', '240517'])(
+      'deactivates %s without deleting its profile or academic records',
+      async (studentCode) => {
+        const profile = {
+          _id: new Types.ObjectId(),
+          userId: new Types.ObjectId(),
+          studentCode,
+          enrollmentStatus: 'active',
+          save: jest.fn().mockResolvedValue(undefined),
+        };
+        mockStudentProfileModel.findById.mockResolvedValue(profile);
+        const deleteSpy = jest.spyOn(service, 'deleteStudent');
+
+        await service.deactivate(profile._id.toString());
+
+        expect(profile.enrollmentStatus).toBe('inactive');
+        expect(profile.save).toHaveBeenCalledTimes(1);
+        expect(mockUsersService.deactivateUser).toHaveBeenCalledWith(
+          profile.userId.toString(),
+        );
+        expect(
+          mockStudentProfileModel.findByIdAndDelete,
+        ).not.toHaveBeenCalled();
+        expect(mockStudentProfileModel.db.collection).not.toHaveBeenCalled();
+        expect(deleteSpy).not.toHaveBeenCalled();
+
+        await service.activate(profile._id.toString());
+        expect(profile.enrollmentStatus).toBe('active');
+        expect(mockUsersService.activateUser).toHaveBeenCalledWith(
+          profile.userId.toString(),
+        );
+        expect(profile.studentCode).toBe(studentCode);
+      },
+    );
+
+    it.each(['active', 'inactive', 'graduated', 'suspended'] as const)(
+      'persists the %s enrollment status without deleting records',
+      async (enrollmentStatus) => {
+        const profile = { userId: new Types.ObjectId(), enrollmentStatus };
+        mockStudentProfileModel.findByIdAndUpdate.mockResolvedValue(profile);
+        const id = new Types.ObjectId().toString();
+
+        await service.update(id, { enrollmentStatus });
+
+        expect(mockStudentProfileModel.findByIdAndUpdate).toHaveBeenCalledWith(
+          id,
+          { $set: { enrollmentStatus } },
+          { new: true, runValidators: true },
+        );
+        if (enrollmentStatus === 'active') {
+          expect(mockUsersService.activateUser).toHaveBeenCalledWith(
+            profile.userId.toString(),
+          );
+        } else if (
+          enrollmentStatus === 'inactive' ||
+          enrollmentStatus === 'suspended'
+        ) {
+          expect(mockUsersService.deactivateUser).toHaveBeenCalledWith(
+            profile.userId.toString(),
+          );
+        }
+        expect(
+          mockStudentProfileModel.findByIdAndDelete,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['inactive', 'suspended'] as const)(
+      'creates a %s student with portal access disabled',
+      async (enrollmentStatus) => {
+        const userId = new Types.ObjectId();
+        mockUsersService.findByStudentCode.mockResolvedValue(null);
+        mockUsersService.createUser.mockResolvedValue({
+          _id: userId,
+          isActive: true,
+        });
+        const result = await service.create({
+          studentCode: '2026999',
+          nationalId: '30101010101010',
+          fullName: 'Synthetic Student',
+          enrollmentStatus,
+        } as Parameters<StudentsService['create']>[0]);
+
+        expect(result.profile.enrollmentStatus).toBe(enrollmentStatus);
+        expect(result.user.isActive).toBe(false);
+        expect(mockUsersService.deactivateUser).toHaveBeenCalledWith(
+          userId.toString(),
+        );
+      },
     );
   });
 
@@ -481,7 +578,7 @@ describe('StudentsService Unit Tests', () => {
             studentCode: '999999',
           }),
         },
-        { new: true },
+        { new: true, runValidators: true },
       );
     });
   });

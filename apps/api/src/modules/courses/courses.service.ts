@@ -44,6 +44,7 @@ import {
   UpdateCourseDto,
   QueryCourseDto,
   EnrollmentOptionsDto,
+  WithdrawStudentsOptionsDto,
 } from './dto/course.dto';
 import {
   buildPaginationOptions,
@@ -1618,6 +1619,215 @@ export class CoursesService {
       contentType:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       filename: 'course-students-enrollment-template.xlsx',
+    };
+  }
+
+  async withdrawStudentsFromExcel(
+    courseId: string,
+    buffer: Buffer,
+    originalname: string,
+    options: WithdrawStudentsOptionsDto,
+    actorId: string,
+  ) {
+    if (
+      !/^\d{4}-\d{4}$/.test(options.academicYear ?? '') ||
+      !['first', 'second', 'summer'].includes(options.semester)
+    ) {
+      throw new BadRequestException(
+        'حدد العام والفصل الدراسي / A specific academic year and semester are required',
+      );
+    }
+    if (!/\.(xlsx|csv)$/i.test(originalname)) {
+      throw new BadRequestException(
+        'استخدم ملف XLSX أو CSV / Use an XLSX or CSV file',
+      );
+    }
+    const course = await this.findOne(courseId);
+    const rows = await this.parseEnrollmentWorkbookRows(buffer, originalname);
+    if (!rows.length || rows.length > 10000) {
+      throw new BadRequestException(
+        'الملف يجب أن يحتوي من 1 إلى 10000 صف / File must contain 1–10000 rows',
+      );
+    }
+    // Exact header matching is deliberate: a name or a course code must never
+    // accidentally be treated as a student code in a destructive import.
+    const headers = new Set(['كودالطالب', 'كود', 'studentcode', 'code']);
+    const errors: string[] = [];
+    let errorCount = 0;
+    let duplicateCount = 0;
+    let notEnrolledCount = 0;
+    let withdrawnCount = 0;
+    const codes = new Map<string, number>();
+    const fail = (row: number, message: string) => {
+      errorCount++;
+      if (errors.length < 220) errors.push(`السطر ${row}: ${message}`);
+    };
+    rows.forEach((row, index) => {
+      const entry = Object.entries(row).find(([key]) =>
+        headers.has(
+          key
+            .replace(/^\uFEFF/, '')
+            .toLowerCase()
+            .replace(/[\s_\-()]/g, ''),
+        ),
+      );
+      const code = entry ? this.cleanFieldValue(entry[1]).trim() : '';
+      if (!code) fail(index + 2, 'كود الطالب مطلوب / Student code is required');
+      else if (codes.has(code.toLowerCase())) duplicateCount++;
+      else codes.set(code.toLowerCase(), index + 2);
+    });
+    const entries = [...codes];
+    const courseCode = course.code.trim().toUpperCase();
+    const processedStudents = new Set<string>();
+    try {
+      for (let offset = 0; offset < entries.length; offset += 100) {
+        const batch = entries.slice(offset, offset + 100);
+        const candidates = batch.flatMap(([code]) => [
+          code,
+          code.toUpperCase(),
+        ]);
+        const [profiles, users] = await Promise.all([
+          this.studentProfileModel
+            .find({ studentCode: { $in: candidates } })
+            .select('studentCode userId')
+            .lean(),
+          this.userModel
+            .find({
+              role: 'student',
+              $or: [
+                { code: { $in: candidates } },
+                { username: { $in: candidates } },
+              ],
+            })
+            .select('_id code username')
+            .lean<
+              Array<{ _id: Types.ObjectId; code?: string; username?: string }>
+            >(),
+        ]);
+        const idsByCode = new Map<string, Set<string>>();
+        const add = (code: string | undefined, id: Types.ObjectId) => {
+          if (!code || !id) return;
+          const key = code.trim().toLowerCase();
+          const ids = idsByCode.get(key) ?? new Set<string>();
+          ids.add(String(id));
+          idsByCode.set(key, ids);
+        };
+        for (const profile of profiles)
+          add(profile.studentCode, profile.userId);
+        for (const user of users) {
+          add(user.code, user._id);
+          add(user.username, user._id);
+        }
+        const operations: Parameters<
+          typeof this.courseRegistrationModel.bulkWrite
+        >[0] = [];
+        for (const [code, row] of batch) {
+          const ids = idsByCode.get(code);
+          if (!ids?.size) {
+            fail(row, 'الطالب غير موجود / Student not found');
+            continue;
+          }
+          if (ids.size !== 1) {
+            fail(row, 'كود الطالب غير فريد / Ambiguous student code');
+            continue;
+          }
+          const id = [...ids][0];
+          if (processedStudents.has(id)) {
+            duplicateCount++;
+            continue;
+          }
+          processedStudents.add(id);
+          const studentId = new Types.ObjectId(id);
+          const matchesCourse = {
+            $eq: [
+              { $toUpper: { $trim: { input: '$$code' } } },
+              { $literal: courseCode },
+            ],
+          };
+          const removedCourses = {
+            $filter: { input: '$courses', as: 'code', cond: matchesCourse },
+          };
+          // An atomic pipeline derives both values from the current document,
+          // preserving concurrent additions and making retries idempotent.
+          operations.push({
+            updateOne: {
+              filter: {
+                studentId,
+                academicYear: options.academicYear,
+                semester: options.semester,
+                $expr: { $gt: [{ $size: removedCourses }, 0] },
+              },
+              update: [
+                {
+                  $set: {
+                    administrativeChanges: {
+                      $concatArrays: [
+                        { $ifNull: ['$administrativeChanges', []] },
+                        {
+                          $literal: [
+                            {
+                              action: 'withdraw',
+                              courseCode,
+                              actorId: new Types.ObjectId(actorId),
+                              at: new Date(),
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    courses: {
+                      $filter: {
+                        input: '$courses',
+                        as: 'code',
+                        cond: { $not: [matchesCourse] },
+                      },
+                    },
+                    totalCreditHours: {
+                      $max: [
+                        0,
+                        {
+                          $subtract: [
+                            { $ifNull: ['$totalCreditHours', 0] },
+                            {
+                              $multiply: [
+                                course.creditHours ?? 3,
+                                { $size: removedCourses },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          });
+        }
+        if (operations.length) {
+          const result = await this.courseRegistrationModel.bulkWrite(
+            operations,
+            { ordered: true },
+          );
+          withdrawnCount += result.modifiedCount;
+          notEnrolledCount += operations.length - result.modifiedCount;
+        }
+      }
+    } finally {
+      await this.cacheService?.delPattern('courses:*');
+      await this.cacheService?.delPattern('registrations:*');
+      await this.cacheService?.delPattern('control:*');
+    }
+    return {
+      courseId: String(course._id),
+      courseCode: course.code,
+      courseName: course.name,
+      totalRows: rows.length,
+      withdrawnCount,
+      notEnrolledCount,
+      duplicateCount,
+      errorCount,
+      errors,
     };
   }
 

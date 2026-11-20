@@ -188,6 +188,7 @@ function StudentsPageContent() {
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isBulkDeactivateOpen, setIsBulkDeactivateOpen] = useState(false);
+  const [isBulkDeactivating, setIsBulkDeactivating] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferStudent, setTransferStudent] = useState<Student | null>(null);
   const [selectedProfileStudent, setProfileStudent] = useState<Student | null>(null);
@@ -1000,22 +1001,48 @@ function StudentsPageContent() {
         locale={locale}
       />
       <ConfirmDialog
+        dir={locale === 'ar' ? 'rtl' : 'ltr'}
         open={isBulkDeactivateOpen}
         onOpenChange={setIsBulkDeactivateOpen}
         title={t('deactivate')}
         description={
           locale === 'ar'
-            ? `هل أنت متأكد من تعطيل حسابات ${selectedKeys.length} طالب محدد؟ سيتم إيقاف وصولهم إلى البوابة.`
-            : `Are you sure you want to suspend the accounts of ${selectedKeys.length} selected students? Their portal access will be deactivated.`
+            ? `هل أنت متأكد من تعطيل حسابات ${selectedKeys.length} طالب محدد؟ ستصبح حالتهم غير نشط مع الاحتفاظ بملفاتهم وسجلاتهم الأكاديمية، ويمكن إعادة تفعيلهم.`
+            : `Deactivate ${selectedKeys.length} selected accounts? Their status will become inactive. Their profiles and academic records will be retained, and they can be reactivated.`
         }
         confirmLabel={t('deactivate')}
         cancelLabel={tCommon('cancel')}
+        disabled={isBulkDeactivating}
         onConfirm={async () => {
-          await Promise.all(selectedKeys.map((id) => deactivateStudent(id)));
-          setSelectedKeys([]);
-          setSelectedStudentsMap(new Map());
-          setIsBulkDeactivateOpen(false);
-          invalidateStudents();
+          if (isBulkDeactivating) return;
+          setIsBulkDeactivating(true);
+          const failed: string[] = [];
+          try {
+            for (const id of selectedKeys) {
+              try {
+                await deactivateStudent(id);
+              } catch {
+                failed.push(id);
+              }
+            }
+            setSelectedKeys(failed);
+            setSelectedStudentsMap((previous) => new Map(
+              [...previous].filter(([id]) => failed.includes(id)),
+            ));
+            setIsBulkDeactivateOpen(false);
+            invalidateStudents();
+            if (failed.length) {
+              toast.error(locale === 'ar'
+                ? `تعذر تعطيل ${failed.length} حساب؛ ظلوا محددين لإعادة المحاولة.`
+                : `${failed.length} accounts could not be deactivated and remain selected.`);
+            } else {
+              toast.success(locale === 'ar'
+                ? 'تم تعطيل الحسابات مع الاحتفاظ ببيانات الطلاب'
+                : 'Accounts deactivated; student records retained');
+            }
+          } finally {
+            setIsBulkDeactivating(false);
+          }
         }}
       />
 

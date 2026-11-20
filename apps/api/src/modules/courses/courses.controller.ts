@@ -31,6 +31,7 @@ import {
   QueryCourseDto,
   EnrollStudentsBatchDto,
   EnrollmentOptionsDto,
+  WithdrawStudentsOptionsDto,
 } from './dto/course.dto';
 import {
   CreateCourseMaterialDto,
@@ -192,6 +193,33 @@ export class CoursesController {
         ...options,
         actor: { _id: String(caller._id), role: caller.role },
       },
+    );
+  }
+
+  @Post('admin/courses/:id/withdraw-students-excel')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.COURSES_WRITE)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Withdraw listed students from a course in one academic term',
+  })
+  async withdrawStudentsFromExcel(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @UploadedFile() file: CourseSyllabusFile,
+    @Query() options: WithdrawStudentsOptionsDto,
+    @CurrentUser() caller: { _id: string },
+  ) {
+    if (!file)
+      throw new BadRequestException('Please select an XLSX or CSV file');
+    return this.coursesService.withdrawStudentsFromExcel(
+      id,
+      file.buffer,
+      file.originalname,
+      options,
+      String(caller._id),
     );
   }
 

@@ -12,6 +12,7 @@ import {
   RotateCcw,
   UploadCloud,
   UserCheck,
+  UserMinus,
   Users,
   X,
 } from "lucide-react";
@@ -70,6 +71,18 @@ export interface CourseStudentEnrollmentDialogProps {
   selectedCourseId?: string | null;
   locale: string;
   onSuccess?: () => void;
+  mode?: "enroll" | "withdraw";
+}
+interface WithdrawalResult {
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  totalRows: number;
+  withdrawnCount: number;
+  notEnrolledCount: number;
+  duplicateCount: number;
+  errorCount: number;
+  errors: string[];
 }
 const initialProgress: BatchUploadProgressState = {
   isUploading: false,
@@ -95,7 +108,9 @@ export function CourseStudentEnrollmentDialog({
   selectedCourseId,
   locale,
   onSuccess,
+  mode = "enroll",
 }: CourseStudentEnrollmentDialogProps) {
+  const withdrawing = mode === "withdraw";
   const isAr = locale === "ar";
   const text = (ar: string, en: string) => (isAr ? ar : en);
   const queryClient = useQueryClient();
@@ -119,6 +134,8 @@ export function CourseStudentEnrollmentDialog({
   const [confirmOverride, setConfirmOverride] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [confirmWithdrawal, setConfirmWithdrawal] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
 
   const coursesQuery = useQuery({
     queryKey: ["admin-all-courses-for-enrollment"],
@@ -164,39 +181,47 @@ export function CourseStudentEnrollmentDialog({
         )
       ).data,
   });
-  const [previousCourseInputs, setpreviousCourseInputs] = useState<unknown[] | null>(null);
-  if (!previousCourseInputs || previousCourseInputs.some((value,i) => !Object.is(value, [open, selectedCourseId, courses][i]))) {
+  const [previousCourseInputs, setpreviousCourseInputs] = useState<
+    unknown[] | null
+  >(null);
+  if (
+    !previousCourseInputs ||
+    previousCourseInputs.some(
+      (value, i) => !Object.is(value, [open, selectedCourseId, courses][i]),
+    )
+  ) {
     setpreviousCourseInputs([open, selectedCourseId, courses]);
     (() => {
-    if (!open) {
-      setInitialized("");
-      setFile(null);
-      setResult(null);
-      setOverride(false);
-      setReason("");
-      setProgress(initialProgress);
-      return;
-    }
-    if (
-      selectedCourseId &&
-      courses.length &&
-      initialized !== selectedCourseId
-    ) {
-      const course = courses.find((item) => item._id === selectedCourseId);
-      if (course) {
-        setInitialized(selectedCourseId);
-        setDepartment("all");
-        setSearch("");
-        setCourseId(course._id);
-        setLevel(course.academicLevel ?? course.level ?? "all");
-        const terms = [
-          ...new Set(getCourseCurricula(course).map((item) => item.semester)),
-        ];
-        if (terms.length === 1) setSemester(terms[0]);
+      if (!open) {
+        setInitialized("");
+        setFile(null);
+        setResult(null);
+        setOverride(false);
+        setReason("");
+        setProgress(initialProgress);
+        setConfirmWithdrawal(false);
+        setDuplicateCount(0);
+        return;
       }
-    }
-    // Initialize only when opening or when the requested course becomes available.
-
+      if (
+        selectedCourseId &&
+        courses.length &&
+        initialized !== selectedCourseId
+      ) {
+        const course = courses.find((item) => item._id === selectedCourseId);
+        if (course) {
+          setInitialized(selectedCourseId);
+          setDepartment("all");
+          setSearch("");
+          setCourseId(course._id);
+          setLevel(course.academicLevel ?? course.level ?? "all");
+          const terms = [
+            ...new Set(getCourseCurricula(course).map((item) => item.semester)),
+          ];
+          if (terms.length === 1) setSemester(terms[0]);
+        }
+      }
+      // Initialize only when opening or when the requested course becomes available.
     })();
   }
 
@@ -207,7 +232,12 @@ export function CourseStudentEnrollmentDialog({
   }
   function chooseFile(next?: File) {
     if (!next) return;
-    if (!/\.(xlsx|xls|csv)$/i.test(next.name) || next.size > 10 * 1024 * 1024) {
+    if (
+      !(withdrawing ? /\.(xlsx|csv)$/i : /\.(xlsx|xls|csv)$/i).test(
+        next.name,
+      ) ||
+      next.size > 10 * 1024 * 1024
+    ) {
       toast.error(
         text(
           "اختر ملف Excel أو CSV بحجم لا يتجاوز 10 ميجابايت.",
@@ -248,6 +278,16 @@ export function CourseStudentEnrollmentDialog({
     }
   }
   function notify(summary: CourseEnrollmentResult) {
+    if (withdrawing) {
+      const message = text(
+        `تم سحب ${summary.enrolledCount} طالب؛ غير مسجلين: ${summary.alreadyEnrolledCount}؛ أخطاء: ${summary.errorCount}.`,
+        `${summary.enrolledCount} withdrawn; ${summary.alreadyEnrolledCount} not enrolled; ${summary.errorCount} errors.`,
+      );
+      if (summary.errorCount) toast.warning(message);
+      else if (summary.enrolledCount) toast.success(message);
+      else toast.info(message);
+      return;
+    }
     const status = enrollmentResultStatus(summary);
     if (status === "failed")
       toast.error(
@@ -292,6 +332,8 @@ export function CourseStudentEnrollmentDialog({
     setUploading(true);
     setResult(null);
     setConfirmOverride(false);
+    setConfirmWithdrawal(false);
+    setDuplicateCount(0);
     const started = Date.now();
     let aggregate: CourseEnrollmentResult | null = null;
     const options = {
@@ -316,49 +358,88 @@ export function CourseStudentEnrollmentDialog({
       1000,
     );
     try {
-      const rows = await readEnrollmentSheet(file);
-      if (rows.length) {
-        const batchSize = 150;
-        const totalBatches = Math.ceil(rows.length / batchSize);
-        for (let offset = 0; offset < rows.length; offset += batchSize) {
-          const response = await api.post<CourseEnrollmentResult>(
-            `/admin/courses/${courseId}/enroll-students-batch`,
-            { ...options, rows: rows.slice(offset, offset + batchSize) },
-          );
-          aggregate = mergeEnrollmentResults(aggregate, response.data, offset);
-          const processed = Math.min(offset + batchSize, rows.length);
-          setProgress((value) => ({
-            ...value,
-            phase: "uploading",
-            percentage: Math.min(
-              99,
-              Math.round((processed / rows.length) * 100),
-            ),
-            processedRows: processed,
-            totalRows: rows.length,
-            currentBatch: Math.floor(offset / batchSize) + 1,
-            totalBatches,
-          }));
-        }
-      } else {
+      if (withdrawing) {
+        setProgress((value) => ({
+          ...value,
+          phase: "uploading",
+          percentage: 10,
+        }));
         const body = new FormData();
         body.append("file", file);
-        const response = await api.post<CourseEnrollmentResult>(
-          `/admin/courses/${courseId}/enroll-students-excel`,
+        const { data } = await api.post<WithdrawalResult>(
+          `/admin/courses/${courseId}/withdraw-students-excel`,
           body,
           {
-            params: options,
+            params: { academicYear, semester },
             onUploadProgress: (event) =>
               setProgress((value) => ({
                 ...value,
-                phase: "uploading",
                 percentage: event.total
-                  ? Math.min(95, Math.round((event.loaded / event.total) * 95))
+                  ? Math.min(90, Math.round((event.loaded / event.total) * 90))
                   : 20,
               })),
           },
         );
-        aggregate = response.data;
+        // Adapt shared presentation while retaining explicit API withdrawal counts.
+        aggregate = {
+          ...data,
+          enrolledCount: data.withdrawnCount,
+          alreadyEnrolledCount: data.notEnrolledCount,
+          skippedBlockedCount: 0,
+        };
+        setDuplicateCount(data.duplicateCount);
+      } else {
+        const rows = await readEnrollmentSheet(file);
+        if (rows.length) {
+          const batchSize = 150;
+          const totalBatches = Math.ceil(rows.length / batchSize);
+          for (let offset = 0; offset < rows.length; offset += batchSize) {
+            const response = await api.post<CourseEnrollmentResult>(
+              `/admin/courses/${courseId}/enroll-students-batch`,
+              { ...options, rows: rows.slice(offset, offset + batchSize) },
+            );
+            aggregate = mergeEnrollmentResults(
+              aggregate,
+              response.data,
+              offset,
+            );
+            const processed = Math.min(offset + batchSize, rows.length);
+            setProgress((value) => ({
+              ...value,
+              phase: "uploading",
+              percentage: Math.min(
+                99,
+                Math.round((processed / rows.length) * 100),
+              ),
+              processedRows: processed,
+              totalRows: rows.length,
+              currentBatch: Math.floor(offset / batchSize) + 1,
+              totalBatches,
+            }));
+          }
+        } else {
+          const body = new FormData();
+          body.append("file", file);
+          const response = await api.post<CourseEnrollmentResult>(
+            `/admin/courses/${courseId}/enroll-students-excel`,
+            body,
+            {
+              params: options,
+              onUploadProgress: (event) =>
+                setProgress((value) => ({
+                  ...value,
+                  phase: "uploading",
+                  percentage: event.total
+                    ? Math.min(
+                        95,
+                        Math.round((event.loaded / event.total) * 95),
+                      )
+                    : 20,
+                })),
+            },
+          );
+          aggregate = response.data;
+        }
       }
       if (aggregate) {
         setResult(aggregate);
@@ -371,23 +452,31 @@ export function CourseStudentEnrollmentDialog({
           processedRows: aggregate!.totalRows,
         }));
       }
-      await countQuery.refetch();
-      void queryClient.invalidateQueries({ queryKey: ["registration"] });
-      void queryClient.invalidateQueries({ queryKey: ["student-syllabi"] });
-      onSuccess?.();
     } catch (error) {
       if (aggregate) setResult(aggregate);
       toast.error(
         getApiErrorMessage(
           error,
-          text(
-            "تعذر إكمال التسجيل. التسجيلات السابقة في هذه العملية محفوظة.",
-            "Enrollment could not finish. Earlier completed batches were preserved.",
-          ),
+          withdrawing
+            ? text(
+                "تعذر إكمال السحب. يمكنك إعادة رفع الملف بأمان لمراجعة المتبقي.",
+                "Withdrawal could not finish. You can safely re-upload the file to process remaining students.",
+              )
+            : text(
+                "تعذر إكمال التسجيل. التسجيلات السابقة في هذه العملية محفوظة.",
+                "Enrollment could not finish. Earlier completed batches were preserved.",
+              ),
         ),
       );
     } finally {
       clearInterval(timer);
+      void countQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["registration"] });
+      void queryClient.invalidateQueries({ queryKey: ["student-syllabi"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin-course-enrolled-students"],
+      });
+      onSuccess?.();
       setUploading(false);
       setProgress((value) => ({ ...value, isUploading: false }));
     }
@@ -417,9 +506,24 @@ export function CourseStudentEnrollmentDialog({
   const summary = result
     ? ([
         [text("إجمالي الصفوف", "Total rows"), result.totalRows],
-        [text("تسجيل جديد", "Newly enrolled"), result.enrolledCount],
-        [text("مسجل مسبقًا", "Already enrolled"), result.alreadyEnrolledCount],
-        [text("تعذر تسجيلهم", "Failed rows"), result.errorCount],
+        [
+          withdrawing
+            ? text("تم سحبهم", "Withdrawn")
+            : text("تسجيل جديد", "Newly enrolled"),
+          result.enrolledCount,
+        ],
+        [
+          withdrawing
+            ? text("غير مسجلين", "Not enrolled")
+            : text("مسجل مسبقًا", "Already enrolled"),
+          result.alreadyEnrolledCount,
+        ],
+        [
+          withdrawing
+            ? text("تعذر سحبهم", "Failed rows")
+            : text("تعذر تسجيلهم", "Failed rows"),
+          result.errorCount,
+        ],
       ] as const)
     : [];
 
@@ -436,13 +540,23 @@ export function CourseStudentEnrollmentDialog({
       >
         <DialogHeader className="shrink-0 border-b border-border px-5 py-5 pe-12 text-start">
           <DialogTitle className="flex items-center gap-2 text-lg">
-            <UserCheck className="h-5 w-5 text-primary" />
-            {text("تسجيل طلاب بمقرر", "Enroll students in a course")}
+            {withdrawing ? (
+              <UserMinus className="h-5 w-5 text-danger" />
+            ) : (
+              <UserCheck className="h-5 w-5 text-primary" />
+            )}
+            {withdrawing
+              ? text("سحب طلاب من مقرر", "Withdraw students from a course")
+              : text("تسجيل طلاب بمقرر", "Enroll students in a course")}
           </DialogTitle>
           <DialogDescription>
             {text(
-              "حدد القسم والفصل، ثم أرفق شيت الطلاب وراجع نتيجة التسجيل.",
-              "Choose the programme and term, upload the student sheet, then review the results.",
+              withdrawing
+                ? "حدد المقرر والعام والفصل، ثم ارفع أكواد الطلاب المطلوب سحبهم فقط. باقي المقررات والدرجات لا تتغير."
+                : "حدد القسم والفصل، ثم أرفق شيت الطلاب وراجع نتيجة التسجيل.",
+              withdrawing
+                ? "Choose the course, year and term, then upload only the students to withdraw. Other courses and grades are preserved."
+                : "Choose the programme and term, upload the student sheet, then review the results.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -542,7 +656,9 @@ export function CourseStudentEnrollmentDialog({
                   "Search by course name or code",
                 )}
                 value={search}
-              onChange={(event) => changeFilter(() => setSearch(event.target.value))}
+                onChange={(event) =>
+                  changeFilter(() => setSearch(event.target.value))
+                }
                 disabled={uploading}
               />
               <EnrollmentSelect
@@ -597,7 +713,7 @@ export function CourseStudentEnrollmentDialog({
                     </bdi>
                   )}
                 </p>
-                {(countQuery.data?.enrolledCount ?? 0) > 0 && (
+                {!withdrawing && (countQuery.data?.enrolledCount ?? 0) > 0 && (
                   <details>
                     <summary className="cursor-pointer text-danger">
                       {text(
@@ -632,8 +748,12 @@ export function CourseStudentEnrollmentDialog({
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {text(
-                    "كود الطالب · المستوى · الحالة · الاسم (اختياري)",
-                    "Student code · Level · Status · Name (optional)",
+                    withdrawing
+                      ? "كود الطالب فقط مطلوب؛ باقي الأعمدة يتم تجاهلها. الحد الأقصى 10000 صف."
+                      : "كود الطالب · المستوى · الحالة · الاسم (اختياري)",
+                    withdrawing
+                      ? "Only student code is required; other columns are ignored. Maximum 10,000 rows."
+                      : "Student code · Level · Status · Name (optional)",
                   )}
                 </p>
               </div>
@@ -667,7 +787,7 @@ export function CourseStudentEnrollmentDialog({
               <input
                 id={fileInputId}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept={withdrawing ? ".xlsx,.csv" : ".xlsx,.xls,.csv"}
                 className="sr-only"
                 disabled={uploading}
                 onChange={onFileChange}
@@ -713,7 +833,7 @@ export function CourseStudentEnrollmentDialog({
             </div>
           </section>
 
-          {user?.role === "admin" && (
+          {!withdrawing && user?.role === "admin" && (
             <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs">
               <label className="flex items-center gap-2 font-medium">
                 <Checkbox
@@ -762,16 +882,18 @@ export function CourseStudentEnrollmentDialog({
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                {state === "failed"
-                  ? text("لم يتم تسجيل طلاب", "No students enrolled")
-                  : state === "partial"
-                    ? text(
-                        "اكتمل التسجيل مع ملاحظات",
-                        "Enrollment completed with issues",
-                      )
-                    : state === "unchanged"
-                      ? text("لا توجد تسجيلات جديدة", "No new enrollments")
-                      : text("اكتمل تسجيل الطلاب", "Enrollment completed")}
+                {withdrawing
+                  ? text("نتيجة سحب الطلاب", "Student withdrawal results")
+                  : state === "failed"
+                    ? text("لم يتم تسجيل طلاب", "No students enrolled")
+                    : state === "partial"
+                      ? text(
+                          "اكتمل التسجيل مع ملاحظات",
+                          "Enrollment completed with issues",
+                        )
+                      : state === "unchanged"
+                        ? text("لا توجد تسجيلات جديدة", "No new enrollments")
+                        : text("اكتمل تسجيل الطلاب", "Enrollment completed")}
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {summary.map(([label, count]) => (
@@ -784,6 +906,14 @@ export function CourseStudentEnrollmentDialog({
                   </div>
                 ))}
               </div>
+              {withdrawing && duplicateCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {text(
+                    `تم تجاهل ${duplicateCount} كود مكرر.`,
+                    `${duplicateCount} duplicate codes skipped.`,
+                  )}
+                </p>
+              )}
               {(result.overriddenCount ?? 0) > 0 && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   {text(
@@ -852,7 +982,11 @@ export function CourseStudentEnrollmentDialog({
               (override && reason.trim().length < 10)
             }
             onClick={() =>
-              override ? setConfirmOverride(true) : void upload()
+              withdrawing
+                ? setConfirmWithdrawal(true)
+                : override
+                  ? setConfirmOverride(true)
+                  : void upload()
             }
           >
             {uploading ? (
@@ -860,9 +994,13 @@ export function CourseStudentEnrollmentDialog({
             ) : (
               <UserCheck className="h-4 w-4" />
             )}
-            {uploading
-              ? text("جارٍ التسجيل…", "Enrolling…")
-              : text("تسجيل الطلاب", "Enroll students")}
+            {withdrawing
+              ? uploading
+                ? text("جارٍ السحب…", "Withdrawing…")
+                : text("سحب الطلاب", "Withdraw students")
+              : uploading
+                ? text("جارٍ التسجيل…", "Enrolling…")
+                : text("تسجيل الطلاب", "Enroll students")}
           </Button>
           <Button
             variant="outline"
@@ -872,6 +1010,43 @@ export function CourseStudentEnrollmentDialog({
             {text("إغلاق", "Close")}
           </Button>
         </DialogFooter>
+        <ConfirmDialog
+          dir={isAr ? "rtl" : "ltr"}
+          open={confirmWithdrawal}
+          onOpenChange={setConfirmWithdrawal}
+          title={text(
+            "تأكيد سحب الطلاب من المقرر؟",
+            "Confirm student withdrawal?",
+          )}
+          description={
+            <span>
+              {text(
+                "سيتم سحب الطلاب المذكورين في الملف فقط من المقرر للفترة المحددة وتحديث ساعاتهم.",
+                "Only students listed in the file will be withdrawn from this course in the selected term, and their credit totals updated.",
+              )}{" "}
+              <bdi>
+                {selected?.code} · {academicYear}
+              </bdi>
+              <span className="block">
+                {text("الفصل:", "Semester:")}{" "}
+                {text(
+                  semester === "first"
+                    ? "الأول"
+                    : semester === "second"
+                      ? "الثاني"
+                      : "الصيفي",
+                  semester,
+                )}
+              </span>
+              <span className="block">{file?.name}</span>
+            </span>
+          }
+          confirmLabel={text("تأكيد السحب", "Confirm withdrawal")}
+          cancelLabel={text("رجوع", "Back")}
+          destructive
+          disabled={uploading}
+          onConfirm={() => void upload()}
+        />
         <ConfirmDialog
           dir={isAr ? "rtl" : "ltr"}
           destructive={false}

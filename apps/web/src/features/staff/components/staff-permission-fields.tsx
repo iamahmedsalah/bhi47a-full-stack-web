@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   STAFF_ASSIGNABLE_PERMISSIONS,
   STAFF_TYPE_VALUES,
@@ -10,6 +10,14 @@ import {
 } from "@student-portal/shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { STAFF_PERMISSION_GROUPS } from "../permission-groups";
 import {
   Users,
@@ -53,7 +61,9 @@ const GROUP_ICONS: Record<string, React.ReactNode> = {
   courseSchedules: <Clock className="h-3.5 w-3.5 text-primary shrink-0" />,
   tuition: <CreditCard className="h-3.5 w-3.5 text-primary shrink-0" />,
   courseMaterials: <Folder className="h-3.5 w-3.5 text-primary shrink-0" />,
-  staffManagement: <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />,
+  staffManagement: (
+    <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+  ),
   admissions: <UserPlus className="h-3.5 w-3.5 text-primary shrink-0" />,
   studentCodes: <Hash className="h-3.5 w-3.5 text-primary shrink-0" />,
   analytics: <TrendingUp className="h-3.5 w-3.5 text-primary shrink-0" />,
@@ -71,6 +81,34 @@ export function StaffPermissionFields({
   currentStaffType?: StaffType;
 }) {
   const t = useTranslations("staff");
+  const locale = useLocale();
+  const [search, setSearch] = React.useState("");
+  const [section, setSection] = React.useState("all");
+  const [selection, setSelection] = React.useState("all");
+  const query = search.trim().toLocaleLowerCase(locale).normalize("NFKC");
+  const visibleGroups = STAFF_PERMISSION_GROUPS.filter(
+    (group) => section === "all" || group.key === section,
+  )
+    .map((group) => ({
+      ...group,
+      permissions: group.permissions.filter((permission) => {
+        const matchesSelection =
+          selection === "all" ||
+          (selection === "selected"
+            ? value.includes(permission)
+            : !value.includes(permission));
+        const text = `${t(`permissions.groups.${group.key}`)} ${t(`permissions.labels.${permission.replaceAll(".", "_")}`)} ${permission}`;
+        return (
+          matchesSelection &&
+          text.toLocaleLowerCase(locale).normalize("NFKC").includes(query)
+        );
+      }),
+    }))
+    .filter((group) => group.permissions.length > 0);
+  const visibleCount = visibleGroups.reduce(
+    (count, group) => count + group.permissions.length,
+    0,
+  );
 
   return (
     <fieldset
@@ -139,9 +177,62 @@ export function StaffPermissionFields({
         </div>
       </div>
 
-      {/* Permission Categories */}
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_150px]">
+        <Input
+          aria-label={t("permissions.search")}
+          placeholder={t("permissions.search")}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          disabled={disabled}
+        />
+        <Select value={section} onValueChange={setSection} disabled={disabled}>
+          <SelectTrigger aria-label={t("permissions.section")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+            <SelectItem value="all">{t("permissions.allSections")}</SelectItem>
+            {STAFF_PERMISSION_GROUPS.map((group) => (
+              <SelectItem key={group.key} value={group.key}>
+                {t(`permissions.groups.${group.key}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={selection}
+          onValueChange={setSelection}
+          disabled={disabled}
+        >
+          <SelectTrigger aria-label={t("permissions.selection")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+            <SelectItem value="all">
+              {t("permissions.allPermissions")}
+            </SelectItem>
+            <SelectItem value="selected">
+              {t("permissions.selectedOnly")}
+            </SelectItem>
+            <SelectItem value="unselected">
+              {t("permissions.unselectedOnly")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p role="status" className="text-xs text-muted-foreground">
+        {t("permissions.visibleCount", {
+          count: visibleCount,
+          total: STAFF_ASSIGNABLE_PERMISSIONS.length,
+        })}
+      </p>
+      {/* Group selection affects only the permissions visible under the filters. */}
       <div className="space-y-3">
-        {STAFF_PERMISSION_GROUPS.map((group) => {
+        {visibleGroups.length === 0 && (
+          <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+            {t("permissions.noMatches")}
+          </p>
+        )}
+        {visibleGroups.map((group) => {
           const groupCount = group.permissions.filter((p) =>
             value.includes(p),
           ).length;
@@ -170,7 +261,12 @@ export function StaffPermissionFields({
                   onClick={() => {
                     if (allChecked) {
                       onChange(
-                        value.filter((p) => !group.permissions.some((permission) => permission === p)),
+                        value.filter(
+                          (p) =>
+                            !group.permissions.some(
+                              (permission) => permission === p,
+                            ),
+                        ),
                       );
                     } else {
                       const next = new Set([...value, ...group.permissions]);
@@ -179,7 +275,9 @@ export function StaffPermissionFields({
                   }}
                   className="text-[10px] text-primary hover:underline font-medium cursor-pointer"
                 >
-                  {allChecked ? t("permissions.clearAll") : t("permissions.selectAll")}
+                  {allChecked
+                    ? t("permissions.clearAll")
+                    : t("permissions.selectAll")}
                 </button>
               </div>
 

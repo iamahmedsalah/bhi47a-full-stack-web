@@ -4,9 +4,6 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import {
-  STAFF_ASSIGNABLE_PERMISSIONS,
-  STAFF_TYPE_VALUES,
-  STAFF_TYPE_DEFAULT_PERMISSIONS,
   formatStaffDisplayName,
   type Permission,
 } from "@student-portal/shared";
@@ -55,45 +52,6 @@ export function StaffPermissionsDialog({
           </DialogTitle>
           <DialogDescription>{t("permissions.description")}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {t("permissions.presets")}:
-            </span>
-            {STAFF_TYPE_VALUES.map((type) => (
-              <Button
-                key={type}
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-7 text-xs"
-                onClick={() =>
-                  setSelected([...STAFF_TYPE_DEFAULT_PERMISSIONS[type]])
-                }
-              >
-                {t(`types.${type}`)}
-              </Button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setSelected([...STAFF_ASSIGNABLE_PERMISSIONS])}
-            >
-              {t("permissions.selectAll")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setSelected([])}
-            >
-              {t("permissions.clearAll")}
-            </Button>
-          </div>
-        </div>
         <div className="flex-1 space-y-4 overflow-y-auto py-2">
           <StaffPermissionFields
             value={selected}

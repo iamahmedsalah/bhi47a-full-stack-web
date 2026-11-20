@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ENROLLMENT_STATUS_VALUES } from "@student-portal/shared";
 
 export const createStudentFormSchema = (message: (key: string) => string) =>
   z
@@ -42,7 +43,10 @@ export const createStudentFormSchema = (message: (key: string) => string) =>
       examRoom: z.string().optional(),
       examFloor: z.string().optional(),
       examBuilding: z.string().optional(),
-      enrollmentStatus: z.string().min(1, message("enrollmentStatus")),
+      enrollmentStatus: z.string().refine(
+        (value) => ENROLLMENT_STATUS_VALUES.some((status) => status === value),
+        message("enrollmentStatus"),
+      ),
       mustChangePassword: z.boolean().optional(),
     })
     .refine(

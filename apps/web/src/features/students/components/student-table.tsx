@@ -125,7 +125,7 @@ interface StudentTableProps {
   onEditStudent: (student: Student) => void;
   onResetPassword: (student: Student) => void;
   onActivateStudent: (student: Student) => void;
-  onDeactivateStudent: (ids: string[]) => void;
+  onDeactivateStudent: (ids: string[]) => Promise<void>;
   onBulkEdit: () => void;
   onOpenBulkDeactivate: () => void;
   onTransferDepartment?: (student: Student) => void;
@@ -171,6 +171,7 @@ export function StudentTable({
   const canResetPassword = isAdmin || Boolean(user?.permissions?.includes('students.reset_password'));
   const canAdvising = isAdmin || Boolean(user?.permissions?.includes('advising.read')) || Boolean(user?.permissions?.includes('advising.write'));
   const [studentToDeactivate, setStudentToDeactivate] = React.useState<Student | null>(null);
+  const [isDeactivating, setIsDeactivating] = React.useState(false);
   const [studentToDelete, setStudentToDelete] = React.useState<Student | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
@@ -585,13 +586,14 @@ export function StudentTable({
                   label: locale === 'ar' ? 'تعطيل الحساب' : 'Deactivate',
                   onClick: onOpenBulkDeactivate,
                   variant: 'destructive' as const,
-                  icon: <Trash2 className="h-3.5 w-3.5" />,
+                  icon: <UserX className="h-3.5 w-3.5" />,
                 },
               ]
             : []),
         ]}
       />
       <ConfirmDialog
+        dir={locale === 'ar' ? 'rtl' : 'ltr'}
         open={studentToDeactivate != null}
         onOpenChange={(open) => {
           if (!open) setStudentToDeactivate(null);
@@ -601,19 +603,27 @@ export function StudentTable({
           <>
             {locale === 'ar'
               ? 'هل أنت متأكد من تعطيل حساب الطالب '
-              : 'Are you sure you want to suspend the account of student '}
+              : 'Are you sure you want to deactivate the account of student '}
             <span className="font-bold text-danger">&quot;{studentToDeactivate?.fullName}&quot;</span>
             {locale === 'ar'
-              ? '؟ سيتم إيقاف دخوله إلى البوابة.'
-              : '? Their portal access will be deactivated.'}
+              ? '؟ ستصبح حالته غير نشط مع الاحتفاظ بملفه وسجلاته الأكاديمية، ويمكن إعادة تفعيله.'
+              : '? Their status will become inactive. Their profile and academic records will be retained, and the account can be reactivated.'}
           </>
         }
         confirmLabel={t('deactivate')}
         cancelLabel={tCommon('cancel')}
-        onConfirm={() => {
-          if (studentToDeactivate) {
-            onDeactivateStudent([studentToDeactivate._id]);
+        disabled={isDeactivating}
+        onConfirm={async () => {
+          if (!studentToDeactivate || isDeactivating) return;
+          setIsDeactivating(true);
+          try {
+            await onDeactivateStudent([studentToDeactivate._id]);
+            toast.success(locale === 'ar' ? 'تم تعطيل الحساب مع الاحتفاظ ببيانات الطالب' : 'Account deactivated; student records retained');
             setStudentToDeactivate(null);
+          } catch (error) {
+            toast.error(getApiErrorMessage(error));
+          } finally {
+            setIsDeactivating(false);
           }
         }}
       />

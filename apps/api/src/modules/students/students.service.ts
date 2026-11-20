@@ -210,6 +210,13 @@ export class StudentsService {
     });
 
     await profile.save();
+    if (
+      dto.enrollmentStatus === 'inactive' ||
+      dto.enrollmentStatus === 'suspended'
+    ) {
+      await this.usersService.deactivateUser(user._id.toString());
+      user.isActive = false;
+    }
     if (actorId)
       await this.studentCodes.recordImport(
         [{ studentCode: dto.studentCode, rowNum: 0 }],
@@ -362,7 +369,7 @@ export class StudentsService {
     const profile = await this.studentProfileModel.findByIdAndUpdate(
       id,
       { $set: profileUpdates },
-      { new: true },
+      { new: true, runValidators: true },
     );
     if (!profile) {
       throw new NotFoundException('الطالب غير موجود');
