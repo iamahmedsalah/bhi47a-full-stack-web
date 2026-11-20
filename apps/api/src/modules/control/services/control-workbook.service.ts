@@ -337,8 +337,30 @@ export class ControlWorkbookService {
     page.getCell(1, column).style = { ...page.getCell('B1').style };
     page.getColumn(column).width = 34;
     page.getColumn(column).hidden = false;
+    if (page.autoFilter) page.autoFilter = `A1:${letter}1`;
+    const tuitionChoices = [
+      'مسدد / Paid',
+      'غير مسدد / Unpaid',
+      'معفى / Exempt',
+      'محجوب / Blocked',
+      'محجوب — غير مسدد / Blocked — unpaid',
+      'غير متاح / Unavailable',
+    ];
     page.eachRow((row, index) => {
       if (index === 1) return;
+      row.getCell(column).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${tuitionChoices.join(',')}"`],
+        showErrorMessage: true,
+        errorStyle: 'stop',
+        errorTitle: 'قيمة غير صحيحة / Invalid value',
+        error: 'اختر من القائمة / Choose a value from the list',
+        showInputMessage: true,
+        promptTitle: 'للمراجعة فقط / For review only',
+        prompt:
+          'التعديل هنا لا يغير المصروفات بالنظام / Does not update portal tuition',
+      };
       const tuition = byCode.get(row.getCell(1).text);
       row.getCell(column).value = tuition?.isBlocked
         ? tuition.status === 'unpaid'

@@ -241,6 +241,19 @@ describe('Control workbook import and review', () => {
       );
       const page = book.worksheets[0];
       expect(page.getCell('O2').text).toContain('محجوب');
+      expect(page.autoFilter).toBe('A1:O1');
+      expect(page.getCell('O2').dataValidation).toMatchObject({
+        type: 'list',
+        allowBlank: true,
+        showErrorMessage: true,
+        errorStyle: 'stop',
+      });
+      expect(page.getCell('O2').dataValidation.formulae?.[0]).toContain(
+        'مسدد / Paid',
+      );
+      expect(page.getCell('O2').dataValidation.formulae?.[0]).toContain(
+        'محجوب / Blocked',
+      );
       for (const col of [1, 2, 3, 4, 8, 15])
         expect(page.getCell(2, col).fill).toMatchObject({
           fgColor: { argb: 'FFFDE9E7' },
@@ -278,6 +291,13 @@ describe('Control workbook import and review', () => {
       });
       const exported = new ExcelJS.Workbook();
       await exported.xlsx.load(await ctx.service.export(ctx.user, ctx.sheetId));
+      expect(
+        exported.getWorksheet('Marks')!.getCell('O2').dataValidation.type,
+      ).toBe('list');
+      expect(
+        exported.getWorksheet('CourseContext')!.getCell('I2').dataValidation
+          .type,
+      ).toBe('list');
       expect(exported.getWorksheet('Marks')!.getCell('O2').text).toContain(
         'محجوب',
       );
