@@ -76,9 +76,11 @@ try {
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
   const midtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});
   const finalRate=page.getByRole('group',{name:'Final pass rate',exact:true});
-  await finalRate.getByText('0.03%',{exact:true}).waitFor();
+  assert.equal(await finalRate.count(),0,'only the selected midterm rate is displayed');
   assert.doesNotMatch(await midtermRate.innerText(),/greater than|of 3001/,'pass-rate cards show the percentage without the calculation');
   await midtermRate.getByText('0.03%',{exact:true}).waitFor();
+  const rateGeometry=await midtermRate.evaluate(element=>({left:element.getBoundingClientRect().left,parentLeft:element.parentElement.getBoundingClientRect().left,width:element.getBoundingClientRect().width}));
+  assert.ok(Math.abs(rateGeometry.left-rateGeometry.parentLeft)<=1 && rateGeometry.width<350,'rate is compact and aligned to the physical left');
   const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
   await heldRow.getByText('Blocked',{exact:true}).waitFor();
   assert.equal(await mark.isDisabled(),true,'financial hold locks grade inputs');
@@ -140,6 +142,8 @@ try {
   assert.equal(rows[0].components.midterm.status,'absent');
   await page.goto(`${base}/en/admin/control/${ids.final}`);
   await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
+  assert.equal(await midtermRate.count(),0,'midterm rate is hidden on the final tab');
+  await finalRate.getByText('0.03%',{exact:true}).waitFor();
   for(const state of ['Banned','Incomplete','Excused']) {
     await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
     await page.getByRole('option',{name:state,exact:true}).click();
@@ -172,7 +176,7 @@ try {
   schemeVersion=2;await mark.fill('15');await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).waitFor();assert.equal(await mark.inputValue(),'15');
   await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).click();await page.getByRole('button',{name:'Retry save',exact:true}).click();await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,15);
   await page.getByRole('button',{name:'Coursework',exact:true}).click();await page.waitForURL(`**/${ids.coursework}`);
-  assert.equal(await page.getByRole('region',{name:'Course pass rates',exact:true}).count(),0,'exam pass rates are shown on midterm/final sheets');
+  assert.equal(await midtermRate.count()+await finalRate.count(),0,'exam pass rates are hidden on coursework');
   await page.getByRole('textbox',{name:'260001 Attendance contribution',exact:true}).fill('4');await page.getByRole('textbox',{name:'260001 Quiz contribution',exact:true}).fill('13');
   await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.coursework.score,17);assert.equal(rows[0].components.coursework.attendanceMark,4);
   await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});
@@ -181,6 +185,10 @@ try {
   await page.goto(`${base}/ar/admin/control/${ids.midterm}`);await page.getByRole('textbox',{name:'260001 الميدتيرم',exact:true}).waitFor();
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
+  const arabicRate=page.getByRole('group',{name:'نسبة نجاح '+messages.midterm,exact:true});
+  await arabicRate.waitFor();
+  const rtlGeometry=await arabicRate.evaluate(element=>({left:element.getBoundingClientRect().left,parentLeft:element.parentElement.getBoundingClientRect().left}));
+  assert.ok(Math.abs(rtlGeometry.left-rtlGeometry.parentLeft)<=1,'Arabic indicator is also at the physical left');
   await page.getByRole('button',{name:messages.SUBMIT,exact:true}).click();
   const arabicReview=page.getByRole('dialog');
   await arabicReview.getByText('مراجعة الكشف قبل المتابعة',{exact:true}).waitFor();

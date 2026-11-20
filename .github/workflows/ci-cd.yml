@@ -208,6 +208,9 @@ jobs:
         env:
           CONTROL_TEST_MONGODB_URI: mongodb://127.0.0.1:27021/control-e2e
 
+      - name: Test individual student course enrollment in Chromium
+        run: pnpm --filter @student-portal/web test:student-enrollment:browser
+
       - name: Test Control workbook and result releases in Chromium
         id: control-browser
         run: |

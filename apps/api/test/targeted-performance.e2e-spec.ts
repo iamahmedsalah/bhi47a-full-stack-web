@@ -11,6 +11,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CoursesController } from '../src/modules/courses/courses.controller';
+import { StudentEnrollmentController } from '../src/modules/courses/student-enrollment.controller';
+import { StudentEnrollmentService } from '../src/modules/courses/student-enrollment.service';
 import { MaterialStorageModule } from '../src/modules/material-storage/material-storage.module';
 import { CoursesService } from '../src/modules/courses/courses.service';
 import { CourseSchema } from '../src/modules/courses/schemas/course.schema';
@@ -188,9 +190,23 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
     );
     const module = await Test.createTestingModule({
       imports: [MaterialStorageModule],
-      controllers: [CoursesController, ComplaintsController],
+      controllers: [
+        CoursesController,
+        ComplaintsController,
+        StudentEnrollmentController,
+      ],
       providers: [
         { provide: CoursesService, useValue: coursesService },
+        {
+          provide: StudentEnrollmentService,
+          useValue: new StudentEnrollmentService(
+            students,
+            courses,
+            registrations,
+            coursesService,
+            { delPattern: () => Promise.resolve() } as never,
+          ),
+        },
         { provide: ComplaintsService, useValue: complaintsService },
       ],
     }).compile();
@@ -650,4 +666,124 @@ describe('targeted performance with isolated MongoDB and real HTTP controllers',
     });
     console.info(`Local synthetic complaints: ${JSON.stringify(results)}`);
   }, 60000);
+
+  it('persists individual enrollment and audit with real permission guards, stale protection and isolated terms', async () => {
+    const studentId = ids[0];
+    const term = { academicYear: '2026-2027', semester: 'first' };
+    const base = `/api/admin/course-student-enrollments/${String(studentId)}`;
+    const permission = 'courses.student_enrollment.manage';
+    await connection.collection(`perf_${runId}_students`).updateOne(
+      { userId: studentId },
+      {
+        $set: {
+          fullName: 'Synthetic student',
+          fullNameAr: 'طالب تجريبي',
+          academicYear: term.academicYear,
+          semester: term.semester,
+          enrollmentStatus: 'active',
+        },
+      },
+    );
+    await registrations.deleteMany({ studentId });
+    await registrations.create({
+      studentId,
+      ...term,
+      courses: [],
+      totalCreditHours: 0,
+      status: 'approved',
+      source: 'system',
+    });
+    await registrations.create({
+      studentId,
+      academicYear: term.academicYear,
+      semester: 'second',
+      courses: ['PERF-HISTORY'],
+      totalCreditHours: 3,
+      status: 'approved',
+      source: 'system',
+    });
+    const grades = connection.collection(`perf_${runId}_grades`);
+    const gradeCount = await grades.countDocuments({ studentId });
+    await request(app.getHttpServer())
+      .get(`${base}?academicYear=${term.academicYear}&semester=first`)
+      .set('x-test-role', 'staff')
+      .set('x-test-permissions', 'courses.write')
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(`${base}?academicYear=${term.academicYear}&semester=first`)
+      .set('x-test-role', 'student')
+      .set('x-test-permissions', permission)
+      .expect(403);
+    const initial = await request(app.getHttpServer())
+      .get(`${base}?academicYear=${term.academicYear}&semester=first`)
+      .set('x-test-role', 'staff')
+      .set('x-test-permissions', permission)
+      .expect(200);
+    const body = {
+      ...term,
+      courseId: String(targetId),
+      expectedVersion: initial.body.version as string,
+    };
+    await request(app.getHttpServer())
+      .post(`${base}/add`)
+      .set('x-test-role', 'staff')
+      .set('x-test-permissions', permission)
+      .send({ ...body, overrideRegistrationLimits: true })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`${base}/add`)
+      .set('x-test-role', 'staff')
+      .set('x-test-permissions', permission)
+      .send(body)
+      .expect(201);
+    let saved = await registrations
+      .findOne({ studentId, ...term })
+      .select('+administrativeChanges')
+      .lean();
+    expect(saved).toMatchObject({
+      courses: ['PERF-TARGET'],
+      totalCreditHours: 3,
+    });
+    expect(saved?.administrativeChanges?.map((event) => event.action)).toEqual([
+      'add',
+    ]);
+    await request(app.getHttpServer())
+      .post(`${base}/withdraw`)
+      .send(body)
+      .expect(409);
+    const current = await request(app.getHttpServer())
+      .get(`${base}?academicYear=${term.academicYear}&semester=first`)
+      .expect(200);
+    const responses = await Promise.all(
+      [0, 1].map(() =>
+        request(app.getHttpServer())
+          .post(`${base}/withdraw`)
+          .set('x-test-role', 'staff')
+          .set('x-test-permissions', permission)
+          .send({ ...body, expectedVersion: current.body.version as string }),
+      ),
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      201, 409,
+    ]);
+    saved = await registrations
+      .findOne({ studentId, ...term })
+      .select('+administrativeChanges')
+      .lean();
+    expect(saved).toMatchObject({ courses: [], totalCreditHours: 0 });
+    expect(saved?.administrativeChanges?.map((event) => event.action)).toEqual([
+      'add',
+      'withdraw',
+    ]);
+    expect(
+      await registrations
+        .findOne({
+          studentId,
+          academicYear: term.academicYear,
+          semester: 'second',
+        })
+        .lean(),
+    ).toMatchObject({ courses: ['PERF-HISTORY'], totalCreditHours: 3 });
+    expect(await grades.countDocuments({ studentId })).toBe(gradeCount);
+  });
 });

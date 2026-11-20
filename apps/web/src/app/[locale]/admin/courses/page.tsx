@@ -59,6 +59,7 @@ import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { DataUploadDialog } from '@/components/ui/data-upload-dialog';
 import { TableActionButton } from '@/components/ui/table-action-button';
 import { CourseStudentEnrollmentDialog } from '@/features/courses/components/course-student-enrollment-dialog';
+import { StudentCourseEnrollmentDialog } from '@/features/courses/components/student-course-enrollment-dialog';
 import { CourseMaterialsDialog } from '@/features/courses/components/course-materials-dialog';
 import { CourseEnrolledStudentsDialog } from '@/features/courses/components/course-enrolled-students-dialog';
 
@@ -1129,6 +1130,7 @@ function CoursesPageContent() {
   const isDoctor = user?.role === 'staff' && staffType === 'doctor';
   const canManageBook = isAdmin || isDoctor;
   const canWriteCourses = isAdmin || Boolean(user?.permissions?.includes('courses.write'));
+  const canManageStudentEnrollment = isAdmin || Boolean(user?.permissions?.includes('courses.student_enrollment.manage'));
   const canUploadCourses = isAdmin || Boolean(user?.permissions?.includes('uploads.import'));
   const canCreateQuiz = isAdmin || Boolean(user?.permissions?.includes('quizzes.write')) || Boolean(user?.permissions?.includes('quizzes.create'));
   const canReadQuizzes = isAdmin || Boolean(user?.permissions?.includes('quizzes.read'));
@@ -1147,6 +1149,7 @@ function CoursesPageContent() {
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
+  const [isStudentEnrollmentOpen, setIsStudentEnrollmentOpen] = useState(false);
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
   const [selectedEnrolledCourse, setSelectedEnrolledCourse] = useState<Course | null>(null);
   const [isEnrolledStudentsOpen, setIsEnrolledStudentsOpen] = useState(false);
@@ -1702,6 +1705,12 @@ function CoursesPageContent() {
             <span>{locale === 'ar' ? 'تسجيل طلاب بمقرر (Excel)' : 'Enroll Students (Excel)'}</span>
           </Button>
         )}
+        {canManageStudentEnrollment && (
+          <Button variant="outline" onClick={() => setIsStudentEnrollmentOpen(true)}>
+            <UserCheck className="h-4 w-4" />
+            {locale === 'ar' ? 'إدارة تسجيل مواد طالب' : 'Manage student enrollment'}
+          </Button>
+        )}
         <Button variant="outline" onClick={exportCourses} disabled={isExporting}>
           {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {locale === 'ar' ? 'تصدير' : 'Export'}
@@ -2190,6 +2199,9 @@ function CoursesPageContent() {
       />
 
       {/* Bulk Student Enrollment in Course Dialog */}
+      {canManageStudentEnrollment && isStudentEnrollmentOpen && (
+        <StudentCourseEnrollmentDialog locale={locale} principalId={user?._id ?? ''} onClose={() => setIsStudentEnrollmentOpen(false)} />
+      )}
       <CourseStudentEnrollmentDialog
         open={isEnrollmentDialogOpen}
         onOpenChange={setIsEnrollmentDialogOpen}

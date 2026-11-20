@@ -18,7 +18,7 @@ export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
       PERMISSIONS.STUDENTS_MANAGE_STATUS,
     ],
   },
-  { key: 'courses', permissions: [PERMISSIONS.COURSES_READ, PERMISSIONS.COURSES_WRITE] },
+  { key: 'courses', permissions: [PERMISSIONS.COURSES_READ, PERMISSIONS.COURSES_WRITE, PERMISSIONS.COURSES_STUDENT_ENROLLMENT_MANAGE] },
   {
     key: 'grades',
     permissions: [

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ControlTransferProgress } from "./control-transfer-progress";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   FileSpreadsheet,
   CheckCircle2,
@@ -140,6 +141,10 @@ export function ControlFileImportDialog({
     guard.current = true;
     setUploading(true);
     setError("");
+    const previouslySaved = plans.current.reduce(
+      (sum, batch) => sum + (batch.saved ?? 0),
+      0,
+    );
     try {
       for (const [batchIndex, plan] of plans.current.entries()) {
         if (plan.saved !== undefined || !plan.preview.valid) continue;
@@ -174,6 +179,11 @@ export function ControlFileImportDialog({
           : getApiErrorMessage(cause),
       );
     } finally {
+      const newlySaved =
+        plans.current.reduce((sum, batch) => sum + (batch.saved ?? 0), 0) -
+        previouslySaved;
+      if (newlySaved > 0)
+        toast.success(t("importSavedToast", { count: newlySaved }));
       guard.current = false;
       setUploading(false);
       try {

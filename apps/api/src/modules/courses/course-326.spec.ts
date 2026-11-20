@@ -354,6 +354,7 @@ describe('administrative limit override authorization and audit', () => {
           _id: regId,
           studentId: h.studentId,
           courses: ['1', '2', '3', '4', '5', '6'],
+          status: 'approved',
         },
       ]),
     );
@@ -385,10 +386,20 @@ describe('administrative limit override authorization and audit', () => {
       [
         expect.objectContaining({
           updateOne: expect.objectContaining({
-            filter: { _id: regId, courses: ['1', '2', '3', '4', '5', '6'] },
+            filter: {
+              _id: regId,
+              courses: ['1', '2', '3', '4', '5', '6'],
+              status: 'approved',
+            },
             update: expect.objectContaining({
               $addToSet: { courses: '326' },
               $push: {
+                administrativeChanges: expect.objectContaining({
+                  action: 'add',
+                  actorId: new Types.ObjectId(actor._id),
+                  courseCode: '326',
+                  at: expect.any(Date),
+                }),
                 administrativeLimitOverrides: expect.objectContaining({
                   ...limits,
                   actorId: new Types.ObjectId(actor._id),

@@ -224,28 +224,22 @@ export function ControlWorkbookGrid({
     }
   }, [drafts, archiveKey]);
   const rows = workbook.data?.rows ?? EMPTY_ROWS;
-  const passRates = useMemo(
-    () =>
-      (["midterm", "final"] as const).map((component) => {
-        const threshold = component === "midterm" ? 18 : 30;
-        const passed = rows.reduce((count, row) => {
-          const mark = row.components[component];
-          return (
-            count +
-            Number(
-              mark?.status === "present" &&
-                mark.score != null &&
-                mark.score > threshold,
-            )
-          );
-        }, 0);
-        return {
-          component,
-          ratio: rows.length ? passed / rows.length : 0,
-        };
-      }),
-    [rows],
-  );
+  const passRate = useMemo(() => {
+    if (key === "coursework") return null;
+    const threshold = key === "midterm" ? 18 : 30;
+    const passed = rows.reduce((count, row) => {
+      const mark = row.components[key];
+      return (
+        count +
+        Number(
+          mark?.status === "present" &&
+            mark.score != null &&
+            mark.score > threshold,
+        )
+      );
+    }, 0);
+    return { component: key, ratio: rows.length ? passed / rows.length : 0 };
+  }, [rows, key]);
   const [searchText, setSearchText] = useState(search);
   const [previousSearch, setPreviousSearch] = useState(search);
   if (previousSearch !== search) {
@@ -1366,33 +1360,29 @@ export function ControlWorkbookGrid({
             </SelectContent>
           </Select>
         </div>
-      </div>
-      {key !== "coursework" && workbook.data && !workbook.isError && (
-        <section aria-label={t("passRatesTitle")} className="space-y-1.5">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {passRates.map((rate) => (
-              <div
-                key={rate.component}
-                role="group"
-                aria-label={t("passRate", { component: t(rate.component) })}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2"
-              >
-                <span className="inline-flex items-center gap-2 text-sm font-medium">
-                  <Percent aria-hidden="true" className="size-4 text-primary" />
-                  {t("passRate", { component: t(rate.component) })}
-                </span>
-                <bdi className="text-lg font-bold tabular-nums text-primary">
-                  {new Intl.NumberFormat(locale, {
-                    style: "percent",
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }).format(rate.ratio)}
-                </bdi>
-              </div>
-            ))}
+        {passRate && workbook.data && !workbook.isError && (
+          <div
+            role="group"
+            aria-label={t("passRate", { component: t(passRate.component) })}
+            className={cn(
+              "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+              rtl ? "ms-auto" : "order-first me-auto",
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <Percent aria-hidden="true" className="size-3.5 text-primary" />
+              {t("passRate", { component: t(passRate.component) })}
+            </span>
+            <bdi className="text-sm font-bold tabular-nums text-primary">
+              {new Intl.NumberFormat(locale, {
+                style: "percent",
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              }).format(passRate.ratio)}
+            </bdi>
           </div>
-        </section>
-      )}
+        )}
+      </div>
       {caps.canEdit && (
         <Input
           aria-label={t("stateReasonOptional")}

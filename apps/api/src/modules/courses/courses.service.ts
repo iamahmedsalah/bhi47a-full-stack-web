@@ -71,6 +71,7 @@ import {
 
 export interface CourseEnrollmentOptions extends EnrollmentOptionsDto {
   actor?: { _id: string; role: string };
+  requireApprovedRegistration?: boolean;
 }
 
 export interface CourseSyllabusFile {
@@ -1815,7 +1816,7 @@ export class CoursesService {
       ...new Map(targetStudentUserIds.map((id) => [String(id), id])).values(),
     ];
     const existingRegistrations: Array<
-      Pick<CourseRegistration, 'studentId' | 'courses'> & {
+      Pick<CourseRegistration, 'studentId' | 'courses' | 'status'> & {
         _id: Types.ObjectId;
       }
     > = [];
@@ -1829,7 +1830,7 @@ export class CoursesService {
               academicYear,
               semester,
             })
-            .select('_id studentId courses')
+            .select('_id studentId courses status')
             .lean(),
       );
       existingRegistrations.push(...registrations);
@@ -2071,6 +2072,24 @@ export class CoursesService {
 
       const studentUserObjId = new Types.ObjectId(studentUserId);
       const existingReg = regByStudentId.get(studentUserIdStr);
+      if (
+        options.requireApprovedRegistration &&
+        existingReg &&
+        existingReg.status !== 'approved'
+      ) {
+        errors.push(
+          `Row ${rowNum}: Pending registration must be resolved first / يجب إنهاء مراجعة التسجيل المعلق أولًا`,
+        );
+        continue;
+      }
+      const administrativeChange = options.actor
+        ? {
+            action: 'add',
+            courseCode: courseCodeUpper,
+            actorId: new Types.ObjectId(options.actor._id),
+            at: new Date(),
+          }
+        : undefined;
       const audit =
         limitException && options.actor
           ? {
@@ -2097,13 +2116,23 @@ export class CoursesService {
                 // Compare the validated snapshot so a concurrent course addition
                 // cannot bypass the credit/course limits checked above.
                 courses: existingReg.courses ?? { $exists: false },
+                status: existingReg.status,
               },
               update: {
                 $addToSet: { courses: courseCodeUpper },
                 $set: { status: 'approved', approvedAt: new Date() },
                 $inc: { totalCreditHours: courseCreditHours },
-                ...(audit
-                  ? { $push: { administrativeLimitOverrides: audit } }
+                ...(audit || administrativeChange
+                  ? {
+                      $push: {
+                        ...(audit
+                          ? { administrativeLimitOverrides: audit }
+                          : {}),
+                        ...(administrativeChange
+                          ? { administrativeChanges: administrativeChange }
+                          : {}),
+                      },
+                    }
                   : {}),
               },
             },
@@ -2121,6 +2150,9 @@ export class CoursesService {
               semester,
               totalCreditHours: courseCreditHours,
               ...(audit ? { administrativeLimitOverrides: [audit] } : {}),
+              ...(administrativeChange
+                ? { administrativeChanges: [administrativeChange] }
+                : {}),
               source: 'system',
               status: 'approved',
               approvedAt: new Date(),

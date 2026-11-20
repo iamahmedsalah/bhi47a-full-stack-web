@@ -15,6 +15,25 @@ export class CourseRegistration {
     type: [
       {
         _id: false,
+        action: { type: String, enum: ['add', 'withdraw'], required: true },
+        courseCode: { type: String, required: true },
+        actorId: { type: Types.ObjectId, required: true },
+        at: { type: Date, required: true },
+      },
+    ],
+    default: [],
+    select: false,
+  })
+  administrativeChanges?: Array<{
+    action: 'add' | 'withdraw';
+    courseCode: string;
+    actorId: Types.ObjectId;
+    at: Date;
+  }>;
+  @Prop({
+    type: [
+      {
+        _id: false,
         actorId: { type: Types.ObjectId, ref: 'User', required: true },
         reason: { type: String, required: true, maxlength: 500 },
         courseCode: { type: String, required: true },

@@ -18,6 +18,8 @@ import {
 } from '../students/schemas/student-profile.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { MaterialStorageModule } from '../material-storage/material-storage.module';
+import { StudentEnrollmentController } from './student-enrollment.controller';
+import { StudentEnrollmentService } from './student-enrollment.service';
 
 @Module({
   imports: [
@@ -31,8 +33,8 @@ import { MaterialStorageModule } from '../material-storage/material-storage.modu
       { name: User.name, schema: UserSchema },
     ]),
   ],
-  controllers: [CoursesController],
-  providers: [CoursesService],
+  controllers: [CoursesController, StudentEnrollmentController],
+  providers: [CoursesService, StudentEnrollmentService],
   exports: [CoursesService],
 })
 export class CoursesModule {}

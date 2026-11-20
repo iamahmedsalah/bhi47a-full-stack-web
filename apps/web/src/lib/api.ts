@@ -755,6 +755,13 @@ const LOWERCASE_ERROR_TRANSLATIONS = new Map<string, { ar: string; en: string }>
 );
 
 const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = {
+  ADMIN_ENROLLMENT_YEAR: { ar: 'أدخل سنة دراسية متتالية صحيحة، مثل 2026-2027.', en: 'Enter a consecutive academic year, such as 2026-2027.' },
+  ADMIN_ENROLLMENT_STUDENT: { ar: 'لم يتم العثور على الطالب. أعد البحث عنه.', en: 'Student not found. Search for the student again.' },
+  ADMIN_ENROLLMENT_STALE: { ar: 'تغير تسجيل الطالب. تم تحديث البيانات؛ راجع المواد ثم أعد المحاولة.', en: 'The student registration changed. Review the refreshed courses and retry.' },
+  ADMIN_ENROLLMENT_PENDING: { ar: 'التسجيل الحالي معلق أو مرفوض. أنهِ مراجعته من صفحة التسجيل قبل التعديل هنا.', en: 'The registration is pending or rejected. Resolve it on the Registration page before editing here.' },
+  ADMIN_ENROLLMENT_COURSE: { ar: 'المادة أو تسجيل الطالب لم يعد موجودًا. حدّث البيانات.', en: 'The course or student registration no longer exists. Refresh the data.' },
+  ADMIN_ENROLLMENT_INACTIVE: { ar: 'لا يمكن إضافة مادة لطالب غير نشط. راجع حالة قيده أولًا.', en: 'Courses cannot be added for an inactive student. Review enrollment status first.' },
+  ADMIN_ENROLLMENT_TOO_LARGE: { ar: 'يتجاوز عدد المواد المسجلة الحد المسموح. راجع سجل الطالب.', en: 'The registration exceeds the supported course count. Review the student record.' },
   GRACE_MIDTERM_ONLY: { ar: 'درجات الرأفة متاحة للميدترم فقط.', en: 'Grace marks are available for midterm sheets only.' },
   GRACE_ALREADY_APPLIED: { ar: 'أُضيفت الرأفة لهذا الكشف بالفعل؛ لا يمكن إضافتها مرة ثانية.', en: 'Grace marks have already been applied to this sheet and cannot be added again.' },
   GRACE_PREVIEW_STALE: { ar: 'تغيرت درجات الكشف أو حالته. أعد تحميل الكشف ومعاينة الزيادة قبل التأكيد.', en: 'The sheet or its marks changed. Reload and preview the addition again before confirming.' },
