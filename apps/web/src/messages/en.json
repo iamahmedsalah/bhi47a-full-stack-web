@@ -1910,6 +1910,8 @@
     },
     "sort": "Sort rows",
     "mark": "Mark",
+    "passRatesTitle": "Course pass rates",
+    "passRate": "{component} pass rate",
     "ascending": "Ascending",
     "descending": "Descending",
     "filter": "Filter rows",

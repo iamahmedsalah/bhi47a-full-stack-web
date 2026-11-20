@@ -27,6 +27,7 @@ import {
   Send,
   CheckCircle2,
   RotateCcw,
+  Percent,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -223,6 +224,28 @@ export function ControlWorkbookGrid({
     }
   }, [drafts, archiveKey]);
   const rows = workbook.data?.rows ?? EMPTY_ROWS;
+  const passRates = useMemo(
+    () =>
+      (["midterm", "final"] as const).map((component) => {
+        const threshold = component === "midterm" ? 18 : 30;
+        const passed = rows.reduce((count, row) => {
+          const mark = row.components[component];
+          return (
+            count +
+            Number(
+              mark?.status === "present" &&
+                mark.score != null &&
+                mark.score > threshold,
+            )
+          );
+        }, 0);
+        return {
+          component,
+          ratio: rows.length ? passed / rows.length : 0,
+        };
+      }),
+    [rows],
+  );
   const [searchText, setSearchText] = useState(search);
   const [previousSearch, setPreviousSearch] = useState(search);
   if (previousSearch !== search) {
@@ -916,7 +939,7 @@ export function ControlWorkbookGrid({
           onClose={() => setImportOpen(false)}
           onDownload={
             caps.canExport
-              ? () => downloadControlTemplate(sheet.id, key)
+              ? () => downloadControlTemplate(sheet.id, key, detail.course.code)
               : undefined
           }
           onSaved={refresh}
@@ -1344,6 +1367,32 @@ export function ControlWorkbookGrid({
           </Select>
         </div>
       </div>
+      {key !== "coursework" && workbook.data && !workbook.isError && (
+        <section aria-label={t("passRatesTitle")} className="space-y-1.5">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {passRates.map((rate) => (
+              <div
+                key={rate.component}
+                role="group"
+                aria-label={t("passRate", { component: t(rate.component) })}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2"
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-medium">
+                  <Percent aria-hidden="true" className="size-4 text-primary" />
+                  {t("passRate", { component: t(rate.component) })}
+                </span>
+                <bdi className="text-lg font-bold tabular-nums text-primary">
+                  {new Intl.NumberFormat(locale, {
+                    style: "percent",
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(rate.ratio)}
+                </bdi>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {caps.canEdit && (
         <Input
           aria-label={t("stateReasonOptional")}

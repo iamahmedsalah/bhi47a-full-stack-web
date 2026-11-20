@@ -1784,6 +1784,8 @@
     "keepMine": "حفظ درجتي بعد مراجعة التعارض",
     "sort": "ترتيب الصفوف",
     "mark": "الدرجة",
+    "passRatesTitle": "نسب النجاح في المادة",
+    "passRate": "نسبة نجاح {component}",
     "ascending": "تصاعدي",
     "descending": "تنازلي",
     "filter": "تصفية الصفوف",

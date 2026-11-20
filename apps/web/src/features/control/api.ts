@@ -274,6 +274,7 @@ export async function exportControlSheet(
 export async function downloadControlTemplate(
   sheetId: string,
   component: ControlComponentKey,
+  courseCode: string,
   mode: "workbook" | "missing" | "exceptions" = "workbook",
   onProgress?: ControlTransferProgress,
 ) {
@@ -285,7 +286,7 @@ export async function downloadControlTemplate(
   const { downloadFileBlob } = await import("@/lib/export-utils");
   await downloadFileBlob(
     raw,
-    `control-${component}-${mode}.xlsx`,
+    `control-${courseCode.replace(/[^a-zA-Z0-9_-]/g, "-") || sheetId}-${component}-${mode}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   onProgress?.(100);
@@ -299,6 +300,7 @@ export async function downloadControlReport(
     semester: string;
     level?: string;
   },
+  courseCode: string,
   onProgress?: ControlTransferProgress,
 ) {
   const raw = await api.get(`/admin/control/sheets/${sheetId}/report`, {
@@ -309,7 +311,7 @@ export async function downloadControlReport(
   const { downloadFileBlob } = await import("@/lib/export-utils");
   await downloadFileBlob(
     raw,
-    `control-${params.type}-${params.academicYear}-${params.semester}${params.level ? `-${params.level}` : ""}.xlsx`,
+    `control-${params.type === "course" ? `${courseCode.replace(/[^a-zA-Z0-9_-]/g, "-") || sheetId}-course` : "round-table"}-${params.academicYear}-${params.semester}${params.level ? `-${params.level}` : ""}.xlsx`,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   onProgress?.(100);

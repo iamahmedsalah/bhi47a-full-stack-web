@@ -35,6 +35,10 @@ const rows = Array.from({length:3001},(_,i)=>({studentId:(i+1).toString(16).padS
 const detail = key => ({sheet:{id:ids[key],academicYear:'2026-2027',semester:'first',component:key,locked:false,grace:key==='midterm'?graceReceipt:null,...states[key]},course:{id:'300000000000000000000001',code:'CS101',name:'Synthetic course'},rules:components.find(c=>c.key===key),capabilities:{canGrace:graceAllowed,canEdit:states[key].workflowState==='DRAFT'||(states[key].workflowState==='IN_REVIEW'&&reviewEditor),canEditReview:reviewEditor,canApprove:true,canSubmit:true,canReview:true,canImport:true,canExport:true,canManageSchemes:true,canViewAudit:true,canManageStates:true,canLock:true,canUnlock:true}});
 rows[0].tuition={isBlocked:true,status:'unpaid'};
 rows[1].tuition={isBlocked:false,status:'paid'};
+for(const [index,midterm,final] of [[200,19,31],[201,18,30]]) {
+  for(const [component,score] of Object.entries({midterm,final}))
+    rows[index].components[component]={studentId:rows[index].studentId,score,status:'present',rev:1,isPublished:false};
+}
 let workbookReads=0;
 const server = http.createServer(async (req,res)=>{
   try {
@@ -70,6 +74,11 @@ try {
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
+  const midtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});
+  const finalRate=page.getByRole('group',{name:'Final pass rate',exact:true});
+  await finalRate.getByText('0.03%',{exact:true}).waitFor();
+  assert.doesNotMatch(await midtermRate.innerText(),/greater than|of 3001/,'pass-rate cards show the percentage without the calculation');
+  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
   const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
   await heldRow.getByText('Blocked',{exact:true}).waitFor();
   assert.equal(await mark.isDisabled(),true,'financial hold locks grade inputs');
@@ -92,7 +101,7 @@ try {
   const templates=page.getByRole('dialog');
   await templates.getByRole('button',{name:'Entry component',exact:true}).click();
   await page.getByRole('option',{name:'final',exact:true}).click();
-  const templateDownload=page.waitForEvent('download');await templates.getByRole('button',{name:'Download Excel',exact:true}).click();await templateDownload;
+  const templateDownload=page.waitForEvent('download');await templates.getByRole('button',{name:'Download Excel',exact:true}).click();assert.equal((await templateDownload).suggestedFilename(),'control-CS101-final-workbook.xlsx');
   assert.equal(downloadRequests.at(-1).component,'final');assert.equal(downloadRequests.at(-1).mode,'workbook');
   await templates.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
   await templates.getByRole('progressbar',{name:'Download complete',exact:true}).waitFor();
@@ -101,10 +110,12 @@ try {
   await templates.waitFor({state:'hidden'});
   await page.getByRole('button',{name:'Control reports',exact:true}).click();
   const reports=page.getByRole('dialog');
+  const courseReportDownload=page.waitForEvent('download');await reports.getByRole('button',{name:'Download Excel',exact:true}).click();assert.equal((await courseReportDownload).suggestedFilename(),'control-CS101-course-2026-2027-first.xlsx');
+  await reports.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
   await reports.getByRole('button',{name:'Report type',exact:true}).click();
   await page.getByRole('option',{name:'Consolidated report (Round table)',exact:true}).click();
   await reports.getByRole('button',{name:'Level',exact:true}).click();await page.getByRole('option',{name:'Level 2',exact:true}).click();
-  const reportDownload=page.waitForEvent('download');await reports.getByRole('button',{name:'Download Excel',exact:true}).click();await reportDownload;
+  const reportDownload=page.waitForEvent('download');await reports.getByRole('button',{name:'Download Excel',exact:true}).click();assert.equal((await reportDownload).suggestedFilename(),'control-round-table-2026-2027-first-2.xlsx');
   assert.equal(downloadRequests.at(-1).type,'round-table');assert.equal(downloadRequests.at(-1).level,'2');assert.equal(downloadRequests.at(-1).semester,'first');
   await reports.getByRole('button',{name:'Download Excel',exact:true,disabled:false}).waitFor();
   await page.keyboard.press('Escape');
@@ -143,18 +154,25 @@ try {
   await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('textbox',{name:'260101 Midterm',exact:true}).waitFor();
+  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
   await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
   await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Previous',exact:true}).click();
   await mark.waitFor();
   await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
   const readsBeforeSave=workbookReads;await mark.fill('17.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,17.5);await page.waitForLoadState('networkidle');assert.equal(workbookReads,readsBeforeSave,'autosave must patch acknowledged rows instead of downloading the whole roster');
+  await mark.fill('19');await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  await midtermRate.getByText('0.07%',{exact:true}).waitFor();
+  await mark.fill('18');await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
+  assert.equal(workbookReads,readsBeforeSave,'pass rates update from acknowledged saves without refetching the workbook');
   await mark.press('Enter');assert.equal(await page.getByRole('textbox',{name:'260002 Midterm',exact:true}).evaluate(el=>document.activeElement===el),true);
   denySave=true;await mark.fill('16');await page.getByText('Synthetic save failure').waitFor();assert.equal(await mark.inputValue(),'16');await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByText('Your unsaved draft was restored. Review the current marks and scheme, then retry saving.',{exact:true}).waitFor();assert.equal(await mark.inputValue(),'16');denySave=false;
   await page.getByRole('button',{name:'Retry save',exact:true}).click();await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,16);
   schemeVersion=2;await mark.fill('15');await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).waitFor();assert.equal(await mark.inputValue(),'15');
   await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).click();await page.getByRole('button',{name:'Retry save',exact:true}).click();await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,15);
   await page.getByRole('button',{name:'Coursework',exact:true}).click();await page.waitForURL(`**/${ids.coursework}`);
+  assert.equal(await page.getByRole('region',{name:'Course pass rates',exact:true}).count(),0,'exam pass rates are shown on midterm/final sheets');
   await page.getByRole('textbox',{name:'260001 Attendance contribution',exact:true}).fill('4');await page.getByRole('textbox',{name:'260001 Quiz contribution',exact:true}).fill('13');
   await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.coursework.score,17);assert.equal(rows[0].components.coursework.attendanceMark,4);
   await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});
@@ -184,6 +202,7 @@ try {
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('263001');
   await page.getByRole('textbox',{name:'263001 '+messages.midterm,exact:true}).waitFor();
   assert.equal(await page.locator('tbody tr').count(),1);
+  await page.getByRole('group',{name:'نسبة نجاح '+messages.midterm,exact:true}).locator('bdi').waitFor();
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('');
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
   for(const row of rows)if(!row.components.midterm)row.components.midterm={studentId:row.studentId,score:10,status:'present',rev:1,isPublished:false};

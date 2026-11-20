@@ -213,6 +213,7 @@ export function ControlDownloadDialogs({
                 await downloadControlTemplate(
                   detail.sheet.id,
                   component,
+                  detail.course.code,
                   mode,
                   setPercent,
                 );
@@ -225,6 +226,7 @@ export function ControlDownloadDialogs({
                     semester: detail.sheet.semester,
                     ...(type === "round-table" ? { level } : {}),
                   },
+                  detail.course.code,
                   setPercent,
                 );
             } catch (cause) {
