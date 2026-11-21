@@ -31,6 +31,7 @@ import { AttendanceCheckInService } from './services/attendance-checkin.service'
 import { AttendanceReportService } from './services/attendance-report.service';
 import { AttendanceRealtimeService } from './services/attendance-realtime.service';
 import { AttendanceController } from './attendance.controller';
+import { AttendanceSessionAccessGuard } from './guards/attendance-session-access.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -58,6 +59,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AttendanceCheckInService,
     AttendanceReportService,
     AttendanceRealtimeService,
+    AttendanceSessionAccessGuard,
   ],
   exports: [
     AttendanceService,

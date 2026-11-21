@@ -47,7 +47,10 @@ export default function StudentSidebar() {
   const params = useParams();
   const pathname = usePathname();
   const locale = params.locale as string;
-  const { sidebarOpen, toggleSidebar, studentMobileSidebarOpen: mobileOpen, setStudentMobileSidebarOpen: setMobileOpen } = useUIStore();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
+  const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const mobileOpen = useUIStore((state) => state.studentMobileSidebarOpen);
+  const setMobileOpen = useUIStore((state) => state.setStudentMobileSidebarOpen);
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 768px)');
     const closeOnDesktop = () => {

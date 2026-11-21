@@ -27,6 +27,7 @@ import {
 } from '../../students/schemas/student-profile.schema';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
+import { createAttendanceRecord } from './attendance-record-write';
 import { CheckInAttendanceDto } from '../dto/attendance-session.dto';
 import {
   attendanceEnrollmentFilter,
@@ -410,27 +411,31 @@ export class AttendanceCheckInService {
     const isLate = now.getTime() > session.startsAt.getTime() + lateThresholdMs;
     const attendanceStatus = isLate ? 'late' : 'present';
 
-    // 9. Atomic insert into database (protected by UNIQUE(sessionId, studentId))
+    // 9. Write the check-in while preventing concurrent session deletion.
     try {
-      const record = await this.recordModel.create({
-        sessionId: session._id,
-        studentId: new Types.ObjectId(studentUser._id),
-        studentCode,
-        studentName,
-        courseCode,
-        sessionType: session.sessionType,
-        status: attendanceStatus,
-        method: 'qr',
-        deviceId,
-        deviceFingerprint,
-        deviceInfo: deviceInfo || 'غير محدد',
-        ipAddress: clientIp || '127.0.0.1',
-        location:
-          typeof latitude === 'number' && typeof longitude === 'number'
-            ? { latitude, longitude, accuracy }
-            : undefined,
-        checkedInAt: now,
-      });
+      const record = await createAttendanceRecord(
+        this.sessionModel,
+        this.recordModel,
+        {
+          sessionId: session._id,
+          studentId: new Types.ObjectId(studentUser._id),
+          studentCode,
+          studentName,
+          courseCode,
+          sessionType: session.sessionType,
+          status: attendanceStatus,
+          method: 'qr',
+          deviceId,
+          deviceFingerprint,
+          deviceInfo: deviceInfo || 'غير محدد',
+          ipAddress: clientIp || '127.0.0.1',
+          location:
+            typeof latitude === 'number' && typeof longitude === 'number'
+              ? { latitude, longitude, accuracy }
+              : undefined,
+          checkedInAt: now,
+        },
+      );
 
       // 10. Emit real-time update to staff monitor
       this.realtimeService.publishEvent(session._id.toString(), {

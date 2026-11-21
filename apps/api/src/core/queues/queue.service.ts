@@ -1,19 +1,11 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import {
-  Job,
-  JobsOptions,
-  Processor,
-  Queue,
-  QueueOptions,
-  Worker,
-} from 'bullmq';
+import { Job, JobsOptions, Processor, Queue, Worker } from 'bullmq';
+import type { Redis, RedisOptions } from 'ioredis';
 import { shouldRunQueueWorkers } from '../../common/utils/runtime.util';
-
-type QueueConnection = NonNullable<QueueOptions['connection']>;
 
 @Injectable()
 export class QueueService implements OnModuleDestroy {
-  private readonly connection?: QueueConnection;
+  private readonly connection?: RedisOptions;
   private readonly queues = new Map<string, Queue>();
   private readonly workers: Worker[] = [];
 
@@ -36,10 +28,14 @@ export class QueueService implements OnModuleDestroy {
       };
     }
 
+    let client: Redis | undefined;
     try {
-      const { default: IORedis } = await import('ioredis');
-      const client = new (IORedis as any)(this.connection, {
+      const { Redis } = await import('ioredis');
+      client = new Redis({
+        ...this.connection,
         connectTimeout: 2000,
+        commandTimeout: 2000,
+        enableReadyCheck: false,
         maxRetriesPerRequest: 1,
         lazyConnect: true,
         retryStrategy: () => null,
@@ -48,7 +44,6 @@ export class QueueService implements OnModuleDestroy {
 
       await client.connect();
       const pong = await client.ping();
-      await client.quit();
       return { ready: true, message: `Connected (Response: ${pong})` };
     } catch (error: unknown) {
       const err = error as { code?: string; message?: string };
@@ -56,6 +51,8 @@ export class QueueService implements OnModuleDestroy {
         ready: false,
         message: `Offline (${err?.code || err?.message || 'Connection refused'}) - Running inline`,
       };
+    } finally {
+      client?.disconnect();
     }
   }
 
@@ -146,7 +143,7 @@ export class QueueService implements OnModuleDestroy {
     return queue;
   }
 
-  private buildRedisConnection(): QueueConnection | undefined {
+  private buildRedisConnection(): RedisOptions | undefined {
     // In test and local development, run inline fallback to preserve Redis quota
     // and prevent cloud network/DNS errors from degrading local development.
     const nodeEnv = process.env.NODE_ENV;

@@ -141,7 +141,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const locale = (params?.locale as string) || 'ar';
   const isArabic = locale.startsWith('ar');
-  const { sidebarOpen } = useUIStore();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const { user, loading, isLoggingOut } = useAuth();
 
   // Route-level staff permission validation

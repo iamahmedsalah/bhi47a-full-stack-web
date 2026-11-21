@@ -23,14 +23,17 @@ await write('auth.ts', `
   } });
 `);
 await write('image.tsx', `import React from 'react';export default function Image({fill,priority,unoptimized,...props}){return <img {...props}/>;}`);
-await write('dynamic.tsx', `export default ()=>()=>null;`);
+await write('dynamic.tsx', `import React from 'react';export default function dynamic(load){const Component=React.lazy(async()=>{const result=await load();return {default:result.default??result};});return props=><React.Suspense fallback={null}><Component {...props}/></React.Suspense>;}`);
 await write('link.tsx', `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>;}`);
 await write('api.ts', `
+  import { AxiosError } from 'axios';
   const request = async ({ url, params, method, data }) => {
     const response = await fetch('/fixture' + url + (params ? '?' + new URLSearchParams(params) : ''), {
       method, ...(data ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) } : {}),
     });
-    return response.json();
+    const body = await response.json();
+    if (!response.ok && url.endsWith('/qr')) throw new AxiosError(body.message, undefined, undefined, undefined, { status: response.status });
+    return body;
   };
   export const apiBaseUrl = '';
   export const getApiErrorMessage = e => e.message || 'Error';
@@ -78,9 +81,18 @@ const attendanceRecord = {
   method: 'manual', status: 'present', checkedInAt: attendanceSession.startsAt,
 };
 let attendanceRecords = [];
+let attendanceSessionAvailable = true;
+let attendanceRecordReads = 0;
+let attendanceSessionStatus = 'CLOSED';
+let attendanceQrReads = 0;
+let attendanceClosesBeforeQr = false;
 const attendanceDeletes = [];
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/attendance/sessions/session-fixture/live') {
+    res.writeHead(204).end();
+    return;
+  }
   if (url.pathname.startsWith('/fixture')) {
     const endpoint = url.pathname.slice('/fixture'.length);
     let data = {};
@@ -92,10 +104,26 @@ const server = http.createServer(async (req, res) => {
     else if (endpoint === '/attendance/my-classes') data = [];
     else if (endpoint === '/attendance/sessions') {
       const stats = { totalCheckedIn: attendanceRecords.length, presentCount: attendanceRecords.length, lateCount: 0 };
+      const total = Number(attendanceSessionAvailable);
+      const status = attendanceSessionStatus;
       data = {
-        sessions: [{ ...attendanceSession, stats }], kpi: { ...stats, totalSessions: 1, activeSessions: 0 },
-        total: 1, page: 1, limit: 20, totalPages: 1, filters: { levels: [], courses: [] },
+        sessions: attendanceSessionAvailable ? [{ ...attendanceSession, status, expiresAt: new Date(Date.now() + 600_000).toISOString(), qrRotationSeconds: 60, stats }] : [],
+        kpi: { ...stats, totalSessions: total, activeSessions: status === 'OPEN' ? total : 0 },
+        total, page: 1, limit: 20, totalPages: total, filters: { levels: [], courses: [] },
       };
+    } else if (endpoint === '/attendance/sessions/session-fixture/qr') {
+      attendanceQrReads++;
+      if (attendanceClosesBeforeQr) {
+        attendanceSessionStatus = 'CLOSED';
+        res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ message: 'Session closed' }));
+        return;
+      }
+      data = { token: 'fixture-token', manualCode: '123456', checkInUrl: '/ar/attendance/check-in', rotationSeconds: 60, remainingSeconds: 60, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    } else if (endpoint === '/attendance/sessions/session-fixture' && req.method === 'DELETE') {
+      attendanceDeletes.push(attendanceSession._id);
+      data = { deletedCount: attendanceRecords.length };
+      attendanceSessionAvailable = false;
+      attendanceRecords = [];
     } else if (endpoint === '/attendance/sessions/session-fixture/records') {
       if (req.method === 'DELETE') {
         let body = '';
@@ -106,6 +134,7 @@ const server = http.createServer(async (req, res) => {
         attendanceRecords = attendanceRecords.filter(record => !recordIds.includes(record._id));
         data = { deletedCount: before - attendanceRecords.length };
       } else {
+        attendanceRecordReads++;
         data = { items: attendanceRecords, total: attendanceRecords.length, page: 1, totalPages: 1 };
       }
     }
@@ -171,13 +200,15 @@ try {
     assert.deepEqual(errors,[]);await page.close();
   }
   for (const account of ['admin', 'staff&delete=1', 'staff']) {
-    attendanceRecords = [attendanceRecord];
+    attendanceRecords = account === 'staff&delete=1' ? [] : [attendanceRecord];
+    attendanceSessionAvailable = true;
+    attendanceRecordReads = 0;
     attendanceDeletes.length = 0;
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/ar/admin/attendance?role=${account}`);
     await page.getByRole('button', { name: account === 'admin' ? 'الرقابة وإدارة الحضور العامة' : 'جلساتي وسجل الحضور' }).click();
     await page.getByRole('button', { name: 'إجراءات جلسة TEST' }).click();
-    const deleteAction = page.getByRole('menuitem', { name: 'حذف سجلات الحضور والغياب' });
+    const deleteAction = page.getByRole('menuitem', { name: 'حذف الجلسة' });
     if (account === 'staff') {
       assert.equal(await deleteAction.count(), 0);
       await page.getByRole('menuitem', { name: 'سجل الطلاب' }).click();
@@ -185,19 +216,45 @@ try {
       assert.equal(await page.getByRole('button', { name: 'حذف المحدد' }).count(), 0);
     } else {
       await deleteAction.click();
-      const register = page.getByRole('dialog', { name: 'اختيار سجلات الحضور والغياب للحذف' });
-      const deleteSelected = register.getByRole('button', { name: 'حذف المحدد' });
-      assert.equal(await deleteSelected.isDisabled(), true);
-      await register.getByRole('checkbox', { name: 'تحديد سجل Synthetic attendee' }).click();
-      await deleteSelected.click();
+      const confirmation = page.getByRole('alertdialog', { name: 'هل أنت متأكد من حذف الجلسة؟' });
+      await confirmation.waitFor();
+      assert.equal(await page.getByRole('dialog', { name: 'سجل حضور الجلسة' }).count(), 0);
+      assert.equal(await confirmation.getByRole('button', { name: 'نعم', exact: true }).isEnabled(), true);
+      await confirmation.getByRole('button', { name: 'لا', exact: true }).click();
+      await confirmation.waitFor({ state: 'detached' });
       assert.deepEqual(attendanceDeletes, []);
-      await page.getByRole('alertdialog').getByRole('button', { name: 'حذف السجلات', exact: true }).click();
-      await register.getByText('Synthetic attendee').waitFor({ state: 'detached' });
-      assert.deepEqual(attendanceDeletes, [[attendanceRecord._id]]);
-      assert.equal(await deleteSelected.isDisabled(), true);
+      await page.getByRole('button', { name: 'إجراءات جلسة TEST' }).click();
+      await deleteAction.click();
+      await confirmation.getByRole('button', { name: 'نعم', exact: true }).click();
+      await page.getByRole('button', { name: 'إجراءات جلسة TEST' }).waitFor({ state: 'detached' });
+      assert.deepEqual(attendanceDeletes, [attendanceSession._id]);
+      assert.deepEqual(attendanceRecords, []);
+      assert.equal(attendanceRecordReads, 0);
     }
     await page.close();
   }
-  console.log('Attendance deletion menu and confirmation verified for admins and staff with and without permission.');
+  attendanceSessionAvailable = true;
+  attendanceRecords = [attendanceRecord];
+  for (const [status, closeBeforeQr] of [['CLOSED', false], ['EXPIRED', false], ['OPEN', false], ['OPEN', true]]) {
+    attendanceSessionStatus = status;
+    attendanceClosesBeforeQr = closeBeforeQr;
+    attendanceQrReads = 0;
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${server.address().port}/ar/admin/attendance?role=admin`);
+    await page.getByRole('button', { name: 'الرقابة وإدارة الحضور العامة' }).click();
+    const course = page.getByRole('button', { name: /Synthetic course/ });
+    await course.press('Enter');
+    if (status === 'OPEN' && !closeBeforeQr) {
+      await page.getByText('123456', { exact: true }).waitFor();
+      await page.locator('svg[shape-rendering="crispEdges"]').waitFor();
+      assert.equal(await page.getByRole('dialog', { name: 'سجل حضور الجلسة' }).count(), 0);
+    } else {
+      await page.getByRole('dialog', { name: 'سجل حضور الجلسة' }).getByText('Synthetic attendee').waitFor();
+    }
+    assert.equal(attendanceQrReads, status === 'OPEN' ? 1 : 0);
+    await page.close();
+  }
+  console.log('Course-name actions verified for closed, expired, active and just-closed sessions.');
+  console.log('Direct session deletion verified for admins and staff, including empty sessions, cancellation and permission checks.');
   console.log('Portal regressions passed in Arabic and English: delayed search echoes, continuous parent renders, clear/reset, dashboard ↔ quizzes shared cache, and mixed password flags with explicit bulk enable/disable.');
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

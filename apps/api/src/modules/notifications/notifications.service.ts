@@ -256,24 +256,13 @@ export class NotificationsService implements OnModuleInit {
 
   async markAllAsRead(userId: string) {
     const filter = await this.buildStudentNotificationFilter(userId);
-    const notifications = await this.notificationModel
-      .find({
-        ...filter,
-        'readBy.userId': { $ne: new Types.ObjectId(userId) },
-      })
-      .select('_id')
-      .lean();
-
-    if (notifications.length === 0) {
-      return { modifiedCount: 0 };
-    }
-
+    const userObjectId = new Types.ObjectId(userId);
     const result = await this.notificationModel.updateMany(
-      { _id: { $in: notifications.map((item) => item._id) } },
+      { ...filter, 'readBy.userId': { $ne: userObjectId } },
       {
         $push: {
           readBy: {
-            userId: new Types.ObjectId(userId),
+            userId: userObjectId,
             readAt: new Date(),
           },
         },
@@ -304,28 +293,17 @@ export class NotificationsService implements OnModuleInit {
 
   async hideAllReadNotifications(userId: string) {
     const filter = await this.buildStudentNotificationFilter(userId);
-
-    const readNotifications = await this.notificationModel
-      .find({
-        ...filter,
-        'readBy.userId': new Types.ObjectId(userId),
-        'hiddenBy.userId': { $ne: new Types.ObjectId(userId) },
-      })
-      .select('_id')
-      .lean();
-
-    if (readNotifications.length === 0) {
-      return { modifiedCount: 0 };
-    }
-
-    const ids = readNotifications.map((n) => n._id);
-
+    const userObjectId = new Types.ObjectId(userId);
     const result = await this.notificationModel.updateMany(
-      { _id: { $in: ids } },
+      {
+        ...filter,
+        'readBy.userId': userObjectId,
+        'hiddenBy.userId': { $ne: userObjectId },
+      },
       {
         $push: {
           hiddenBy: {
-            userId: new Types.ObjectId(userId),
+            userId: userObjectId,
             hiddenAt: new Date(),
           },
         },

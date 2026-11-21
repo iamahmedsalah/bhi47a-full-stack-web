@@ -53,7 +53,7 @@ export class RedisCacheStore implements ICacheStore {
         },
         tls: isTls
           ? {
-              rejectUnauthorized: false,
+              rejectUnauthorized: true,
               servername: parsedUrl?.hostname || undefined,
             }
           : undefined,

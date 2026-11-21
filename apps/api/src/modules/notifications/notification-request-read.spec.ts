@@ -139,3 +139,45 @@ describe('notification history projection', () => {
     });
   });
 });
+
+describe('bulk notification updates', () => {
+  it('checks targeting and the current read/hidden state in the write', async () => {
+    const userId = new Types.ObjectId();
+    const target = {
+      $or: [{ targetType: 'all' }, { targetStudentId: userId }],
+    };
+    const updateMany = jest
+      .fn()
+      .mockResolvedValueOnce({ modifiedCount: 2 })
+      .mockResolvedValueOnce({ modifiedCount: 0 });
+    const service = Object.assign(
+      Object.create(NotificationsService.prototype) as NotificationsService,
+      {
+        buildStudentNotificationFilter: jest.fn().mockResolvedValue(target),
+        notificationModel: { updateMany },
+      },
+    );
+
+    await expect(service.markAllAsRead(userId.toHexString())).resolves.toEqual({
+      modifiedCount: 2,
+    });
+    expect(updateMany).toHaveBeenNthCalledWith(
+      1,
+      { ...target, 'readBy.userId': { $ne: userId } },
+      { $push: { readBy: { userId, readAt: expect.any(Date) } } },
+    );
+
+    await expect(
+      service.hideAllReadNotifications(userId.toHexString()),
+    ).resolves.toEqual({ modifiedCount: 0 });
+    expect(updateMany).toHaveBeenNthCalledWith(
+      2,
+      {
+        ...target,
+        'readBy.userId': userId,
+        'hiddenBy.userId': { $ne: userId },
+      },
+      { $push: { hiddenBy: { userId, hiddenAt: expect.any(Date) } } },
+    );
+  });
+});

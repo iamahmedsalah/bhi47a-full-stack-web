@@ -415,7 +415,7 @@ export class AttendanceSessionService {
     await session.save();
 
     // Inform real-time subscribers
-    this.realtimeService.closeSessionStream(sessionId);
+    this.realtimeService.closeSessionStream(session._id.toString());
 
     return {
       success: true,

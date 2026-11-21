@@ -421,9 +421,10 @@ export function ActiveSessionPresenter({
             const msg = String(
               err?.response?.data?.message || err?.message || "",
             );
-            // Stop polling if session is closed or expired on server
+            // Stop polling if the session is closed, expired, or deleted.
             if (
               status === 400 ||
+              status === 404 ||
               msg.includes("مغلقة") ||
               msg.includes("انتهت") ||
               msg.includes("closed") ||

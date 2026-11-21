@@ -56,11 +56,10 @@ export default function AdminSidebar() {
   const params = useParams();
   const pathname = usePathname();
   const { user, logout, isLoggingOut } = useAuth();
-  const {
-    sidebarOpen, toggleSidebar,
-    adminMobileSidebarOpen: mobileOpen,
-    setAdminMobileSidebarOpen: setMobileOpen,
-  } = useUIStore();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
+  const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const mobileOpen = useUIStore((state) => state.adminMobileSidebarOpen);
+  const setMobileOpen = useUIStore((state) => state.setAdminMobileSidebarOpen);
   const locale = params.locale as string;
 
   useEffect(() => {

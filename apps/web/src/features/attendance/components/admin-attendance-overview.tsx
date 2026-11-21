@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isAxiosError } from "axios";
 import {
   keepPreviousData,
   useMutation,
@@ -47,6 +48,7 @@ import {
   attendanceApi,
   type AttendanceSessionDto,
   type AttendanceRecordDto,
+  type QrPayload,
 } from "../api/attendance-api";
 import { getAttendanceErrorMessage } from "../schemas/attendance-schemas";
 import { AttendanceExportButton } from "./attendance-export-button";
@@ -117,7 +119,7 @@ export function AdminAttendanceOverview({
 }: {
   isArabic?: boolean;
   canDeleteRecords?: boolean;
-  onOpenSessionPresenter?: (session: AttendanceSessionDto) => void;
+  onOpenSessionPresenter?: (session: AttendanceSessionDto, qr: QrPayload) => void;
 }) {
   const t = useTranslations("attendanceDelete");
   const queryClient = useQueryClient();
@@ -125,11 +127,10 @@ export function AdminAttendanceOverview({
     defaultFilters: { status: "all", level: "all", courseCode: "all" },
     defaultLimit: 20,
   });
-  const [register, setRegister] = useState<{
-    session: AttendanceSessionDto;
-    mode: "view" | "delete";
-  } | null>(null);
-  const selectedSession = register?.session;
+  const [selectedSession, setSelectedSession] =
+    useState<AttendanceSessionDto | null>(null);
+  const [sessionToDelete, setSessionToDelete] =
+    useState<AttendanceSessionDto | null>(null);
   const [recordsPage, setRecordsPage] = useState(1);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [editRecord, setEditRecord] = useState<AttendanceRecordDto | null>(
@@ -159,6 +160,9 @@ export function AdminAttendanceOverview({
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
+  const currentSession =
+    overview.data?.sessions.find((session) => session._id === selectedSession?._id) ??
+    selectedSession;
   const records = useQuery({
     queryKey: ["attendance-session-records", selectedSession?._id, recordsPage],
     enabled: Boolean(selectedSession),
@@ -167,7 +171,7 @@ export function AdminAttendanceOverview({
         page: recordsPage,
         limit: 50,
       }),
-    refetchInterval: selectedSession?.status === "OPEN" ? 20000 : false,
+    refetchInterval: currentSession?.status === "OPEN" ? 20000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
@@ -198,10 +202,19 @@ export function AdminAttendanceOverview({
     },
     onError: () => toast.error(t("failed")),
   });
-  const currentSession =
-    overview.data?.sessions.find(
-      (session) => session._id === selectedSession?._id,
-    ) || selectedSession;
+  const deleteSession = useMutation({
+    mutationFn: attendanceApi.deleteSession,
+    onSuccess: async (_, sessionId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["attendance-sessions"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["attendance-session-records", sessionId],
+        }),
+      ]);
+      toast.success(t("sessionDeleted"));
+    },
+    onError: () => toast.error(t("sessionDeleteFailed")),
+  });
   const kpi = overview.data?.kpi || {
     totalSessions: 0,
     activeSessions: 0,
@@ -209,29 +222,52 @@ export function AdminAttendanceOverview({
     presentCount: 0,
     lateCount: 0,
   };
-  const openRecords = (session: AttendanceSessionDto, mode: "view" | "delete") => {
-    setRegister({ session, mode });
+  const openRecords = useCallback((session: AttendanceSessionDto) => {
+    setSelectedSession(session);
     setRecordsPage(1);
     setSelectedRecordIds([]);
-  };
+  }, []);
+  const { mutate: openPresenter, isPending: isOpeningPresenter } = useMutation({
+    mutationFn: (session: AttendanceSessionDto) => attendanceApi.getCurrentQr(session._id),
+    onSuccess: (qr, session) => onOpenSessionPresenter?.(session, qr),
+    onError: (error, session) => {
+      if (isAxiosError(error) && error.response?.status === 400) {
+        openRecords(session);
+        void queryClient.invalidateQueries({ queryKey: ["attendance-sessions"] });
+        return;
+      }
+      toast.error(isArabic ? "تعذر فتح عرض الجلسة" : "Failed to open session presenter");
+    },
+  });
   const columns = useMemo<ColumnDef<AttendanceSessionDto>[]>(
     () => [
       {
         key: "course",
         header: isArabic ? "المقرر" : "Course",
-        render: (session) => (
-          <div className="min-w-40">
-            <bdi
-              dir="ltr"
-              className="font-mono text-xs font-semibold text-primary"
+        render: (session) => {
+          const showPresenter = session.status === "OPEN" && Boolean(onOpenSessionPresenter);
+          const action = showPresenter
+            ? isArabic ? "عرض رمز QR" : "Show QR code"
+            : isArabic ? "فتح سجل الحضور" : "Open attendance record";
+
+          return (
+            <button
+              type="button"
+              className="group min-w-40 cursor-pointer rounded-squircle text-start focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary disabled:cursor-wait"
+              disabled={isOpeningPresenter}
+              onClick={() => showPresenter ? openPresenter(session) : openRecords(session)}
+              title={action}
             >
-              {session.courseCode}
-            </bdi>
-            <p className="mt-1 text-xs">
-              <bdi>{session.courseName || "—"}</bdi>
-            </p>
-          </div>
-        ),
+              <bdi dir="ltr" className="block font-mono text-xs font-semibold text-primary">
+                {session.courseCode}
+              </bdi>
+              <bdi className="mt-1 block text-xs group-hover:text-primary group-hover:underline">
+                {session.courseName || "—"}
+              </bdi>
+              <span className="sr-only">{action}</span>
+            </button>
+          );
+        },
       },
       {
         key: "level",
@@ -361,7 +397,7 @@ export function AdminAttendanceOverview({
                   className="z-50 min-w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
                 >
                   <DropdownMenu.Item
-                    onSelect={() => openRecords(session, "view")}
+                    onSelect={() => openRecords(session)}
                     className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
                   >
                     <UserRound className="h-4 w-4" />
@@ -369,8 +405,9 @@ export function AdminAttendanceOverview({
                   </DropdownMenu.Item>
                   {session.status === "OPEN" && onOpenSessionPresenter && (
                     <DropdownMenu.Item
-                      onSelect={() => onOpenSessionPresenter(session)}
-                      className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
+                      disabled={isOpeningPresenter}
+                      onSelect={() => openPresenter(session)}
+                      className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent data-disabled:opacity-50"
                     >
                       <QrCode className="h-4 w-4" />
                       {isArabic ? "عرض QR" : "Open presenter"}
@@ -380,8 +417,9 @@ export function AdminAttendanceOverview({
                     <>
                       <DropdownMenu.Separator className="my-1 border-t border-border" />
                       <DropdownMenu.Item
-                        onSelect={() => openRecords(session, "delete")}
-                        className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm text-destructive outline-none focus:bg-destructive/10"
+                        disabled={deleteSession.isPending}
+                        onSelect={() => setSessionToDelete(session)}
+                        className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm text-destructive outline-none focus:bg-destructive/10 data-disabled:opacity-50"
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                         {t("menuAction")}
@@ -395,7 +433,7 @@ export function AdminAttendanceOverview({
         ),
       },
     ],
-    [canDeleteRecords, isArabic, locale, onOpenSessionPresenter, t],
+    [canDeleteRecords, deleteSession.isPending, isArabic, isOpeningPresenter, locale, onOpenSessionPresenter, openPresenter, openRecords, t],
   );
   const updateRecord = async () => {
     if (!editRecord || saving) return;
@@ -597,10 +635,35 @@ export function AdminAttendanceOverview({
           disabled={overview.isPlaceholderData || table.isPending}
         />
       </div>
+      {canDeleteRecords && (
+        <ConfirmDialog
+          dir={isArabic ? "rtl" : "ltr"}
+          open={Boolean(sessionToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setSessionToDelete(null);
+          }}
+          title={t("deleteSessionTitle")}
+          description={
+            <>
+              <span className="mb-2 block font-medium text-foreground">
+                <bdi>{sessionToDelete?.courseCode}</bdi>{" "}
+                <bdi>{sessionToDelete?.courseName}</bdi>
+              </span>
+              {t("deleteSessionDescription")}
+            </>
+          }
+          confirmLabel={t("yes")}
+          cancelLabel={t("no")}
+          disabled={deleteSession.isPending}
+          onConfirm={() => {
+            if (sessionToDelete) deleteSession.mutate(sessionToDelete._id);
+          }}
+        />
+      )}
       <Dialog
         open={Boolean(selectedSession)}
         onOpenChange={(open) => {
-          if (!open && !deleteRecords.isPending) setRegister(null);
+          if (!open && !deleteRecords.isPending) setSelectedSession(null);
         }}
       >
         <DialogContent
@@ -609,11 +672,7 @@ export function AdminAttendanceOverview({
         >
           <DialogHeader>
             <DialogTitle>
-              {register?.mode === "delete"
-                ? t("selectTitle")
-                : isArabic
-                  ? "سجل حضور الجلسة"
-                  : "Session attendance register"}
+              {isArabic ? "سجل حضور الجلسة" : "Session attendance register"}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               <bdi>{selectedSession?.courseCode}</bdi> ·{" "}
@@ -741,7 +800,7 @@ export function AdminAttendanceOverview({
             <Button
               variant="outline"
               disabled={deleteRecords.isPending}
-              onClick={() => setRegister(null)}
+              onClick={() => setSelectedSession(null)}
             >
               {isArabic ? "إغلاق" : "Close"}
             </Button>

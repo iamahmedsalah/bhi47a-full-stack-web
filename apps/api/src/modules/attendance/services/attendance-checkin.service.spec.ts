@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AttendanceCheckInService } from './attendance-checkin.service';
 import { Types } from 'mongoose';
 
@@ -18,10 +22,19 @@ describe('AttendanceCheckInService', () => {
   };
 
   const mockSessionId = new Types.ObjectId();
+  const transaction = {};
 
   beforeEach(() => {
     mockSessionModel = {
       findById: jest.fn(),
+      exists: jest.fn().mockReturnValue({
+        session: jest.fn().mockResolvedValue(null),
+      }),
+      updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+      db: {
+        transaction: async (work: (session: object) => Promise<unknown>) =>
+          work(transaction),
+      },
     };
     mockRecordModel = {
       findOne: jest.fn(),
@@ -185,26 +198,59 @@ describe('AttendanceCheckInService', () => {
       lean: jest.fn().mockResolvedValue(null),
     });
 
-    mockRecordModel.create.mockResolvedValue({
-      _id: new Types.ObjectId(),
-      status: 'present',
-      method: 'qr',
-      checkedInAt: new Date(),
-    });
+    mockRecordModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        status: 'present',
+        method: 'qr',
+        checkedInAt: new Date(),
+      },
+    ]);
 
     const result = await service.checkIn(mockStudent, rawToken);
 
     expect(result.alreadyCheckedIn).toBe(false);
     expect(result.status).toBe('present');
     expect(mockRecordModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        courseCode: 'CS101',
-        status: 'present',
-        method: 'qr',
-        studentCode: '2026001',
-      }),
+      [
+        expect.objectContaining({
+          courseCode: 'CS101',
+          status: 'present',
+          method: 'qr',
+          studentCode: '2026001',
+        }),
+      ],
+      { session: transaction },
     );
     expect(mockRealtimeService.publishEvent).toHaveBeenCalled();
+    expect(mockSessionModel.updateOne).toHaveBeenCalledWith(
+      {
+        _id: mockSessionId,
+        status: 'OPEN',
+        expiresAt: { $gt: expect.any(Date) },
+      },
+      { $inc: { __v: 1 } },
+      { session: transaction, timestamps: false },
+    );
+
+    mockRecordModel.create.mockClear();
+    mockRealtimeService.publishEvent.mockClear();
+    mockSessionModel.updateOne.mockResolvedValue({ matchedCount: 0 });
+    await expect(service.checkIn(mockStudent, rawToken)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(mockRecordModel.create).not.toHaveBeenCalled();
+    expect(mockRealtimeService.publishEvent).not.toHaveBeenCalled();
+
+    // The session read can still show OPEN after a close or expiry wins the write.
+    mockSessionModel.exists.mockReturnValue({
+      session: jest.fn().mockResolvedValue({ _id: mockSessionId }),
+    });
+    await expect(service.checkIn(mockStudent, rawToken)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockRecordModel.create).not.toHaveBeenCalled();
+    expect(mockRealtimeService.publishEvent).not.toHaveBeenCalled();
   });
 
   it('should mark student as LATE when check-in occurs after lateThresholdMinutes', async () => {
@@ -236,20 +282,25 @@ describe('AttendanceCheckInService', () => {
       lean: jest.fn().mockResolvedValue(null),
     });
 
-    mockRecordModel.create.mockResolvedValue({
-      _id: new Types.ObjectId(),
-      status: 'late',
-      method: 'qr',
-      checkedInAt: new Date(),
-    });
+    mockRecordModel.create.mockResolvedValue([
+      {
+        _id: new Types.ObjectId(),
+        status: 'late',
+        method: 'qr',
+        checkedInAt: new Date(),
+      },
+    ]);
 
     const result = await service.checkIn(mockStudent, rawToken);
 
     expect(result.status).toBe('late');
     expect(mockRecordModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'late',
-      }),
+      [
+        expect.objectContaining({
+          status: 'late',
+        }),
+      ],
+      { session: transaction },
     );
   });
 

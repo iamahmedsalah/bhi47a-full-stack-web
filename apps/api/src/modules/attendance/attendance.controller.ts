@@ -43,6 +43,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
+import { RequireAttendanceSessionAccess } from './guards/attendance-session-access.guard';
+import { getClientIp } from '../../common/rate-limit/rate-limit.rules';
 
 @ApiTags('Attendance')
 @ApiBearerAuth()
@@ -160,6 +162,7 @@ export class AttendanceController {
 
   @Get('attendance/sessions/:id')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('session')
   @ApiOperation({ summary: 'Get session details and live statistics' })
   async getSessionDetails(
     @Param('id') id: string,
@@ -169,6 +172,7 @@ export class AttendanceController {
 
   @Get('attendance/sessions/:id/qr')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('session')
   @ApiOperation({ summary: 'Get current rotating QR token for active session' })
   async getCurrentQr(@Param('id') id: string, @Req() req: Request) {
     return this.sessionService.getCurrentQr(id, this.resolveWebBaseUrl(req));
@@ -188,21 +192,36 @@ export class AttendanceController {
 
   @Sse('attendance/sessions/:id/live')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('session')
   @ApiOperation({
     summary: 'Server-Sent Events (SSE) live stream for attendees',
   })
-  liveSessionFeed(@Param('id') id: string): Observable<MessageEvent> {
-    return this.realtimeService.getEventStream(id);
+  liveSessionFeed(
+    @Param('id', ParseObjectIdPipe) id: string,
+  ): Observable<MessageEvent> {
+    return this.realtimeService.getEventStream(id.toLowerCase());
   }
 
   @Get('attendance/sessions/:id/records')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('session')
   @ApiOperation({ summary: 'Get paginated attendee list for a session' })
   async getSessionRecords(
     @Param('id') id: string,
     @Query() query: QueryAttendanceRecordsDto,
   ) {
     return this.reportService.getSessionRecords(id, query);
+  }
+
+  @Delete('attendance/sessions/:id')
+  @Roles('staff', 'admin')
+  @RequirePermissions(PERMISSIONS.ATTENDANCE_DELETE)
+  @ApiOperation({ summary: 'Delete an attendance session and its records' })
+  async deleteSession(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() user: { _id: string; role: string },
+  ) {
+    return this.reportService.deleteSession(id, user);
   }
 
   @Delete('attendance/sessions/:id/records')
@@ -221,6 +240,7 @@ export class AttendanceController {
 
   @Patch('attendance/records/:id')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('record')
   @ApiOperation({ summary: 'Manual status update with audit logging' })
   async manualUpdateRecord(
     @Param('id') id: string,
@@ -232,6 +252,7 @@ export class AttendanceController {
 
   @Post('attendance/sessions/:id/manual-mark')
   @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('session')
   @ApiOperation({ summary: 'Manually mark a student present in a session' })
   async manualStudentCheckIn(
     @Param('id') id: string,
@@ -298,12 +319,7 @@ export class AttendanceController {
     @Body() dto: CheckInAttendanceDto,
     @Req() req: Request,
   ) {
-    const rawIp =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.ip ||
-      req.socket.remoteAddress ||
-      '127.0.0.1';
-    return this.checkInService.checkIn(user, dto, rawIp);
+    return this.checkInService.checkIn(user, dto, getClientIp(req));
   }
 
   @Get('attendance/student/live-sessions')

@@ -75,6 +75,13 @@ export default function StaffAttendancePage() {
   const [activeSession, setActiveSession] =
     useState<AttendanceSessionDto | null>(null);
   const [activeQr, setActiveQr] = useState<QrPayload | null>(null);
+  const openSessionPresenter = React.useCallback(
+    (session: AttendanceSessionDto, qr: QrPayload) => {
+      setActiveSession(session);
+      setActiveQr(qr);
+    },
+    [],
+  );
 
   // Dialog state
   const [showStartDialog, setShowStartDialog] = useState(false);
@@ -378,19 +385,7 @@ export default function StaffAttendancePage() {
           canDeleteRecords={
             isAdmin || user?.permissions?.includes(PERMISSIONS.ATTENDANCE_DELETE)
           }
-          onOpenSessionPresenter={async (session) => {
-            try {
-              const qr = await attendanceApi.getCurrentQr(session._id);
-              setActiveSession(session);
-              setActiveQr(qr);
-            } catch {
-              toast.error(
-                isArabic
-                  ? "تعذر فتح عرض الجلسة"
-                  : "Failed to open session presenter",
-              );
-            }
-          }}
+          onOpenSessionPresenter={openSessionPresenter}
         />
       ) : (
         /* Classes Grid */

@@ -263,6 +263,13 @@ export const attendanceApi = {
     return res.data;
   },
 
+  async deleteSession(sessionId: string) {
+    const res = await api.delete<{ deletedCount: number }>(
+      `/attendance/sessions/${sessionId}`,
+    );
+    return res.data;
+  },
+
   async deleteSessionRecords(sessionId: string, recordIds: string[]) {
     const res = await api.delete<{ deletedCount: number }>(
       `/attendance/sessions/${sessionId}/records`,

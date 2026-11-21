@@ -1,6 +1,5 @@
 import { Injectable, MessageEvent } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, Subject, defer, finalize, map } from 'rxjs';
 
 export interface AttendanceLiveEvent {
   type: 'CHECK_IN' | 'STATUS_CHANGE' | 'SESSION_CLOSED' | 'SESSION_EXPIRED';
@@ -36,54 +35,54 @@ export interface AttendanceLiveEvent {
 
 @Injectable()
 export class AttendanceRealtimeService {
-  private sessionChannels = new Map<string, Subject<AttendanceLiveEvent>>();
-
-  /**
-   * Retrieves or creates an RxJS Subject stream for an active attendance session.
-   */
-  private getOrCreateSubject(sessionId: string): Subject<AttendanceLiveEvent> {
-    let subject = this.sessionChannels.get(sessionId);
-    if (!subject) {
-      subject = new Subject<AttendanceLiveEvent>();
-      this.sessionChannels.set(sessionId, subject);
-    }
-    return subject;
-  }
+  private readonly sessionChannels = new Map<
+    string,
+    { events: Subject<AttendanceLiveEvent>; viewers: number }
+  >();
 
   /**
    * Returns an Observable SSE message stream for clients connected to a session.
    */
   getEventStream(sessionId: string): Observable<MessageEvent> {
-    const subject = this.getOrCreateSubject(sessionId);
-    return subject.asObservable().pipe(
-      map((event) => ({
-        data: event,
-      })),
-    );
+    return defer(() => {
+      const channel = this.sessionChannels.get(sessionId) ?? {
+        events: new Subject<AttendanceLiveEvent>(),
+        viewers: 0,
+      };
+      channel.viewers += 1;
+      this.sessionChannels.set(sessionId, channel);
+
+      return channel.events.pipe(
+        map((event) => ({ data: event })),
+        finalize(() => {
+          channel.viewers -= 1;
+          if (
+            channel.viewers === 0 &&
+            this.sessionChannels.get(sessionId) === channel
+          ) {
+            this.sessionChannels.delete(sessionId);
+          }
+        }),
+      );
+    });
   }
 
   /**
    * Broadcasts a live check-in or update event to all staff members viewing the session.
    */
   publishEvent(sessionId: string, event: AttendanceLiveEvent): void {
-    const subject = this.sessionChannels.get(sessionId);
-    if (subject) {
-      subject.next(event);
-    }
+    this.sessionChannels.get(sessionId)?.events.next(event);
   }
 
   /**
    * Closes the session's stream channel and cleans up memory.
    */
   closeSessionStream(sessionId: string): void {
-    const subject = this.sessionChannels.get(sessionId);
-    if (subject) {
-      subject.next({
-        type: 'SESSION_CLOSED',
-        timestamp: new Date(),
-      });
-      subject.complete();
-      this.sessionChannels.delete(sessionId);
-    }
+    const channel = this.sessionChannels.get(sessionId);
+    if (!channel) return;
+
+    this.sessionChannels.delete(sessionId);
+    channel.events.next({ type: 'SESSION_CLOSED', timestamp: new Date() });
+    channel.events.complete();
   }
 }

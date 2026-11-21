@@ -55,7 +55,8 @@ export default function AdminHeader() {
   const canReadNotifications = user?.role === 'admin' || Boolean(user?.permissions?.includes('notifications.read'));
   const locale = params.locale as string;
   const tNav = useTranslations('nav');
-  const { adminMobileSidebarOpen, setAdminMobileSidebarOpen } = useUIStore();
+  const adminMobileSidebarOpen = useUIStore((state) => state.adminMobileSidebarOpen);
+  const setAdminMobileSidebarOpen = useUIStore((state) => state.setAdminMobileSidebarOpen);
 
   const isAr = locale === 'ar';
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);

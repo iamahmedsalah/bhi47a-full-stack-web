@@ -20,7 +20,7 @@ export default function StudentLayout({
 }) {
   const params = useParams();
   const locale = (params?.locale as string) || 'ar';
-  const { sidebarOpen } = useUIStore();
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const { user, loading, isLoggingOut } = useAuth();
 
   if (loading || isLoggingOut || !user || user.role !== 'student' || user.mustChangePassword) {

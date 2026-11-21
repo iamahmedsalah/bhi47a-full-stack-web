@@ -8,6 +8,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
@@ -36,6 +37,10 @@ import {
 } from '../dto/attendance-session.dto';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import {
+  createAttendanceRecord,
+  isStandaloneTransactionError,
+} from './attendance-record-write';
+import {
   attendanceSessionFilter,
   attendanceSessionScope,
   type AttendanceViewer,
@@ -60,6 +65,38 @@ export class AttendanceReportService {
     @InjectModel(CourseRegistration.name)
     private registrationModel: Model<CourseRegistrationDocument>,
   ) {}
+
+  async deleteSession(sessionId: string, user: AttendanceViewer) {
+    const id = new Types.ObjectId(sessionId);
+    let result: { deletedCount: number };
+    try {
+      result = await this.sessionModel.db.transaction(async (session) => {
+        const deleted = await this.sessionModel.deleteOne(
+          { _id: id, ...attendanceSessionScope(user) },
+          { session },
+        );
+        if (deleted.deletedCount === 0) {
+          throw new NotFoundException('Attendance session not found');
+        }
+        const { deletedCount } = await this.recordModel.deleteMany(
+          { sessionId: id },
+          { session },
+        );
+        return { deletedCount };
+      });
+    } catch (error) {
+      if (!isStandaloneTransactionError(error)) throw error;
+      throw new ServiceUnavailableException(
+        'Deleting attendance sessions requires a MongoDB replica set',
+      );
+    }
+
+    this.realtimeService.closeSessionStream(id.toString());
+    this.logger.log(
+      `User ${user._id} deleted attendance session ${id.toString()} with ${result.deletedCount} records`,
+    );
+    return result;
+  }
 
   async deleteSessionRecords(
     sessionId: string,
@@ -344,32 +381,36 @@ export class AttendanceReportService {
       return existing;
     }
 
-    const newRecord = await this.recordModel.create({
-      sessionId: session._id,
-      studentId: studentUser._id,
-      studentCode: studentUser.studentCode || dto.studentCode,
-      studentName: studentUser.name,
-      courseCode: session.courseCode,
-      sessionType: session.sessionType,
-      status: dto.status,
-      method: 'manual',
-      checkedInAt: now,
-      markedBy: new Types.ObjectId(staffUser._id),
-      markedByName: staffUser.name,
-      markedByNameAr: formatStaffDisplayName(staffUser, 'ar'),
-      markedByNameEn: formatStaffDisplayName(staffUser, 'en'),
-      note: dto.reason,
-      auditTrail: [
-        {
-          action: 'MANUAL_STAFF_REGISTRATION',
-          modifiedBy: new Types.ObjectId(staffUser._id),
-          modifiedByName: staffUser.name,
-          newStatus: dto.status,
-          reason: dto.reason || 'Manual registration by staff member',
-          timestamp: now,
-        },
-      ],
-    });
+    const newRecord = await createAttendanceRecord(
+      this.sessionModel,
+      this.recordModel,
+      {
+        sessionId: session._id,
+        studentId: studentUser._id,
+        studentCode: studentUser.studentCode || dto.studentCode,
+        studentName: studentUser.name,
+        courseCode: session.courseCode,
+        sessionType: session.sessionType,
+        status: dto.status,
+        method: 'manual',
+        checkedInAt: now,
+        markedBy: new Types.ObjectId(staffUser._id),
+        markedByName: staffUser.name,
+        markedByNameAr: formatStaffDisplayName(staffUser, 'ar'),
+        markedByNameEn: formatStaffDisplayName(staffUser, 'en'),
+        note: dto.reason,
+        auditTrail: [
+          {
+            action: 'MANUAL_STAFF_REGISTRATION',
+            modifiedBy: new Types.ObjectId(staffUser._id),
+            modifiedByName: staffUser.name,
+            newStatus: dto.status,
+            reason: dto.reason || 'Manual registration by staff member',
+            timestamp: now,
+          },
+        ],
+      },
+    );
 
     this.realtimeService.publishEvent(session._id.toString(), {
       type: 'CHECK_IN',

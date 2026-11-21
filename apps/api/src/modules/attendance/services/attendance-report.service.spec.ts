@@ -20,14 +20,85 @@ describe('Attendance record deletion', () => {
   const recordIds = [new Types.ObjectId(), new Types.ObjectId()];
   const selected = recordIds.map(String);
 
-  it('requires the delegated deletion permission', () => {
-    const handler = Object.getOwnPropertyDescriptor(
-      AttendanceController.prototype,
-      'deleteSessionRecords',
-    )!.value as () => void;
-    expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toEqual([
-      PERMISSIONS.ATTENDANCE_DELETE,
-    ]);
+  it.each(['deleteSession', 'deleteSessionRecords'])(
+    'requires the delegated deletion permission for %s',
+    (method) => {
+      const handler = Object.getOwnPropertyDescriptor(
+        AttendanceController.prototype,
+        method,
+      )!.value as () => void;
+      expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toEqual([
+        PERMISSIONS.ATTENDANCE_DELETE,
+      ]);
+    },
+  );
+
+  it.each([
+    ['admin', 2],
+    ['staff', 0],
+  ] as const)(
+    'lets %s delete a scoped session with %i records in one transaction',
+    async (role, deletedCount) => {
+      const transaction = {};
+      const deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+      const deleteMany = jest.fn().mockResolvedValue({ deletedCount });
+      const closeSessionStream = jest.fn();
+      const service = new AttendanceReportService(
+        { deleteMany } as never,
+        {
+          deleteOne,
+          db: {
+            transaction: async (work: (session: object) => Promise<unknown>) =>
+              work(transaction),
+          },
+        } as never,
+        {} as never,
+        { closeSessionStream } as never,
+        {} as never,
+      );
+      const user = { _id: actorId.toString(), role };
+      await expect(
+        service.deleteSession(sessionId.toString(), user),
+      ).resolves.toEqual({ deletedCount });
+      expect(deleteOne).toHaveBeenCalledWith(
+        {
+          _id: sessionId,
+          ...(role === 'staff' ? { createdBy: actorId } : {}),
+        },
+        { session: transaction },
+      );
+      expect(deleteMany).toHaveBeenCalledWith(
+        { sessionId },
+        { session: transaction },
+      );
+      expect(closeSessionStream).toHaveBeenCalledWith(sessionId.toString());
+    },
+  );
+
+  it('does not delete records when the session is missing or outside staff scope', async () => {
+    const deleteMany = jest.fn();
+    const closeSessionStream = jest.fn();
+    const service = new AttendanceReportService(
+      { deleteMany } as never,
+      {
+        deleteOne: jest.fn().mockResolvedValue({ deletedCount: 0 }),
+        db: {
+          transaction: async (work: (session: object) => Promise<unknown>) =>
+            work({}),
+        },
+      } as never,
+      {} as never,
+      { closeSessionStream } as never,
+      {} as never,
+    );
+    await expect(
+      service.deleteSession(sessionId.toString(), {
+        _id: actorId.toString(),
+        role: 'staff',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(deleteMany).not.toHaveBeenCalled();
+    expect(closeSessionStream).not.toHaveBeenCalled();
   });
 
   it('validates a non-empty bounded list of record IDs', async () => {
@@ -158,14 +229,21 @@ describe('Attendance export permissions', () => {
     const sessionId = new Types.ObjectId();
     const records = {
       findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation((record) => ({
-        ...record,
-        _id: new Types.ObjectId(),
-      })),
+      create: jest.fn().mockImplementation(([record]) => [
+        {
+          ...record,
+          _id: new Types.ObjectId(),
+        },
+      ]),
     };
     const service = new AttendanceReportService(
       records as never,
       {
+        updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+        db: {
+          transaction: async (work: (session: object) => Promise<unknown>) =>
+            work({}),
+        },
         findById: jest.fn().mockReturnValue({
           lean: jest.fn().mockResolvedValue({
             _id: sessionId,
