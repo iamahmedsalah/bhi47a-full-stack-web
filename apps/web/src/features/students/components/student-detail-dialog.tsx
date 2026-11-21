@@ -250,6 +250,7 @@ export function StudentDetailDialog({
 
   const enrollmentStatusMap: Record<string, string> = {
     active: isAr ? 'نشط' : 'Active',
+    inactive: isAr ? 'غير نشط' : 'Inactive',
     suspended: isAr ? 'موقوف' : 'Suspended',
     graduated: isAr ? 'خريج' : 'Graduated',
     withdrawn: isAr ? 'منسحب' : 'Withdrawn',

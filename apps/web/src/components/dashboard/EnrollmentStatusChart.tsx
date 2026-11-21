@@ -36,6 +36,7 @@ const STATUS_MAP: Record<string, { labelAr: string; labelEn: string; color: stri
   active: { labelAr: 'منتظم / نشط', labelEn: 'Active', color: '#10b981' },
   suspended: { labelAr: 'موقوف القيد', labelEn: 'Suspended', color: '#ef4444' },
   graduated: { labelAr: 'خريج', labelEn: 'Graduated', color: '#06b6d4' },
+  inactive: { labelAr: 'غير نشط', labelEn: 'Inactive', color: '#f59e0b' },
   withdrawn: { labelAr: 'منسحب', labelEn: 'Withdrawn', color: '#f59e0b' },
 };
 

@@ -31,6 +31,7 @@ import { TableCell } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -124,8 +125,11 @@ export function AdminAttendanceOverview({
     defaultFilters: { status: "all", level: "all", courseCode: "all" },
     defaultLimit: 20,
   });
-  const [selectedSession, setSelectedSession] =
-    useState<AttendanceSessionDto | null>(null);
+  const [register, setRegister] = useState<{
+    session: AttendanceSessionDto;
+    mode: "view" | "delete";
+  } | null>(null);
+  const selectedSession = register?.session;
   const [recordsPage, setRecordsPage] = useState(1);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [editRecord, setEditRecord] = useState<AttendanceRecordDto | null>(
@@ -205,8 +209,8 @@ export function AdminAttendanceOverview({
     presentCount: 0,
     lateCount: 0,
   };
-  const openRecords = (session: AttendanceSessionDto) => {
-    setSelectedSession(session);
+  const openRecords = (session: AttendanceSessionDto, mode: "view" | "delete") => {
+    setRegister({ session, mode });
     setRecordsPage(1);
     setSelectedRecordIds([]);
   };
@@ -357,7 +361,7 @@ export function AdminAttendanceOverview({
                   className="z-50 min-w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
                 >
                   <DropdownMenu.Item
-                    onSelect={() => openRecords(session)}
+                    onSelect={() => openRecords(session, "view")}
                     className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
                   >
                     <UserRound className="h-4 w-4" />
@@ -372,6 +376,18 @@ export function AdminAttendanceOverview({
                       {isArabic ? "عرض QR" : "Open presenter"}
                     </DropdownMenu.Item>
                   )}
+                  {canDeleteRecords && (
+                    <>
+                      <DropdownMenu.Separator className="my-1 border-t border-border" />
+                      <DropdownMenu.Item
+                        onSelect={() => openRecords(session, "delete")}
+                        className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm text-destructive outline-none focus:bg-destructive/10"
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        {t("menuAction")}
+                      </DropdownMenu.Item>
+                    </>
+                  )}
                 </div>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -379,7 +395,7 @@ export function AdminAttendanceOverview({
         ),
       },
     ],
-    [isArabic, locale, onOpenSessionPresenter],
+    [canDeleteRecords, isArabic, locale, onOpenSessionPresenter, t],
   );
   const updateRecord = async () => {
     if (!editRecord || saving) return;
@@ -584,7 +600,7 @@ export function AdminAttendanceOverview({
       <Dialog
         open={Boolean(selectedSession)}
         onOpenChange={(open) => {
-          if (!open && !deleteRecords.isPending) setSelectedSession(null);
+          if (!open && !deleteRecords.isPending) setRegister(null);
         }}
       >
         <DialogContent
@@ -593,34 +609,42 @@ export function AdminAttendanceOverview({
         >
           <DialogHeader>
             <DialogTitle>
-              {isArabic ? "سجل حضور الجلسة" : "Session attendance register"}
+              {register?.mode === "delete"
+                ? t("selectTitle")
+                : isArabic
+                  ? "سجل حضور الجلسة"
+                  : "Session attendance register"}
             </DialogTitle>
-            <p className="text-xs text-muted-foreground">
+            <DialogDescription className="text-xs text-muted-foreground">
               <bdi>{selectedSession?.courseCode}</bdi> ·{" "}
               <bdi>{selectedSession?.courseName}</bdi>
-            </p>
+            </DialogDescription>
           </DialogHeader>
           {selectedSession && (
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {canDeleteRecords && selectedRecordIds.length > 0 && (
+              {canDeleteRecords && (
                 <>
                   <span
                     className="me-auto text-sm text-muted-foreground"
                     aria-live="polite"
                   >
-                    {t("selected", { count: selectedRecordIds.length })}
+                    {selectedRecordIds.length > 0
+                      ? t("selected", { count: selectedRecordIds.length })
+                      : t("selectHint")}
                     {selectedRecordIds.length === ATTENDANCE_RECORD_DELETE_LIMIT &&
                       ` · ${t("limit", { count: ATTENDANCE_RECORD_DELETE_LIMIT })}`}
                   </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={deleteRecords.isPending}
-                    onClick={() => setSelectedRecordIds([])}
-                  >
-                    {t("clear")}
-                  </Button>
+                  {selectedRecordIds.length > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={deleteRecords.isPending}
+                      onClick={() => setSelectedRecordIds([])}
+                    >
+                      {t("clear")}
+                    </Button>
+                  )}
                   <ConfirmDialog
                     dir={isArabic ? "rtl" : "ltr"}
                     trigger={
@@ -628,7 +652,9 @@ export function AdminAttendanceOverview({
                         type="button"
                         variant="destructive"
                         size="sm"
-                        disabled={deleteRecords.isPending}
+                        disabled={
+                          deleteRecords.isPending || selectedRecordIds.length === 0
+                        }
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                         {deleteRecords.isPending
@@ -642,6 +668,7 @@ export function AdminAttendanceOverview({
                     })}
                     confirmLabel={t("confirm")}
                     cancelLabel={t("cancel")}
+                    disabled={deleteRecords.isPending || selectedRecordIds.length === 0}
                     onConfirm={() =>
                       deleteRecords.mutate({
                         sessionId: selectedSession._id,
@@ -714,7 +741,7 @@ export function AdminAttendanceOverview({
             <Button
               variant="outline"
               disabled={deleteRecords.isPending}
-              onClick={() => setSelectedSession(null)}
+              onClick={() => setRegister(null)}
             >
               {isArabic ? "إغلاق" : "Close"}
             </Button>

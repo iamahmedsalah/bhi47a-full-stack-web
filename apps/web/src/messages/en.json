@@ -1788,6 +1788,9 @@
     "refreshApplication": "Reload latest application"
   },
   "attendanceDelete": {
+    "menuAction": "Delete attendance records",
+    "selectTitle": "Select attendance records to delete",
+    "selectHint": "Select the records you want to delete.",
     "selectVisible": "Select all visible records",
     "selectRecord": "Select record for {name}",
     "selected": "{count, plural, one {# record selected} other {# records selected}}",

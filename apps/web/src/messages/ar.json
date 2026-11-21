@@ -1788,6 +1788,9 @@
     "refreshApplication": "تحميل أحدث بيانات الطلب"
   },
   "attendanceDelete": {
+    "menuAction": "حذف سجلات الحضور والغياب",
+    "selectTitle": "اختيار سجلات الحضور والغياب للحذف",
+    "selectHint": "حدّد السجلات اللي عايز تحذفها.",
     "selectVisible": "تحديد كل السجلات المعروضة",
     "selectRecord": "تحديد سجل {name}",
     "selected": "تم تحديد {count, number} من السجلات",

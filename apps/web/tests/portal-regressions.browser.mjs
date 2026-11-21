@@ -15,15 +15,33 @@ await fs.mkdir(output, { recursive: true });
 const write = (name, source) => fs.writeFile(path.join(output, name), source);
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
 await write('navigation.ts', `export const useParams=()=>({locale:location.pathname.split('/')[1]});export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);const router={push:()=>{},replace:url=>setTimeout(()=>history.replaceState(null,'',url),500)};export const useRouter=()=>router;`);
-await write('auth.ts', `export const useAuth=()=>({user:{_id:'synthetic',role:'student',name:'Synthetic',mustChangePassword:false}});`);
+await write('auth.ts', `
+  const params = new URLSearchParams(location.search);
+  export const useAuth = () => ({ user: {
+    _id: 'synthetic', role: params.get('role') || 'student', name: 'Synthetic',
+    mustChangePassword: false, permissions: params.has('delete') ? ['attendance.delete'] : [],
+  } });
+`);
 await write('image.tsx', `import React from 'react';export default function Image({fill,priority,unoptimized,...props}){return <img {...props}/>;}`);
 await write('dynamic.tsx', `export default ()=>()=>null;`);
 await write('link.tsx', `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>;}`);
-await write('attendance.ts', `export const attendanceApi={getMyAttendanceHistory:async()=>({summary:{totalSessions:0,presentCount:0,lateCount:0,attendanceRate:0}}),getStudentLiveSessions:async()=>({sessions:[]})};`);
-await write('api.ts', `const request=async({url,params})=>{const response=await fetch('/fixture'+url+(params?'?'+new URLSearchParams(params):''));return response.json();};export const apiBaseUrl='';export const getApiErrorMessage=e=>e.message||'Error';export const getApiErrorDetails=e=>e;export default {request,get:(url,config)=>request({url,...config})};`);
+await write('api.ts', `
+  const request = async ({ url, params, method, data }) => {
+    const response = await fetch('/fixture' + url + (params ? '?' + new URLSearchParams(params) : ''), {
+      method, ...(data ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) } : {}),
+    });
+    return response.json();
+  };
+  export const apiBaseUrl = '';
+  export const getApiErrorMessage = e => e.message || 'Error';
+  export const getApiErrorDetails = e => e;
+  export default { request, get: (url, config) => request({ url, ...config }),
+    delete: (url, config) => request({ url, ...config, method: 'DELETE' }) };
+`);
 await write('api-client.ts', `import api from './api';export const apiGet=async(url,config)=>(await api.get(url,config)).data;export const apiPost=async(url,body)=>{const response=await fetch('/fixture'+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw new Error(result.message);return result.data};export const apiPatch=apiPost;export const apiDelete=apiPost;`);
 await write('entry.tsx', `
   import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';
+  import Attendance from '@/app/[locale]/admin/attendance/page';
   import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
   import Dashboard from '@/app/[locale]/dashboard/page';import Quizzes from '@/app/[locale]/dashboard/quizzes/page';
   import {MaterialUploadProvider} from '@/features/courses/material-upload-provider';
@@ -36,20 +54,31 @@ await write('entry.tsx', `
     React.useEffect(()=>{const t=setInterval(()=>tick(n=>n+1),30);return()=>clearInterval(t)},[]);
     return <>{view==='search'?<><FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search fixture"/><button onClick={()=>setSearch('external')}>External reset</button><output>{search}</output></>:view==='home'?<Dashboard/>:view==='quizzes'?<Quizzes/>:<PasswordRequirementDialog summary={{totalStudents:8020,mustChangeCount:83,allEnabled:false,anyEnabled:true}} isAr={locale==='ar'} busy={false} onClose={()=>{}} onSave={async enabled=>{window.saved=enabled}}/>}</>;
   }
-  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><MaterialUploadProvider locale={locale}><App/></MaterialUploadProvider></QueryClientProvider></NextIntlClientProvider>);
+  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><MaterialUploadProvider locale={locale}>{location.pathname.endsWith('/attendance') ? <Attendance/> : <App/>}</MaterialUploadProvider></QueryClientProvider></NextIntlClientProvider>);
 `);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
   entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' },
   resolve: { extensions: ['.tsx', '.ts', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: {
     'next/navigation': path.join(output, 'navigation.ts'), 'next/image': path.join(output, 'image.tsx'), 'next/dynamic': path.join(output, 'dynamic.tsx'), 'next/link': path.join(output, 'link.tsx'),
-    '@/lib/api': path.join(output, 'api.ts'), '@/lib/api-client': path.join(output, 'api-client.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@/features/attendance/api/attendance-api': path.join(output, 'attendance.ts'), '@': path.join(web, 'src'),
+    '@/lib/api': path.join(output, 'api.ts'), '@/lib/api-client': path.join(output, 'api-client.ts'), '@/providers/auth-provider': path.join(output, 'auth.ts'), '@': path.join(web, 'src'),
   } },
   module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] },
 }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
 const quiz = { _id:'quiz-fixture', title:'Portal fixture quiz', courseId:'course-fixture', courseCode:'TEST', courseName:'Synthetic course', durationMinutes:10, totalMarks:10, passingMarks:5, questionsCount:1, isOpen:true, isEnded:false, isSubmitted:false };
 let requiredCodes = ['20260001', '20260002'];
 const studentUpdates = [];
+const attendanceSession = {
+  _id: 'session-fixture', courseCode: 'TEST', courseName: 'Synthetic course', level: '3',
+  sessionType: 'section', academicPosition: 'instructor', createdByName: 'Synthetic instructor',
+  startsAt: '2026-10-02T19:40:00Z', status: 'CLOSED',
+};
+const attendanceRecord = {
+  _id: 'record-fixture', studentName: 'Synthetic attendee', studentCode: '20260001',
+  method: 'manual', status: 'present', checkedInAt: attendanceSession.startsAt,
+};
+let attendanceRecords = [];
+const attendanceDeletes = [];
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname.startsWith('/fixture')) {
@@ -58,6 +87,28 @@ const server = http.createServer(async (req, res) => {
     if (endpoint === '/students/me/quizzes') data = [quiz];
     else if (endpoint === '/students/me/course-quizzes') data = [];
     else if (endpoint === '/students/me/profile') data = { studentCode:'TEST',fullName:'Synthetic',level:'1' };
+    else if (endpoint === '/students/me/attendance-history') data = { summary: { totalSessions: 0, presentCount: 0, lateCount: 0, attendanceRate: 0 } };
+    else if (endpoint === '/attendance/student/live-sessions') data = { sessions: [] };
+    else if (endpoint === '/attendance/my-classes') data = [];
+    else if (endpoint === '/attendance/sessions') {
+      const stats = { totalCheckedIn: attendanceRecords.length, presentCount: attendanceRecords.length, lateCount: 0 };
+      data = {
+        sessions: [{ ...attendanceSession, stats }], kpi: { ...stats, totalSessions: 1, activeSessions: 0 },
+        total: 1, page: 1, limit: 20, totalPages: 1, filters: { levels: [], courses: [] },
+      };
+    } else if (endpoint === '/attendance/sessions/session-fixture/records') {
+      if (req.method === 'DELETE') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const { recordIds } = JSON.parse(body);
+        attendanceDeletes.push(recordIds);
+        const before = attendanceRecords.length;
+        attendanceRecords = attendanceRecords.filter(record => !recordIds.includes(record._id));
+        data = { deletedCount: before - attendanceRecords.length };
+      } else {
+        data = { items: attendanceRecords, total: attendanceRecords.length, page: 1, totalPages: 1 };
+      }
+    }
     else if (endpoint === '/students/me/syllabi') data = { registeredCourses:[],availableLevelCourses:[] };
     else if (endpoint === '/admin/students-must-change-password-codes') data = {items:requiredCodes,total:requiredCodes.length,totalPages:1};
     else if (endpoint === '/admin/students-password-requirement' && req.method === 'POST') {
@@ -119,5 +170,34 @@ try {
     assert.deepEqual(requiredCodes.sort(),['20260001','20260002']);
     assert.deepEqual(errors,[]);await page.close();
   }
+  for (const account of ['admin', 'staff&delete=1', 'staff']) {
+    attendanceRecords = [attendanceRecord];
+    attendanceDeletes.length = 0;
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${server.address().port}/ar/admin/attendance?role=${account}`);
+    await page.getByRole('button', { name: account === 'admin' ? 'الرقابة وإدارة الحضور العامة' : 'جلساتي وسجل الحضور' }).click();
+    await page.getByRole('button', { name: 'إجراءات جلسة TEST' }).click();
+    const deleteAction = page.getByRole('menuitem', { name: 'حذف سجلات الحضور والغياب' });
+    if (account === 'staff') {
+      assert.equal(await deleteAction.count(), 0);
+      await page.getByRole('menuitem', { name: 'سجل الطلاب' }).click();
+      await page.getByRole('dialog', { name: 'سجل حضور الجلسة' }).getByText('Synthetic attendee').waitFor();
+      assert.equal(await page.getByRole('button', { name: 'حذف المحدد' }).count(), 0);
+    } else {
+      await deleteAction.click();
+      const register = page.getByRole('dialog', { name: 'اختيار سجلات الحضور والغياب للحذف' });
+      const deleteSelected = register.getByRole('button', { name: 'حذف المحدد' });
+      assert.equal(await deleteSelected.isDisabled(), true);
+      await register.getByRole('checkbox', { name: 'تحديد سجل Synthetic attendee' }).click();
+      await deleteSelected.click();
+      assert.deepEqual(attendanceDeletes, []);
+      await page.getByRole('alertdialog').getByRole('button', { name: 'حذف السجلات', exact: true }).click();
+      await register.getByText('Synthetic attendee').waitFor({ state: 'detached' });
+      assert.deepEqual(attendanceDeletes, [[attendanceRecord._id]]);
+      assert.equal(await deleteSelected.isDisabled(), true);
+    }
+    await page.close();
+  }
+  console.log('Attendance deletion menu and confirmation verified for admins and staff with and without permission.');
   console.log('Portal regressions passed in Arabic and English: delayed search echoes, continuous parent renders, clear/reset, dashboard ↔ quizzes shared cache, and mixed password flags with explicit bulk enable/disable.');
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

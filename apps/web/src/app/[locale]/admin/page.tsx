@@ -547,7 +547,8 @@ export default function AdminDashboard() {
         { name: "active", key: "active", value: s.active },
         { name: "suspended", key: "suspended", value: s.suspended },
         { name: "graduated", key: "graduated", value: s.graduated },
-        { name: "withdrawn", key: "withdrawn", value: s.withdrawn },
+        // The stats API returns the inactive count under its legacy key.
+        { name: "inactive", key: "inactive", value: s.withdrawn },
       ].filter((d) => d.value > 0);
     }
     return [];
