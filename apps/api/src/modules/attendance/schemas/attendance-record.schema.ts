@@ -95,6 +95,12 @@ export class AttendanceRecord {
   @Prop({ trim: true })
   markedByName?: string;
 
+  @Prop({ trim: true })
+  markedByNameAr?: string;
+
+  @Prop({ trim: true })
+  markedByNameEn?: string;
+
   @Prop({ trim: true, maxlength: 500 })
   note?: string;
 

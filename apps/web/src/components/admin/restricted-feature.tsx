@@ -1,5 +1,6 @@
 'use client';
 
+import { getUserDisplayName } from "@/lib/user-name";
 import React, { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ShieldAlert, ArrowLeft, ArrowRight, RotateCw, Mail, Lock, UserCheck, ShieldOff } from 'lucide-react';
@@ -118,7 +119,7 @@ export function RestrictedFeature({
               <div className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4 text-primary" />
                 <span className="font-semibold text-foreground">
-                  {user?.name || (isArabic ? 'الموظف' : 'Staff Member')}
+                  {getUserDisplayName(user, locale) || (isArabic ? 'الموظف' : 'Staff Member')}
                 </span>
               </div>
               <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground uppercase">

@@ -19,6 +19,7 @@ import {
 import { MaterialStorageService } from './material-storage.service';
 import { publicMaterialResponse } from './material-response';
 import express from 'express';
+import JSZip from 'jszip';
 import request from 'supertest';
 
 describe('private teaching file storage', () => {
@@ -82,6 +83,54 @@ describe('private teaching file storage', () => {
     await expect(storage.save(await upload('book.exe'), false)).rejects.toThrow(
       'Unsupported',
     );
+  });
+
+  it('packages mixed types and preserves Arabic and duplicate filenames', async () => {
+    const csv = Buffer.from('﻿الاسم,الدرجة\nأحمد,90');
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+    const files = await Promise.all([
+      upload('lecture.pdf'),
+      upload('lecture.pdf'),
+      upload('درجات.csv', csv),
+      upload('diagram.png', png),
+    ]);
+    const { stored, attachments } = await storage.saveBundle(
+      files,
+      'المحاضرة الأولى',
+    );
+    expect(stored.originalName).toBe('المحاضرة الأولى.zip');
+    const archive = await JSZip.loadAsync(
+      await readFile(storage.pathFor(stored.storageKey)),
+      { checkCRC32: true },
+    );
+    expect(Object.keys(archive.files)).toEqual([
+      'lecture.pdf',
+      'lecture (2).pdf',
+      'درجات.csv',
+      'diagram.png',
+    ]);
+    expect(attachments.map(({ name }) => name)).toEqual(
+      Object.keys(archive.files),
+    );
+    expect(await archive.file('lecture (2).pdf')!.async('nodebuffer')).toEqual(
+      pdf,
+    );
+    expect(await archive.file('درجات.csv')!.async('nodebuffer')).toEqual(csv);
+    expect(await archive.file('diagram.png')!.async('nodebuffer')).toEqual(png);
+  });
+
+  it('rejects over-limit bundles and disguised binary CSV', async () => {
+    const large = await upload();
+    await truncate(large.path, COURSE_MATERIAL_MAX_BYTES);
+    await expect(
+      storage.saveBundle([large, await upload()], 'Lecture'),
+    ).rejects.toThrow('total limit');
+    await expect(
+      storage.save(
+        await upload('fake.csv', Buffer.from([0, 255, 0, 1])),
+        false,
+      ),
+    ).rejects.toThrow('CSV');
   });
 
   it('rejects a renamed ZIP presented as an Office document', async () => {

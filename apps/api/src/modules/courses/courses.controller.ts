@@ -9,6 +9,7 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   BadRequestException,
   Res,
 } from '@nestjs/common';
@@ -464,18 +465,18 @@ export class CoursesController {
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({
     summary:
-      'Upload academic lecture (by Doctor) or section (by TA) for a course',
+      'Upload a lecture (doctor) or section (TA/assistant lecturer), with an optional recording URL',
   })
   async uploadMaterial(
     @Param('id', ParseObjectIdPipe) id: string,
-    @UploadedFile() file: MaterialUpload | undefined,
+    @UploadedFiles() files: MaterialUpload[] | undefined,
     @Body() dto: CreateCourseMaterialDto,
     @CurrentUser() caller: any,
   ) {
-    if (!dto.videoUrl && (!file || !file.path)) {
+    if (!dto.videoUrl && !files?.length) {
       throw new BadRequestException('يرجى اختيار ملف المحاضرة أو السكشن لرفعه');
     }
-    return this.coursesService.uploadCourseMaterial(id, file, dto, caller);
+    return this.coursesService.uploadCourseMaterial(id, files, dto, caller);
   }
 
   @Get('courses/:id/materials')

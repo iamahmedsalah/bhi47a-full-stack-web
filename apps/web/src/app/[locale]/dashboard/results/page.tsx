@@ -1,4 +1,5 @@
 "use client";
+import { getUserDisplayName } from "@/lib/user-name";
 import { useState } from "react";
 
 import React from "react";
@@ -480,7 +481,7 @@ export default function StudentResultsPage() {
 
   const certificateData: ResultCertificateData = {
     locale,
-    studentName: user?.name ?? (isEnglish ? "Student" : "الطالب"),
+    studentName: getUserDisplayName(user, locale) || (isEnglish ? "Student" : "الطالب"),
     studentCode: user?.studentCode ?? "—",
     academicYear: groupedList[0]?.academicYear ?? "—",
     semester: semesterLabel,

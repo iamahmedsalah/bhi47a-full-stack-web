@@ -1,5 +1,6 @@
 'use client';
 
+import { getUserDisplayName } from "@/lib/user-name";
 import React, {
   useMemo,
   useState,
@@ -491,7 +492,7 @@ function PublicComplaintsContent() {
                   {isAuthenticatedStudent ? (
                     <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
                       <p className="text-sm font-semibold text-foreground">
-                        {isAr ? `يتم الإرسال باسم ${user.name}` : `Submitting as ${user.name}`}
+                        {isAr ? `يتم الإرسال باسم ${getUserDisplayName(user, locale)}` : `Submitting as ${getUserDisplayName(user, locale)}`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {isAr

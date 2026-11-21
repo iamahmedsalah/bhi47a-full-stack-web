@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { CheckInProgress, type CheckInPhase } from "./check-in-progress";
 import {
   Dialog,
   DialogContent,
@@ -67,10 +69,12 @@ export function StudentQrScannerDialog({
   initialToken = "",
 }: StudentQrScannerDialogProps) {
   const isAr = locale.startsWith("ar");
+  const reducedMotion = useReducedMotion();
 
   const [activeTab, setActiveTab] = useState<"camera" | "manual">("camera");
   const [manualInput, setManualInput] = useState(initialToken);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phase, setPhase] = useState<CheckInPhase>("device");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraFacing, setCameraFacing] = useState<"environment" | "user">(
     "environment",
@@ -85,6 +89,8 @@ export function StudentQrScannerDialog({
   const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraRunRef = useRef(0);
   const checkInInFlightRef = useRef(false);
+  const attemptRef = useRef(0);
+  const locationAbortRef = useRef<AbortController | null>(null);
 
   // Stop camera helper
   const stopCamera = useCallback(() => {
@@ -117,17 +123,33 @@ export function StudentQrScannerDialog({
 
       if (checkInInFlightRef.current) return;
       checkInInFlightRef.current = true;
+      const attempt = ++attemptRef.current;
+      const locationAbort = new AbortController();
+      locationAbortRef.current = locationAbort;
 
       setValidationError(null);
+      setPhase("device");
       setIsSubmitting(true);
+      stopCamera();
 
       try {
         const deviceIdentity = await getDeviceIdentity();
-        let coords: { latitude?: number; longitude?: number; accuracy?: number } = {};
+        if (attempt !== attemptRef.current) return;
+        setPhase("location");
+        let coords: {
+          latitude?: number;
+          longitude?: number;
+          accuracy?: number;
+        } = {};
 
         if (typeof window !== "undefined" && "geolocation" in navigator) {
           try {
-            const pos = await getAttendancePosition(navigator.geolocation);
+            const pos = await getAttendancePosition(
+              navigator.geolocation,
+              50,
+              12000,
+              { signal: locationAbort.signal },
+            );
             if (pos) {
               coords = {
                 latitude: pos.coords.latitude,
@@ -140,6 +162,8 @@ export function StudentQrScannerDialog({
           }
         }
 
+        if (attempt !== attemptRef.current) return;
+        setPhase("verification");
         const res = await attendanceApi.checkIn({
           token: cleanToken,
           deviceId: deviceIdentity.deviceId,
@@ -147,6 +171,7 @@ export function StudentQrScannerDialog({
           deviceInfo: deviceIdentity.deviceInfo,
           ...coords,
         });
+        if (attempt !== attemptRef.current) return;
         setCheckInResult(res);
         stopCamera();
         toast.success(
@@ -157,12 +182,16 @@ export function StudentQrScannerDialog({
         );
         onSuccess?.();
       } catch (err: unknown) {
+        if (attempt !== attemptRef.current) return;
         const msg = getAttendanceErrorMessage(err, locale);
         toast.error(msg);
         setValidationError(msg);
       } finally {
-        checkInInFlightRef.current = false;
-        setIsSubmitting(false);
+        if (attempt === attemptRef.current) {
+          checkInInFlightRef.current = false;
+          locationAbortRef.current = null;
+          setIsSubmitting(false);
+        }
       }
     },
     [isAr, locale, onSuccess, stopCamera],
@@ -279,8 +308,16 @@ export function StudentQrScannerDialog({
             formats: ["qr_code"],
           });
 
+          let detecting = false;
           scanIntervalRef.current = setInterval(async () => {
-            if (!videoRef.current || videoRef.current.readyState < 2) return;
+            if (
+              detecting ||
+              cameraRun !== cameraRunRef.current ||
+              !videoRef.current ||
+              videoRef.current.readyState < 2
+            )
+              return;
+            detecting = true;
             try {
               const barcodes = await barcodeDetector.detect(videoRef.current);
               if (barcodes && barcodes.length > 0) {
@@ -291,7 +328,10 @@ export function StudentQrScannerDialog({
                 }
               }
             } catch {
-              void startCanvasScanner(cameraRun);
+              if (cameraRun === cameraRunRef.current)
+                void startCanvasScanner(cameraRun);
+            } finally {
+              detecting = false;
             }
           }, 250);
         } catch {
@@ -320,15 +360,42 @@ export function StudentQrScannerDialog({
         setActiveTab("manual");
       }
     } else {
+      attemptRef.current += 1;
+      locationAbortRef.current?.abort();
+      checkInInFlightRef.current = false;
       stopCamera();
     }
     onOpenChange(isOpen);
   };
 
+  useEffect(() => {
+    let active = true;
+    if (open) {
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setCheckInResult(null);
+        setValidationError(null);
+        setIsSubmitting(false);
+      });
+    }
+    return () => {
+      active = false;
+      attemptRef.current += 1;
+      locationAbortRef.current?.abort();
+      checkInInFlightRef.current = false;
+    };
+  }, [open]);
+
   // Camera stream lifecycle
   useEffect(() => {
     let active = true;
-    if (open && activeTab === "camera") {
+    if (
+      open &&
+      activeTab === "camera" &&
+      !isSubmitting &&
+      !checkInResult &&
+      !validationError
+    ) {
       void Promise.resolve().then(() => {
         if (active) {
           void startCamera();
@@ -342,7 +409,15 @@ export function StudentQrScannerDialog({
       active = false;
       stopCamera();
     };
-  }, [open, activeTab, startCamera, stopCamera]);
+  }, [
+    open,
+    activeTab,
+    startCamera,
+    stopCamera,
+    isSubmitting,
+    checkInResult,
+    validationError,
+  ]);
 
   // Handle manual submit
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -395,8 +470,16 @@ export function StudentQrScannerDialog({
         </DialogHeader>
 
         {/* Success View */}
-        {checkInResult ? (
-          <div className="py-4 space-y-5 text-center animate-fade-in">
+        {isSubmitting ? (
+          <CheckInProgress phase={phase} isArabic={isAr} />
+        ) : checkInResult ? (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="py-4 space-y-5 text-center"
+            role="status"
+            aria-live="polite"
+          >
             <div
               className={`h-20 w-20 mx-auto rounded-full flex items-center justify-center transition-all ${
                 checkInResult.status === "present"
@@ -405,7 +488,7 @@ export function StudentQrScannerDialog({
               }`}
             >
               {checkInResult.status === "present" ? (
-                <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-pulse" />
+                <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               ) : (
                 <Clock className="h-10 w-10 text-amber-400" />
               )}
@@ -469,7 +552,6 @@ export function StudentQrScannerDialog({
                 onClick={() => {
                   setCheckInResult(null);
                   setActiveTab("camera");
-                  startCamera();
                 }}
                 className="w-1/2 border-border text-xs cursor-pointer"
               >
@@ -482,7 +564,39 @@ export function StudentQrScannerDialog({
                 {isAr ? "تم بنجاح وإغلاق" : "Done & Close"}
               </Button>
             </div>
-          </div>
+          </motion.div>
+        ) : validationError ? (
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-4 py-6 text-center"
+          >
+            <div
+              className="mx-auto flex size-20 items-center justify-center rounded-full border border-destructive/25 bg-destructive/10 text-destructive"
+              aria-hidden="true"
+            >
+              <XCircle className="size-9" />
+            </div>
+            <div role="alert" className="space-y-2">
+              <h3 className="font-bold">
+                {isAr ? "لم يتم تسجيل الحضور" : "Attendance was not recorded"}
+              </h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {validationError}
+              </p>
+            </div>
+            <Button className="w-full" onClick={() => setValidationError(null)}>
+              <RefreshCw className="size-4" />
+              {isAr ? "إعادة المحاولة" : "Try again"}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleOpenChange(false)}
+            >
+              {isAr ? "إغلاق" : "Close"}
+            </Button>
+          </motion.div>
         ) : (
           <div className="space-y-4 pt-2">
             {/* Mode Switcher Tabs */}
@@ -491,7 +605,6 @@ export function StudentQrScannerDialog({
                 type="button"
                 onClick={() => {
                   setActiveTab("camera");
-                  startCamera();
                 }}
                 className={`flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === "camera"

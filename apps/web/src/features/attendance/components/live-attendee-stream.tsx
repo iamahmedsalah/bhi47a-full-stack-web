@@ -577,12 +577,16 @@ export function LiveAttendeeStream({
                           {record.markedByName && (
                             <p className="mt-1">
                               {isArabic ? "سجله:" : "Recorded by:"}{" "}
-                              <bdi>{record.markedByName}</bdi>
+                              <bdi>{(isArabic ? record.markedByNameAr : record.markedByNameEn) || record.markedByName}</bdi>
                             </p>
                           )}
                           {record.note && (
                             <p className="mt-1">
-                              <bdi>{record.note}</bdi>
+                              <bdi>{({
+                                "Manual check-in by instructor": isArabic ? "تسجيل يدوي بواسطة المحاضر" : "Manual check-in by instructor",
+                                "Manual registration by staff member": isArabic ? "تسجيل يدوي بواسطة الموظف" : "Manual registration by staff member",
+                                "Manual modification by academic staff": isArabic ? "تعديل يدوي بواسطة عضو هيئة التدريس" : "Manual modification by academic staff",
+                              } as Record<string, string>)[record.note] || record.note}</bdi>
                             </p>
                           )}
                         </Detail>

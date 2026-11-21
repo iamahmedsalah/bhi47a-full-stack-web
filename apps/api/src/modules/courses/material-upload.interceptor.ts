@@ -6,11 +6,12 @@ import {
   mixin,
   type Type,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { defer, lastValueFrom } from 'rxjs';
 import {
   COURSE_BOOK_MAX_BYTES,
   COURSE_MATERIAL_MAX_BYTES,
+  COURSE_MATERIAL_MAX_FILES,
 } from '@student-portal/shared';
 import {
   MaterialStorageService,
@@ -24,9 +25,11 @@ export class MaterialMutationInterceptor implements NestInterceptor {
   constructor(private readonly storage: MaterialStorageService) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
-    const request = context
-      .switchToHttp()
-      .getRequest<{ method: string; file?: MaterialUpload }>();
+    const request = context.switchToHttp().getRequest<{
+      method: string;
+      file?: MaterialUpload;
+      files?: MaterialUpload[];
+    }>();
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method))
       return next.handle();
     return defer(async () => {
@@ -34,8 +37,15 @@ export class MaterialMutationInterceptor implements NestInterceptor {
       try {
         return await lastValueFrom(next.handle());
       } finally {
-        await this.storage.discardTemporary(request.file?.path);
-        await release();
+        try {
+          await Promise.all(
+            [request.file, ...(request.files ?? [])]
+              .filter(Boolean)
+              .map((file) => this.storage.discardTemporary(file?.path)),
+          );
+        } finally {
+          await release();
+        }
       }
     });
   }
@@ -60,15 +70,18 @@ export function MaterialUploadInterceptor(
       // Recording links carry JSON metadata and do not consume file capacity.
       if (!book && request.is?.('application/json')) return next.handle();
       await this.storage.checkCapacity();
-      const Interceptor = FileInterceptor('file', {
+      const options = {
         dest: this.storage.temporaryDirectory,
         limits: {
           fileSize: book ? COURSE_BOOK_MAX_BYTES : COURSE_MATERIAL_MAX_BYTES,
-          files: 1,
+          files: book ? 1 : COURSE_MATERIAL_MAX_FILES,
           fields: 8,
           fieldSize: 4096,
         },
-      });
+      };
+      const Interceptor = book
+        ? FileInterceptor('file', options)
+        : FilesInterceptor('file', COURSE_MATERIAL_MAX_FILES, options);
       return new Interceptor().intercept(context, next);
     }
   }

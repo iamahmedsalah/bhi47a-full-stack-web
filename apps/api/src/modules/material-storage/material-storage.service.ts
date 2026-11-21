@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import {
   access,
   chmod,
@@ -16,17 +16,20 @@ import {
   mkdir,
   open,
   realpath,
+  readFile,
   rename,
   statfs,
   unlink,
 } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import JSZip from 'jszip';
 import type { Response } from 'express';
 import {
   COURSE_BOOK_MAX_BYTES,
   COURSE_MATERIAL_EXTENSIONS,
   COURSE_MATERIAL_MAX_BYTES,
+  COURSE_MATERIAL_MAX_FILES,
   type MaterialFileReference,
 } from '@student-portal/shared';
 
@@ -36,6 +39,12 @@ export interface MaterialUpload {
   size: number;
   mimetype: string;
 }
+
+// Control characters are intentional here: filenames and CSV downloads must be safe text.
+// eslint-disable-next-line no-control-regex
+const UNSAFE_FILENAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/g;
+// eslint-disable-next-line no-control-regex
+const NON_TEXT_CSV_CHARACTERS = /[\x00-\x08\x0b\x0c\x0e-\x1f]/;
 
 @Injectable()
 export class MaterialStorageService implements OnModuleInit {
@@ -136,7 +145,87 @@ export class MaterialStorageService implements OnModuleInit {
     file: MaterialUpload,
     book: boolean,
   ): Promise<MaterialFileReference> {
+    return this.persist(
+      file,
+      book,
+      book ? COURSE_BOOK_MAX_BYTES : COURSE_MATERIAL_MAX_BYTES,
+    );
+  }
+
+  async saveBundle(files: MaterialUpload[], title: string) {
     await this.checkCapacity();
+    if (files.length < 2 || files.length > COURSE_MATERIAL_MAX_FILES)
+      throw new BadRequestException('Invalid attachment count');
+
+    const archive = new JSZip();
+    const attachments: { name: string; size: number }[] = [];
+    const usedNames = new Set<string>();
+    const entries: { name: string; path: string }[] = [];
+    let totalSize = 0;
+    for (const file of files) {
+      const { size, originalName } = await this.validateUpload(
+        file,
+        false,
+        COURSE_MATERIAL_MAX_BYTES,
+      );
+      totalSize += size;
+      if (totalSize > COURSE_MATERIAL_MAX_BYTES)
+        throw new BadRequestException(
+          'Attachments exceed the total limit of 25 MB',
+        );
+      const extension = extname(originalName);
+      const stem = originalName.slice(0, -extension.length) || 'file';
+      let name = originalName;
+      for (
+        let suffix = 2;
+        usedNames.has(name.normalize('NFC').toLowerCase());
+        suffix++
+      )
+        name = `${stem} (${suffix})${extension}`;
+      usedNames.add(name.normalize('NFC').toLowerCase());
+      attachments.push({ name, size });
+      entries.push({ name, path: file.path });
+    }
+
+    const path = join(this.temporaryDirectory, randomUUID());
+    const originalname = `${
+      title
+        .replace(UNSAFE_FILENAME_CHARACTERS, '_')
+        .trim()
+        .replace(/[. ]+$/, '') || 'materials'
+    }.zip`;
+    const streams = entries.map((entry) => {
+      const stream = createReadStream(entry.path);
+      archive.file(entry.name, stream);
+      return stream;
+    });
+    try {
+      await pipeline(
+        archive.generateNodeStream({
+          streamFiles: true,
+          compression: 'DEFLATE',
+          compressionOptions: { level: 3 },
+        }),
+        createWriteStream(path, { flags: 'wx', mode: 0o600 }),
+      );
+      const { size } = await lstat(path);
+      const stored = await this.persist(
+        { path, originalname, size, mimetype: 'application/zip' },
+        false,
+        COURSE_MATERIAL_MAX_BYTES + 64 * 1024,
+      );
+      return { stored, attachments };
+    } finally {
+      for (const stream of streams) stream.destroy();
+      await this.discardTemporary(path);
+    }
+  }
+
+  private async validateUpload(
+    file: MaterialUpload,
+    book: boolean,
+    maxBytes: number,
+  ) {
     if (resolve(file.path, '..') !== resolve(this.temporaryDirectory))
       throw new BadRequestException('Invalid temporary upload');
     const info = await lstat(file.path);
@@ -144,7 +233,7 @@ export class MaterialStorageService implements OnModuleInit {
       !info.isFile() ||
       info.isSymbolicLink() ||
       info.size === 0 ||
-      info.size > (book ? COURSE_BOOK_MAX_BYTES : COURSE_MATERIAL_MAX_BYTES)
+      info.size > maxBytes
     ) {
       throw new BadRequestException('Invalid file size');
     }
@@ -174,7 +263,16 @@ export class MaterialStorageService implements OnModuleInit {
       (extension === 'pdf' && !pdf) ||
       (['doc', 'xls', 'ppt'].includes(extension) && !ole) ||
       (['docx', 'xlsx', 'pptx', 'zip'].includes(extension) && !zip) ||
-      (extension === 'rar' && !rar)
+      (extension === 'rar' && !rar) ||
+      (['jpg', 'jpeg'].includes(extension) &&
+        !header.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) ||
+      (extension === 'png' &&
+        !header
+          .subarray(0, 8)
+          .equals(Buffer.from('89504e470d0a1a0a', 'hex'))) ||
+      (extension === 'webp' &&
+        (header.toString('ascii', 0, 4) !== 'RIFF' ||
+          header.toString('ascii', 8, 12) !== 'WEBP'))
     ) {
       throw new BadRequestException(
         'File content does not match its extension',
@@ -240,6 +338,58 @@ export class MaterialStorageService implements OnModuleInit {
       if (!names.has('[Content_Types].xml') || !names.has(marker))
         throw new BadRequestException('Invalid Office document');
     }
+    if (extension === 'csv') {
+      const bytes = await readFile(file.path);
+      try {
+        const bom =
+          bytes.readUInt8(0) === 0xff && bytes[1] === 0xfe
+            ? 'utf-16le'
+            : bytes[0] === 0xfe && bytes[1] === 0xff
+              ? 'utf-16be'
+              : 'utf-8';
+        const content = new TextDecoder(bom, { fatal: true }).decode(bytes);
+        if (!content.trim() || NON_TEXT_CSV_CHARACTERS.test(content))
+          throw new Error('Invalid CSV text');
+      } catch {
+        throw new BadRequestException('CSV must be UTF-8 or UTF-16 with a BOM');
+      }
+    }
+
+    let originalName = file.originalname;
+    if (
+      Array.from(originalName).every((letter) => letter.charCodeAt(0) <= 255)
+    ) {
+      const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
+      if (!decoded.includes('\uFFFD')) originalName = decoded;
+    }
+    const stem = originalName
+      .slice(0, -(extension.length + 1))
+      .replace(UNSAFE_FILENAME_CHARACTERS, '_')
+      .trim()
+      .replace(/^[. ]+|[. ]+$/g, '');
+    const safeStem = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(stem)
+      ? `_${stem}`
+      : stem;
+    return {
+      size: info.size,
+      extension,
+      originalName: `${Array.from(safeStem || 'file')
+        .slice(0, 120)
+        .join('')}.${extname(originalName).slice(1)}`,
+    };
+  }
+
+  private async persist(
+    file: MaterialUpload,
+    book: boolean,
+    maxBytes: number,
+  ): Promise<MaterialFileReference> {
+    await this.checkCapacity();
+    const { size, extension, originalName } = await this.validateUpload(
+      file,
+      book,
+      maxBytes,
+    );
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(file.path)) hash.update(chunk);
     const storageKey = `files/${randomUUID()}`;
@@ -255,22 +405,17 @@ export class MaterialStorageService implements OnModuleInit {
       pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       zip: 'application/zip',
       rar: 'application/vnd.rar',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      csv: 'text/csv',
     };
-    let originalName = file.originalname;
-    if (
-      Array.from(originalName).every((letter) => letter.charCodeAt(0) <= 255)
-    ) {
-      const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
-      if (!decoded.includes('\uFFFD')) originalName = decoded;
-    }
     return {
       storageProvider: 'vps',
       storageKey,
-      originalName: originalName
-        .replaceAll('\0', '_')
-        .replace(/[\r\n/\\]/g, '_')
-        .slice(0, 255),
-      size: info.size,
+      originalName,
+      size,
       mimeType: mimeTypes[extension],
       sha256: hash.digest('hex'),
     };

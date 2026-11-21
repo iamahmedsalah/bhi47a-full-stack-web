@@ -1,4 +1,5 @@
 "use client";
+import { getUserDisplayName } from "@/lib/user-name";
 import { useCallback } from "react";
 
 import React, { useEffect, useState } from "react";
@@ -226,7 +227,7 @@ export default function StudentCheckInPage() {
               <div className="flex justify-between">
                 <span>{isArabic ? "الطالب:" : "Student:"}</span>
                 <span className="font-semibold text-foreground">
-                  {user?.name}
+                  {getUserDisplayName(user, locale)}
                 </span>
               </div>
               <div className="flex justify-between">

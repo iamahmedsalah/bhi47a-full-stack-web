@@ -3,6 +3,7 @@ import { Document, Types } from 'mongoose';
 import {
   COURSE_MATERIAL_TYPE_VALUES,
   type CourseMaterialType,
+  type CourseMaterialAttachment,
   type MaterialFileReference,
 } from '@student-portal/shared';
 
@@ -36,6 +37,12 @@ export class CourseMaterial {
   @Prop({ type: Object })
   storedFile?: MaterialFileReference;
 
+  @Prop({
+    type: [{ _id: false, name: String, size: Number }],
+    default: undefined,
+  })
+  attachments?: CourseMaterialAttachment[];
+
   @Prop({ required: true, trim: true })
   fileName!: string;
 
@@ -66,9 +73,10 @@ export class CourseMaterial {
   @Prop({
     type: String,
     required: true,
-    enum: ['doctor', 'teaching_assistant', 'admin'],
+    enum: ['doctor', 'assistant_lecturer', 'teaching_assistant', 'admin'],
   })
-  uploadedByRole!: 'doctor' | 'teaching_assistant' | 'admin';
+  uploadedByRole!:
+    'doctor' | 'assistant_lecturer' | 'teaching_assistant' | 'admin';
 }
 
 export const CourseMaterialSchema =

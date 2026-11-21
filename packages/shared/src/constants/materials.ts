@@ -5,7 +5,8 @@ export const COURSE_MATERIAL_TYPES = {
 
 export const COURSE_BOOK_MAX_BYTES = 100 * 1024 * 1024;
 export const COURSE_MATERIAL_MAX_BYTES = 25 * 1024 * 1024;
-export const COURSE_MATERIAL_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'zip', 'rar'] as const;
+export const COURSE_MATERIAL_MAX_FILES = 10;
+export const COURSE_MATERIAL_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'zip', 'rar', 'jpg', 'jpeg', 'png', 'webp', 'csv'] as const;
 
 /** Internal persistence contract. Never include this object in public responses. */
 export interface MaterialFileReference {
@@ -32,6 +33,11 @@ export type CourseMaterialType =
 export const COURSE_MATERIAL_TYPE_VALUES: CourseMaterialType[] =
   Object.values(COURSE_MATERIAL_TYPES);
 
+export interface CourseMaterialAttachment {
+  name: string;
+  size: number;
+}
+
 export interface CourseMaterialDto {
   _id: string;
   courseId: string;
@@ -40,6 +46,9 @@ export interface CourseMaterialDto {
   titleAr?: string;
   fileUrl: string;
   fileName: string;
+  /** Includes legacy files; false for recording-only entries. */
+  hasFile?: boolean;
+  attachments?: CourseMaterialAttachment[];
   /** External recording; absent on existing uploaded materials. */
   videoUrl?: string;
   fileSize?: number;
@@ -49,7 +58,7 @@ export interface CourseMaterialDto {
   isPublished: boolean;
   uploadedBy: string;
   uploadedByName: string;
-  uploadedByRole: 'doctor' | 'teaching_assistant' | 'admin';
+  uploadedByRole: 'doctor' | 'assistant_lecturer' | 'teaching_assistant' | 'admin';
   createdAt: string;
   updatedAt: string;
 }

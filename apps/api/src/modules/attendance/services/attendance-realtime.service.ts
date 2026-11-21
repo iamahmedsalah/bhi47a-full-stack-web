@@ -13,6 +13,9 @@ export interface AttendanceLiveEvent {
     method: string;
     checkedInAt: Date;
     note?: string;
+    markedByName?: string;
+    markedByNameAr?: string;
+    markedByNameEn?: string;
     deviceId?: string;
     deviceFingerprint?: string;
     deviceInfo?: string;

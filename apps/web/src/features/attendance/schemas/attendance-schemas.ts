@@ -213,12 +213,13 @@ export function getAttendanceErrorMessage(
 
   if (
     normalized.includes("غير مسجل") ||
+    normalized.includes("لست مسجلاً") ||
     normalized.includes("not enrolled") ||
     normalized.includes("not registered")
   ) {
     return isAr
-      ? "أنت غير مسجل في هذا المقرر الدراسي، ولا يمكنك تسجيل الحضور فيه."
-      : "You are not enrolled in this course and cannot register attendance.";
+      ? "الطالب غير مسجل بالمقرر في هذا الفصل الدراسي، ولا يمكن تسجيل حضوره."
+      : "The student is not enrolled in this course for this semester and cannot be marked as attending.";
   }
 
   if (

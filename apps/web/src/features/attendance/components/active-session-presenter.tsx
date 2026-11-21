@@ -36,6 +36,7 @@ import { apiBaseUrl } from "@/lib/api";
 import { LocationCapture } from "./location-capture";
 import { LiveAttendeeStream } from "./live-attendee-stream";
 import { AttendanceExportButton } from "./attendance-export-button";
+import { getAttendanceErrorMessage } from "../schemas/attendance-schemas";
 
 export const HALL_PRESETS = INSTITUTE_VENUE_PRESETS;
 
@@ -83,6 +84,7 @@ export function ActiveSessionPresenter({
     "present",
   );
   const [manualReason, setManualReason] = useState("");
+  const [manualError, setManualError] = useState<string | null>(null);
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
 
   // Edit status modal
@@ -485,11 +487,12 @@ export function ActiveSessionPresenter({
     if (!manualStudentCode.trim()) return;
 
     setIsSubmittingManual(true);
+    setManualError(null);
     try {
       const record = await attendanceApi.manualStudentCheckIn(session._id, {
         studentCode: manualStudentCode.trim(),
         status: manualStatus,
-        reason: manualReason || "Manual check-in by instructor",
+        reason: manualReason || undefined,
       });
       setAttendees((prev) => [record, ...prev]);
       setStats((prev) => ({
@@ -505,12 +508,10 @@ export function ActiveSessionPresenter({
       setManualStudentCode("");
       setManualReason("");
       setShowManualAddDialog(false);
-    } catch {
-      toast.error(
-        isArabic
-          ? "تعذر تسجيل الطالب يدويًا، تأكد من صحة كود الطالب"
-          : "Failed to mark student manually",
-      );
+    } catch (error: unknown) {
+      const message = getAttendanceErrorMessage(error, isArabic ? "ar" : "en");
+      setManualError(message);
+      toast.error(message);
     } finally {
       setIsSubmittingManual(false);
     }
@@ -559,8 +560,8 @@ export function ActiveSessionPresenter({
     ),
   );
   const manualStatusOptions: CustomDropdownOption[] = [
-    { value: "present", label: isArabic ? "حاضر (Present)" : "Present" },
-    { value: "late", label: isArabic ? "متأخر (Late)" : "Late" },
+    { value: "present", label: isArabic ? "حاضر" : "Present" },
+    { value: "late", label: isArabic ? "متأخر" : "Late" },
   ];
 
   const handleCopyManualCode = async () => {
@@ -881,7 +882,10 @@ export function ActiveSessionPresenter({
       </Dialog>
 
       {/* Dialog: Manual Check-in Student */}
-      <Dialog open={showManualAddDialog} onOpenChange={setShowManualAddDialog}>
+      <Dialog open={showManualAddDialog} onOpenChange={(open) => {
+        setShowManualAddDialog(open);
+        setManualError(null);
+      }}>
         <DialogContent className="sm:max-w-md" dir={isArabic ? "rtl" : "ltr"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -892,13 +896,23 @@ export function ActiveSessionPresenter({
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleManualAdd} className="space-y-4 py-2">
+            {manualError && (
+              <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {manualError}
+              </p>
+            )}
             <div className="space-y-2">
               <Label>
                 {isArabic ? "كود الطالب (الرقم الأكاديمي)" : "Student Code"}
               </Label>
               <Input
                 value={manualStudentCode}
-                onChange={(e) => setManualStudentCode(e.target.value)}
+                onChange={(e) => {
+                  setManualStudentCode(e.target.value);
+                  setManualError(null);
+                }}
+                dir="ltr"
+                className="text-left"
                 placeholder="2026001"
                 required
               />

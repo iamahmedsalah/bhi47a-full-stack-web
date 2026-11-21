@@ -3,7 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Post,
-  UploadedFile,
+  UploadedFiles,
   UseInterceptors,
   ValidationPipe,
   type INestApplication,
@@ -33,11 +33,18 @@ class UploadFixtureController {
   @Post(':id')
   @UseInterceptors(MaterialUploadInterceptor(false))
   async upload(
-    @UploadedFile() file: MaterialUpload,
+    @UploadedFiles() files: MaterialUpload[] | undefined,
     @Body() dto: CreateCourseMaterialDto,
   ) {
-    if (dto.videoUrl) return { videoUrl: dto.videoUrl };
-    const reference = await this.storage.save(file, false);
+    if (!files?.length) return { videoUrl: dto.videoUrl };
+    if (files.length > 1) {
+      const { stored, attachments } = await this.storage.saveBundle(
+        files,
+        dto.title,
+      );
+      return { mimeType: stored.mimeType, attachments, videoUrl: dto.videoUrl };
+    }
+    const reference = await this.storage.save(files[0], false);
     return { size: reference.size, mimeType: reference.mimeType };
   }
 }
@@ -108,6 +115,25 @@ describe('disk multipart upload lifecycle', () => {
       .send({ type: 'lecture', title: 'Recording', videoUrl })
       .expect(201);
     expect(result.body).toEqual({ videoUrl });
+    expect(await readdir(join(root, '.writers'))).toEqual([]);
+  });
+
+  it('commits multiple attachments and an optional video in one upload', async () => {
+    const videoUrl = 'https://example.com/video';
+    const result = await request(app.getHttpServer())
+      .post('/test-materials/course')
+      .field('type', 'lecture')
+      .field('title', 'Week 1')
+      .field('videoUrl', videoUrl)
+      .attach('file', Buffer.from('%PDF-1.7\nHTTP upload'), 'lecture.pdf')
+      .attach('file', Buffer.from('name,grade\nAli,90'), 'grades.csv')
+      .expect(201);
+    expect(result.body).toMatchObject({
+      videoUrl,
+      mimeType: 'application/zip',
+      attachments: [{ name: 'lecture.pdf' }, { name: 'grades.csv' }],
+    });
+    expect(await readdir(join(root, '.tmp'))).toEqual([]);
     expect(await readdir(join(root, '.writers'))).toEqual([]);
   });
 

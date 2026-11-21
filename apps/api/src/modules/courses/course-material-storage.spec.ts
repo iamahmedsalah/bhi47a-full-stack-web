@@ -107,10 +107,10 @@ describe('course materials storage boundaries', () => {
     },
   );
 
-  it('rejects ambiguous or missing recording sources and unsafe URLs', async () => {
+  it('rejects missing content and unsafe URLs, including URLs attached to files', async () => {
     for (const [upload, videoUrl] of [
       [undefined, undefined],
-      [file, 'https://example.com/video'],
+      [file, 'javascript:alert(1)'],
       [undefined, 'javascript:alert(1)'],
       [undefined, 'https://user:password@example.com/video'],
     ] as const) {
@@ -129,6 +129,68 @@ describe('course materials storage boundaries', () => {
     }
     expect(storage.save).not.toHaveBeenCalled();
   });
+
+  it('stores a PDF and optional recording together and allows downloading the PDF', async () => {
+    const videoUrl = 'https://example.com/video';
+    const result = await service.uploadCourseMaterial(
+      course._id.toString(),
+      file,
+      { type: 'lecture', title: 'Lecture with recording', videoUrl },
+      doctor,
+    );
+    expect(result.material).toMatchObject({ storedFile: stored, videoUrl });
+    expect(storage.save).toHaveBeenCalledWith(file, false);
+    materials.findById.mockResolvedValue(result.material);
+    await service.downloadCourseMaterial('id', {}, admin);
+    expect(storage.deliver).toHaveBeenCalledWith(stored, {});
+  });
+
+  it.each(['teaching_assistant', 'assistant_lecturer'])(
+    'allows an assigned %s through preflight and section upload, but rejects lectures and unassigned courses',
+    async (staffType) => {
+      const caller = { ...ta, staffType };
+      // Legacy embedded assignments must work at both authorization boundaries.
+      course.teachingAssistantIds = [];
+      course.teachingAssistants = [{ _id: ta._id.toString() }];
+      await expect(
+        service.authorizeMaterialUpload(course._id.toString(), caller, false),
+      ).resolves.toBeUndefined();
+      const result = await service.uploadCourseMaterial(
+        course._id.toString(),
+        file,
+        {
+          type: 'section',
+          title: 'Section',
+          videoUrl: 'https://example.com/video',
+        },
+        caller,
+      );
+      expect(result.material.uploadedByRole).toBe(staffType);
+      await expect(
+        service.uploadCourseMaterial(
+          course._id.toString(),
+          file,
+          { type: 'lecture', title: 'Lecture' },
+          caller,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        service.authorizeMaterialUpload(
+          course._id.toString(),
+          { ...caller, _id: new Types.ObjectId() },
+          false,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        service.uploadCourseMaterial(
+          course._id.toString(),
+          file,
+          { type: 'section', title: 'Section' },
+          { ...caller, _id: new Types.ObjectId() },
+        ),
+      ).rejects.toThrow();
+    },
+  );
 
   it('preserves assignment and type permissions for recording links', async () => {
     for (const caller of [

@@ -1,5 +1,6 @@
 'use client';
 
+import { getUserDisplayName } from "@/lib/user-name";
 import React, { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, usePathname } from 'next/navigation';
@@ -120,7 +121,7 @@ export default function StudentSidebar() {
               />
               <div className="min-w-0">
                 <h2 className="truncate text-xs font-bold leading-tight text-white/95">
-                  {user?.name || tHeader('portal')}
+                  {getUserDisplayName(user, locale) || tHeader('portal')}
                 </h2>
                 <p className="truncate text-[10px] text-muted-foreground">{user?.studentCode || tHeader('instituteName')}</p>
               </div>

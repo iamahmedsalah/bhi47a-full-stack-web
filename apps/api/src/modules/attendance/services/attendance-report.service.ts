@@ -1,4 +1,8 @@
 import {
+  formatStaffDisplayName,
+  type StaffDisplayLike,
+} from '@student-portal/shared';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -15,6 +19,14 @@ import {
   AttendanceSessionDocument,
 } from '../schemas/attendance-session.schema';
 import { User, UserDocument } from '../../users/schemas/user.schema';
+import {
+  CourseRegistration,
+  CourseRegistrationDocument,
+} from '../../registrations/schemas/course-registration.schema';
+import {
+  attendanceEnrollmentFilter,
+  ATTENDANCE_NOT_ENROLLED,
+} from './attendance-enrollment';
 import {
   ManualMarkAttendanceDto,
   ManualStudentCheckInDto,
@@ -41,6 +53,8 @@ export class AttendanceReportService {
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
     private realtimeService: AttendanceRealtimeService,
+    @InjectModel(CourseRegistration.name)
+    private registrationModel: Model<CourseRegistrationDocument>,
   ) {}
 
   async exportAttendance(
@@ -91,7 +105,16 @@ export class AttendanceReportService {
   /**
    * Retrieves paginated attendee records for a specific session.
    */
-  async getSessionRecords(sessionId: string, query: QueryAttendanceRecordsDto) {
+  async getSessionRecords(
+    sessionId: string,
+    query: QueryAttendanceRecordsDto,
+  ): Promise<{
+    items: (AttendanceRecord & { _id: Types.ObjectId })[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     if (!Types.ObjectId.isValid(sessionId)) {
       throw new BadRequestException('معرّف الجلسة غير صالح');
     }
@@ -126,8 +149,38 @@ export class AttendanceReportService {
       this.recordModel.countDocuments(filter),
     ]);
 
+    // Resolve both languages for existing records without rewriting audit history.
+    const markerIds = [
+      ...new Set(
+        items.flatMap((item) =>
+          item.markedBy ? [item.markedBy.toString()] : [],
+        ),
+      ),
+    ];
+    const markers = markerIds.length
+      ? await this.userModel
+          .find({ _id: { $in: markerIds } })
+          .select('name nameAr role staffType titlePrefix')
+          .lean()
+      : [];
+    const markersById = new Map(
+      markers.map((marker) => [marker._id.toString(), marker]),
+    );
+
     return {
-      items,
+      items: items.map((item) => {
+        const marker =
+          item.markedBy && markersById.get(item.markedBy.toString());
+        return {
+          ...item,
+          markedByNameAr: marker
+            ? formatStaffDisplayName(marker, 'ar')
+            : item.markedByNameAr || item.markedByName,
+          markedByNameEn: marker
+            ? formatStaffDisplayName(marker, 'en')
+            : item.markedByNameEn || item.markedByName,
+        };
+      }),
       total,
       page,
       limit,
@@ -140,7 +193,7 @@ export class AttendanceReportService {
    */
   async manualUpdateRecord(
     recordId: string,
-    staffUser: { _id: string; name: string },
+    staffUser: { _id: string; name: string } & StaffDisplayLike,
     dto: ManualMarkAttendanceDto,
   ) {
     if (!Types.ObjectId.isValid(recordId)) {
@@ -159,6 +212,8 @@ export class AttendanceReportService {
     }
     record.markedBy = new Types.ObjectId(staffUser._id);
     record.markedByName = staffUser.name;
+    record.markedByNameAr = formatStaffDisplayName(staffUser, 'ar');
+    record.markedByNameEn = formatStaffDisplayName(staffUser, 'en');
 
     record.auditTrail.push({
       action: 'MANUAL_STATUS_OVERRIDE',
@@ -184,6 +239,9 @@ export class AttendanceReportService {
         method: record.method,
         checkedInAt: record.checkedInAt,
         note: record.note,
+        markedByName: record.markedByName,
+        markedByNameAr: record.markedByNameAr,
+        markedByNameEn: record.markedByNameEn,
       },
       timestamp: new Date(),
     });
@@ -196,7 +254,7 @@ export class AttendanceReportService {
    */
   async manualStudentCheckIn(
     sessionId: string,
-    staffUser: { _id: string; name: string },
+    staffUser: { _id: string; name: string } & StaffDisplayLike,
     dto: ManualStudentCheckInDto,
   ) {
     if (!Types.ObjectId.isValid(sessionId)) {
@@ -224,6 +282,13 @@ export class AttendanceReportService {
       );
     }
 
+    const isEnrolled = await this.registrationModel.exists(
+      attendanceEnrollmentFilter(studentUser._id, session),
+    );
+    if (!isEnrolled) {
+      throw new ForbiddenException(ATTENDANCE_NOT_ENROLLED);
+    }
+
     // Check duplicate
     const existing = await this.recordModel.findOne({
       sessionId: session._id,
@@ -237,6 +302,8 @@ export class AttendanceReportService {
       existing.note = dto.reason;
       existing.markedBy = new Types.ObjectId(staffUser._id);
       existing.markedByName = staffUser.name;
+      existing.markedByNameAr = formatStaffDisplayName(staffUser, 'ar');
+      existing.markedByNameEn = formatStaffDisplayName(staffUser, 'en');
       existing.auditTrail.push({
         action: 'MANUAL_OVERRIDE_EXISTING',
         modifiedBy: new Types.ObjectId(staffUser._id),
@@ -261,6 +328,8 @@ export class AttendanceReportService {
       checkedInAt: now,
       markedBy: new Types.ObjectId(staffUser._id),
       markedByName: staffUser.name,
+      markedByNameAr: formatStaffDisplayName(staffUser, 'ar'),
+      markedByNameEn: formatStaffDisplayName(staffUser, 'en'),
       note: dto.reason,
       auditTrail: [
         {
@@ -285,6 +354,9 @@ export class AttendanceReportService {
         method: newRecord.method,
         checkedInAt: newRecord.checkedInAt,
         note: newRecord.note,
+        markedByName: newRecord.markedByName,
+        markedByNameAr: newRecord.markedByNameAr,
+        markedByNameEn: newRecord.markedByNameEn,
       },
       timestamp: now,
     });

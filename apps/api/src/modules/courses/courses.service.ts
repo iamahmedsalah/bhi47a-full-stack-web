@@ -13,7 +13,11 @@ import {
 import { CacheService } from '../../core/cache/cache.service';
 import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import { MetricsService } from '../../core/metrics/metrics.service';
-import { courseStaffFilter } from './utils/course-staff.util';
+import {
+  courseStaffFilter,
+  isAssignedToCourse,
+  isTeachingStaff,
+} from './utils/course-staff.util';
 import { courseCurriculumFilter } from './utils/course-filter.util';
 import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
 import {
@@ -824,16 +828,16 @@ export class CoursesService {
     const course = await this.findOne(courseId);
     if (book) return this.validateCourseDoctorOrAdmin(course, caller);
     if (caller.role === 'admin') return;
-    const id = caller._id.toString();
-    const assigned =
-      caller.staffType === 'doctor'
-        ? course.doctorId?.toString() === id ||
-          (course.doctorIds || []).some((item) => item.toString() === id)
-        : caller.staffType === 'teaching_assistant' &&
-          (course.teachingAssistantIds || []).some(
-            (item) => item.toString() === id,
-          );
-    if (caller.role !== 'staff' || !assigned)
+    const assigned = isAssignedToCourse(
+      course,
+      caller._id.toString(),
+      caller.staffType === 'doctor' ? 'doctor' : 'ta',
+    );
+    if (
+      caller.role !== 'staff' ||
+      !isTeachingStaff(caller.staffType) ||
+      !assigned
+    )
       throw new ForbiddenException(
         'You are not assigned to upload materials for this course',
       );
@@ -1172,11 +1176,11 @@ export class CoursesService {
   }
 
   /**
-   * Upload academic material (Lecture by Doctor or Section by TA) with strict role segregation.
+   * Upload lectures by doctors or sections by TAs/assistant lecturers for assigned courses.
    */
   async uploadCourseMaterial(
     courseId: string,
-    file: MaterialUpload | undefined,
+    upload: MaterialUpload | MaterialUpload[] | undefined,
     dto: CreateCourseMaterialDto,
     caller: any,
   ) {
@@ -1186,18 +1190,14 @@ export class CoursesService {
     const staffType = caller.staffType;
     const callerIdStr = caller._id?.toString();
 
-    let uploadedByRole: 'doctor' | 'teaching_assistant' | 'admin' = 'admin';
+    let uploadedByRole: CourseMaterial['uploadedByRole'] = 'admin';
 
     if (callerRole === 'admin') {
       uploadedByRole = 'admin';
     } else if (callerRole === 'staff') {
       if (staffType === 'doctor') {
         uploadedByRole = 'doctor';
-        const isAssigned =
-          course.doctorId?.toString() === callerIdStr ||
-          (course.doctorIds || []).some(
-            (d: any) => d.toString() === callerIdStr,
-          );
+        const isAssigned = isAssignedToCourse(course, callerIdStr, 'doctor');
         if (!isAssigned) {
           throw new ForbiddenException(
             'غير مسموح لك برفع مواد لهذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
@@ -1208,19 +1208,20 @@ export class CoursesService {
             'أستاذ المقرر (دكتور) مخصص له رفع المحاضرات (lecture) فقط',
           );
         }
-      } else if (staffType === 'teaching_assistant') {
-        uploadedByRole = 'teaching_assistant';
-        const isAssigned = (course.teachingAssistantIds || []).some(
-          (taId: any) => taId.toString() === callerIdStr,
-        );
+      } else if (
+        staffType === 'teaching_assistant' ||
+        staffType === 'assistant_lecturer'
+      ) {
+        uploadedByRole = staffType;
+        const isAssigned = isAssignedToCourse(course, callerIdStr, 'ta');
         if (!isAssigned) {
           throw new ForbiddenException(
-            'غير مسموح لك برفع سكاشن لهذا المقرر لعدم إسناد المادة إليك كمعيد',
+            'غير مسموح لك برفع سكاشن لهذا المقرر لعدم إسناد المادة إليك',
           );
         }
         if (dto.type !== 'section') {
           throw new BadRequestException(
-            'المعيد مخصص له رفع السكاشن والتدريبات العملية (section) فقط',
+            'المعيد والمدرس المساعد مخصص لهما رفع السكاشن والتدريبات العملية (section) فقط',
           );
         }
       } else {
@@ -1230,9 +1231,10 @@ export class CoursesService {
       throw new ForbiddenException('صلاحية غير كافية لرفع المحتوى');
     }
 
+    const files = Array.isArray(upload) ? upload : upload ? [upload] : [];
     const videoUrl = dto.videoUrl?.trim();
-    if (Boolean(file) === Boolean(videoUrl)) {
-      throw new BadRequestException('Provide either a file or a recording URL');
+    if (!files.length && !videoUrl) {
+      throw new BadRequestException('Provide a file or a recording URL');
     }
     if (videoUrl) {
       let parsed: URL;
@@ -1252,9 +1254,15 @@ export class CoursesService {
         );
       }
     }
-    const stored = file
-      ? await this.materialStorage!.save(file, false)
-      : undefined;
+    const bundle =
+      files.length > 1
+        ? await this.materialStorage!.saveBundle(files, dto.title.trim())
+        : undefined;
+    const stored =
+      bundle?.stored ??
+      (files[0]
+        ? await this.materialStorage!.save(files[0], false)
+        : undefined);
     const material = new this.courseMaterialModel({
       courseId: course._id,
       type: dto.type,
@@ -1262,6 +1270,7 @@ export class CoursesService {
       titleAr: dto.titleAr?.trim(),
       fileUrl: `/api/courses/materials/pending/download`,
       storedFile: stored,
+      attachments: bundle?.attachments,
       fileName: stored?.originalName || dto.title.trim(),
       fileSize: stored?.size,
       mimeType: stored?.mimeType,
@@ -1368,7 +1377,12 @@ export class CoursesService {
 
     if (caller?.role === 'student' && !material.isPublished)
       throw new NotFoundException('Material is unavailable');
-    if (material.videoUrl) {
+    if (
+      material.videoUrl &&
+      !material.storedFile &&
+      !material.mimeType &&
+      !material.fileSize
+    ) {
       throw new BadRequestException(
         'Open the recording link instead of downloading a file',
       );

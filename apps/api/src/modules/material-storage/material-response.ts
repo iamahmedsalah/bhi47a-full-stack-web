@@ -58,6 +58,12 @@ export function publicMaterialResponse(value: unknown): unknown {
     'fileUrl' in source
   ) {
     const materialId = routeId(source._id);
+    result.hasFile = Boolean(
+      source.storedFile ||
+      source.mimeType ||
+      source.fileSize ||
+      !source.videoUrl,
+    );
     if (materialId)
       result.fileUrl = `/api/courses/materials/${materialId}/download`;
   }

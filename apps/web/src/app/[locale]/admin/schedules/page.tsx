@@ -1,5 +1,6 @@
 'use client';
 
+import { getUserDisplayName } from "@/lib/user-name";
 import { curriculumDepartmentLabel } from "@student-portal/shared";
 import type { StaffMember, StaffListResponse } from '@/features/staff/types';
 import type { PaginatedResponse } from '@/lib/api';
@@ -949,8 +950,8 @@ function SchedulesManagementContent() {
             <div>
               <span className="font-bold">
                 {isAr
-                  ? `أهلاً دكتور/محاضر ${user?.name}`
-                  : `Welcome Instructor ${user?.name}`}
+                  ? `أهلاً دكتور/محاضر ${getUserDisplayName(user, locale)}`
+                  : `Welcome Instructor ${getUserDisplayName(user, locale)}`}
               </span>
               <p className="text-muted-foreground text-[11px] mt-0.5">
                 {isAr

@@ -28,6 +28,10 @@ import {
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { CheckInAttendanceDto } from '../dto/attendance-session.dto';
+import {
+  attendanceEnrollmentFilter,
+  ATTENDANCE_NOT_ENROLLED,
+} from './attendance-enrollment';
 
 interface MongoDuplicateKeyError {
   code: number;
@@ -314,11 +318,9 @@ export class AttendanceCheckInService {
     const [studentProfile, isEnrolled, existingRecord, deviceUsedByOther] =
       await Promise.all([
         this.studentProfileModel.findOne({ userId: studentObjectId }).lean(),
-        this.registrationModel.exists({
-          studentId: studentObjectId,
-          courses: courseCode,
-          status: 'approved',
-        }),
+        this.registrationModel.exists(
+          attendanceEnrollmentFilter(studentObjectId, session),
+        ),
         this.recordModel
           .findOne({ sessionId: session._id, studentId: studentObjectId })
           .lean(),
@@ -340,17 +342,7 @@ export class AttendanceCheckInService {
     }
 
     if (!isEnrolled) {
-      // Check if institute has any registrations recorded yet for this student
-      const hasAnyRegistration = await this.registrationModel.exists({
-        studentId: studentObjectId,
-      });
-
-      // If student has registered courses but this course is not one of them, block check-in
-      if (hasAnyRegistration) {
-        throw new ForbiddenException(
-          `عذراً، لست مسجلاً في مقرر [${courseCode}] لهذا الفصل الدراسي.`,
-        );
-      }
+      throw new ForbiddenException(ATTENDANCE_NOT_ENROLLED);
     }
 
     if (existingRecord) {

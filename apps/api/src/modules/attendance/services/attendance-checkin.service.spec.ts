@@ -59,6 +59,103 @@ describe('AttendanceCheckInService', () => {
     );
   });
 
+  it.each([
+    ['no registration', null],
+    [
+      'pending registration',
+      {
+        status: 'pending',
+        academicYear: '2026-2027',
+        semester: 'first',
+        courses: ['CS101'],
+      },
+    ],
+    [
+      'rejected registration',
+      {
+        status: 'rejected',
+        academicYear: '2026-2027',
+        semester: 'first',
+        courses: ['CS101'],
+      },
+    ],
+    [
+      'another course',
+      {
+        status: 'approved',
+        academicYear: '2026-2027',
+        semester: 'first',
+        courses: ['CS102'],
+      },
+    ],
+    [
+      'another semester',
+      {
+        status: 'approved',
+        academicYear: '2026-2027',
+        semester: 'second',
+        courses: ['CS101'],
+      },
+    ],
+    [
+      'another academic year',
+      {
+        status: 'approved',
+        academicYear: '2025-2026',
+        semester: 'first',
+        courses: ['CS101'],
+      },
+    ],
+  ])(
+    'rejects QR attendance with %s before writing attendance',
+    async (_label, registration) => {
+      const session = {
+        _id: mockSessionId,
+        courseCode: 'CS101',
+        academicYear: '2026-2027',
+        semester: 'first',
+        status: 'OPEN',
+        startsAt: new Date(),
+        expiresAt: new Date(Date.now() + 600000),
+        sessionSecret: 'secret',
+        qrRotationSeconds: 20,
+      };
+      mockSessionModel.findById.mockReturnValue({
+        select: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(session) }),
+      });
+      mockTokenService.validateToken.mockReturnValue({ valid: true });
+      mockRecordModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      });
+      mockRegistrationModel.exists.mockImplementation(
+        (filter: {
+          status: string;
+          courses: string;
+          academicYear: string;
+          semester: string;
+        }) =>
+          registration &&
+          registration.status === filter.status &&
+          registration.courses.includes(filter.courses) &&
+          registration.academicYear === filter.academicYear &&
+          registration.semester === filter.semester
+            ? { _id: 'registration' }
+            : null,
+      );
+      await expect(
+        service.checkIn(
+          mockStudent,
+          `${mockSessionId.toString()}.100.validsignature32characterslong12`,
+        ),
+      ).rejects.toThrow('الطالب غير مسجل بالمقرر');
+      expect(mockRegistrationModel.exists).toHaveBeenCalledTimes(1);
+      expect(mockRecordModel.create).not.toHaveBeenCalled();
+      expect(mockRealtimeService.publishEvent).not.toHaveBeenCalled();
+    },
+  );
+
   it('should successfully check in student and record status as PRESENT within late threshold', async () => {
     const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 

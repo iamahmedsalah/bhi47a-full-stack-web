@@ -111,6 +111,8 @@ export interface AttendanceRecordDto {
     accuracy?: number;
   };
   markedByName?: string;
+  markedByNameAr?: string;
+  markedByNameEn?: string;
   note?: string;
 }
 

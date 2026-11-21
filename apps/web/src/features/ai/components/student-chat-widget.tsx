@@ -1,5 +1,6 @@
 "use client";
 
+import { getUserDisplayName } from "@/lib/user-name";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
@@ -201,7 +202,7 @@ export function StudentChatWidget() {
                     <Bot className="h-6 w-6" aria-hidden="true" />
                   </span>
                   <h3 className="font-bold">
-                    {t("welcome", { name: user.name })}
+                    {t("welcome", { name: getUserDisplayName(user, locale) })}
                   </h3>
                   <p className="mt-1 px-4 text-xs leading-relaxed text-muted-foreground">
                     {t("description")}

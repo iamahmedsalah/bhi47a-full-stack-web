@@ -3,6 +3,33 @@ import { UserSchema } from '../users/schemas/user.schema';
 import { publicMaterialResponse } from './material-response';
 
 describe('material response serialization compatibility', () => {
+  it.each([
+    [
+      {
+        storedFile: { storageKey: 'PRIVATE_KEY' },
+        videoUrl: 'https://example.com/video',
+      },
+      true,
+    ],
+    [{ videoUrl: 'https://example.com/video' }, false],
+    [{}, true],
+  ])(
+    'exposes file availability without private storage details: %j',
+    (content, hasFile) => {
+      const result = publicMaterialResponse({
+        _id: 'material',
+        courseId: 'course',
+        type: 'section',
+        fileUrl: '/old',
+        ...content,
+      });
+      expect(result).toMatchObject({
+        hasFile,
+        fileUrl: '/api/courses/materials/material/download',
+      });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_KEY');
+    },
+  );
   it('preserves user schema sanitization for nested hydrated documents', () => {
     const isolated = new mongoose.Mongoose();
     const User = isolated.model('MaterialPrivacyFixture', UserSchema);

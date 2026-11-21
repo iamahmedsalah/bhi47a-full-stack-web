@@ -27,7 +27,7 @@ async function main() {
   );
   await fs.writeFile(
     path.join(output, "auth.ts"),
-    `export const useAuth = () => ({ user:{ _id:'000000000000000000000001', role:'admin', name:'Upload Tester' } });`,
+    `export const useAuth = () => { const params = new URLSearchParams(location.search); return { user:{ _id:'000000000000000000000001', role:params.get('role') || 'admin', staffType:params.get('staffType'), permissions:params.get('readonly') ? [] : ['course_materials.write', 'course_materials.delete'], name:'Upload Tester' } }; };`,
   );
   await fs.writeFile(
     path.join(output, "navigation.ts"),
@@ -56,7 +56,8 @@ async function main() {
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
     function Content() {
       const [open,setOpen] = useState(false); const [view,setView] = useState(true); const book = useStartBookUpload();
-      return <><AdminHeader/><main className="p-6 space-y-4"><button onClick={() => setOpen(true)}>Open materials</button><button onClick={() => setView(value => !value)}>Navigate</button><label>Queue book<input data-testid="book" type="file" accept="application/pdf" onChange={event => { const file = event.target.files?.[0]; if(file) book('${courseId}','Course book · 326',file); event.target.value = ''; }}/></label>{view ? <CourseMaterialsDialog open={open} onOpenChange={setOpen} courseId="${courseId}" courseCode="326" courseName="Test Course" locale={locale}/> : <p>Another page</p>}</main></>;
+      const params = new URLSearchParams(location.search);
+      return <><AdminHeader/><main className="p-6 space-y-4"><button onClick={() => setOpen(true)}>Open materials</button><button onClick={() => setView(value => !value)}>Navigate</button><label>Queue book<input data-testid="book" type="file" accept="application/pdf" onChange={event => { const file = event.target.files?.[0]; if(file) book('${courseId}','Course book · 326',file); event.target.value = ''; }}/></label>{view ? <CourseMaterialsDialog open={open} onOpenChange={setOpen} courseId="${courseId}" courseCode="326" courseName="Test Course" locale={locale} isStudent={params.get('role') === 'student'} isStudentBlocked={params.has('blocked')}/> : <p>Another page</p>}</main></>;
     }
     createRoot(document.getElementById('root')).render(<React.StrictMode><QueryClientProvider client={new QueryClient({ defaultOptions:{queries:{retry:false}} })}><NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar : en}><MaterialUploadProvider locale={locale}><Content/></MaterialUploadProvider></NextIntlClientProvider></QueryClientProvider></React.StrictMode>);`,
   );
@@ -179,7 +180,14 @@ async function main() {
                   _id: "000000000000000000000100",
                   courseId,
                   title,
-                  videoUrl: recording?.videoUrl,
+                  videoUrl:
+                    recording?.videoUrl ||
+                    /name="videoUrl"\r\n\r\n([^\r]+)/.exec(body)?.[1],
+                  hasFile: !recording,
+                  attachments: Array.from(
+                    body.matchAll(/name="file"; filename="([^"]+)"/g),
+                    ([, name]) => ({ name, size: 1 }),
+                  ),
                   type: "lecture",
                   fileName: "lecture.pdf",
                   fileSize: 1024,
@@ -274,16 +282,11 @@ async function main() {
           exact: true,
         })
         .click();
-      // Links use the same form, but require no uploaded file.
-      await page
-        .getByRole("tab", {
-          name: isAr ? "رابط تسجيل فيديو" : "Video recording link",
-          exact: true,
-        })
-        .click();
       await page.locator("input[type=text]").first().fill("Recorded lecture");
       const videoInput = page.getByLabel(
-        isAr ? "رابط الفيديو المسجل *" : "Recorded video URL *",
+        isAr
+          ? "رابط فيديو المحاضرة أو السكشن (اختياري)"
+          : "Lecture or section video URL (optional)",
         { exact: true },
       );
       const saveRecording = page.getByRole("button", {
@@ -324,7 +327,22 @@ async function main() {
       await page
         .locator("input[type=file]")
         .last()
-        .setInputFiles(file("lecture.pdf"));
+        .setInputFiles([
+          file("lecture.pdf"),
+          {
+            name: "grades.csv",
+            mimeType: "text/csv",
+            buffer: Buffer.from("Name,Grade\nJohn,90"),
+          },
+        ]);
+      await page
+        .getByRole("button", {
+          name: isAr ? "إزالة grades.csv" : "Remove grades.csv",
+        })
+        .waitFor();
+      await page
+        .locator("#material-video-url")
+        .fill("https://example.com/lecture-video");
       await page
         .getByRole("button", {
           name: isAr ? "رفع وحفظ" : "Upload & Save",
@@ -410,6 +428,28 @@ async function main() {
       await page
         .getByRole("button", { name: "Open materials", exact: true })
         .click();
+      const combinedRow = page
+        .getByText("lecture", { exact: true })
+        .locator("xpath=../../../..");
+      await combinedRow
+        .getByRole("link", {
+          name: isAr ? "مشاهدة التسجيل" : "Watch recording",
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await combinedRow
+          .getByRole("button", {
+            name: isAr ? "تحميل الملفات (ZIP)" : "Download files (ZIP)",
+            exact: true,
+          })
+          .count(),
+        1,
+      );
+      await page.screenshot({
+        path: path.join(output, `${locale}-combined-material.png`),
+        fullPage: true,
+      });
       await page.getByText("lecture", { exact: true }).last().waitFor();
       await page.keyboard.press("Escape");
       // A rejected POST is retried only after the user's explicit action.
@@ -459,6 +499,83 @@ async function main() {
       assert.deepEqual(errors, []);
       await context.close();
       materials = [];
+    }
+    for (const staffType of [
+      "doctor",
+      "assistant_lecturer",
+      "teaching_assistant",
+    ]) {
+      for (const readonly of [false, true]) {
+        const page = await browser.newPage();
+        await page.goto(
+          `http://127.0.0.1:${server.address().port}/?locale=en&role=staff&staffType=${staffType}${readonly ? "&readonly=1" : ""}`,
+        );
+        await page
+          .getByRole("button", { name: "Open materials", exact: true })
+          .click();
+        const add = page.getByRole("button", {
+          name: staffType === "doctor" ? "Add New Lecture" : "Add New Section",
+          exact: true,
+        });
+        assert.equal(await add.count(), readonly ? 0 : 1);
+        if (!readonly) {
+          await add.click();
+          await page
+            .getByLabel("Lecture or section video URL (optional)", {
+              exact: true,
+            })
+            .waitFor();
+        }
+        await page.close();
+      }
+    }
+    materials = [
+      {
+        _id: "combined",
+        courseId,
+        title: "Lecture 1",
+        type: "lecture",
+        hasFile: true,
+        fileName: "lecture.pdf",
+        fileUrl: "/api/test.pdf",
+        videoUrl: "https://example.com/video",
+      },
+    ];
+    for (const blocked of [false, true]) {
+      const page = await browser.newPage({
+        viewport: { width: 390, height: 900 },
+      });
+      await page.goto(
+        `http://127.0.0.1:${server.address().port}/?locale=ar&role=student${blocked ? "&blocked=1" : ""}`,
+      );
+      await page
+        .getByRole("button", { name: "Open materials", exact: true })
+        .click();
+      await page.getByText("Lecture 1", { exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole("button", { name: "تحميل", exact: true }).count(),
+        blocked ? 0 : 1,
+      );
+      assert.equal(
+        await page
+          .getByRole("link", { name: "مشاهدة التسجيل", exact: true })
+          .count(),
+        blocked ? 0 : 1,
+      );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "إضافة محتوى تعليمي", exact: true })
+          .count(),
+        0,
+      );
+      await page.screenshot({
+        path: path.join(
+          output,
+          `ar-student-${blocked ? "blocked" : "combined"}.png`,
+        ),
+        fullPage: true,
+      });
+      await page.close();
     }
     assert.equal(
       maxActive,

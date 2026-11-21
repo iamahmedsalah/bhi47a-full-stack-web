@@ -16,6 +16,12 @@ import {
   type SessionClaims,
 } from './auth-session-store.service';
 import { AuthSessionMetadataService } from './auth-session-metadata.service';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import {
+  StudentProfile,
+  type StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
 
 @Injectable()
 export class AuthSessionService {
@@ -25,6 +31,9 @@ export class AuthSessionService {
     private readonly configService: ConfigService,
     @Optional() private readonly sessionStore?: AuthSessionStore,
     @Optional() private readonly metadata?: AuthSessionMetadataService,
+    @Optional()
+    @InjectModel(StudentProfile.name)
+    private readonly studentProfileModel?: Model<StudentProfileDocument>,
   ) {}
 
   generateToken(userId: string, role: string, tokenVersion: number): string {
@@ -62,10 +71,18 @@ export class AuthSessionService {
   async getMe(userId: string) {
     const user = await this.usersService.findByIdForAuth(userId);
     if (!user) throw new NotFoundException('User not found');
+    const profile =
+      user.role === 'student' && this.studentProfileModel
+        ? await this.studentProfileModel
+            .findOne({ userId: user._id })
+            .select('fullNameAr fullNameEn')
+            .lean()
+        : null;
     return {
       _id: user._id,
       name: user.name,
-      nameAr: (user as { nameAr?: string }).nameAr,
+      nameAr: profile?.fullNameAr || user.nameAr,
+      nameEn: profile?.fullNameEn,
       role: user.role,
       staffType: user.staffType,
       titlePrefix: user.titlePrefix,
