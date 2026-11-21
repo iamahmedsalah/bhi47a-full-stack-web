@@ -192,6 +192,40 @@ describe('course materials storage boundaries', () => {
     },
   );
 
+  it('allows an assistant_lecturer assigned in doctorIds/doctors (stale bucket) to pass preflight and upload a section', async () => {
+    const assistantLecturer = {
+      _id: new Types.ObjectId(),
+      role: 'staff',
+      staffType: 'assistant_lecturer',
+    };
+    course.doctorIds = [assistantLecturer._id];
+    course.teachingAssistantIds = [];
+    course.teachingAssistants = [];
+    await expect(
+      service.authorizeMaterialUpload(
+        course._id.toString(),
+        assistantLecturer,
+        false,
+      ),
+    ).resolves.toBeUndefined();
+    const result = await service.uploadCourseMaterial(
+      course._id.toString(),
+      file,
+      { type: 'section', title: 'Section from assistant lecturer' },
+      assistantLecturer,
+    );
+    expect(result.material.uploadedByRole).toBe('assistant_lecturer');
+    expect(result.material.type).toBe('section');
+    await expect(
+      service.uploadCourseMaterial(
+        course._id.toString(),
+        file,
+        { type: 'lecture', title: 'Disallowed lecture' },
+        assistantLecturer,
+      ),
+    ).rejects.toThrow();
+  });
+
   it('preserves assignment and type permissions for recording links', async () => {
     for (const caller of [
       ta,

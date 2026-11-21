@@ -96,7 +96,7 @@ function AdminExamSchedulesManagerContent() {
   const staffType = user?.staffType;
   const isTeachingOrFinanceStaff =
     user?.role === 'staff' &&
-    ['doctor', 'teaching_assistant', 'ta', 'accountant'].includes(staffType || '');
+    ['doctor', 'teaching_assistant', 'assistant_lecturer', 'ta', 'accountant'].includes(staffType || '');
   const canWriteSchedules =
     !isTeachingOrFinanceStaff &&
     (isAdmin || Boolean(user?.permissions?.includes('exam_schedules.write')));

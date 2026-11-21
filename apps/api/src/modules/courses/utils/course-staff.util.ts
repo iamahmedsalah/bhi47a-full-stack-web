@@ -26,10 +26,26 @@ const fields = (kind: AssignmentKind) => ({
 function referenceId(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (value instanceof Types.ObjectId) return value.toHexString();
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toHexString' in value &&
+    typeof (value as { toHexString?: unknown }).toHexString === 'function'
+  ) {
+    return (value as { toHexString(): string }).toHexString();
+  }
   if (value && typeof value === 'object' && '_id' in value) {
     const id = value._id;
     if (typeof id === 'string') return id;
     if (id instanceof Types.ObjectId) return id.toHexString();
+    if (
+      id &&
+      typeof id === 'object' &&
+      'toHexString' in id &&
+      typeof (id as { toHexString?: unknown }).toHexString === 'function'
+    ) {
+      return (id as { toHexString(): string }).toHexString();
+    }
   }
   return undefined;
 }
@@ -88,6 +104,6 @@ export function courseStaffFilter(
 
 export function isTeachingStaff(staffType?: string): boolean {
   return ['doctor', 'teaching_assistant', 'assistant_lecturer'].includes(
-    staffType ?? '',
+    (staffType ?? '').trim().toLowerCase(),
   );
 }

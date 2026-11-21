@@ -1091,6 +1091,9 @@ export class StudentsService {
         if (u.staffType === 'doctor') {
           roleLabelAr = 'عضو هيئة تدريس / دكتور';
           roleLabelEn = 'Doctor (Faculty)';
+        } else if (u.staffType === 'assistant_lecturer') {
+          roleLabelAr = 'مدرس مساعد';
+          roleLabelEn = 'Assistant Lecturer';
         } else if (u.staffType === 'teaching_assistant') {
           roleLabelAr = 'معيد';
           roleLabelEn = 'Teaching Assistant';

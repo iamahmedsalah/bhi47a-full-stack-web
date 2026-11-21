@@ -52,6 +52,8 @@ import {
   UpdateGradingSchemeDto,
 } from './dto/control.dto';
 import { ControlAccessService } from './services/control-access.service';
+import { ControlCheckpointDto } from './dto/control-checkpoint.dto';
+import { ControlEditorCheckpointService } from './services/control-editor-checkpoint.service';
 import { ControlGradesService } from './services/control-grades.service';
 import { ControlSheetsService } from './services/control-sheets.service';
 import { GradingSchemeService } from './services/grading-scheme.service';
@@ -74,6 +76,7 @@ export class ControlController {
     private readonly reports: ControlReportsService,
     private readonly attempts: ControlAttemptsService,
     private readonly grace: ControlGraceService,
+    private readonly checkpoints: ControlEditorCheckpointService,
   ) {}
 
   @Post('sheets/:id/grace/preview')
@@ -280,6 +283,23 @@ export class ControlController {
   @Get('sheets/:id')
   getSheet(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.sheets.getSheet(user, id);
+  }
+
+  @Get('sheets/:id/checkpoint')
+  getCheckpoint(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.checkpoints.get(user, id);
+  }
+
+  @Put('sheets/:id/checkpoint')
+  saveCheckpoint(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ControlCheckpointDto,
+  ) {
+    return this.checkpoints.save(user, id, dto);
   }
 
   @Get('sheets/:id/entries')

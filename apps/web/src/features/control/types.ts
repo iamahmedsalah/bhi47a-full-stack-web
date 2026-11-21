@@ -257,3 +257,12 @@ export interface ControlImportPreview {
     issues: string[];
   }>;
 }
+export interface ControlCheckpoint {
+  studentId: string | null;
+  field: "raw" | "attendance" | "quizzes";
+  sort: "code" | "name" | "mark";
+  descending: boolean;
+  filter: "all" | "absent";
+  onlyMissing: boolean;
+  search: string;
+}

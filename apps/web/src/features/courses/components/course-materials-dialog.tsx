@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  FileText,
   UploadCloud,
   Download,
   Trash2,
@@ -41,6 +40,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { FileTypeIcon, getFileTypeMeta } from '@/components/ui/file-type-icon';
 import { useMaterialUploadActions } from '@/features/courses/material-upload-provider';
 import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
 
@@ -71,11 +71,15 @@ export function CourseMaterialsDialog({
   const { start: startUpload } = useMaterialUploadActions();
 
   const isAdmin = user?.role === 'admin';
-  const staffType = user?.staffType;
+  const staffType = user?.staffType?.trim().toLowerCase();
   const isDoctor = user?.role === 'staff' && staffType === 'doctor';
+  const isAssistantLecturer = user?.role === 'staff' && staffType === 'assistant_lecturer';
   const isTeachingAssistant =
     user?.role === 'staff' &&
-    (staffType === 'teaching_assistant' || staffType === 'assistant_lecturer');
+    (staffType === 'teaching_assistant' ||
+      staffType === 'assistant_lecturer' ||
+      staffType === 'ta' ||
+      staffType === 'assistant');
   const hasWritePermission =
     isAdmin || Boolean(user?.permissions?.includes(PERMISSIONS.COURSE_MATERIALS_WRITE));
 
@@ -92,6 +96,11 @@ export function CourseMaterialsDialog({
   const [uploadType, setUploadType] = useState<CourseMaterialType>(
     isTeachingAssistant && !isAdmin ? COURSE_MATERIAL_TYPES.SECTION : COURSE_MATERIAL_TYPES.LECTURE,
   );
+  const effectiveUploadType: CourseMaterialType = isAdmin
+    ? uploadType
+    : isDoctor
+      ? COURSE_MATERIAL_TYPES.LECTURE
+      : COURSE_MATERIAL_TYPES.SECTION;
   const [title, setTitle] = useState('');
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -185,7 +194,7 @@ export function CourseMaterialsDialog({
     mutationFn: () =>
       api.post(`/courses/${courseId}/materials`, {
         title: title.trim(),
-        type: uploadType,
+        type: effectiveUploadType,
         videoUrl: videoUrl.trim(),
         ...(weekNumber ? { weekNumber: Number(weekNumber) } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
@@ -219,7 +228,7 @@ export function CourseMaterialsDialog({
       const selectedFiles = files;
       const payload = {
         title: title.trim(),
-        type: uploadType,
+        type: effectiveUploadType,
         weekNumber,
         description: description.trim(),
         videoUrl: videoUrl.trim(),
@@ -436,7 +445,7 @@ export function CourseMaterialsDialog({
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <UploadCloud className="h-4 w-4 text-primary" />
                   <span>
-                    {uploadType === 'lecture'
+                    {effectiveUploadType === 'lecture'
                       ? isAr
                         ? 'رفع محاضرة جديدة'
                         : 'Upload New Lecture'
@@ -485,13 +494,17 @@ export function CourseMaterialsDialog({
                     </div>
                   ) : (
                     <div className="h-8 px-3 rounded-squircle bg-secondary/60 border border-border/60 text-xs font-bold flex items-center text-foreground">
-                      {uploadType === 'lecture'
+                      {effectiveUploadType === 'lecture'
                         ? isAr
                           ? 'محاضرة (أستاذ المادة)'
                           : 'Lecture (Doctor)'
-                        : isAr
-                          ? 'سكشن (معيد المادة)'
-                          : 'Section (Teaching Assistant)'}
+                        : isAssistantLecturer
+                          ? isAr
+                            ? 'سكشن (مدرس مساعد)'
+                            : 'Section (Assistant Lecturer)'
+                          : isAr
+                            ? 'سكشن (معيد المادة)'
+                            : 'Section (Teaching Assistant)'}
                     </div>
                   )}
                 </div>
@@ -524,7 +537,7 @@ export function CourseMaterialsDialog({
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={
                     isAr
-                      ? uploadType === 'lecture'
+                      ? effectiveUploadType === 'lecture'
                         ? 'مثال: المحاضرة الأولى - مقدمة في نظم المعلومات'
                         : 'مثال: السكشن الأول - تدريبات عملية'
                       : 'e.g., Week 1 - Introduction to Information Systems'
@@ -547,8 +560,25 @@ export function CourseMaterialsDialog({
                 />
               </div>
 
-              <div className="space-y-2">
-                <p className="text-xs font-semibold">{isAr ? 'المرفقات' : 'Attachments'}</p>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    {isAr ? 'المرفقات' : 'Attachments'}
+                  </p>
+                  {files.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span>
+                        {isAr
+                          ? `${files.length} / ${COURSE_MATERIAL_MAX_FILES} ملفات`
+                          : `${files.length} / ${COURSE_MATERIAL_MAX_FILES} files`}
+                      </span>
+                      <span>·</span>
+                      <bdi dir="ltr" className="font-mono font-medium text-foreground">
+                        {formatFileSize(totalFileSize)} / 25 MB
+                      </bdi>
+                    </div>
+                  )}
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -557,74 +587,121 @@ export function CourseMaterialsDialog({
                   onChange={(event) => handleFileSelect(Array.from(event.target.files ?? []))}
                   className="hidden"
                 />
-                <div
-                  className={`space-y-2 rounded-xl border border-dashed p-3 ${isDragging ? 'border-primary bg-primary/10' : 'border-border'}`}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setIsDragging(true);
+                  }}
                   onDragOver={(event) => {
                     event.preventDefault();
                     setIsDragging(true);
                   }}
-                  onDragLeave={() => setIsDragging(false)}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      setIsDragging(false);
+                    }
+                  }}
                   onDrop={(event) => {
                     event.preventDefault();
                     setIsDragging(false);
                     handleFileSelect(Array.from(event.dataTransfer.files));
                   }}
+                  className={`group flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-6 py-7 text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    isDragging
+                      ? 'border-primary bg-primary/15 scale-[1.005] shadow-sm'
+                      : 'border-primary/45 bg-card/75 hover:border-primary hover:bg-primary/5'
+                  }`}
                 >
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-transform duration-200 ${
+                      isDragging
+                        ? 'bg-primary/20 text-primary scale-110'
+                        : 'bg-primary/10 text-primary group-hover:scale-105'
+                    }`}
                   >
-                    <Plus className="size-4" />
-                    {isAr ? 'إضافة ملفات' : 'Add files'}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {isAr
-                      ? 'اسحب الملفات هنا. حتى 10 ملفات بإجمالي 25 ميجابايت.'
-                      : 'Drop files here. Up to 10 files and 25 MB total.'}
+                    <UploadCloud className="h-7 w-7" />
+                  </div>
+                  <p className="text-sm font-bold text-foreground">
+                    {isDragging
+                      ? isAr
+                        ? 'أفلت الملفات هنا لإضافتها'
+                        : 'Drop files here to attach'
+                      : isAr
+                        ? 'اضغط لاختيار الملفات أو اسحب الملفات وأفلتها هنا'
+                        : 'Click to choose files or drag and drop them here'}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     {isAr
-                      ? 'PDF وWord وExcel وPowerPoint وCSV والصور وZIP وRAR'
-                      : 'PDF, Word, Excel, PowerPoint, CSV, images, ZIP and RAR'}
+                      ? 'PDF، Word، Excel، PowerPoint، CSV، الصور، ZIP، RAR (حتى 10 ملفات بإجمالي 25 ميجابايت)'
+                      : 'PDF, Word, Excel, PowerPoint, CSV, Images, ZIP, RAR (Up to 10 files · 25 MB total)'}
                   </p>
-                </div>
+                </button>
                 {files.length > 0 && (
-                  <>
-                    <ul className="divide-y divide-border rounded-xl border border-border">
-                      {files.map((file, index) => (
-                        <li
-                          key={`${file.name}-${index}`}
-                          className="flex items-center gap-2 p-2 text-xs"
-                        >
-                          <FileText className="size-4 shrink-0 text-primary" />
-                          <bdi className="min-w-0 flex-1 truncate" title={file.name}>
-                            {file.name}
-                          </bdi>
-                          <bdi className="shrink-0 text-muted-foreground">
-                            {formatFileSize(file.size)}
-                          </bdi>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={isAr ? `إزالة ${file.name}` : `Remove ${file.name}`}
-                            onClick={() => {
-                              setFiles(files.filter((_, i) => i !== index));
-                              setFileErrors([]);
-                            }}
+                  <div className="space-y-2">
+                    <ul className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-card/85">
+                      {files.map((file, index) => {
+                        const meta = getFileTypeMeta(file.name, file.type);
+                        return (
+                          <li
+                            key={`${file.name}-${file.size}-${index}`}
+                            className="flex items-center gap-3 px-3 py-2.5 text-xs transition-colors hover:bg-secondary/25"
                           >
-                            <X className="size-4" />
-                          </Button>
-                        </li>
-                      ))}
+                            <FileTypeIcon fileName={file.name} mimeType={file.type} size="md" />
+                            <div className="min-w-0 flex-1 text-start">
+                              <p
+                                className="truncate text-xs font-semibold text-foreground"
+                                title={file.name}
+                              >
+                                <bdi>{file.name}</bdi>
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <span
+                                  className={`inline-flex items-center rounded-squircle border px-1.5 py-0.2 font-mono text-[10px] font-bold ${meta.bgClass} ${meta.borderClass} ${meta.textClass}`}
+                                >
+                                  {meta.label}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <bdi dir="ltr" className="font-mono">
+                                  {formatFileSize(file.size)}
+                                </bdi>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 shrink-0 rounded-squircle p-0 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer"
+                              aria-label={isAr ? `إزالة ${file.name}` : `Remove ${file.name}`}
+                              onClick={() => {
+                                setFiles(files.filter((_, i) => i !== index));
+                                setFileErrors([]);
+                              }}
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          </li>
+                        );
+                      })}
                     </ul>
-                    <p className="text-xs text-muted-foreground">
-                      {isAr ? `المرفقات: ${files.length}` : `Files: ${files.length}`} ·{' '}
-                      <bdi>{formatFileSize(totalFileSize)}</bdi>
-                    </p>
-                  </>
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <p>
+                        {isAr ? `المرفقات: ${files.length}` : `Files: ${files.length}`} ·{' '}
+                        <bdi dir="ltr">{formatFileSize(totalFileSize)}</bdi>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFiles([]);
+                          setFileErrors([]);
+                        }}
+                        className="text-[11px] font-medium text-muted-foreground hover:text-rose-500 transition-colors cursor-pointer"
+                      >
+                        {isAr ? 'مسح الكل' : 'Clear all'}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {fileErrors.length > 0 && (
                   <ul role="alert" className="space-y-1 break-all text-xs text-destructive">
@@ -727,7 +804,7 @@ export function CourseMaterialsDialog({
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {isAr
-                    ? 'سيتم إدراج المحاضرات والسكاشن فور قيام أستاذ المقرر أو المعيد برفعها'
+                    ? 'سيتم إدراج المحاضرات والسكاشن فور قيام أستاذ المقرر أو الهيئة المعاونة برفعها'
                     : 'Lectures and sections will appear once uploaded'}
                 </p>
               </div>
@@ -752,20 +829,28 @@ export function CourseMaterialsDialog({
                       className="p-3 hover:bg-secondary/20 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-start"
                     >
                       <div className="flex items-start gap-3 min-w-0">
-                        {/* Type Icon Badge */}
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
-                            isLecture
-                              ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20'
-                              : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
-                          }`}
-                        >
-                          {!hasFile && item.videoUrl ? (
+                        {/* File Extension / Recording Icon */}
+                        {!hasFile && item.videoUrl ? (
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                              isLecture
+                                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20'
+                                : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                            }`}
+                          >
                             <Video className="h-4 w-4" />
-                          ) : (
-                            <FileText className="h-4 w-4" />
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <FileTypeIcon
+                            fileName={
+                              attachmentCount > 1
+                                ? 'bundle.zip'
+                                : item.attachments?.[0]?.name || item.fileName
+                            }
+                            mimeType={attachmentCount > 1 ? 'application/zip' : item.mimeType}
+                            size="md"
+                          />
+                        )}
 
                         {/* Details */}
                         <div className="min-w-0 space-y-1">

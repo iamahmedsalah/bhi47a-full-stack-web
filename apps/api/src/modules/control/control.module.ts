@@ -25,6 +25,11 @@ import {
   CourseStaffAssignmentSchema,
 } from '../attendance/schemas/course-staff-assignment.schema';
 import { ControlController } from './control.controller';
+import { ControlEditorCheckpointService } from './services/control-editor-checkpoint.service';
+import {
+  ControlEditorCheckpoint,
+  ControlEditorCheckpointSchema,
+} from './schemas/control-editor-checkpoint.schema';
 import {
   ControlSheet,
   ControlSheetSchema,
@@ -49,6 +54,10 @@ import { GradingSchemeService } from './services/grading-scheme.service';
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: ControlImport.name, schema: ControlImportSchema },
       { name: ControlSheet.name, schema: ControlSheetSchema },
+      {
+        name: ControlEditorCheckpoint.name,
+        schema: ControlEditorCheckpointSchema,
+      },
       { name: GradingScheme.name, schema: GradingSchemeSchema },
       { name: GradeAuditLog.name, schema: GradeAuditLogSchema },
       { name: Grade.name, schema: GradeSchema },
@@ -63,6 +72,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
   ],
   controllers: [ControlController],
   providers: [
+    ControlEditorCheckpointService,
     ControlGraceService,
     ControlAttemptsService,
     ControlReportsService,

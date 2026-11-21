@@ -530,7 +530,8 @@ export function ActiveSessionsDialog({
                                   ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
                                   : item.staffType === 'doctor'
                                     ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                                    : item.staffType === 'teaching_assistant'
+                                    : item.staffType === 'teaching_assistant' ||
+                                        item.staffType === 'assistant_lecturer'
                                       ? 'bg-teal-500/15 text-teal-300 border-teal-500/30'
                                       : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
                               )}

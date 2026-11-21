@@ -17,7 +17,7 @@ await fs.mkdir(output, { recursive: true });
 const write = (name, source) => fs.writeFile(path.join(output, name), source);
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))});module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
 await write('navigation.ts', `import {useSyncExternalStore} from 'react';const subscribe=fn=>{window.addEventListener('popstate',fn);return()=>window.removeEventListener('popstate',fn);};const nativeReplace=history.replaceState.bind(history);history.replaceState=(...args)=>{nativeReplace(...args);window.dispatchEvent(new PopStateEvent('popstate'));};const router={push:url=>{location.href=url;},replace:url=>{window.__serverNavigations=(window.__serverNavigations||0)+1;history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'));}};export const useRouter=()=>router;export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(useSyncExternalStore(subscribe,()=>location.search));`);
-await write('api.ts', `const call=async(method,url,body,config)=>{const target=new URL(url,location.origin);for(const [k,v] of Object.entries(config?.params??{}))target.searchParams.set(k,String(v));const r=await fetch(target,{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})});if(!r.ok){const error=await r.json();throw Object.assign(new Error(error.message),error);}return config?.responseType==='blob'?r.blob():{success:true,data:await r.json(),timestamp:new Date().toISOString()};};export const getApiErrorDetails=e=>({code:e.code,message:e.message});export const getApiErrorMessage=e=>e.message;export default {get:(u,c)=>call('GET',u,null,c),post:(u,b)=>call('POST',u,b),patch:(u,b)=>call('PATCH',u,b)};`);
+await write('api.ts', `const call=async(method,url,body,config)=>{const target=new URL(url,location.origin);for(const [k,v] of Object.entries(config?.params??{}))target.searchParams.set(k,String(v));const r=await fetch(target,{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})});if(!r.ok){const error=await r.json();throw Object.assign(new Error(error.message),error);}return config?.responseType==='blob'?r.blob():{success:true,data:await r.json(),timestamp:new Date().toISOString()};};export const getApiErrorDetails=e=>({code:e.code,message:e.message});export const getApiErrorMessage=e=>e.message;export default {get:(u,c)=>call('GET',u,null,c),post:(u,b)=>call('POST',u,b),patch:(u,b)=>call('PATCH',u,b),put:(u,b)=>call('PUT',u,b)};`);
 await write('entry.tsx', `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';import {Toaster} from 'sonner';import {ControlWorkbookGrid} from '${path.join(web, 'src/features/control/components/control-workbook-grid.tsx').replaceAll('\\','/')}';import ar from '${path.join(web,'src/messages/ar.json').replaceAll('\\','/')}';import en from '${path.join(web,'src/messages/en.json').replaceAll('\\','/')}';const locale=location.pathname.split('/')[1];const id=location.pathname.split('/').at(-1);const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});function App(){const [search,setSearch]=useState('');const [show,setShow]=useState(true);const {data}=useQuery({queryKey:['control','sheet',id],queryFn:()=>fetch('/admin/control/sheets/'+id).then(r=>r.json())});return data?<main className="p-6"><h1 className="text-2xl mb-5">{locale==='ar'?'دفتر درجات الكنترول':'Control grade workbook'}</h1><button onClick={()=>setShow(!show)}>Toggle fixture editor</button>{show&&<ControlWorkbookGrid principalId="fixture-user" sheetDetails={data} locale={locale} search={search} onSearchChange={setSearch} onOpenScheme={()=>{}} onOpenSheetAudit={()=>{}} onOpenRowAudit={()=>{}} onLockToggleRequest={()=>{}}/>}</main>:null}document.documentElement.dir=locale==='ar'?'rtl':'ltr';createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><App/><Toaster/></QueryClientProvider></NextIntlClientProvider>);`);
 await new Promise((resolve, reject) => webpack({ mode: 'development', devtool: false, context: web,
   entry: path.join(output, 'entry.tsx'), output: { path: output, filename: 'app.js', publicPath: '/' },
@@ -40,6 +40,8 @@ for(const [index,midterm,final] of [[200,19,31],[201,18,30]]) {
     rows[index].components[component]={studentId:rows[index].studentId,score,status:'present',rev:1,isPublished:false};
 }
 let workbookReads=0;
+let checkpointEnabled=false;
+const checkpoints=new Map();
 const server = http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
@@ -48,8 +50,15 @@ const server = http.createServer(async (req,res)=>{
       res.setHeader('Content-Type','application/json');
       const key=Object.keys(ids).find(k=>url.pathname.includes(ids[k])) || 'midterm';
       if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,componentStates:Object.fromEntries(Object.entries(states).map(([k,v])=>[k,v.workflowState])),scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
+      if(url.pathname.endsWith('/checkpoint') && req.method==='GET') return res.end(JSON.stringify(checkpoints.get(key) ?? null));
       if(req.method==='GET') return res.end(JSON.stringify(detail(key)));
       const chunks=[];for await(const chunk of req) chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
+      if(url.pathname.endsWith('/checkpoint') && req.method==='PUT') {
+        const {expectedActorId,...checkpoint}=body;
+        assert.equal(expectedActorId,'fixture-user');
+        if(checkpointEnabled) checkpoints.set(key,checkpoint);
+        return res.end(JSON.stringify({saved:true}));
+      }
       if(url.pathname.endsWith('/grace/preview')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.amount,5);return res.end(JSON.stringify({digest:'a'.repeat(64),revision:states[key].revision,amount:5,max:20,counts:{registered:3001,changed:3,capped:1,atMaximum:1,absentOrBanned:2,held:0,unentered:0,other:2995},sample:[{studentCode:rows[0].studentCode,before:0,added:5,after:5},{studentCode:rows[1].studentCode,before:1,added:5,after:6},{studentCode:rows[2].studentCode,before:18,added:2,after:20}]}));}
       if(url.pathname.endsWith('/grace')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.digest,'a'.repeat(64));assert.equal(body.expectedRevision,states[key].revision);assert.ok(body.operationId);graceReceipt={amount:5,changed:3,capped:1,appliedAt:new Date().toISOString()};[5,6,20].forEach((score,i)=>rows[i].components.midterm={...rows[i].components.midterm,score,rev:rows[i].components.midterm.rev+1});states[key].revision++;return res.end(JSON.stringify(graceReceipt));}
       if(url.pathname.endsWith('/entries')) {
@@ -268,6 +277,31 @@ try {
   await grace.getByText('Grace marks applied and recorded in the audit log.',{exact:true}).waitFor();
   await grace.getByRole('button',{name:'Close grace marks',exact:true}).click();
   await page.getByRole('button',{name:'Grace marks applied',exact:true,disabled:true}).waitFor();
+  checkpointEnabled=true;
+  states.midterm.workflowState='DRAFT';
+  const sheetUrl=`${base}/en/admin/control/${ids.midterm}`;
+  await page.goto(sheetUrl);
+  await page.getByRole('button',{name:'Next',exact:true}).click();
+  const checkpointResponse=page.waitForResponse(response=>response.url().endsWith('/checkpoint')&&response.request().method()==='PUT'&&response.ok());
+  await page.getByRole('textbox',{name:'260150 Midterm',exact:true}).focus();
+  await checkpointResponse;
+  assert.equal(checkpoints.get('midterm').studentId,rows[149].studentId);
+  // Change the row's position while retaining the same student identity.
+  rows[149].studentCode='999999';
+  await page.close();
+  page=await browser.newPage({viewport:{width:1500,height:950}});
+  await page.goto(sheetUrl);
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='999999 Midterm');
+  assert.equal(new URL(page.url()).searchParams.get('page'),'31');
+  const resetResponse=page.waitForResponse(response=>response.url().endsWith('/checkpoint')&&response.request().method()==='PUT'&&response.ok());
+  const gradeWritesBeforeReset=writes;
+  await page.getByRole('button',{name:'Start from first page',exact:true}).click();
+  await resetResponse;
+  assert.equal(checkpoints.get('midterm').studentId,null);
+  assert.equal(writes,gradeWritesBeforeReset);
+  await page.goto(sheetUrl);
+  await page.getByRole('textbox',{name:'260001 Midterm',exact:true}).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('page'),null);
   console.log('Control browser acceptance passed: 3001-student paginated/searchable bilingual real grid, all grade columns, autosave/retry, keyboard navigation, coursework 5/15, desktop/mobile screenshots. API persistence is covered separately.');
 } catch(error) { if(page) await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});throw error; }
 finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

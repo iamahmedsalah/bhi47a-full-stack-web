@@ -1,4 +1,6 @@
 import { ControlAttemptsService } from '../../src/modules/control/services/control-attempts.service';
+import { ControlEditorCheckpointSchema } from '../../src/modules/control/schemas/control-editor-checkpoint.schema';
+import { ControlEditorCheckpointService } from '../../src/modules/control/services/control-editor-checkpoint.service';
 import { StudentProfileSchema } from '../../src/modules/students/schemas/student-profile.schema';
 import type { Row as ExcelRow } from 'exceljs';
 import { ControlReportsService } from '../../src/modules/control/services/control-reports.service';
@@ -41,6 +43,7 @@ import type { AuthenticatedUser } from '../../src/modules/auth/types/authenticat
 
 describe('Control real replica-set persistence, approval and Grades visibility', () => {
   let connection: Connection;
+  let checkpoints: ControlEditorCheckpointService;
   let marks: ControlGradesService,
     sheets: ControlSheetsService,
     workbook: ControlWorkbookService,
@@ -112,6 +115,10 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         CourseStaffAssignmentSchema,
       );
     const studentProfile = model('StudentProfile', StudentProfileSchema);
+    const checkpointModel = model(
+      'ControlEditorCheckpoint',
+      ControlEditorCheckpointSchema,
+    );
     const settingsModel = model('SystemSettings', SystemSettingsSchema);
     const academicProfile = model(
       'StudentAcademicProfile',
@@ -209,6 +216,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       audit as never,
       access,
       schemeService,
+    );
+    checkpoints = new ControlEditorCheckpointService(
+      checkpointModel,
+      access,
+      sheets,
     );
     grades = new GradesService(
       grade as never,
@@ -322,6 +334,53 @@ describe('Control real replica-set persistence, approval and Grades visibility',
     expectedRev: 0,
     opId: randomUUID(),
     ...extra,
+  });
+
+  it('isolates resume positions by actor and sheet and clears them without changing grades', async () => {
+    const midterm = await open();
+    const final = await open('final');
+    const position = {
+      expectedActorId: actor._id,
+      studentId: studentId.toHexString(),
+      field: 'raw',
+      sort: 'code',
+      descending: true,
+      filter: 'all',
+      onlyMissing: false,
+      search: '',
+    } as const;
+    const gradeCount = await gradeModel.countDocuments();
+    await checkpoints.save(actor, midterm.sheet.id, position);
+    expect(await checkpoints.get(actor, midterm.sheet.slug)).toMatchObject({
+      studentId: position.studentId,
+      descending: true,
+    });
+    expect(await checkpoints.get(reviewer, midterm.sheet.id)).toBeNull();
+    expect(await checkpoints.get(actor, final.sheet.id)).toBeNull();
+    await expect(
+      checkpoints.save(reviewer, midterm.sheet.id, position),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      checkpoints.get(
+        {
+          ...reviewer,
+          role: 'staff',
+          permissions: [
+            PERMISSIONS.CONTROL_ACCESS,
+            PERMISSIONS.CONTROL_SHEETS_VIEW,
+          ],
+        },
+        midterm.sheet.id,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await checkpoints.save(actor, midterm.sheet.id, {
+      ...position,
+      studentId: null,
+    });
+    expect(await checkpoints.get(actor, midterm.sheet.id)).toMatchObject({
+      studentId: null,
+    });
+    expect(await gradeModel.countDocuments()).toBe(gradeCount);
   });
 
   it('rolls mark changes back when audit insertion fails, then applies/retries idempotently', async () => {

@@ -52,12 +52,12 @@ export class CreateCourseScheduleDto {
   staffName?: string;
 
   @ApiPropertyOptional({
-    enum: ['doctor', 'teaching_assistant'],
+    enum: ['doctor', 'teaching_assistant', 'assistant_lecturer'],
     default: 'doctor',
   })
-  @IsEnum(['doctor', 'teaching_assistant'])
+  @IsEnum(['doctor', 'teaching_assistant', 'assistant_lecturer'])
   @IsOptional()
-  staffType?: 'doctor' | 'teaching_assistant';
+  staffType?: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
 
   @ApiProperty({ enum: SLOT_TYPES, default: 'lecture' })
   @IsEnum(SLOT_TYPES)
@@ -158,10 +158,12 @@ export class UpdateCourseScheduleDto {
   @IsOptional()
   staffName?: string;
 
-  @ApiPropertyOptional({ enum: ['doctor', 'teaching_assistant'] })
-  @IsEnum(['doctor', 'teaching_assistant'])
+  @ApiPropertyOptional({
+    enum: ['doctor', 'teaching_assistant', 'assistant_lecturer'],
+  })
+  @IsEnum(['doctor', 'teaching_assistant', 'assistant_lecturer'])
   @IsOptional()
-  staffType?: 'doctor' | 'teaching_assistant';
+  staffType?: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
 
   @ApiPropertyOptional({ enum: SLOT_TYPES })
   @IsEnum(SLOT_TYPES)

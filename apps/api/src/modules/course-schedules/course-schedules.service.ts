@@ -617,10 +617,14 @@ export class CourseSchedulesService {
       مختبر: 'lab',
     };
 
-    const STAFF_TYPE_MAP: Record<string, 'doctor' | 'teaching_assistant'> = {
+    const STAFF_TYPE_MAP: Record<
+      string,
+      'doctor' | 'teaching_assistant' | 'assistant_lecturer'
+    > = {
       doctor: 'doctor',
       dr: 'doctor',
       teaching_assistant: 'teaching_assistant',
+      assistant_lecturer: 'assistant_lecturer',
       ta: 'teaching_assistant',
       دكتور: 'doctor',
       دكتورة: 'doctor',
@@ -628,7 +632,7 @@ export class CourseSchedulesService {
       أستاذ: 'doctor',
       معيد: 'teaching_assistant',
       معيدة: 'teaching_assistant',
-      'مدرس مساعد': 'teaching_assistant',
+      'مدرس مساعد': 'assistant_lecturer',
       مهندس: 'teaching_assistant',
       مهندسة: 'teaching_assistant',
     };

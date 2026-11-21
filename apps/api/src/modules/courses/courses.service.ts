@@ -794,28 +794,20 @@ export class CoursesService {
 
   validateCourseDoctorOrAdmin(course: CourseDocument, caller?: any) {
     if (!caller || caller.role === 'admin') return;
-    if (caller.role !== 'staff' || caller.staffType !== 'doctor') {
+    const normalizedStaffType = String(caller.staffType || '')
+      .trim()
+      .toLowerCase();
+    if (caller.role !== 'staff' || normalizedStaffType !== 'doctor') {
       throw new ForbiddenException(
         'Only an assigned doctor or administrator can manage the course book',
       );
     }
-    if (caller.role === 'staff') {
-      if (caller.staffType === 'teaching_assistant') {
-        throw new ForbiddenException(
-          'غير مسموح للمعيد برفع أو تعديل كتاب المقرر أو غلافه. هذه الصلاحية خاصة بأستاذ المقرر (دكتور) فقط',
-        );
-      }
-      if (caller.staffType === 'doctor') {
-        const callerId = caller._id?.toString();
-        const isAssigned =
-          course.doctorId?.toString() === callerId ||
-          (course.doctorIds || []).some((d: any) => d.toString() === callerId);
-        if (!isAssigned) {
-          throw new ForbiddenException(
-            'غير مسموح لك برفع أو تعديل كتاب هذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
-          );
-        }
-      }
+    const callerId = caller._id?.toString();
+    const isAssigned = isAssignedToCourse(course, callerId, 'doctor');
+    if (!isAssigned) {
+      throw new ForbiddenException(
+        'غير مسموح لك برفع أو تعديل كتاب هذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
+      );
     }
   }
 
@@ -828,14 +820,17 @@ export class CoursesService {
     const course = await this.findOne(courseId);
     if (book) return this.validateCourseDoctorOrAdmin(course, caller);
     if (caller.role === 'admin') return;
+    const normalizedStaffType = String(caller.staffType || '')
+      .trim()
+      .toLowerCase();
     const assigned = isAssignedToCourse(
       course,
       caller._id.toString(),
-      caller.staffType === 'doctor' ? 'doctor' : 'ta',
+      normalizedStaffType === 'doctor' ? 'doctor' : 'all',
     );
     if (
       caller.role !== 'staff' ||
-      !isTeachingStaff(caller.staffType) ||
+      !isTeachingStaff(normalizedStaffType) ||
       !assigned
     )
       throw new ForbiddenException(
@@ -1187,7 +1182,9 @@ export class CoursesService {
     const course = await this.findOne(courseId);
 
     const callerRole = caller.role;
-    const staffType = caller.staffType;
+    const staffType = String(caller.staffType || '')
+      .trim()
+      .toLowerCase();
     const callerIdStr = caller._id?.toString();
 
     let uploadedByRole: CourseMaterial['uploadedByRole'] = 'admin';
@@ -1213,7 +1210,9 @@ export class CoursesService {
         staffType === 'assistant_lecturer'
       ) {
         uploadedByRole = staffType;
-        const isAssigned = isAssignedToCourse(course, callerIdStr, 'ta');
+        // Match courseStaffFilter ('all') so assistants/assistant lecturers assigned
+        // in any staff field on the course are never blocked by a stale bucket.
+        const isAssigned = isAssignedToCourse(course, callerIdStr, 'all');
         if (!isAssigned) {
           throw new ForbiddenException(
             'غير مسموح لك برفع سكاشن لهذا المقرر لعدم إسناد المادة إليك',

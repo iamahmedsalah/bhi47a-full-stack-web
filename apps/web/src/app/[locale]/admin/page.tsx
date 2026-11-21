@@ -298,7 +298,9 @@ export default function AdminDashboard() {
   const isStaff = user?.role === "staff";
   const isDoctor = isStaff && user?.staffType === "doctor";
   const isTeachingAssistant =
-    isStaff && user?.staffType === "teaching_assistant";
+    isStaff &&
+    (user?.staffType === "teaching_assistant" ||
+      user?.staffType === "assistant_lecturer");
   const isAdministrative =
     isStaff && (user?.staffType === "administrative" || !user?.staffType);
 
@@ -1538,7 +1540,15 @@ export default function AdminDashboard() {
               />
               <StatCard
                 title={isAr ? "الدور الأكاديمي" : "Academic Role"}
-                value={isAr ? "هيئة تدريس معاونة" : "Teaching Assistant"}
+                value={
+                  user?.staffType === "assistant_lecturer"
+                    ? isAr
+                      ? "مدرس مساعد"
+                      : "Assistant Lecturer"
+                    : isAr
+                      ? "هيئة تدريس معاونة"
+                      : "Teaching Assistant"
+                }
                 icon={<GraduationCap className="w-6 h-6" />}
                 color="#f59e0b"
               />

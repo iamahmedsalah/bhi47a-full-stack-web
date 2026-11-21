@@ -131,8 +131,12 @@ export function useTableState<TFilters extends Record<string, string>>({
 
   // Update related filters/page atomically while retaining other tables' state.
   const setFilters = useCallback(
-    (updates: Partial<TFilters>) => {
+    (updates: Partial<TFilters>, search?: string) => {
       const params = new URLSearchParams(searchParams?.toString() ?? "");
+      if (search !== undefined) {
+        if (search.trim()) params.set("search", search.trim());
+        else params.delete("search");
+      }
       for (const key of Object.keys(updates) as Array<keyof TFilters>) {
         const value = updates[key];
         if (

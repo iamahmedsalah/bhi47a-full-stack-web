@@ -10,6 +10,7 @@ import type {
   ApplyChangesResponse,
   ControlAuditRow,
   ControlCapabilities,
+  ControlCheckpoint,
   ControlCourseSummary,
   ControlRosterRow,
   ControlSheetDetails,
@@ -188,6 +189,33 @@ export async function getControlWorkbook(sheetId: string) {
     `/admin/control/sheets/${sheetId}/workbook`,
   );
   return res.data;
+}
+
+export async function getControlCheckpoint(
+  sheetId: string,
+  signal: AbortSignal,
+) {
+  const res = await api.get<ControlCheckpoint | null>(
+    `/admin/control/sheets/${sheetId}/checkpoint`,
+    { signal, timeout: 5000 },
+  );
+  return res.data;
+}
+
+export async function saveControlCheckpoint(
+  sheetId: string,
+  principalId: string,
+  checkpoint: ControlCheckpoint,
+) {
+  await api.put(
+    `/admin/control/sheets/${sheetId}/checkpoint`,
+    { ...checkpoint, expectedActorId: principalId },
+    {
+      adapter: "fetch",
+      fetchOptions: { keepalive: true },
+      timeout: 5000,
+    },
+  );
 }
 export async function reviewControlSheet(
   sheetId: string,

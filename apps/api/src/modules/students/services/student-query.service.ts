@@ -209,7 +209,8 @@ export class StudentQueryService {
     if (
       caller?.role === 'staff' &&
       ((caller as any)?.staffType === 'doctor' ||
-        (caller as any)?.staffType === 'teaching_assistant')
+        (caller as any)?.staffType === 'teaching_assistant' ||
+        (caller as any)?.staffType === 'assistant_lecturer')
     ) {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }
@@ -245,7 +246,8 @@ export class StudentQueryService {
     if (
       caller?.role === 'staff' &&
       ((caller as any)?.staffType === 'doctor' ||
-        (caller as any)?.staffType === 'teaching_assistant')
+        (caller as any)?.staffType === 'teaching_assistant' ||
+        (caller as any)?.staffType === 'assistant_lecturer')
     ) {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }

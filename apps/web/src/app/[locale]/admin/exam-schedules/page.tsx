@@ -11,7 +11,7 @@ function ExamSchedulesContent() {
   const staffType = user?.staffType;
   const isTeachingOrFinanceStaff =
     user?.role === 'staff' &&
-    ['doctor', 'teaching_assistant', 'ta', 'accountant'].includes(staffType || '');
+    ['doctor', 'teaching_assistant', 'assistant_lecturer', 'ta', 'accountant'].includes(staffType || '');
 
   if (isTeachingOrFinanceStaff) {
     return (

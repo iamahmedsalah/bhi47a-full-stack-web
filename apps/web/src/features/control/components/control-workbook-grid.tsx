@@ -98,6 +98,9 @@ import type {
   WorkbookRow,
 } from "../types";
 
+import { useControlCheckpoint } from "../hooks/use-control-checkpoint";
+import type { ControlCheckpoint } from "../types";
+
 type Draft = GradeChangeInput & {
   raw: string;
   attendance: string;
@@ -350,6 +353,127 @@ export function ControlWorkbookGrid({
     () => filtered.slice((currentPage - 1) * 100, currentPage * 100),
     [filtered, currentPage],
   );
+  const { remember, restore, setRestore, saveError, retry } =
+    useControlCheckpoint(sheet.id, principalId);
+  const [hiddenCheckpoint, setHiddenCheckpoint] =
+    useState<ControlCheckpoint | null>(null);
+  const appliedView = useRef<ControlCheckpoint | null>(null);
+  const restoringFocus = useRef(false);
+  const setViewFilters = view.setFilters;
+  useEffect(() => {
+    if (!restore?.studentId || !workbook.data || workbook.isError) return;
+    const frame = requestAnimationFrame(() => {
+      const viewMatches =
+        sort === restore.sort &&
+        descending === restore.descending &&
+        filter === restore.filter &&
+        onlyMissing === restore.onlyMissing &&
+        search === restore.search;
+      if (!viewMatches && appliedView.current !== restore) {
+        appliedView.current = restore;
+        setViewFilters(
+          {
+            gridSort: restore.sort,
+            gridDirection: restore.descending ? "desc" : "asc",
+            gridFilter: restore.filter,
+            gridMissing: String(restore.onlyMissing),
+          },
+          restore.search,
+        );
+      }
+      if (
+        !viewMatches ||
+        deferredSearch !== normalizeSearchText(restore.search) ||
+        searchText.trim() !== restore.search
+      )
+        return;
+      const index = filtered.findIndex(
+        (row) => row.studentId === restore.studentId,
+      );
+      if (index < 0) {
+        setHiddenCheckpoint(
+          rows.some((row) => row.studentId === restore.studentId)
+            ? restore
+            : null,
+        );
+        setRestore(null);
+        return;
+      }
+      const targetPage = Math.floor(index / 100) + 1;
+      if (currentPage !== targetPage) {
+        setPage(targetPage);
+        return;
+      }
+      const row = tableViewport.current?.querySelector<HTMLTableRowElement>(
+        `[data-checkpoint-row="${restore.studentId}"]`,
+      );
+      if (!row) return;
+      const input = row.querySelector<HTMLInputElement>(
+        `input[data-cell="${key}-${index % 100}-${restore.field}"]`,
+      );
+      // Scroll within the table so restoration doesn't jump the entire screen.
+      const viewport = tableViewport.current;
+      if (viewport) {
+        const bounds = viewport.getBoundingClientRect();
+        const top = row.getBoundingClientRect().top - bounds.top;
+        viewport.scrollTop += top - viewport.clientHeight / 3;
+        const cellBounds = input?.getBoundingClientRect();
+        if (cellBounds && cellBounds.left < bounds.left) {
+          viewport.scrollLeft += cellBounds.left - bounds.left;
+        } else if (cellBounds && cellBounds.right > bounds.right) {
+          viewport.scrollLeft += cellBounds.right - bounds.right;
+        }
+      }
+      restoringFocus.current = true;
+      if (input && !input.disabled && !input.readOnly)
+        input.focus({ preventScroll: true });
+      restoringFocus.current = false;
+      setRestore(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    restore,
+    workbook.data,
+    workbook.isError,
+    setViewFilters,
+    sort,
+    descending,
+    filter,
+    onlyMissing,
+    search,
+    deferredSearch,
+    searchText,
+    filtered,
+    rows,
+    currentPage,
+    setPage,
+    key,
+    setRestore,
+  ]);
+
+  function startFromFirstPage() {
+    setHiddenCheckpoint(null);
+    setSearchText("");
+    setSelected([]);
+    view.resetAll();
+    tableViewport.current?.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    tableViewport.current?.scrollIntoView({
+      block: "start",
+      behavior: "instant",
+    });
+    remember(
+      {
+        studentId: null,
+        field: "raw",
+        sort: "code",
+        descending: false,
+        filter: "all",
+        onlyMissing: false,
+        search: "",
+      },
+      true,
+    );
+  }
   const pending = Object.keys(drafts).length > 0;
   useEffect(() => {
     onPendingChange?.(pending);
@@ -806,6 +930,19 @@ export function ControlWorkbookGrid({
       <Input
         aria-label={`${row.studentCode} ${field === "raw" ? t(component) : t(field)}`}
         data-cell={`${component}-${index}-${field}`}
+        onFocus={(event) => {
+          if (restoringFocus.current || event.currentTarget.readOnly) return;
+          setHiddenCheckpoint(null);
+          remember({
+            studentId: row.studentId,
+            field,
+            sort,
+            descending,
+            filter: filter === "absent" ? "absent" : "all",
+            onlyMissing,
+            search: search.trim().slice(0, 100),
+          });
+        }}
         aria-invalid={
           component === key && Boolean(draft?.error || errors[row.studentId])
         }
@@ -1486,6 +1623,41 @@ export function ControlWorkbookGrid({
           {t("undo")}
         </Button>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={startFromFirstPage}
+        >
+          {t("startFromFirstPage")}
+        </Button>
+        {hiddenCheckpoint && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const checkpoint: ControlCheckpoint = {
+                ...hiddenCheckpoint,
+                filter: "all",
+                onlyMissing: false,
+                search: "",
+              };
+              remember(checkpoint, true);
+              setRestore(checkpoint);
+              setHiddenCheckpoint(null);
+            }}
+          >
+            {t("goToLastStudent")}
+          </Button>
+        )}
+        {saveError && (
+          <Button type="button" variant="ghost" size="sm" onClick={retry}>
+            {t("retryCheckpoint")}
+          </Button>
+        )}
+      </div>
       <div
         ref={tableViewport}
         className="max-h-[65vh] overflow-auto scroll-mt-6 rounded-xl border bg-card"
@@ -1552,6 +1724,7 @@ export function ControlWorkbookGrid({
           <tbody>
             {visible.map((row, index) => (
               <tr
+                data-checkpoint-row={row.studentId}
                 key={row.studentId}
                 data-tuition-blocked={row.tuition?.isBlocked || undefined}
                 className={cn(
