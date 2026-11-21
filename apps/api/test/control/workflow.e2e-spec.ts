@@ -115,9 +115,13 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         CourseStaffAssignmentSchema,
       );
     const studentProfile = model('StudentProfile', StudentProfileSchema);
-    const checkpointModel = model(
+    const checkpointCollection = `${prefix}_ControlEditorCheckpoint`;
+    ownedCollections.push(checkpointCollection);
+    // Preserve the schema's string _id instead of adding Document's ObjectId.
+    const checkpointModel = connection.model(
       'ControlEditorCheckpoint',
       ControlEditorCheckpointSchema,
+      checkpointCollection,
     );
     const settingsModel = model('SystemSettings', SystemSettingsSchema);
     const academicProfile = model(
