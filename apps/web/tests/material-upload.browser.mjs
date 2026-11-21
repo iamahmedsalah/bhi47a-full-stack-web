@@ -50,6 +50,8 @@ async function main() {
     import en from '${source("messages/en.json")}';
     import ar from '${source("messages/ar.json")}';
     import AdminHeader from '${source("components/admin/header")}';
+    import StudentHeader from '${source("components/student/header")}';
+    import StudentSidebar from '${source("components/student/sidebar")}';
     import { MaterialUploadProvider, useStartBookUpload } from '${source("features/courses/material-upload-provider")}';
     import { CourseMaterialsDialog } from '${source("features/courses/components/course-materials-dialog")}';
     const locale = new URLSearchParams(location.search).get('locale') || 'en';
@@ -57,6 +59,7 @@ async function main() {
     function Content() {
       const [open,setOpen] = useState(false); const [view,setView] = useState(true); const book = useStartBookUpload();
       const params = new URLSearchParams(location.search);
+      if (params.has('studentHeader')) return <><StudentHeader/><StudentSidebar/></>;
       return <><AdminHeader/><main className="p-6 space-y-4"><button onClick={() => setOpen(true)}>Open materials</button><button onClick={() => setView(value => !value)}>Navigate</button><label>Queue book<input data-testid="book" type="file" accept="application/pdf" onChange={event => { const file = event.target.files?.[0]; if(file) book('${courseId}','Course book · 326',file); event.target.value = ''; }}/></label>{view ? <CourseMaterialsDialog open={open} onOpenChange={setOpen} courseId="${courseId}" courseCode="326" courseName="Test Course" locale={locale} isStudent={params.get('role') === 'student'} isStudentBlocked={params.has('blocked')}/> : <p>Another page</p>}</main></>;
     }
     createRoot(document.getElementById('root')).render(<React.StrictMode><QueryClientProvider client={new QueryClient({ defaultOptions:{queries:{retry:false}} })}><NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar : en}><MaterialUploadProvider locale={locale}><Content/></MaterialUploadProvider></NextIntlClientProvider></QueryClientProvider></React.StrictMode>);`,
@@ -202,16 +205,30 @@ async function main() {
             release();
           }, 1200);
         });
-      } else if (pathname.endsWith("/materials"))
+      } else if (pathname.endsWith("/materials")) {
+        const viewer = new URL(req.headers.referer ?? "/", "http://localhost").searchParams;
+        const role = viewer.get("role") ?? "admin";
+        const kind = viewer.get("staffType");
+        let allowedUploadTypes = [];
+        if (!viewer.has("readonly") && !viewer.has("unassigned")) {
+          if (role === "admin" || (role === "staff" && kind === "assistant_lecturer")) {
+            allowedUploadTypes = ["lecture", "section"];
+          } else if (role === "staff" && kind === "doctor") {
+            allowedUploadTypes = ["lecture"];
+          } else if (role === "staff" && kind === "teaching_assistant") {
+            allowedUploadTypes = ["section"];
+          }
+        }
         json({
           courseId,
           courseCode: "326",
           courseName: "Test Course",
+          allowedUploadTypes,
           materials: materials.filter((item) => item.title !== "__failed"),
           totalCount: materials.filter((item) => item.title !== "__failed")
             .length,
         });
-      else json({ items: [], total: 0, page: 1, totalPages: 1 });
+      } else json({ items: [], total: 0, page: 1, totalPages: 1 });
       return;
     }
     const asset =
@@ -514,12 +531,19 @@ async function main() {
           .getByRole("button", { name: "Open materials", exact: true })
           .click();
         const add = page.getByRole("button", {
-          name: staffType === "doctor" ? "Add New Lecture" : "Add New Section",
+          name: staffType === "doctor" ? "Add New Lecture" : staffType === "assistant_lecturer" ? "Add Material" : "Add New Section",
           exact: true,
         });
-        assert.equal(await add.count(), readonly ? 0 : 1);
+        if (readonly) {
+          await page.getByText("No materials available yet", { exact: false }).waitFor();
+          assert.equal(await add.count(), 0);
+        }
         if (!readonly) {
           await add.click();
+          if (staffType === "assistant_lecturer") {
+            await page.getByRole("button", { name: "Lecture", exact: true }).waitFor();
+            await page.getByRole("button", { name: "Section", exact: true }).click();
+          }
           await page
             .getByLabel("Lecture or section video URL (optional)", {
               exact: true,
@@ -528,6 +552,26 @@ async function main() {
         }
         await page.close();
       }
+    }
+    for (const locale of ["en", "ar"]) {
+      const page = await browser.newPage({ viewport: { width: 360, height: 800 } });
+      await page.goto(`http://127.0.0.1:${server.address().port}/?locale=${locale}&role=student&studentHeader=1`);
+      const menu = page.locator("header #student-navigation-trigger");
+      await menu.waitFor();
+      assert.equal(await menu.evaluate(element => getComputedStyle(element).position), "static");
+      const geometry = await menu.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        const header = element.closest("header").getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, headerLeft: header.left, headerRight: header.right };
+      });
+      const edgeGap = locale === "ar" ? geometry.left - geometry.headerLeft : geometry.headerRight - geometry.right;
+      assert(edgeGap >= 0 && edgeGap <= 16, "menu aligns with the trailing edge of the header");
+      await menu.click();
+      await page.getByRole("dialog").waitFor();
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page.waitForFunction(() => document.activeElement?.id === "student-navigation-trigger");
+      await page.close();
     }
     materials = [
       {

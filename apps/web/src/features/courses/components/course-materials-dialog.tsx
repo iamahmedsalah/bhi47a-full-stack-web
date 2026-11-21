@@ -71,36 +71,12 @@ export function CourseMaterialsDialog({
   const { start: startUpload } = useMaterialUploadActions();
 
   const isAdmin = user?.role === 'admin';
-  const staffType = user?.staffType?.trim().toLowerCase();
-  const isDoctor = user?.role === 'staff' && staffType === 'doctor';
-  const isAssistantLecturer = user?.role === 'staff' && staffType === 'assistant_lecturer';
-  const isTeachingAssistant =
-    user?.role === 'staff' &&
-    (staffType === 'teaching_assistant' ||
-      staffType === 'assistant_lecturer' ||
-      staffType === 'ta' ||
-      staffType === 'assistant');
-  const hasWritePermission =
-    isAdmin || Boolean(user?.permissions?.includes(PERMISSIONS.COURSE_MATERIALS_WRITE));
-
-  // Permissions to upload
-  const canUploadLecture = hasWritePermission && (isAdmin || isDoctor);
-  const canUploadSection = hasWritePermission && (isAdmin || isTeachingAssistant);
-  const canUploadAny = !isStudent && (canUploadLecture || canUploadSection);
-
   // Filter state
   const [activeTab, setActiveTab] = useState<'all' | 'lecture' | 'section'>('all');
 
   // Upload Form state
   const [isUploadFormOpen, setIsUploadFormOpen] = useState(false);
-  const [uploadType, setUploadType] = useState<CourseMaterialType>(
-    isTeachingAssistant && !isAdmin ? COURSE_MATERIAL_TYPES.SECTION : COURSE_MATERIAL_TYPES.LECTURE,
-  );
-  const effectiveUploadType: CourseMaterialType = isAdmin
-    ? uploadType
-    : isDoctor
-      ? COURSE_MATERIAL_TYPES.LECTURE
-      : COURSE_MATERIAL_TYPES.SECTION;
+  const [uploadType, setUploadType] = useState<CourseMaterialType>(COURSE_MATERIAL_TYPES.LECTURE);
   const [title, setTitle] = useState('');
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -159,8 +135,8 @@ export function CourseMaterialsDialog({
   const [materialToDelete, setMaterialToDelete] = useState<CourseMaterialDto | null>(null);
 
   // Fetch materials
-  const { data, isLoading, refetch } = useQuery<CourseMaterialsResponse>({
-    queryKey: ['course-materials', courseId],
+  const { data, isLoading, isError, error, refetch } = useQuery<CourseMaterialsResponse>({
+    queryKey: ['course-materials', courseId, user?._id],
     queryFn: async () => {
       if (!courseId)
         return {
@@ -176,6 +152,11 @@ export function CourseMaterialsDialog({
     enabled: open && Boolean(courseId),
   });
 
+  const allowedTypes = isStudent ? [] : (data?.allowedUploadTypes ?? []);
+  const canUploadAny = allowedTypes.length > 0;
+  const effectiveUploadType = allowedTypes.includes(uploadType)
+    ? uploadType
+    : (allowedTypes[0] ?? COURSE_MATERIAL_TYPES.LECTURE);
   const materials = data?.materials || [];
   const filteredMaterials =
     activeTab === 'all' ? materials : materials.filter((m) => m.type === activeTab);
@@ -408,28 +389,19 @@ export function CourseMaterialsDialog({
                 type="button"
                 size="sm"
                 onClick={() => {
-                  if (isTeachingAssistant && !isAdmin) {
-                    setUploadType(COURSE_MATERIAL_TYPES.SECTION);
-                  } else {
-                    setUploadType(COURSE_MATERIAL_TYPES.LECTURE);
-                  }
+                  const preferred = activeTab === 'all' ? effectiveUploadType : activeTab;
+                  setUploadType(allowedTypes.includes(preferred) ? preferred : effectiveUploadType);
                   setIsUploadFormOpen(true);
                 }}
                 className="h-8 rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 shadow-xs cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>
-                  {isTeachingAssistant && !isAdmin
-                    ? isAr
-                      ? 'إضافة سكشن جديد'
-                      : 'Add New Section'
-                    : isDoctor && !isAdmin
-                      ? isAr
-                        ? 'إضافة محاضرة جديدة'
-                        : 'Add New Lecture'
-                      : isAr
-                        ? 'إضافة محتوى تعليمي'
-                        : 'Add Material'}
+                  {allowedTypes.length > 1
+                    ? (isAr ? 'إضافة محتوى تعليمي' : 'Add Material')
+                    : effectiveUploadType === 'lecture'
+                      ? (isAr ? 'إضافة محاضرة جديدة' : 'Add New Lecture')
+                      : (isAr ? 'إضافة سكشن جديد' : 'Add New Section')}
                 </span>
               </Button>
             )}
@@ -466,12 +438,12 @@ export function CourseMaterialsDialog({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Material Type Selector (Admin only can switch; Doctor locked to lecture; TA locked to section) */}
+                {/* Material type selector */}
                 <div>
                   <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
                     {isAr ? 'نوع المرفق' : 'Material Type'}
                   </label>
-                  {isAdmin ? (
+                  {allowedTypes.length > 1 ? (
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -495,16 +467,8 @@ export function CourseMaterialsDialog({
                   ) : (
                     <div className="h-8 px-3 rounded-squircle bg-secondary/60 border border-border/60 text-xs font-bold flex items-center text-foreground">
                       {effectiveUploadType === 'lecture'
-                        ? isAr
-                          ? 'محاضرة (أستاذ المادة)'
-                          : 'Lecture (Doctor)'
-                        : isAssistantLecturer
-                          ? isAr
-                            ? 'سكشن (مدرس مساعد)'
-                            : 'Section (Assistant Lecturer)'
-                          : isAr
-                            ? 'سكشن (معيد المادة)'
-                            : 'Section (Teaching Assistant)'}
+                        ? (isAr ? 'محاضرة' : 'Lecture')
+                        : (isAr ? 'سكشن' : 'Section')}
                     </div>
                   )}
                 </div>
@@ -795,6 +759,13 @@ export function CourseMaterialsDialog({
                 <span className="text-xs">
                   {isAr ? 'جاري تحميل المحاضرات والسكاشن...' : 'Loading materials...'}
                 </span>
+              </div>
+            ) : isError && !isStudentBlocked ? (
+              <div role="alert" className="space-y-2 py-6 text-center text-sm">
+                <p>{getApiErrorMessage(error, isAr ? 'تعذر تحميل المرفقات' : 'Could not load materials')}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+                  {isAr ? 'إعادة المحاولة' : 'Retry'}
+                </Button>
               </div>
             ) : filteredMaterials.length === 0 ? (
               <div className="py-12 text-center rounded-xl border border-dashed border-border/80 bg-secondary/10">

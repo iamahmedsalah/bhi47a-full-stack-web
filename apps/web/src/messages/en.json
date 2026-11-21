@@ -1793,6 +1793,7 @@
     "enabled": "Enable component entry",
     "keepMine": "Keep my mark after reviewing the conflict",
     "workbook": "Control workbook",
+    "loadingShort": "…",
     "startFromFirstPage": "Start from first page",
     "goToLastStudent": "Go to last student",
     "retryCheckpoint": "Could not save your position · Retry",

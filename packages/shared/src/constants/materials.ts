@@ -24,6 +24,7 @@ export interface CourseMaterialsResponse {
   courseName: string;
   courseNameAr?: string;
   totalCount: number;
+  allowedUploadTypes?: CourseMaterialType[];
   materials: CourseMaterialDto[];
 }
 

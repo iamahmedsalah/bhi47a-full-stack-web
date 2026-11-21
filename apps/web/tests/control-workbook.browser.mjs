@@ -81,7 +81,15 @@ let browser,page;
 try {
   browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1500,height:950}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let finishWorkbookLoad;
+  const workbookGate = new Promise(resolve => { finishWorkbookLoad = resolve; });
+  await page.route('**/workbook', async route => {
+    await workbookGate;
+    await route.continue();
+  }, { times: 1 });
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
+  await page.getByRole('status').getByText('Loading workbook', {exact:true}).waitFor();
+  finishWorkbookLoad();
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
   const midtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});
   const finalRate=page.getByRole('group',{name:'Final pass rate',exact:true});

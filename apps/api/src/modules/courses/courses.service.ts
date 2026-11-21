@@ -16,7 +16,6 @@ import { MetricsService } from '../../core/metrics/metrics.service';
 import {
   courseStaffFilter,
   isAssignedToCourse,
-  isTeachingStaff,
 } from './utils/course-staff.util';
 import { courseCurriculumFilter } from './utils/course-filter.util';
 import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
@@ -27,6 +26,8 @@ import {
 import {
   getCourseCurricula,
   MAX_COURSE_DOCTORS,
+  PERMISSIONS,
+  type CourseMaterialType,
   normalizeDepartment,
   type Semester,
   type CourseLevel,
@@ -819,23 +820,41 @@ export class CoursesService {
     if (!caller) throw new ForbiddenException('Authentication required');
     const course = await this.findOne(courseId);
     if (book) return this.validateCourseDoctorOrAdmin(course, caller);
-    if (caller.role === 'admin') return;
-    const normalizedStaffType = String(caller.staffType || '')
-      .trim()
-      .toLowerCase();
-    const assigned = isAssignedToCourse(
-      course,
-      caller._id.toString(),
-      normalizedStaffType === 'doctor' ? 'doctor' : 'all',
-    );
-    if (
-      caller.role !== 'staff' ||
-      !isTeachingStaff(normalizedStaffType) ||
-      !assigned
-    )
+    if (!this.materialUploadPolicy(course, caller)) {
       throw new ForbiddenException(
         'You are not assigned to upload materials for this course',
       );
+    }
+  }
+
+  private materialUploadPolicy(
+    course: CourseDocument,
+    caller?: { role: string; staffType?: string; _id: { toString(): string } },
+  ): {
+    role: CourseMaterial['uploadedByRole'];
+    types: CourseMaterialType[];
+  } | null {
+    if (caller?.role === 'admin')
+      return { role: 'admin', types: ['lecture', 'section'] };
+    if (caller?.role !== 'staff') return null;
+    const type = caller.staffType?.trim().toLowerCase();
+    const id = caller._id.toString();
+    if (type === 'doctor' && isAssignedToCourse(course, id, 'doctor')) {
+      return { role: type, types: ['lecture'] };
+    }
+    if (
+      type === 'assistant_lecturer' &&
+      isAssignedToCourse(course, id, 'all')
+    ) {
+      return { role: type, types: ['lecture', 'section'] };
+    }
+    if (
+      type === 'teaching_assistant' &&
+      isAssignedToCourse(course, id, 'all')
+    ) {
+      return { role: type, types: ['section'] };
+    }
+    return null;
   }
 
   async uploadSyllabus(courseId: string, file: MaterialUpload, caller?: any) {
@@ -1181,54 +1200,18 @@ export class CoursesService {
   ) {
     const course = await this.findOne(courseId);
 
-    const callerRole = caller.role;
-    const staffType = String(caller.staffType || '')
-      .trim()
-      .toLowerCase();
-    const callerIdStr = caller._id?.toString();
-
-    let uploadedByRole: CourseMaterial['uploadedByRole'] = 'admin';
-
-    if (callerRole === 'admin') {
-      uploadedByRole = 'admin';
-    } else if (callerRole === 'staff') {
-      if (staffType === 'doctor') {
-        uploadedByRole = 'doctor';
-        const isAssigned = isAssignedToCourse(course, callerIdStr, 'doctor');
-        if (!isAssigned) {
-          throw new ForbiddenException(
-            'غير مسموح لك برفع مواد لهذا المقرر لعدم إسناد المادة إليك كأستاذ مقرر',
-          );
-        }
-        if (dto.type !== 'lecture') {
-          throw new BadRequestException(
-            'أستاذ المقرر (دكتور) مخصص له رفع المحاضرات (lecture) فقط',
-          );
-        }
-      } else if (
-        staffType === 'teaching_assistant' ||
-        staffType === 'assistant_lecturer'
-      ) {
-        uploadedByRole = staffType;
-        // Match courseStaffFilter ('all') so assistants/assistant lecturers assigned
-        // in any staff field on the course are never blocked by a stale bucket.
-        const isAssigned = isAssignedToCourse(course, callerIdStr, 'all');
-        if (!isAssigned) {
-          throw new ForbiddenException(
-            'غير مسموح لك برفع سكاشن لهذا المقرر لعدم إسناد المادة إليك',
-          );
-        }
-        if (dto.type !== 'section') {
-          throw new BadRequestException(
-            'المعيد والمدرس المساعد مخصص لهما رفع السكاشن والتدريبات العملية (section) فقط',
-          );
-        }
-      } else {
-        throw new ForbiddenException('غير مصرح لك برفع المحتوى الأكاديمي');
-      }
-    } else {
-      throw new ForbiddenException('صلاحية غير كافية لرفع المحتوى');
+    const policy = this.materialUploadPolicy(course, caller);
+    if (!policy) {
+      throw new ForbiddenException(
+        'You are not assigned to upload materials for this course',
+      );
     }
+    if (!policy.types.includes(dto.type)) {
+      throw new BadRequestException(
+        'This material type is not available for your teaching role',
+      );
+    }
+    const uploadedByRole = policy.role;
 
     const files = Array.isArray(upload) ? upload : upload ? [upload] : [];
     const videoUrl = dto.videoUrl?.trim();
@@ -1349,6 +1332,13 @@ export class CoursesService {
       courseName: course.name,
       courseNameAr: course.nameAr,
       totalCount: materials.length,
+      allowedUploadTypes:
+        caller?.role === 'admin' ||
+        (caller?.role === 'staff' &&
+          Array.isArray(caller.permissions) &&
+          caller.permissions.includes(PERMISSIONS.COURSE_MATERIALS_WRITE))
+          ? (this.materialUploadPolicy(course, caller)?.types ?? [])
+          : [],
       materials,
     };
   }

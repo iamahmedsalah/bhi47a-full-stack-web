@@ -6,7 +6,9 @@ import React, { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, Inbox, Calendar, Loader2, Check, Trash2 } from 'lucide-react';
+import { Bell, Inbox, Calendar, Loader2, Check, Trash2, Menu } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import { useUIStore } from '@/store/ui-store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { queryKeys } from '@/lib/query-keys';
 import {
@@ -26,6 +28,9 @@ import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 import { NotificationDetailsDialog } from '@/components/notifications/notification-details-dialog';
 
 export default function StudentHeader() {
+  const tNav = useTranslations('nav');
+  const mobileOpen = useUIStore((state) => state.studentMobileSidebarOpen);
+  const setMobileOpen = useUIStore((state) => state.setStudentMobileSidebarOpen);
   const { user } = useAuth();
   const params = useParams();
   const queryClient = useQueryClient();
@@ -156,32 +161,44 @@ export default function StudentHeader() {
 
   return (
     <>
-      <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 pe-14 md:pe-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+      <header className="z-30 bg-card/90 backdrop-blur-xl border border-white/10 shadow-2xl p-3 sm:p-4 rounded-2xl mx-3 mt-3 md:mx-6 md:mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
         {/* Right/Start section: Logo & Institute Name */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 md:flex-1">
           <Image
             src="https://res.cloudinary.com/dkocrxpu4/image/upload/w_112,h_112,c_limit,f_auto,q_auto/v1770685642/logo_k8bbtk.webp"
             alt={isAr ? 'شعار المعهد' : 'Institute Logo'}
-            width={42}
-            height={42}
-            className="h-9 w-9 sm:h-11 sm:w-11 object-contain rounded shrink-0"
+            width={44}
+            height={44}
+            className="object-contain rounded shrink-0"
             priority
           />
           <div className="text-start min-w-0 flex-1">
-            <h2 className="text-xs sm:text-sm md:text-base font-bold text-foreground/90 leading-tight truncate">
+            <h2 className="text-sm md:text-base font-bold text-foreground/90 leading-tight truncate">
               {isAr ? 'المعهد العالى للعلوم الادارية المتقدمة والحاسبات' : 'Higher Institute for Advanced Administrative Sciences & Computer'}
             </h2>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] sm:text-xs text-primary font-medium">
+              <span className="truncate text-xs text-primary font-semibold">
                 {isAr ? 'بوابة الطالب الإلكترونية' : 'Student Portal'}
               </span>
               {user?.studentCode && (
-                <span className="text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 py-0.2 rounded" dir="ltr">
+                <span className="shrink-0 text-[10px] font-mono text-muted-foreground bg-secondary/50 px-1.5 rounded" dir="ltr">
                   <bdi>{user.studentCode}</bdi>
                 </span>
               )}
             </div>
           </div>
+          <button
+            id="student-navigation-trigger"
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-squircle border border-white/10 bg-card/95 text-foreground md:hidden"
+            aria-label={tNav('openNavigation')}
+            aria-expanded={mobileOpen}
+            aria-controls="student-mobile-navigation"
+            aria-haspopup="dialog"
+          >
+            <Menu className="size-5" />
+          </button>
         </div>
 
         {/* Left/End section: Controls bar */}
@@ -199,7 +216,7 @@ export default function StudentHeader() {
               <SheetTrigger asChild>
                 <button
                   type="button"
-                  className="relative flex h-10 w-10 items-center rounded-squircle justify-center border border-white/10 bg-black/20 text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
+                  className="relative flex h-10 w-10 items-center rounded-squircle justify-center border border-border/80 bg-background/80 text-foreground transition-colors hover:text-primary hover:border-primary/50 cursor-pointer shadow-xs"
                   aria-label={isAr ? 'الإشعارات' : 'Notifications'}
                 >
                   <Bell className="h-4 w-4" />

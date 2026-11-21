@@ -465,7 +465,7 @@ export class CoursesController {
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({
     summary:
-      'Upload a lecture (doctor) or section (TA/assistant lecturer), with an optional recording URL',
+      'Upload an assigned course lecture or section, with an optional recording URL',
   })
   async uploadMaterial(
     @Param('id', ParseObjectIdPipe) id: string,

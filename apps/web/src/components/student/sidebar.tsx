@@ -1,7 +1,7 @@
 'use client';
 
 import { getUserDisplayName } from "@/lib/user-name";
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams, usePathname } from 'next/navigation';
 import Image from 'next/image';
@@ -21,7 +21,6 @@ import {
   Loader2,
   LogOut,
   MapPin,
-  Menu,
   MessageCircle,
   User,
   X,
@@ -32,6 +31,7 @@ import { cn } from '@/lib/cn';
 import Themes from '@/components/ui/Themes';
 import LangToggle from '@/components/ui/LangToggle';
 import { useUIStore } from '@/store/ui-store';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 interface NavItem {
   key: string;
@@ -47,8 +47,18 @@ export default function StudentSidebar() {
   const params = useParams();
   const pathname = usePathname();
   const locale = params.locale as string;
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { sidebarOpen, toggleSidebar, studentMobileSidebarOpen: mobileOpen, setStudentMobileSidebarOpen: setMobileOpen } = useUIStore();
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileOpen(false);
+    };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => {
+      desktop.removeEventListener('change', closeOnDesktop);
+      setMobileOpen(false);
+    };
+  }, [setMobileOpen]);
 
   const notificationsQuery = useQuery({
     queryKey: queryKeys.notifications.studentList,
@@ -218,54 +228,28 @@ export default function StudentSidebar() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        className="fixed start-4 top-4 z-50 inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/10 bg-card/95 text-foreground shadow-[var(--shadow-glow)] backdrop-blur md:hidden cursor-pointer"
-        aria-label="Open navigation"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
       <aside className={cn("fixed inset-y-0 start-0 z-40 hidden p-4 md:block transition-all duration-300", sidebarOpen ? "w-72" : "w-28")}>
         {renderContent(false)}
       </aside>
-
-      <div
-        className={cn(
-          'fixed inset-0 z-[100] md:hidden',
-          mobileOpen ? 'pointer-events-auto' : 'pointer-events-none',
-        )}
-        aria-hidden={!mobileOpen}
-      >
-        <button
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-          className={cn(
-            'absolute inset-0 bg-black/60 transition-opacity cursor-pointer',
-            mobileOpen ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-        <div
-          className={cn(
-            'absolute inset-y-0 start-0 w-80 max-w-[88vw] bg-[#0d1821] p-4 transition-transform',
-            mobileOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full',
-          )}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          id="student-mobile-navigation"
+          side={locale === 'ar' ? 'right' : 'left'}
+          dir={locale === 'ar' ? 'rtl' : 'ltr'}
+          aria-describedby={undefined}
+          className="flex h-dvh w-80 max-w-[88vw] flex-col gap-0 overflow-hidden bg-[#0d1821] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden [&>button:last-child]:hidden"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            document.getElementById('student-navigation-trigger')?.focus();
+          }}
         >
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-md text-white hover:bg-white/10 cursor-pointer"
-            aria-label="Close navigation"
-          >
-            <X className="h-5 w-5" />
+          <SheetTitle className="sr-only">{tNav('openNavigation')}</SheetTitle>
+          <button type="button" onClick={() => setMobileOpen(false)} aria-label={tNav('closeNavigation')} className="mb-2 size-10 self-end rounded-squircle hover:bg-white/10">
+            <X className="mx-auto size-5" />
           </button>
-          <div className="h-[calc(100%-3.25rem)] min-h-0">
-            {renderContent(true)}
-          </div>
-        </div>
-      </div>
+          <div className="min-h-0 flex-1">{renderContent(true)}</div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

@@ -26,19 +26,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
 import { PageTitleBanner } from "@/components/ui/page-title-banner";
 import { PermissionGuard } from "@/components/ui/permission-guard";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
   controlKeys,
+  controlWorkbookOptions,
   getControlSheet,
   lockControlSheet,
   unlockControlSheet,
 } from "@/features/control/api";
 import { ControlAuditDrawer } from "@/features/control/components/control-audit-drawer";
 import { ControlWorkbookGrid as ControlGrid } from "@/features/control/components/control-workbook-grid";
+import { ControlWorkbookLoading } from "@/features/control/components/control-workbook-loading";
 import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
 import type { ControlRosterRow } from "@/features/control/types";
 
@@ -50,6 +51,18 @@ function ControlSheetEditorContent() {
   const locale = (params?.locale as string) || "ar";
   const sheetId = (params?.sheetId as string) || "";
   const isAr = locale === "ar";
+  const canViewSheet =
+    user?.role === "admin" ||
+    Boolean(
+      user?.permissions?.includes(PERMISSIONS.CONTROL_ACCESS) &&
+      user.permissions.includes(PERMISSIONS.CONTROL_SHEETS_VIEW),
+    );
+  // Start the roster request alongside sheet metadata. The grid reuses it.
+  useQuery({
+    ...controlWorkbookOptions(sheetId, user?._id),
+    enabled: Boolean(sheetId && user?._id && canViewSheet),
+    notifyOnChangeProps: [],
+  });
 
   const { search, setSearch } = useTableState({
     shallow: true,
@@ -115,7 +128,7 @@ function ControlSheetEditorContent() {
   });
 
   if (sheetLoading) {
-    return <PageSkeletonLoader />;
+    return <ControlWorkbookLoading />;
   }
 
   if (sheetError || !sheetDetails) {
@@ -186,6 +199,7 @@ function ControlSheetEditorContent() {
           }
           key={`${user?._id ?? ""}:${sheetId}`}
           principalId={user?._id}
+          requestSheetId={sheetId}
           sheetDetails={sheetDetails}
           locale={locale}
           onPendingChange={setHasPending}
@@ -332,7 +346,7 @@ function ControlSheetEditorContent() {
 
 export default function ControlSheetEditorPage() {
   return (
-    <Suspense fallback={<PageSkeletonLoader />}>
+    <Suspense fallback={<ControlWorkbookLoading />}>
       <ControlSheetEditorContent />
     </Suspense>
   );

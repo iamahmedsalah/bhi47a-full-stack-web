@@ -77,7 +77,7 @@ import {
   controlKeys,
   downloadControlTemplate,
   exportControlImportErrors,
-  getControlWorkbook,
+  controlWorkbookOptions,
   getControlSheet,
   openControlSheet,
   previewControlRows,
@@ -99,6 +99,7 @@ import type {
 } from "../types";
 
 import { useControlCheckpoint } from "../hooks/use-control-checkpoint";
+import { ControlWorkbookLoading } from "./control-workbook-loading";
 import type { ControlCheckpoint } from "../types";
 
 type Draft = GradeChangeInput & {
@@ -114,6 +115,7 @@ const draftArchive = new Map<string, Record<string, Draft>>();
 interface Props {
   canPublish?: boolean;
   principalId?: string;
+  requestSheetId?: string;
   sheetDetails: ControlSheetDetails;
   locale: string;
   search: string;
@@ -129,6 +131,7 @@ interface Props {
 export function ControlWorkbookGrid({
   canPublish = false,
   principalId,
+  requestSheetId,
   sheetDetails: detail,
   locale,
   search,
@@ -146,11 +149,8 @@ export function ControlWorkbookGrid({
   const { sheet, capabilities: caps } = detail;
   const key = sheet.component;
   const [graceOpen, setGraceOpen] = useState(false);
-  const workbook = useQuery({
-    queryKey: [...controlKeys.sheet(sheet.id), "workbook"],
-    queryFn: () => getControlWorkbook(sheet.id),
-    staleTime: 15_000,
-  });
+  const workbookId = requestSheetId ?? sheet.id;
+  const workbook = useQuery(controlWorkbookOptions(workbookId, principalId));
   const archiveKey = principalId ? `${principalId}:${sheet.id}` : "";
   const [restoredDraft] = useState(() =>
     archiveKey ? draftArchive.get(archiveKey) : undefined,
@@ -612,7 +612,7 @@ export function ControlWorkbookGrid({
             }),
         );
         query.setQueryData<import("../types").ControlWorkbook>(
-          [...controlKeys.sheet(sheet.id), "workbook"],
+          controlWorkbookOptions(workbookId, principalId).queryKey,
           (current) => {
             if (!current) return current;
             const accepted = new Map(
@@ -692,6 +692,8 @@ export function ControlWorkbookGrid({
     }
   }, [
     sheet.id,
+    workbookId,
+    principalId,
     workbook.data?.scheme.version,
     reason,
     formatControlIssue,
@@ -1013,13 +1015,7 @@ export function ControlWorkbookGrid({
     );
   };
 
-  if (workbook.isLoading)
-    return (
-      <div
-        className="h-64 animate-pulse rounded-xl bg-muted"
-        aria-label={t("loading")}
-      />
-    );
+  if (workbook.isLoading) return <ControlWorkbookLoading />;
   if (workbook.isError)
     return (
       <div role="alert">

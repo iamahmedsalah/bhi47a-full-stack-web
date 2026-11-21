@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { CoursesService } from './courses.service';
+import { PERMISSIONS } from '@student-portal/shared';
 import type {
   MaterialStorageService,
   MaterialUpload,
@@ -51,6 +52,11 @@ describe('course materials storage boundaries', () => {
       save: jest.fn().mockResolvedValue(data),
     }));
     materials.findById = jest.fn();
+    materials.find = jest.fn().mockReturnValue({
+      sort: jest
+        .fn()
+        .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+    });
     materials.findByIdAndDelete = jest.fn();
     materials.exists = jest.fn().mockResolvedValue(null);
     students = {
@@ -146,9 +152,13 @@ describe('course materials storage boundaries', () => {
   });
 
   it.each(['teaching_assistant', 'assistant_lecturer'])(
-    'allows an assigned %s through preflight and section upload, but rejects lectures and unassigned courses',
+    'applies the assigned %s material rules for preflight, listing and upload',
     async (staffType) => {
-      const caller = { ...ta, staffType };
+      const caller = {
+        ...ta,
+        staffType,
+        permissions: [PERMISSIONS.COURSE_MATERIALS_WRITE],
+      };
       // Legacy embedded assignments must work at both authorization boundaries.
       course.teachingAssistantIds = [];
       course.teachingAssistants = [{ _id: ta._id.toString() }];
@@ -166,14 +176,40 @@ describe('course materials storage boundaries', () => {
         caller,
       );
       expect(result.material.uploadedByRole).toBe(staffType);
+      const lecture = service.uploadCourseMaterial(
+        course._id.toString(),
+        file,
+        { type: 'lecture', title: 'Lecture' },
+        caller,
+      );
+      if (staffType === 'assistant_lecturer') {
+        await expect(lecture).resolves.toMatchObject({
+          material: { type: 'lecture' },
+        });
+      } else {
+        await expect(lecture).rejects.toThrow();
+      }
+      const types =
+        staffType === 'assistant_lecturer'
+          ? ['lecture', 'section']
+          : ['section'];
       await expect(
-        service.uploadCourseMaterial(
+        service.getCourseMaterials(course._id.toString(), {}, caller),
+      ).resolves.toMatchObject({ allowedUploadTypes: types });
+      await expect(
+        service.getCourseMaterials(
           course._id.toString(),
-          file,
-          { type: 'lecture', title: 'Lecture' },
-          caller,
+          {},
+          { ...caller, permissions: [] },
         ),
-      ).rejects.toThrow();
+      ).resolves.toMatchObject({ allowedUploadTypes: [] });
+      await expect(
+        service.getCourseMaterials(
+          course._id.toString(),
+          {},
+          { ...caller, _id: new Types.ObjectId() },
+        ),
+      ).resolves.toMatchObject({ allowedUploadTypes: [] });
       await expect(
         service.authorizeMaterialUpload(
           course._id.toString(),
@@ -220,10 +256,10 @@ describe('course materials storage boundaries', () => {
       service.uploadCourseMaterial(
         course._id.toString(),
         file,
-        { type: 'lecture', title: 'Disallowed lecture' },
+        { type: 'lecture', title: 'Lecture from assistant lecturer' },
         assistantLecturer,
       ),
-    ).rejects.toThrow();
+    ).resolves.toMatchObject({ material: { type: 'lecture' } });
   });
 
   it('preserves assignment and type permissions for recording links', async () => {

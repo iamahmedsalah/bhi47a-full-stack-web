@@ -1,4 +1,5 @@
 import api, { type PaginatedResponse } from "@/lib/api";
+import { queryOptions } from "@tanstack/react-query";
 import type { AxiosProgressEvent } from "axios";
 
 import type {
@@ -184,11 +185,20 @@ export async function updateGradingScheme(
   return res.data;
 }
 
-export async function getControlWorkbook(sheetId: string) {
+export async function getControlWorkbook(sheetId: string, signal?: AbortSignal) {
   const res = await api.get<import("./types").ControlWorkbook>(
     `/admin/control/sheets/${sheetId}/workbook`,
+    { signal },
   );
   return res.data;
+}
+
+export function controlWorkbookOptions(sheetId: string, principalId?: string) {
+  return queryOptions({
+    queryKey: [...controlKeys.sheet(sheetId), "workbook", principalId] as const,
+    queryFn: ({ signal }) => getControlWorkbook(sheetId, signal),
+    staleTime: 15_000,
+  });
 }
 
 export async function getControlCheckpoint(
