@@ -1,6 +1,105 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
+import { AttendanceController } from '../attendance.controller';
+import { DeleteAttendanceRecordsDto } from '../dto/attendance-session.dto';
+import { PERMISSIONS_KEY } from '../../auth/decorators/permissions.decorator';
+import {
+  ATTENDANCE_RECORD_DELETE_LIMIT,
+  PERMISSIONS,
+} from '@student-portal/shared';
+import { validate } from 'class-validator';
 import { AttendanceReportService } from './attendance-report.service';
+
+describe('Attendance record deletion', () => {
+  const sessionId = new Types.ObjectId();
+  const actorId = new Types.ObjectId();
+  const recordIds = [new Types.ObjectId(), new Types.ObjectId()];
+  const selected = recordIds.map(String);
+
+  it('requires the delegated deletion permission', () => {
+    const handler = Object.getOwnPropertyDescriptor(
+      AttendanceController.prototype,
+      'deleteSessionRecords',
+    )!.value as () => void;
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toEqual([
+      PERMISSIONS.ATTENDANCE_DELETE,
+    ]);
+  });
+
+  it('validates a non-empty bounded list of record IDs', async () => {
+    const check = (ids: string[]) =>
+      validate(
+        Object.assign(new DeleteAttendanceRecordsDto(), { recordIds: ids }),
+      );
+    await expect(check(selected)).resolves.toHaveLength(0);
+    for (const ids of [
+      [],
+      ['invalid'],
+      [selected[0], selected[0]],
+      Array.from({ length: ATTENDANCE_RECORD_DELETE_LIMIT + 1 }, () =>
+        new Types.ObjectId().toString(),
+      ),
+    ]) {
+      await expect(check(ids)).resolves.not.toHaveLength(0);
+    }
+  });
+
+  it.each(['admin', 'staff'])(
+    'limits deletion by %s to selected IDs in the requested session and supports retries',
+    async (role) => {
+      const exists = jest.fn().mockResolvedValue({ _id: sessionId });
+      const deleteMany = jest
+        .fn()
+        .mockResolvedValueOnce({ deletedCount: 2 })
+        .mockResolvedValueOnce({ deletedCount: 0 });
+      const service = new AttendanceReportService(
+        { deleteMany } as never,
+        { exists } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
+      const user = { _id: actorId.toString(), role };
+      await expect(
+        service.deleteSessionRecords(sessionId.toString(), user, selected),
+      ).resolves.toEqual({ deletedCount: 2 });
+      expect(exists).toHaveBeenCalledWith({
+        _id: sessionId,
+        ...(role === 'staff' ? { createdBy: actorId } : {}),
+      });
+      expect(deleteMany).toHaveBeenCalledWith({
+        sessionId,
+        _id: { $in: recordIds },
+      });
+      await expect(
+        service.deleteSessionRecords(sessionId.toString(), user, selected),
+      ).resolves.toEqual({ deletedCount: 0 });
+    },
+  );
+
+  it('does not delete records for sessions outside staff scope', async () => {
+    const deleteMany = jest.fn();
+    const service = new AttendanceReportService(
+      { deleteMany } as never,
+      { exists: jest.fn().mockResolvedValue(null) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    await expect(
+      service.deleteSessionRecords(
+        sessionId.toString(),
+        { _id: actorId.toString(), role: 'staff' },
+        selected,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
+});
 
 describe('Attendance export permissions', () => {
   it.each(['doctor', 'teaching_assistant', 'assistant_lecturer', 'admin'])(

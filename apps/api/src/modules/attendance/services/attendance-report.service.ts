@@ -6,6 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -36,6 +37,7 @@ import {
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import {
   attendanceSessionFilter,
+  attendanceSessionScope,
   type AttendanceViewer,
 } from './attendance-query';
 import {
@@ -45,6 +47,8 @@ import {
 
 @Injectable()
 export class AttendanceReportService {
+  private readonly logger = new Logger(AttendanceReportService.name);
+
   constructor(
     @InjectModel(AttendanceRecord.name)
     private recordModel: Model<AttendanceRecordDocument>,
@@ -56,6 +60,30 @@ export class AttendanceReportService {
     @InjectModel(CourseRegistration.name)
     private registrationModel: Model<CourseRegistrationDocument>,
   ) {}
+
+  async deleteSessionRecords(
+    sessionId: string,
+    user: AttendanceViewer,
+    recordIds: string[],
+  ) {
+    const sessionObjectId = new Types.ObjectId(sessionId);
+    const session = await this.sessionModel.exists({
+      _id: sessionObjectId,
+      ...attendanceSessionScope(user),
+    });
+    if (!session) throw new NotFoundException('Attendance session not found');
+
+    const { deletedCount } = await this.recordModel.deleteMany({
+      sessionId: sessionObjectId,
+      _id: { $in: recordIds.map((id) => new Types.ObjectId(id)) },
+    });
+    if (deletedCount > 0) {
+      this.logger.log(
+        `User ${user._id} deleted ${deletedCount} attendance records from session ${sessionId}`,
+      );
+    }
+    return { deletedCount };
+  }
 
   async exportAttendance(
     user: AttendanceViewer,

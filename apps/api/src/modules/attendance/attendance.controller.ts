@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -13,6 +14,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PERMISSIONS } from '@student-portal/shared';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import type { Request, Response } from 'express';
@@ -35,8 +37,10 @@ import {
   CreateCourseStaffAssignmentDto,
   UpdateSessionLocationDto,
   QueryAttendanceSessionsDto,
+  DeleteAttendanceRecordsDto,
 } from './dto/attendance-session.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 
@@ -199,6 +203,20 @@ export class AttendanceController {
     @Query() query: QueryAttendanceRecordsDto,
   ) {
     return this.reportService.getSessionRecords(id, query);
+  }
+
+  @Delete('attendance/sessions/:id/records')
+  @Roles('staff', 'admin')
+  @RequirePermissions(PERMISSIONS.ATTENDANCE_DELETE)
+  @ApiOperation({
+    summary: 'Delete selected records from an attendance session',
+  })
+  async deleteSessionRecords(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() user: { _id: string; role: string },
+    @Body() dto: DeleteAttendanceRecordsDto,
+  ) {
+    return this.reportService.deleteSessionRecords(id, user, dto.recordIds);
   }
 
   @Patch('attendance/records/:id')

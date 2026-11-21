@@ -27,7 +27,7 @@ import {
   HelpCircle,
   CalendarDays,
   ShieldCheck,
-  TableProperties,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/cn";
@@ -121,7 +121,7 @@ export default function AdminSidebar() {
     {
       key: "control",
       href: `/${locale}/admin/control`,
-      icon: <TableProperties className="h-5 w-5" />,
+      icon: <FileSpreadsheet className="h-5 w-5" />,
       permission: PERMISSIONS.CONTROL_ACCESS,
     },
     {

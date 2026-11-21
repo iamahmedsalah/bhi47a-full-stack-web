@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
+import { ATTENDANCE_RECORD_DELETE_LIMIT } from "@student-portal/shared";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
@@ -13,11 +20,13 @@ import {
   MoreVertical,
   QrCode,
   UserRound,
+  Trash2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableCell } from "@/components/ui/table";
 import {
   Dialog,
@@ -102,11 +111,15 @@ function SessionSearch({
 
 export function AdminAttendanceOverview({
   isArabic = true,
+  canDeleteRecords = false,
   onOpenSessionPresenter,
 }: {
   isArabic?: boolean;
+  canDeleteRecords?: boolean;
   onOpenSessionPresenter?: (session: AttendanceSessionDto) => void;
 }) {
+  const t = useTranslations("attendanceDelete");
+  const queryClient = useQueryClient();
   const table = useTableState({
     defaultFilters: { status: "all", level: "all", courseCode: "all" },
     defaultLimit: 20,
@@ -114,6 +127,7 @@ export function AdminAttendanceOverview({
   const [selectedSession, setSelectedSession] =
     useState<AttendanceSessionDto | null>(null);
   const [recordsPage, setRecordsPage] = useState(1);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [editRecord, setEditRecord] = useState<AttendanceRecordDto | null>(
     null,
   );
@@ -153,6 +167,33 @@ export function AdminAttendanceOverview({
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   });
+  const deleteRecords = useMutation({
+    mutationFn: ({
+      sessionId,
+      recordIds,
+    }: {
+      sessionId: string;
+      recordIds: string[];
+    }) => attendanceApi.deleteSessionRecords(sessionId, recordIds),
+    onSuccess: async ({ deletedCount }, { sessionId }) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["attendance-session-records", sessionId],
+        refetchType: "none",
+      });
+      const [updated] = await Promise.all([
+        records.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["attendance-sessions"] }),
+      ]);
+      if (updated.isSuccess) {
+        const lastPage = Math.max(1, updated.data.totalPages);
+        setRecordsPage((page) => Math.min(page, lastPage));
+      }
+      setSelectedRecordIds([]);
+      if (deletedCount > 0) toast.success(t("deleted", { count: deletedCount }));
+      else toast.info(t("alreadyRemoved"));
+    },
+    onError: () => toast.error(t("failed")),
+  });
   const currentSession =
     overview.data?.sessions.find(
       (session) => session._id === selectedSession?._id,
@@ -167,6 +208,7 @@ export function AdminAttendanceOverview({
   const openRecords = (session: AttendanceSessionDto) => {
     setSelectedSession(session);
     setRecordsPage(1);
+    setSelectedRecordIds([]);
   };
   const columns = useMemo<ColumnDef<AttendanceSessionDto>[]>(
     () => [
@@ -542,7 +584,7 @@ export function AdminAttendanceOverview({
       <Dialog
         open={Boolean(selectedSession)}
         onOpenChange={(open) => {
-          if (!open) setSelectedSession(null);
+          if (!open && !deleteRecords.isPending) setSelectedSession(null);
         }}
       >
         <DialogContent
@@ -559,7 +601,56 @@ export function AdminAttendanceOverview({
             </p>
           </DialogHeader>
           {selectedSession && (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canDeleteRecords && selectedRecordIds.length > 0 && (
+                <>
+                  <span
+                    className="me-auto text-sm text-muted-foreground"
+                    aria-live="polite"
+                  >
+                    {t("selected", { count: selectedRecordIds.length })}
+                    {selectedRecordIds.length === ATTENDANCE_RECORD_DELETE_LIMIT &&
+                      ` · ${t("limit", { count: ATTENDANCE_RECORD_DELETE_LIMIT })}`}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={deleteRecords.isPending}
+                    onClick={() => setSelectedRecordIds([])}
+                  >
+                    {t("clear")}
+                  </Button>
+                  <ConfirmDialog
+                    dir={isArabic ? "rtl" : "ltr"}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteRecords.isPending}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                        {deleteRecords.isPending
+                          ? t("deleting")
+                          : t("deleteSelected")}
+                      </Button>
+                    }
+                    title={t("title")}
+                    description={t("description", {
+                      count: selectedRecordIds.length,
+                    })}
+                    confirmLabel={t("confirm")}
+                    cancelLabel={t("cancel")}
+                    onConfirm={() =>
+                      deleteRecords.mutate({
+                        sessionId: selectedSession._id,
+                        recordIds: selectedRecordIds,
+                      })
+                    }
+                  />
+                </>
+              )}
               <AttendanceExportButton
                 isArabic={isArabic}
                 sessionId={selectedSession._id}
@@ -592,6 +683,15 @@ export function AdminAttendanceOverview({
                   hall={selectedSession.location}
                   isArabic={isArabic}
                   isLive={currentSession?.status === "OPEN"}
+                  selection={
+                    canDeleteRecords
+                      ? {
+                          ids: selectedRecordIds,
+                          disabled: deleteRecords.isPending,
+                          onChange: setSelectedRecordIds,
+                        }
+                      : undefined
+                  }
                   onEdit={(record) => {
                     setEditRecord(record);
                     setEditStatus(record.status);
@@ -605,13 +705,17 @@ export function AdminAttendanceOverview({
                   totalPages={records.data?.totalPages || 0}
                   onPage={setRecordsPage}
                   isArabic={isArabic}
-                  disabled={records.isFetching}
+                  disabled={records.isFetching || deleteRecords.isPending}
                 />
               </>
             )
           )}
           <DialogFooter className="rtl:sm:justify-start">
-            <Button variant="outline" onClick={() => setSelectedSession(null)}>
+            <Button
+              variant="outline"
+              disabled={deleteRecords.isPending}
+              onClick={() => setSelectedSession(null)}
+            >
               {isArabic ? "إغلاق" : "Close"}
             </Button>
           </DialogFooter>

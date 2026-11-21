@@ -61,11 +61,14 @@ Module._load = function (request, parent, ...rest) {
   if (request === "@tanstack/react-query")
     return {
       keepPreviousData: (value) => value,
+      useMutation: () => ({}),
+      useQueryClient: () => ({}),
       useQuery: ({ queryKey }) => ({
         data: queryKey[0] === "attendance-sessions" ? overview : undefined,
         refetch() {},
       }),
     };
+  if (request === "next-intl") return { useTranslations: () => (key) => key };
   if (request === "@/hooks/use-table-state")
     return {
       useTableState: () => ({

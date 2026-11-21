@@ -6,6 +6,7 @@ import type { ControlCheckpoint } from "../types";
 
 export function useControlCheckpoint(sheetId: string, principalId?: string) {
   const [restore, setRestore] = useState<ControlCheckpoint | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(principalId));
   const [saveError, setSaveError] = useState(false);
   const interacted = useRef(false);
   const queued = useRef<ControlCheckpoint | null>(null);
@@ -44,6 +45,7 @@ export function useControlCheckpoint(sheetId: string, principalId?: string) {
     (checkpoint: ControlCheckpoint, immediate = false) => {
       if (!principalId) return;
       interacted.current = true;
+      setIsLoading(false);
       setRestore(null);
       latest.current = checkpoint;
       queued.current = checkpoint;
@@ -63,7 +65,10 @@ export function useControlCheckpoint(sheetId: string, principalId?: string) {
         lastSaved.current = checkpoint;
         if (checkpoint?.studentId) setRestore(checkpoint);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
     const saveWhenHidden = () => {
       if (document.visibilityState === "hidden") void flush();
     };
@@ -77,6 +82,7 @@ export function useControlCheckpoint(sheetId: string, principalId?: string) {
 
   return {
     restore,
+    isLoading,
     setRestore,
     remember,
     saveError,

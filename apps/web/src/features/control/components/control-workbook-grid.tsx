@@ -353,8 +353,14 @@ export function ControlWorkbookGrid({
     () => filtered.slice((currentPage - 1) * 100, currentPage * 100),
     [filtered, currentPage],
   );
-  const { remember, restore, setRestore, saveError, retry } =
-    useControlCheckpoint(sheet.id, principalId);
+  const {
+    remember,
+    restore,
+    setRestore,
+    isLoading: checkpointLoading,
+    saveError,
+    retry,
+  } = useControlCheckpoint(sheet.id, principalId);
   const [hiddenCheckpoint, setHiddenCheckpoint] =
     useState<ControlCheckpoint | null>(null);
   const appliedView = useRef<ControlCheckpoint | null>(null);
@@ -1647,6 +1653,9 @@ export function ControlWorkbookGrid({
           >
             {t("goToLastStudent")}
           </Button>
+        )}
+        {(checkpointLoading || restore) && (
+          <ControlWorkbookLoading stage="restoringPosition" />
         )}
         {saveError && (
           <Button type="button" variant="ghost" size="sm" onClick={retry}>

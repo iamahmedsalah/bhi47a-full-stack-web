@@ -7,6 +7,10 @@ import {
   Min,
   Max,
   IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsMongoId,
   ValidateNested,
   IsBoolean,
   IsInt,
@@ -18,11 +22,22 @@ import { Type } from 'class-transformer';
 import {
   ATTENDANCE_SESSION_TYPES,
   ATTENDANCE_RECORD_STATUSES,
+  ATTENDANCE_RECORD_DELETE_LIMIT,
   STAFF_ACADEMIC_POSITIONS,
   type AttendanceSessionType,
   type AttendanceRecordStatus,
   type StaffAcademicPosition,
 } from '@student-portal/shared';
+
+export class DeleteAttendanceRecordsDto {
+  @ApiProperty({ type: [String], maxItems: ATTENDANCE_RECORD_DELETE_LIMIT })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ATTENDANCE_RECORD_DELETE_LIMIT)
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  recordIds!: string[];
+}
 
 export class SessionLocationDto {
   @ApiPropertyOptional({

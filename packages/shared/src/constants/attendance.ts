@@ -64,6 +64,8 @@ export const ATTENDANCE_CONFIG_DEFAULTS = {
   QR_TOLERANCE_SECONDS: 5,
 } as const;
 
+export const ATTENDANCE_RECORD_DELETE_LIMIT = 200;
+
 export const INSTITUTE_GEO_LOCATION = {
   VENUE_NAME: 'المعهد العالى للعلوم الادارية والحاسبات',
   VENUE_NAME_EN: 'BHI Advanced administrative sciences and computers K47',

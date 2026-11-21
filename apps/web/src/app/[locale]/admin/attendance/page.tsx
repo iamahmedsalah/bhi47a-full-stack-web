@@ -53,6 +53,7 @@ const ActiveSessionPresenter = dynamic(
 import {
   INSTITUTE_VENUE_PRESETS,
   INSTITUTE_GEO_LOCATION,
+  PERMISSIONS,
   type InstituteVenuePreset,
 } from "@student-portal/shared";
 import { AdminAttendanceOverview } from "@/features/attendance/components/admin-attendance-overview";
@@ -374,6 +375,9 @@ export default function StaffAttendancePage() {
       {activeTab === "admin-overview" ? (
         <AdminAttendanceOverview
           isArabic={isArabic}
+          canDeleteRecords={
+            isAdmin || user?.permissions?.includes(PERMISSIONS.ATTENDANCE_DELETE)
+          }
           onOpenSessionPresenter={async (session) => {
             try {
               const qr = await attendanceApi.getCurrentQr(session._id);

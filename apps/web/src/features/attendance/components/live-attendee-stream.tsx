@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
+import { ATTENDANCE_RECORD_DELETE_LIMIT } from "@student-portal/shared";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Users,
@@ -26,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import type {
   AttendanceRecordDto,
@@ -43,6 +46,11 @@ interface LiveAttendeeStreamProps {
   isArabic: boolean;
   isLive: boolean;
   onEdit: (record: AttendanceRecordDto) => void;
+  selection?: {
+    ids: string[];
+    disabled: boolean;
+    onChange: (ids: string[]) => void;
+  };
 }
 
 function Detail({
@@ -74,8 +82,10 @@ export function LiveAttendeeStream({
   isArabic,
   isLive,
   onEdit,
+  selection,
 }: LiveAttendeeStreamProps) {
-  const [filter, setFilter] = useState<"all" | "present" | "late">("all");
+  const t = useTranslations("attendanceDelete");
+  const [filter, setFilter] = useState<"all" | AttendanceRecordDto["status"]>("all");
   const [search, setSearch] = useState("");
   const locale = isArabic ? "ar-EG" : "en-GB";
   const number = (value: number) => value.toLocaleString(locale);
@@ -94,6 +104,15 @@ export function LiveAttendeeStream({
           new Date(b.checkedInAt).getTime() - new Date(a.checkedInAt).getTime(),
       );
   }, [records, filter, search]);
+  const selected = new Set(selection?.ids);
+  const visibleSelectedCount = visible.filter((record) =>
+    selected.has(record._id),
+  ).length;
+  const allVisibleSelected = visibleSelectedCount === visible.length;
+  const selectionLimitReached = selected.size >= ATTENDANCE_RECORD_DELETE_LIMIT;
+  const canSelectAllVisible =
+    selected.size + visible.length - visibleSelectedCount <=
+    ATTENDANCE_RECORD_DELETE_LIMIT;
   const statuses = {
     present: {
       label: isArabic ? "حاضر" : "Present",
@@ -226,7 +245,7 @@ export function LiveAttendeeStream({
                 isArabic ? "تصفية حالة الحضور" : "Filter attendance status"
               }
             >
-              {(["all", "present", "late"] as const).map((value) => (
+              {(["all", "present", "late", "excused", "absent"] as const).map((value) => (
                 <button
                   key={value}
                   type="button"
@@ -238,13 +257,7 @@ export function LiveAttendeeStream({
                     ? isArabic
                       ? "الكل"
                       : "All"
-                    : value === "present"
-                      ? isArabic
-                        ? "حاضر"
-                        : "Present"
-                      : isArabic
-                        ? "متأخر"
-                        : "Late"}
+                    : statuses[value].label}
                   <span className="tabular-nums opacity-80">
                     {number(
                       records.filter(
@@ -261,6 +274,27 @@ export function LiveAttendeeStream({
                 : `${number(visible.length)} shown`}
             </span>
           </div>
+          {selection && visible.length > 0 && (
+            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={
+                  allVisibleSelected || (visibleSelectedCount > 0 && "indeterminate")
+                }
+                disabled={
+                  selection.disabled || (!allVisibleSelected && !canSelectAllVisible)
+                }
+                onCheckedChange={(checked) => {
+                  const next = new Set(selected);
+                  for (const { _id } of visible) {
+                    if (checked === true) next.add(_id);
+                    else next.delete(_id);
+                  }
+                  selection.onChange([...next]);
+                }}
+              />
+              {t("selectVisible")}
+            </label>
+          )}
         </div>
 
         <div className="max-h-[36rem] flex-1 overflow-y-auto p-3 sm:p-4">
@@ -346,6 +380,26 @@ export function LiveAttendeeStream({
                     className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-background/40 transition-colors hover:border-primary/25"
                   >
                     <div className="flex items-start gap-3 p-3 sm:p-4">
+                      {selection && (
+                        <Checkbox
+                          className="mt-3"
+                          aria-label={t("selectRecord", {
+                            name: record.studentName,
+                          })}
+                          checked={selected.has(record._id)}
+                          disabled={
+                            selection.disabled ||
+                            (selectionLimitReached && !selected.has(record._id))
+                          }
+                          onCheckedChange={(checked) =>
+                            selection.onChange(
+                              checked === true
+                                ? [...selected, record._id]
+                                : selection.ids.filter((id) => id !== record._id),
+                            )
+                          }
+                        />
+                      )}
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-secondary/40 text-muted-foreground">
                         <UserRound className="h-5 w-5" aria-hidden="true" />
                       </div>

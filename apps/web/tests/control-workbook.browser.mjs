@@ -88,7 +88,7 @@ try {
     await route.continue();
   }, { times: 1 });
   await page.goto(`${base}/en/admin/control/${ids.midterm}`);
-  await page.getByRole('status').getByText('Loading workbook', {exact:true}).waitFor();
+  await page.getByRole('status').getByText('Loading grade workbook…', {exact:true}).waitFor({state:'visible'});
   finishWorkbookLoad();
   const mark=page.getByRole('textbox',{name:'260001 Midterm',exact:true});await mark.waitFor();
   const midtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});

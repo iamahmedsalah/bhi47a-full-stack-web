@@ -8,7 +8,7 @@ import {
   ArrowRight,
   Loader2,
   Lock,
-  TableProperties,
+  FileSpreadsheet,
   Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -169,7 +169,7 @@ function ControlSheetEditorContent() {
               : `${sheetDetails.rules.nameEn} Sheet · Academic Year ${sheetDetails.sheet.academicYear} · Max ${sheetDetails.rules.max}`
           }
           eyebrow={isAr ? "شبكة رصد الكنترول" : "Control Grade Sheet"}
-          icon={<TableProperties className="h-4 w-4" />}
+          icon={<FileSpreadsheet className="size-4" />}
         >
           <StatusBadge
             label={sheetDetails.sheet.locked ? "locked" : "unlocked"}

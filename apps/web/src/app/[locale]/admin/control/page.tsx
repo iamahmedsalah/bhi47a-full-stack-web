@@ -11,7 +11,7 @@ import {
   MoreVertical,
   ShieldCheck,
   SlidersHorizontal,
-  TableProperties,
+  FileSpreadsheet,
   Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +66,7 @@ import {
   openControlSheet,
   unlockControlSheet,
 } from "@/features/control/api";
+import { ControlWorkbookLoading } from "@/features/control/components/control-workbook-loading";
 import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
 import type { ControlCourseSummary } from "@/features/control/types";
 
@@ -605,7 +606,7 @@ function ControlHomeContent() {
               : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
           }
           eyebrow={isAr ? "أعمال الكنترول" : "Academic Control Office"}
-          icon={<TableProperties className="h-4 w-4" />}
+          icon={<FileSpreadsheet className="size-4" />}
         />
 
         <FilterBar
@@ -717,12 +718,7 @@ function ControlHomeContent() {
         </FilterBar>
 
         {openSheetMutation.isPending && (
-          <div className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold text-primary">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>
-              {isAr ? "جاري فتح كشف الرصد..." : "Opening grade sheet..."}
-            </span>
-          </div>
+          <ControlWorkbookLoading stage="openingSheet" />
         )}
 
         {!isLoading && !isError && !coursesData?.items.length && (
@@ -736,23 +732,26 @@ function ControlHomeContent() {
             </a>
           </div>
         )}
-        <DataTableShell
-          columns={columns}
-          data={filteredItems}
-          keyExtractor={(item) => item.courseId}
-          isLoading={isLoading}
-          isError={isError}
-          error={error}
-          onRetry={() => void refetch()}
-          enableSelection
-          selectedKeys={selectedKeys}
-          onSelectedKeysChange={setSelectedKeys}
-          emptyMessage={
-            isAr
-              ? "لا توجد مقررات متاحة ضمن نطاق صلاحياتك لهذا الفصل الدراسي."
-              : "No courses available within your scope for this semester."
-          }
-        />
+        {isLoading ? (
+          <ControlWorkbookLoading stage="loadingList" />
+        ) : (
+          <DataTableShell
+            columns={columns}
+            data={filteredItems}
+            keyExtractor={(item) => item.courseId}
+            isError={isError}
+            error={error}
+            onRetry={() => void refetch()}
+            enableSelection
+            selectedKeys={selectedKeys}
+            onSelectedKeysChange={setSelectedKeys}
+            emptyMessage={
+              isAr
+                ? "لا توجد مقررات متاحة ضمن نطاق صلاحياتك لهذا الفصل الدراسي."
+                : "No courses available within your scope for this semester."
+            }
+          />
+        )}
 
         {schemeTarget && (
           <GradingSchemeDialog
