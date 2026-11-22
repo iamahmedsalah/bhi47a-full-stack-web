@@ -1724,7 +1724,6 @@ export function ControlWorkbookGrid({
           <div
             role="group"
             aria-label={t("passRate", { component: t(passRate.component) })}
-            tabIndex={canManagePassThreshold ? 0 : undefined}
             onClick={
               canManagePassThreshold
                 ? () => {
@@ -1733,28 +1732,10 @@ export function ControlWorkbookGrid({
                   }
                 : undefined
             }
-            onKeyDown={
-              canManagePassThreshold
-                ? (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setThresholdInput(String(passRate.threshold));
-                      setPassThresholdOpen(true);
-                    }
-                  }
-                : undefined
-            }
-            title={
-              canManagePassThreshold
-                ? rtl
-                  ? `اضغط لتعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
-                  : `Click to edit pass mark threshold (current > ${passRate.threshold})`
-                : undefined
-            }
             className={cn(
-              "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+              "inline-flex h-9 w-fit max-w-full items-center gap-2.5 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
               canManagePassThreshold &&
-                " transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+                "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
               rtl ? "ms-auto" : "order-first me-auto",
             )}
           >
@@ -1770,10 +1751,27 @@ export function ControlWorkbookGrid({
               }).format(passRate.ratio)}
             </bdi>
             {canManagePassThreshold && (
-              <SlidersHorizontal
-                aria-hidden="true"
-                className="size-3.5 text-primary/80"
-              />
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setThresholdInput(String(passRate.threshold));
+                  setPassThresholdOpen(true);
+                }}
+                aria-label={
+                  rtl
+                    ? "تعديل حد درجة النجاح"
+                    : "Edit pass mark threshold"
+                }
+                title={
+                  rtl
+                    ? `تعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
+                    : `Edit pass mark threshold (current > ${passRate.threshold})`
+                }
+                className="inline-flex size-6 items-center justify-center rounded-squircle text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary cursor-pointer"
+              >
+                <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+              </button>
             )}
           </div>
         )}

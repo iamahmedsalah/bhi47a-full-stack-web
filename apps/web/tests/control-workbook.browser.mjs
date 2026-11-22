@@ -69,6 +69,7 @@ const server = http.createServer(async (req,res)=>{
         states[key].revision++;return res.end(JSON.stringify({results,summary:{ok:results.length,invalid:0,conflict:0,forbidden:0}}));
       }
       if(url.pathname.endsWith('/review')) {assert.equal(body.reason,undefined,'workflow does not send a reason');assert.equal(body.allowMissing,true,'blank entries require explicit confirmation');assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='SUBMIT_APPROVAL'?'PENDING_APPROVAL':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
+      if(url.pathname.endsWith('/pass-threshold') && req.method==='PATCH') {states[key].passThreshold=body.passThreshold;return res.end(JSON.stringify(detail(key)));}
       if(url.pathname==='/admin/control/sheets') return res.end(JSON.stringify(detail(body.component)));
     }
     if(/\.(js|css)$/.test(url.pathname)) {res.setHeader('Content-Type',url.pathname.endsWith('.js')?'text/javascript':'text/css');return res.end(await fs.readFile(path.join(output,path.basename(url.pathname))));}
@@ -310,6 +311,16 @@ try {
   await page.goto(sheetUrl);
   await page.getByRole('textbox',{name:'260001 Midterm',exact:true}).waitFor();
   assert.equal(new URL(page.url()).searchParams.get('page'),null);
+  const activeMidtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});
+  await activeMidtermRate.getByRole('button',{name:'Edit pass mark threshold',exact:true}).click();
+  const thresholdDialog=page.getByRole('dialog');
+  await thresholdDialog.getByRole('spinbutton').fill('10');
+  const thresholdResponse=page.waitForResponse(response=>response.url().endsWith('/pass-threshold')&&response.request().method()==='PATCH');
+  await thresholdDialog.getByRole('button',{name:'Save Threshold',exact:true}).click();
+  assert.equal((await thresholdResponse).status(),200);
+  assert.equal(states.midterm.passThreshold,10);
+  await thresholdDialog.waitFor({state:'hidden'});
+  await activeMidtermRate.waitFor({state:'visible'});
   console.log('Control browser acceptance passed: 3001-student paginated/searchable bilingual real grid, all grade columns, autosave/retry, keyboard navigation, coursework 5/15, desktop/mobile screenshots. API persistence is covered separately.');
 } catch(error) { if(page) await page.screenshot({path:path.join(output,'failure.png'),fullPage:true});throw error; }
 finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
