@@ -322,8 +322,8 @@ function AdminFaqManagementPage({ ar }: { ar: boolean }) {
       if (res.inserted > 0) {
         toast.success(
           ar
-            ? `تمت إضافة ${res.inserted} سؤال افتراضي بنجاح (وتخطي ${res.skipped} موجود مسبقاً)`
-            : `Loaded ${res.inserted} starter FAQ(s) (${res.skipped} already existed)`,
+            ? `تمت إضافة ${res.inserted} مسودة (وتخطي ${res.skipped} سؤال موجود)`
+            : `Added ${res.inserted} starter drafts (${res.skipped} already existed)`,
         );
       } else {
         toast.info(
@@ -416,14 +416,6 @@ function AdminFaqManagementPage({ ar }: { ar: boolean }) {
     });
   };
 
-  const toggleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(rows.map((row) => row._id));
-    } else {
-      setSelectedIds([]);
-    }
-  };
-
   const toggleSelectRow = (id: string, checked: boolean) => {
     setSelectedIds((prev) =>
       checked ? [...new Set([...prev, id])] : prev.filter((item) => item !== id),
@@ -441,7 +433,9 @@ function AdminFaqManagementPage({ ar }: { ar: boolean }) {
           <div className="flex items-center justify-center">
             <Checkbox
               checked={allVisibleSelected}
-              onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+              onCheckedChange={(checked) =>
+                setSelectedIds(checked === true ? rows.map((row) => row._id) : [])
+              }
               aria-label={ar ? 'تحديد الكل' : 'Select all'}
             />
           </div>
@@ -545,47 +539,51 @@ function AdminFaqManagementPage({ ar }: { ar: boolean }) {
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
+                  asChild
                   align="end"
                   sideOffset={6}
-                  dir={dir}
-                  className="z-50 min-w-44 rounded-xl border border-border bg-card p-1.5 shadow-xl"
                 >
-                  <DropdownMenu.Item
-                    onSelect={() => openEditDialog(row)}
-                    className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-foreground outline-none hover:bg-secondary cursor-pointer"
+                  <div
+                    dir={dir}
+                    className="z-50 min-w-44 rounded-xl border border-border bg-card p-1.5 shadow-xl"
                   >
-                    <Pencil className="h-3.5 w-3.5 text-primary" />
-                    <span>{ar ? 'تعديل السؤال والإجابة' : 'Edit Question'}</span>
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() =>
-                      togglePublishMutation.mutate({
-                        id: row._id,
-                        isActive: !row.isActive,
-                      })
-                    }
-                    className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-foreground outline-none hover:bg-secondary cursor-pointer"
-                  >
-                    {row.isActive ? (
-                      <>
-                        <EyeOff className="h-3.5 w-3.5 text-amber-400" />
-                        <span>{ar ? 'تحويل إلى مسودة' : 'Move to Draft'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3.5 w-3.5 text-emerald-400" />
-                        <span>{ar ? 'نشر للطلاب والمساعد' : 'Publish'}</span>
-                      </>
-                    )}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator className="my-1 h-px bg-border/70" />
-                  <DropdownMenu.Item
-                    onSelect={() => setDeleteTarget(row)}
-                    className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-danger outline-none hover:bg-danger/10 cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>{ar ? 'حذف السؤال' : 'Delete FAQ'}</span>
-                  </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() => openEditDialog(row)}
+                      className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-foreground outline-none hover:bg-secondary cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-primary" />
+                      <span>{ar ? 'تعديل السؤال والإجابة' : 'Edit Question'}</span>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={() =>
+                        togglePublishMutation.mutate({
+                          id: row._id,
+                          isActive: !row.isActive,
+                        })
+                      }
+                      className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-foreground outline-none hover:bg-secondary cursor-pointer"
+                    >
+                      {row.isActive ? (
+                        <>
+                          <EyeOff className="h-3.5 w-3.5 text-amber-400" />
+                          <span>{ar ? 'تحويل إلى مسودة' : 'Move to Draft'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>{ar ? 'نشر للطلاب والمساعد' : 'Publish'}</span>
+                        </>
+                      )}
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="my-1 h-px bg-border/70" />
+                    <DropdownMenu.Item
+                      onSelect={() => setDeleteTarget(row)}
+                      className="flex items-center gap-2 rounded-squircle px-2.5 py-2 text-xs font-medium text-danger outline-none hover:bg-danger/10 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{ar ? 'حذف السؤال' : 'Delete FAQ'}</span>
+                    </DropdownMenu.Item>
+                  </div>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>

@@ -13,7 +13,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 function normalizeList(values: string[]): string[] {
-  return [...new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean))];
+  return [
+    ...new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean)),
+  ];
 }
 
 async function seedFaqs() {

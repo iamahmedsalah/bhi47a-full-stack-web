@@ -22,7 +22,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'ميعاد الامتحان',
       'الامتحانات',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 1,
   },
   {
@@ -40,11 +40,12 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'الدور',
       'المبنى',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 2,
   },
   {
-    question: 'ما هي ضوابط دخول اللجنة وماذا أفعل عند وجود عذر قهري للغياب عن الامتحان؟',
+    question:
+      'ما هي ضوابط دخول اللجنة وماذا أفعل عند وجود عذر قهري للغياب عن الامتحان؟',
     answer:
       'يجب الحضور قبل موعد الامتحان بوقت كافٍ مع إحضار كارنيه المعهد أو بطاقة الرقم القومي. في حال وجود عذر مرضي أو قهري موثق، يجب تقديم الطلب والمستندات الرسمية لشؤون الطلاب خلال المدة المقررة طبقاً للائحة المعهد، ويمكنك الاستفسار المبدئي عبر صفحة «المساعدة والشكاوى».',
     topics: ['الامتحانات'],
@@ -56,7 +57,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'تأجيل امتحان',
       'عذر قهري',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 3,
   },
   {
@@ -74,7 +75,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'درجات الكويزات',
       'كويز',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 4,
   },
   {
@@ -90,11 +91,12 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'الكنترول',
       'المصروفات',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 5,
   },
   {
-    question: 'كيف أفعّل البريد الأكاديمي الرسمي وما هي كلمة المرور الافتراضية؟',
+    question:
+      'كيف أفعّل البريد الأكاديمي الرسمي وما هي كلمة المرور الافتراضية؟',
     answer:
       'يظهر عنوان بريدك الأكاديمي الرسمي في كارت «البريد الأكاديمي الرسمي» بالصفحة الرئيسية وفي ملفك الشخصي. كلمة المرور الافتراضية عند التفعيل لأول مرة هي الرقم القومي كاملاً (14 رقماً) المسجل في ملفك بالمعهد، ويمكنك تسجيل الدخول مباشرة عبر Gmail.',
     topics: ['البريد الأكاديمي'],
@@ -107,11 +109,12 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'كلمة مرور الايميل',
       'الرقم القومي',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 6,
   },
   {
-    question: 'ما الخدمات المتاحة عبر البريد الأكاديمي وماذا أفعل إذا نسيت كلمة مروره؟',
+    question:
+      'ما الخدمات المتاحة عبر البريد الأكاديمي وماذا أفعل إذا نسيت كلمة مروره؟',
     answer:
       'يمنحك البريد الأكاديمي وصولاً كاملاً لخدمات Google Workspace مثل Gmail وGoogle Drive وGoogle Meet وGoogle Classroom. في حال نسيان كلمة المرور أو تعذر الدخول، أرسل تذكرة إلى «الدعم الفني» من تبويب الشكاوى مع توضيح كود الطالب ليتم إعادة تعيينها.',
     topics: ['البريد الأكاديمي'],
@@ -123,7 +126,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'classroom',
       'meet',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 7,
   },
   {
@@ -139,7 +142,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'حرمان',
       'انذار غياب',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 8,
   },
   {
@@ -155,7 +158,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'اللوكيشن',
       'الموقع الجغرافي',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 9,
   },
   {
@@ -172,7 +175,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'تذكرة',
       'مشكلة تقنية',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 10,
   },
   {
@@ -187,11 +190,12 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'رد الإدارة',
       'المحادثة',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 11,
   },
   {
-    question: 'كيف أسجل الدخول لأول مرة وكيف أصل إلى المحاضرات والسكاشن وجدول الدراسة؟',
+    question:
+      'كيف أسجل الدخول لأول مرة وكيف أصل إلى المحاضرات والسكاشن وجدول الدراسة؟',
     answer:
       'يتم تسجيل الدخول لأول مرة باستخدام «كود الطالب» وكلمة المرور الافتراضية وهي «الرقم القومي»، وسيُطلب منك تغيير كلمة المرور فوراً لحماية حسابك. بعد الدخول، يمكنك استعراض وتحميل ملفات المحاضرات والسكاشن من صفحة «المقررات»، ومعرفة مواعيدك من «جدول المحاضرات والسكاشن».',
     topics: ['الحساب والمقررات'],
@@ -205,7 +209,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'المقررات',
       'جدول المحاضرات',
     ],
-    isActive: true,
+    isActive: false,
     sortOrder: 12,
   },
 
@@ -215,8 +219,14 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
     answer:
       'Open "Exam Schedule" from the sidebar menu, or check the "Official Exam Timetable" card on your Student Dashboard to view and download the latest published midterm or final schedule.',
     topics: ['exams'],
-    keywords: ['exam schedule', 'timetable', 'midterm dates', 'final dates', 'exams'],
-    isActive: true,
+    keywords: [
+      'exam schedule',
+      'timetable',
+      'midterm dates',
+      'final dates',
+      'exams',
+    ],
+    isActive: false,
     sortOrder: 101,
   },
   {
@@ -224,17 +234,31 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
     answer:
       'Go to "Exam Location" in the sidebar or check the "Exam Seating & Room" card on your Dashboard. Your seat number, building, floor, and room will appear as soon as seating assignments are published.',
     topics: ['exams'],
-    keywords: ['exam place', 'exam location', 'seat number', 'room', 'building', 'floor'],
-    isActive: true,
+    keywords: [
+      'exam place',
+      'exam location',
+      'seat number',
+      'room',
+      'building',
+      'floor',
+    ],
+    isActive: false,
     sortOrder: 102,
   },
   {
-    question: 'What are the exam entry rules and what should I do if I miss an exam due to an emergency?',
+    question:
+      'What are the exam entry rules and what should I do if I miss an exam due to an emergency?',
     answer:
       'Arrive early with your student ID card or national ID. For documented medical or force majeure excuses, submit the official supporting documents to Student Affairs within the deadline specified by institute regulations.',
     topics: ['exams'],
-    keywords: ['missed exam', 'medical excuse', 'exam rules', 'student id', 'absence'],
-    isActive: true,
+    keywords: [
+      'missed exam',
+      'medical excuse',
+      'exam rules',
+      'student id',
+      'absence',
+    ],
+    isActive: false,
     sortOrder: 103,
   },
   {
@@ -243,7 +267,7 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'Open "Results" from the sidebar to view your published midterm, final, and total course grades. For monthly or practical quizzes, open "Quiz Grades" to review your scores once released by your instructor.',
     topics: ['results'],
     keywords: ['results', 'grades', 'midterm', 'final', 'quiz grades', 'gpa'],
-    isActive: true,
+    isActive: false,
     sortOrder: 104,
   },
   {
@@ -251,26 +275,46 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
     answer:
       'Grades appear only after the Control committee finishes reviewing, approving, and publishing the course sheet. If a result is marked as withheld due to an administrative or financial hold, please contact Student Affairs or submit a ticket in the Tickets tab.',
     topics: ['results'],
-    keywords: ['withheld', 'missing grade', 'not published', 'control', 'tuition hold'],
-    isActive: true,
+    keywords: [
+      'withheld',
+      'missing grade',
+      'not published',
+      'control',
+      'tuition hold',
+    ],
+    isActive: false,
     sortOrder: 105,
   },
   {
-    question: 'How do I activate my official academic email and what is the default password?',
+    question:
+      'How do I activate my official academic email and what is the default password?',
     answer:
       'Your official academic email address is displayed on the Dashboard and Profile pages. Your default initial password is your full 14-digit National ID registered with the institute, and you can sign in directly through Gmail.',
     topics: ['academic email'],
-    keywords: ['academic email', 'gmail', 'default password', 'national id', 'activate email'],
-    isActive: true,
+    keywords: [
+      'academic email',
+      'gmail',
+      'default password',
+      'national id',
+      'activate email',
+    ],
+    isActive: false,
     sortOrder: 106,
   },
   {
-    question: 'What services are included with the academic email and how can I reset its password?',
+    question:
+      'What services are included with the academic email and how can I reset its password?',
     answer:
       'Your academic email grants full access to Google Workspace services including Gmail, Google Drive, Google Meet, and Google Classroom. If you forget your email password, submit a Technical Support ticket with your student code.',
     topics: ['academic email'],
-    keywords: ['reset email password', 'google workspace', 'drive', 'meet', 'classroom'],
-    isActive: true,
+    keywords: [
+      'reset email password',
+      'google workspace',
+      'drive',
+      'meet',
+      'classroom',
+    ],
+    isActive: false,
     sortOrder: 107,
   },
   {
@@ -278,26 +322,46 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
     answer:
       'Open "Attendance" from the sidebar to inspect your lecture and section attendance statistics per course along with any absence warnings for the active semester.',
     topics: ['attendance'],
-    keywords: ['attendance', 'absence', 'attendance rate', 'warnings', 'lectures'],
-    isActive: true,
+    keywords: [
+      'attendance',
+      'absence',
+      'attendance rate',
+      'warnings',
+      'lectures',
+    ],
+    isActive: false,
     sortOrder: 108,
   },
   {
-    question: 'How do I check in to an active lecture or section attendance session?',
+    question:
+      'How do I check in to an active lecture or section attendance session?',
     answer:
       'When your lecturer or teaching assistant starts an attendance session, open the "Attendance" page to scan the QR code or enter the session code. Enable browser location access if on-campus verification is required.',
     topics: ['attendance'],
-    keywords: ['qr code', 'check in', 'attendance session', 'location', 'geofence'],
-    isActive: true,
+    keywords: [
+      'qr code',
+      'check in',
+      'attendance session',
+      'location',
+      'geofence',
+    ],
+    isActive: false,
     sortOrder: 109,
   },
   {
-    question: 'How do I submit a complaint or inquiry to Student Affairs or Technical Support?',
+    question:
+      'How do I submit a complaint or inquiry to Student Affairs or Technical Support?',
     answer:
       'Click "New Complaint" at the top of this page, choose the ticket type and target department (Student Affairs, Technical Support, Control, Finance, or Academic Advising), provide clear details, and optionally attach a screenshot.',
     topics: ['complaints'],
-    keywords: ['complaint', 'inquiry', 'support ticket', 'student affairs', 'technical support'],
-    isActive: true,
+    keywords: [
+      'complaint',
+      'inquiry',
+      'support ticket',
+      'student affairs',
+      'technical support',
+    ],
+    isActive: false,
     sortOrder: 110,
   },
   {
@@ -306,16 +370,25 @@ export const DEFAULT_FAQ_ITEMS: DefaultFaqSeedItem[] = [
       'Switch to the "My Tickets & Complaints" tab on this page to view every ticket and its current status. Click "Open Chat" to read staff responses and send follow-up replies.',
     topics: ['complaints'],
     keywords: ['ticket status', 'follow up', 'ticket number', 'reply', 'chat'],
-    isActive: true,
+    isActive: false,
     sortOrder: 111,
   },
   {
-    question: 'How do I sign in for the first time and access course materials and schedules?',
+    question:
+      'How do I sign in for the first time and access course materials and schedules?',
     answer:
       'Sign in initially with your Student Code and your National ID as the initial password; you will be prompted to set a new personal password immediately. Once signed in, download lecture/section materials from "Courses" and view your classes in "Lecture & Section Schedule".',
     topics: ['account & courses'],
-    keywords: ['first login', 'student code', 'password reset', 'materials', 'lectures', 'courses', 'schedule'],
-    isActive: true,
+    keywords: [
+      'first login',
+      'student code',
+      'password reset',
+      'materials',
+      'lectures',
+      'courses',
+      'schedule',
+    ],
+    isActive: false,
     sortOrder: 112,
   },
 ];

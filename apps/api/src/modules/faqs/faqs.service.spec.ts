@@ -53,7 +53,7 @@ describe('FaqsService', () => {
     expect((passedFilter.$and as unknown[]).length).toBe(2);
   });
 
-  it('idempotently seeds default FAQs and reports inserted vs skipped counts', async () => {
+  it('adds starter FAQs as drafts and never overwrites existing entries', async () => {
     const updateOneMock = jest
       .fn()
       .mockResolvedValueOnce({ upsertedCount: 1 })
@@ -67,6 +67,13 @@ describe('FaqsService', () => {
     const result = await service.seedDefaults(userId);
 
     expect(updateOneMock).toHaveBeenCalledTimes(DEFAULT_FAQ_ITEMS.length);
+    for (const [filter, update, options] of updateOneMock.mock.calls) {
+      expect(filter).toEqual({ question: expect.any(String) });
+      expect(update).toEqual({
+        $setOnInsert: expect.objectContaining({ isActive: false }),
+      });
+      expect(options).toEqual({ upsert: true });
+    }
     expect(result).toEqual({
       inserted: 1,
       skipped: DEFAULT_FAQ_ITEMS.length - 1,
