@@ -340,6 +340,11 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
   const usage = data.usage;
   const hasBudget = usage.monthlyTokenBudget !== null;
   const ragData = ragOverview.data;
+  const ragSummary = ragData?.summary;
+  const ragItems = Array.isArray(ragData?.items) ? ragData.items : [];
+  const hasValidRagOverview = Boolean(
+    ragSummary && typeof ragSummary.totalSyllabi === "number",
+  );
 
   return (
     <div className="space-y-5">
@@ -474,11 +479,11 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
       {/* RAG Syllabus Knowledge Index Monitoring & Manual Re-indexing Section */}
       <section className="rounded-2xl border border-border bg-secondary/15 p-5 space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-squircle bg-primary/10 text-primary">
               <Database className="h-5 w-5" />
             </span>
-            <div>
+            <div className="min-w-0">
               <h2 className="font-bold text-foreground">
                 {ar
                   ? "فهرس كتب وتوصيف المقررات (RAG Knowledge Index)"
@@ -499,13 +504,13 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
               size="sm"
               disabled={ragOverview.isFetching}
               onClick={() => void ragOverview.refetch()}
-              className="rounded-squircle gap-1.5 text-xs"
+              className="h-auto min-h-9 max-w-full whitespace-normal rounded-squircle gap-1.5 px-3 py-1.5 text-xs"
             >
               <RefreshCw
                 className={
                   ragOverview.isFetching
-                    ? "h-3.5 w-3.5 animate-spin"
-                    : "h-3.5 w-3.5"
+                    ? "h-3.5 w-3.5 shrink-0 animate-spin"
+                    : "h-3.5 w-3.5 shrink-0"
                 }
               />
               {ar ? "تحديث الحالة" : "Refresh"}
@@ -515,16 +520,16 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
               size="sm"
               disabled={
                 reindexAllMutation.isPending ||
-                !ragData ||
-                ragData.summary.totalSyllabi === 0
+                !hasValidRagOverview ||
+                (ragSummary?.totalSyllabi ?? 0) === 0
               }
               onClick={() => reindexAllMutation.mutate(false)}
-              className="rounded-squircle gap-1.5 text-xs"
+              className="h-auto min-h-9 max-w-full whitespace-normal rounded-squircle gap-1.5 px-3 py-1.5 text-xs"
             >
               {reindexAllMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
               ) : (
-                <BookOpen className="h-3.5 w-3.5" />
+                <BookOpen className="h-3.5 w-3.5 shrink-0" />
               )}
               {ar
                 ? "فهرسة الكتب غير المفهرسة"
@@ -537,7 +542,7 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
           <div className="flex min-h-36 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
           </div>
-        ) : ragOverview.isError || !ragData ? (
+        ) : ragOverview.isError || !hasValidRagOverview || !ragSummary ? (
           <div className="rounded-xl border border-border/70 bg-background/40 p-6 text-center text-xs text-muted-foreground space-y-2">
             <p>
               {ar
@@ -549,7 +554,7 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
               variant="outline"
               size="sm"
               onClick={() => void ragOverview.refetch()}
-              className="rounded-squircle"
+              className="h-auto min-h-9 max-w-full whitespace-normal rounded-squircle px-3 py-1.5"
             >
               {ar ? "إعادة المحاولة" : "Retry"}
             </Button>
@@ -559,17 +564,15 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <UsageCard
                 label={ar ? "إجمالي الكتب المرفوعة" : "Total Uploaded Syllabi"}
-                value={numberFormatter.format(ragData.summary.totalSyllabi)}
+                value={numberFormatter.format(ragSummary.totalSyllabi)}
               />
               <UsageCard
                 label={ar ? "مفهرس وجاهز للبحث" : "Indexed & Ready"}
-                value={numberFormatter.format(ragData.summary.readyCount)}
+                value={numberFormatter.format(ragSummary.readyCount)}
               />
               <UsageCard
                 label={ar ? "إجمالي المقاطع النشطة" : "Total Active Chunks"}
-                value={numberFormatter.format(
-                  ragData.summary.totalActiveChunks,
-                )}
+                value={numberFormatter.format(ragSummary.totalActiveChunks)}
               />
               <UsageCard
                 label={
@@ -578,14 +581,14 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
                     : "Pending / Failed / Unindexed"
                 }
                 value={numberFormatter.format(
-                  ragData.summary.failedCount +
-                    ragData.summary.unindexedCount +
-                    ragData.summary.processingCount,
+                  ragSummary.failedCount +
+                    ragSummary.unindexedCount +
+                    ragSummary.processingCount,
                 )}
               />
             </div>
 
-            {ragData.items.length === 0 ? (
+            {ragItems.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/80 bg-background/30 p-8 text-center text-xs text-muted-foreground">
                 {ar
                   ? "لا توجد كتب مقررات (Syllabus PDF) مرفوعة حتى الآن. عند رفع كتاب لأي مقرر سيتم فهرسته تلقائياً هنا."
@@ -594,7 +597,7 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
             ) : (
               <div className="overflow-hidden rounded-xl border border-border/70 bg-background/40">
                 <DataTable
-                  rows={ragData.items}
+                  rows={ragItems}
                   columns={ragColumns}
                   getRowKey={(row) => row.courseId}
                 />

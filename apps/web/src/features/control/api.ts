@@ -10,15 +10,20 @@ import type {
 import type {
   ApplyChangesResponse,
   ControlAuditRow,
+  ControlBulkLockResult,
   ControlCapabilities,
   ControlCheckpoint,
   ControlCourseSummary,
+  ControlPetition,
+  ControlPetitionStatus,
+  ControlPetitionsSummary,
   ControlRosterRow,
   ControlSheetDetails,
   ControlWorkflowHistory,
   GradeChangeInput,
   ResolvedGradingScheme,
 } from "./types";
+import type { GradeStatus } from "@student-portal/shared";
 
 export type ControlTransferProgress = (percent: number | null) => void;
 const transferProgress =
@@ -52,6 +57,11 @@ export const controlKeys = {
   ) => [...controlKeys.all, "audit", sheetId, params] as const,
   workflowHistory: (sheetId: string) =>
     [...controlKeys.all, "workflow-history", sheetId] as const,
+  petitions: (params?: Record<string, unknown>) =>
+    [...controlKeys.all, "petitions", params ?? {}] as const,
+  petitionsSummary: (params?: Record<string, unknown>) =>
+    [...controlKeys.all, "petitions-summary", params ?? {}] as const,
+  petition: (id: string) => [...controlKeys.all, "petition", id] as const,
 };
 
 export async function getControlCapabilities(): Promise<ControlCapabilities> {
@@ -519,4 +529,111 @@ export async function undoIcCarry(
     { studentId, fingerprint },
   );
   return response.data;
+}
+
+export async function bulkLockControlSheets(dto: {
+  academicYear: string;
+  semester: Semester;
+  courseIds: string[];
+  components: ControlComponentKey[];
+  reason?: string;
+}): Promise<ControlBulkLockResult> {
+  const res = await api.post<ControlBulkLockResult>(
+    "/admin/control/sheets/bulk-lock",
+    dto,
+  );
+  return res.data;
+}
+
+export async function bulkUnlockControlSheets(dto: {
+  academicYear: string;
+  semester: Semester;
+  courseIds: string[];
+  components: ControlComponentKey[];
+  reason?: string;
+}): Promise<ControlBulkLockResult> {
+  const res = await api.post<ControlBulkLockResult>(
+    "/admin/control/sheets/bulk-unlock",
+    dto,
+  );
+  return res.data;
+}
+
+export async function createControlPetition(dto: {
+  sheetId: string;
+  reason: string;
+  items: Array<{
+    studentId: string;
+    proposedScore?: number | null;
+    proposedStatus?: GradeStatus;
+    proposedAttendanceMark?: number | null;
+    proposedQuizzesMark?: number | null;
+    studentReason?: string;
+  }>;
+}): Promise<ControlPetition> {
+  const res = await api.post<ControlPetition>("/admin/control/petitions", dto);
+  return res.data;
+}
+
+export async function getControlPetitionsSummary(params?: {
+  academicYear?: string;
+  semester?: Semester;
+  sheetId?: string;
+}): Promise<ControlPetitionsSummary> {
+  const res = await api.get<ControlPetitionsSummary>(
+    "/admin/control/petitions/summary",
+    { params },
+  );
+  return res.data;
+}
+
+export async function listControlPetitions(params?: {
+  academicYear?: string;
+  semester?: Semester;
+  component?: ControlComponentKey;
+  status?: ControlPetitionStatus;
+  courseId?: string;
+  sheetId?: string;
+  mine?: boolean;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<PaginatedResponse<ControlPetition>> {
+  const res = await api.get<PaginatedResponse<ControlPetition>>(
+    "/admin/control/petitions",
+    { params },
+  );
+  return res.data;
+}
+
+export async function getControlPetition(id: string): Promise<ControlPetition> {
+  const res = await api.get<ControlPetition>(`/admin/control/petitions/${id}`);
+  return res.data;
+}
+
+export async function decideControlPetition(
+  id: string,
+  dto: {
+    items: Array<{
+      studentId: string;
+      decision: "APPROVED" | "REJECTED";
+      decisionNote?: string;
+    }>;
+    reviewNote?: string;
+  },
+): Promise<ControlPetition> {
+  const res = await api.post<ControlPetition>(
+    `/admin/control/petitions/${id}/decide`,
+    dto,
+  );
+  return res.data;
+}
+
+export async function markControlPetitionSeen(
+  id: string,
+): Promise<ControlPetition> {
+  const res = await api.post<ControlPetition>(
+    `/admin/control/petitions/${id}/mark-seen`,
+  );
+  return res.data;
 }

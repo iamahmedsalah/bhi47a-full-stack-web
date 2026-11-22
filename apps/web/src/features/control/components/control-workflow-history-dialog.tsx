@@ -130,6 +130,7 @@ export function ControlWorkflowHistoryDialog({
     switch (action) {
       case "APPROVE":
       case "PUBLISH":
+      case "PETITION_APPROVE":
         return "success" as const;
       case "SUBMIT":
       case "SUBMIT_APPROVAL":
@@ -137,6 +138,7 @@ export function ControlWorkflowHistoryDialog({
       case "RETURN":
       case "LOCK":
       case "HIDE":
+      case "PETITION_REJECT":
         return "danger" as const;
       case "OPENED":
       case "UNLOCK":

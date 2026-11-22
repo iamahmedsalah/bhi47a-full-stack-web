@@ -53,7 +53,7 @@ try {
     await search.fill('');
     await page.getByRole('button',{name:messages.section,exact:true}).click();
     await page.getByRole('option',{name:messages.groups.control,exact:true}).click();
-    assert.equal(await page.getByRole('checkbox').count(),19);
+    assert.equal(await page.getByRole('checkbox').count(),22);
     await search.fill('control.grades.grace');
     await page.screenshot({path:path.join(output,locale+'-desktop.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});

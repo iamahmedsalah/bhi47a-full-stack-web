@@ -10,6 +10,9 @@ export interface ControlCapabilities {
   canReview: boolean;
   canApprove?: boolean;
   canApproveFinal?: boolean;
+  canReopen?: boolean;
+  canCreatePetitions?: boolean;
+  canApprovePetitions?: boolean;
   canImport: boolean;
   canExport: boolean;
   canAccess: boolean;
@@ -92,6 +95,9 @@ export interface ControlSheetDetails {
     canManagePassThreshold?: boolean;
     canSubmit: boolean;
     canReview: boolean;
+    canReopen?: boolean;
+    canCreatePetitions?: boolean;
+    canApprovePetitions?: boolean;
     canApprove?: boolean;
     canApproveFinal?: boolean;
     canImport: boolean;
@@ -231,7 +237,10 @@ export interface ControlAuditRow {
     | "RETURN"
     | "REOPEN"
     | "PUBLISH"
-    | "HIDE";
+    | "HIDE"
+    | "GRACE"
+    | "PETITION_APPROVE"
+    | "PETITION_REJECT";
   source: "GRID" | "XLSX" | "SYSTEM";
   component: string;
   oldValue: {
@@ -315,4 +324,77 @@ export interface ControlCheckpoint {
   filter: "all" | "absent";
   onlyMissing: boolean;
   search: string;
+}
+
+export interface ControlBulkLockResult {
+  locked: boolean;
+  affected: number;
+  createdAndLocked: number;
+  alreadyInState: number;
+  skippedDisabled: number;
+}
+
+export type ControlPetitionStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "PARTIALLY_APPROVED"
+  | "REJECTED";
+
+export type ControlPetitionItemDecision = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface ControlPetitionItem {
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  studentNameAr: string | null;
+  currentScore: number | null;
+  currentStatus: GradeStatus | null;
+  currentAttendanceMark: number | null;
+  currentQuizzesMark: number | null;
+  baselineRev: number;
+  proposedScore: number | null;
+  proposedStatus: GradeStatus;
+  proposedAttendanceMark: number | null;
+  proposedQuizzesMark: number | null;
+  studentReason: string | null;
+  decision: ControlPetitionItemDecision;
+  decisionNote: string | null;
+  appliedRev: number | null;
+  decidedAt: string | null;
+  hasRevConflict?: boolean;
+}
+
+export interface ControlPetition {
+  id: string;
+  sheetId: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  courseNameAr: string | null;
+  courseNameEn: string | null;
+  courseLevel: string | null;
+  academicYear: string;
+  semester: Semester;
+  component: ControlComponentKey;
+  status: ControlPetitionStatus;
+  reason: string;
+  requestedBy: ControlWorkflowActor;
+  requestedAt: string;
+  reviewedBy: ControlWorkflowActor | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  requesterSeenAt: string | null;
+  counts: {
+    total: number;
+    approved: number;
+    rejected: number;
+    pending: number;
+  };
+  items: ControlPetitionItem[];
+}
+
+export interface ControlPetitionsSummary {
+  pendingForApprovalCount: number;
+  unreadDecisionsCount: number;
+  sheetPendingCount: number;
 }

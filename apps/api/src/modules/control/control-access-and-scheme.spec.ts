@@ -72,12 +72,71 @@ describe('ControlAccessService', () => {
   });
 
   it.each([
-    [PERMISSIONS.CONTROL_SHEETS_REVIEW, true, false, false],
-    [PERMISSIONS.CONTROL_SHEETS_APPROVE, false, true, false],
-    [PERMISSIONS.CONTROL_FINAL_APPROVE, false, false, true],
+    [
+      PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ],
+    [
+      PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+    ],
+    [
+      PERMISSIONS.CONTROL_FINAL_APPROVE,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+    ],
+    [
+      PERMISSIONS.CONTROL_SHEETS_REOPEN,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+    ],
+    [
+      PERMISSIONS.CONTROL_PETITIONS_CREATE,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+    ],
+    [
+      PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ],
   ])(
     'keeps %s independent from other review/approval powers',
-    (permission, review, approve, final) => {
+    (
+      permission,
+      review,
+      approve,
+      final,
+      reopen,
+      createPetitions,
+      approvePetitions,
+    ) => {
       const service = buildAccess();
       const user = {
         _id: staffId,
@@ -88,11 +147,17 @@ describe('ControlAccessService', () => {
         canReview: review,
         canApprove: approve,
         canApproveFinal: final,
+        canReopen: reopen,
+        canCreatePetitions: createPetitions,
+        canApprovePetitions: approvePetitions,
       });
       for (const required of [
         PERMISSIONS.CONTROL_SHEETS_REVIEW,
         PERMISSIONS.CONTROL_SHEETS_APPROVE,
         PERMISSIONS.CONTROL_FINAL_APPROVE,
+        PERMISSIONS.CONTROL_SHEETS_REOPEN,
+        PERMISSIONS.CONTROL_PETITIONS_CREATE,
+        PERMISSIONS.CONTROL_PETITIONS_APPROVE,
       ]) {
         if (required !== permission)
           expect(() => service.assertPermission(user, required)).toThrow(
@@ -426,5 +491,129 @@ describe('ControlSheetsService lock & unlock', () => {
       ],
       expect.anything(),
     );
+  });
+
+  it('bulk-locks and bulk-unlocks selected courses and components, upserting unopened sheets as locked', async () => {
+    const sheetsByKey = new Map<string, Record<string, any>>();
+    const existingMidtermId = new Types.ObjectId();
+    sheetsByKey.set(`${String(courseId)}:midterm`, {
+      _id: existingMidtermId,
+      academicYear: '2026-2027',
+      semester: 'first',
+      courseId,
+      courseCode: 'CS101',
+      component: 'midterm',
+      locked: false,
+      revision: 0,
+    });
+
+    const sheetModel = {
+      db: {
+        startSession: jest.fn().mockResolvedValue({
+          withTransaction: async (fn: () => Promise<void>) => fn(),
+          endSession: jest.fn().mockResolvedValue(undefined),
+        }),
+      },
+      findOne: jest.fn((filter: Record<string, any>) =>
+        chain(
+          sheetsByKey.get(`${String(filter.courseId)}:${filter.component}`) ??
+            null,
+        ),
+      ),
+      updateOne: jest.fn(
+        (filter: Record<string, any>, update: Record<string, any>) => {
+          for (const [, val] of sheetsByKey) {
+            if (String(val._id) === String(filter._id)) {
+              if (update.$set) Object.assign(val, update.$set);
+              if (update.$inc?.revision) val.revision += update.$inc.revision;
+            }
+          }
+          return Promise.resolve({ modifiedCount: 1 });
+        },
+      ),
+      create: jest.fn((docs: Array<Record<string, any>>) => {
+        const created: Record<string, any> = {
+          _id: new Types.ObjectId(),
+          ...docs[0],
+        };
+        sheetsByKey.set(
+          `${String(created.courseId)}:${String(created.component)}`,
+          created,
+        );
+        return Promise.resolve([created]);
+      }),
+    };
+    const courseModel = {
+      find: jest.fn(() =>
+        chain([{ _id: courseId, code: 'CS101', name: 'Intro' }]),
+      ),
+    };
+    const auditModel = { create: jest.fn().mockResolvedValue({}) };
+    const access = {
+      assertPermission: jest.fn(),
+      assertCourseScope: jest.fn().mockResolvedValue(undefined),
+    };
+    const schemes = {
+      getScheme: jest.fn().mockResolvedValue({
+        components: [
+          { key: 'midterm', enabled: true },
+          { key: 'coursework', enabled: true },
+          { key: 'final', enabled: true },
+        ],
+      }),
+    };
+
+    const svc = new ControlSheetsService(
+      sheetModel as never,
+      courseModel as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      auditModel as never,
+      access as never,
+      schemes as never,
+    );
+
+    const lockResult = await svc.bulkLock(user, {
+      academicYear: '2026-2027',
+      semester: 'first',
+      courseIds: [String(courseId)],
+      components: ['midterm', 'coursework', 'final'],
+      reason: 'Close all control components',
+    });
+
+    expect(lockResult).toEqual({
+      locked: true,
+      affected: 3,
+      createdAndLocked: 2,
+      alreadyInState: 0,
+      skippedDisabled: 0,
+    });
+    expect(sheetsByKey.get(`${String(courseId)}:midterm`)?.locked).toBe(true);
+    expect(sheetsByKey.get(`${String(courseId)}:coursework`)?.locked).toBe(
+      true,
+    );
+    expect(sheetsByKey.get(`${String(courseId)}:final`)?.locked).toBe(true);
+
+    const unlockResult = await svc.bulkUnlock(user, {
+      academicYear: '2026-2027',
+      semester: 'first',
+      courseIds: [String(courseId)],
+      components: ['midterm', 'final'],
+      reason: 'Reopen midterm and final only',
+    });
+
+    expect(unlockResult).toEqual({
+      locked: false,
+      affected: 2,
+      createdAndLocked: 0,
+      alreadyInState: 0,
+      skippedDisabled: 0,
+    });
+    expect(sheetsByKey.get(`${String(courseId)}:midterm`)?.locked).toBe(false);
+    expect(sheetsByKey.get(`${String(courseId)}:coursework`)?.locked).toBe(
+      true,
+    );
+    expect(sheetsByKey.get(`${String(courseId)}:final`)?.locked).toBe(false);
   });
 });

@@ -5,9 +5,11 @@ import React, { Suspense, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
+  Bell,
   CheckCircle2,
   Clock,
   ExternalLink,
+  FileCheck2,
   FileEdit,
   FileSpreadsheet,
   GitBranch,
@@ -67,11 +69,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   controlKeys,
   getControlCapabilities,
+  getControlPetitionsSummary,
   listControlCourses,
   lockControlSheet,
   openControlSheet,
   unlockControlSheet,
 } from "@/features/control/api";
+import { ControlBulkLockDialog } from "@/features/control/components/control-bulk-lock-dialog";
 import { ControlWorkbookLoading } from "@/features/control/components/control-workbook-loading";
 import {
   ControlWorkflowHistoryDialog,
@@ -141,8 +145,22 @@ function ControlHomeContent() {
   const [schemeTarget, setSchemeTarget] = useState<ControlCourseSummary | null>(
     null,
   );
+  const [bulkLockOpen, setBulkLockOpen] = useState(false);
   const [workflowTarget, setWorkflowTarget] =
     useState<WorkflowHistoryTarget | null>(null);
+
+  const { data: petitionsSummary } = useQuery({
+    queryKey: controlKeys.petitionsSummary({ academicYear, semester }),
+    queryFn: () => getControlPetitionsSummary({ academicYear, semester }),
+    enabled: Boolean(
+      caps?.canCreatePetitions ||
+        caps?.canApprovePetitions ||
+        caps?.scopeAll,
+    ),
+  });
+  const totalPetitionNotifications =
+    (petitionsSummary?.pendingForApprovalCount ?? 0) +
+    (petitionsSummary?.unreadDecisionsCount ?? 0);
   const [lockTarget, setLockTarget] = useState<{
     sheetId: string;
     locked: boolean;
@@ -725,20 +743,100 @@ function ControlHomeContent() {
       ]}
     >
       <div className="space-y-6" dir={isAr ? "rtl" : "ltr"}>
-        <PageTitleBanner
-          title={
-            isAr
-              ? "الكنترول — رصد ومراجعة الدرجات"
-              : "Control — Grade Entry & Sheets"
-          }
-          subtitle={
-            isAr
-              ? "إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات."
-              : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
-          }
-          eyebrow={isAr ? "أعمال الكنترول" : "Academic Control Office"}
-          icon={<FileSpreadsheet className="size-4" />}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <PageTitleBanner
+            title={
+              isAr
+                ? "الكنترول — رصد ومراجعة الدرجات"
+                : "Control — Grade Entry & Sheets"
+            }
+            subtitle={
+              isAr
+                ? "إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات."
+                : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
+            }
+            eyebrow={isAr ? "أعمال الكنترول" : "Academic Control Office"}
+            icon={<FileSpreadsheet className="size-4" />}
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(caps?.canCreatePetitions ||
+              caps?.canApprovePetitions ||
+              caps?.scopeAll) && (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-squircle gap-2 text-xs font-bold border-primary/30 hover:bg-primary/10"
+                onClick={() =>
+                  router.push(
+                    `/${locale}/admin/control/petitions?academicYear=${encodeURIComponent(academicYear)}&semester=${encodeURIComponent(semester)}`,
+                  )
+                }
+              >
+                <FileCheck2 className="size-4 text-primary" />
+                <span>
+                  {isAr ? "طلبات التماس الدرجات" : "Grade Petitions"}
+                </span>
+                {totalPetitionNotifications > 0 && (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground animate-pulse">
+                    <Bell className="size-2.5" />
+                    {totalPetitionNotifications}
+                  </span>
+                )}
+              </Button>
+            )}
+
+            {(caps?.canLock || caps?.canUnlock) && (
+              <Button
+                type="button"
+                variant="default"
+                className="rounded-squircle gap-1.5 text-xs font-bold"
+                onClick={() => setBulkLockOpen(true)}
+              >
+                <Lock className="size-3.5" />
+                <span>
+                  {isAr
+                    ? "إدارة قفل الكنترول الجماعي"
+                    : "Bulk Lock / Unlock Control"}
+                </span>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {selectedKeys.length > 0 && (caps?.canLock || caps?.canUnlock) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs">
+            <span className="font-bold text-foreground">
+              {isAr
+                ? `تم تحديد ${selectedKeys.length} مقرر دراسي`
+                : `${selectedKeys.length} course(s) selected`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 rounded-squircle text-xs font-bold gap-1.5"
+                onClick={() => setBulkLockOpen(true)}
+              >
+                <Lock className="size-3.5" />
+                <span>
+                  {isAr
+                    ? "قفل / فك قفل المقررات المحددة (ميدتيرم / أعمال سنة / فاينل)"
+                    : "Lock / Unlock Selected Courses"}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-squircle text-xs"
+                onClick={() => setSelectedKeys([])}
+              >
+                {isAr ? "إلغاء التحديد" : "Clear Selection"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <FilterBar
           compact
@@ -881,6 +979,21 @@ function ControlHomeContent() {
                 ? "لا توجد مقررات متاحة ضمن نطاق صلاحياتك لهذا الفصل الدراسي."
                 : "No courses available within your scope for this semester."
             }
+          />
+        )}
+
+        {bulkLockOpen && (caps?.canLock || caps?.canUnlock) && (
+          <ControlBulkLockDialog
+            open={bulkLockOpen}
+            onOpenChange={setBulkLockOpen}
+            locale={locale}
+            academicYear={academicYear}
+            semester={semester}
+            courses={coursesData?.items ?? []}
+            initialSelectedCourseIds={selectedKeys}
+            initialComponent={component}
+            canLock={Boolean(caps?.canLock)}
+            canUnlock={Boolean(caps?.canUnlock)}
           />
         )}
 

@@ -1104,6 +1104,46 @@ describe('Control workbook import and review', () => {
     expect(ctx.sheet.workflowState).toBe('DRAFT');
     expect(ctx.audit.create).toHaveBeenCalledTimes(4);
   });
+  it('denies REOPEN to a Control Head holding review and approve without control.sheets.reopen, and blocks transitions while locked', async () => {
+    const ctx = build();
+    const access = new ControlAccessService({} as never, {} as never);
+    ctx.access.assertPermission.mockImplementation((user, permission) =>
+      access.assertPermission(user, permission),
+    );
+    ctx.sheet.workflowState = 'APPROVED';
+    const controlHead = {
+      ...ctx.user,
+      role: 'staff' as const,
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_REVIEW,
+        PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      ],
+    };
+    await expect(
+      ctx.service.review(controlHead, ctx.sheetId, {
+        action: 'REOPEN',
+        expectedRevision: 0,
+        reason: 'Attempted reopen by control head',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const seniorWithReopen = {
+      ...controlHead,
+      permissions: [
+        ...controlHead.permissions,
+        PERMISSIONS.CONTROL_SHEETS_REOPEN,
+      ],
+    };
+    ctx.sheet.locked = true;
+    await expect(
+      ctx.service.review(seniorWithReopen, ctx.sheetId, {
+        action: 'REOPEN',
+        expectedRevision: 0,
+        reason: 'Attempted reopen while locked',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
   it('exports filtered missing/exception reports and scopes failed-row reports to the preview owner', async () => {
     const ctx = build();
     const missing = new ExcelJS.Workbook();

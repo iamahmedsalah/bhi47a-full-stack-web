@@ -257,6 +257,22 @@ const server = http.createServer(async (req, res) => {
         );
         return;
       }
+      if (pathname === "/admin/ai/rag/overview") {
+        res.end(
+          JSON.stringify({
+            summary: {
+              totalSyllabi: 0,
+              readyCount: 0,
+              processingCount: 0,
+              failedCount: 0,
+              unindexedCount: 0,
+              totalActiveChunks: 0,
+            },
+            items: [],
+          }),
+        );
+        return;
+      }
       if (
         req.method === "PATCH" &&
         pathname.startsWith("/auth/passkeys/synthetic-key-")

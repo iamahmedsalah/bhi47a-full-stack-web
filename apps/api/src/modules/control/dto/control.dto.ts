@@ -164,6 +164,28 @@ export class UnlockSheetDto {
   reason?: string;
 }
 
+export class BulkLockControlSheetsDto extends ControlTermQueryDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(250)
+  @IsMongoId({ each: true })
+  courseIds!: string[];
+
+  @ApiProperty({ enum: CONTROL_COMPONENT_KEYS, isArray: true })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(CONTROL_COMPONENT_KEYS.length)
+  @IsIn(CONTROL_COMPONENT_KEYS, { each: true })
+  components!: ControlComponentKey[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
 export class UpdatePassThresholdDto {
   @ApiProperty({ example: 18 })
   @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })

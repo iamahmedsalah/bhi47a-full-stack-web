@@ -1,14 +1,162 @@
-import {
-  PERMISSIONS,
-  type StaffAssignablePermission,
-} from "@student-portal/shared";
+import { PERMISSIONS, type Permission } from "@student-portal/shared";
 
-export interface StaffPermissionGroup {
+export interface ControlPermissionSubgroup {
   key: string;
-  permissions: StaffAssignablePermission[];
+  titleAr: string;
+  titleEn: string;
+  permissions: readonly Permission[];
 }
 
-export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
+export interface ControlRolePreset {
+  key: string;
+  labelAr: string;
+  labelEn: string;
+  descriptionAr: string;
+  descriptionEn: string;
+  permissions: readonly Permission[];
+}
+
+export const CONTROL_PERMISSION_SUBGROUPS: readonly ControlPermissionSubgroup[] = [
+  {
+    key: "access_and_scope",
+    titleAr: "١. الدخول والعرض والنطاق",
+    titleEn: "1. Access, View & Course Scope",
+    permissions: [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_AUDIT_VIEW,
+    ],
+  },
+  {
+    key: "entry_and_files",
+    titleAr: "٢. الرصد والإدخال وملفات الإكسل",
+    titleEn: "2. Grade Entry, States & Excel",
+    permissions: [
+      PERMISSIONS.CONTROL_SHEETS_CREATE,
+      PERMISSIONS.CONTROL_GRADES_ENTER,
+      PERMISSIONS.CONTROL_SHEETS_SUBMIT,
+      PERMISSIONS.CONTROL_STATES_MANAGE,
+      PERMISSIONS.CONTROL_IMPORT,
+      PERMISSIONS.CONTROL_EXPORT,
+    ],
+  },
+  {
+    key: "review_and_rules",
+    titleAr: "٣. المراجعة والرأفة وضبط الدرجات",
+    titleEn: "3. Review, Grace Marks & Schemes",
+    permissions: [
+      PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+      PERMISSIONS.CONTROL_GRADES_GRACE,
+      PERMISSIONS.CONTROL_SCHEMES_MANAGE,
+    ],
+  },
+  {
+    key: "approval_and_locks",
+    titleAr: "٤. الاعتماد وقفل الكنترول",
+    titleEn: "4. Approval & Control Locking",
+    permissions: [
+      PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      PERMISSIONS.CONTROL_FINAL_APPROVE,
+      PERMISSIONS.CONTROL_SHEETS_LOCK,
+      PERMISSIONS.CONTROL_SHEETS_UNLOCK,
+    ],
+  },
+  {
+    key: "petitions_and_emergency",
+    titleAr: "٥. الالتماسات وإجراءات الطوارئ العليا",
+    titleEn: "5. Grade Petitions & Emergency Reset",
+    permissions: [
+      PERMISSIONS.CONTROL_PETITIONS_CREATE,
+      PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+      PERMISSIONS.CONTROL_SHEETS_REOPEN,
+      PERMISSIONS.CONTROL_GRADES_EDIT_PUBLISHED,
+    ],
+  },
+] as const;
+
+export const CONTROL_ROLE_PRESETS: readonly ControlRolePreset[] = [
+  {
+    key: "doctor_entry",
+    labelAr: "مسؤول رصد (دكتور / معيد)",
+    labelEn: "Grade Entry (Doctor / TA)",
+    descriptionAr: "فتح الكشف ورصد الدرجات وإرسالها للمراجعة لمقرراته فقط",
+    descriptionEn: "Open sheet, enter grades, and submit for review on assigned courses",
+    permissions: [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SHEETS_CREATE,
+      PERMISSIONS.CONTROL_GRADES_ENTER,
+      PERMISSIONS.CONTROL_SHEETS_SUBMIT,
+      PERMISSIONS.CONTROL_IMPORT,
+      PERMISSIONS.CONTROL_EXPORT,
+    ],
+  },
+  {
+    key: "control_reviewer",
+    labelAr: "مراجع كنترول",
+    labelEn: "Control Reviewer",
+    descriptionAr: "مراجعة الكشوف وتصحيحها أو إرجاعها ورفعها للاعتماد بدون اعتماد نهائي",
+    descriptionEn: "Review sheets, correct during review, return or forward for approval",
+    permissions: [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+      PERMISSIONS.CONTROL_STATES_MANAGE,
+      PERMISSIONS.CONTROL_AUDIT_VIEW,
+      PERMISSIONS.CONTROL_EXPORT,
+    ],
+  },
+  {
+    key: "control_head",
+    labelAr: "رئيس الكنترول",
+    labelEn: "Control Head",
+    descriptionAr:
+      "مراجعة واعتماد الميدتيرم وأعمال السنة، الرأفة، قفل الكنترول، وتقديم طلبات الالتماس (بدون إعادة فتح أو فك قفل)",
+    descriptionEn:
+      "Approve midterm/coursework, apply grace marks, lock sheets, and submit petitions (no reopen or unlock)",
+    permissions: [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SHEETS_CREATE,
+      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_SHEETS_REVIEW,
+      PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
+      PERMISSIONS.CONTROL_STATES_MANAGE,
+      PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      PERMISSIONS.CONTROL_GRADES_GRACE,
+      PERMISSIONS.CONTROL_SCHEMES_MANAGE,
+      PERMISSIONS.CONTROL_SHEETS_LOCK,
+      PERMISSIONS.CONTROL_PETITIONS_CREATE,
+      PERMISSIONS.CONTROL_AUDIT_VIEW,
+      PERMISSIONS.CONTROL_EXPORT,
+    ],
+  },
+  {
+    key: "dean_approver",
+    labelAr: "عميد / اعتماد نهائي والتماسات",
+    labelEn: "Dean / Final & Petition Approver",
+    descriptionAr: "اعتماد النتيجة النهائية (الفاينل) والبت في طلبات التماس تعديل الدرجات",
+    descriptionEn: "Approve final official results and decide student grade petitions",
+    permissions: [
+      PERMISSIONS.CONTROL_ACCESS,
+      PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_FINAL_APPROVE,
+      PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+      PERMISSIONS.CONTROL_AUDIT_VIEW,
+      PERMISSIONS.CONTROL_EXPORT,
+    ],
+  },
+] as const;
+
+export const STAFF_PERMISSION_GROUPS: ReadonlyArray<{
+  key: string;
+  permissions: readonly Permission[];
+}> = [
   {
     key: "students",
     permissions: [
@@ -66,8 +214,14 @@ export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
       PERMISSIONS.NOTIFICATIONS_SEND,
     ],
   },
-  { key: "faqs", permissions: [PERMISSIONS.FAQS_READ, PERMISSIONS.FAQS_WRITE] },
-  { key: "uploads", permissions: [PERMISSIONS.UPLOADS_IMPORT] },
+  {
+    key: "faqs",
+    permissions: [PERMISSIONS.FAQS_READ, PERMISSIONS.FAQS_WRITE],
+  },
+  {
+    key: "uploads",
+    permissions: [PERMISSIONS.UPLOADS_IMPORT],
+  },
   {
     key: "exams",
     permissions: [
@@ -119,6 +273,11 @@ export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
       PERMISSIONS.ADMISSIONS_ACCESS_MANAGE,
       PERMISSIONS.ADMISSIONS_EXPORT,
       PERMISSIONS.ADMISSIONS_IMPORT,
+    ],
+  },
+  {
+    key: "studentCodes",
+    permissions: [
       PERMISSIONS.STUDENT_CODES_READ,
       PERMISSIONS.STUDENT_CODES_MANAGE,
       PERMISSIONS.STUDENT_CODES_RECOVER,
@@ -172,24 +331,27 @@ export const STAFF_PERMISSION_GROUPS: StaffPermissionGroup[] = [
     key: "control",
     permissions: [
       PERMISSIONS.CONTROL_ACCESS,
-      PERMISSIONS.CONTROL_SHEETS_SUBMIT,
-      PERMISSIONS.CONTROL_SHEETS_REVIEW,
-      PERMISSIONS.CONTROL_SHEETS_APPROVE,
-      PERMISSIONS.CONTROL_FINAL_APPROVE,
-      PERMISSIONS.CONTROL_IMPORT,
-      PERMISSIONS.CONTROL_EXPORT,
       PERMISSIONS.CONTROL_SHEETS_VIEW,
+      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_AUDIT_VIEW,
       PERMISSIONS.CONTROL_SHEETS_CREATE,
       PERMISSIONS.CONTROL_GRADES_ENTER,
+      PERMISSIONS.CONTROL_SHEETS_SUBMIT,
+      PERMISSIONS.CONTROL_STATES_MANAGE,
+      PERMISSIONS.CONTROL_IMPORT,
+      PERMISSIONS.CONTROL_EXPORT,
+      PERMISSIONS.CONTROL_SHEETS_REVIEW,
       PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT,
       PERMISSIONS.CONTROL_GRADES_GRACE,
-      PERMISSIONS.CONTROL_GRADES_EDIT_PUBLISHED,
-      PERMISSIONS.CONTROL_STATES_MANAGE,
+      PERMISSIONS.CONTROL_SCHEMES_MANAGE,
+      PERMISSIONS.CONTROL_SHEETS_APPROVE,
+      PERMISSIONS.CONTROL_FINAL_APPROVE,
       PERMISSIONS.CONTROL_SHEETS_LOCK,
       PERMISSIONS.CONTROL_SHEETS_UNLOCK,
-      PERMISSIONS.CONTROL_SCHEMES_MANAGE,
-      PERMISSIONS.CONTROL_AUDIT_VIEW,
-      PERMISSIONS.CONTROL_SCOPE_ALL,
+      PERMISSIONS.CONTROL_PETITIONS_CREATE,
+      PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+      PERMISSIONS.CONTROL_SHEETS_REOPEN,
+      PERMISSIONS.CONTROL_GRADES_EDIT_PUBLISHED,
     ],
   },
 ];

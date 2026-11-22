@@ -10,6 +10,8 @@ import type { ClientSession } from 'mongoose';
 import {
   CONTROL_ENABLED_COMPONENT_KEYS,
   PERMISSIONS,
+  type ControlComponentKey,
+  type Semester,
 } from '@student-portal/shared';
 import {
   buildPaginationOptions,
@@ -342,6 +344,9 @@ export class ControlSheetsService {
         canEditReview: caps.canEditReview,
         canSubmit: caps.canSubmit,
         canReview: caps.canReview,
+        canReopen: caps.canReopen && !sheet.locked,
+        canCreatePetitions: caps.canCreatePetitions,
+        canApprovePetitions: caps.canApprovePetitions,
         canApprove:
           sheet.component === 'final' ? caps.canApproveFinal : caps.canApprove,
         canApproveFinal: caps.canApproveFinal,
@@ -471,6 +476,202 @@ export class ControlSheetsService {
     return this.getSheet(user, sheetId);
   }
 
+  async bulkLock(
+    user: AuthenticatedUser,
+    dto: {
+      academicYear: string;
+      semester: Semester;
+      courseIds: string[];
+      components: ControlComponentKey[];
+      reason?: string;
+    },
+  ) {
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_LOCK);
+    return this.executeBulkLockChange(user, dto, true);
+  }
+
+  async bulkUnlock(
+    user: AuthenticatedUser,
+    dto: {
+      academicYear: string;
+      semester: Semester;
+      courseIds: string[];
+      components: ControlComponentKey[];
+      reason?: string;
+    },
+  ) {
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_UNLOCK);
+    return this.executeBulkLockChange(user, dto, false);
+  }
+
+  private async executeBulkLockChange(
+    user: AuthenticatedUser,
+    dto: {
+      academicYear: string;
+      semester: Semester;
+      courseIds: string[];
+      components: ControlComponentKey[];
+      reason?: string;
+    },
+    targetLocked: boolean,
+  ) {
+    const uniqueCourseIds = [...new Set(dto.courseIds)];
+    const uniqueComponents = [...new Set(dto.components)];
+    const courses = await this.courseModel
+      .find({
+        _id: { $in: uniqueCourseIds.map((id) => new Types.ObjectId(id)) },
+      })
+      .select('code name nameAr nameEn')
+      .lean();
+    if (courses.length !== uniqueCourseIds.length) {
+      throw new NotFoundException('One or more courses were not found');
+    }
+
+    for (const course of courses) {
+      await this.access.assertCourseScope(
+        user,
+        course,
+        dto.academicYear,
+        dto.semester,
+      );
+    }
+
+    let affected = 0;
+    let createdAndLocked = 0;
+    let alreadyInState = 0;
+    let skippedDisabled = 0;
+    const trimmedReason = dto.reason?.trim() || undefined;
+
+    const session = await this.sheetModel.db.startSession();
+    try {
+      await session.withTransaction(async () => {
+        for (const course of courses) {
+          const scheme = await this.schemes.getScheme(
+            String(course._id),
+            dto.academicYear,
+            dto.semester,
+            session,
+          );
+          for (const component of uniqueComponents) {
+            const compRule = scheme.components.find((c) => c.key === component);
+            if (!compRule?.enabled) {
+              skippedDisabled += 1;
+              continue;
+            }
+            const filter = {
+              academicYear: dto.academicYear,
+              semester: dto.semester,
+              courseId: course._id,
+              component,
+            };
+            const existing = await this.sheetModel
+              .findOne(filter)
+              .session(session)
+              .lean();
+
+            if (targetLocked) {
+              if (existing?.locked) {
+                alreadyInState += 1;
+                continue;
+              }
+              if (existing) {
+                await this.sheetModel.updateOne(
+                  { _id: existing._id },
+                  {
+                    $set: {
+                      locked: true,
+                      lockedBy: new Types.ObjectId(user._id),
+                      lockedAt: new Date(),
+                      lockReason: trimmedReason,
+                    },
+                    $inc: { revision: 1 },
+                  },
+                  { session },
+                );
+                affected += 1;
+                await this.writeSheetAudit(
+                  existing,
+                  'LOCK',
+                  user._id,
+                  trimmedReason,
+                  session,
+                );
+              } else {
+                const slug = buildControlSheetSlug({
+                  courseCode: course.code,
+                  component,
+                  academicYear: dto.academicYear,
+                  semester: dto.semester,
+                });
+                const [created] = await this.sheetModel.create(
+                  [
+                    {
+                      academicYear: dto.academicYear,
+                      semester: dto.semester,
+                      courseId: course._id,
+                      courseCode: String(course.code).toUpperCase(),
+                      slug,
+                      component,
+                      workflowState: 'DRAFT',
+                      revision: 1,
+                      locked: true,
+                      lockedBy: new Types.ObjectId(user._id),
+                      lockedAt: new Date(),
+                      lockReason: trimmedReason,
+                      createdBy: new Types.ObjectId(user._id),
+                    },
+                  ],
+                  { session },
+                );
+                affected += 1;
+                createdAndLocked += 1;
+                await this.writeSheetAudit(
+                  created,
+                  'LOCK',
+                  user._id,
+                  trimmedReason,
+                  session,
+                );
+              }
+            } else {
+              if (!existing || !existing.locked) {
+                alreadyInState += 1;
+                continue;
+              }
+              await this.sheetModel.updateOne(
+                { _id: existing._id },
+                {
+                  $set: { locked: false },
+                  $inc: { revision: 1 },
+                  $unset: { lockedBy: '', lockedAt: '', lockReason: '' },
+                },
+                { session },
+              );
+              affected += 1;
+              await this.writeSheetAudit(
+                existing,
+                'UNLOCK',
+                user._id,
+                trimmedReason,
+                session,
+              );
+            }
+          }
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return {
+      locked: targetLocked,
+      affected,
+      createdAndLocked,
+      alreadyInState,
+      skippedDisabled,
+    };
+  }
+
   async updatePassThreshold(
     user: AuthenticatedUser,
     sheetId: string,
@@ -595,6 +796,8 @@ export class ControlSheetsService {
       'PUBLISH',
       'HIDE',
       'GRACE',
+      'PETITION_APPROVE',
+      'PETITION_REJECT',
     ] as const;
 
     const [auditRows, firstEntryRow] = await Promise.all([

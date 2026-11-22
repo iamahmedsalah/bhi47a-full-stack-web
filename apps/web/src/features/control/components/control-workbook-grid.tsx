@@ -15,7 +15,10 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   ArrowRight,
+  Bell,
   Download,
+  FileCheck2,
+  FileEdit,
   GitCompareArrows,
   Upload,
   History,
@@ -80,6 +83,7 @@ import {
   exportControlImportErrors,
   controlWorkbookOptions,
   getControlSheet,
+  listControlPetitions,
   openControlSheet,
   previewControlRows,
   reviewControlSheet,
@@ -92,8 +96,11 @@ import { normalizeSearchText } from "@/lib/search-text";
 import { ControlDownloadDialogs } from "./control-download-dialogs";
 import { ControlGraceDialog } from "./control-grace-dialog";
 import { ControlImportLauncher } from "./control-import-launcher";
+import { ControlPetitionCreateDialog } from "./control-petition-create-dialog";
+import { ControlPetitionReviewDialog } from "./control-petition-review-dialog";
 import type {
   ControlImportPreview,
+  ControlPetition,
   ControlRosterRow,
   ControlSheetDetails,
   GradeChangeInput,
@@ -151,6 +158,9 @@ export function ControlWorkbookGrid({
   const { sheet, capabilities: caps } = detail;
   const key = sheet.component;
   const [graceOpen, setGraceOpen] = useState(false);
+  const [petitionCreateOpen, setPetitionCreateOpen] = useState(false);
+  const [activePetitionReview, setActivePetitionReview] =
+    useState<ControlPetition | null>(null);
   const [passThresholdOpen, setPassThresholdOpen] = useState(false);
   const [thresholdInput, setThresholdInput] = useState<string>("");
   const [thresholdBusy, setThresholdBusy] = useState(false);
@@ -159,6 +169,14 @@ export function ControlWorkbookGrid({
   >({});
   const workbookId = requestSheetId ?? sheet.id;
   const workbook = useQuery(controlWorkbookOptions(workbookId, principalId));
+  const sheetPetitionsQuery = useQuery({
+    queryKey: controlKeys.petitions({ sheetId: sheet.id, limit: 10 }),
+    queryFn: () => listControlPetitions({ sheetId: sheet.id, limit: 10 }),
+    enabled: Boolean(
+      caps.canCreatePetitions || caps.canApprovePetitions || caps.canReview,
+    ),
+  });
+  const sheetPetitions = sheetPetitionsQuery.data?.items ?? [];
   const archiveKey = principalId ? `${principalId}:${sheet.id}` : "";
   const [restoredDraft] = useState(() =>
     archiveKey ? draftArchive.get(archiveKey) : undefined,
@@ -1300,6 +1318,38 @@ export function ControlWorkbookGrid({
           onAudit={caps.canViewAudit ? onOpenSheetAudit : undefined}
         />
       )}
+      {petitionCreateOpen && caps.canCreatePetitions && (
+        <ControlPetitionCreateDialog
+          open={petitionCreateOpen}
+          onOpenChange={setPetitionCreateOpen}
+          locale={locale}
+          detail={detail}
+          scheme={workbook.data?.scheme}
+          rows={rows}
+          initialSelectedStudentIds={selected}
+          onSubmitted={() => {
+            setSelected([]);
+            void sheetPetitionsQuery.refetch();
+          }}
+        />
+      )}
+      {activePetitionReview && (
+        <ControlPetitionReviewDialog
+          key={activePetitionReview.id}
+          petition={activePetitionReview}
+          open={Boolean(activePetitionReview)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setActivePetitionReview(null);
+              void refresh();
+              void sheetPetitionsQuery.refetch();
+            }
+          }}
+          locale={locale}
+          canApprove={Boolean(caps.canApprovePetitions)}
+          currentUserId={principalId}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
         {CONTROL_COMPONENT_KEYS.map((component) => (
           <Button
@@ -1526,7 +1576,7 @@ export function ControlWorkbookGrid({
                       type="button"
                       size="sm"
                       className="rounded-squircle text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm gap-1.5 h-8 px-4"
-                      disabled={pending}
+                      disabled={pending || sheet.locked}
                       onClick={() => setAction("APPROVE")}
                     >
                       <CheckCircle2 className="size-3.5" />
@@ -1539,7 +1589,7 @@ export function ControlWorkbookGrid({
                     variant="outline"
                     size="sm"
                     className="rounded-squircle text-xs font-semibold border-rose-500/30 text-rose-400 hover:bg-rose-500/10 gap-1.5 h-8 px-3"
-                    disabled={pending}
+                    disabled={pending || sheet.locked}
                     onClick={() => setAction("RETURN")}
                   >
                     <RotateCcw className="size-3.5" />
@@ -1549,19 +1599,21 @@ export function ControlWorkbookGrid({
               </>
             )}
 
-          {caps.canReview && sheet.workflowState === "APPROVED" && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="rounded-squircle text-xs font-semibold gap-1.5 h-8 px-3"
-              disabled={pending}
-              onClick={() => setAction("REOPEN")}
-            >
-              <RotateCcw className="size-3.5" />
-              <span>{t("REOPEN")}</span>
-            </Button>
-          )}
+          {caps.canReopen &&
+            sheet.workflowState === "APPROVED" &&
+            !sheet.locked && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-squircle text-xs font-semibold gap-1.5 h-8 px-3"
+                disabled={pending}
+                onClick={() => setAction("REOPEN")}
+              >
+                <RotateCcw className="size-3.5" />
+                <span>{t("REOPEN")}</span>
+              </Button>
+            )}
         </div>
       </div>
 
@@ -1635,6 +1687,18 @@ export function ControlWorkbookGrid({
           >
             <SlidersHorizontal className="size-3.5 me-1.5" />
             {t("scheme")}
+          </Button>
+        )}
+        {caps.canCreatePetitions && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-squircle text-xs font-semibold border-primary/35 text-primary hover:bg-primary/10"
+            disabled={pending || busy}
+            onClick={() => setPetitionCreateOpen(true)}
+          >
+            <FileEdit className="size-3.5 me-1.5" />
+            {rtl ? "طلب التماس درجات" : "Grade Petition"}
           </Button>
         )}
         {caps.canViewAudit && (
@@ -1785,9 +1849,89 @@ export function ControlWorkbookGrid({
           onChange={(e) => setReason(e.target.value)}
         />
       )}
+      {sheetPetitions.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-primary/25 bg-primary/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-bold text-foreground">
+              <FileCheck2 className="size-4 text-primary" />
+              <span>
+                {rtl
+                  ? `طلبات التماس تعديل الدرجات على هذا الكشف (${sheetPetitions.length})`
+                  : `Grade Adjustment Petitions on this Sheet (${sheetPetitions.length})`}
+              </span>
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 rounded-squircle text-xs text-primary"
+              onClick={() =>
+                router.push(
+                  `/${locale}/admin/control/petitions?academicYear=${encodeURIComponent(sheet.academicYear)}&semester=${encodeURIComponent(sheet.semester)}`,
+                )
+              }
+            >
+              {rtl ? "عرض كل طلبات الالتماس" : "View All Petitions"}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sheetPetitions.slice(0, 4).map((p) => {
+              const isUnreadDecision =
+                p.status !== "PENDING" && p.requesterSeenAt === null;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setActivePetitionReview(p)}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-squircle border px-3 py-1.5 text-xs transition-all cursor-pointer",
+                    p.status === "PENDING"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                      : p.status === "REJECTED"
+                        ? "border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20",
+                  )}
+                >
+                  {isUnreadDecision && (
+                    <Bell className="size-3.5 animate-bounce text-primary" />
+                  )}
+                  <span className="font-bold">
+                    {p.status === "PENDING"
+                      ? rtl
+                        ? `قيد الاعتماد (${p.counts.total} طلاب)`
+                        : `Pending (${p.counts.total} students)`
+                      : rtl
+                        ? `تم البت: موافقة ${p.counts.approved} · رفض ${p.counts.rejected}`
+                        : `Decided: ${p.counts.approved} approved · ${p.counts.rejected} rejected`}
+                  </span>
+                  <span className="text-[11px] opacity-80 truncate max-w-[180px]">
+                    — {p.reason}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {selected.length > 0 && (
-        <div className="flex items-center gap-3 rounded-xl border p-2">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border p-2">
           <span>{t("selected", { count: selected.length })}</span>
+          {caps.canCreatePetitions && (
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-squircle gap-1.5 text-xs font-bold"
+              disabled={pending}
+              onClick={() => setPetitionCreateOpen(true)}
+            >
+              <FileEdit className="size-3.5" />
+              <span>
+                {rtl
+                  ? `طلب التماس للطلاب المحددين (${selected.length})`
+                  : `Create Petition for Selected (${selected.length})`}
+              </span>
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() =>

@@ -43,6 +43,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
 import {
   ApplyChangesDto,
+  BulkLockControlSheetsDto,
   ControlAuditQueryDto,
   ControlEntriesQueryDto,
   ControlTermQueryDto,
@@ -52,10 +53,16 @@ import {
   UpdateGradingSchemeDto,
   UpdatePassThresholdDto,
 } from './dto/control.dto';
+import {
+  CreateControlPetitionDto,
+  DecideControlPetitionDto,
+  ListControlPetitionsQueryDto,
+} from './dto/control-petition.dto';
 import { ControlAccessService } from './services/control-access.service';
 import { ControlCheckpointDto } from './dto/control-checkpoint.dto';
 import { ControlEditorCheckpointService } from './services/control-editor-checkpoint.service';
 import { ControlGradesService } from './services/control-grades.service';
+import { ControlPetitionsService } from './services/control-petitions.service';
 import { ControlSheetsService } from './services/control-sheets.service';
 import { GradingSchemeService } from './services/grading-scheme.service';
 
@@ -78,6 +85,7 @@ export class ControlController {
     private readonly attempts: ControlAttemptsService,
     private readonly grace: ControlGraceService,
     private readonly checkpoints: ControlEditorCheckpointService,
+    private readonly petitions: ControlPetitionsService,
   ) {}
 
   @Post('sheets/:id/grace/preview')
@@ -327,6 +335,28 @@ export class ControlController {
     return this.grades.applyChanges(user, id, dto, 'GRID');
   }
 
+  @Post('sheets/bulk-lock')
+  @ApiOperation({
+    summary: 'Lock multiple courses and components for an academic term',
+  })
+  bulkLock(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkLockControlSheetsDto,
+  ) {
+    return this.sheets.bulkLock(user, dto);
+  }
+
+  @Post('sheets/bulk-unlock')
+  @ApiOperation({
+    summary: 'Unlock multiple courses and components for an academic term',
+  })
+  bulkUnlock(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkLockControlSheetsDto,
+  ) {
+    return this.sheets.bulkUnlock(user, dto);
+  }
+
   @Post('sheets/:id/lock')
   lock(
     @CurrentUser() user: AuthenticatedUser,
@@ -343,6 +373,68 @@ export class ControlController {
     @Body() dto: UnlockSheetDto,
   ) {
     return this.sheets.unlock(user, id, dto.reason);
+  }
+
+  @Post('petitions')
+  @ApiOperation({
+    summary: 'Submit a grade-adjustment petition for selected students',
+  })
+  createPetition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateControlPetitionDto,
+  ) {
+    return this.petitions.createPetition(user, dto);
+  }
+
+  @Get('petitions/summary')
+  @ApiOperation({
+    summary: 'Live counts of pending petitions and unread decisions',
+  })
+  getPetitionsSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ListControlPetitionsQueryDto,
+  ) {
+    return this.petitions.getSummary(user, query);
+  }
+
+  @Get('petitions')
+  @ApiOperation({ summary: 'List grade-adjustment petitions' })
+  listPetitions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ListControlPetitionsQueryDto,
+  ) {
+    return this.petitions.listPetitions(user, query);
+  }
+
+  @Get('petitions/:id')
+  @ApiOperation({
+    summary: 'Get a grade-adjustment petition with student items',
+  })
+  getPetition(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.petitions.getPetition(user, id);
+  }
+
+  @Post('petitions/:id/decide')
+  @ApiOperation({
+    summary: 'Approve or reject each student in a grade-adjustment petition',
+  })
+  decidePetition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DecideControlPetitionDto,
+  ) {
+    return this.petitions.decidePetition(user, id, dto);
+  }
+
+  @Post('petitions/:id/mark-seen')
+  @ApiOperation({
+    summary: 'Acknowledge a decided petition notification as the requester',
+  })
+  markPetitionSeen(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.petitions.markSeen(user, id);
   }
 
   @Patch('sheets/:id/pass-threshold')

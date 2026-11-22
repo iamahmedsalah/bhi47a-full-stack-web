@@ -410,11 +410,13 @@ export class ControlWorkbookService {
       user,
       dto.action === 'SUBMIT'
         ? PERMISSIONS.CONTROL_SHEETS_SUBMIT
-        : dto.action === 'APPROVE'
-          ? targetSheet.component === 'final'
-            ? PERMISSIONS.CONTROL_FINAL_APPROVE
-            : PERMISSIONS.CONTROL_SHEETS_APPROVE
-          : PERMISSIONS.CONTROL_SHEETS_REVIEW,
+        : dto.action === 'REOPEN'
+          ? PERMISSIONS.CONTROL_SHEETS_REOPEN
+          : dto.action === 'APPROVE'
+            ? targetSheet.component === 'final'
+              ? PERMISSIONS.CONTROL_FINAL_APPROVE
+              : PERMISSIONS.CONTROL_SHEETS_APPROVE
+            : PERMISSIONS.CONTROL_SHEETS_REVIEW,
     );
     const resolvedSheetId = String(targetSheet?._id ?? sheetId);
     const session = await this.sheets.db.startSession();
@@ -450,10 +452,7 @@ export class ControlWorkbookService {
                 : dto.action === 'RETURN'
                   ? ['IN_REVIEW', 'PENDING_APPROVAL']
                   : ['IN_REVIEW'];
-        if (
-          !allowed.includes(state) ||
-          (sheet.locked && ['SUBMIT', 'SUBMIT_APPROVAL'].includes(dto.action))
-        )
+        if (!allowed.includes(state) || sheet.locked)
           throw new ConflictException('INVALID_WORKFLOW_TRANSITION');
         const roster = await this.sheetService.getRosterStudentIds(
           course.code,

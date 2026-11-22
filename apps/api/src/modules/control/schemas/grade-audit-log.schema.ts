@@ -18,6 +18,8 @@ export const GRADE_AUDIT_ACTIONS = [
   'PUBLISH',
   'HIDE',
   'GRACE',
+  'PETITION_APPROVE',
+  'PETITION_REJECT',
 ] as const;
 export type GradeAuditAction = (typeof GRADE_AUDIT_ACTIONS)[number];
 

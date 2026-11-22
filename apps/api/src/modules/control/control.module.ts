@@ -35,6 +35,10 @@ import {
   ControlSheetSchema,
 } from './schemas/control-sheet.schema';
 import {
+  ControlPetition,
+  ControlPetitionSchema,
+} from './schemas/control-petition.schema';
+import {
   GradeAuditLog,
   GradeAuditLogSchema,
 } from './schemas/grade-audit-log.schema';
@@ -44,6 +48,7 @@ import {
 } from './schemas/grading-scheme.schema';
 import { ControlAccessService } from './services/control-access.service';
 import { ControlGradesService } from './services/control-grades.service';
+import { ControlPetitionsService } from './services/control-petitions.service';
 import { ControlSheetsService } from './services/control-sheets.service';
 import { GradingSchemeService } from './services/grading-scheme.service';
 
@@ -54,6 +59,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: ControlImport.name, schema: ControlImportSchema },
       { name: ControlSheet.name, schema: ControlSheetSchema },
+      { name: ControlPetition.name, schema: ControlPetitionSchema },
       {
         name: ControlEditorCheckpoint.name,
         schema: ControlEditorCheckpointSchema,
@@ -80,6 +86,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
     ControlAccessService,
     ControlSheetsService,
     ControlGradesService,
+    ControlPetitionsService,
     GradingSchemeService,
   ],
   exports: [ControlGradesService],

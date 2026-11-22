@@ -15,6 +15,9 @@ export interface ControlCapabilities {
   canReview: boolean;
   canApprove: boolean;
   canApproveFinal: boolean;
+  canReopen: boolean;
+  canCreatePetitions: boolean;
+  canApprovePetitions: boolean;
   canImport: boolean;
   canExport: boolean;
   canAccess: boolean;
@@ -60,6 +63,9 @@ export class ControlAccessService {
       canReview: gated(PERMISSIONS.CONTROL_SHEETS_REVIEW),
       canApprove: gated(PERMISSIONS.CONTROL_SHEETS_APPROVE),
       canApproveFinal: gated(PERMISSIONS.CONTROL_FINAL_APPROVE),
+      canReopen: gated(PERMISSIONS.CONTROL_SHEETS_REOPEN),
+      canCreatePetitions: gated(PERMISSIONS.CONTROL_PETITIONS_CREATE),
+      canApprovePetitions: gated(PERMISSIONS.CONTROL_PETITIONS_APPROVE),
       canImport: gated(PERMISSIONS.CONTROL_IMPORT),
       canExport: gated(PERMISSIONS.CONTROL_EXPORT),
       canAccess,

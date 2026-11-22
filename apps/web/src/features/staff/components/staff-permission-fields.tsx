@@ -18,7 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { STAFF_PERMISSION_GROUPS } from "../permission-groups";
+import {
+  CONTROL_PERMISSION_SUBGROUPS,
+  CONTROL_ROLE_PRESETS,
+  STAFF_PERMISSION_GROUPS,
+} from "../permission-groups";
 import {
   Users,
   BookOpen,
@@ -32,6 +36,7 @@ import {
   Award,
   CheckCircle2,
   FileText,
+  FileSpreadsheet,
   Compass,
   Clock,
   CreditCard,
@@ -67,6 +72,7 @@ const GROUP_ICONS: Record<string, React.ReactNode> = {
   admissions: <UserPlus className="h-3.5 w-3.5 text-primary shrink-0" />,
   studentCodes: <Hash className="h-3.5 w-3.5 text-primary shrink-0" />,
   analytics: <TrendingUp className="h-3.5 w-3.5 text-primary shrink-0" />,
+  control: <FileSpreadsheet className="h-3.5 w-3.5 text-primary shrink-0" />,
 };
 
 export function StaffPermissionFields({
@@ -281,39 +287,158 @@ export function StaffPermissionFields({
                 </button>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                {group.permissions.map((permission) => {
-                  const checked = value.includes(permission);
-                  return (
-                    <label
-                      key={permission}
-                      className={`flex cursor-pointer items-start gap-2.5 rounded-squircle border p-2 text-xs transition-all select-none ${
-                        checked
-                          ? "border-primary/50 bg-primary/10 text-foreground font-medium shadow-xs"
-                          : "border-border/60 bg-background/40 hover:border-border hover:bg-secondary/30 text-muted-foreground"
-                      }`}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        disabled={disabled}
-                        onCheckedChange={(c) =>
-                          onChange(
-                            c === true
-                              ? [...value, permission]
-                              : value.filter((item) => item !== permission),
-                          )
-                        }
-                        className="mt-0.5"
-                      />
-                      <span className="leading-snug">
-                        {t(
-                          `permissions.labels.${permission.replaceAll(".", "_")}`,
-                        )}
+              {group.key === "control" ? (
+                <div className="space-y-3 pt-1">
+                  {/* One-click Control Role Presets */}
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-foreground">
+                        <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>
+                          {locale === "ar"
+                            ? "قوالب صلاحيات الكنترول السريعة (تُحدّث صلاحيات الكنترول فقط)"
+                            : "Quick Control Role Presets (updates Control permissions only)"}
+                        </span>
                       </span>
-                    </label>
-                  );
-                })}
-              </div>
+                    </div>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {CONTROL_ROLE_PRESETS.map((preset) => {
+                        const allControlPerms =
+                          STAFF_PERMISSION_GROUPS.find(
+                            (g) => g.key === "control",
+                          )?.permissions ?? [];
+                        const selectedControlPerms = value.filter((p) =>
+                          allControlPerms.includes(p),
+                        );
+                        const isExactMatch =
+                          selectedControlPerms.length ===
+                            preset.permissions.length &&
+                          preset.permissions.every((p) =>
+                            selectedControlPerms.includes(p),
+                          );
+                        return (
+                          <button
+                            key={preset.key}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => {
+                              const nonControl = value.filter(
+                                (p) => !allControlPerms.includes(p),
+                              );
+                              onChange([...nonControl, ...preset.permissions]);
+                            }}
+                            className={`flex flex-col items-start gap-0.5 rounded-squircle border p-2 text-start transition-all cursor-pointer ${
+                              isExactMatch
+                                ? "border-primary bg-primary/15 text-foreground shadow-xs"
+                                : "border-border/70 bg-background/60 hover:border-primary/40 hover:bg-primary/5"
+                            }`}
+                          >
+                            <span className="text-xs font-bold text-foreground">
+                              {locale === "ar"
+                                ? preset.labelAr
+                                : preset.labelEn}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground leading-snug">
+                              {locale === "ar"
+                                ? preset.descriptionAr
+                                : preset.descriptionEn}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Grouped Control Sub-sections */}
+                  {CONTROL_PERMISSION_SUBGROUPS.map((subgroup) => {
+                    const visibleSubPerms = subgroup.permissions.filter((p) =>
+                      group.permissions.includes(p),
+                    );
+                    if (visibleSubPerms.length === 0) return null;
+                    return (
+                      <div
+                        key={subgroup.key}
+                        className="space-y-1.5 rounded-xl border border-border/40 bg-background/30 p-2.5"
+                      >
+                        <div className="text-[11px] font-bold text-primary">
+                          {locale === "ar"
+                            ? subgroup.titleAr
+                            : subgroup.titleEn}
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {visibleSubPerms.map((permission) => {
+                            const checked = value.includes(permission);
+                            return (
+                              <label
+                                key={permission}
+                                className={`flex cursor-pointer items-start gap-2.5 rounded-squircle border p-2 text-xs transition-all select-none ${
+                                  checked
+                                    ? "border-primary/50 bg-primary/10 text-foreground font-medium shadow-xs"
+                                    : "border-border/60 bg-background/40 hover:border-border hover:bg-secondary/30 text-muted-foreground"
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onCheckedChange={(c) =>
+                                    onChange(
+                                      c === true
+                                        ? [...value, permission]
+                                        : value.filter(
+                                            (item) => item !== permission,
+                                          ),
+                                    )
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span className="leading-snug">
+                                  {t(
+                                    `permissions.labels.${permission.replaceAll(".", "_")}`,
+                                  )}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {group.permissions.map((permission) => {
+                    const checked = value.includes(permission);
+                    return (
+                      <label
+                        key={permission}
+                        className={`flex cursor-pointer items-start gap-2.5 rounded-squircle border p-2 text-xs transition-all select-none ${
+                          checked
+                            ? "border-primary/50 bg-primary/10 text-foreground font-medium shadow-xs"
+                            : "border-border/60 bg-background/40 hover:border-border hover:bg-secondary/30 text-muted-foreground"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={disabled}
+                          onCheckedChange={(c) =>
+                            onChange(
+                              c === true
+                                ? [...value, permission]
+                                : value.filter((item) => item !== permission),
+                            )
+                          }
+                          className="mt-0.5"
+                        />
+                        <span className="leading-snug">
+                          {t(
+                            `permissions.labels.${permission.replaceAll(".", "_")}`,
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
