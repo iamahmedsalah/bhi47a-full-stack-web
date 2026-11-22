@@ -3,6 +3,13 @@ import type { FilterQuery } from 'mongoose';
 import type { QueryAttendanceSessionsDto } from '../dto/attendance-session.dto';
 import type { AttendanceSessionDocument } from '../schemas/attendance-session.schema';
 
+export function attendanceSearchPattern(search?: string) {
+  const value = search?.trim();
+  return value
+    ? new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    : undefined;
+}
+
 export interface AttendanceViewer {
   _id: string;
   role: string;
@@ -20,6 +27,7 @@ export function attendanceSessionFilter(
   user: AttendanceViewer,
   query: QueryAttendanceSessionsDto,
   now = new Date(),
+  matchingInstructors: Types.ObjectId[] = [],
 ): FilterQuery<AttendanceSessionDocument> {
   const conditions: FilterQuery<AttendanceSessionDocument>[] = [
     attendanceSessionScope(user),
@@ -45,16 +53,16 @@ export function attendanceSessionFilter(
         { status: 'OPEN', expiresAt: { $lte: now } },
       ],
     });
-  if (query.search?.trim()) {
-    const regex = new RegExp(
-      query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-      'i',
-    );
+  const regex = attendanceSearchPattern(query.search);
+  if (regex) {
     conditions.push({
       $or: [
         { courseCode: regex },
         { courseName: regex },
         { createdByName: regex },
+        ...(matchingInstructors.length
+          ? [{ createdBy: { $in: matchingInstructors } }]
+          : []),
       ],
     });
   }

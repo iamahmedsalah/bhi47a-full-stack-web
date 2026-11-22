@@ -28,6 +28,11 @@ import {
 } from '../dto/attendance-session.dto';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
+import {
+  attendanceInstructor,
+  findAttendanceInstructors,
+  loadAttendanceInstructors,
+} from './attendance-instructor';
 import { ATTENDANCE_CONFIG_DEFAULTS } from '@student-portal/shared';
 import {
   attendanceSessionFilter,
@@ -47,6 +52,10 @@ export interface SessionDetailsResponse {
   semester: string;
   createdBy: Types.ObjectId | string;
   createdByName: string;
+  createdByNameAr?: string;
+  createdByNameEn?: string;
+  instructorStaffType?: string;
+  instructorTitlePrefix?: string;
   academicPosition: string;
   status: string;
   startsAt: Date;
@@ -573,7 +582,16 @@ export class AttendanceSessionService {
   ): Promise<AdminOverviewResponse> {
     const now = new Date();
     const scope = attendanceSessionScope(user);
-    const filter = attendanceSessionFilter(user, query, now);
+    const matchingInstructors = await findAttendanceInstructors(
+      this.userModel,
+      query.search,
+    );
+    const filter = attendanceSessionFilter(
+      user,
+      query,
+      now,
+      matchingInstructors,
+    );
     const limit = Math.min(100, Math.max(1, Math.trunc(query.limit || 20)));
     const total = await this.sessionModel.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
@@ -648,13 +666,16 @@ export class AttendanceSessionService {
         { $sort: { '_id.code': 1, '_id.level': 1 } },
       ]),
     ]);
-    const counts = await this.recordModel.aggregate<Counts>([
-      {
-        $match: {
-          sessionId: { $in: recentSessions.map((session) => session._id) },
+    const [instructors, counts] = await Promise.all([
+      loadAttendanceInstructors(this.userModel, recentSessions),
+      this.recordModel.aggregate<Counts>([
+        {
+          $match: {
+            sessionId: { $in: recentSessions.map((session) => session._id) },
+          },
         },
-      },
-      { $group: { _id: '$sessionId', ...countFields } },
+        { $group: { _id: '$sessionId', ...countFields } },
+      ]),
     ]);
     const statsMap = new Map(
       counts.map((entry) => [entry._id.toString(), entry]),
@@ -672,6 +693,7 @@ export class AttendanceSessionService {
         const stats = statsMap.get(session._id.toString());
         return {
           ...session,
+          ...attendanceInstructor(session, instructors),
           status:
             session.status === 'OPEN' && session.expiresAt <= now
               ? 'EXPIRED'

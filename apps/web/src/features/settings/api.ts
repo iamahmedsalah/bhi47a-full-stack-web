@@ -33,6 +33,7 @@ export interface RegistrationTermItem {
 
 export interface AiSettingsItem {
   studentAdvisorEnabled: boolean;
+  studentAdvisorConfigured?: boolean;
   provider: string;
   model: string;
   apiKeyConfigured: boolean;

@@ -9,7 +9,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { ATTENDANCE_RECORD_DELETE_LIMIT } from "@student-portal/shared";
+import { ATTENDANCE_RECORD_DELETE_LIMIT, getStaffRoleLabel } from "@student-portal/shared";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
@@ -298,15 +298,15 @@ export function AdminAttendanceOverview({
         header: isArabic ? "القائم بالتدريس" : "Instructor",
         render: (session) => (
           <div className="min-w-32 text-xs">
-            <bdi>{session.createdByName}</bdi>
+            <bdi>{(isArabic ? session.createdByNameAr : session.createdByNameEn) || session.createdByName}</bdi>
             <p className="mt-1 text-muted-foreground">
-              {session.academicPosition === "doctor"
-                ? isArabic
-                  ? "دكتور المادة"
-                  : "Doctor"
-                : isArabic
-                  ? "معيد"
-                  : "Teaching assistant"}
+              {getStaffRoleLabel(
+                session.instructorStaffType ??
+                  (session.academicPosition === "doctor" ? "doctor" : "teaching_assistant"),
+                "staff",
+                locale,
+                session.instructorTitlePrefix,
+              )}
             </p>
           </div>
         ),

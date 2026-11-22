@@ -27,6 +27,9 @@ const session = {
   sessionType: "lecture",
   academicPosition: "doctor",
   createdByName: "Lecturer",
+  createdByNameAr: "م. م أحمد سليمان",
+  createdByNameEn: "A.L. Ahmed Soliman",
+  instructorStaffType: "assistant_lecturer",
   startsAt: "2026-10-02T19:40:00Z",
   status: "CLOSED",
   stats: { totalCheckedIn: 1, presentCount: 1, lateCount: 0 },
@@ -130,6 +133,14 @@ for (const isArabic of [false, true])
         "Every direct row child must be a table cell",
       );
       assert.match(cells[0][0], /315/);
+      assert.match(
+        cells[3][0],
+        isArabic ? /م\. م أحمد سليمان/ : /A\.L\. Ahmed Soliman/,
+      );
+      assert.match(
+        cells[3][0],
+        isArabic ? /مدرس مساعد/ : /Assistant Lecturer/,
+      );
       assert.match(cells[4][0], /<time/);
       assert.match(cells[7][0], /<button/);
     }

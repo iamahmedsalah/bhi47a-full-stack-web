@@ -517,6 +517,252 @@ export class ControlSheetsService {
     );
   }
 
+  /** Sheet-level workflow stages and actor timeline for the Control table dialog. */
+  async getWorkflowHistory(user: AuthenticatedUser, sheetId: string) {
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_AUDIT_VIEW);
+    const { sheet, course } = await this.requireSheetInScope(user, sheetId);
+
+    const workflowActions = [
+      'SUBMIT',
+      'SUBMIT_APPROVAL',
+      'APPROVE',
+      'RETURN',
+      'REOPEN',
+      'LOCK',
+      'UNLOCK',
+      'PUBLISH',
+      'HIDE',
+      'GRACE',
+    ] as const;
+
+    const [auditRows, firstEntryRow] = await Promise.all([
+      this.auditModel
+        .find({
+          courseId: sheet.courseId,
+          academicYear: sheet.academicYear,
+          semester: sheet.semester,
+          component: sheet.component,
+          action: { $in: workflowActions },
+        })
+        .sort({ at: -1 })
+        .limit(100)
+        .lean(),
+      this.auditModel
+        .findOne({
+          courseId: sheet.courseId,
+          academicYear: sheet.academicYear,
+          semester: sheet.semester,
+          component: sheet.component,
+          action: { $in: ['CREATE', 'UPDATE'] },
+        })
+        .sort({ at: -1 })
+        .select('actorId at')
+        .lean(),
+    ]);
+
+    const actorIds = new Set<string>();
+    const toIdString = (
+      value: string | Types.ObjectId | null | undefined,
+    ): string | null => {
+      if (!value) return null;
+      return typeof value === 'string' ? value : value.toHexString();
+    };
+    const collectId = (value: string | Types.ObjectId | null | undefined) => {
+      const str = toIdString(value);
+      if (str && Types.ObjectId.isValid(str)) actorIds.add(str);
+    };
+
+    collectId(sheet.createdBy);
+    collectId(sheet.submission?.submittedBy);
+    collectId(sheet.reviewSubmission?.submittedBy);
+    collectId(sheet.approvedBy);
+    collectId(sheet.lockedBy);
+    collectId(firstEntryRow?.actorId);
+    for (const row of auditRows) collectId(row.actorId);
+
+    const users = actorIds.size
+      ? await this.userModel
+          .find({
+            _id: { $in: [...actorIds].map((id) => new Types.ObjectId(id)) },
+          })
+          .select('name nameAr role staffType titlePrefix')
+          .lean()
+      : [];
+
+    const userById = new Map(users.map((u) => [String(u._id), u]));
+    const formatActor = (value: string | Types.ObjectId | null | undefined) => {
+      const str = toIdString(value);
+      if (!str) return null;
+      const u = userById.get(str);
+      if (!u) return null;
+      return {
+        id: String(u._id),
+        name: u.name ?? null,
+        nameAr: (u as { nameAr?: string }).nameAr ?? null,
+        role: (u as { role?: string }).role ?? null,
+        staffType: (u as { staffType?: string }).staffType ?? null,
+        titlePrefix: (u as { titlePrefix?: string }).titlePrefix ?? null,
+      };
+    };
+
+    const latestByAction = new Map<string, (typeof auditRows)[number]>();
+    for (const row of auditRows) {
+      if (!latestByAction.has(row.action)) {
+        latestByAction.set(row.action, row);
+      }
+    }
+
+    const currentState = sheet.workflowState ?? 'DRAFT';
+    const order: Record<string, number> = {
+      DRAFT: 0,
+      RETURNED: 0,
+      IN_REVIEW: 1,
+      PENDING_APPROVAL: 2,
+      APPROVED: 3,
+    };
+    const currentRank = order[currentState] ?? 0;
+
+    const draftActor =
+      formatActor(firstEntryRow?.actorId) ?? formatActor(sheet.createdBy);
+    const draftAt =
+      firstEntryRow?.at ?? (sheet as { createdAt?: Date }).createdAt ?? null;
+
+    const submitAudit = latestByAction.get('SUBMIT');
+    const reviewActor =
+      formatActor(sheet.submission?.submittedBy) ??
+      formatActor(submitAudit?.actorId);
+    const reviewAt = sheet.submission?.submittedAt ?? submitAudit?.at ?? null;
+
+    const approvalRequestAudit = latestByAction.get('SUBMIT_APPROVAL');
+    const pendingApprovalActor =
+      formatActor(sheet.reviewSubmission?.submittedBy) ??
+      formatActor(approvalRequestAudit?.actorId);
+    const pendingApprovalAt =
+      sheet.reviewSubmission?.submittedAt ?? approvalRequestAudit?.at ?? null;
+
+    const approveAudit = latestByAction.get('APPROVE');
+    const approvedActor =
+      formatActor(sheet.approvedBy) ?? formatActor(approveAudit?.actorId);
+    const approvedAt = sheet.approvedAt ?? approveAudit?.at ?? null;
+
+    const returnAudit = latestByAction.get('RETURN');
+
+    const stages = [
+      {
+        key: 'DRAFT' as const,
+        status:
+          currentState === 'RETURNED'
+            ? ('returned' as const)
+            : currentRank > 0
+              ? ('completed' as const)
+              : ('active' as const),
+        actor:
+          currentState === 'RETURNED'
+            ? (formatActor(returnAudit?.actorId) ?? draftActor)
+            : draftActor,
+        at:
+          currentState === 'RETURNED'
+            ? ((returnAudit?.at ?? draftAt)?.toISOString?.() ?? null)
+            : draftAt
+              ? new Date(draftAt).toISOString()
+              : null,
+        note:
+          currentState === 'RETURNED'
+            ? (sheet.reviewReason ?? returnAudit?.reason ?? null)
+            : null,
+      },
+      {
+        key: 'IN_REVIEW' as const,
+        status:
+          currentRank > 1
+            ? ('completed' as const)
+            : currentRank === 1
+              ? ('active' as const)
+              : ('pending' as const),
+        actor: reviewActor,
+        at: reviewAt ? new Date(reviewAt).toISOString() : null,
+        note: submitAudit?.reason ?? null,
+      },
+      {
+        key: 'PENDING_APPROVAL' as const,
+        status:
+          currentRank > 2
+            ? ('completed' as const)
+            : currentRank === 2
+              ? ('active' as const)
+              : ('pending' as const),
+        actor: pendingApprovalActor,
+        at: pendingApprovalAt
+          ? new Date(pendingApprovalAt).toISOString()
+          : null,
+        note: approvalRequestAudit?.reason ?? null,
+      },
+      {
+        key: 'APPROVED' as const,
+        status:
+          currentRank >= 3 ? ('completed' as const) : ('pending' as const),
+        actor: approvedActor,
+        at: approvedAt ? new Date(approvedAt).toISOString() : null,
+        note: approveAudit?.reason ?? null,
+      },
+    ];
+
+    const events: Array<{
+      id: string;
+      action: string;
+      fromState: string | null;
+      toState: string | null;
+      actor: ReturnType<typeof formatActor>;
+      reason: string | null;
+      at: string;
+    }> = auditRows.map((row) => {
+      const oldVal = row.oldValue as { workflowState?: string } | null;
+      const newVal = row.newValue as { workflowState?: string } | null;
+      return {
+        id: String(row._id),
+        action: row.action,
+        fromState: oldVal?.workflowState ?? null,
+        toState: newVal?.workflowState ?? null,
+        actor: formatActor(row.actorId),
+        reason: row.reason ?? null,
+        at: new Date(row.at).toISOString(),
+      };
+    });
+
+    const createdAt = (sheet as { createdAt?: Date }).createdAt;
+    if (sheet.createdBy && createdAt) {
+      events.push({
+        id: `opened-${String(sheet._id)}`,
+        action: 'OPENED',
+        fromState: null,
+        toState: 'DRAFT',
+        actor: formatActor(sheet.createdBy),
+        reason: null,
+        at: new Date(createdAt).toISOString(),
+      });
+    }
+
+    return {
+      sheetId: String(sheet._id),
+      slug: sheet.slug ?? null,
+      courseCode: course.code,
+      courseName: course.name,
+      courseNameAr: course.nameAr ?? null,
+      courseNameEn: course.nameEn ?? null,
+      component: sheet.component,
+      academicYear: sheet.academicYear,
+      semester: sheet.semester,
+      workflowState: currentState,
+      locked: Boolean(sheet.locked),
+      lockedBy: formatActor(sheet.lockedBy),
+      lockedAt: sheet.lockedAt ? new Date(sheet.lockedAt).toISOString() : null,
+      lockReason: sheet.lockReason ?? null,
+      reviewReason: sheet.reviewReason ?? null,
+      stages,
+      events,
+    };
+  }
+
   /** Students with an approved registration containing the course for the term. */
   async getRosterStudentIds(
     courseCode: string,

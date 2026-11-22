@@ -116,6 +116,7 @@ function ScheduleEntry<T extends TimetableEntry>({
             {
               name: entry.staffName,
               nameAr: entry.staffNameAr,
+              titlePrefix: entry.titlePrefix,
               staffType:
                 entry.staffType ||
                 (entry.type === "lecture" ? "doctor" : "teaching_assistant"),

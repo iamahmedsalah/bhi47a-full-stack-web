@@ -166,6 +166,53 @@ export interface ResolvedGradingScheme {
   components: ControlSchemeComponent[];
 }
 
+export interface ControlWorkflowActor {
+  id: string;
+  name: string | null;
+  nameAr: string | null;
+  role: string | null;
+  staffType: string | null;
+  titlePrefix: string | null;
+}
+
+export interface ControlWorkflowStage {
+  key: "DRAFT" | "IN_REVIEW" | "PENDING_APPROVAL" | "APPROVED";
+  status: "completed" | "active" | "returned" | "pending";
+  actor: ControlWorkflowActor | null;
+  at: string | null;
+  note: string | null;
+}
+
+export interface ControlWorkflowEvent {
+  id: string;
+  action: string;
+  fromState: string | null;
+  toState: string | null;
+  actor: ControlWorkflowActor | null;
+  reason: string | null;
+  at: string;
+}
+
+export interface ControlWorkflowHistory {
+  sheetId: string;
+  slug: string | null;
+  courseCode: string;
+  courseName: string;
+  courseNameAr: string | null;
+  courseNameEn: string | null;
+  component: ControlComponentKey;
+  academicYear: string;
+  semester: Semester;
+  workflowState: ControlSheetDetails["sheet"]["workflowState"];
+  locked: boolean;
+  lockedBy: ControlWorkflowActor | null;
+  lockedAt: string | null;
+  lockReason: string | null;
+  reviewReason: string | null;
+  stages: ControlWorkflowStage[];
+  events: ControlWorkflowEvent[];
+}
+
 export interface ControlAuditRow {
   id: string;
   action:

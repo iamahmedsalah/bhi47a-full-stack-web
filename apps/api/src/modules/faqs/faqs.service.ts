@@ -12,7 +12,9 @@ import {
   QueryFaqDto,
   UpdateFaqDto,
 } from './dto/faq.dto';
+import { DEFAULT_FAQ_ITEMS } from './default-faqs.data';
 import { Faq, FaqDocument } from './schemas/faq.schema';
+import { faqTermPattern, faqTerms, scoreFaq } from './faq-retrieval';
 
 @Injectable()
 export class FaqsService {
@@ -43,14 +45,30 @@ export class FaqsService {
       filter.topics = this.normalize(query.topic);
     }
 
+    const andConditions: FilterQuery<FaqDocument>[] = [];
+
+    if (query.locale === 'ar') {
+      andConditions.push({ question: { $regex: /[\u0600-\u06FF]/ } });
+    } else if (query.locale === 'en') {
+      andConditions.push({ question: { $not: /[\u0600-\u06FF]/ } });
+    }
+
     if (query.search) {
       const search = normalizeSearchTerm(query.search);
-      filter.$or = [
-        { question: { $regex: search, $options: 'i' } },
-        { answer: { $regex: search, $options: 'i' } },
-        { keywords: { $regex: search, $options: 'i' } },
-        { topics: { $regex: search, $options: 'i' } },
-      ];
+      andConditions.push({
+        $or: [
+          { question: { $regex: search, $options: 'i' } },
+          { answer: { $regex: search, $options: 'i' } },
+          { keywords: { $regex: search, $options: 'i' } },
+          { topics: { $regex: search, $options: 'i' } },
+        ],
+      });
+    }
+
+    if (andConditions.length === 1) {
+      Object.assign(filter, andConditions[0]);
+    } else if (andConditions.length > 1) {
+      filter.$and = andConditions;
     }
 
     const [items, total] = await Promise.all([
@@ -106,26 +124,62 @@ export class FaqsService {
     return { message: 'FAQ deleted successfully' };
   }
 
-  async ask(dto: AskFaqDto) {
-    const messageTerms = this.tokenize(dto.message);
-    const faqs = await this.faqModel
-      .find({ isActive: true })
-      .sort({ sortOrder: 1, createdAt: -1 })
-      .lean();
+  async bulkRemove(ids: string[]): Promise<{ deletedCount: number }> {
+    const uniqueIds = [...new Set(ids)].map((id) => new Types.ObjectId(id));
+    const result = await this.faqModel.deleteMany({ _id: { $in: uniqueIds } });
+    return { deletedCount: result.deletedCount ?? 0 };
+  }
 
-    const matches = faqs
-      .map((faq) => ({
-        faq,
-        score: this.scoreFaq(messageTerms, faq),
-      }))
-      .filter((match) => match.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+  async seedDefaults(
+    userId?: string,
+  ): Promise<{ inserted: number; skipped: number; total: number }> {
+    let inserted = 0;
+    let skipped = 0;
+    const creatorId =
+      userId && Types.ObjectId.isValid(userId)
+        ? new Types.ObjectId(userId)
+        : undefined;
+
+    for (const item of DEFAULT_FAQ_ITEMS) {
+      const result = await this.faqModel.updateOne(
+        { question: item.question },
+        {
+          $setOnInsert: {
+            question: item.question,
+            answer: item.answer,
+            topics: this.normalizeList(item.topics),
+            keywords: this.normalizeList(item.keywords),
+            isActive: item.isActive,
+            sortOrder: item.sortOrder,
+            ...(creatorId ? { createdBy: creatorId } : {}),
+          },
+        },
+        { upsert: true },
+      );
+
+      if (result.upsertedCount > 0) {
+        inserted += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    return {
+      inserted,
+      skipped,
+      total: DEFAULT_FAQ_ITEMS.length,
+    };
+  }
+
+  async ask(dto: AskFaqDto) {
+    const messageTerms = faqTerms(dto.message);
+    const matches = await this.findRelevant(dto.message);
 
     if (matches.length === 0) {
       return {
-        answer:
-          'I could not find a matching FAQ yet. Please submit a complaint or contact student affairs for help.',
+        answer: /\p{Script=Arabic}/u.test(dto.message)
+          ? 'ملقتش إجابة معتمدة للسؤال ده. تقدر تتواصل مع شؤون الطلاب أو تبعت استفسار من صفحة الشكاوى.'
+          : 'I could not find a matching FAQ yet. Please submit an inquiry or contact student affairs.',
         confidence: 0,
         matches: [],
       };
@@ -145,37 +199,28 @@ export class FaqsService {
     };
   }
 
-  private scoreFaq(terms: string[], faq: Faq): number {
-    const haystack = [
-      faq.question,
-      faq.answer,
-      ...(faq.topics || []),
-      ...(faq.keywords || []),
-    ]
-      .join(' ')
-      .toLowerCase();
-
-    return terms.reduce((score, term) => {
-      if (faq.keywords?.map((item) => this.normalize(item)).includes(term)) {
-        return score + 3;
-      }
-      if (faq.topics?.map((item) => this.normalize(item)).includes(term)) {
-        return score + 2;
-      }
-      return haystack.includes(term) ? score + 1 : score;
-    }, 0);
-  }
-
-  private tokenize(value: string): string[] {
-    return [
-      ...new Set(
-        value
-          .toLowerCase()
-          .split(/[^\p{L}\p{N}]+/u)
-          .map((term) => this.normalize(term))
-          .filter((term) => term.length > 1),
-      ),
-    ];
+  async findRelevant(query: string, limit = 5) {
+    const terms = faqTerms(query);
+    if (!terms.length) return [];
+    const pattern = new RegExp(terms.map(faqTermPattern).join('|'), 'iu');
+    const candidates = await this.faqModel
+      .find({
+        isActive: true,
+        $or: [
+          { question: pattern },
+          { keywords: pattern },
+          { topics: pattern },
+        ],
+      })
+      .select('question answer keywords topics')
+      .sort({ sortOrder: 1, createdAt: -1, _id: 1 })
+      .limit(100)
+      .lean();
+    return candidates
+      .map((faq) => ({ faq, score: scoreFaq(query, terms, faq) }))
+      .filter((match) => match.score >= 3)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   }
 
   private normalizeList(values?: string[]): string[] {

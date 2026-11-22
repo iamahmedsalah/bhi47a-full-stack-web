@@ -15,6 +15,7 @@ import type {
   ControlCourseSummary,
   ControlRosterRow,
   ControlSheetDetails,
+  ControlWorkflowHistory,
   GradeChangeInput,
   ResolvedGradingScheme,
 } from "./types";
@@ -49,6 +50,8 @@ export const controlKeys = {
     sheetId: string,
     params: { page?: number; limit?: number; studentId?: string },
   ) => [...controlKeys.all, "audit", sheetId, params] as const,
+  workflowHistory: (sheetId: string) =>
+    [...controlKeys.all, "workflow-history", sheetId] as const,
 };
 
 export async function getControlCapabilities(): Promise<ControlCapabilities> {
@@ -142,6 +145,15 @@ export async function listControlAudit(
   const res = await api.get<PaginatedResponse<ControlAuditRow>>(
     `/admin/control/sheets/${sheetId}/audit`,
     { params },
+  );
+  return res.data;
+}
+
+export async function getControlWorkflowHistory(
+  sheetId: string,
+): Promise<ControlWorkflowHistory> {
+  const res = await api.get<ControlWorkflowHistory>(
+    `/admin/control/sheets/${sheetId}/workflow-history`,
   );
   return res.data;
 }

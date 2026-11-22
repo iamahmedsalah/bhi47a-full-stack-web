@@ -17,6 +17,9 @@ export PATH="$work/bin:$PATH"
 if ! command -v flock > /dev/null; then
   printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/flock"
 fi
+case "$(uname -s)" in
+  MINGW*|MSYS*) printf '#!/usr/bin/env bash\nexec python "$@"\n' > "$work/bin/python3" ;;
+esac
 
 cat > "$work/bin/git" <<'MOCK'
 #!/usr/bin/env bash
@@ -25,6 +28,18 @@ MOCK
 cat > "$work/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 printf '%s %s\n' "${RELEASE_TAG:-unset}" "$*" >> "$TEST_LOG"
+if [[ " $* " == *' config --format json '* ]]; then
+  printf '%s\n' '{"services":{"web":{"build":{"args":{"NEXT_PUBLIC_API_URL":"/api","NEXT_PUBLIC_APP_ENV":"production","NEXT_PUBLIC_APP_VERSION":"1.0.0"}}}}}'
+fi
+if [[ -n "${TEST_WEB_LABEL:-}" && "$1 $2" == 'image inspect' ]]; then
+  if [[ "${4:-}" == '{{.Os}}/{{.Architecture}}' ]]; then
+    printf '%s\n' "${TEST_IMAGE_PLATFORM:-linux/amd64}"
+  elif [[ "${3:-}" == '--format' ]]; then
+    printf '%s\n' "$TEST_WEB_LABEL"
+  fi
+  exit 0
+fi
+if [[ "$1" == version ]]; then printf 'linux/amd64\n'; fi
 if [[ "$1 $2" == 'image inspect' ]]; then exit 1; fi
 if [[ " $* " == *' ps --all --quiet '* ]]; then echo "fixture-${*: -1}"; fi
 if [[ " $* " == *' logs '* && "${TEST_DIAGNOSTICS_FAIL:-}" == 1 ]]; then exit 1; fi
@@ -74,6 +89,26 @@ bash "$work/app/deploy/deploy.sh" --snapshot "$snapshot"
 bash "$work/app/deploy/deploy.sh" --rollback
 [[ $(cat "$work/app/.deploy/current-release") == "$TEST_OLD" ]]
 echo 'PASS archive deployment accepts a SHA256 release and supports rollback'
+
+: > "$TEST_LOG"
+if TEST_WEB_LABEL=mismatch VPS_USE_PREBUILT_IMAGES=1 bash "$work/app/deploy/deploy.sh"; then
+  echo 'Accepted mismatched public build settings' >&2; exit 1
+fi
+if grep -Eq 'image tag| up | build ' "$TEST_LOG"; then
+  echo 'Mismatched CI images affected deployment' >&2; exit 1
+fi
+fingerprint=$(printf '%s\n' /api '' '' production 1.0.0 | sha256sum | cut -d' ' -f1)
+if TEST_WEB_LABEL="$fingerprint" TEST_IMAGE_PLATFORM=linux/arm64 VPS_USE_PREBUILT_IMAGES=1 bash "$work/app/deploy/deploy.sh"; then
+  echo 'Accepted mismatched image architecture' >&2; exit 1
+fi
+if grep -Eq ' tag | up | build ' "$TEST_LOG"; then
+  echo 'Wrong-architecture CI images affected deployment' >&2; exit 1
+fi
+TEST_WEB_LABEL="$fingerprint" VPS_USE_PREBUILT_IMAGES=1 bash "$work/app/deploy/deploy.sh"
+grep -Fq "tag student-portal-web:ci-$TEST_NEW student-portal-web:$TEST_NEW" "$TEST_LOG"
+grep -Fq "tag student-portal-api:ci-$TEST_NEW student-portal-api:$TEST_NEW" "$TEST_LOG"
+if grep -Fq ' build ' "$TEST_LOG"; then echo 'CI images built again on VPS' >&2; exit 1; fi
+echo 'PASS prebuilt images activate only when public settings match'
 
 if bash "$work/app/deploy/deploy.sh" --seed; then
   echo 'Legacy demo seed flag unexpectedly accepted' >&2; exit 1;

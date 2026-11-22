@@ -5,13 +5,19 @@ import React, { Suspense, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import {
+  CheckCircle2,
+  Clock,
   ExternalLink,
+  FileEdit,
+  FileSpreadsheet,
+  GitBranch,
+  History,
   Loader2,
   Lock,
   MoreVertical,
+  RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
-  FileSpreadsheet,
   Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -67,11 +73,16 @@ import {
   unlockControlSheet,
 } from "@/features/control/api";
 import { ControlWorkbookLoading } from "@/features/control/components/control-workbook-loading";
+import {
+  ControlWorkflowHistoryDialog,
+  type WorkflowHistoryTarget,
+} from "@/features/control/components/control-workflow-history-dialog";
 import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
 import type { ControlCourseSummary } from "@/features/control/types";
 
 function ControlHomeContent() {
   const releaseText = useTranslations("controlRelease");
+  const controlText = useTranslations("control");
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -130,6 +141,8 @@ function ControlHomeContent() {
   const [schemeTarget, setSchemeTarget] = useState<ControlCourseSummary | null>(
     null,
   );
+  const [workflowTarget, setWorkflowTarget] =
+    useState<WorkflowHistoryTarget | null>(null);
   const [lockTarget, setLockTarget] = useState<{
     sheetId: string;
     locked: boolean;
@@ -245,30 +258,36 @@ function ControlHomeContent() {
       {
         key: "name",
         header: isAr ? "اسم المقرر" : "Course Name",
-        className: "min-w-[220px]",
+        className: "min-w-[230px]",
         render: (item) => {
           const title = isAr
             ? item.nameAr || item.name
             : item.nameEn || item.name;
+          const secondaryTitle =
+            item.nameAr && item.nameEn
+              ? isAr
+                ? item.nameEn
+                : item.nameAr
+              : null;
           const levelLabel = item.level
             ? isAr
               ? `المستوى ${
                   item.level === "1"
-                    ? "الأولى"
+                    ? "الأول"
                     : item.level === "2"
-                      ? "الثانية"
+                      ? "الثاني"
                       : item.level === "3"
-                        ? "الثالثة"
-                        : "الرابعة"
+                        ? "الثالث"
+                        : "الرابع"
                 }`
               : `Level ${item.level}`
             : null;
           return (
-            <TableCell className="min-w-[220px]">
-              <div className="flex items-center gap-2">
+            <TableCell className="min-w-[230px] py-3">
+              <div className="flex flex-col items-start gap-1">
                 <button
                   type="button"
-                  className="font-semibold text-foreground hover:text-primary hover:underline text-start disabled:text-muted-foreground"
+                  className="text-sm font-bold text-foreground hover:text-primary hover:underline text-start leading-snug disabled:text-muted-foreground cursor-pointer"
                   disabled={
                     openSheetMutation.isPending ||
                     !(
@@ -291,20 +310,24 @@ function ControlHomeContent() {
                 >
                   {title}
                 </button>
-                {levelLabel && (
-                  <Badge
-                    variant="outline"
-                    className="rounded-squircle text-[10px] py-0 px-2 font-medium border-primary/30 text-primary bg-primary/5"
-                  >
-                    {levelLabel}
-                  </Badge>
+                {(levelLabel || secondaryTitle) && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {levelLabel && (
+                      <Badge
+                        variant="outline"
+                        className="rounded-squircle border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary whitespace-nowrap"
+                      >
+                        {levelLabel}
+                      </Badge>
+                    )}
+                    {secondaryTitle && (
+                      <span className="text-[11px] text-muted-foreground truncate max-w-[220px]">
+                        <bdi>{secondaryTitle}</bdi>
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-              {item.nameAr && item.nameEn && (
-                <div className="text-[11px] text-muted-foreground">
-                  {isAr ? item.nameEn : item.nameAr}
-                </div>
-              )}
             </TableCell>
           );
         },
@@ -312,9 +335,9 @@ function ControlHomeContent() {
       {
         key: "component",
         header: isAr ? "المكوّن" : "Component",
-        className: "w-32 text-center",
+        className: "w-28 text-center",
         render: () => (
-          <TableCell className="w-32 text-center">
+          <TableCell className="w-28 text-center">
             <StatusBadge label={releaseText(component)} variant="primary" />
           </TableCell>
         ),
@@ -322,7 +345,7 @@ function ControlHomeContent() {
       {
         key: "progress",
         header: isAr ? "تقدم الرصد (المرصود / المسجلين)" : "Entry Progress",
-        className: "min-w-[200px]",
+        className: "min-w-[185px]",
         render: (item) => {
           const mid = item.components.find((c) => c.key === component);
           const entered = mid?.entered ?? 0;
@@ -331,7 +354,7 @@ function ControlHomeContent() {
             total > 0 ? Math.min(100, Math.round((entered / total) * 100)) : 0;
 
           return (
-            <TableCell className="min-w-[200px]">
+            <TableCell className="min-w-[185px]">
               <div className="space-y-1.5">
                 <div
                   className="flex items-center justify-between text-xs font-mono"
@@ -354,9 +377,98 @@ function ControlHomeContent() {
         },
       },
       {
+        key: "workflow",
+        header: isAr ? "حالة الرصد" : "Grading Status",
+        className: "w-44 text-center",
+        render: (item) => {
+          const mid = item.components.find((c) => c.key === component);
+          const hasSheet = Boolean(mid?.sheetId);
+          const wfState = mid?.workflowState ?? "DRAFT";
+          const displayLabel = !hasSheet
+            ? isAr
+              ? "لم يبدأ الرصد"
+              : "Not Started"
+            : wfState === "DRAFT"
+              ? isAr
+                ? "مسودة · قيد الرصد"
+                : "Draft · Entering"
+              : controlText(`workflow.${wfState}`);
+
+          const styleClass = !hasSheet
+            ? "border-border/70 bg-secondary/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            : wfState === "APPROVED"
+              ? "border-emerald-500/35 bg-emerald-500/12 text-emerald-400 hover:bg-emerald-500/20"
+              : wfState === "RETURNED"
+                ? "border-rose-500/35 bg-rose-500/12 text-rose-400 hover:bg-rose-500/20"
+                : wfState === "IN_REVIEW"
+                  ? "border-amber-500/35 bg-amber-500/12 text-amber-400 hover:bg-amber-500/20"
+                  : wfState === "PENDING_APPROVAL"
+                    ? "border-indigo-500/35 bg-indigo-500/12 text-indigo-300 hover:bg-indigo-500/20"
+                    : "border-sky-500/35 bg-sky-500/12 text-sky-400 hover:bg-sky-500/20";
+
+          const StateIcon = !hasSheet
+            ? Clock
+            : wfState === "APPROVED"
+              ? CheckCircle2
+              : wfState === "RETURNED"
+                ? RotateCcw
+                : wfState === "IN_REVIEW" || wfState === "PENDING_APPROVAL"
+                  ? GitBranch
+                  : FileEdit;
+
+          const canViewWorkflowHistory = Boolean(caps?.canViewAudit);
+
+          return (
+            <TableCell className="w-44 text-center">
+              {canViewWorkflowHistory ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWorkflowTarget({
+                      sheetId: mid?.sheetId ?? null,
+                      slug: mid?.slug ?? null,
+                      courseId: item.courseId,
+                      courseCode: item.code,
+                      courseName: isAr
+                        ? item.nameAr || item.name
+                        : item.nameEn || item.name,
+                      component,
+                      workflowState: mid?.workflowState,
+                      locked: Boolean(mid?.locked),
+                    })
+                  }
+                  title={
+                    isAr
+                      ? "اضغط لعرض كل مراحل الرصد والاعتماد ومن قام بها"
+                      : "Click to view all grading stages and who performed them"
+                  }
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1.5 rounded-squircle border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap",
+                    styleClass,
+                  )}
+                >
+                  <StateIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{displayLabel}</span>
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1.5 rounded-squircle border px-2.5 py-1 text-xs font-semibold whitespace-nowrap",
+                    styleClass,
+                  )}
+                >
+                  <StateIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{displayLabel}</span>
+                </span>
+              )}
+            </TableCell>
+          );
+        },
+      },
+      {
         key: "status",
-        header: isAr ? "حالة الكشف" : "Sheet Status",
-        className: "w-40 text-center",
+        header: isAr ? "حالة الكشف" : "Sheet Lock",
+        className: "w-28 text-center",
         render: (item) => {
           const mid = item.components.find((c) => c.key === component);
           const isLocked = Boolean(mid?.locked);
@@ -366,83 +478,72 @@ function ControlHomeContent() {
           );
 
           return (
-            <TableCell className="w-40 text-center">
-              <div className="inline-flex flex-col items-center gap-1">
-                {canToggle ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!mid?.sheetId) return;
-                      setLockReason("");
-                      setLockTarget({
-                        sheetId: mid.sheetId,
-                        locked: isLocked,
-                        courseCode: item.code,
-                        courseName: isAr
-                          ? item.nameAr || item.name
-                          : item.nameEn || item.name,
-                      });
-                    }}
-                    title={
-                      isAr
-                        ? isLocked
-                          ? "الكشف مقفول - انقر لفك القفل"
-                          : "الكشف مفتوح - انقر للقفل"
-                        : isLocked
-                          ? "Sheet is locked - click to unlock"
-                          : "Sheet is open - click to lock"
-                    }
-                    className={cn(
-                      "group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-squircle text-xs font-semibold transition-all border cursor-pointer",
-                      isLocked
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
-                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
-                    )}
-                  >
-                    {isLocked ? (
-                      <Lock className="h-3 w-3 text-amber-400" />
-                    ) : (
-                      <Unlock className="h-3 w-3 text-emerald-400" />
-                    )}
-                    <span>
-                      {isAr
-                        ? isLocked
-                          ? "مغلق"
-                          : "مفتوح"
-                        : isLocked
-                          ? "Locked"
-                          : "Open"}
-                    </span>
-                  </button>
-                ) : (
-                  <StatusBadge
-                    label={isLocked ? "locked" : "unlocked"}
-                    variant={isLocked ? "warning" : "success"}
-                  />
-                )}
-                <span className="text-[10px] text-muted-foreground">
-                  {isAr
-                    ? isLocked
-                      ? "للقراءة فقط"
-                      : "متاح للرصد"
-                    : isLocked
-                      ? "Read-only"
-                      : "Accepting marks"}
-                </span>
-              </div>
+            <TableCell className="w-28 text-center">
+              {canToggle ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!mid?.sheetId) return;
+                    setLockReason("");
+                    setLockTarget({
+                      sheetId: mid.sheetId,
+                      locked: isLocked,
+                      courseCode: item.code,
+                      courseName: isAr
+                        ? item.nameAr || item.name
+                        : item.nameEn || item.name,
+                    });
+                  }}
+                  title={
+                    isAr
+                      ? isLocked
+                        ? "الكشف مقفول - انقر لفك القفل"
+                        : "الكشف مفتوح - انقر للقفل"
+                      : isLocked
+                        ? "Sheet is locked - click to unlock"
+                        : "Sheet is open - click to lock"
+                  }
+                  className={cn(
+                    "group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-squircle text-xs font-semibold transition-all border cursor-pointer whitespace-nowrap",
+                    isLocked
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+                      : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
+                  )}
+                >
+                  {isLocked ? (
+                    <Lock className="h-3 w-3 text-amber-400" />
+                  ) : (
+                    <Unlock className="h-3 w-3 text-emerald-400" />
+                  )}
+                  <span>
+                    {isAr
+                      ? isLocked
+                        ? "مغلق"
+                        : "مفتوح"
+                      : isLocked
+                        ? "Locked"
+                        : "Open"}
+                  </span>
+                </button>
+              ) : (
+                <StatusBadge
+                  label={isLocked ? "locked" : "unlocked"}
+                  variant={isLocked ? "warning" : "success"}
+                />
+              )}
             </TableCell>
           );
         },
       },
       {
         key: "visibility",
-        header: isAr ? "الظهور للطالب (موديول الدرجات)" : "Published Count",
-        className: "w-40 text-center",
+        header: isAr ? "الظهور للطالب" : "Visibility",
+        className: "w-32 text-center",
         render: (item) => {
           const mid = item.components.find((c) => c.key === component);
           const pub = mid?.published ?? 0;
           return (
-            <TableCell className="w-40 text-center">
+            <TableCell className="w-32 text-center">
               <StatusBadge
                 label={
                   pub > 0
@@ -481,8 +582,25 @@ function ControlHomeContent() {
                               ? "فتح شبكة رصد الدرجات"
                               : "Open Grade Sheet Grid"
                             : isAr
-                              ? "إنشاء وفتح كشف الميدتيرم"
+                              ? "إنشاء وفتح كشف الرصد"
                               : "Create & Open Grade Sheet"}
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
+            ...(caps?.canViewAudit
+              ? [
+                  {
+                    value: "workflow",
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5">
+                        <History className="h-3.5 w-3.5 text-primary" />
+                        <span>
+                          {isAr
+                            ? "عرض سجل مراحل الرصد والاعتماد"
+                            : "View Workflow Stage History"}
                         </span>
                       </div>
                     ),
@@ -558,6 +676,19 @@ function ControlHomeContent() {
                         } else {
                           openSheetMutation.mutate(item.courseId);
                         }
+                      } else if (val === "workflow") {
+                        setWorkflowTarget({
+                          sheetId: mid?.sheetId ?? null,
+                          slug: mid?.slug ?? null,
+                          courseId: item.courseId,
+                          courseCode: item.code,
+                          courseName: isAr
+                            ? item.nameAr || item.name
+                            : item.nameEn || item.name,
+                          component,
+                          workflowState: mid?.workflowState,
+                          locked: Boolean(mid?.locked),
+                        });
                       } else if (val === "lock" || val === "unlock") {
                         if (!mid?.sheetId) return;
                         setLockReason("");
@@ -583,7 +714,7 @@ function ControlHomeContent() {
         },
       },
     ],
-    [isAr, caps, locale, router, openSheetMutation, component, releaseText],
+    [isAr, caps, locale, router, openSheetMutation, component, releaseText, controlText],
   );
 
   return (
@@ -769,6 +900,31 @@ function ControlHomeContent() {
             academicYear={academicYear}
             semester={semester}
             locale={locale}
+          />
+        )}
+
+        {caps?.canViewAudit && (
+          <ControlWorkflowHistoryDialog
+            target={workflowTarget}
+            open={Boolean(workflowTarget)}
+            onOpenChange={(o) => {
+              if (!o) setWorkflowTarget(null);
+            }}
+            locale={locale}
+            canOpenSheet={Boolean(
+              workflowTarget?.sheetId ||
+                caps?.canCreateSheets ||
+                caps?.scopeAll,
+            )}
+            onOpenSheet={(target) => {
+              if (target.sheetId) {
+                router.push(
+                  `/${locale}/admin/control/${target.slug || target.sheetId}`,
+                );
+              } else {
+                openSheetMutation.mutate(target.courseId);
+              }
+            }}
           />
         )}
 

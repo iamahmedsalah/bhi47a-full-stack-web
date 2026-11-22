@@ -64,6 +64,7 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
   }
 
   const data = settings.data;
+  const advisorAvailable = data.studentAdvisorEnabled && data.studentAdvisorConfigured !== false;
   const usage = data.usage;
   const hasBudget = usage.monthlyTokenBudget !== null;
 
@@ -79,22 +80,25 @@ export function AiSettingsPanel({ locale }: { locale: string }) {
               <h2 className="font-bold">{t("advisorTitle")}</h2>
               <span
                 className={
-                  data.studentAdvisorEnabled
+                  advisorAvailable
                     ? "rounded-squircle bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-400"
                     : "rounded-squircle bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-400"
                 }
               >
-                {data.studentAdvisorEnabled ? t("enabled") : t("disabled")}
+                {advisorAvailable ? t("enabled") : t("disabled")}
               </span>
             </div>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               {t("advisorDescription")}
             </p>
+            {data.studentAdvisorConfigured === false && <p className="mt-2 text-sm text-amber-500" role="status">
+              {locale === "ar" ? "تفعيل المساعد يحتاج إعداد مفتاح Gemini واسم النموذج والسماح به على السيرفر." : "Server opt-in, a Gemini API key, and a chat model are required before the assistant is available."}
+            </p>}
           </div>
         </div>
         <Button
           variant={data.studentAdvisorEnabled ? "destructive" : "default"}
-          disabled={toggle.isPending}
+          disabled={toggle.isPending || (data.studentAdvisorConfigured === false && !data.studentAdvisorEnabled)}
           onClick={() => toggle.mutate(!data.studentAdvisorEnabled)}
           className="h-auto min-h-11 shrink-0 whitespace-normal rounded-squircle px-4 py-2.5 md:max-w-56"
         >

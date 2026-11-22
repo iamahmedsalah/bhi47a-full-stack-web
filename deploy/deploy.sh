@@ -39,6 +39,30 @@ fi
 export RELEASE_TAG="$release"
 "${dc[@]}" config --quiet
 if [[ "${1:-}" != --rollback ]]; then
+  if [[ "${VPS_USE_PREBUILT_IMAGES:-0}" == 1 ]]; then
+    printf 'Validating CI-built images against VPS public build settings.\n'
+    expected=$("${dc[@]}" config --format json | python3 -c '
+import hashlib, json, sys
+args = json.load(sys.stdin)["services"]["web"]["build"]["args"]
+keys = ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_GOOGLE_CLIENT_ID", "NEXT_PUBLIC_TURNSTILE_SITE_KEY", "NEXT_PUBLIC_APP_ENV", "NEXT_PUBLIC_APP_VERSION"]
+print(hashlib.sha256(("".join(str(args.get(key) or "") + "\n" for key in keys)).encode()).hexdigest())')
+    actual=$(docker image inspect --format '{{index .Config.Labels "app.portal.public-config"}}' "student-portal-web:ci-${release}")
+    if [[ "$actual" != "$expected" ]]; then
+      echo 'CI-built web settings differ from the VPS. Match the GitHub public build variables to .env.prod or disable VPS_PREBUILT_IMAGES.' >&2
+      exit 1
+    fi
+    platform=$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')
+    for service in api web; do
+      image_platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "student-portal-${service}:ci-${release}")
+      if [[ "$image_platform" != "$platform" ]]; then
+        echo "CI-built $service image does not match the VPS platform." >&2
+        exit 1
+      fi
+    done
+    for service in api web; do
+      docker tag "student-portal-${service}:ci-${release}" "student-portal-${service}:${release}"
+    done
+  fi
   # Sequential builds reduce peak RAM on a single VPS.
   for service in api web; do
     if ! docker image inspect "student-portal-${service}:${release}" > /dev/null 2>&1; then

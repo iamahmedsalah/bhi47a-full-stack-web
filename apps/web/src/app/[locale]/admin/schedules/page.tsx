@@ -64,7 +64,7 @@ import { EmptyState } from '@/components/ui/feedback';
 import { downloadFileBlob, EXCEL_MIME_TYPE, CSV_MIME_TYPE } from '@/lib/export-utils';
 import { exportScheduleAsLandscapeImage, exportScheduleAsLandscapePdf, type ScheduleExportFormat } from '@/features/course-schedules/export-schedule-image';
 import { ScheduleExportButtons } from '@/features/course-schedules/schedule-export-buttons';
-import { formatStaffDisplayName } from '@student-portal/shared';
+import { formatStaffDisplayName, getStaffRoleLabel } from '@student-portal/shared';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DataUploadProgress } from '@/components/ui/data-upload-progress';
 import type { BatchUploadProgressState } from '@/features/uploads/use-batch-upload';
@@ -78,6 +78,7 @@ export interface CourseScheduleItem {
   staffId: string;
   staffName: string;
   staffNameAr?: string;
+  titlePrefix?: string;
   staffType: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
   type: 'lecture' | 'section' | 'lab';
   dayOfWeek:
@@ -1302,6 +1303,8 @@ function SchedulesManagementContent() {
                               {
                                 name: item.staffName,
                                 nameAr: item.staffNameAr,
+
+                                titlePrefix: item.titlePrefix,
                                 staffType: item.staffType,
                               },
                               isAr ? 'ar' : 'en',
@@ -1327,7 +1330,7 @@ function SchedulesManagementContent() {
                           ) : item.staffType === 'doctor' ? (
                             <span className="inline-flex items-center gap-1 font-semibold text-teal-400">
                               <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-                              {isAr ? 'أستاذ مقرر (دكتور)' : 'Doctor'}
+                              {getStaffRoleLabel(item.staffType, 'staff', isAr ? 'ar' : 'en', item.titlePrefix)}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 font-semibold text-amber-400">

@@ -285,6 +285,7 @@ function buildScheduleMarkup(
                               {
                                 name: entry.staffName,
                                 nameAr: entry.staffNameAr,
+                                titlePrefix: entry.titlePrefix,
                                 staffType:
                                   entry.staffType ||
                                   (entry.type === "lecture"
@@ -379,6 +380,7 @@ function buildScheduleMarkup(
                 {
                   name: item.staffName,
                   nameAr: item.staffNameAr,
+                  titlePrefix: item.titlePrefix,
                   staffType:
                     item.staffType ||
                     (item.type === "lecture" ? "doctor" : "teaching_assistant"),

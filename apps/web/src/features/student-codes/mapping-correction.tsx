@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
+import { ArrowRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
@@ -132,8 +133,13 @@ export function MappingCorrection({
                 <p>
                   {t("fields.academicYear")}: <bdi>{item.academicYear}</bdi>
                 </p>
-                <p>
-                  {t("mapping.current")}: <bdi>{item.currentPrefix}</bdi> →{" "}
+                <p className="flex flex-wrap items-center gap-1.5">
+                  <span>{t("mapping.current")}:</span>
+                  <bdi>{item.currentPrefix}</bdi>
+                  <ArrowRight
+                    className="h-3.5 w-3.5 shrink-0 text-primary rtl:rotate-180"
+                    aria-hidden="true"
+                  />
                   <bdi>{item.expectedPrefix}</bdi>
                 </p>
                 <p>

@@ -210,8 +210,8 @@ export default function StudentAttendancePage() {
                       </h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {isAr
-                          ? `المحاضر: ${session.createdByName}`
-                          : `Instructor: ${session.createdByName}`}
+                          ? `القائم بالتدريس: ${session.createdByNameAr || session.createdByName}`
+                          : `Instructor: ${session.createdByNameEn || session.createdByName}`}
                       </p>
                     </div>
 

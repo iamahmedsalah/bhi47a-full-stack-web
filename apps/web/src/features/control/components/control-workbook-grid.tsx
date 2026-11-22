@@ -14,6 +14,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  ArrowRight,
   Download,
   GitCompareArrows,
   Upload,
@@ -2107,10 +2108,19 @@ export function ControlWorkbookGrid({
               </p>
             ))}
             {preview?.changes.map((change) => (
-              <p key={change.opId} className="text-sm font-mono">
+              <p
+                key={change.opId}
+                className="flex flex-wrap items-center gap-1.5 text-sm font-mono"
+              >
                 <bdi>{byId.get(change.studentId)?.studentCode}</bdi>:{" "}
-                {byId.get(change.studentId)?.components[key]?.score ?? "—"} →{" "}
-                {change.score ?? t("states." + change.status)}
+                <span>
+                  {byId.get(change.studentId)?.components[key]?.score ?? "—"}
+                </span>
+                <ArrowRight
+                  className="h-3.5 w-3.5 shrink-0 text-primary rtl:rotate-180"
+                  aria-hidden="true"
+                />
+                <span>{change.score ?? t("states." + change.status)}</span>
               </p>
             ))}
           </div>

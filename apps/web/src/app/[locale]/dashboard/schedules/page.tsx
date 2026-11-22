@@ -49,6 +49,7 @@ export interface StudentScheduleItem {
   staffId: string;
   staffName: string;
   staffNameAr?: string;
+  titlePrefix?: string;
   staffType: 'doctor' | 'teaching_assistant' | 'assistant_lecturer';
   type: 'lecture' | 'section' | 'lab';
   dayOfWeek: 'saturday' | 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday';
@@ -529,6 +530,7 @@ function StudentSchedulesContent() {
                                     {
                                       name: item.staffName,
                                       nameAr: item.staffNameAr,
+                                      titlePrefix: item.titlePrefix,
                                       staffType: item.staffType,
                                     },
                                     isAr ? 'ar' : 'en',
@@ -618,6 +620,7 @@ function StudentSchedulesContent() {
                           {
                             name: item.staffName,
                             nameAr: item.staffNameAr,
+                            titlePrefix: item.titlePrefix,
                             staffType: item.staffType,
                           },
                           isAr ? 'ar' : 'en',
@@ -705,6 +708,7 @@ function StudentSchedulesContent() {
                               {
                                 name: item.staffName,
                                 nameAr: item.staffNameAr,
+                                titlePrefix: item.titlePrefix,
                                 staffType: item.staffType,
                               },
                               isAr ? 'ar' : 'en',

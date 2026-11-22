@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
-import { History, Loader2, Eye } from "lucide-react";
+import { ArrowRight, History, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -236,7 +236,10 @@ export function ControlAuditDrawer({
                         t(`workflow.${state}`),
                       )}
                     </span>
-                    <span className="text-primary font-bold">→</span>
+                    <ArrowRight
+                      className="h-3.5 w-3.5 shrink-0 text-primary rtl:rotate-180"
+                      aria-hidden="true"
+                    />
                     <span className="font-semibold text-foreground">
                       {formatSnapshot(item.newValue, isAr, (state) =>
                         t(`workflow.${state}`),

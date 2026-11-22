@@ -34,10 +34,13 @@ export class GeminiProvider implements LlmProvider {
     userMessage: string,
     options?: LlmChatOptions,
   ): Promise<LlmChatResponse> {
-    const model = this.client.getGenerativeModel({
-      model: this.chatModel,
-      systemInstruction: options?.systemInstruction,
-    });
+    const model = this.client.getGenerativeModel(
+      {
+        model: this.chatModel,
+        systemInstruction: options?.systemInstruction,
+      },
+      { timeout: 12_000 },
+    );
 
     const history = (options?.history ?? []).map((msg) => ({
       role: msg.role === 'model' ? ('model' as const) : ('user' as const),

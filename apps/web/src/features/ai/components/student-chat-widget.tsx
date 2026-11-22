@@ -256,7 +256,7 @@ export function StudentChatWidget() {
                           : "rounded-ss-none border border-border bg-card whitespace-pre-wrap",
                       )}
                     >
-                      <p>{message.text}</p>
+                      <p className="whitespace-pre-wrap">{message.text}</p>
                       <time className="mt-1 block text-end text-[10px] opacity-60">
                         {message.timestamp}
                       </time>

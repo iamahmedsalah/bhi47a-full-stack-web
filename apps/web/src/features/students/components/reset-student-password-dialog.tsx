@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
-import { KeyRound, ShieldAlert, Sparkles } from "lucide-react";
+import { ArrowLeft, KeyRound, Plus, ShieldAlert, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { resetStudentPassword, type Student } from "../api";
 import {
@@ -213,15 +213,30 @@ export function ResetStudentPasswordDialog({
               <button
                 type="button"
                 onClick={() => setUseCustomPassword(!useCustomPassword)}
-                className="text-xs font-semibold text-primary hover:text-primary/80 underline underline-offset-4 cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 underline underline-offset-4 cursor-pointer"
               >
-                {useCustomPassword
-                  ? isAr
-                    ? "← استخدام الرقم القومي ككلمة مرور مؤقتة (الافتراضي)"
-                    : "← Use National ID as temporary password (Default)"
-                  : isAr
-                    ? "+ تعيين كلمة مرور مؤقتة مخصصة بدلاً من الرقم القومي"
-                    : "+ Set custom temporary password instead of National ID"}
+                {useCustomPassword ? (
+                  <>
+                    <ArrowLeft
+                      className="h-3.5 w-3.5 shrink-0 rtl:rotate-180"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      {isAr
+                        ? "استخدام الرقم القومي ككلمة مرور مؤقتة (الافتراضي)"
+                        : "Use National ID as temporary password (Default)"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      {isAr
+                        ? "تعيين كلمة مرور مؤقتة مخصصة بدلاً من الرقم القومي"
+                        : "Set custom temporary password instead of National ID"}
+                    </span>
+                  </>
+                )}
               </button>
             ) : (
               <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">

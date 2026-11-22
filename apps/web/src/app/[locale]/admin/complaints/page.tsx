@@ -7,6 +7,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import {
+  ArrowRight,
   Eye,
   FileSpreadsheet,
   LifeBuoy,
@@ -1375,7 +1376,7 @@ function AdminComplaintsContent() {
                     <div key={`${item.changedAt}-${index}`} className="flex items-center justify-between rounded-squircle border border-border bg-surface/60 p-3 text-xs">
                       <div className="flex items-center gap-1.5 font-semibold">
                         <span className="text-muted-foreground">{formatStatus(item.fromStatus, locale)}</span>
-                        <span className="text-primary font-mono text-xs">→</span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary rtl:rotate-180" aria-hidden="true" />
                         <span className="text-foreground font-bold">{formatStatus(item.toStatus, locale)}</span>
                       </div>
                       <span className="text-muted-foreground">

@@ -10,7 +10,8 @@ import { AdminAiController } from './controllers/admin-ai.controller';
 import { ChatSession, ChatSessionSchema } from './schemas/chat-session.schema';
 import { AiUsageLog, AiUsageLogSchema } from './schemas/ai-usage-log.schema';
 import { AiSettings, AiSettingsSchema } from './schemas/ai-settings.schema';
-import { Faq, FaqSchema } from '../faqs/schemas/faq.schema';
+import { FaqsModule } from '../faqs/faqs.module';
+import { GradesModule } from '../grades/grades.module';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { Grade, GradeSchema } from '../grades/schemas/grade.schema';
 import {
@@ -28,11 +29,12 @@ import { AiSettingsService } from './services/ai-settings.service';
 @Module({
   imports: [
     ConfigModule,
+    FaqsModule,
+    GradesModule,
     MongooseModule.forFeature([
       { name: ChatSession.name, schema: ChatSessionSchema },
       { name: AiUsageLog.name, schema: AiUsageLogSchema },
       { name: AiSettings.name, schema: AiSettingsSchema },
-      { name: Faq.name, schema: FaqSchema },
       { name: Course.name, schema: CourseSchema },
       { name: Grade.name, schema: GradeSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },

@@ -336,6 +336,7 @@
     "metrics": "System Metrics & APM",
     "uploads": "Upload Data",
     "examSchedules": "Exam Schedules",
+    "faq": "Frequently Asked Questions",
     "lectureSchedules": "Lecture & Section Schedules",
     "settings": "Settings",
     "staff": "Staff",
@@ -613,6 +614,7 @@
     "exportEmails": "Export Excel"
   },
   "studentPortal": {
+    "courses": "Courses",
     "dashboard": "Home",
     "profile": "Profile",
     "attendance": "Attendance",
@@ -622,7 +624,8 @@
     "academicEmail": "Academic Email",
     "examSchedule": "Exam Schedule",
     "examPlace": "Exam Location",
-    "complaints": "Complaints",
+    "faq": "Frequently Asked Questions",
+    "complaints": "Help & Complaints",
     "notifications": "Notifications",
     "schedules": "Lecture & Section Schedule"
   },
@@ -1162,7 +1165,7 @@
     "open": "Open academic AI advisor",
     "close": "Close academic AI advisor",
     "welcome": "Hello, {name}!",
-    "description": "Ask about recommended courses, GPA, published grades, complaints, or institute FAQs.",
+    "description": "Ask about your published grades, course details, complaints, or institute FAQs.",
     "suggestedQuestions": "Suggested questions",
     "placeholder": "Ask your academic advisor...",
     "send": "Send message",
@@ -1177,13 +1180,13 @@
     "resetsAt": "Resets {time}",
     "presets": {
       "courses": "What courses should I take next?",
-      "gpa": "What is my current GPA?",
+      "gpa": "What are my grades?",
       "complaint": "How do I file a complaint?",
       "faqs": "Search institute FAQs"
     },
     "queries": {
       "courses": "What courses should I register for next to graduate on time?",
-      "gpa": "What is my current GPA, completed credits, and academic standing?",
+      "gpa": "What are my grades?",
       "complaint": "How do I submit a technical or academic complaint?",
       "faqs": "Search the institute FAQs and tell me what you can help with."
     }
@@ -1916,6 +1919,9 @@
     "attendanceMax": "Attendance maximum (quizzes = 20 − attendance)",
     "splitNote": "Default: attendance 5 + quizzes 15 = 20. Enter each awarded contribution, not the raw quiz score. The split is frozen once coursework marks exist.",
     "frozenNote": "Marked components are frozen. Clear draft marks before changing the scheme; no force rescaling is performed.",
+    "entryStatus": "Grade entry · {state}",
+    "entryInProgress": "Entering grades",
+    "entryNotStarted": "Sheet not opened",
     "workflow": {
       "DRAFT": "Draft",
       "IN_REVIEW": "In review",

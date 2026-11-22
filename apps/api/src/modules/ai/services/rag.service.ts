@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Faq } from '../../faqs/schemas/faq.schema';
+import { FaqsService } from '../../faqs/faqs.service';
+import { faqTermPattern, faqTerms, scoreFaq } from '../../faqs/faq-retrieval';
 import { Course } from '../../courses/schemas/course.schema';
 import { GeminiProvider } from '../providers/gemini.provider';
 
@@ -15,7 +16,7 @@ import { GeminiProvider } from '../providers/gemini.provider';
 @Injectable()
 export class RagService {
   constructor(
-    @InjectModel(Faq.name) private readonly faqModel: Model<Faq>,
+    private readonly faqs: FaqsService,
     @InjectModel(Course.name) private readonly courseModel: Model<Course>,
     private readonly gemini: GeminiProvider,
   ) {}
@@ -25,35 +26,27 @@ export class RagService {
    * Uses text search for now; will be upgraded to Atlas Vector Search.
    */
   async retrieveFaqs(query: string, limit = 5): Promise<string> {
-    const terms = query
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((t) => t.length > 1);
-
-    if (terms.length === 0) return '';
-
-    const regexFilter = {
-      isActive: true,
-      $or: terms.flatMap((term) => [
-        { question: { $regex: term, $options: 'i' } },
-        { answer: { $regex: term, $options: 'i' } },
-        { keywords: { $regex: term, $options: 'i' } },
-        { topics: { $regex: term, $options: 'i' } },
-      ]),
-    };
-
-    const faqs = await this.faqModel.find(regexFilter).limit(limit).lean();
-
-    if (faqs.length === 0) return '';
+    const faqs = await this.faqs.findRelevant(query, limit);
 
     return faqs
       .map(
-        (faq, i) =>
+        ({ faq }, i) =>
           `FAQ ${i + 1}:\nQ: ${faq.question}\nA: ${faq.answer}${
             faq.topics?.length ? `\nTopics: ${faq.topics.join(', ')}` : ''
           }`,
       )
       .join('\n\n');
+  }
+
+  async findAnswer(
+    query: string,
+    locale: 'ar' | 'en',
+  ): Promise<string | undefined> {
+    const matches = await this.faqs.findRelevant(query, 20);
+    return matches.find(
+      ({ faq }) =>
+        /\p{Script=Arabic}/u.test(faq.question) === (locale === 'ar'),
+    )?.faq.answer;
   }
 
   /**
@@ -64,39 +57,49 @@ export class RagService {
     limit = 10,
     locale: 'ar' | 'en' = 'en',
   ): Promise<string> {
-    const terms = query
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((t) => t.length > 1);
+    const terms = faqTerms(query).filter((term) => term.length >= 3);
 
     if (terms.length === 0) return '';
 
+    const pattern = new RegExp(terms.map(faqTermPattern).join('|'), 'iu');
     const courses = await this.courseModel
       .find({
         isActive: true,
-        $or: terms.flatMap((term) => [
-          { code: { $regex: term, $options: 'i' } },
-          { name: { $regex: term, $options: 'i' } },
-          { nameAr: { $regex: term, $options: 'i' } },
-          { nameEn: { $regex: term, $options: 'i' } },
-        ]),
+        $or: [
+          { code: pattern },
+          { name: pattern },
+          { nameAr: pattern },
+          { nameEn: pattern },
+        ],
       })
       .select(
         'code name nameAr nameEn creditHours prerequisites level semester type',
       )
-      .limit(limit)
+      .sort({ code: 1 })
+      .limit(60)
       .lean();
 
     if (courses.length === 0) return '';
 
     return courses
-      .map((c) => {
+      .map((course) => ({
+        course,
+        score: Math.max(
+          ...[course.code, course.name, course.nameAr, course.nameEn]
+            .filter((name): name is string => Boolean(name))
+            .map((question) => scoreFaq(query, terms, { question })),
+        ),
+      }))
+      .filter(({ score }) => score >= 4)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ course: c }) => {
         const localizedName =
           locale === 'ar'
             ? c.nameAr || c.name || c.nameEn
             : c.nameEn || c.name || c.nameAr;
         return (
-          `Course: ${localizedName}\n` +
+          `Course: ${localizedName} (code: ${c.code})\n` +
           `Level: ${c.level}, Semester: ${c.semester}, Credits: ${c.creditHours ?? 0}\n` +
           `Type: ${c.type ?? 'N/A'}` +
           (c.prerequisites?.length

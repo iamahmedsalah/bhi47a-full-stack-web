@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale } from 'next-intl';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Activity, ArrowUpDown, Cpu, Database, Server, ShieldAlert, Clock, RefreshCw, Copy, Check, AlertTriangle, GraduationCap, TrendingUp, Layers, Radio, SlidersHorizontal, Download, Terminal, Link2 } from 'lucide-react';
+import { Activity, ArrowRight, ArrowUpDown, Cpu, Database, Server, ShieldAlert, Clock, RefreshCw, Copy, Check, AlertTriangle, GraduationCap, TrendingUp, Layers, Radio, SlidersHorizontal, Download, Terminal, Link2 } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -426,8 +426,9 @@ export default function AdminMetricsPage() {
                     <span className="text-muted-foreground block text-[11px] group-hover:text-rose-300 transition-colors">
                       {isAr ? 'حسابات مقفلة (Brute-Force)' : 'Locked Accounts'}
                     </span>
-                    <span className="text-[10px] text-rose-400 group-hover:underline flex items-center gap-0.5 font-medium">
-                      {isAr ? 'عرض وفك الحظر ←' : 'View & Unlock →'}
+                    <span className="text-[10px] text-rose-400 group-hover:underline flex items-center gap-1 font-medium">
+                      <span>{isAr ? 'عرض وفك الحظر' : 'View & Unlock'}</span>
+                      <ArrowRight className="h-3 w-3 shrink-0 rtl:rotate-180" aria-hidden="true" />
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between mt-0.5">

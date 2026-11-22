@@ -182,6 +182,12 @@ export default function AdminSidebar() {
       permission: PERMISSIONS.EXAM_SCHEDULES_READ,
     },
     {
+      key: "faq",
+      href: `/${locale}/admin/faqs`,
+      icon: <BookOpen className="h-5 w-5" />,
+      permission: PERMISSIONS.FAQS_READ,
+    },
+    {
       key: "settings",
       href: `/${locale}/admin/settings`,
       icon: <Settings className="h-5 w-5" />,

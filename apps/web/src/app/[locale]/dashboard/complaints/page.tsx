@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -9,7 +10,9 @@ import api, { getApiErrorMessage, type PaginatedResponse } from '@/lib/api';
 import { useTableState } from '@/hooks/use-table-state';
 import { ComplaintPagination } from '@/features/complaints/components/complaint-pagination';
 import { ComplaintSearchInput } from '@/features/complaints/components/complaint-search-input';
+import { StudentFaqSection } from '@/features/faqs/components/student-faq-section';
 import {
+  BookOpen,
   MessageCircle,
   Plus,
   X,
@@ -24,6 +27,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
@@ -62,8 +66,21 @@ const REPLY_MAX_LENGTH = 1000;
 
 export default function StudentComplaintsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const t = useTranslations('complaints');
   const tCommon = useTranslations('common');
+
+  const activeTab: 'faq' | 'tickets' =
+    searchParams.get('tab') === 'tickets' ? 'tickets' : 'faq';
+
+  const handleTabChange = (nextTab: string) => {
+    const resolvedTab = nextTab === 'tickets' ? 'tickets' : 'faq';
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', resolvedTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -135,6 +152,7 @@ export default function StudentComplaintsPage() {
       toast.success(isEnglish ? 'Complaint submitted successfully' : 'تم تقديم الشكوى بنجاح');
       setIsAddOpen(false);
       setSearchQuery('');
+      handleTabChange('tickets');
       void queryClient.invalidateQueries({ queryKey: ['student-complaints'] });
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, isEnglish ? 'Could not submit complaint' : 'تعذر تقديم الشكوى'));
@@ -177,14 +195,16 @@ export default function StudentComplaintsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-            <MessageCircle className="h-6 w-6 text-primary" />
-            <span>{t('title')}</span>
+          <h2 className="flex items-center gap-2.5 text-2xl font-bold text-foreground">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-squircle border border-primary/25 bg-primary/10 text-primary">
+              <LifeBuoy className="h-5 w-5" />
+            </span>
+            <span>{isEnglish ? 'Help Center & Complaints' : 'المساعدة والشكاوى'}</span>
           </h2>
           <p className="text-muted-foreground text-sm">
             {isEnglish
-              ? 'Submit issues, reports, or suggestions'
-              : 'قم بتقديم الاقتراحات، الشكاوى والأعطال ومتابعة تذاكرك الحالية'}
+              ? 'Browse approved FAQs first, or submit and track your support tickets'
+              : 'تصفّح الأسئلة الشائعة المعتمدة أولاً، أو قدّم شكوى/استفسار وتابع تذاكرك الحالية'}
           </p>
         </div>
         <button
@@ -196,6 +216,45 @@ export default function StudentComplaintsPage() {
         </button>
       </div>
 
+      {/* Unified Help Center & Tickets Tabs */}
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        dir={isEnglish ? 'ltr' : 'rtl'}
+        className="space-y-5"
+      >
+        <TabsList className="grid w-full grid-cols-2 h-auto rounded-2xl border border-border/70 bg-card/60 p-1.5 backdrop-blur-sm">
+          <TabsTrigger
+            value="faq"
+            className="flex items-center justify-center gap-2 rounded-squircle py-2.5 px-3 text-xs sm:text-sm font-bold transition-all cursor-pointer data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <BookOpen className="h-4 w-4 shrink-0" />
+            <span>{isEnglish ? 'Frequently Asked Questions' : 'الأسئلة الشائعة'}</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="tickets"
+            className="flex items-center justify-center gap-2 rounded-squircle py-2.5 px-3 text-xs sm:text-sm font-bold transition-all cursor-pointer data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <MessageCircle className="h-4 w-4 shrink-0" />
+            <span>{isEnglish ? 'My Tickets & Complaints' : 'تذاكري والشكاوى'}</span>
+            {(ticketsQuery.data?.total ?? 0) > 0 && (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-squircle bg-background/25 px-1.5 text-[11px] font-bold">
+                {ticketsQuery.data?.total}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="faq" className="mt-0 space-y-5">
+          <StudentFaqSection
+            ar={!isEnglish}
+            onOpenNewComplaint={openAddModal}
+            onSwitchToTickets={() => handleTabChange('tickets')}
+            ticketsCount={ticketsQuery.data?.total ?? 0}
+          />
+        </TabsContent>
+
+        <TabsContent value="tickets" className="mt-0 space-y-5">
       {/* Search Widget */}
       <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 shadow-(--shadow-glow) hover:border-primary/30 transition-all duration-300">
         <label className="mb-2 block text-xs font-bold text-foreground">
@@ -313,6 +372,8 @@ export default function StudentComplaintsPage() {
       )}
 
       <ComplaintPagination page={page} limit={limit} total={ticketsQuery.data?.total ?? 0} totalPages={ticketsQuery.data?.totalPages ?? 0} busy={ticketsQuery.isFetching} isAr={!isEnglish} onPage={setPage} onLimit={setLimit} />
+        </TabsContent>
+      </Tabs>
 
       {/* Add Complaint Modal */}
       <AnimatePresence>

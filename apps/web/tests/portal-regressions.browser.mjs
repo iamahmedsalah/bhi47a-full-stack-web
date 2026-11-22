@@ -45,6 +45,7 @@ await write('api-client.ts', `import api from './api';export const apiGet=async(
 await write('entry.tsx', `
   import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';
   import Attendance from '@/app/[locale]/admin/attendance/page';
+  import Courses from '@/app/[locale]/dashboard/courses/page';
   import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
   import Dashboard from '@/app/[locale]/dashboard/page';import Quizzes from '@/app/[locale]/dashboard/quizzes/page';
   import {MaterialUploadProvider} from '@/features/courses/material-upload-provider';
@@ -57,7 +58,8 @@ await write('entry.tsx', `
     React.useEffect(()=>{const t=setInterval(()=>tick(n=>n+1),30);return()=>clearInterval(t)},[]);
     return <>{view==='search'?<><FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search fixture"/><button onClick={()=>setSearch('external')}>External reset</button><output>{search}</output></>:view==='home'?<Dashboard/>:view==='quizzes'?<Quizzes/>:<PasswordRequirementDialog summary={{totalStudents:8020,mustChangeCount:83,allEnabled:false,anyEnabled:true}} isAr={locale==='ar'} busy={false} onClose={()=>{}} onSave={async enabled=>{window.saved=enabled}}/>}</>;
   }
-  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><MaterialUploadProvider locale={locale}>{location.pathname.endsWith('/attendance') ? <Attendance/> : <App/>}</MaterialUploadProvider></QueryClientProvider></NextIntlClientProvider>);
+  const content = location.pathname.endsWith('/attendance') ? <Attendance/> : location.pathname.endsWith('/courses') ? <Courses/> : <App/>;
+  createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale={locale} messages={locale==='ar'?ar:en} timeZone="Africa/Cairo"><QueryClientProvider client={client}><MaterialUploadProvider locale={locale}>{content}</MaterialUploadProvider></QueryClientProvider></NextIntlClientProvider>);
 `);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, context: web,
@@ -68,6 +70,13 @@ await new Promise((resolve, reject) => webpack({
   } },
   module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] },
 }, (error, stats) => error || stats.hasErrors() ? reject(error || new Error(stats.toString({ all: false, errors: true }))) : resolve()));
+const cssPath = path.join(web, 'src/app/globals.css');
+const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({ base: web })])
+  .process(await fs.readFile(cssPath, 'utf8'), { from: cssPath });
+await write('courses.css', css.css);
+const fixtureCourse = { _id:'course-fixture', code:'413', name:'Applied economics and statistical research methods', nameAr:'مبادئ الاقتصاد التطبيقي وطرق البحث الإحصائي', level:'3', creditHours:3, syllabusPdfUrl:'/fixture/syllabus', isRegistered:true };
+let catalogVisible = true;
+let studentBlocked = false;
 const quiz = { _id:'quiz-fixture', title:'Portal fixture quiz', courseId:'course-fixture', courseCode:'TEST', courseName:'Synthetic course', durationMinutes:10, totalMarks:10, passingMarks:5, questionsCount:1, isOpen:true, isEnded:false, isSubmitted:false };
 let requiredCodes = ['20260001', '20260002'];
 const studentUpdates = [];
@@ -98,7 +107,8 @@ const server = http.createServer(async (req, res) => {
     let data = {};
     if (endpoint === '/students/me/quizzes') data = [quiz];
     else if (endpoint === '/students/me/course-quizzes') data = [];
-    else if (endpoint === '/students/me/profile') data = { studentCode:'TEST',fullName:'Synthetic',level:'1' };
+    else if (endpoint === '/students/me/profile') data = { studentCode:'TEST',fullName:'Synthetic',level:'1',isBlocked:studentBlocked };
+    else if (endpoint === '/portal-settings') data = { syllabiVisible:catalogVisible, registrationVisible:true };
     else if (endpoint === '/students/me/attendance-history') data = { summary: { totalSessions: 0, presentCount: 0, lateCount: 0, attendanceRate: 0 } };
     else if (endpoint === '/attendance/student/live-sessions') data = { sessions: [] };
     else if (endpoint === '/attendance/my-classes') data = [];
@@ -138,7 +148,7 @@ const server = http.createServer(async (req, res) => {
         data = { items: attendanceRecords, total: attendanceRecords.length, page: 1, totalPages: 1 };
       }
     }
-    else if (endpoint === '/students/me/syllabi') data = { registeredCourses:[],availableLevelCourses:[] };
+    else if (endpoint === '/students/me/syllabi') data = { registeredCourses:[fixtureCourse],availableLevelCourses:[fixtureCourse, { _id:'second-fixture', code:'414', name:'Statistics', nameAr:'الإحصاء', level:'3' }] };
     else if (endpoint === '/admin/students-must-change-password-codes') data = {items:requiredCodes,total:requiredCodes.length,totalPages:1};
     else if (endpoint === '/admin/students-password-requirement' && req.method === 'POST') {
       let body = '';for await (const chunk of req) body += chunk;
@@ -153,7 +163,9 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');res.end(JSON.stringify({success:true,data,timestamp:new Date().toISOString()}));return;
   }
   if (url.pathname.endsWith('.js')) {res.setHeader('Content-Type','text/javascript');res.end(await fs.readFile(path.join(output,path.basename(url.pathname))));return;}
-  res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><div id="root"></div><script src="/app.js"></script>');
+  if (url.pathname === '/courses.css') {res.setHeader('Content-Type','text/css');res.end(css.css);return;}
+  const styles = url.pathname.endsWith('/courses') ? '<link rel="stylesheet" href="/courses.css">' : '';
+  res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'+ styles +'<div id="root"></div><script src="/app.js"></script>');
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
@@ -256,5 +268,37 @@ try {
   }
   console.log('Course-name actions verified for closed, expired, active and just-closed sessions.');
   console.log('Direct session deletion verified for admins and staff, including empty sessions, cancellation and permission checks.');
+  for (const locale of ['ar', 'en']) {
+    const ar = locale === 'ar';
+    const page = await browser.newPage({ viewport: { width: 320, height: 780 }, isMobile: true, hasTouch: true });
+    await page.goto(`http://127.0.0.1:${server.address().port}/${locale}/dashboard/courses`);
+    const longTitle = page.getByRole('heading', { name: ar ? fixtureCourse.nameAr : fixtureCourse.name, exact: true });
+    await longTitle.waitFor();
+    assert.equal(await longTitle.count(), 1, 'enrolled courses are not duplicated');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    assert.equal(await longTitle.evaluate(el => el.scrollHeight <= el.clientHeight), true);
+    const search = page.getByRole('searchbox');
+    await search.fill(ar ? '٤١٤' : 'Statistics');
+    await page.getByRole('heading', { name: ar ? 'الإحصاء' : 'Statistics', exact: true }).waitFor();
+    assert.equal(await longTitle.count(), 0);
+    await search.fill('');
+    await page.getByRole('button', { name: ar ? 'مقرراتي المسجلة' : 'My enrolled courses' }).click();
+    assert.equal(await page.getByRole('heading', { name: ar ? 'الإحصاء' : 'Statistics', exact: true }).count(), 0);
+    await page.getByRole('button', { name: ar ? 'المحاضرات والسكاشن' : 'Lectures & sections' }).click();
+    await page.getByRole('dialog').waitFor();
+    await page.close();
+  }
+  console.log('Mobile course catalog verified at 320px in Arabic and English.');
+  const restrictedPage = await browser.newPage();
+  const catalogUrl = `http://127.0.0.1:${server.address().port}/en/dashboard/courses`;
+  studentBlocked = true;
+  await restrictedPage.goto(catalogUrl);
+  await restrictedPage.getByText('Syllabus locked', { exact: true }).waitFor();
+  assert.equal(await restrictedPage.getByRole('link', { name: 'Syllabus PDF' }).count(), 0);
+  catalogVisible = false;
+  await restrictedPage.reload();
+  await restrictedPage.getByText('Courses are currently unavailable.', { exact: true }).waitFor();
+  assert.equal(await restrictedPage.getByRole('heading', { name: fixtureCourse.name }).count(), 0);
+  await restrictedPage.close();
   console.log('Portal regressions passed in Arabic and English: delayed search echoes, continuous parent renders, clear/reset, dashboard ↔ quizzes shared cache, and mixed password flags with explicit bulk enable/disable.');
 } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}

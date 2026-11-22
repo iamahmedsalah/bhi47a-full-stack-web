@@ -353,6 +353,17 @@ export class ControlController {
     return this.sheets.listAudit(user, id, query);
   }
 
+  @Get('sheets/:id/workflow-history')
+  @ApiOperation({
+    summary: 'Sheet workflow stages and chronological actor history',
+  })
+  getWorkflowHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.sheets.getWorkflowHistory(user, id);
+  }
+
   @Get('schemes/:courseId')
   async getScheme(
     @CurrentUser() user: AuthenticatedUser,

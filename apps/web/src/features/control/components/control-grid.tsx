@@ -10,6 +10,7 @@ import React, {
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   CheckCircle2,
@@ -1930,7 +1931,10 @@ export function ControlGrid({
                   <span className="text-muted-foreground">
                     {item.oldScore ?? item.oldStatus ?? '—'}
                   </span>
-                  <span className="text-primary">→</span>
+                  <ArrowRight
+                    className="h-3.5 w-3.5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                   {item.validationError ? (
                     <span className="text-rose-400 font-bold">
                       {item.rawText} (

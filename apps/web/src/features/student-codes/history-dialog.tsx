@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
+import { ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -116,13 +117,21 @@ export function CodeHistoryDialog({
                     ? t(`sources.${event.source}`)
                     : t("sources.unknown")}
                 </p>
-                <p>
-                  {event.from && t.has(`statuses.${event.from}`)
-                    ? t(`statuses.${event.from}`) + " → "
-                    : ""}
-                  {t.has(`statuses.${event.to}`)
-                    ? t(`statuses.${event.to}`)
-                    : t("recorded")}
+                <p className="flex flex-wrap items-center gap-1.5">
+                  {event.from && t.has(`statuses.${event.from}`) ? (
+                    <>
+                      <span>{t(`statuses.${event.from}`)}</span>
+                      <ArrowRight
+                        className="h-3.5 w-3.5 shrink-0 text-primary rtl:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </>
+                  ) : null}
+                  <span>
+                    {t.has(`statuses.${event.to}`)
+                      ? t(`statuses.${event.to}`)
+                      : t("recorded")}
+                  </span>
                 </p>
                 {event.details && (
                   <div className="space-y-1 rounded-lg border p-2 text-xs">

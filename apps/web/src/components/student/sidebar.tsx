@@ -16,6 +16,7 @@ import {
   CalendarDays,
   ClipboardList,
   BookOpenCheck,
+  BookOpen,
   FileText,
   Home,
   Loader2,
@@ -85,6 +86,7 @@ export default function StudentSidebar() {
 
   const registrationVisible =
     portalSettingsQuery.data?.registrationVisible ?? true;
+  const syllabiVisible = portalSettingsQuery.data?.syllabiVisible ?? true;
 
   const navItems: NavItem[] = useMemo(() => {
     return [
@@ -92,6 +94,9 @@ export default function StudentSidebar() {
       { key: 'profile', href: `/${locale}/dashboard/profile`, icon: <User className="h-5 w-5" /> },
       { key: 'attendance', href: `/${locale}/dashboard/attendance`, icon: <ClipboardList className="h-5 w-5" /> },
       { key: 'schedules', href: `/${locale}/dashboard/schedules`, icon: <CalendarDays className="h-5 w-5" /> },
+      ...(syllabiVisible
+        ? [{ key: 'courses', href: `/${locale}/dashboard/courses`, icon: <BookOpen className="h-5 w-5" /> }]
+        : []),
       ...(registrationVisible
         ? [
             {
@@ -107,7 +112,7 @@ export default function StudentSidebar() {
       { key: 'examPlace', href: `/${locale}/dashboard/exam-place`, icon: <MapPin className="h-5 w-5" /> },
       { key: 'complaints', href: `/${locale}/dashboard/complaints`, icon: <MessageCircle className="h-5 w-5" /> },
     ];
-  }, [locale, registrationVisible]);
+  }, [locale, registrationVisible, syllabiVisible]);
 
   const renderContent = (isForceOpen: boolean) => {
     const isSidebarOpen = isForceOpen || sidebarOpen;

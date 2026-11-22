@@ -18,6 +18,7 @@ import {
 import { AuthSessionMetadataService } from './auth-session-metadata.service';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { inferDoctorPrefix } from '@student-portal/shared';
 import {
   StudentProfile,
   type StudentProfileDocument,
@@ -85,7 +86,11 @@ export class AuthSessionService {
       nameEn: profile?.fullNameEn,
       role: user.role,
       staffType: user.staffType,
-      titlePrefix: user.titlePrefix,
+      titlePrefix:
+        user.titlePrefix ||
+        (user.staffType === 'doctor'
+          ? inferDoctorPrefix(user.nameAr) || inferDoctorPrefix(user.name)
+          : undefined),
       email: user.email,
       phone: user.phone,
       studentCode: user.studentCode,

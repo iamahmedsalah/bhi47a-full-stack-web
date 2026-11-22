@@ -37,6 +37,11 @@ import {
 } from '../dto/attendance-session.dto';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import {
+  attendanceInstructor,
+  findAttendanceInstructors,
+  loadAttendanceInstructors,
+} from './attendance-instructor';
+import {
   createAttendanceRecord,
   isStandaloneTransactionError,
 } from './attendance-record-write';
@@ -127,7 +132,15 @@ export class AttendanceReportService {
     query: QueryAttendanceSessionsDto,
     sessionId?: string,
   ) {
-    let filter = attendanceSessionFilter(user, query);
+    const matchingInstructors = sessionId
+      ? []
+      : await findAttendanceInstructors(this.userModel, query.search);
+    let filter = attendanceSessionFilter(
+      user,
+      query,
+      new Date(),
+      matchingInstructors,
+    );
     if (sessionId) {
       if (!Types.ObjectId.isValid(sessionId))
         throw new BadRequestException('Invalid session ID');
@@ -141,6 +154,11 @@ export class AttendanceReportService {
     }
     const sessionModel = this.sessionModel;
     const recordModel = this.recordModel;
+    const creatorIds = await sessionModel.distinct('createdBy', filter);
+    const instructors = await loadAttendanceInstructors(
+      this.userModel,
+      creatorIds.map((createdBy) => ({ createdBy })),
+    );
     async function* entries(): AsyncGenerator<AttendanceExportEntry> {
       const sessions = sessionModel
         .find(filter)
@@ -155,7 +173,17 @@ export class AttendanceReportService {
             .lean()
             .cursor();
           try {
-            yield { session, records };
+            const instructor = attendanceInstructor(session, instructors);
+            yield {
+              session: {
+                ...session,
+                createdByName:
+                  query.lang === 'ar'
+                    ? instructor.createdByNameAr
+                    : instructor.createdByNameEn,
+              },
+              records,
+            };
           } finally {
             await records.close();
           }

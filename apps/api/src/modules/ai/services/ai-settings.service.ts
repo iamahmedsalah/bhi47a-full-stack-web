@@ -23,11 +23,12 @@ export class AiSettingsService {
   ) {}
 
   async isStudentAdvisorEnabled(): Promise<boolean> {
+    if (!this.studentAdvisorConfigured()) return false;
     const settings = await this.settings
       .findOne({ key: 'default' })
       .select('studentAdvisorEnabled')
       .lean();
-    return settings?.studentAdvisorEnabled ?? true;
+    return settings?.studentAdvisorEnabled ?? this.defaultStudentAdvisorState();
   }
 
   async getStudentStatus() {
@@ -59,7 +60,9 @@ export class AiSettingsService {
           );
 
     return {
-      studentAdvisorEnabled: settings?.studentAdvisorEnabled ?? true,
+      studentAdvisorEnabled:
+        settings?.studentAdvisorEnabled ?? this.defaultStudentAdvisorState(),
+      studentAdvisorConfigured: this.studentAdvisorConfigured(),
       provider: 'Gemini',
       model: this.config.get<string>('GEMINI_CHAT_MODEL', 'gemini-2.0-flash'),
       apiKeyConfigured: Boolean(this.config.get<string>('GEMINI_API_KEY', '')),
@@ -122,5 +125,18 @@ export class AiSettingsService {
       this.config.get<string>('AI_MONTHLY_TOKEN_BUDGET', ''),
     );
     return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+
+  private defaultStudentAdvisorState(): boolean {
+    return this.config.get<string>('NODE_ENV') !== 'production';
+  }
+
+  private studentAdvisorConfigured(): boolean {
+    return (
+      this.defaultStudentAdvisorState() ||
+      (this.config.get<string>('STUDENT_AI_ENABLED') === 'true' &&
+        Boolean(this.config.get<string>('GEMINI_API_KEY')?.trim()) &&
+        Boolean(this.config.get<string>('GEMINI_CHAT_MODEL')?.trim()))
+    );
   }
 }

@@ -38,7 +38,15 @@ export interface QrPayload {
   expiresAt: string;
 }
 
-export interface AttendanceSessionDto {
+export interface AttendanceInstructorDto {
+  createdByName: string;
+  createdByNameAr?: string;
+  createdByNameEn?: string;
+  instructorStaffType?: string;
+  instructorTitlePrefix?: string;
+}
+
+export interface AttendanceSessionDto extends AttendanceInstructorDto {
   _id: string;
   courseCode: string;
   courseName?: string;
@@ -49,7 +57,6 @@ export interface AttendanceSessionDto {
   academicYear: string;
   semester: string;
   createdBy: string;
-  createdByName: string;
   academicPosition: "doctor" | "instructor";
   status: "OPEN" | "CLOSED" | "EXPIRED";
   startsAt: string;
@@ -72,7 +79,7 @@ export interface AttendanceSessionDto {
   };
 }
 
-export interface StudentLiveSessionItem {
+export interface StudentLiveSessionItem extends AttendanceInstructorDto {
   _id: string;
   courseCode: string;
   courseName?: string;
@@ -80,7 +87,6 @@ export interface StudentLiveSessionItem {
   level: string;
   group?: string;
   section?: string;
-  createdByName: string;
   academicPosition: "doctor" | "instructor";
   startsAt: string;
   expiresAt: string;

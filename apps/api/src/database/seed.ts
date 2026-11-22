@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as dns from 'node:dns';
 import { validateSeedMode } from './seed-policy';
+import { DEFAULT_FAQ_ITEMS } from '../modules/faqs/default-faqs.data';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
@@ -868,6 +869,35 @@ async function seed() {
             ],
             createdAt: new Date(),
             updatedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+    }
+
+    const faqsCollection = connection.collection('faqs');
+    const faqSeedNow = new Date();
+    for (const item of DEFAULT_FAQ_ITEMS) {
+      await faqsCollection.updateOne(
+        { question: item.question },
+        {
+          $setOnInsert: {
+            question: item.question,
+            answer: item.answer,
+            topics: [
+              ...new Set(
+                item.topics.map((topic) => topic.trim().toLowerCase()),
+              ),
+            ],
+            keywords: [
+              ...new Set(
+                item.keywords.map((keyword) => keyword.trim().toLowerCase()),
+              ),
+            ],
+            isActive: item.isActive,
+            sortOrder: item.sortOrder,
+            createdAt: faqSeedNow,
+            updatedAt: faqSeedNow,
           },
         },
         { upsert: true },

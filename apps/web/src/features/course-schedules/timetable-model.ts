@@ -5,6 +5,7 @@ export interface TimetableEntry {
   courseNameAr?: string;
   staffName: string;
   staffNameAr?: string;
+  titlePrefix?: string;
   staffType?: string;
   type: "lecture" | "section" | "lab";
   dayOfWeek: string;

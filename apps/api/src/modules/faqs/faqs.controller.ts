@@ -16,6 +16,7 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import {
   AskFaqDto,
+  BulkDeleteFaqsDto,
   CreateFaqDto,
   QueryFaqDto,
   UpdateFaqDto,
@@ -55,6 +56,22 @@ export class FaqsController {
   @ApiOperation({ summary: 'Create FAQ' })
   async create(@Body() dto: CreateFaqDto, @CurrentUser('_id') userId: string) {
     return this.faqsService.create(dto, userId);
+  }
+
+  @Post('admin/faqs/seed-defaults')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.FAQS_WRITE)
+  @ApiOperation({ summary: 'Idempotently seed starter FAQ entries' })
+  async seedDefaults(@CurrentUser('_id') userId: string) {
+    return this.faqsService.seedDefaults(userId);
+  }
+
+  @Post('admin/faqs/bulk-delete')
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.FAQS_WRITE)
+  @ApiOperation({ summary: 'Bulk delete FAQs' })
+  async bulkRemove(@Body() dto: BulkDeleteFaqsDto) {
+    return this.faqsService.bulkRemove(dto.ids);
   }
 
   @Patch('admin/faqs/:id')

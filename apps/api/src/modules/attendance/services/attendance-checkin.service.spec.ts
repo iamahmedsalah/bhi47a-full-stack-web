@@ -69,6 +69,7 @@ describe('AttendanceCheckInService', () => {
       mockStudentProfileModel,
       mockTokenService,
       mockRealtimeService,
+      {} as never,
     );
   });
 

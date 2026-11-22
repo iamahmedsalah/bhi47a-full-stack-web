@@ -1,11 +1,15 @@
 import {
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
+  IsIn,
+  IsMongoId,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateFaqDto {
@@ -95,10 +99,28 @@ export class QueryFaqDto {
   @IsOptional()
   topic?: string;
 
+  @ApiPropertyOptional({ enum: ['ar', 'en'] })
+  @IsIn(['ar', 'en'])
+  @IsOptional()
+  locale?: 'ar' | 'en';
+
   @ApiPropertyOptional({ default: true })
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+export class BulkDeleteFaqsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsMongoId({ each: true })
+  ids!: string[];
 }
 
 export class AskFaqDto {

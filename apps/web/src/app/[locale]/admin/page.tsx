@@ -15,6 +15,7 @@ import {
   UserPlus,
   Upload,
   Calendar,
+  ArrowRight,
   ArrowUpRight,
   CircleAlert,
   Loader2,
@@ -1541,15 +1542,9 @@ export default function AdminDashboard() {
               />
               <StatCard
                 title={isAr ? "الدور الأكاديمي" : "Academic Role"}
-                value={
-                  user?.staffType === "assistant_lecturer"
-                    ? isAr
-                      ? "مدرس مساعد"
-                      : "Assistant Lecturer"
-                    : isAr
-                      ? "هيئة تدريس معاونة"
-                      : "Teaching Assistant"
-                }
+                value={getStaffRoleLabel(
+                  user?.staffType, user?.role, locale, user?.titlePrefix,
+                )}
                 icon={<GraduationCap className="w-6 h-6" />}
                 color="#f59e0b"
               />
@@ -2301,8 +2296,9 @@ export default function AdminDashboard() {
                         {c.status}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-primary">
-                      {isAr ? "فتح" : "Open"} →
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                      <span>{isAr ? "فتح" : "Open"}</span>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" aria-hidden="true" />
                     </span>
                   </div>
                 ))}

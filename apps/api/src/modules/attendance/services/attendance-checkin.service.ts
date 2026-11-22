@@ -28,6 +28,11 @@ import {
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { createAttendanceRecord } from './attendance-record-write';
+import {
+  attendanceInstructor,
+  loadAttendanceInstructors,
+} from './attendance-instructor';
+import { User, type UserDocument } from '../../users/schemas/user.schema';
 import { CheckInAttendanceDto } from '../dto/attendance-session.dto';
 import {
   attendanceEnrollmentFilter,
@@ -65,6 +70,7 @@ export class AttendanceCheckInService {
     private studentProfileModel: Model<StudentProfileDocument>,
     private tokenService: AttendanceTokenService,
     private realtimeService: AttendanceRealtimeService,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @Optional() private readonly cacheService?: CacheService,
   ) {}
 
@@ -542,15 +548,18 @@ export class AttendanceCheckInService {
 
     // Check which sessions student has already checked in to
     const sessionIds = openSessions.map((s) => s._id.toString());
-    const checkedRecords = await this.recordModel
-      .find({
-        sessionId: { $in: sessionIds },
-        $or: [
-          { studentId: new Types.ObjectId(studentUser._id) },
-          ...(studentCode ? [{ studentCode }] : []),
-        ],
-      })
-      .lean();
+    const [instructors, checkedRecords] = await Promise.all([
+      loadAttendanceInstructors(this.userModel, openSessions),
+      this.recordModel
+        .find({
+          sessionId: { $in: sessionIds },
+          $or: [
+            { studentId: new Types.ObjectId(studentUser._id) },
+            ...(studentCode ? [{ studentCode }] : []),
+          ],
+        })
+        .lean(),
+    ]);
 
     const checkedSessionMap = new Map<string, any>();
     for (const rec of checkedRecords) {
@@ -573,6 +582,7 @@ export class AttendanceCheckInService {
         group: s.group,
         section: s.section,
         createdByName: s.createdByName,
+        ...attendanceInstructor(s, instructors),
         academicPosition: s.academicPosition,
         startsAt: s.startsAt,
         expiresAt: s.expiresAt,
