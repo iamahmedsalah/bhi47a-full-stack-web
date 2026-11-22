@@ -1721,62 +1721,61 @@ export function ControlWorkbookGrid({
           </Select>
         </div>
         {passRate && workbook.data && !workbook.isError && (
-          canManagePassThreshold ? (
-            <button
-              type="button"
-              onClick={() => {
-                setThresholdInput(String(passRate.threshold));
-                setPassThresholdOpen(true);
-              }}
-              aria-label={t("passRate", { component: t(passRate.component) })}
-              title={
-                rtl
+          <div
+            role="group"
+            aria-label={t("passRate", { component: t(passRate.component) })}
+            tabIndex={canManagePassThreshold ? 0 : undefined}
+            onClick={
+              canManagePassThreshold
+                ? () => {
+                    setThresholdInput(String(passRate.threshold));
+                    setPassThresholdOpen(true);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              canManagePassThreshold
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setThresholdInput(String(passRate.threshold));
+                      setPassThresholdOpen(true);
+                    }
+                  }
+                : undefined
+            }
+            title={
+              canManagePassThreshold
+                ? rtl
                   ? `اضغط لتعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
                   : `Click to edit pass mark threshold (current > ${passRate.threshold})`
-              }
-              className={cn(
-                "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/25 bg-primary/10 px-3 text-xs transition-all hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
-                rtl ? "ms-auto" : "order-first me-auto",
-              )}
-            >
-              <span className="inline-flex items-center gap-1.5 font-medium">
-                <Percent aria-hidden="true" className="size-3.5 text-primary" />
-                {t("passRate", { component: t(passRate.component) })}
-              </span>
-              <bdi className="text-sm font-bold tabular-nums text-primary">
-                {new Intl.NumberFormat(locale, {
-                  style: "percent",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }).format(passRate.ratio)}
-              </bdi>
+                : undefined
+            }
+            className={cn(
+              "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+              canManagePassThreshold &&
+                " transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+              rtl ? "ms-auto" : "order-first me-auto",
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <Percent aria-hidden="true" className="size-3.5 text-primary" />
+              {t("passRate", { component: t(passRate.component) })}
+            </span>
+            <bdi className="text-sm font-bold tabular-nums text-primary">
+              {new Intl.NumberFormat(locale, {
+                style: "percent",
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              }).format(passRate.ratio)}
+            </bdi>
+            {canManagePassThreshold && (
               <SlidersHorizontal
                 aria-hidden="true"
                 className="size-3.5 text-primary/80"
               />
-            </button>
-          ) : (
-            <div
-              role="group"
-              aria-label={t("passRate", { component: t(passRate.component) })}
-              className={cn(
-                "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
-                rtl ? "ms-auto" : "order-first me-auto",
-              )}
-            >
-              <span className="inline-flex items-center gap-1.5 font-medium">
-                <Percent aria-hidden="true" className="size-3.5 text-primary" />
-                {t("passRate", { component: t(passRate.component) })}
-              </span>
-              <bdi className="text-sm font-bold tabular-nums text-primary">
-                {new Intl.NumberFormat(locale, {
-                  style: "percent",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }).format(passRate.ratio)}
-              </bdi>
-            </div>
-          )
+            )}
+          </div>
         )}
       </div>
       {caps.canEdit && (
