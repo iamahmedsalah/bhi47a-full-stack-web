@@ -154,6 +154,14 @@ describe('once-only midterm grace marks', () => {
       [1, 5, 6],
       [28, 2, 30],
     ]);
+    expect(preview.passRate).toEqual({
+      threshold: 18,
+      total: 8,
+      passedBefore: 2,
+      passedAfter: 2,
+      ratioBefore: 0.25,
+      ratioAfter: 0.25,
+    });
     expect(c.grades.bulkWrite).not.toHaveBeenCalled();
   });
   it('applies one transaction with per-grade audit evidence and returns the same receipt on retry', async () => {

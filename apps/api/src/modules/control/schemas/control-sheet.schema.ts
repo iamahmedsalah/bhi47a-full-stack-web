@@ -86,6 +86,10 @@ export class ControlSheet {
     capped: number;
   };
 
+  /** Dynamic pass-rate mark threshold (defaults to 18 for midterm, 30 for final). */
+  @Prop({ type: Number, min: 0 })
+  passThreshold?: number;
+
   @Prop({ default: false })
   locked!: boolean;
 
@@ -110,6 +114,14 @@ ControlSheetSchema.index(
 );
 ControlSheetSchema.index({ courseId: 1, academicYear: 1, semester: 1 });
 ControlSheetSchema.index({ slug: 1 }, { sparse: true });
+
+export function defaultPassThresholdForComponent(
+  component: ControlComponentKey,
+  max?: number,
+): number {
+  const base = component === 'midterm' ? 18 : component === 'final' ? 30 : 12;
+  return typeof max === 'number' && max > 0 ? Math.min(base, max) : base;
+}
 
 export function buildControlSheetSlug(sheet: {
   courseCode: string;

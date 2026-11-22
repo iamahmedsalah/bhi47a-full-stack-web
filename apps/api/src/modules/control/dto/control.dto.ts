@@ -164,6 +164,14 @@ export class UnlockSheetDto {
   reason?: string;
 }
 
+export class UpdatePassThresholdDto {
+  @ApiProperty({ example: 18 })
+  @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(1000)
+  passThreshold!: number;
+}
+
 export class SchemeComponentInputDto {
   @ApiProperty({ enum: CONTROL_COMPONENT_KEYS })
   @IsIn(CONTROL_COMPONENT_KEYS)

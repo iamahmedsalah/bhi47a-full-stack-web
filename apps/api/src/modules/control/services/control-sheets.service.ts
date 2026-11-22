@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -26,6 +27,7 @@ import {
   ControlSheet,
   ControlSheetDocument,
   buildControlSheetSlug,
+  defaultPassThresholdForComponent,
   parseControlSheetSlug,
 } from '../schemas/control-sheet.schema';
 import {
@@ -284,6 +286,18 @@ export class ControlSheetsService {
         semester: sheet.semester,
       });
 
+    const passThreshold =
+      typeof sheet.passThreshold === 'number' &&
+      Number.isFinite(sheet.passThreshold)
+        ? sheet.passThreshold
+        : defaultPassThresholdForComponent(sheet.component, rules.max);
+    const canManagePassThreshold = Boolean(
+      caps.canManageSchemes ||
+      caps.canGrace ||
+      caps.canApprove ||
+      caps.canApproveFinal,
+    );
+
     return {
       sheet: {
         id: String(sheet._id),
@@ -295,6 +309,7 @@ export class ControlSheetsService {
         revision: sheet.revision ?? 0,
         reviewReason: sheet.reviewReason ?? null,
         grace: sheet.grace ?? null,
+        passThreshold,
         locked: sheet.locked,
         lockedAt: sheet.lockedAt ?? null,
         lockReason: sheet.lockReason ?? null,
@@ -313,9 +328,11 @@ export class ControlSheetsService {
         nameEn: rules.nameEn,
         max: rules.max,
         step: rules.step,
+        passThreshold,
       },
       capabilities: {
         canGrace: caps.canGrace,
+        canManagePassThreshold,
         canEdit:
           !sheet.locked &&
           (sheet.workflowState === 'IN_REVIEW'
@@ -452,6 +469,51 @@ export class ControlSheetsService {
       await session.endSession();
     }
     return this.getSheet(user, sheetId);
+  }
+
+  async updatePassThreshold(
+    user: AuthenticatedUser,
+    sheetId: string,
+    passThreshold: number,
+  ) {
+    const caps = this.access.getCapabilities(user);
+    if (
+      !caps.canAccess ||
+      !(
+        caps.canManageSchemes ||
+        caps.canGrace ||
+        caps.canApprove ||
+        caps.canApproveFinal
+      )
+    ) {
+      this.access.assertPermission(user, PERMISSIONS.CONTROL_SCHEMES_MANAGE);
+    }
+
+    const { sheet } = await this.requireSheetInScope(user, sheetId);
+    const rules = await this.schemes.requireEnabledComponent(
+      String(sheet.courseId),
+      sheet.academicYear,
+      sheet.semester,
+      sheet.component,
+    );
+
+    if (
+      !Number.isFinite(passThreshold) ||
+      passThreshold < 0 ||
+      passThreshold > rules.max ||
+      Math.abs(Math.round(passThreshold * 100) - passThreshold * 100) > 1e-6
+    ) {
+      throw new BadRequestException(
+        `Pass threshold must be between 0 and ${rules.max}`,
+      );
+    }
+
+    await this.sheetModel.updateOne(
+      { _id: sheet._id },
+      { $set: { passThreshold } },
+    );
+
+    return this.getSheet(user, String(sheet._id));
   }
 
   async listAudit(

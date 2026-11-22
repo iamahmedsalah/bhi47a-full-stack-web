@@ -50,6 +50,7 @@ import {
   OpenSheetDto,
   UnlockSheetDto,
   UpdateGradingSchemeDto,
+  UpdatePassThresholdDto,
 } from './dto/control.dto';
 import { ControlAccessService } from './services/control-access.service';
 import { ControlCheckpointDto } from './dto/control-checkpoint.dto';
@@ -342,6 +343,18 @@ export class ControlController {
     @Body() dto: UnlockSheetDto,
   ) {
     return this.sheets.unlock(user, id, dto.reason);
+  }
+
+  @Patch('sheets/:id/pass-threshold')
+  @ApiOperation({
+    summary: 'Update the dynamic pass-rate mark threshold for a sheet',
+  })
+  updatePassThreshold(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePassThresholdDto,
+  ) {
+    return this.sheets.updatePassThreshold(user, id, dto.passThreshold);
   }
 
   @Get('sheets/:id/audit')

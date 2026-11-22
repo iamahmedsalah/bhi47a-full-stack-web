@@ -272,12 +272,31 @@ export interface GracePreview {
     unentered: number;
     other: number;
   };
+  passRate?: {
+    threshold: number;
+    total: number;
+    passedBefore: number;
+    passedAfter: number;
+    ratioBefore: number;
+    ratioAfter: number;
+  };
   sample: Array<{
     studentCode: string;
     before: number;
     added: number;
     after: number;
   }>;
+}
+
+export async function updateControlPassThreshold(
+  sheetId: string,
+  passThreshold: number,
+) {
+  const res = await api.patch<ControlSheetDetails>(
+    `/admin/control/sheets/${sheetId}/pass-threshold`,
+    { passThreshold },
+  );
+  return res.data;
 }
 export async function previewControlGrace(
   sheetId: string,

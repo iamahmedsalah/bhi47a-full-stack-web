@@ -84,6 +84,7 @@ import {
   previewControlRows,
   reviewControlSheet,
   getControlAttempts,
+  updateControlPassThreshold,
 } from "../api";
 import { ControlHelpNotes } from "./control-help-notes";
 import { HelpNote } from "@/components/ui/help-note";
@@ -150,6 +151,12 @@ export function ControlWorkbookGrid({
   const { sheet, capabilities: caps } = detail;
   const key = sheet.component;
   const [graceOpen, setGraceOpen] = useState(false);
+  const [passThresholdOpen, setPassThresholdOpen] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState<string>("");
+  const [thresholdBusy, setThresholdBusy] = useState(false);
+  const [customThresholds, setCustomThresholds] = useState<
+    Partial<Record<ControlComponentKey, number>>
+  >({});
   const workbookId = requestSheetId ?? sheet.id;
   const workbook = useQuery(controlWorkbookOptions(workbookId, principalId));
   const archiveKey = principalId ? `${principalId}:${sheet.id}` : "";
@@ -228,9 +235,44 @@ export function ControlWorkbookGrid({
     }
   }, [drafts, archiveKey]);
   const rows = workbook.data?.rows ?? EMPTY_ROWS;
+  const activePassThreshold = useMemo(() => {
+    const localOverride = customThresholds[key];
+    if (typeof localOverride === "number" && Number.isFinite(localOverride)) {
+      return localOverride;
+    }
+    if (
+      key === detail.sheet.component &&
+      typeof detail.sheet.passThreshold === "number" &&
+      Number.isFinite(detail.sheet.passThreshold)
+    ) {
+      return detail.sheet.passThreshold;
+    }
+    if (
+      key === detail.rules.key &&
+      typeof detail.rules.passThreshold === "number" &&
+      Number.isFinite(detail.rules.passThreshold)
+    ) {
+      return detail.rules.passThreshold;
+    }
+    return key === "midterm" ? 18 : 30;
+  }, [
+    customThresholds,
+    detail.rules.key,
+    detail.rules.passThreshold,
+    detail.sheet.component,
+    detail.sheet.passThreshold,
+    key,
+  ]);
+  const canManagePassThreshold = Boolean(
+    caps.canManagePassThreshold ??
+      (caps.canManageSchemes ||
+        caps.canGrace ||
+        caps.canApprove ||
+        caps.canApproveFinal),
+  );
   const passRate = useMemo(() => {
     if (key === "coursework") return null;
-    const threshold = key === "midterm" ? 18 : 30;
+    const threshold = activePassThreshold;
     const passed = rows.reduce((count, row) => {
       const mark = row.components[key];
       return (
@@ -242,8 +284,14 @@ export function ControlWorkbookGrid({
         )
       );
     }, 0);
-    return { component: key, ratio: rows.length ? passed / rows.length : 0 };
-  }, [rows, key]);
+    return {
+      component: key,
+      threshold,
+      passed,
+      total: rows.length,
+      ratio: rows.length ? passed / rows.length : 0,
+    };
+  }, [rows, key, activePassThreshold]);
   const [searchText, setSearchText] = useState(search);
   const [previousSearch, setPreviousSearch] = useState(search);
   if (previousSearch !== search) {
@@ -1037,12 +1085,184 @@ export function ControlWorkbookGrid({
         <ControlGraceDialog
           detail={detail}
           locale={locale}
+          rows={rows}
+          passThreshold={activePassThreshold}
           onClose={() => setGraceOpen(false)}
           onSaved={async () => {
             setUndo([]);
             await refresh();
           }}
         />
+      )}
+      {passThresholdOpen && passRate && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !thresholdBusy) setPassThresholdOpen(false);
+          }}
+        >
+          <DialogContent
+            dir={rtl ? "rtl" : "ltr"}
+            className="max-w-md rounded-2xl border-border bg-card p-6 shadow-2xl"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-start">
+                <Percent className="size-5 text-primary" />
+                {rtl
+                  ? `تعديل درجة حساب نسبة النجاح — ${t(passRate.component)}`
+                  : `Edit Pass Threshold — ${t(passRate.component)}`}
+              </DialogTitle>
+              <DialogDescription className="text-start text-xs">
+                {rtl
+                  ? `حدد الدرجة التي يُحسب بعدها الطالب ناجحًا في ${t(passRate.component)} (الدرجة العظمى: ${detail.rules.max}).`
+                  : `Set the mark above which a student is counted as passing in ${t(passRate.component)} (Max mark: ${detail.rules.max}).`}
+              </DialogDescription>
+            </DialogHeader>
+
+            {(() => {
+              const parsedNext =
+                thresholdInput.trim() !== "" &&
+                Number.isFinite(Number(thresholdInput))
+                  ? Number(thresholdInput)
+                  : passRate.threshold;
+              const isValidNext =
+                Number.isFinite(parsedNext) &&
+                parsedNext >= 0 &&
+                parsedNext <= detail.rules.max;
+              const nextPassed = isValidNext
+                ? rows.reduce((count, row) => {
+                    const mark = row.components[key];
+                    return (
+                      count +
+                      Number(
+                        mark?.status === "present" &&
+                          mark.score != null &&
+                          mark.score > parsedNext,
+                      )
+                    );
+                  }, 0)
+                : passRate.passed;
+              const nextRatio = rows.length ? nextPassed / rows.length : 0;
+              const pctFmt = new Intl.NumberFormat(locale, {
+                style: "percent",
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              });
+
+              return (
+                <div className="space-y-4">
+                  <label className="block space-y-1.5 text-xs font-semibold text-foreground">
+                    <span>
+                      {rtl
+                        ? `درجة النجاح (${0} - ${detail.rules.max})`
+                        : `Pass Mark Threshold (0 - ${detail.rules.max})`}
+                    </span>
+                    <Input
+                      dir="ltr"
+                      type="number"
+                      min={0}
+                      max={detail.rules.max}
+                      step={detail.rules.step || 0.5}
+                      value={thresholdInput}
+                      disabled={thresholdBusy}
+                      className="rounded-squircle text-left"
+                      onChange={(e) => setThresholdInput(e.target.value)}
+                    />
+                  </label>
+
+                  <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-2">
+                    <span className="block text-xs font-bold text-foreground">
+                      {rtl
+                        ? "معاينة تغير نسبة النجاح:"
+                        : "Pass Rate Change Preview:"}
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="rounded-squircle border border-border/80 bg-background/70 px-3 py-1.5 text-center flex-1">
+                        <span className="block text-[10px] text-muted-foreground">
+                          {rtl
+                            ? `الحالية (> ${passRate.threshold})`
+                            : `Current (> ${passRate.threshold})`}
+                        </span>
+                        <bdi className="text-sm font-bold tabular-nums text-foreground">
+                          {pctFmt.format(passRate.ratio)}
+                        </bdi>
+                        <span className="block text-[10px] text-muted-foreground">
+                          <bdi>
+                            {passRate.passed} / {passRate.total}
+                          </bdi>
+                        </span>
+                      </div>
+
+                      <ArrowRight className="size-4 shrink-0 text-primary rtl:rotate-180" />
+
+                      <div className="rounded-squircle border border-primary/35 bg-primary/15 px-3 py-1.5 text-center flex-1">
+                        <span className="block text-[10px] text-primary">
+                          {rtl
+                            ? `الجديدة (> ${isValidNext ? parsedNext : passRate.threshold})`
+                            : `New (> ${isValidNext ? parsedNext : passRate.threshold})`}
+                        </span>
+                        <bdi className="text-sm font-bold tabular-nums text-primary">
+                          {pctFmt.format(nextRatio)}
+                        </bdi>
+                        <span className="block text-[10px] text-primary/85">
+                          <bdi>
+                            {nextPassed} / {passRate.total}
+                          </bdi>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="gap-2 rtl:sm:justify-start">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={thresholdBusy}
+                      onClick={() => setPassThresholdOpen(false)}
+                      className="rounded-squircle"
+                    >
+                      {rtl ? "إلغاء" : "Cancel"}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={thresholdBusy || !isValidNext}
+                      className="rounded-squircle gap-1.5"
+                      onClick={async () => {
+                        setThresholdBusy(true);
+                        try {
+                          await updateControlPassThreshold(
+                            sheet.id,
+                            parsedNext,
+                          );
+                          setCustomThresholds((prev) => ({
+                            ...prev,
+                            [key]: parsedNext,
+                          }));
+                          await refresh();
+                          toast.success(
+                            rtl
+                              ? "تم تحديث درجة ونسبة النجاح بنجاح"
+                              : "Pass threshold updated successfully",
+                          );
+                          setPassThresholdOpen(false);
+                        } catch (err) {
+                          toast.error(getApiErrorMessage(err));
+                        } finally {
+                          setThresholdBusy(false);
+                        }
+                      }}
+                    >
+                      {thresholdBusy && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
+                      {rtl ? "حفظ وتحديث النسبة" : "Save Threshold"}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
       )}
       {attemptDialog && (
         <ControlAttemptDialog
@@ -1501,26 +1721,62 @@ export function ControlWorkbookGrid({
           </Select>
         </div>
         {passRate && workbook.data && !workbook.isError && (
-          <div
-            role="group"
-            aria-label={t("passRate", { component: t(passRate.component) })}
-            className={cn(
-              "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
-              rtl ? "ms-auto" : "order-first me-auto",
-            )}
-          >
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <Percent aria-hidden="true" className="size-3.5 text-primary" />
-              {t("passRate", { component: t(passRate.component) })}
-            </span>
-            <bdi className="text-sm font-bold tabular-nums text-primary">
-              {new Intl.NumberFormat(locale, {
-                style: "percent",
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }).format(passRate.ratio)}
-            </bdi>
-          </div>
+          canManagePassThreshold ? (
+            <button
+              type="button"
+              onClick={() => {
+                setThresholdInput(String(passRate.threshold));
+                setPassThresholdOpen(true);
+              }}
+              aria-label={t("passRate", { component: t(passRate.component) })}
+              title={
+                rtl
+                  ? `اضغط لتعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
+                  : `Click to edit pass mark threshold (current > ${passRate.threshold})`
+              }
+              className={cn(
+                "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/25 bg-primary/10 px-3 text-xs transition-all hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+                rtl ? "ms-auto" : "order-first me-auto",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <Percent aria-hidden="true" className="size-3.5 text-primary" />
+                {t("passRate", { component: t(passRate.component) })}
+              </span>
+              <bdi className="text-sm font-bold tabular-nums text-primary">
+                {new Intl.NumberFormat(locale, {
+                  style: "percent",
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(passRate.ratio)}
+              </bdi>
+              <SlidersHorizontal
+                aria-hidden="true"
+                className="size-3.5 text-primary/80"
+              />
+            </button>
+          ) : (
+            <div
+              role="group"
+              aria-label={t("passRate", { component: t(passRate.component) })}
+              className={cn(
+                "inline-flex h-9 w-fit max-w-full items-center gap-3 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+                rtl ? "ms-auto" : "order-first me-auto",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <Percent aria-hidden="true" className="size-3.5 text-primary" />
+                {t("passRate", { component: t(passRate.component) })}
+              </span>
+              <bdi className="text-sm font-bold tabular-nums text-primary">
+                {new Intl.NumberFormat(locale, {
+                  style: "percent",
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(passRate.ratio)}
+              </bdi>
+            </div>
+          )
         )}
       </div>
       {caps.canEdit && (

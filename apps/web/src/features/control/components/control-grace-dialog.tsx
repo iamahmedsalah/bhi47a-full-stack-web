@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ArrowRight, Loader2, Percent, Sparkles, TrendingUp } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,16 +19,20 @@ import {
   applyControlGrace,
   type GracePreview,
 } from "../api";
-import type { ControlSheetDetails } from "../types";
+import type { ControlSheetDetails, WorkbookRow } from "../types";
 
 export function ControlGraceDialog({
   detail,
   locale,
+  rows = [],
+  passThreshold,
   onClose,
   onSaved,
 }: {
   detail: ControlSheetDetails;
   locale: string;
+  rows?: WorkbookRow[];
+  passThreshold?: number;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -41,6 +45,70 @@ export function ControlGraceDialog({
   const operation = useRef(crypto.randomUUID());
   const guard = useRef(false);
   const text = (arabic: string, english: string) => (ar ? arabic : english);
+
+  const resolvedThreshold =
+    passThreshold ??
+    detail.sheet.passThreshold ??
+    detail.rules.passThreshold ??
+    18;
+
+  const percentFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: "percent",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [locale],
+  );
+
+  // Compute live pass-rate transition (from -> to) as the user types or from backend preview
+  const livePassRateTransition = useMemo(() => {
+    if (preview?.passRate) {
+      return {
+        threshold: preview.passRate.threshold,
+        total: preview.passRate.total,
+        passedBefore: preview.passRate.passedBefore,
+        passedAfter: preview.passRate.passedAfter,
+        ratioBefore: preview.passRate.ratioBefore,
+        ratioAfter: preview.passRate.ratioAfter,
+      };
+    }
+
+    const parsedAmount =
+      amount !== "" && Number.isFinite(Number(amount)) && Number(amount) > 0
+        ? Math.min(detail.rules.max, Number(amount))
+        : 0;
+
+    if (rows.length === 0) return null;
+
+    let passedBefore = 0;
+    let passedAfter = 0;
+
+    for (const row of rows) {
+      const mark = row.components.midterm;
+      if (mark?.status !== "present" || mark.score == null) continue;
+      const beforeScore = mark.score;
+      const canReceiveGrace = !row.tuition?.isBlocked && !row.notRegistered;
+      const afterScore =
+        canReceiveGrace && parsedAmount > 0
+          ? Math.min(detail.rules.max, beforeScore + parsedAmount)
+          : beforeScore;
+
+      if (beforeScore > resolvedThreshold) passedBefore += 1;
+      if (afterScore > resolvedThreshold) passedAfter += 1;
+    }
+
+    return {
+      threshold: resolvedThreshold,
+      total: rows.length,
+      passedBefore,
+      passedAfter,
+      ratioBefore: rows.length > 0 ? passedBefore / rows.length : 0,
+      ratioAfter: rows.length > 0 ? passedAfter / rows.length : 0,
+    };
+  }, [amount, detail.rules.max, preview?.passRate, resolvedThreshold, rows]);
+
   return (
     <Dialog
       open
@@ -64,9 +132,7 @@ export function ControlGraceDialog({
               : detail.course.name}
           </DialogDescription>
         </DialogHeader>
-        <HelpNote
-          title={text("قواعد درجات الرأفة", "Grace mark rules")}
-        >
+        <HelpNote title={text("قواعد درجات الرأفة", "Grace mark rules")}>
           {text(
             "تُضاف مرة واحدة لهذا الكشف. تشمل الحاضر الذي رُصدت له درجة، حتى الصفر. لا تتجاوز الدرجة العظمى، ولا تشمل الغائب أو المحروم أو المحجوب أو الخانات الفارغة. لا تنشر النتائج تلقائيًا.",
             "Applied once per sheet. Includes entered present marks, including zero. Capped at the maximum. Absent, banned, financially blocked and unentered students are excluded. This does not publish results.",
@@ -85,6 +151,7 @@ export function ControlGraceDialog({
                 step={detail.rules.step}
                 value={amount}
                 disabled={busy}
+                className="rounded-squircle"
                 onChange={(e) => {
                   setAmount(e.target.value);
                   setPreview(null);
@@ -92,7 +159,103 @@ export function ControlGraceDialog({
                 }}
               />
             </label>
+
+            {/* Compact Pass Rate Before -> After Impact Card */}
+            {livePassRateTransition && (
+              <div
+                role="region"
+                aria-label={text(
+                  "تأثير درجات الرأفة على نسبة النجاح",
+                  "Grace marks pass rate impact",
+                )}
+                className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-2.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 font-bold text-foreground">
+                    <Percent className="size-3.5 text-primary" />
+                    {text(
+                      "تغير نسبة نجاح الميدتيرم",
+                      "Midterm pass rate change",
+                    )}
+                  </span>
+                  <span className="rounded-squircle border border-border/70 bg-background/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    {text(
+                      `حد النجاح > ${livePassRateTransition.threshold} درجة`,
+                      `Pass mark > ${livePassRateTransition.threshold}`,
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="rounded-squircle border border-border/80 bg-background/70 px-3 py-1.5 text-center">
+                      <span className="block text-[10px] text-muted-foreground">
+                        {text("قبل الرأفة", "Before")}
+                      </span>
+                      <bdi className="text-sm font-bold tabular-nums text-foreground">
+                        {percentFormatter.format(
+                          livePassRateTransition.ratioBefore,
+                        )}
+                      </bdi>
+                      <span className="block text-[10px] text-muted-foreground">
+                        <bdi>
+                          {livePassRateTransition.passedBefore} /{" "}
+                          {livePassRateTransition.total}
+                        </bdi>
+                      </span>
+                    </div>
+
+                    <ArrowRight className="size-4 shrink-0 text-primary rtl:rotate-180" />
+
+                    <div className="rounded-squircle border border-primary/35 bg-primary/15 px-3 py-1.5 text-center">
+                      <span className="block text-[10px] text-primary">
+                        {text("بعد الرأفة", "After")}
+                      </span>
+                      <bdi className="text-sm font-bold tabular-nums text-primary">
+                        {percentFormatter.format(
+                          livePassRateTransition.ratioAfter,
+                        )}
+                      </bdi>
+                      <span className="block text-[10px] text-primary/85">
+                        <bdi>
+                          {livePassRateTransition.passedAfter} /{" "}
+                          {livePassRateTransition.total}
+                        </bdi>
+                      </span>
+                    </div>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 rounded-squircle border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
+                    <TrendingUp className="size-3.5" />
+                    <bdi>
+                      +
+                      {percentFormatter.format(
+                        Math.max(
+                          0,
+                          livePassRateTransition.ratioAfter -
+                            livePassRateTransition.ratioBefore,
+                        ),
+                      )}
+                    </bdi>
+                    <span className="text-[11px] font-medium opacity-90">
+                      (
+                      <bdi>
+                        +
+                        {Math.max(
+                          0,
+                          livePassRateTransition.passedAfter -
+                            livePassRateTransition.passedBefore,
+                        )}
+                      </bdi>{" "}
+                      {text("طالب", "students")})
+                    </span>
+                  </span>
+                </div>
+              </div>
+            )}
+
             <Button
+              className="rounded-squircle"
               disabled={
                 busy ||
                 !amount ||
@@ -226,6 +389,7 @@ export function ControlGraceDialog({
           <Button
             aria-label={text("إغلاق نافذة الرأفة", "Close grace marks")}
             variant="outline"
+            className="rounded-squircle"
             disabled={busy}
             onClick={onClose}
           >
@@ -233,6 +397,7 @@ export function ControlGraceDialog({
           </Button>
           {preview && !applied && (
             <Button
+              className="rounded-squircle"
               disabled={busy || preview.counts.changed === 0}
               onClick={async () => {
                 if (guard.current) return;

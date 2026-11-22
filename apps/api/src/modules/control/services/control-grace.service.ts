@@ -20,6 +20,7 @@ import {
 import {
   ControlSheet,
   ControlSheetDocument,
+  defaultPassThresholdForComponent,
 } from '../schemas/control-sheet.schema';
 import {
   GradeAuditLog,
@@ -188,6 +189,36 @@ export class ControlGraceService {
     }
     counts.changed = changes.length;
     counts.unentered = roster.size - seen.size;
+
+    const passThreshold =
+      typeof sheet.passThreshold === 'number' &&
+      Number.isFinite(sheet.passThreshold)
+        ? sheet.passThreshold
+        : defaultPassThresholdForComponent(sheet.component, rules.max);
+
+    const changeAfterByStudent = new Map(
+      changes.map((c) => [String(c.studentId), c.after]),
+    );
+    let passedBefore = 0;
+    let passedAfter = 0;
+    for (const mark of docs) {
+      const sid = String(mark.studentId);
+      if (!roster.has(sid) || mark.status !== 'present') continue;
+      const beforeScore = mark.grade;
+      const afterScore = changeAfterByStudent.get(sid) ?? beforeScore;
+      if (beforeScore > passThreshold) passedBefore += 1;
+      if (afterScore > passThreshold) passedAfter += 1;
+    }
+    const totalRoster = roster.size;
+    const passRate = {
+      threshold: passThreshold,
+      total: totalRoster,
+      passedBefore,
+      passedAfter,
+      ratioBefore: totalRoster > 0 ? passedBefore / totalRoster : 0,
+      ratioAfter: totalRoster > 0 ? passedAfter / totalRoster : 0,
+    };
+
     const digest = createHash('sha256')
       .update(
         JSON.stringify({
@@ -219,6 +250,7 @@ export class ControlGraceService {
         amount: dto.amount,
         max: rules.max,
         counts,
+        passRate,
         sample: changes.slice(0, 20).map((c) => ({
           studentCode: c.studentCode,
           before: c.before,

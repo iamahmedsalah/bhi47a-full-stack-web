@@ -66,6 +66,7 @@ export interface ControlSheetDetails {
       capped: number;
       appliedAt: string;
     } | null;
+    passThreshold?: number;
     locked: boolean;
     lockedAt: string | null;
     lockReason: string | null;
@@ -84,9 +85,11 @@ export interface ControlSheetDetails {
     nameEn: string;
     max: number;
     step: number;
+    passThreshold?: number;
   };
   capabilities: {
     canGrace?: boolean;
+    canManagePassThreshold?: boolean;
     canSubmit: boolean;
     canReview: boolean;
     canApprove?: boolean;
