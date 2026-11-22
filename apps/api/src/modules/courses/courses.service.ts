@@ -10,6 +10,7 @@ import {
   MaterialStorageService,
   type MaterialUpload,
 } from '../material-storage/material-storage.service';
+import { RagIngestionService } from '../ai/services/rag-ingestion.service';
 import { CacheService } from '../../core/cache/cache.service';
 import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import { MetricsService } from '../../core/metrics/metrics.service';
@@ -117,6 +118,7 @@ export class CoursesService {
     @Optional() private registrationsService?: RegistrationsService,
     @Optional() private metricsService?: MetricsService,
     @Optional() private materialStorage?: MaterialStorageService,
+    @Optional() private ragIngestion?: RagIngestionService,
   ) {}
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
@@ -764,6 +766,7 @@ export class CoursesService {
     await this.findOne(id);
     await this.courseModel.findByIdAndDelete(id);
     await this.cacheService?.delPattern('courses:*');
+    await this.ragIngestion?.removeCourseIndex(id).catch(() => {});
     return { message: 'تم حذف المادة بنجاح' }; // Course deleted successfully
   }
 
@@ -873,6 +876,11 @@ export class CoursesService {
       throw error;
     }
     await this.cacheService?.delPattern('courses:*');
+    if (stored.sha256) {
+      void this.ragIngestion
+        ?.enqueueSyllabusIngestion(courseId, stored.sha256)
+        .catch(() => {});
+    }
     return {
       message: 'Course book uploaded successfully',
       courseId,
@@ -1175,6 +1183,7 @@ export class CoursesService {
     course.syllabusUpdatedAt = undefined;
     await course.save();
     await this.cacheService?.delPattern('courses:*');
+    await this.ragIngestion?.removeCourseIndex(courseId).catch(() => {});
     return { message: 'تم إزالة ملف المنهج بنجاح' };
   }
 

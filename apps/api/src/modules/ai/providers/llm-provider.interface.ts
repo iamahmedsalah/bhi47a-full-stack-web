@@ -35,16 +35,31 @@ export interface LlmChatResponse {
 export interface LlmEmbeddingOptions {
   /** Task type hint for embedding models. */
   taskType?: 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY' | 'SEMANTIC_SIMILARITY';
+  /** Optional document title when taskType is RETRIEVAL_DOCUMENT. */
+  title?: string;
+}
+
+export interface LlmStreamChunk {
+  delta: string;
+  done?: boolean;
+  usage?: LlmChatResponse['usage'];
+  model?: string;
 }
 
 export interface LlmProvider {
   /** Send a chat message and receive a response. */
   chat(userMessage: string, options?: LlmChatOptions): Promise<LlmChatResponse>;
 
+  /** Stream a chat response token by token. */
+  chatStream?(
+    userMessage: string,
+    options?: LlmChatOptions,
+  ): AsyncGenerator<LlmStreamChunk, void, unknown>;
+
   /** Generate a vector embedding for the given text. */
   embed(text: string, options?: LlmEmbeddingOptions): Promise<number[]>;
 
-  /** Embed multiple texts in a single batch. */
+  /** Embed multiple texts in bounded batches with retry/backoff. */
   embedBatch(
     texts: string[],
     options?: LlmEmbeddingOptions,

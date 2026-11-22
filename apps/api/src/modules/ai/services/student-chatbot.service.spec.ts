@@ -120,4 +120,127 @@ describe('student assistant boundaries', () => {
     });
     expect(findOne).not.toHaveBeenCalled();
   });
+
+  it('answers from grounded syllabus PDF excerpts with verified server-side citations and ignores ungrounded answers', async () => {
+    const f = fixture();
+    const evidenceMap = new Map([
+      [
+        'S1',
+        {
+          sourceId: 'S1',
+          courseId: new Types.ObjectId().toHexString(),
+          courseCode: 'BIS201',
+          courseTitle: 'نظم قواعد البيانات',
+          fileName: 'bis201.pdf',
+          pageNumber: 7,
+          score: 0.92,
+        },
+      ],
+    ]);
+
+    Object.assign(f.rag, {
+      retrieveDocumentExcerpts: jest.fn().mockResolvedValue({
+        contextPrompt:
+          '<document_excerpt id="S1" course="BIS201 - نظم قواعد البيانات" page="7">\nدرجة أعمال السنة 20 درجة.\n</document_excerpt>',
+        evidenceMap,
+        chunks: [],
+      }),
+      verifyDocumentCitations: jest.fn().mockReturnValue({
+        grounded: true,
+        answer: 'درجة أعمال السنة في المقرر هي 20 درجة [S1].',
+        sources: [...evidenceMap.values()],
+      }),
+    });
+
+    f.gemini.chat.mockResolvedValue({
+      content: 'درجة أعمال السنة في المقرر هي 20 درجة [S1].',
+      model: 'gemini-2.5-flash',
+      usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+    });
+
+    const reply = await f.service.chat(
+      studentId,
+      'كم درجة أعمال السنة في نظم قواعد البيانات؟',
+      undefined,
+      'ar',
+    );
+
+    expect(reply.answer).toContain('20 درجة [S1]');
+    expect(reply.sources).toEqual([
+      expect.objectContaining({
+        sourceId: 'S1',
+        courseCode: 'BIS201',
+        pageNumber: 7,
+      }),
+    ]);
+    expect(f.rag.retrieveCourses).not.toHaveBeenCalled();
+  });
+
+  it('streams SSE events (meta -> token -> done) and resolves verified citations on done', async () => {
+    const f = fixture();
+    const evidenceMap = new Map([
+      [
+        'S1',
+        {
+          sourceId: 'S1',
+          courseId: new Types.ObjectId().toHexString(),
+          courseCode: 'BIS201',
+          courseTitle: 'نظم قواعد البيانات',
+          fileName: 'bis201.pdf',
+          pageNumber: 3,
+          score: 0.95,
+        },
+      ],
+    ]);
+
+    Object.assign(f.rag, {
+      retrieveDocumentExcerpts: jest.fn().mockResolvedValue({
+        contextPrompt:
+          '<document_excerpt id="S1" course="BIS201" page="3">Final exam is 60 marks.</document_excerpt>',
+        evidenceMap,
+        chunks: [],
+      }),
+      verifyDocumentCitations: jest.fn().mockReturnValue({
+        grounded: true,
+        answer: 'الامتحان النهائي من 60 درجة [S1].',
+        sources: [...evidenceMap.values()],
+      }),
+    });
+
+    Object.assign(f.gemini, {
+      chatStream: async function* () {
+        await Promise.resolve();
+        yield { delta: 'الامتحان النهائي ' };
+        yield { delta: 'من 60 درجة [S1].' };
+        yield {
+          delta: '',
+          done: true,
+          model: 'gemini-2.5-flash',
+          usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },
+        };
+      },
+    });
+
+    const events = [];
+    for await (const ev of f.service.chatStream(
+      studentId,
+      'كم درجة الامتحان النهائي في قواعد البيانات؟',
+      undefined,
+      'ar',
+    )) {
+      events.push(ev);
+    }
+
+    expect(events[0].event).toBe('meta');
+    expect(events.filter((e) => e.event === 'token')).toHaveLength(2);
+    const doneEvent = events[events.length - 1];
+    expect(doneEvent.event).toBe('done');
+    expect(doneEvent.data.answer).toBe('الامتحان النهائي من 60 درجة [S1].');
+    expect(doneEvent.data.sources).toEqual([
+      expect.objectContaining({
+        sourceId: 'S1',
+        pageNumber: 3,
+      }),
+    ]);
+  });
 });

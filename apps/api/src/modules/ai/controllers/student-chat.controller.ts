@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
@@ -30,6 +31,47 @@ export class StudentChatController {
     @Body() dto: SendStudentChatMessageDto,
   ) {
     return this.chatbot.chat(user._id, dto.message, dto.sessionId, dto.locale);
+  }
+
+  @Post('stream')
+  @ApiOperation({
+    summary: 'Stream a message response from the AI chatbot via SSE',
+  })
+  async streamMessage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SendStudentChatMessageDto,
+    @Res() res: Response,
+  ) {
+    const stream = this.chatbot.chatStream(
+      user._id,
+      dto.message,
+      dto.sessionId,
+      dto.locale,
+    );
+
+    // Pull the first event ("meta") before committing 200 SSE headers so rate-limit (429) or disabled (503) exceptions return proper HTTP status codes
+    const first = await stream.next();
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const writeSse = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    if (!first.done && first.value) {
+      writeSse(first.value.event, first.value.data);
+    }
+
+    for await (const item of stream) {
+      writeSse(item.event, item.data);
+    }
+
+    res.end();
   }
 
   @Get('sessions')

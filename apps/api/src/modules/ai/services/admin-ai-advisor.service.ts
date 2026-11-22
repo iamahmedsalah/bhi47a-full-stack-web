@@ -75,13 +75,13 @@ export class AdminAiAdvisorService {
         analysis: response.content,
         usage: response.usage,
       };
-    } catch (error) {
+    } catch {
       await this.usageLogs.create({
         userId: new Types.ObjectId(actorId),
         model: 'gemini',
         feature: 'admin-student-analysis',
         latencyMs: Date.now() - start,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'ADMIN_STUDENT_ANALYSIS_FAILED',
       });
 
       return {
@@ -123,13 +123,13 @@ export class AdminAiAdvisorService {
       });
 
       return { summary: response.content, usage: response.usage };
-    } catch (error) {
+    } catch {
       await this.usageLogs.create({
         userId: new Types.ObjectId(actorId),
         model: 'gemini',
         feature: 'admin-student-summary',
         latencyMs: Date.now() - start,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'ADMIN_STUDENT_SUMMARY_FAILED',
       });
 
       return { summary: 'حدث خطأ أثناء إنشاء الملخص.' };
@@ -183,8 +183,9 @@ export class AdminAiAdvisorService {
 
     if (!user || !academic) return null;
 
+    // Data minimization: never transmit personal student name or studentCode to external LLM
     const parts = [
-      `## Student: ${user.name} (${user.studentCode})`,
+      '## Anonymized Student Academic Record',
       `Department: ${profile?.department ?? 'N/A'}`,
       `Level: ${profile?.level ?? academic.academicLevel ?? 'N/A'}`,
       `GPA: ${academic.gpa ?? 'N/A'}`,

@@ -64,7 +64,7 @@ export class AiSettingsService {
         settings?.studentAdvisorEnabled ?? this.defaultStudentAdvisorState(),
       studentAdvisorConfigured: this.studentAdvisorConfigured(),
       provider: 'Gemini',
-      model: this.config.get<string>('GEMINI_CHAT_MODEL', 'gemini-2.0-flash'),
+      model: this.config.get<string>('GEMINI_CHAT_MODEL', 'gemini-2.5-flash'),
       apiKeyConfigured: Boolean(this.config.get<string>('GEMINI_API_KEY', '')),
       usage: {
         allTimeTokens: allTime.totalTokens,

@@ -4,7 +4,7 @@ import { getUserDisplayName } from "@/lib/user-name";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Loader2, Send, User, X } from "lucide-react";
+import { Bot, FileText, Loader2, Send, User, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,10 @@ import { cn } from "@/lib/cn";
 import { useAuth } from "@/providers/auth-provider";
 import {
   getChatStatus,
-  sendChatMessage,
+  streamChatMessage,
   StudentChatDisabledError,
   StudentChatRateLimitError,
+  type ChatCitationSource,
 } from "../api";
 
 interface ChatMessage {
@@ -22,6 +23,7 @@ interface ChatMessage {
   sender: "user" | "assistant";
   text: string;
   timestamp: string;
+  sources?: ChatCitationSource[];
 }
 
 function messageId(sender: ChatMessage["sender"]) {
@@ -105,19 +107,65 @@ export function StudentChatWidget() {
     setLoading(true);
 
     try {
-      const response = await sendChatMessage(query, sessionId, locale);
+      const assistantMsgId = messageId("assistant");
+      let streamedCreated = false;
+
+      const response = await streamChatMessage(query, sessionId, locale, {
+        onMeta: (meta) => {
+          if (meta.sessionId) setSessionId(meta.sessionId);
+          if (meta.rateLimit) {
+            setRemainingMessages(meta.rateLimit.remaining);
+            setQuotaResetAt(meta.rateLimit.resetAt);
+          }
+        },
+        onToken: (delta) => {
+          streamedCreated = true;
+          setMessages((current) => {
+            const exists = current.some((m) => m.id === assistantMsgId);
+            if (!exists) {
+              return [
+                ...current,
+                {
+                  id: assistantMsgId,
+                  sender: "assistant",
+                  text: delta,
+                  timestamp: timestamp(),
+                },
+              ];
+            }
+            return current.map((m) =>
+              m.id === assistantMsgId ? { ...m, text: m.text + delta } : m,
+            );
+          });
+        },
+      });
+
       setSessionId(response.sessionId);
       setRemainingMessages(response.rateLimit?.remaining);
       setQuotaResetAt(response.rateLimit?.resetAt);
-      setMessages((current) => [
-        ...current,
-        {
-          id: messageId("assistant"),
-          sender: "assistant",
-          text: response.answer,
-          timestamp: timestamp(),
-        },
-      ]);
+      setMessages((current) => {
+        if (streamedCreated && current.some((m) => m.id === assistantMsgId)) {
+          return current.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  text: response.answer,
+                  sources: response.sources,
+                }
+              : m,
+          );
+        }
+        return [
+          ...current,
+          {
+            id: assistantMsgId,
+            sender: "assistant",
+            text: response.answer,
+            timestamp: timestamp(),
+            sources: response.sources,
+          },
+        ];
+      });
     } catch (error) {
       const isRateLimited = error instanceof StudentChatRateLimitError;
       const isDisabled = error instanceof StudentChatDisabledError;
@@ -257,6 +305,34 @@ export function StudentChatWidget() {
                       )}
                     >
                       <p className="whitespace-pre-wrap">{message.text}</p>
+                      {message.sources && message.sources.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-border/60 pt-2">
+                          {message.sources.map((src, idx) => {
+                            const labelText = src.courseTitle || src.title || src.fileName || "PDF";
+                            const pageLabel =
+                              typeof src.pageNumber === "number"
+                                ? locale === "ar"
+                                  ? `ص ${src.pageNumber}`
+                                  : `p. ${src.pageNumber}`
+                                : undefined;
+                            return (
+                              <span
+                                key={`${src.sourceId || idx}-${src.pageNumber || 0}`}
+                                className="inline-flex items-center gap-1 rounded-squircle border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+                              >
+                                <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                {src.sourceId && (
+                                  <span className="font-mono">[{src.sourceId}]</span>
+                                )}
+                                <span className="truncate max-w-36">{labelText}</span>
+                                {pageLabel && (
+                                  <span className="opacity-80">· {pageLabel}</span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       <time className="mt-1 block text-end text-[10px] opacity-60">
                         {message.timestamp}
                       </time>

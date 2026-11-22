@@ -1,17 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { FaqsService } from '../../faqs/faqs.service';
 import { faqTermPattern, faqTerms, scoreFaq } from '../../faqs/faq-retrieval';
 import { Course } from '../../courses/schemas/course.schema';
 import { GeminiProvider } from '../providers/gemini.provider';
+import {
+  RagDocumentSearchService,
+  type RagCitationSource,
+  type RetrievedDocumentEvidence,
+} from './rag-document-search.service';
 
 /**
  * Retrieval-Augmented Generation service.
  *
- * Retrieves relevant context from the database (FAQs, courses, grades)
- * and formats it for inclusion in LLM prompts. Supports both keyword-based
- * and (future) vector-based retrieval.
+ * Retrieves relevant context from the database (FAQs, courses, and
+ * student-eligible syllabus PDF chunks) and formats it for inclusion
+ * in LLM prompts with strict server-side citation verification.
  */
 @Injectable()
 export class RagService {
@@ -19,11 +24,11 @@ export class RagService {
     private readonly faqs: FaqsService,
     @InjectModel(Course.name) private readonly courseModel: Model<Course>,
     private readonly gemini: GeminiProvider,
+    @Optional() private readonly documentSearch?: RagDocumentSearchService,
   ) {}
 
   /**
    * Retrieve FAQ entries relevant to the user's query.
-   * Uses text search for now; will be upgraded to Atlas Vector Search.
    */
   async retrieveFaqs(query: string, limit = 5): Promise<string> {
     const faqs = await this.faqs.findRelevant(query, limit);
@@ -51,13 +56,14 @@ export class RagService {
 
   /**
    * Retrieve course information relevant to a query.
+   * Evaluates all matching active courses before scoring to avoid alphabetical truncation.
    */
   async retrieveCourses(
     query: string,
     limit = 10,
     locale: 'ar' | 'en' = 'en',
   ): Promise<string> {
-    const terms = faqTerms(query).filter((term) => term.length >= 3);
+    const terms = faqTerms(query).filter((term) => term.length >= 2);
 
     if (terms.length === 0) return '';
 
@@ -75,8 +81,7 @@ export class RagService {
       .select(
         'code name nameAr nameEn creditHours prerequisites level semester type',
       )
-      .sort({ code: 1 })
-      .limit(60)
+      .limit(300)
       .lean();
 
     if (courses.length === 0) return '';
@@ -108,6 +113,38 @@ export class RagService {
         );
       })
       .join('\n\n');
+  }
+
+  /**
+   * Retrieve student-authorized PDF document excerpts and citation metadata.
+   */
+  async retrieveDocumentExcerpts(
+    studentId: string,
+    query: string,
+    locale: 'ar' | 'en' = 'ar',
+  ): Promise<RetrievedDocumentEvidence | undefined> {
+    if (!this.documentSearch) return undefined;
+    return this.documentSearch.searchForStudent(studentId, query, { locale });
+  }
+
+  /**
+   * Verify model citations against server-supplied document evidence.
+   */
+  verifyDocumentCitations(
+    rawAnswer: string,
+    evidenceMap: Map<string, RagCitationSource>,
+  ): {
+    grounded: boolean;
+    answer: string;
+    sources: RagCitationSource[];
+  } {
+    if (!this.documentSearch) {
+      return { grounded: false, answer: '', sources: [] };
+    }
+    return this.documentSearch.verifyAndResolveCitations(
+      rawAnswer,
+      evidenceMap,
+    );
   }
 
   /**
@@ -145,7 +182,7 @@ export class RagService {
   }
 
   /**
-   * Generate an embedding for future Atlas Vector Search integration.
+   * Generate an embedding for query retrieval.
    */
   async generateEmbedding(text: string): Promise<number[]> {
     return this.gemini.embed(text, { taskType: 'RETRIEVAL_QUERY' });

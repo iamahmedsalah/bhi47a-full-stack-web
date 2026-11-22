@@ -66,6 +66,7 @@ export const settingsKeys = {
   gpaRules: ["admin-gpa-rules"] as const,
   registrationTerms: ["admin-registration-terms"] as const,
   aiSettings: ["admin-ai-settings"] as const,
+  ragDocuments: ["admin-ai-rag-documents"] as const,
   advisingRules: ["admin-advising-rules"] as const,
   portalSettings: ["admin-portal-settings"] as const,
   publicPortalSettings: ["portal-settings"] as const,
@@ -193,6 +194,85 @@ export async function updateAiSettings(
   const response = await api.patch<AiSettingsItem>("/admin/ai/settings", {
     studentAdvisorEnabled,
   });
+  return response.data;
+}
+
+export type RagDocumentStatus =
+  | "ready"
+  | "processing"
+  | "failed"
+  | "pending"
+  | "unindexed";
+
+export type RagDocumentFailureCode =
+  | "CORRUPT_PDF"
+  | "ENCRYPTED_PDF"
+  | "EMPTY_PDF"
+  | "SCANNED_PDF_NO_TEXT"
+  | "EMBEDDING_FAILED"
+  | "STORAGE_READ_FAILED";
+
+export interface RagDocumentStatusItem {
+  _id?: string;
+  courseId: string;
+  courseCode: string;
+  courseNameAr: string;
+  courseNameEn: string;
+  fileName: string;
+  sha256: string;
+  status: RagDocumentStatus;
+  failureCode?: RagDocumentFailureCode;
+  pageCount: number;
+  chunkCount: number;
+  ocrUsed: boolean;
+  embeddingModel?: string;
+  ingestedAt?: string;
+  syllabusUpdatedAt?: string;
+}
+
+export interface RagIngestionOverview {
+  summary: {
+    totalSyllabi: number;
+    readyCount: number;
+    processingCount: number;
+    failedCount: number;
+    unindexedCount: number;
+    totalActiveChunks: number;
+    embeddingModel: string;
+  };
+  items: RagDocumentStatusItem[];
+}
+
+export async function getRagDocumentsOverview(): Promise<RagIngestionOverview> {
+  const response = await api.get<RagIngestionOverview>(
+    "/admin/ai/rag-documents",
+  );
+  return response.data;
+}
+
+export async function reindexCourseRagDocument(
+  courseId: string,
+): Promise<{ queued: boolean; courseId: string; sha256?: string }> {
+  const response = await api.post<{
+    queued: boolean;
+    courseId: string;
+    sha256?: string;
+  }>(`/admin/ai/rag-documents/${courseId}/reindex`, {});
+  return response.data;
+}
+
+export async function reindexAllRagDocuments(
+  forceAll = false,
+): Promise<{
+  totalSyllabi: number;
+  queuedCount: number;
+  skippedCount: number;
+}> {
+  const response = await api.post<{
+    totalSyllabi: number;
+    queuedCount: number;
+    skippedCount: number;
+  }>("/admin/ai/rag-documents/reindex-all", { forceAll });
   return response.data;
 }
 

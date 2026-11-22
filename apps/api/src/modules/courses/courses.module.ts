@@ -18,6 +18,7 @@ import {
 } from '../students/schemas/student-profile.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { MaterialStorageModule } from '../material-storage/material-storage.module';
+import { AiModule } from '../ai/ai.module';
 import { StudentEnrollmentController } from './student-enrollment.controller';
 import { StudentEnrollmentService } from './student-enrollment.service';
 
@@ -25,6 +26,7 @@ import { StudentEnrollmentService } from './student-enrollment.service';
   imports: [
     MaterialStorageModule,
     RegistrationsModule,
+    AiModule,
     MongooseModule.forFeature([
       { name: Course.name, schema: CourseSchema },
       { name: CourseMaterial.name, schema: CourseMaterialSchema },
