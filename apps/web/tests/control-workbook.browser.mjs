@@ -105,9 +105,13 @@ try {
   const midtermRate=page.getByRole('group',{name:'Midterm pass rate',exact:true});
   const finalRate=page.getByRole('group',{name:'Final pass rate',exact:true});
   assert.equal(await finalRate.count(),0,'only the selected midterm rate is displayed');
-  assert.doesNotMatch(await midtermRate.innerText(),/greater than|of 3001/,'pass-rate cards show the percentage without the calculation');
-  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
-  const rateGeometry=await midtermRate.evaluate(element=>({left:element.getBoundingClientRect().left,parentLeft:element.parentElement.getBoundingClientRect().left,width:element.getBoundingClientRect().width}));
+  // One of two present marks exceeds 18. Unentered rows do not count.
+  await midtermRate.getByText('50.00%',{exact:true}).waitFor();
+  const rateGeometry=await midtermRate.evaluate(element=>({
+    left:element.parentElement.getBoundingClientRect().left,
+    parentLeft:element.parentElement.parentElement.getBoundingClientRect().left,
+    width:element.getBoundingClientRect().width,
+  }));
   assert.ok(Math.abs(rateGeometry.left-rateGeometry.parentLeft)<=1 && rateGeometry.width<350,'rate is compact and aligned to the physical left');
   const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
   await heldRow.getByText('Blocked',{exact:true}).waitFor();
@@ -163,15 +167,17 @@ try {
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.status,'banned');
   assert.equal(rows[0].components.midterm.score,null);
+  await midtermRate.getByText('33.33%',{exact:true}).waitFor();
   assert.equal(await optionalReason.inputValue(),'');
   await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
   await page.getByRole('option',{name:'Absent',exact:true}).click();
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.status,'absent');
+  await midtermRate.getByText('50.00%',{exact:true}).waitFor();
   await page.goto(`${base}/en/admin/control/${ids.final}`);
   await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
   assert.equal(await midtermRate.count(),0,'midterm rate is hidden on the final tab');
-  await finalRate.getByText('0.03%',{exact:true}).waitFor();
+  await finalRate.getByText('50.00%',{exact:true}).waitFor();
   for(const state of ['Banned','Incomplete','Excused']) {
     await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
     await page.getByRole('option',{name:state,exact:true}).click();
@@ -186,7 +192,7 @@ try {
   await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('textbox',{name:'260101 Midterm',exact:true}).waitFor();
-  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
+  await midtermRate.getByText('50.00%',{exact:true}).waitFor();
   await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
   await page.getByRole('table').evaluate(table=>table.parentElement.scrollTop=table.parentElement.scrollHeight);
   await page.getByRole('button',{name:'Previous',exact:true}).click();
@@ -194,9 +200,9 @@ try {
   await page.waitForFunction(()=>document.querySelector('table').parentElement.scrollTop===0);
   const readsBeforeSave=workbookReads;await mark.fill('17.5');await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,17.5);await page.waitForLoadState('networkidle');assert.equal(workbookReads,readsBeforeSave,'autosave must patch acknowledged rows instead of downloading the whole roster');
   await mark.fill('19');await page.getByRole('status').getByText(/All changes saved/).waitFor();
-  await midtermRate.getByText('0.07%',{exact:true}).waitFor();
+  await midtermRate.getByText('66.67%',{exact:true}).waitFor();
   await mark.fill('18');await page.getByRole('status').getByText(/All changes saved/).waitFor();
-  await midtermRate.getByText('0.03%',{exact:true}).waitFor();
+  await midtermRate.getByText('33.33%',{exact:true}).waitFor();
   assert.equal(workbookReads,readsBeforeSave,'pass rates update from acknowledged saves without refetching the workbook');
   await mark.press('Enter');assert.equal(await page.getByRole('textbox',{name:'260002 Midterm',exact:true}).evaluate(el=>document.activeElement===el),true);
   denySave=true;await mark.fill('16');await page.getByText('Synthetic save failure').waitFor();assert.equal(await mark.inputValue(),'16');await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).click();await page.getByText('Your unsaved draft was restored. Review the current marks and scheme, then retry saving.',{exact:true}).waitFor();assert.equal(await mark.inputValue(),'16');denySave=false;
@@ -215,7 +221,10 @@ try {
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
   const arabicRate=page.getByRole('group',{name:'نسبة نجاح '+messages.midterm,exact:true});
   await arabicRate.waitFor();
-  const rtlGeometry=await arabicRate.evaluate(element=>({left:element.getBoundingClientRect().left,parentLeft:element.parentElement.getBoundingClientRect().left}));
+  const rtlGeometry=await arabicRate.evaluate(element=>({
+    left:element.parentElement.getBoundingClientRect().left,
+    parentLeft:element.parentElement.parentElement.getBoundingClientRect().left,
+  }));
   assert.ok(Math.abs(rtlGeometry.left-rtlGeometry.parentLeft)<=1,'Arabic indicator is also at the physical left');
   await page.getByRole('button',{name:messages.SUBMIT,exact:true}).click();
   const arabicReview=page.getByRole('dialog');
@@ -238,7 +247,10 @@ try {
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('263001');
   await page.getByRole('textbox',{name:'263001 '+messages.midterm,exact:true}).waitFor();
   assert.equal(await page.locator('tbody tr').count(),1);
-  await page.getByRole('group',{name:'نسبة نجاح '+messages.midterm,exact:true}).locator('bdi').waitFor();
+  const arabicPercent = await page.evaluate(() => new Intl.NumberFormat('ar', {
+    style:'percent', minimumFractionDigits:2, maximumFractionDigits:2,
+  }).format(1/3));
+  await arabicRate.getByText(arabicPercent,{exact:true}).waitFor();
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('');
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
   for(const row of rows)if(!row.components.midterm)row.components.midterm={studentId:row.studentId,score:10,status:'present',rev:1,isPublished:false};
