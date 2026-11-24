@@ -126,7 +126,7 @@ export class ControlWorkbookService {
           examType: { $in: CONTROL_COMPONENT_KEYS },
         })
         .select(
-          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark carriedFrom grace',
+          'studentId examType grade status rev controlApprovedRev cleared isPublished updatedAt attendanceMark quizzesMark carriedFrom grace',
         )
         .batchSize(500)
         .lean(),
@@ -1060,6 +1060,11 @@ export class ControlWorkbookService {
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
+      throw new ConflictException(
+        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
+      );
+    }
     const book = new ExcelJS.Workbook();
     try {
       await book.xlsx.load(
@@ -1236,6 +1241,11 @@ export class ControlWorkbookService {
     );
     if (!detail.capabilities.canEdit)
       throw new ConflictException('SHEET_NOT_EDITABLE');
+    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
+      throw new ConflictException(
+        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
+      );
+    }
     const { rows: roster, scheme } = await this.workbook(user, sheetId);
     if (expectedScheme !== undefined && scheme.version !== expectedScheme)
       throw new ConflictException('SCHEME_CHANGED');
@@ -1487,6 +1497,11 @@ export class ControlWorkbookService {
   async commit(user: AuthenticatedUser, sheetId: string, previewId: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
+      throw new ConflictException(
+        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
+      );
+    }
     this.access.assertPermission(
       user,
       detail.sheet.workflowState === 'IN_REVIEW'

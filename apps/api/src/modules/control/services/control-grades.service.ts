@@ -5,6 +5,7 @@ import {
 } from '../../students/schemas/student-profile.schema';
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -164,12 +165,20 @@ export class ControlGradesService {
       .session(session)
       .lean();
     if (!sheet) throw new NotFoundException('Sheet not found');
-    this.access.assertPermission(
-      user,
-      sheet.workflowState === 'IN_REVIEW'
-        ? PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT
-        : PERMISSIONS.CONTROL_GRADES_ENTER,
-    );
+    const isPartialOpen = sheet.workflowState === 'PARTIAL_OPEN';
+    if (isPartialOpen) {
+      this.access.assertPermission(user, PERMISSIONS.CONTROL_ACCESS);
+      if (!caps.canEnter && !caps.canEditReview) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
+    } else {
+      this.access.assertPermission(
+        user,
+        sheet.workflowState === 'IN_REVIEW'
+          ? PERMISSIONS.CONTROL_GRADES_REVIEW_EDIT
+          : PERMISSIONS.CONTROL_GRADES_ENTER,
+      );
+    }
     const course = await this.courseModel.findById(sheet.courseId).lean();
     if (!course) throw new NotFoundException('Course not found');
     await this.access.assertCourseScope(
@@ -178,7 +187,19 @@ export class ControlGradesService {
       sheet.academicYear,
       sheet.semester,
     );
-    if (
+    if (isPartialOpen) {
+      if (
+        sheet.locked ||
+        !sheet.partialCycle ||
+        !['EDITING', 'RETURNED'].includes(sheet.partialCycle.phase)
+      ) {
+        throw new ConflictException({
+          code: 'PARTIAL_PENDING_APPROVAL',
+          message:
+            'Partial entry is awaiting approval and cannot be edited / الرصد الجزئي بانتظار الاعتماد أو مقفل',
+        });
+      }
+    } else if (
       sheet.locked ||
       !['DRAFT', 'RETURNED', 'IN_REVIEW'].includes(
         sheet.workflowState ?? 'DRAFT',
@@ -264,6 +285,9 @@ export class ControlGradesService {
     const appliedOps = new Map(priorOps.map((o) => [o.opId, o]));
     const seenStudents = new Set<string>();
     const seenOperations = new Set<string>();
+    const partialAllowedSet = isPartialOpen
+      ? new Set(sheet.partialCycle?.allowedStudentIds ?? [])
+      : null;
 
     const results: ChangeResult[] = [];
     const auditRows: Array<Record<string, unknown>> = [];
@@ -334,6 +358,34 @@ export class ControlGradesService {
 
       const student = studentById.get(change.studentId);
       const existing = docByStudent.get(change.studentId);
+      if (partialAllowedSet) {
+        if (!partialAllowedSet.has(change.studentId)) {
+          results.push({
+            ...base,
+            result: 'forbidden',
+            code: 'not_in_partial_cycle',
+            message:
+              'Student is not included in the active partial entry cycle',
+          });
+          continue;
+        }
+        const isLockedApprovedMark = Boolean(
+          existing &&
+          !existing.cleared &&
+          typeof existing.controlApprovedRev === 'number' &&
+          existing.controlApprovedRev === (existing.rev ?? 0) &&
+          !['excused', 'incomplete'].includes(existing.status),
+        );
+        if (isLockedApprovedMark) {
+          results.push({
+            ...base,
+            result: 'forbidden',
+            code: 'grade_already_approved',
+            message: 'Approved grades cannot be edited during partial entry',
+          });
+          continue;
+        }
+      }
       if (heldIds.has(change.studentId)) {
         results.push({
           ...base,
@@ -389,11 +441,19 @@ export class ControlGradesService {
           continue;
         }
       }
+      const allowPartialOverwriteExcused = Boolean(
+        partialAllowedSet &&
+        partialAllowedSet.has(change.studentId) &&
+        existing &&
+        !existing.cleared &&
+        ['excused', 'incomplete'].includes(existing.status),
+      );
       const plan = this.planChange(change, dto.reason, {
         rules,
         caps,
         existing,
         inRoster: rosterIds.has(change.studentId),
+        allowPartialOverwriteExcused,
       });
       if (plan.kind === 'reject') {
         results.push({ ...base, ...plan.result });
@@ -463,16 +523,28 @@ export class ControlGradesService {
     if (auditRows.length > 0) {
       // Every edit and transition writes the same sheet document. Concurrent
       // lock/review/entry transactions therefore conflict instead of passing a stale check.
+      const sheetUpdateFilter = isPartialOpen
+        ? {
+            _id: sheet._id,
+            locked: false,
+            workflowState: 'PARTIAL_OPEN',
+            'partialCycle.cycleId': sheet.partialCycle!.cycleId,
+            'partialCycle.phase': { $in: ['EDITING', 'RETURNED'] },
+          }
+        : {
+            _id: sheet._id,
+            locked: false,
+            $or: [
+              { workflowState: sheet.workflowState ?? 'DRAFT' },
+              { workflowState: { $exists: false } },
+            ],
+          };
+      const sheetIncrement = isPartialOpen
+        ? { $inc: { revision: 1, 'partialCycle.revision': 1 } }
+        : { $inc: { revision: 1 } };
       const touched = await this.sheetModel.updateOne(
-        {
-          _id: sheet._id,
-          locked: false,
-          $or: [
-            { workflowState: sheet.workflowState ?? 'DRAFT' },
-            { workflowState: { $exists: false } },
-          ],
-        },
-        { $inc: { revision: 1 } },
+        sheetUpdateFilter,
+        sheetIncrement,
         { session },
       );
       if (touched.matchedCount !== 1)
@@ -513,6 +585,7 @@ export class ControlGradesService {
       caps: ReturnType<ControlAccessService['getCapabilities']>;
       existing: GradeLean | undefined;
       inRoster: boolean;
+      allowPartialOverwriteExcused?: boolean;
     },
   ):
     | { kind: 'reject'; result: Omit<ChangeResult, 'opId' | 'studentId'> }
@@ -590,7 +663,7 @@ export class ControlGradesService {
       }
     }
 
-    if (existing?.isPublished) {
+    if (existing?.isPublished && !ctx.allowPartialOverwriteExcused) {
       return reject(
         'forbidden',
         'unpublish_required',

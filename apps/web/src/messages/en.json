@@ -1930,7 +1930,8 @@
       "IN_REVIEW": "In review",
       "PENDING_APPROVAL": "Awaiting approval",
       "RETURNED": "Returned",
-      "APPROVED": "Approved"
+      "APPROVED": "Approved",
+      "PARTIAL_OPEN": "Partial entry open"
     },
     "states": {
       "present": "Present",
@@ -1959,7 +1960,12 @@
       "PUBLISH": "Results published",
       "HIDE": "Results hidden",
       "PETITION_APPROVE": "Petition mark approved",
-      "PETITION_REJECT": "Petition mark rejected"
+      "PETITION_REJECT": "Petition mark rejected",
+      "PARTIAL_OPEN": "Partial entry opened",
+      "PARTIAL_SUBMIT": "Partial marks submitted",
+      "PARTIAL_RETURN": "Partial marks returned",
+      "PARTIAL_APPROVE": "Partial marks approved & closed",
+      "PARTIAL_CLOSE": "Partial entry cycle closed"
     },
     "sort": "Sort rows",
     "mark": "Mark",
@@ -1973,7 +1979,8 @@
       "invalid": "Invalid values",
       "dirty": "Pending edits",
       "errors": "Save errors / conflicts",
-      "absent": "Absent"
+      "absent": "Absent",
+      "partial": "Partial entry students only"
     },
     "copy": "Copy selected",
     "fillDown": "Fill from first selected row",

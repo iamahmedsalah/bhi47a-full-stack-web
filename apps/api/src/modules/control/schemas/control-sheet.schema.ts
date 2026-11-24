@@ -3,6 +3,7 @@ import { Document, Types } from 'mongoose';
 import {
   CONTROL_COMPONENT_KEYS,
   CONTROL_WORKFLOW_STATES,
+  type ControlPartialPhase,
   type ControlWorkflowState,
   SEMESTER_VALUES,
   type ControlComponentKey,
@@ -10,6 +11,23 @@ import {
 } from '@student-portal/shared';
 
 export type ControlSheetDocument = ControlSheet & Document;
+
+export interface ControlSheetPartialCycle {
+  cycleId: string;
+  phase: ControlPartialPhase;
+  revision: number;
+  allowedStudentIds: string[];
+  studentReasons?: Record<string, string>;
+  openReason?: string;
+  openedBy: string;
+  openedAt: Date;
+  submittedBy?: string;
+  submittedAt?: Date;
+  submissionDigest?: string;
+  returnReason?: string;
+  returnedBy?: string;
+  returnedAt?: Date;
+}
 
 /**
  * One sheet = one course + term + component. It only carries sheet-level state
@@ -75,6 +93,10 @@ export class ControlSheet {
   /** Explicitly confirmed unentered marks; never interpreted as zero. */
   @Prop({ type: [String], default: [] })
   unenteredStudentIds!: string[];
+
+  /** Active selective/partial entry cycle on an already-approved sheet. */
+  @Prop({ type: Object, default: null })
+  partialCycle?: ControlSheetPartialCycle | null;
 
   @Prop({ type: Object })
   grace?: {

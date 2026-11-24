@@ -300,6 +300,19 @@ export class ControlSheetsService {
       caps.canApproveFinal,
     );
 
+    const workflowState = sheet.workflowState ?? 'DRAFT';
+    const isPartialEditing =
+      workflowState === 'PARTIAL_OPEN' &&
+      Boolean(
+        sheet.partialCycle &&
+        ['EDITING', 'RETURNED'].includes(sheet.partialCycle.phase),
+      );
+    const isPartialPendingApproval =
+      workflowState === 'PARTIAL_OPEN' &&
+      sheet.partialCycle?.phase === 'PENDING_APPROVAL';
+    const canApproveComponent =
+      sheet.component === 'final' ? caps.canApproveFinal : caps.canApprove;
+
     return {
       sheet: {
         id: String(sheet._id),
@@ -307,9 +320,10 @@ export class ControlSheetsService {
         academicYear: sheet.academicYear,
         semester: sheet.semester,
         component: sheet.component,
-        workflowState: sheet.workflowState ?? 'DRAFT',
+        workflowState,
         revision: sheet.revision ?? 0,
         reviewReason: sheet.reviewReason ?? null,
+        partialCycle: sheet.partialCycle ?? null,
         grace: sheet.grace ?? null,
         passThreshold,
         locked: sheet.locked,
@@ -337,18 +351,30 @@ export class ControlSheetsService {
         canManagePassThreshold,
         canEdit:
           !sheet.locked &&
-          (sheet.workflowState === 'IN_REVIEW'
-            ? caps.canEditReview
-            : caps.canEnter &&
-              ['DRAFT', 'RETURNED'].includes(sheet.workflowState ?? 'DRAFT')),
+          (isPartialEditing
+            ? caps.canEnter || caps.canEditReview
+            : workflowState === 'IN_REVIEW'
+              ? caps.canEditReview
+              : caps.canEnter && ['DRAFT', 'RETURNED'].includes(workflowState)),
         canEditReview: caps.canEditReview,
         canSubmit: caps.canSubmit,
         canReview: caps.canReview,
         canReopen: caps.canReopen && !sheet.locked,
+        canOpenPartial:
+          caps.canReopen && workflowState === 'APPROVED' && !sheet.locked,
+        canSubmitPartial:
+          (caps.canSubmit || caps.canReview) &&
+          isPartialEditing &&
+          !sheet.locked,
+        canReturnPartial:
+          (caps.canReview || canApproveComponent) &&
+          isPartialPendingApproval &&
+          !sheet.locked,
+        canApprovePartial:
+          canApproveComponent && isPartialPendingApproval && !sheet.locked,
         canCreatePetitions: caps.canCreatePetitions,
         canApprovePetitions: caps.canApprovePetitions,
-        canApprove:
-          sheet.component === 'final' ? caps.canApproveFinal : caps.canApprove,
+        canApprove: canApproveComponent,
         canApproveFinal: caps.canApproveFinal,
         canImport: caps.canImport,
         canExport: caps.canExport,
@@ -380,7 +406,9 @@ export class ControlSheetsService {
           semester: sheet.semester,
           examType: sheet.component,
         })
-        .select('studentId grade status rev cleared isPublished updatedAt')
+        .select(
+          'studentId grade status rev controlApprovedRev cleared isPublished updatedAt',
+        )
         .batchSize(500)
         .lean(),
     ]);
@@ -798,6 +826,11 @@ export class ControlSheetsService {
       'GRACE',
       'PETITION_APPROVE',
       'PETITION_REJECT',
+      'PARTIAL_OPEN',
+      'PARTIAL_SUBMIT',
+      'PARTIAL_RETURN',
+      'PARTIAL_APPROVE',
+      'PARTIAL_CLOSE',
     ] as const;
 
     const [auditRows, firstEntryRow] = await Promise.all([
@@ -884,6 +917,7 @@ export class ControlSheetsService {
       IN_REVIEW: 1,
       PENDING_APPROVAL: 2,
       APPROVED: 3,
+      PARTIAL_OPEN: 3,
     };
     const currentRank = order[currentState] ?? 0;
 

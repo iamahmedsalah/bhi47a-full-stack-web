@@ -14,6 +14,7 @@ import type {
   ControlCapabilities,
   ControlCheckpoint,
   ControlCourseSummary,
+  ControlPartialCandidatesResponse,
   ControlPetition,
   ControlPetitionStatus,
   ControlPetitionsSummary,
@@ -62,6 +63,8 @@ export const controlKeys = {
   petitionsSummary: (params?: Record<string, unknown>) =>
     [...controlKeys.all, "petitions-summary", params ?? {}] as const,
   petition: (id: string) => [...controlKeys.all, "petition", id] as const,
+  partialCandidates: (sheetId: string, includeExcused: boolean) =>
+    [...controlKeys.all, "partial-candidates", sheetId, includeExcused] as const,
 };
 
 export async function getControlCapabilities(): Promise<ControlCapabilities> {
@@ -144,6 +147,72 @@ export async function unlockControlSheet(
   const res = await api.post<ControlSheetDetails>(
     `/admin/control/sheets/${sheetId}/unlock`,
     { reason },
+  );
+  return res.data;
+}
+
+export async function getControlPartialCandidates(
+  sheetId: string,
+  includeExcused = false,
+): Promise<ControlPartialCandidatesResponse> {
+  const res = await api.get<ControlPartialCandidatesResponse>(
+    `/admin/control/sheets/${sheetId}/partial/candidates`,
+    { params: { includeExcused } },
+  );
+  return res.data;
+}
+
+export async function openControlPartialEntry(
+  sheetId: string,
+  dto: {
+    studentIds: string[];
+    includeExcused?: boolean;
+    reason?: string;
+    studentReasons?: Record<string, string>;
+    expectedRevision: number;
+  },
+): Promise<ControlSheetDetails> {
+  const res = await api.post<ControlSheetDetails>(
+    `/admin/control/sheets/${sheetId}/partial/open`,
+    dto,
+  );
+  return res.data;
+}
+
+export async function submitControlPartialEntry(
+  sheetId: string,
+  dto: { expectedPartialRevision: number; reason?: string },
+): Promise<ControlSheetDetails> {
+  const res = await api.post<ControlSheetDetails>(
+    `/admin/control/sheets/${sheetId}/partial/submit`,
+    dto,
+  );
+  return res.data;
+}
+
+export async function returnControlPartialEntry(
+  sheetId: string,
+  dto: { expectedPartialRevision: number; reason: string },
+): Promise<ControlSheetDetails> {
+  const res = await api.post<ControlSheetDetails>(
+    `/admin/control/sheets/${sheetId}/partial/return`,
+    dto,
+  );
+  return res.data;
+}
+
+export async function approveControlPartialEntry(
+  sheetId: string,
+  dto: {
+    expectedPartialRevision: number;
+    reason?: string;
+    attemptReviewDigest?: string;
+    keepPreviousStudentIds?: string[];
+  },
+): Promise<ControlSheetDetails> {
+  const res = await api.post<ControlSheetDetails>(
+    `/admin/control/sheets/${sheetId}/partial/approve`,
+    dto,
   );
   return res.data;
 }

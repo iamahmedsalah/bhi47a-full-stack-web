@@ -130,11 +130,16 @@ export function ControlAuditDrawer({
   const actionVariant = (action: ControlAuditRow["action"]) => {
     switch (action) {
       case "CREATE":
+      case "PARTIAL_APPROVE":
         return "success" as const;
       case "UPDATE":
+      case "PARTIAL_OPEN":
+      case "PARTIAL_SUBMIT":
+      case "PARTIAL_CLOSE":
         return "info" as const;
       case "CLEAR":
       case "UNLOCK":
+      case "PARTIAL_RETURN":
         return "warning" as const;
       case "LOCK":
         return "danger" as const;

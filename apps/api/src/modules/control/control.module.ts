@@ -48,6 +48,7 @@ import {
 } from './schemas/grading-scheme.schema';
 import { ControlAccessService } from './services/control-access.service';
 import { ControlGradesService } from './services/control-grades.service';
+import { ControlPartialEntryService } from './services/control-partial-entry.service';
 import { ControlPetitionsService } from './services/control-petitions.service';
 import { ControlSheetsService } from './services/control-sheets.service';
 import { GradingSchemeService } from './services/grading-scheme.service';
@@ -86,6 +87,7 @@ import { GradingSchemeService } from './services/grading-scheme.service';
     ControlAccessService,
     ControlSheetsService,
     ControlGradesService,
+    ControlPartialEntryService,
     ControlPetitionsService,
     GradingSchemeService,
   ],

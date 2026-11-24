@@ -8,6 +8,7 @@ import React, {
   useMemo,
   useSyncExternalStore,
 } from 'react';
+import { syncThemeColorMeta } from '@/lib/theme-colors';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const orig = console.error;
@@ -95,7 +96,7 @@ function resolveTheme(theme: ThemePref, systemTheme: ResolvedTheme): ResolvedThe
   return theme === 'system' ? systemTheme : theme;
 }
 
-function applyTheme(resolvedTheme: ResolvedTheme) {
+function applyTheme(theme: ThemePref, resolvedTheme: ResolvedTheme) {
   if (typeof document === 'undefined') return;
 
   document.documentElement.setAttribute('data-theme', resolvedTheme);
@@ -103,6 +104,7 @@ function applyTheme(resolvedTheme: ResolvedTheme) {
 
   // لأنك بتستخدم data-theme فقط
   document.documentElement.classList.remove('dark');
+  syncThemeColorMeta(theme, resolvedTheme);
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
@@ -129,8 +131,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [theme, systemTheme]);
 
   useEffect(() => {
-    applyTheme(resolvedTheme);
-  }, [resolvedTheme]);
+    applyTheme(theme, resolvedTheme);
+  }, [theme, resolvedTheme]);
 
   const setTheme = useCallback((nextTheme: ThemePref) => {
     window.localStorage.setItem(THEME_KEY, nextTheme);

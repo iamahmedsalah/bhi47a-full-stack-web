@@ -9,6 +9,7 @@ export interface ControlEntry {
   status: string | null;
   rev: number;
   isPublished: boolean | null;
+  isApproved?: boolean;
   updatedAt: string | null;
 }
 
@@ -19,6 +20,7 @@ interface GradeLike {
   grade?: number;
   status?: string;
   rev?: number;
+  controlApprovedRev?: number;
   isPublished?: boolean;
   updatedAt?: Date;
 }
@@ -45,6 +47,11 @@ export function toControlEntry(
     status,
     rev: doc.rev ?? 0,
     isPublished: doc.isPublished ?? null,
+    ...(typeof doc.controlApprovedRev === 'number'
+      ? {
+          isApproved: !doc.cleared && doc.controlApprovedRev === (doc.rev ?? 0),
+        }
+      : {}),
     updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : null,
   };
 }

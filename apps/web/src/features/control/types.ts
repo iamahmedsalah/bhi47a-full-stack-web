@@ -52,6 +52,41 @@ export interface ControlCourseSummary {
   components: ControlCourseSummaryComponent[];
 }
 
+export interface ControlSheetPartialCycle {
+  cycleId: string;
+  phase: "EDITING" | "PENDING_APPROVAL" | "RETURNED";
+  revision: number;
+  allowedStudentIds: string[];
+  studentReasons?: Record<string, string>;
+  openReason?: string;
+  openedBy: string;
+  openedAt: string;
+  submittedBy?: string;
+  submittedAt?: string;
+  submissionDigest?: string;
+  returnReason?: string;
+  returnedBy?: string;
+  returnedAt?: string;
+}
+
+export interface ControlPartialCandidate {
+  studentId: string;
+  studentCode: string;
+  name: string;
+  nameAr: string | null;
+  currentStatus: string | null;
+  reasonKind: "unentered" | "excused" | "incomplete";
+  tuitionBlocked: boolean;
+  tuitionStatus: string | null;
+}
+
+export interface ControlPartialCandidatesResponse {
+  sheetId: string;
+  revision: number;
+  component: ControlComponentKey;
+  candidates: ControlPartialCandidate[];
+}
+
 export interface ControlSheetDetails {
   sheet: {
     id: string;
@@ -60,9 +95,15 @@ export interface ControlSheetDetails {
     semester: Semester;
     component: ControlComponentKey;
     workflowState:
-      "DRAFT" | "IN_REVIEW" | "PENDING_APPROVAL" | "RETURNED" | "APPROVED";
+      | "DRAFT"
+      | "IN_REVIEW"
+      | "PENDING_APPROVAL"
+      | "RETURNED"
+      | "APPROVED"
+      | "PARTIAL_OPEN";
     revision: number;
     reviewReason: string | null;
+    partialCycle?: ControlSheetPartialCycle | null;
     grace?: {
       amount: number;
       changed: number;
@@ -98,6 +139,10 @@ export interface ControlSheetDetails {
     canSubmit: boolean;
     canReview: boolean;
     canReopen?: boolean;
+    canOpenPartial?: boolean;
+    canSubmitPartial?: boolean;
+    canReturnPartial?: boolean;
+    canApprovePartial?: boolean;
     canCreatePetitions?: boolean;
     canApprovePetitions?: boolean;
     canApprove?: boolean;
@@ -122,6 +167,7 @@ export interface ControlEntry {
   status: string | null;
   rev: number;
   isPublished: boolean | null;
+  isApproved?: boolean;
   updatedAt: string | null;
 }
 
@@ -242,7 +288,12 @@ export interface ControlAuditRow {
     | "HIDE"
     | "GRACE"
     | "PETITION_APPROVE"
-    | "PETITION_REJECT";
+    | "PETITION_REJECT"
+    | "PARTIAL_OPEN"
+    | "PARTIAL_SUBMIT"
+    | "PARTIAL_RETURN"
+    | "PARTIAL_APPROVE"
+    | "PARTIAL_CLOSE";
   source: "GRID" | "XLSX" | "SYSTEM";
   component: string;
   oldValue: {

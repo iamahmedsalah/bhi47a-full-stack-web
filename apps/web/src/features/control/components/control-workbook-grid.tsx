@@ -32,6 +32,8 @@ import {
   CheckCircle2,
   RotateCcw,
   Percent,
+  ShieldCheck,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -90,6 +92,9 @@ import {
   reviewControlSheet,
   getControlAttempts,
   updateControlPassThreshold,
+  submitControlPartialEntry,
+  returnControlPartialEntry,
+  approveControlPartialEntry,
 } from "../api";
 import { ControlHelpNotes } from "./control-help-notes";
 import { HelpNote } from "@/components/ui/help-note";
@@ -97,6 +102,7 @@ import { normalizeSearchText } from "@/lib/search-text";
 import { ControlDownloadDialogs } from "./control-download-dialogs";
 import { ControlGraceDialog } from "./control-grace-dialog";
 import { ControlImportLauncher } from "./control-import-launcher";
+import { ControlPartialOpenDialog } from "./control-partial-open-dialog";
 import { ControlPetitionCreateDialog } from "./control-petition-create-dialog";
 import { ControlPetitionReviewDialog } from "./control-petition-review-dialog";
 import type {
@@ -159,6 +165,11 @@ export function ControlWorkbookGrid({
   const { sheet, capabilities: caps } = detail;
   const key = sheet.component;
   const [graceOpen, setGraceOpen] = useState(false);
+  const [partialOpenDialog, setPartialOpenDialog] = useState(false);
+  const [partialAction, setPartialAction] = useState<
+    "PARTIAL_SUBMIT" | "PARTIAL_RETURN" | "PARTIAL_APPROVE" | null
+  >(null);
+  const [partialReason, setPartialReason] = useState("");
   const [petitionCreateOpen, setPetitionCreateOpen] = useState(false);
   const [activePetitionReview, setActivePetitionReview] =
     useState<ControlPetition | null>(null);
@@ -192,6 +203,7 @@ export function ControlWorkbookGrid({
   const [busy, setBusy] = useState(false);
   const [attemptDialog, setAttemptDialog] = useState<{
     approval: boolean;
+    partial?: boolean;
   } | null>(null);
   const [failed, setFailed] = useState(Boolean(restoredDraft));
   const [needsSchemeRefresh, setNeedsSchemeRefresh] = useState(false);
@@ -433,6 +445,36 @@ export function ControlWorkbookGrid({
       }),
     [rows, sort, key, rtl, descending],
   );
+  const isPartialOpen =
+    sheet.workflowState === "PARTIAL_OPEN" && Boolean(sheet.partialCycle);
+  const partialCycle = sheet.partialCycle ?? null;
+  const partialAllowedSet = useMemo(
+    () => new Set(partialCycle?.allowedStudentIds ?? []),
+    [partialCycle],
+  );
+  const canEditRow = useCallback(
+    (row: WorkbookRow) => {
+      if (!caps.canEdit || row.tuition?.isBlocked || row.notRegistered) {
+        return false;
+      }
+      if (isPartialOpen) {
+        if (!partialAllowedSet.has(row.studentId)) return false;
+        const current = row.components[key];
+        if (
+          current?.isApproved &&
+          !["excused", "incomplete"].includes(current.status ?? "")
+        ) {
+          return false;
+        }
+        return true;
+      }
+      return (
+        !row.components[key]?.isPublished &&
+        !row.components[key]?.carriedFrom
+      );
+    },
+    [caps.canEdit, isPartialOpen, key, partialAllowedSet],
+  );
   const searchableRows = useMemo(
     () =>
       sortedRows.filter((row) => {
@@ -441,9 +483,19 @@ export function ControlWorkbookGrid({
         if (onlyMissing && row.components[key]?.status) return false;
         if (filter === "absent" && row.components[key]?.status !== "absent")
           return false;
+        if (filter === "partial" && !partialAllowedSet.has(row.studentId))
+          return false;
         return true;
       }),
-    [sortedRows, deferredSearch, onlyMissing, filter, key, searchIndex],
+    [
+      sortedRows,
+      deferredSearch,
+      onlyMissing,
+      filter,
+      key,
+      searchIndex,
+      partialAllowedSet,
+    ],
   );
   const filtered = useMemo(() => {
     if (!["invalid", "dirty", "errors"].includes(filter)) return searchableRows;
@@ -852,13 +904,7 @@ export function ControlWorkbookGrid({
     field: "raw" | "attendance" | "quizzes" | "status",
     value: string,
   ) {
-    if (
-      !caps.canEdit ||
-      row.tuition?.isBlocked ||
-      row.notRegistered ||
-      row.components[key]?.isPublished
-    )
-      return;
+    if (!canEditRow(row)) return;
     const prior = row.components[key];
     setFailed(false);
     setErrors((current) => ({ ...current, [row.studentId]: "" }));
@@ -999,6 +1045,81 @@ export function ControlWorkbookGrid({
       setBusy(false);
     }
   }
+  async function transitionPartial(
+    attemptReview?: {
+      attemptReviewDigest: string;
+      keepPreviousStudentIds: string[];
+    },
+    override?: "PARTIAL_APPROVE",
+  ) {
+    const activeOp = override ?? partialAction;
+    if (!activeOp || !partialCycle || !(await save())) return false;
+    if (activeOp === "PARTIAL_RETURN" && partialReason.trim().length < 3) {
+      toast.error(
+        rtl
+          ? "يرجى كتابة سبب إعادة الدرجات للمراجعة (٣ أحرف على الأقل)"
+          : "Enter a return reason (at least 3 characters)",
+      );
+      return false;
+    }
+    setBusy(true);
+    try {
+      if (
+        activeOp === "PARTIAL_APPROVE" &&
+        key === "final" &&
+        !attemptReview
+      ) {
+        const comparison = await getControlAttempts(sheet.id);
+        if (comparison.total > 0) {
+          setAttemptDialog({ approval: true, partial: true });
+          setPartialAction(null);
+          return false;
+        }
+      }
+
+      if (activeOp === "PARTIAL_SUBMIT") {
+        await submitControlPartialEntry(sheet.id, {
+          expectedPartialRevision: partialCycle.revision,
+          reason: partialReason.trim() || undefined,
+        });
+        toast.success(
+          rtl
+            ? "تم إرسال الدرجات الجديدة للاعتماد بنجاح"
+            : "New partial marks submitted for approval",
+        );
+      } else if (activeOp === "PARTIAL_RETURN") {
+        await returnControlPartialEntry(sheet.id, {
+          expectedPartialRevision: partialCycle.revision,
+          reason: partialReason.trim(),
+        });
+        toast.success(
+          rtl
+            ? "تمت إعادة الرصد الجزئي للمراجعة للطلاب المحددين فقط"
+            : "Partial entry returned for selected students only",
+        );
+      } else {
+        await approveControlPartialEntry(sheet.id, {
+          expectedPartialRevision: partialCycle.revision,
+          reason: partialReason.trim() || undefined,
+          ...(attemptReview ?? {}),
+        });
+        toast.success(
+          rtl
+            ? "تم اعتماد الدرجات الجديدة وإغلاق دورة الرصد الجزئي بنجاح"
+            : "New marks approved and partial entry cycle closed",
+        );
+      }
+      setPartialAction(null);
+      setPartialReason("");
+      await refresh();
+      return true;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
   async function previewRows(raw: string, first: number) {
     if (!caps.canImport || !(await save())) return;
     const lines = raw.trim().split(/\r?\n/);
@@ -1082,10 +1203,7 @@ export function ControlWorkbookGrid({
         readOnly={
           component !== key ||
           busy ||
-          !caps.canEdit ||
-          row.notRegistered ||
-          Boolean(entry?.isPublished) ||
-          Boolean(entry?.carriedFrom)
+          !canEditRow(row)
         }
         onChange={(e) => edit(row, field, e.target.value)}
         onPaste={(e) => {
@@ -1388,8 +1506,22 @@ export function ControlWorkbookGrid({
           onClose={() => setAttemptDialog(null)}
           onCarried={refresh}
           onApproved={async (review) => {
-            if (await transition(review, "APPROVE")) setAttemptDialog(null);
+            if (attemptDialog.partial) {
+              if (await transitionPartial(review, "PARTIAL_APPROVE"))
+                setAttemptDialog(null);
+            } else if (await transition(review, "APPROVE")) {
+              setAttemptDialog(null);
+            }
           }}
+        />
+      )}
+      {partialOpenDialog && caps.canOpenPartial && (
+        <ControlPartialOpenDialog
+          open={partialOpenDialog}
+          onOpenChange={setPartialOpenDialog}
+          locale={locale}
+          detail={detail}
+          onOpened={refresh}
         />
       )}
       {downloadKind && (
@@ -1599,17 +1731,37 @@ export function ControlWorkbookGrid({
                 "inline-flex items-center gap-1.5 px-3 py-1 rounded-squircle text-xs font-bold border",
                 sheet.workflowState === "APPROVED"
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : ["IN_REVIEW", "PENDING_APPROVAL"].includes(
-                        sheet.workflowState,
-                      )
-                    ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                    : sheet.workflowState === "RETURNED"
-                      ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                      : "bg-surface text-muted-foreground border-border/70",
+                  : sheet.workflowState === "PARTIAL_OPEN"
+                    ? "bg-amber-500/12 text-amber-300 border-amber-500/35"
+                    : ["IN_REVIEW", "PENDING_APPROVAL"].includes(
+                          sheet.workflowState,
+                        )
+                      ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                      : sheet.workflowState === "RETURNED"
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                        : "bg-surface text-muted-foreground border-border/70",
               )}
             >
               <span className="size-2 rounded-full animate-pulse bg-current" />
-              <span>{t(`workflow.${sheet.workflowState}`)}</span>
+              <span>
+                {t(`workflow.${sheet.workflowState}`)}
+                {isPartialOpen && partialCycle && (
+                  <>
+                    {" · "}
+                    {partialCycle.phase === "PENDING_APPROVAL"
+                      ? rtl
+                        ? "بانتظار اعتماد العميد"
+                        : "Awaiting Approval"
+                      : partialCycle.phase === "RETURNED"
+                        ? rtl
+                          ? "معاد للمراجعة"
+                          : "Returned"
+                        : rtl
+                          ? "قيد الرصد"
+                          : "Editing"}
+                  </>
+                )}
+              </span>
             </div>
           </div>
 
@@ -1696,6 +1848,26 @@ export function ControlWorkbookGrid({
               </>
             )}
 
+          {caps.canOpenPartial &&
+            sheet.workflowState === "APPROVED" &&
+            !sheet.locked && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-squircle text-xs font-semibold border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 gap-1.5 h-8 px-3"
+                disabled={pending || busy}
+                onClick={() => setPartialOpenDialog(true)}
+              >
+                <UserCheck className="size-3.5" />
+                <span>
+                  {rtl
+                    ? "فتح الرصد للطلاب غير المرصود لهم درجات"
+                    : "Open Selective Entry"}
+                </span>
+              </Button>
+            )}
+
           {caps.canReopen &&
             sheet.workflowState === "APPROVED" &&
             !sheet.locked && (
@@ -1711,8 +1883,103 @@ export function ControlWorkbookGrid({
                 <span>{t("REOPEN")}</span>
               </Button>
             )}
+
+          {isPartialOpen && (
+            <>
+              {caps.canSubmitPartial && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="rounded-squircle text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm gap-1.5 h-8 px-3.5"
+                  disabled={pending || busy || sheet.locked}
+                  onClick={() => setPartialAction("PARTIAL_SUBMIT")}
+                >
+                  <Send className="size-3.5" />
+                  <span>
+                    {rtl
+                      ? "إرسال الدرجات الجديدة للاعتماد"
+                      : "Submit Partial Marks"}
+                  </span>
+                </Button>
+              )}
+              {caps.canApprovePartial && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="rounded-squircle text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm gap-1.5 h-8 px-3.5"
+                  disabled={pending || busy || sheet.locked}
+                  onClick={() => setPartialAction("PARTIAL_APPROVE")}
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  <span>
+                    {rtl
+                      ? "اعتماد ونشر الدرجات الجديدة"
+                      : "Approve New Marks"}
+                  </span>
+                </Button>
+              )}
+              {caps.canReturnPartial && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-squircle text-xs font-semibold border-rose-500/30 text-rose-400 hover:bg-rose-500/10 gap-1.5 h-8 px-3"
+                  disabled={pending || busy || sheet.locked}
+                  onClick={() => setPartialAction("PARTIAL_RETURN")}
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>
+                    {rtl ? "إعادة للمراجعة" : "Return Partial"}
+                  </span>
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
+
+      {isPartialOpen && partialCycle && (
+        <div className="rounded-2xl border border-amber-500/35 bg-amber-500/[0.07] p-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between text-xs">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 font-bold text-amber-200">
+              <UserCheck className="size-4 shrink-0 text-amber-300" />
+              <span>
+                {rtl
+                  ? `دورة الرصد الجزئي مفتوحة لـ ${partialCycle.allowedStudentIds.length} طالب — الدرجات المعتمدة الأصلية مقفلة ومحمية`
+                  : `Partial entry active for ${partialCycle.allowedStudentIds.length} selected students — approved marks remain locked`}
+              </span>
+            </div>
+            {(partialCycle.returnReason || partialCycle.openReason) && (
+              <p className="text-muted-foreground">
+                {partialCycle.returnReason
+                  ? rtl
+                    ? `ملاحظة الإعادة للمراجعة: ${partialCycle.returnReason}`
+                    : `Return note: ${partialCycle.returnReason}`
+                  : rtl
+                    ? `سبب الفتح: ${partialCycle.openReason}`
+                    : `Reason: ${partialCycle.openReason}`}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setFilter(filter === "partial" ? "all" : "partial")
+            }
+            className="rounded-squircle h-8 shrink-0 border-amber-500/35 text-xs font-semibold cursor-pointer"
+          >
+            {filter === "partial"
+              ? rtl
+                ? "عرض كل الطلاب"
+                : "Show All Students"
+              : rtl
+                ? "طلاب الرصد الجزئي فقط"
+                : "Filter Partial Students"}
+          </Button>
+        </div>
+      )}
 
       {/* Grid Utilities & Data Tools Strip */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -1834,7 +2101,7 @@ export function ControlWorkbookGrid({
             </Button>
           </>
         )}
-        {caps.canImport && caps.canEdit && (
+        {caps.canImport && caps.canEdit && !isPartialOpen && (
           <>
             <Button
               variant="outline"
@@ -1876,7 +2143,14 @@ export function ControlWorkbookGrid({
               <SelectValue />
             </SelectTrigger>
             <SelectContent dir={rtl ? "rtl" : "ltr"}>
-              {["all", "invalid", "dirty", "errors", "absent"].map((mode) => (
+              {[
+                "all",
+                ...(isPartialOpen ? ["partial"] : []),
+                "invalid",
+                "dirty",
+                "errors",
+                "absent",
+              ].map((mode) => (
                 <SelectItem key={mode} value={mode}>
                   {t(`filters.${mode}`)}
                 </SelectItem>
@@ -2297,7 +2571,9 @@ export function ControlWorkbookGrid({
                   "border-t",
                   row.tuition?.isBlocked
                     ? "[&>td]:bg-[color-mix(in_srgb,var(--card)_92%,#f43f5e_8%)] hover:[&>td]:bg-[color-mix(in_srgb,var(--card)_88%,#f43f5e_12%)]"
-                    : "hover:bg-muted/30",
+                    : isPartialOpen && partialAllowedSet.has(row.studentId)
+                      ? "[&>td]:bg-amber-500/[0.06] hover:[&>td]:bg-amber-500/[0.11]"
+                      : "hover:bg-muted/30",
                 )}
               >
                 <td className="p-2 text-center">
@@ -2323,6 +2599,26 @@ export function ControlWorkbookGrid({
                 </td>
                 <td className="p-3">
                   {rtl ? row.nameAr || row.name : row.name}
+                  {isPartialOpen && partialAllowedSet.has(row.studentId) && (
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[10px] font-bold text-amber-300 ms-1.5">
+                      <UserCheck className="size-3 shrink-0" aria-hidden="true" />
+                      {rtl ? "مفتوح للرصد الجزئي" : "Partial Entry"}
+                      {partialCycle?.studentReasons?.[row.studentId]
+                        ? ` · ${partialCycle.studentReasons[row.studentId]}`
+                        : ""}
+                    </span>
+                  )}
+                  {isPartialOpen &&
+                    !partialAllowedSet.has(row.studentId) &&
+                    row.components[key]?.isApproved && (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-squircle border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ms-1.5">
+                        <ShieldCheck
+                          className="size-3 shrink-0"
+                          aria-hidden="true"
+                        />
+                        {rtl ? "معتمد · مقفل" : "Approved · Locked"}
+                      </span>
+                    )}
                   {row.tuition?.isBlocked && (
                     <span className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-400">
                       <Lock className="size-3 shrink-0" aria-hidden="true" />
@@ -2416,13 +2712,7 @@ export function ControlWorkbookGrid({
                       row.components[key]?.status ||
                       "not_entered"
                     }
-                    disabled={
-                      Boolean(row.tuition?.isBlocked) ||
-                      !caps.canEdit ||
-                      row.notRegistered ||
-                      Boolean(row.components[key]?.isPublished) ||
-                      Boolean(row.components[key]?.carriedFrom)
-                    }
+                    disabled={!canEditRow(row)}
                     onValueChange={(value) => edit(row, "status", value)}
                   >
                     <SelectTrigger
@@ -2493,11 +2783,7 @@ export function ControlWorkbookGrid({
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
-                            disabled={
-                              !caps.canEdit ||
-                              pending ||
-                              Boolean(row.tuition?.isBlocked)
-                            }
+                            disabled={!canEditRow(row) || pending}
                             className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-rose-500 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-400 outline-none disabled:opacity-50 disabled:pointer-events-none"
                             onSelect={() => {
                               setSelected([row.studentId]);
@@ -2553,6 +2839,104 @@ export function ControlWorkbookGrid({
           </Button>
         </div>
       </div>
+      <Dialog
+        open={Boolean(partialAction)}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setPartialAction(null);
+            setPartialReason("");
+          }
+        }}
+      >
+        <DialogContent flush dir={rtl ? "rtl" : "ltr"} className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-start gap-3 text-start">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/15 text-primary">
+                <UserCheck className="size-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <DialogTitle className="text-base font-bold text-start">
+                  {partialAction === "PARTIAL_SUBMIT"
+                    ? rtl
+                      ? "إرسال درجات الرصد الجزئي للاعتماد"
+                      : "Submit Partial Marks for Approval"
+                    : partialAction === "PARTIAL_RETURN"
+                      ? rtl
+                        ? "إعادة درجات الرصد الجزئي للمراجعة"
+                        : "Return Partial Marks for Review"
+                      : rtl
+                        ? "اعتماد ونشر الدرجات الجديدة"
+                        : "Approve & Publish New Marks"}
+                </DialogTitle>
+                <DialogDescription className="text-start text-xs">
+                  {partialAction === "PARTIAL_SUBMIT"
+                    ? rtl
+                      ? "سيُغلق تعديل درجات الطلاب المحددين أثناء انتظار اعتماد العميد، مع بقاء الدرجات الأصلية محمية ومنشورة."
+                      : "Editing for selected students will lock while awaiting dean approval. Original marks stay published."
+                    : partialAction === "PARTIAL_RETURN"
+                      ? rtl
+                        ? "سيُعاد فتح الرصد للطلاب المعنيين في الدورة الجزئية فقط دون المساس بالدرجات الأصلية."
+                        : "Editing will reopen for the selected partial-entry students only."
+                      : rtl
+                        ? "سيتم اعتماد ونشر درجات الطلاب الجدد فقط وإغلاق دورة الرصد الجزئي نهائيًا داخل Transaction."
+                        : "Only the newly entered marks will be approved and published, and the partial cycle will close."}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogBody>
+            <div className="rounded-xl border border-border/60 bg-secondary/20 p-3.5 space-y-2">
+              <label className="block space-y-1.5 text-xs font-semibold text-foreground">
+                <span>
+                  {partialAction === "PARTIAL_RETURN"
+                    ? rtl
+                      ? "سبب الإعادة للمراجعة (مطلوب):"
+                      : "Return reason (required):"
+                    : rtl
+                      ? "ملاحظة / سبب الإجراء (اختياري):"
+                      : "Note / reason (optional):"}
+                </span>
+                <Input
+                  value={partialReason}
+                  maxLength={500}
+                  disabled={busy}
+                  onChange={(e) => setPartialReason(e.target.value)}
+                  className="rounded-squircle h-9 text-xs"
+                />
+              </label>
+            </div>
+          </DialogBody>
+          <DialogFooter className="gap-2 rtl:sm:justify-start">
+            <Button
+              type="button"
+              disabled={
+                busy ||
+                saving ||
+                (partialAction === "PARTIAL_RETURN" &&
+                  partialReason.trim().length < 3)
+              }
+              onClick={() => void transitionPartial()}
+              className="rounded-squircle gap-1.5"
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              <span>{rtl ? "تأكيد ومتابعة" : "Confirm"}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setPartialAction(null);
+                setPartialReason("");
+              }}
+              className="rounded-squircle"
+            >
+              {rtl ? "إلغاء" : "Cancel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={Boolean(action)}
         onOpenChange={(open) => {

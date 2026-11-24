@@ -421,6 +421,7 @@ export class ControlReleaseStore {
     actorId: string,
     session: ClientSession,
     expectedDigest?: string,
+    notifyStudentIds?: string[],
   ): Promise<Release> {
     const preview = await this.preview(sheet, session);
     if (expectedDigest && expectedDigest !== preview.digest)
@@ -478,20 +479,25 @@ export class ControlReleaseStore {
       preview.activeReleaseId !== String(release._id) &&
       release.marks.length
     ) {
+      const allowedNoticeSet = notifyStudentIds
+        ? new Set(notifyStudentIds)
+        : null;
       const students = [
         ...new Set(release.marks.map((m) => String(m.studentId))),
-      ];
-      await this.db.collection<Outbox>('control_release_outbox').insertMany(
-        students.map((id) => ({
-          _id: new Types.ObjectId(),
-          studentId: new Types.ObjectId(id),
-          actorId: release.actorId,
-          releaseId: release._id,
-          attempts: 0,
-          createdAt: new Date(),
-        })),
-        { session },
-      );
+      ].filter((id) => !allowedNoticeSet || allowedNoticeSet.has(id));
+      if (students.length > 0) {
+        await this.db.collection<Outbox>('control_release_outbox').insertMany(
+          students.map((id) => ({
+            _id: new Types.ObjectId(),
+            studentId: new Types.ObjectId(id),
+            actorId: release.actorId,
+            releaseId: release._id,
+            attempts: 0,
+            createdAt: new Date(),
+          })),
+          { session },
+        );
+      }
     }
     await this.pointers.replaceOne(
       { _id: sheet._id },

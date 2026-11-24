@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
+import { THEME_COLORS } from '@/lib/theme-colors';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -8,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'بوابة الطالب والخدمات الأكاديمية الإلكترونية - المعهد العالي للعلوم الإدارية المتقدمة والحاسبات',
     start_url: '/ar',
     display: 'standalone',
-    background_color: '#021c1c',
-    theme_color: '#0f3d3d',
+    background_color: THEME_COLORS.light,
+    theme_color: THEME_COLORS.light,
     lang: 'ar',
     dir: 'rtl',
     icons: [

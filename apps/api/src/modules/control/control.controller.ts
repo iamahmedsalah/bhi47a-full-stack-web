@@ -60,8 +60,16 @@ import {
 } from './dto/control-petition.dto';
 import { ControlAccessService } from './services/control-access.service';
 import { ControlCheckpointDto } from './dto/control-checkpoint.dto';
+import {
+  ApprovePartialEntryDto,
+  OpenPartialEntryDto,
+  PartialCandidatesQueryDto,
+  ReturnPartialEntryDto,
+  SubmitPartialEntryDto,
+} from './dto/control-partial.dto';
 import { ControlEditorCheckpointService } from './services/control-editor-checkpoint.service';
 import { ControlGradesService } from './services/control-grades.service';
+import { ControlPartialEntryService } from './services/control-partial-entry.service';
 import { ControlPetitionsService } from './services/control-petitions.service';
 import { ControlSheetsService } from './services/control-sheets.service';
 import { GradingSchemeService } from './services/grading-scheme.service';
@@ -86,6 +94,7 @@ export class ControlController {
     private readonly grace: ControlGraceService,
     private readonly checkpoints: ControlEditorCheckpointService,
     private readonly petitions: ControlPetitionsService,
+    private readonly partial: ControlPartialEntryService,
   ) {}
 
   @Get('sheets/:id/grace/status')
@@ -196,6 +205,67 @@ export class ControlController {
     @Body() dto: ReviewSheetDto,
   ) {
     return this.workbook.review(user, id, dto);
+  }
+
+  @Get('sheets/:id/partial/candidates')
+  @ApiOperation({
+    summary: 'List unentered (NULL) or excused candidates for partial entry',
+  })
+  getPartialCandidates(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query() query: PartialCandidatesQueryDto,
+  ) {
+    return this.partial.listCandidates(user, id, Boolean(query.includeExcused));
+  }
+
+  @Post('sheets/:id/partial/open')
+  @ApiOperation({
+    summary: 'Open a selective partial entry cycle for selected students',
+  })
+  openPartialEntry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: OpenPartialEntryDto,
+  ) {
+    return this.partial.openPartial(user, id, dto);
+  }
+
+  @Post('sheets/:id/partial/submit')
+  @ApiOperation({
+    summary: 'Submit new partial entry marks for dean approval',
+  })
+  submitPartialEntry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SubmitPartialEntryDto,
+  ) {
+    return this.partial.submitPartial(user, id, dto);
+  }
+
+  @Post('sheets/:id/partial/return')
+  @ApiOperation({
+    summary:
+      'Return partial entry marks for correction to selected students only',
+  })
+  returnPartialEntry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ReturnPartialEntryDto,
+  ) {
+    return this.partial.returnPartial(user, id, dto);
+  }
+
+  @Post('sheets/:id/partial/approve')
+  @ApiOperation({
+    summary: 'Approve and publish newly entered partial marks and close cycle',
+  })
+  approvePartialEntry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ApprovePartialEntryDto,
+  ) {
+    return this.partial.approvePartial(user, id, dto);
   }
 
   @Get('sheets/:id/export')

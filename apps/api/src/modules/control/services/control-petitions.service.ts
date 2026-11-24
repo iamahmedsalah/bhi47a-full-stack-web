@@ -255,6 +255,24 @@ export class ControlPetitionsService {
       }
 
       const existing = gradeByStudent.get(item.studentId);
+      if (
+        sheet.workflowState === 'PARTIAL_OPEN' &&
+        sheet.partialCycle?.allowedStudentIds?.includes(item.studentId)
+      ) {
+        throw new ConflictException(
+          `لا يمكن تقديم التماس للطالب ${student.studentCode ?? student.name} لأنه مشمول حاليًا في دورة الرصد الجزئي قبل اعتمادها`,
+        );
+      }
+      if (
+        !existing ||
+        existing.cleared ||
+        typeof existing.controlApprovedRev !== 'number' ||
+        existing.controlApprovedRev !== (existing.rev ?? 0)
+      ) {
+        throw new BadRequestException(
+          `لا يمكن تقديم التماس على درجة الطالب ${student.studentCode ?? student.name} لأنها غير معتمدة أو ما زالت مسودة`,
+        );
+      }
       const currentEntry = toControlEntry(existing ?? null);
       const currentScore = currentEntry?.score ?? null;
       const currentStatus =
@@ -636,6 +654,24 @@ export class ControlPetitionsService {
             : null;
 
           if (decisionInput.decision === 'APPROVED') {
+            if (
+              sheet.workflowState === 'PARTIAL_OPEN' &&
+              sheet.partialCycle?.allowedStudentIds?.includes(studentIdStr)
+            ) {
+              throw new ConflictException(
+                `الطالب ${item.studentCode} مشمول حاليًا في دورة الرصد الجزئي؛ يجب اعتماد الرصد الجزئي أولًا`,
+              );
+            }
+            if (
+              !existing ||
+              existing.cleared ||
+              typeof existing.controlApprovedRev !== 'number' ||
+              existing.controlApprovedRev !== (existing.rev ?? 0)
+            ) {
+              throw new ConflictException(
+                `درجة الطالب ${item.studentCode} لم تعد معتمدة أو ما زالت مسودة`,
+              );
+            }
             const currentRev = existing?.rev ?? 0;
             if (currentRev !== item.baselineRev) {
               throw new ConflictException(
@@ -654,7 +690,9 @@ export class ControlPetitionsService {
                 : 0;
             const scale = calculateGradeScale(percentage, status);
             const newRev = currentRev + 1;
-            const keepApproved = sheet.workflowState === 'APPROVED';
+            const keepApproved = ['APPROVED', 'PARTIAL_OPEN'].includes(
+              sheet.workflowState ?? '',
+            );
 
             const filter = {
               studentId: item.studentId,

@@ -12,6 +12,7 @@ import { MaterialUploadProvider } from '@/features/courses/material-upload-provi
 import { ConsoleBanner } from '@/providers/console-banner';
 import { getSiteUrl } from '@/lib/site-url';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
+import { THEME_COLORS } from '@/lib/theme-colors';
 
 export async function generateMetadata({
   params,
@@ -88,6 +89,20 @@ const themeInitScript = `
     document.documentElement.setAttribute('data-theme', resolvedTheme);
     document.documentElement.style.colorScheme = resolvedTheme;
     document.documentElement.classList.remove('dark');
+    const head = document.head;
+    if (head) {
+      const existing = head.querySelector('meta[name="theme-color"][data-theme-override="true"]');
+      if (theme === 'system') {
+        if (existing) existing.remove();
+      } else {
+        const color = resolvedTheme === 'dark' ? '${THEME_COLORS.dark}' : '${THEME_COLORS.light}';
+        const meta = existing || document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        meta.setAttribute('data-theme-override', 'true');
+        meta.setAttribute('content', color);
+        if (!existing) head.prepend(meta);
+      }
+    }
   } catch {
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.style.colorScheme = 'light';

@@ -1835,7 +1835,8 @@
       "invalid": "قيم غير صحيحة",
       "dirty": "تغييرات معلقة",
       "errors": "أخطاء الحفظ والتعارضات",
-      "absent": "الغائبون"
+      "absent": "الغائبون",
+      "partial": "طلاب الرصد الجزئي فقط"
     },
     "copy": "نسخ المحدد",
     "missingExport": "تصدير الدرجات الناقصة",
@@ -1956,7 +1957,8 @@
       "IN_REVIEW": "قيد المراجعة",
       "PENDING_APPROVAL": "بانتظار الاعتماد",
       "RETURNED": "معاد للتصحيح",
-      "APPROVED": "معتمد"
+      "APPROVED": "معتمد",
+      "PARTIAL_OPEN": "رصد جزئي مفتوح"
     },
     "states": {
       "present": "حاضر",
@@ -1982,7 +1984,12 @@
       "PUBLISH": "نشر النتائج",
       "HIDE": "إخفاء النتائج",
       "PETITION_APPROVE": "اعتماد التماس درجة",
-      "PETITION_REJECT": "رفض التماس درجة"
+      "PETITION_REJECT": "رفض التماس درجة",
+      "PARTIAL_OPEN": "فتح الرصد الجزئي",
+      "PARTIAL_SUBMIT": "إرسال الرصد الجزئي للاعتماد",
+      "PARTIAL_RETURN": "إعادة الرصد الجزئي للمراجعة",
+      "PARTIAL_APPROVE": "اعتماد ونشر الرصد الجزئي",
+      "PARTIAL_CLOSE": "إغلاق دورة الرصد الجزئي"
     },
     "schemeHelpTitle": "كيف يعمل توزيع الدرجات؟",
     "midtermStatusOnly": "الميدترم يقبل حاضر أو غائب أو محروم فقط.",

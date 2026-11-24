@@ -129,13 +129,16 @@ export function ControlWorkflowHistoryDialog({
   const actionVariant = (action: string) => {
     switch (action) {
       case "APPROVE":
+      case "PARTIAL_APPROVE":
       case "PUBLISH":
       case "PETITION_APPROVE":
         return "success" as const;
       case "SUBMIT":
       case "SUBMIT_APPROVAL":
+      case "PARTIAL_SUBMIT":
         return "warning" as const;
       case "RETURN":
+      case "PARTIAL_RETURN":
       case "LOCK":
       case "HIDE":
       case "PETITION_REJECT":
@@ -143,6 +146,8 @@ export function ControlWorkflowHistoryDialog({
       case "OPENED":
       case "UNLOCK":
       case "REOPEN":
+      case "PARTIAL_OPEN":
+      case "PARTIAL_CLOSE":
       case "GRACE":
         return "info" as const;
       default:
@@ -174,7 +179,9 @@ export function ControlWorkflowHistoryDialog({
         ? ("success" as const)
         : activeState === "RETURNED"
           ? ("danger" as const)
-          : activeState === "IN_REVIEW" || activeState === "PENDING_APPROVAL"
+          : activeState === "IN_REVIEW" ||
+              activeState === "PENDING_APPROVAL" ||
+              activeState === "PARTIAL_OPEN"
             ? ("warning" as const)
             : ("info" as const);
 

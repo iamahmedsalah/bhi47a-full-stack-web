@@ -104,9 +104,25 @@ export function ControlPetitionCreateDialog({
   const attendanceMax = scheme?.courseworkAttendanceMax ?? 5;
   const quizzesMax = scheme?.courseworkQuizzesMax ?? 15;
 
+  const partialAllowedSet = useMemo(
+    () =>
+      detail.sheet.workflowState === "PARTIAL_OPEN"
+        ? new Set(detail.sheet.partialCycle?.allowedStudentIds ?? [])
+        : null,
+    [detail.sheet.workflowState, detail.sheet.partialCycle?.allowedStudentIds],
+  );
+
   const eligibleRows = useMemo(
-    () => rows.filter((r) => !r.notRegistered && !r.tuition?.isBlocked),
-    [rows],
+    () =>
+      rows.filter((r) => {
+        if (r.notRegistered || r.tuition?.isBlocked) return false;
+        if (partialAllowedSet?.has(r.studentId)) return false;
+        const entry = r.components[component];
+        if (!entry || !entry.status) return false;
+        // Only approved (non-draft) grades may be petitioned
+        return entry.isApproved !== false;
+      }),
+    [rows, component, partialAllowedSet],
   );
   const rowById = useMemo(
     () => new Map(eligibleRows.map((r) => [r.studentId, r])),

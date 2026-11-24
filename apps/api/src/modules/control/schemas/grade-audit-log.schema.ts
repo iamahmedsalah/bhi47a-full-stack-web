@@ -20,6 +20,11 @@ export const GRADE_AUDIT_ACTIONS = [
   'GRACE',
   'PETITION_APPROVE',
   'PETITION_REJECT',
+  'PARTIAL_OPEN',
+  'PARTIAL_SUBMIT',
+  'PARTIAL_RETURN',
+  'PARTIAL_APPROVE',
+  'PARTIAL_CLOSE',
 ] as const;
 export type GradeAuditAction = (typeof GRADE_AUDIT_ACTIONS)[number];
 

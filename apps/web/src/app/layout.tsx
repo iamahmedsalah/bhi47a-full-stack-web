@@ -1,12 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import { getSiteUrl } from '@/lib/site-url';
 import { INSTITUTE_INFO } from '@/data/institutional-data';
+import { THEME_COLORS } from '@/lib/theme-colors';
 import './globals.css';
 
 const siteUrl = getSiteUrl();
 
 export const viewport: Viewport = {
-  themeColor: '#0f3d3d',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: THEME_COLORS.light },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLORS.dark },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
