@@ -525,7 +525,7 @@ function StudentLoginContent() {
                   aria-live="polite"
                   className="w-full space-y-4 text-center animate-in fade-in zoom-in-95 duration-300"
                 >
-                  <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border border-amber-500/35 bg-amber-500/12 text-amber-300 shadow-sm">
+                  <div className="mx-auto flex size-16 items-center justify-center rounded-squircle border border-amber-500/35 bg-amber-500/12 text-amber-300 shadow-sm">
                     <Wrench className="size-8" />
                   </div>
 
@@ -554,14 +554,14 @@ function StudentLoginContent() {
                   </div>
 
                   {validEta && formattedCairoEta && (
-                    <div className="rounded-xl border border-border/65 bg-secondary/20 p-4 space-y-3 text-start">
+                    <div className="rounded-xl border border-border/65 bg-secondary/20 p-3.5 sm:p-4 space-y-3 text-start">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-muted-foreground">
                           {locale === "ar"
                             ? "الوقت التقريبي لعودة النظام:"
                             : "Approximate return time:"}
                         </span>
-                        <span className="rounded-squircle border border-border/75 bg-card px-2.5 py-1 font-mono text-xs font-bold text-primary">
+                        <span className="rounded-md border border-border/75 bg-card px-2.5 py-1 font-mono text-xs font-bold text-primary">
                           <bdi>{formattedCairoEta}</bdi>
                         </span>
                       </div>
@@ -571,7 +571,7 @@ function StudentLoginContent() {
                           className="grid grid-cols-3 gap-2 text-center"
                           dir="ltr"
                         >
-                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                          <div className="rounded-md border border-border/65 bg-card/85 py-2.5 px-2">
                             <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
                               {String(hours).padStart(2, "0")}
                             </div>
@@ -579,7 +579,7 @@ function StudentLoginContent() {
                               {locale === "ar" ? "ساعة" : "Hours"}
                             </div>
                           </div>
-                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                          <div className="rounded-md border border-border/65 bg-card/85 py-2.5 px-2">
                             <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
                               {String(minutes).padStart(2, "0")}
                             </div>
@@ -587,7 +587,7 @@ function StudentLoginContent() {
                               {locale === "ar" ? "دقيقة" : "Minutes"}
                             </div>
                           </div>
-                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                          <div className="rounded-md border border-border/65 bg-card/85 py-2.5 px-2">
                             <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
                               {String(seconds).padStart(2, "0")}
                             </div>
@@ -615,7 +615,7 @@ function StudentLoginContent() {
                         setForcedMaintenance(null);
                       }
                     }}
-                    className="w-full min-h-11 rounded-squircle gap-2 font-bold text-xs sm:text-sm cursor-pointer"
+                    className="h-auto min-h-11 w-full whitespace-normal py-2.5 rounded-squircle gap-2 font-bold text-xs sm:text-sm cursor-pointer"
                   >
                     <RefreshCw
                       className={`size-4 shrink-0 ${

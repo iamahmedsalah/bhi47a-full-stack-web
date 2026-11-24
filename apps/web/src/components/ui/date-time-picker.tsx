@@ -112,13 +112,14 @@ export function DateTimePicker({
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-      <div className="relative flex items-center w-full">
+      <div className="relative flex items-center w-full min-w-0">
         <PopoverPrimitive.Trigger asChild disabled={disabled}>
           <Button
             type="button"
             variant="outline"
             className={cn(
-              'w-full justify-start text-start font-normal h-10 border-border bg-surface/50 rounded-squircle hover:bg-surface/70 focus:ring-1 focus:ring-primary gap-2.5 px-3.5',
+              'h-auto min-h-10 w-full min-w-0 whitespace-normal justify-start text-start font-normal border-border bg-surface/50 rounded-squircle hover:bg-surface/70 focus:ring-1 focus:ring-primary gap-2.5 px-3.5 py-2',
+              value && !disabled && 'pe-8',
               !value && 'text-muted-foreground',
               isError &&
                 'border-rose-500/60 bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/30 hover:border-rose-500/80',
@@ -131,7 +132,12 @@ export function DateTimePicker({
                 isError ? 'text-rose-400' : 'text-primary',
               )}
             />
-            <span className="truncate flex-1 font-mono text-xs leading-none">
+            <span
+              className={cn(
+                'min-w-0 flex-1 break-words text-xs leading-snug',
+                date && 'font-mono',
+              )}
+            >
               {displayText}
             </span>
           </Button>
