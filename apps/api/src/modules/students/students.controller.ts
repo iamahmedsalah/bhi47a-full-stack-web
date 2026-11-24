@@ -26,6 +26,7 @@ import {
   ResetAcademicRecordsDto,
 } from './dto/student.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { ParseObjectIdPipe } from '../../common/pipes/parse-objectid.pipe';
@@ -203,6 +204,16 @@ export class StudentsController {
       dto.targetDepartment,
       dto.targetLevel,
     );
+  }
+
+  @Public()
+  @Get('portal-settings/student-login-status')
+  @ApiOperation({
+    summary:
+      'Public student login maintenance status & approximate return time',
+  })
+  async getStudentLoginStatus() {
+    return this.studentsService.getStudentLoginStatus();
   }
 
   @Get('portal-settings')

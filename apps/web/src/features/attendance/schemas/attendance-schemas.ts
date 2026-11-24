@@ -183,10 +183,14 @@ status: z.enum(["present", "late"] as const, {
 interface ApiErrorShape {
   response?: {
     data?: {
+      code?: string;
       message?: string;
+      messageEn?: string;
     };
   };
+  code?: string;
   message?: string;
+  messageEn?: string;
 }
 
 export function getAttendanceErrorMessage(
@@ -195,9 +199,25 @@ export function getAttendanceErrorMessage(
 ): string {
   const isAr = locale.startsWith("ar");
   const err = error as ApiErrorShape | null | undefined;
+  const code = err?.response?.data?.code || err?.code || "";
   const rawMsg = err?.response?.data?.message || err?.message || "";
 
   const normalized = String(rawMsg).toLowerCase();
+
+  if (
+    code === "STUDENT_TUITION_BLOCKED" ||
+    normalized.includes("محجوب") ||
+    normalized.includes("مصروفات") ||
+    normalized.includes("unpaid tuition") ||
+    normalized.includes("withheld")
+  ) {
+    return isAr
+      ? rawMsg ||
+          "عفواً، الحساب محجوب ماليًا ولا يمكن تسجيل الحضور (QR أو يدويًا) لحين سداد المصروفات الدراسية."
+      : err?.response?.data?.messageEn ||
+          err?.messageEn ||
+          "Attendance check-in (QR and manual) is disabled because this account is withheld due to unpaid tuition fees.";
+  }
 
   if (
     normalized.includes("جلسة الحضور مغلقة") ||

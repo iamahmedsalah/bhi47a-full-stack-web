@@ -113,6 +113,48 @@ describe('revocable session policy', () => {
     await store.revoke(first, 'first');
     await store.assertActive(second, 'second');
   });
+  it('enforces the 24-hour server-side sliding idle timeout and extends it on touch without exceeding absolute expiry', async () => {
+    const model = records();
+    const store = new AuthSessionStore(model as never, config);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const token: SessionClaims = {
+      ...claims(),
+      iat: nowSec,
+      exp: nowSec + 7 * 24 * 3600,
+    };
+    await store.register(token);
+    expect(model.rows[0].idleExpiresAt).toBeInstanceOf(Date);
+    expect(model.rows[0].lastActivityAt).toBeInstanceOf(Date);
+    // Default idle timeout is 24h (1440 min)
+    const initialRemainingHours =
+      (model.rows[0].idleExpiresAt.getTime() - Date.now()) / (3600 * 1000);
+    expect(initialRemainingHours).toBeGreaterThan(23.9);
+    expect(initialRemainingHours).toBeLessThanOrEqual(24.05);
+
+    // Expire idle window even though 7-day absolute JWT expiresAt is still valid
+    model.rows[0].idleExpiresAt = new Date(Date.now() - 1000);
+    await expect(store.assertActive(token, 'raw')).rejects.toThrow(
+      'Session expired due to inactivity',
+    );
+
+    // Touch slides idleExpiresAt forward (capped at absolute expiresAt)
+    const touched = await store.touch(token, 'raw');
+    expect(touched).not.toBeNull();
+    expect(touched!.idleTimeoutSeconds).toBe(24 * 3600);
+    await store.assertActive(token, 'raw');
+
+    // Short absolute token expiry must never be exceeded by touch()
+    const shortToken: SessionClaims = {
+      ...claims(),
+      iat: nowSec,
+      exp: nowSec + 600, // 10 minutes absolute
+    };
+    await store.register(shortToken);
+    const shortTouch = await store.touch(shortToken, 'short');
+    expect(Date.parse(shortTouch!.idleExpiresAt)).toBeLessThanOrEqual(
+      shortToken.exp * 1000,
+    );
+  });
   it('registers concurrent retries once without extending expiry, then refuses to resurrect a revoked session', async () => {
     const model = records();
     const store = new AuthSessionStore(model as never, config);

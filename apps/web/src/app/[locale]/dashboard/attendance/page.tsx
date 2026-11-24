@@ -5,9 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useParams } from "next/navigation";
 import {
+  Award,
   ClipboardList,
   CheckCircle2,
   Clock,
+  Lock,
+  ShieldAlert,
   ShieldCheck,
   QrCode,
   BookOpen,
@@ -15,12 +18,17 @@ import {
   ChevronRight,
   XCircle,
 } from "lucide-react";
+import api from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { LoadingState, ErrorState } from "@/components/ui/feedback";
 import { CustomDropdown } from "@/components/ui/custom-dropdown";
-import { attendanceApi } from "@/features/attendance/api/attendance-api";
+import {
+  attendanceApi,
+  type StudentLiveSessionItem,
+} from "@/features/attendance/api/attendance-api";
+import { DashboardLiveAttendanceHub } from "@/features/attendance/components/dashboard-live-attendance-hub";
 import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
 
 export default function StudentAttendancePage() {
@@ -32,6 +40,20 @@ export default function StudentAttendancePage() {
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [showScanDialog, setShowScanDialog] = useState<boolean>(false);
+  const [selectedScanSession, setSelectedScanSession] =
+    useState<StudentLiveSessionItem | null>(null);
+
+  const profileQuery = useQuery({
+    queryKey: ["student-profile"],
+    queryFn: async () => {
+      const res = await api.get<
+        | { isBlocked?: boolean; blockReason?: string }
+        | { data: { isBlocked?: boolean; blockReason?: string } }
+      >("/students/me/profile");
+      return "data" in res.data ? res.data.data : res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Fetch student active/live sessions
   const liveSessionsQuery = useQuery({
@@ -62,7 +84,16 @@ export default function StudentAttendancePage() {
     excusedCount: 0,
     absentCount: 0,
     attendanceRate: 100,
+    totalBonusPoints: 0,
   };
+  const totalBonusPoints = summary.totalBonusPoints ?? 0;
+  const isStudentBlocked =
+    Boolean(profileQuery.data?.isBlocked) ||
+    Boolean(liveSessionsQuery.data?.isBlocked);
+  const blockReason =
+    profileQuery.data?.blockReason ||
+    liveSessionsQuery.data?.blockReason ||
+    null;
 
   const courses = data?.courses || [];
   const records = useMemo(() => data?.records || [], [data?.records]);
@@ -124,14 +155,33 @@ export default function StudentAttendancePage() {
         </div>
 
         {/* Actions & Status Badge */}
-        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-center">
-          <Button
-            onClick={() => setShowScanDialog(true)}
-            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
-          >
-            <QrCode className="h-4 w-4" />
-            <span>{isAr ? "تسجيل الحضور (QR / كود)" : "Check In Now"}</span>
-          </Button>
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto self-start sm:self-center">
+          {isStudentBlocked ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled
+              className="w-full sm:w-auto min-h-11 rounded-squircle gap-2 border-rose-500/35 bg-rose-500/10 text-rose-300 font-bold text-xs cursor-not-allowed"
+            >
+              <Lock className="h-4 w-4 shrink-0" />
+              <span>
+                {isAr
+                  ? "تسجيل الحضور موقوف (حساب محجوب)"
+                  : "Check-in Blocked (Tuition Hold)"}
+              </span>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setSelectedScanSession(null);
+                setShowScanDialog(true);
+              }}
+              className="w-full sm:w-auto min-h-11 rounded-squircle gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
+            >
+              <QrCode className="h-4 w-4" />
+              <span>{isAr ? "تسجيل الحضور (QR / كود)" : "Check In Now"}</span>
+            </Button>
+          )}
 
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
@@ -166,93 +216,48 @@ export default function StudentAttendancePage() {
         </div>
       </div>
 
-      {/* Live Attendance Sessions Section */}
-      {liveSessionsQuery.data?.sessions &&
-        liveSessionsQuery.data.sessions.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary" />
-                </span>
-                <span>
-                  {isAr
-                    ? "محاضرات وسكاشن منعقدة الآن (حضور مباشر)"
-                    : "Live Sessions in Progress"}
-                </span>
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {liveSessionsQuery.data.sessions.map((session) => (
-                <Card
-                  key={session._id}
-                  className="p-4 bg-card border border-border/70 hover:border-primary/40 flex flex-col justify-between gap-3 shadow-sm transition-all rounded-2xl"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                          {session.courseCode}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {session.sessionType === "lecture"
-                            ? isAr
-                              ? "محاضرة"
-                              : "Lecture"
-                            : isAr
-                              ? "سكشن"
-                              : "Section"}
-                        </span>
-                      </div>
-                      <h3 className="text-base font-bold text-foreground mt-1">
-                        {session.courseName || session.courseCode}
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {isAr
-                          ? `القائم بالتدريس: ${session.createdByNameAr || session.createdByName}`
-                          : `Instructor: ${session.createdByNameEn || session.createdByName}`}
-                      </p>
-                    </div>
-
-                    {session.alreadyCheckedIn ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>{isAr ? "تم تسجيل حضورك" : "Checked In"}</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>
-                          {isAr
-                            ? `متبقي ${Math.ceil(session.remainingSeconds / 60)} دقيقة`
-                            : `${Math.ceil(session.remainingSeconds / 60)}m left`}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-
-                  {!session.alreadyCheckedIn && (
-                    <Button
-                      onClick={() => setShowScanDialog(true)}
-                      className="w-full gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
-                    >
-                      <QrCode className="h-3.5 w-3.5" />
-                      <span>
-                        {isAr
-                          ? "مسح الرمز لتسجيل الحضور"
-                          : "Scan QR to Check In"}
-                      </span>
-                    </Button>
-                  )}
-                </Card>
-              ))}
-            </div>
+      {isStudentBlocked && (
+        <div className="rounded-2xl border border-rose-500/35 bg-rose-500/10 p-4 text-start flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-squircle border border-rose-500/35 bg-rose-500/15 text-rose-400">
+            <ShieldAlert className="size-4" />
           </div>
-        )}
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs sm:text-sm font-bold text-rose-300">
+              {isAr
+                ? "تسجيل الحضور موقوف مؤقتًا لحجب الحساب ماليًا"
+                : "Attendance Check-in Paused Due to Tuition Hold"}
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {isAr
+                ? "لا يمكن تسجيل الحضور عبر مسح رمز QR أو التحضير اليدوي لحين سداد المصروفات الدراسية ومراجعة شؤون الطلاب."
+                : "Neither QR scanning nor manual check-in is permitted while tuition fees remain unsettled."}
+            </p>
+            {blockReason && (
+              <p className="text-[11px] font-semibold text-rose-300">
+                {isAr ? `السبب المسجل: ${blockReason}` : `Reason: ${blockReason}`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile-First Multi-Session Live Attendance Hub */}
+      <DashboardLiveAttendanceHub
+        sessions={liveSessionsQuery.data?.sessions || []}
+        isBlocked={isStudentBlocked}
+        blockReason={blockReason}
+        totalBonusPoints={totalBonusPoints}
+        locale={locale}
+        showHistoryLink={false}
+        onScanSession={(session) => {
+          if (isStudentBlocked) return;
+          setSelectedScanSession(session ?? null);
+          setShowScanDialog(true);
+        }}
+      />
 
       {/* Aggregate Statistics Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* Overall Percentage */}
         <Card className="col-span-2 sm:col-span-1 p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between relative overflow-hidden shadow-sm">
           <div className="flex items-center justify-between">
@@ -343,6 +348,24 @@ export default function StudentAttendancePage() {
             </p>
           </div>
         </Card>
+
+        {/* Total Bonus Marks */}
+        <Card className="p-4 bg-card/40 border-amber-500/30 backdrop-blur-sm flex flex-col justify-between shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-amber-300">
+              {isAr ? "البونص (Bonus)" : "Bonus"}
+            </span>
+            <Award className="h-4 w-4 text-amber-300" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black font-mono text-amber-300">
+              <bdi dir="ltr">+{totalBonusPoints}</bdi>
+            </span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isAr ? "درجة مكافأة" : "Reward marks"}
+            </p>
+          </div>
+        </Card>
       </div>
 
       {/* Course Breakdown Section */}
@@ -406,6 +429,12 @@ export default function StudentAttendancePage() {
                       <span className="text-rose-400">
                         {course.absentCount} {isAr ? "غياب" : "abs"}
                       </span>
+                      {(course.totalBonusPoints ?? 0) > 0 && (
+                        <span className="text-amber-300 font-bold">
+                          <bdi dir="ltr">+{course.totalBonusPoints}</bdi>{" "}
+                          {isAr ? "بونص" : "bonus"}
+                        </span>
+                      )}
                     </div>
 
                     <button
@@ -554,6 +583,9 @@ export default function StudentAttendancePage() {
                     <th className="p-3.5 text-center">
                       {isAr ? "وسيلة التحقق" : "Method"}
                     </th>
+                    <th className="p-3.5 text-center">
+                      {isAr ? "البونص" : "Bonus"}
+                    </th>
                     <th className="p-3.5 text-end">
                       {isAr ? "الحالة" : "Status"}
                     </th>
@@ -606,6 +638,20 @@ export default function StudentAttendancePage() {
                           )}
                         </span>
                       </td>
+                      <td className="p-3.5 text-center">
+                        {(record.bonusPoints ?? 0) > 0 ? (
+                          <span
+                            title={record.bonusReason || undefined}
+                            className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-300 font-sans"
+                          >
+                            <Award className="h-3 w-3 shrink-0" />
+                            <bdi dir="ltr">+{record.bonusPoints}</bdi>
+                            <span>{isAr ? "بونص" : "Bonus"}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </td>
                       <td className="p-3.5 text-end">
                         <AttendanceStatusBadge
                           status={record.status}
@@ -625,12 +671,26 @@ export default function StudentAttendancePage() {
                   key={record._id}
                   className="p-3.5 bg-card/45 border-border/70 space-y-2.5 shadow-sm"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-sm font-bold text-foreground">
                       {record.courseCode}
                     </span>
-                    <AttendanceStatusBadge status={record.status} isAr={isAr} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(record.bonusPoints ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-300">
+                          <Award className="h-3 w-3 shrink-0" />
+                          <bdi dir="ltr">+{record.bonusPoints}</bdi>
+                          <span>{isAr ? "بونص" : "Bonus"}</span>
+                        </span>
+                      )}
+                      <AttendanceStatusBadge status={record.status} isAr={isAr} />
+                    </div>
                   </div>
+                  {record.bonusReason && (record.bonusPoints ?? 0) > 0 && (
+                    <p className="text-[11px] text-amber-300/90">
+                      {record.bonusReason}
+                    </p>
+                  )}
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
                     <span className="font-sans">
@@ -665,8 +725,20 @@ export default function StudentAttendancePage() {
 
       {/* Student QR Scanner Dialog */}
       <StudentQrScannerDialog
-        open={showScanDialog}
-        onOpenChange={setShowScanDialog}
+        open={showScanDialog && !isStudentBlocked}
+        onOpenChange={(open) => {
+          setShowScanDialog(open);
+          if (!open) setSelectedScanSession(null);
+        }}
+        sessionContext={
+          selectedScanSession
+            ? {
+                courseCode: selectedScanSession.courseCode,
+                courseName: selectedScanSession.courseName,
+                sessionType: selectedScanSession.sessionType,
+              }
+            : null
+        }
         onSuccess={() => {
           historyQuery.refetch();
           liveSessionsQuery.refetch();

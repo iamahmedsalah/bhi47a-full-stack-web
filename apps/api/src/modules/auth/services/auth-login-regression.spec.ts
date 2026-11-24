@@ -163,4 +163,65 @@ describe('existing password, Google and session contracts', () => {
       expect.objectContaining({ httpOnly: false }),
     );
   });
+
+  it('blocks student password and Google sign-in with STUDENT_LOGIN_MAINTENANCE while keeping admin login open', async () => {
+    const eta = '2026-11-24T16:00:00.000Z';
+    const maintenanceSettingsModel = {
+      findOne: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            studentLoginMaintenance: true,
+            studentLoginMaintenanceEta: new Date(eta),
+            studentLoginMaintenanceMessage: 'صيانة مجدولة',
+          }),
+        }),
+      }),
+    };
+    const gatedLogin = new AuthLoginService(
+      {
+        ...users,
+        findByEmail: jest.fn().mockResolvedValue({
+          ...user,
+          role: 'admin',
+          email: 'admin@bhi.edu.eg',
+        }),
+      } as unknown as UsersService,
+      sessions,
+      jwt,
+      config,
+      {} as EmailsService,
+      undefined,
+      undefined,
+      maintenanceSettingsModel as never,
+    );
+
+    await expect(
+      gatedLogin.studentLogin({
+        studentCode: user.studentCode,
+        password: 'current-password',
+      }),
+    ).rejects.toMatchObject({
+      status: 503,
+      response: expect.objectContaining({
+        code: 'STUDENT_LOGIN_MAINTENANCE',
+        eta,
+      }),
+    });
+
+    await expect(
+      gatedLogin.googleLogin('mock-google-credential'),
+    ).rejects.toMatchObject({
+      status: 503,
+      response: expect.objectContaining({
+        code: 'STUDENT_LOGIN_MAINTENANCE',
+        eta,
+      }),
+    });
+
+    const adminRes = await gatedLogin.adminLogin({
+      email: 'admin@bhi.edu.eg',
+      password: 'admin-password',
+    });
+    expect(adminRes.user.role).toBe('admin');
+  });
 });

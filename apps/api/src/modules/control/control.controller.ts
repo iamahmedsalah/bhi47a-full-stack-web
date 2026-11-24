@@ -88,6 +88,14 @@ export class ControlController {
     private readonly petitions: ControlPetitionsService,
   ) {}
 
+  @Get('sheets/:id/grace/status')
+  getGraceStatus(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseObjectIdPipe) id: string,
+  ) {
+    return this.grace.getStatus(user, id);
+  }
+
   @Post('sheets/:id/grace/preview')
   previewGrace(
     @CurrentUser() user: AuthenticatedUser,

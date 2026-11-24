@@ -589,32 +589,51 @@ describe('StudentsService Unit Tests', () => {
       mockSystemSettingsModel.create.mockResolvedValueOnce({
         registrationVisible: true,
         syllabiVisible: true,
+        studentLoginMaintenance: false,
       });
 
       const res = await service.getPortalSettings();
       expect(res).toEqual({
         registrationVisible: true,
         syllabiVisible: true,
+        studentLoginMaintenance: false,
+        studentLoginMaintenanceEta: null,
+        studentLoginMaintenanceMessage: null,
       });
       expect(mockSystemSettingsModel.create).toHaveBeenCalled();
     });
 
-    it('updatePortalSettings persists updated flags and user id', async () => {
-      const mockSettingsDoc = {
+    it('updatePortalSettings persists updated flags, maintenance mode, ETA, and user id', async () => {
+      const mockSettingsDoc: Record<string, any> = {
         registrationVisible: true,
         syllabiVisible: true,
+        studentLoginMaintenance: false,
+        studentLoginMaintenanceEta: null,
+        studentLoginMaintenanceMessage: null,
         save: jest.fn().mockResolvedValue(true),
       };
       mockSystemSettingsModel.findOne.mockResolvedValueOnce(mockSettingsDoc);
 
       const adminId = new Types.ObjectId().toString();
+      const eta = '2026-11-24T15:30:00.000Z';
       const res = await service.updatePortalSettings(
-        { registrationVisible: false, syllabiVisible: false },
+        {
+          registrationVisible: false,
+          syllabiVisible: false,
+          studentLoginMaintenance: true,
+          studentLoginMaintenanceEta: eta,
+          studentLoginMaintenanceMessage: 'تحديث الخوادم',
+        },
         adminId,
       );
 
-      expect(res.registrationVisible).toBe(false);
-      expect(res.syllabiVisible).toBe(false);
+      expect(res).toEqual({
+        registrationVisible: false,
+        syllabiVisible: false,
+        studentLoginMaintenance: true,
+        studentLoginMaintenanceEta: eta,
+        studentLoginMaintenanceMessage: 'تحديث الخوادم',
+      });
       expect(mockSettingsDoc.save).toHaveBeenCalled();
     });
 

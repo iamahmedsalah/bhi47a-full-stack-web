@@ -94,6 +94,7 @@ export interface StudentLiveSessionItem extends AttendanceInstructorDto {
   remainingSeconds: number;
   alreadyCheckedIn: boolean;
   checkedInStatus?: "present" | "late" | "excused" | null;
+  bonusPoints?: number;
 }
 
 export interface AttendanceRecordDto {
@@ -120,6 +121,12 @@ export interface AttendanceRecordDto {
   markedByNameAr?: string;
   markedByNameEn?: string;
   note?: string;
+  bonusPoints?: number;
+  bonusReason?: string;
+  bonusAwardedByName?: string;
+  bonusAwardedByNameAr?: string;
+  bonusAwardedByNameEn?: string;
+  bonusAwardedAt?: string;
 }
 
 export interface PaginatedRecordsResponse {
@@ -149,6 +156,7 @@ export interface CourseAttendanceSummary {
   absentCount: number;
   excusedCount: number;
   attendanceRate: number;
+  totalBonusPoints?: number;
 }
 
 export interface StudentAttendanceHistoryResponse {
@@ -159,6 +167,7 @@ export interface StudentAttendanceHistoryResponse {
     excusedCount: number;
     absentCount: number;
     attendanceRate: number;
+    totalBonusPoints?: number;
   };
   courses?: CourseAttendanceSummary[];
   records: AttendanceRecordDto[];
@@ -296,6 +305,18 @@ export const attendanceApi = {
     return res.data;
   },
 
+  // Award or adjust bonus marks for an attendance record
+  async updateRecordBonus(
+    recordId: string,
+    payload: { bonusPoints: number; reason?: string },
+  ): Promise<AttendanceRecordDto> {
+    const res = await api.patch<AttendanceRecordDto>(
+      `/attendance/records/${recordId}/bonus`,
+      payload,
+    );
+    return res.data;
+  },
+
   // Manual check-in student
   async manualStudentCheckIn(
     sessionId: string,
@@ -359,10 +380,14 @@ export const attendanceApi = {
   // Student active/live sessions
   async getStudentLiveSessions(): Promise<{
     sessions: StudentLiveSessionItem[];
+    isBlocked?: boolean;
+    blockReason?: string | null;
   }> {
-    const res = await api.get<{ sessions: StudentLiveSessionItem[] }>(
-      "/attendance/student/live-sessions",
-    );
+    const res = await api.get<{
+      sessions: StudentLiveSessionItem[];
+      isBlocked?: boolean;
+      blockReason?: string | null;
+    }>("/attendance/student/live-sessions");
     return res.data;
   },
 

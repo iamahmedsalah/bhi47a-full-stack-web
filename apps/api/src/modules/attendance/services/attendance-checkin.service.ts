@@ -348,6 +348,16 @@ export class AttendanceCheckInService {
       );
     }
 
+    if (studentProfile?.isBlocked) {
+      throw new ForbiddenException({
+        code: 'STUDENT_TUITION_BLOCKED',
+        message:
+          'عفواً، لا يمكن تسجيل الحضور نظراً لحجب الحساب لعدم سداد المصروفات الدراسية. يرجى مراجعة خزينة المعهد وشؤون الطلاب.',
+        messageEn:
+          'Attendance check-in is disabled because your account is withheld due to unpaid tuition fees. Please visit the institute treasury and student affairs.',
+      });
+    }
+
     if (!isEnrolled) {
       throw new ForbiddenException(ATTENDANCE_NOT_ENROLLED);
     }
@@ -542,8 +552,11 @@ export class AttendanceCheckInService {
       .sort({ startsAt: -1 })
       .lean();
 
+    const isBlocked = Boolean(student?.isBlocked);
+    const blockReason = student?.blockReason || null;
+
     if (!openSessions.length) {
-      return { sessions: [] };
+      return { sessions: [], isBlocked, blockReason };
     }
 
     // Check which sessions student has already checked in to
@@ -590,10 +603,11 @@ export class AttendanceCheckInService {
         remainingSeconds,
         alreadyCheckedIn: Boolean(rec),
         checkedInStatus: rec ? rec.status : null,
+        bonusPoints: typeof rec?.bonusPoints === 'number' ? rec.bonusPoints : 0,
       };
     });
 
-    return { sessions: liveSessions };
+    return { sessions: liveSessions, isBlocked, blockReason };
   }
 
   /**

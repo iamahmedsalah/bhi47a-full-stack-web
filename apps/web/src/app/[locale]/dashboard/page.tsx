@@ -42,7 +42,11 @@ import { cn } from "@/lib/cn";
 
 import dynamic from "next/dynamic";
 import { useAuth } from "@/providers/auth-provider";
-import { attendanceApi } from "@/features/attendance/api/attendance-api";
+import {
+  attendanceApi,
+  type StudentLiveSessionItem,
+} from "@/features/attendance/api/attendance-api";
+import { DashboardLiveAttendanceHub } from "@/features/attendance/components/dashboard-live-attendance-hub";
 import { getStudentDisplayNames } from "@/features/students/student-name";
 import { getPublicPortalSettings, settingsKeys } from "@/features/settings/api";
 import { StudentCourseCatalog } from "@/features/courses/components/student-course-catalog";
@@ -120,6 +124,8 @@ export default function StudentDashboard() {
 
   // 4. Live Attendance Sessions Query (adaptive 45s interval, never in background)
   const [showScanDialog, setShowScanDialog] = React.useState(false);
+  const [selectedScanSession, setSelectedScanSession] =
+    React.useState<StudentLiveSessionItem | null>(null);
   const liveSessionsQuery = useQuery({
     queryKey: ["student-live-attendance-sessions"],
     queryFn: () => attendanceApi.getStudentLiveSessions(),
@@ -207,9 +213,12 @@ export default function StudentDashboard() {
     : null;
   const eligibility = eligibilityQuery.data ?? null;
   const liveSessions = liveSessionsQuery.data?.sessions || [];
-  const activeLiveSession =
-    liveSessions.find((s) => !s.alreadyCheckedIn && s.remainingSeconds > 0) ||
-    liveSessions[0];
+  const isStudentBlocked =
+    Boolean(profile?.isBlocked) || Boolean(liveSessionsQuery.data?.isBlocked);
+  const blockReason =
+    profile?.blockReason || liveSessionsQuery.data?.blockReason || null;
+  const totalBonusPoints =
+    attendanceQuery.data?.summary?.totalBonusPoints ?? 0;
   const openQuizzes = (quizzesQuery.data?.quizzes || []).filter(
     (q) => q.isOpen && !q.isSubmitted,
   );
@@ -290,8 +299,8 @@ export default function StudentDashboard() {
               </h3>
               <p className="text-xs md:text-sm text-foreground/90 leading-relaxed">
                 {locale === 'ar'
-                  ? 'تم حجب بعض الخدمات الأكاديمية (مثل خوض الكويزات وتحميل مناهج ومحاضرات وسكاشن المواد) نظراً لعدم سداد المصروفات الدراسية المقررة. يرجى مراجعة خزينة المعهد وشؤون الطلاب لتسوية الرسوم وإعادة تفعيل كافة الخدمات.'
-                  : 'Certain portal features (including quiz attempts, syllabus PDF, and course lecture/section downloads) are restricted due to unpaid tuition fees. Please visit the institute treasury and student affairs office to settle fees and restore full access.'}
+                  ? 'تم حجب بعض الخدمات الأكاديمية (شاملاً تسجيل الحضور عبر QR أو يدويًا، وخوض الكويزات، وتحميل مناهج ومحاضرات وسكاشن المواد) نظراً لعدم سداد المصروفات الدراسية المقررة. يرجى مراجعة خزينة المعهد وشؤون الطلاب لتسوية الرسوم وإعادة تفعيل كافة الخدمات.'
+                  : 'Certain portal features (including QR & manual attendance check-in, quiz attempts, syllabus PDF, and course lecture/section downloads) are restricted due to unpaid tuition fees. Please visit the institute treasury and student affairs office to settle fees and restore full access.'}
               </p>
               {profile.blockReason && (
                 <div className="pt-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300">
@@ -377,65 +386,19 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Live Attendance Session Alert Banner */}
-      {activeLiveSession &&
-        !activeLiveSession.alreadyCheckedIn &&
-        activeLiveSession.remainingSeconds > 0 && (
-          <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 backdrop-blur-sm p-4 sm:p-5 shadow-(--shadow-glow) animate-fade-in flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3.5 z-10">
-              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary">
-                <QrCode className="h-5 w-5" />
-                <span className="absolute -top-1 -inset-e-1 flex h-3 w-3 items-center justify-center">
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                </span>
-              </div>
-              <div className="space-y-0.5 text-start">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary border border-primary/25">
-                    {locale === "ar"
-                      ? "جلسة حضور مباشرة مفتوحة الآن"
-                      : "Live Attendance Session Open"}
-                  </span>
-                  <span className="font-mono text-xs font-bold text-foreground">
-                    {activeLiveSession.courseCode}
-                  </span>
-                </div>
-                <p className="text-sm font-bold text-foreground">
-                  {activeLiveSession.courseName || activeLiveSession.courseCode}{" "}
-                  —{" "}
-                  <span className="font-normal text-muted-foreground">
-                    {activeLiveSession.sessionType === "lecture"
-                      ? locale === "ar"
-                        ? "محاضرة"
-                        : "Lecture"
-                      : locale === "ar"
-                        ? "سكشن"
-                        : "Section"}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "ar"
-                    ? `بواسطة: ${activeLiveSession.createdByNameAr || activeLiveSession.createdByName || "المحاضر"} · متبقي ${Math.ceil(activeLiveSession.remainingSeconds / 60)} دقيقة`
-                    : `By: ${activeLiveSession.createdByNameEn || activeLiveSession.createdByName || "Instructor"} · ${Math.ceil(activeLiveSession.remainingSeconds / 60)} min remaining`}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 z-10 self-end sm:self-center">
-              <button
-                onClick={() => setShowScanDialog(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-squircle bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-sm transition-all cursor-pointer"
-              >
-                <QrCode className="w-4 h-4" />
-                <span>
-                  {locale === "ar"
-                    ? "مسح الرمز / توثيق الحضور"
-                    : "Scan QR / Check In"}
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Mobile-First Multi-Session Live Attendance QR Hub */}
+      <DashboardLiveAttendanceHub
+        sessions={liveSessions}
+        isBlocked={isStudentBlocked}
+        blockReason={blockReason}
+        totalBonusPoints={totalBonusPoints}
+        locale={locale}
+        onScanSession={(session) => {
+          if (isStudentBlocked) return;
+          setSelectedScanSession(session ?? null);
+          setShowScanDialog(true);
+        }}
+      />
 
       {/* Active/Open Quiz Alert Banner */}
       {activeQuiz && (
@@ -1246,8 +1209,20 @@ export default function StudentDashboard() {
 
       {/* Student QR Scanner Dialog */}
       <StudentQrScannerDialog
-        open={showScanDialog}
-        onOpenChange={setShowScanDialog}
+        open={showScanDialog && !isStudentBlocked}
+        onOpenChange={(open) => {
+          setShowScanDialog(open);
+          if (!open) setSelectedScanSession(null);
+        }}
+        sessionContext={
+          selectedScanSession
+            ? {
+                courseCode: selectedScanSession.courseCode,
+                courseName: selectedScanSession.courseName,
+                sessionType: selectedScanSession.sessionType,
+              }
+            : null
+        }
         onSuccess={() => {
           attendanceQuery.refetch();
           liveSessionsQuery.refetch();

@@ -279,6 +279,22 @@ export async function reindexAllRagDocuments(
 export interface PortalSettingsItem {
   registrationVisible: boolean;
   syllabiVisible: boolean;
+  studentLoginMaintenance?: boolean;
+  studentLoginMaintenanceEta?: string | null;
+  studentLoginMaintenanceMessage?: string | null;
+}
+
+export interface StudentLoginMaintenanceStatus {
+  studentLoginMaintenance: boolean;
+  studentLoginMaintenanceEta: string | null;
+  studentLoginMaintenanceMessage: string | null;
+}
+
+export async function getStudentLoginStatus(): Promise<StudentLoginMaintenanceStatus> {
+  const response = await api.get<StudentLoginMaintenanceStatus>(
+    "/portal-settings/student-login-status",
+  );
+  return response.data;
 }
 
 export async function getPortalSettings(): Promise<PortalSettingsItem> {

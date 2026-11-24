@@ -89,6 +89,14 @@ export class AuthService {
     return this.sessionService.revokeSession(token);
   }
 
+  touchSession(token?: string) {
+    return this.sessionService.touchSession(token);
+  }
+
+  getSessionTiming(token?: string) {
+    return this.sessionService.getSessionTiming(token);
+  }
+
   updateTheme(userId: string, theme: 'light' | 'dark' | 'system') {
     return this.usersService.updateTheme(userId, theme);
   }

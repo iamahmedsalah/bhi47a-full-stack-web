@@ -112,6 +112,17 @@ export class Grade {
   @Prop({ type: Number })
   controlApprovedRev?: number;
 
+  /** Provenance for midterm grace marks so new entries, adjustments, and resets never miscalculate. */
+  @Prop({ type: Object })
+  grace?: {
+    originalGrade: number;
+    appliedAmount: number;
+    actualAdded: number;
+    appliedRev: number;
+    operationId: string;
+    appliedAt: Date;
+  };
+
   /** Optimistic-concurrency revision, incremented by the Control module. */
   @Prop({ type: Number, default: 0, min: 0 })
   rev?: number;

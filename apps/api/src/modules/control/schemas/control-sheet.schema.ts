@@ -84,7 +84,9 @@ export class ControlSheet {
     appliedAt: Date;
     changed: number;
     capped: number;
-  };
+    totalGraced?: number;
+    updatedAt?: Date;
+  } | null;
 
   /** Dynamic pass-rate mark threshold (defaults to 18 for midterm, 30 for final). */
   @Prop({ type: Number, min: 0 })

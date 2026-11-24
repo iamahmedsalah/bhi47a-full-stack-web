@@ -764,6 +764,8 @@ const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = 
   ADMIN_ENROLLMENT_TOO_LARGE: { ar: 'يتجاوز عدد المواد المسجلة الحد المسموح. راجع سجل الطالب.', en: 'The registration exceeds the supported course count. Review the student record.' },
   GRACE_MIDTERM_ONLY: { ar: 'درجات الرأفة متاحة للميدترم فقط.', en: 'Grace marks are available for midterm sheets only.' },
   GRACE_ALREADY_APPLIED: { ar: 'أُضيفت الرأفة لهذا الكشف بالفعل؛ لا يمكن إضافتها مرة ثانية.', en: 'Grace marks have already been applied to this sheet and cannot be added again.' },
+  GRACE_NOT_APPLIED: { ar: 'لم تُطبّق درجات رأفة على هذا الكشف بعد. ابدأ بإضافة الرأفة أولًا.', en: 'No grace marks have been applied to this sheet yet. Apply initial grace marks first.' },
+  GRACE_LEGACY_LOCKED: { ar: 'هذا الكشف يحتوي على رأفة مسجّلة قبل تحديث حفظ الدرجات الأصلية، ولا يمكن تعديلها أو إلغاؤها تلقائيًا. يمكنك تطبيق الرأفة للطلاب الجدد فقط.', en: 'This sheet has legacy grace marks stored before original-mark tracking, so automatic adjustment or reset is unavailable. You can still apply grace marks to newly entered students only.' },
   GRACE_PREVIEW_STALE: { ar: 'تغيرت درجات الكشف أو حالته. أعد تحميل الكشف ومعاينة الزيادة قبل التأكيد.', en: 'The sheet or its marks changed. Reload and preview the addition again before confirming.' },
   GRACE_INVALID_AMOUNT: { ar: 'أدخل زيادة موجبة تتوافق مع خطوة الإدخال ولا تتجاوز الدرجة العظمى للميدترم.', en: 'Enter a positive addition matching the entry increment and not exceeding the midterm maximum.' },
   GRACE_INVALID_MARKS: { ar: 'توجد درجات مكررة أو غير متوافقة مع توزيع الدرجات. راجع الكشف أولًا.', en: 'Some marks are duplicated or do not match the grading scheme. Review the sheet first.' },

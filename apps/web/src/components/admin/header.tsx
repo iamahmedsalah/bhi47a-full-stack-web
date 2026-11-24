@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { toast } from 'sonner';
-import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 import LangToggle from '@/components/ui/LangToggle';
 import { Themes } from '@/components/ui/Themes';
 import { useUIStore } from '@/store/ui-store';
@@ -226,11 +225,8 @@ export default function AdminHeader() {
         </button>
       </div>
 
-      {/* Left/End section: Session timer, language switcher, themes, notifications */}
-      <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
-        {/* Session Expiry Timer widget */}
-        <SessionTimerWidget role="admin" />
-
+      {/* Left/End section: language switcher, themes, notifications */}
+      <div className="flex items-center justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           <div className="h-6 w-[1px] bg-white/10 hidden md:block" />

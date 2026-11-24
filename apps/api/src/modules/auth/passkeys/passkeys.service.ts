@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
   UnauthorizedException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -26,6 +27,10 @@ import {
   StudentProfile,
   type StudentProfileDocument,
 } from '../../students/schemas/student-profile.schema';
+import {
+  SystemSettings,
+  type SystemSettingsDocument,
+} from '../../complaints/schemas/system-settings.schema';
 import { readPasskeyConfig } from './passkeys.config';
 import type {
   PasskeyCredential,
@@ -66,6 +71,9 @@ export class PasskeysService implements OnModuleInit {
     @InjectModel(StudentProfile.name)
     private readonly studentProfiles?: Model<StudentProfileDocument>,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional()
+    @InjectModel(SystemSettings.name)
+    private readonly systemSettingsModel?: Model<SystemSettingsDocument>,
   ) {
     this.policy = readPasskeyConfig(config);
   }
@@ -111,6 +119,27 @@ export class PasskeysService implements OnModuleInit {
   }
 
   private async assertStudentLoginEnabled() {
+    if (this.systemSettingsModel) {
+      const sys = await this.systemSettingsModel
+        .findOne()
+        .select(
+          'studentLoginMaintenance studentLoginMaintenanceEta studentLoginMaintenanceMessage',
+        )
+        .lean();
+      if (sys?.studentLoginMaintenance) {
+        throw new ServiceUnavailableException({
+          code: 'STUDENT_LOGIN_MAINTENANCE',
+          message:
+            sys.studentLoginMaintenanceMessage ||
+            'جاري العمل على صيانة النظام في الوقت الحالي، الرجاء المحاولة في وقت لاحق.',
+          messageEn:
+            'System maintenance is currently in progress. Please try again later.',
+          eta: sys.studentLoginMaintenanceEta
+            ? new Date(sys.studentLoginMaintenanceEta).toISOString()
+            : null,
+        });
+      }
+    }
     if (!(await this.getSettings()).studentLoginEnabled) {
       throw new ForbiddenException('Student passkey sign-in is disabled');
     }
@@ -502,7 +531,8 @@ export class PasskeysService implements OnModuleInit {
         }),
       );
       return result;
-    } catch {
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
       this.metrics?.recordLoginAttempt('invalid_credentials');
       this.logger.warn(JSON.stringify({ event: 'passkey_login_failed' }));
       throw new UnauthorizedException(

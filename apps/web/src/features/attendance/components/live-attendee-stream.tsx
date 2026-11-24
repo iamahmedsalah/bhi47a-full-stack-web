@@ -21,6 +21,7 @@ import {
   ChevronDown,
   MoreVertical,
   Pencil,
+  Award,
   ShieldCheck,
   CircleHelp,
   XCircle,
@@ -46,6 +47,7 @@ interface LiveAttendeeStreamProps {
   isArabic: boolean;
   isLive: boolean;
   onEdit: (record: AttendanceRecordDto) => void;
+  onAwardBonus?: (record: AttendanceRecordDto) => void;
   selection?: {
     ids: string[];
     disabled: boolean;
@@ -82,6 +84,7 @@ export function LiveAttendeeStream({
   isArabic,
   isLive,
   onEdit,
+  onAwardBonus,
   selection,
 }: LiveAttendeeStreamProps) {
   const t = useTranslations("attendanceDelete");
@@ -419,16 +422,28 @@ export function LiveAttendeeStream({
                               </bdi>
                             </p>
                           </div>
-                          <Badge
-                            variant="outline"
-                            className={`shrink-0 gap-1 rounded-squircle ${status.className}`}
-                          >
-                            <status.Icon
-                              className="h-3 w-3"
-                              aria-hidden="true"
-                            />
-                            {status.label}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                            {(record.bonusPoints ?? 0) > 0 && (
+                              <Badge
+                                variant="outline"
+                                className="shrink-0 gap-1 rounded-squircle border-amber-500/35 bg-amber-500/12 text-amber-300 font-bold"
+                              >
+                                <Award className="h-3 w-3" aria-hidden="true" />
+                                <bdi dir="ltr">+{record.bonusPoints}</bdi>
+                                <span>{isArabic ? "بونص" : "Bonus"}</span>
+                              </Badge>
+                            )}
+                            <Badge
+                              variant="outline"
+                              className={`shrink-0 gap-1 rounded-squircle ${status.className}`}
+                            >
+                              <status.Icon
+                                className="h-3 w-3"
+                                aria-hidden="true"
+                              />
+                              {status.label}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
                           <time
@@ -511,6 +526,24 @@ export function LiveAttendeeStream({
                               dir={isArabic ? "rtl" : "ltr"}
                               className="z-50 min-w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
                             >
+                              {onAwardBonus && (
+                                <DropdownMenu.Item
+                                  onSelect={() => onAwardBonus(record)}
+                                  className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm text-amber-300 outline-none focus:bg-accent"
+                                >
+                                  <Award
+                                    className="h-4 w-4"
+                                    aria-hidden="true"
+                                  />
+                                  {(record.bonusPoints ?? 0) > 0
+                                    ? isArabic
+                                      ? `تعديل البونص (+${record.bonusPoints})`
+                                      : `Edit bonus (+${record.bonusPoints})`
+                                    : isArabic
+                                      ? "منح درجات بونص (Bonus)"
+                                      : "Award bonus marks"}
+                                </DropdownMenu.Item>
+                              )}
                               <DropdownMenu.Item
                                 onSelect={() => onEdit(record)}
                                 className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-sm outline-none focus:bg-accent"
@@ -641,6 +674,12 @@ export function LiveAttendeeStream({
                                 "Manual registration by staff member": isArabic ? "تسجيل يدوي بواسطة الموظف" : "Manual registration by staff member",
                                 "Manual modification by academic staff": isArabic ? "تعديل يدوي بواسطة عضو هيئة التدريس" : "Manual modification by academic staff",
                               } as Record<string, string>)[record.note] || record.note}</bdi>
+                            </p>
+                          )}
+                          {record.bonusReason && (
+                            <p className="mt-1 text-amber-300/90">
+                              {isArabic ? "سبب البونص:" : "Bonus reason:"}{" "}
+                              <bdi>{record.bonusReason}</bdi>
                             </p>
                           )}
                         </Detail>

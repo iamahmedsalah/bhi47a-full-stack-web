@@ -32,6 +32,12 @@ export class AttendanceAuditEntry {
   })
   newStatus!: AttendanceRecordStatus;
 
+  @Prop({ type: Number })
+  previousBonusPoints?: number;
+
+  @Prop({ type: Number })
+  newBonusPoints?: number;
+
   @Prop({ trim: true, maxlength: 500 })
   reason?: string;
 
@@ -103,6 +109,30 @@ export class AttendanceRecord {
 
   @Prop({ trim: true, maxlength: 500 })
   note?: string;
+
+  /**
+   * Optional instructor/TA bonus marks rewarded for class/section participation.
+   */
+  @Prop({ type: Number, default: 0, min: 0, max: 20 })
+  bonusPoints?: number;
+
+  @Prop({ trim: true, maxlength: 300 })
+  bonusReason?: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  bonusAwardedBy?: Types.ObjectId;
+
+  @Prop({ trim: true })
+  bonusAwardedByName?: string;
+
+  @Prop({ trim: true })
+  bonusAwardedByNameAr?: string;
+
+  @Prop({ trim: true })
+  bonusAwardedByNameEn?: string;
+
+  @Prop()
+  bonusAwardedAt?: Date;
 
   /**
    * Unique client device identifier (UUIDv4) to enforce anti-proxy check:

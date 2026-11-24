@@ -29,7 +29,11 @@ import {
 import { ControlAccessService } from './control-access.service';
 import { ControlSheetsService } from './control-sheets.service';
 import { GradingSchemeService } from './grading-scheme.service';
-import type { ApplyGraceDto, GracePreviewDto } from '../dto/control.dto';
+import type {
+  ApplyGraceDto,
+  ControlGraceMode,
+  GracePreviewDto,
+} from '../dto/control.dto';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
 
 const conflict = (code: string) =>
@@ -51,6 +55,84 @@ export class ControlGraceService {
     private readonly schemes: GradingSchemeService,
   ) {}
 
+  async getStatus(user: AuthenticatedUser, id: string) {
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_GRACE);
+    const scoped = await this.sheetService.requireSheetInScope(user, id);
+    const sheet = await this.sheets.findById(scoped.sheet._id).lean();
+    if (!sheet || sheet.component !== 'midterm') {
+      throw new BadRequestException({
+        code: 'GRACE_MIDTERM_ONLY',
+        message: 'GRACE_MIDTERM_ONLY',
+      });
+    }
+
+    const scheme = await this.schemes.getScheme(
+      String(sheet.courseId),
+      sheet.academicYear,
+      sheet.semester,
+    );
+    const rules = scheme.components.find((c) => c.key === 'midterm');
+    const roster = await this.sheetService.getRosterStudentIds(
+      scoped.course.code,
+      sheet.academicYear,
+      sheet.semester,
+    );
+    const docs = await this.grades
+      .find({
+        courseId: sheet.courseId,
+        academicYear: sheet.academicYear,
+        semester: sheet.semester,
+        examType: 'midterm',
+        cleared: { $ne: true },
+      })
+      .select('studentId grade status rev isPublished carriedFrom grace')
+      .lean();
+    const profiles = await this.profiles
+      .find({
+        userId: { $in: [...roster].map((value) => new Types.ObjectId(value)) },
+        isBlocked: true,
+      })
+      .select('userId')
+      .lean();
+    const held = new Set(profiles.map((profile) => String(profile.userId)));
+
+    let gracedCount = 0;
+    let eligibleNewCount = 0;
+    let manuallyModifiedCount = 0;
+
+    for (const mark of docs) {
+      const sid = String(mark.studentId);
+      if (
+        !roster.has(sid) ||
+        held.has(sid) ||
+        mark.status !== 'present' ||
+        mark.isPublished ||
+        mark.carriedFrom
+      ) {
+        continue;
+      }
+      if (mark.grace) {
+        gracedCount += 1;
+        if ((mark.rev ?? 0) !== mark.grace.appliedRev) {
+          manuallyModifiedCount += 1;
+        }
+      } else if (!rules || mark.grade < rules.max) {
+        eligibleNewCount += 1;
+      }
+    }
+
+    return {
+      revision: sheet.revision ?? 0,
+      locked: sheet.locked,
+      workflowState: sheet.workflowState ?? 'DRAFT',
+      activeGrace: sheet.grace ?? null,
+      gracedCount,
+      eligibleNewCount,
+      manuallyModifiedCount,
+      legacyGrace: Boolean(sheet.grace && gracedCount === 0),
+    };
+  }
+
   private async load(
     user: AuthenticatedUser,
     id: string,
@@ -69,16 +151,34 @@ export class ControlGraceService {
         code: 'GRACE_MIDTERM_ONLY',
         message: 'GRACE_MIDTERM_ONLY',
       });
-    if (sheet.grace) {
+
+    const mode: ControlGraceMode = dto.mode ?? 'initial';
+    const includeNewStudents = dto.includeNewStudents !== false;
+
+    if (mode === 'initial') {
+      if (sheet.grace) {
+        if (
+          retry &&
+          sheet.grace.operationId === retry.operationId &&
+          sheet.grace.amount === retry.amount &&
+          sheet.grace.actorId === user._id
+        )
+          return { receipt: sheet.grace } as const;
+        throw conflict('GRACE_ALREADY_APPLIED');
+      }
+    } else {
+      if (!sheet.grace) throw conflict('GRACE_NOT_APPLIED');
       if (
         retry &&
+        mode !== 'reset' &&
         sheet.grace.operationId === retry.operationId &&
-        sheet.grace.amount === retry.amount &&
+        (mode === 'new_only' || sheet.grace.amount === retry.amount) &&
         sheet.grace.actorId === user._id
-      )
+      ) {
         return { receipt: sheet.grace } as const;
-      throw conflict('GRACE_ALREADY_APPLIED');
+      }
     }
+
     if (
       sheet.locked ||
       !['DRAFT', 'RETURNED', 'IN_REVIEW'].includes(
@@ -88,6 +188,7 @@ export class ControlGraceService {
       throw conflict('SHEET_LOCKED');
     if ((sheet.revision ?? 0) !== dto.expectedRevision)
       throw conflict('GRACE_PREVIEW_STALE');
+
     const scheme = await this.schemes.getScheme(
       String(sheet.courseId),
       sheet.academicYear,
@@ -95,16 +196,31 @@ export class ControlGraceService {
       session,
     );
     const rules = scheme.components.find((c) => c.key === 'midterm')!;
-    if (
-      !rules?.enabled ||
-      !Number.isFinite(dto.amount) ||
-      dto.amount <= 0 ||
-      validateMark(dto.amount, rules)
-    )
+    if (!rules?.enabled) {
       throw new BadRequestException({
         code: 'GRACE_INVALID_AMOUNT',
         message: 'GRACE_INVALID_AMOUNT',
       });
+    }
+
+    if (mode === 'reset') {
+      if (!Number.isFinite(dto.amount) || dto.amount !== 0) {
+        throw new BadRequestException({
+          code: 'GRACE_INVALID_AMOUNT',
+          message: 'GRACE_INVALID_AMOUNT',
+        });
+      }
+    } else if (
+      !Number.isFinite(dto.amount) ||
+      dto.amount <= 0 ||
+      validateMark(dto.amount, rules)
+    ) {
+      throw new BadRequestException({
+        code: 'GRACE_INVALID_AMOUNT',
+        message: 'GRACE_INVALID_AMOUNT',
+      });
+    }
+
     const roster = await this.sheetService.getRosterStudentIds(
       scoped.course.code,
       sheet.academicYear,
@@ -134,14 +250,18 @@ export class ControlGraceService {
       .select('userId')
       .lean();
     const held = new Set(profiles.map((profile) => String(profile.userId)));
+
     const seen = new Set<string>();
     const changes: Array<{
       id: Types.ObjectId;
       studentId: Types.ObjectId;
       studentCode: string;
+      originalGrade: number;
       before: number;
       after: number;
       rev: number;
+      appliedAmount: number;
+      clearGrace: boolean;
     }> = [];
     const counts = {
       registered: roster.size,
@@ -153,6 +273,25 @@ export class ControlGraceService {
       unentered: 0,
       other: 0,
     };
+    const modeStats = {
+      alreadyGraced: 0,
+      manuallyModified: 0,
+      excludedNew: 0,
+      totalGracedAfter: 0,
+    };
+
+    let hasAnyGracedRecord = false;
+    for (const mark of docs) {
+      const sid = String(mark.studentId);
+      if (roster.has(sid) && mark.grace) {
+        hasAnyGracedRecord = true;
+        break;
+      }
+    }
+    if ((mode === 'adjust' || mode === 'reset') && !hasAnyGracedRecord) {
+      throw conflict('GRACE_LEGACY_LOCKED');
+    }
+
     for (const mark of docs) {
       const studentId = String(mark.studentId);
       if (!roster.has(studentId)) continue;
@@ -172,20 +311,117 @@ export class ControlGraceService {
       }
       if (mark.maxGrade !== rules.max || validateMark(mark.grade, rules))
         throw conflict('GRACE_INVALID_MARKS');
-      const after = round(Math.min(rules.max, mark.grade + dto.amount));
-      if (after === mark.grade) {
-        counts.atMaximum++;
-        continue;
+
+      if (mode === 'initial') {
+        const after = round(Math.min(rules.max, mark.grade + dto.amount));
+        if (after === mark.grade) {
+          counts.atMaximum++;
+          continue;
+        }
+        if (mark.grade + dto.amount > rules.max) counts.capped++;
+        modeStats.totalGracedAfter++;
+        changes.push({
+          id: mark._id,
+          studentId: mark.studentId,
+          studentCode: mark.studentCode ?? '',
+          originalGrade: mark.grade,
+          before: mark.grade,
+          after,
+          rev: mark.rev ?? 0,
+          appliedAmount: dto.amount,
+          clearGrace: false,
+        });
+      } else if (mode === 'new_only') {
+        if (mark.grace) {
+          modeStats.alreadyGraced++;
+          modeStats.totalGracedAfter++;
+          continue;
+        }
+        const after = round(Math.min(rules.max, mark.grade + dto.amount));
+        if (after === mark.grade) {
+          counts.atMaximum++;
+          continue;
+        }
+        if (mark.grade + dto.amount > rules.max) counts.capped++;
+        modeStats.totalGracedAfter++;
+        changes.push({
+          id: mark._id,
+          studentId: mark.studentId,
+          studentCode: mark.studentCode ?? '',
+          originalGrade: mark.grade,
+          before: mark.grade,
+          after,
+          rev: mark.rev ?? 0,
+          appliedAmount: dto.amount,
+          clearGrace: false,
+        });
+      } else if (mode === 'adjust') {
+        if (mark.grace) {
+          modeStats.totalGracedAfter++;
+          if ((mark.rev ?? 0) !== mark.grace.appliedRev) {
+            modeStats.manuallyModified++;
+            continue;
+          }
+          const original = mark.grace.originalGrade;
+          const after = round(Math.min(rules.max, original + dto.amount));
+          if (after === mark.grade && mark.grace.appliedAmount === dto.amount) {
+            continue;
+          }
+          if (original + dto.amount > rules.max) counts.capped++;
+          changes.push({
+            id: mark._id,
+            studentId: mark.studentId,
+            studentCode: mark.studentCode ?? '',
+            originalGrade: original,
+            before: mark.grade,
+            after,
+            rev: mark.rev ?? 0,
+            appliedAmount: dto.amount,
+            clearGrace: false,
+          });
+        } else {
+          if (!includeNewStudents) {
+            modeStats.excludedNew++;
+            continue;
+          }
+          const after = round(Math.min(rules.max, mark.grade + dto.amount));
+          if (after === mark.grade) {
+            counts.atMaximum++;
+            continue;
+          }
+          if (mark.grade + dto.amount > rules.max) counts.capped++;
+          modeStats.totalGracedAfter++;
+          changes.push({
+            id: mark._id,
+            studentId: mark.studentId,
+            studentCode: mark.studentCode ?? '',
+            originalGrade: mark.grade,
+            before: mark.grade,
+            after,
+            rev: mark.rev ?? 0,
+            appliedAmount: dto.amount,
+            clearGrace: false,
+          });
+        }
+      } else if (mode === 'reset') {
+        if (!mark.grace) continue;
+        if ((mark.rev ?? 0) !== mark.grace.appliedRev) {
+          modeStats.manuallyModified++;
+          continue;
+        }
+        const original = mark.grace.originalGrade;
+        changes.push({
+          id: mark._id,
+          studentId: mark.studentId,
+          studentCode: mark.studentCode ?? '',
+          originalGrade: original,
+          before: mark.grade,
+          after: original,
+          rev: mark.rev ?? 0,
+          appliedAmount: 0,
+          clearGrace: true,
+        });
       }
-      if (mark.grade + dto.amount > rules.max) counts.capped++;
-      changes.push({
-        id: mark._id,
-        studentId: mark.studentId,
-        studentCode: mark.studentCode ?? '',
-        before: mark.grade,
-        after,
-        rev: mark.rev ?? 0,
-      });
     }
     counts.changed = changes.length;
     counts.unentered = roster.size - seen.size;
@@ -222,6 +458,8 @@ export class ControlGraceService {
     const digest = createHash('sha256')
       .update(
         JSON.stringify({
+          mode,
+          includeNewStudents,
           amount: dto.amount,
           revision: sheet.revision ?? 0,
           scheme,
@@ -236,23 +474,32 @@ export class ControlGraceService {
             m.rev,
             m.isPublished,
             m.carriedFrom,
+            m.grace?.originalGrade ?? null,
+            m.grace?.appliedAmount ?? null,
+            m.grace?.appliedRev ?? null,
           ]),
         }),
       )
       .digest('hex');
+
     return {
+      mode,
       sheet,
       rules,
       changes,
+      modeStats,
       preview: {
+        mode,
         digest,
         revision: sheet.revision ?? 0,
         amount: dto.amount,
         max: rules.max,
         counts,
+        modeStats,
         passRate,
         sample: changes.slice(0, 20).map((c) => ({
           studentCode: c.studentCode,
+          originalGrade: c.originalGrade,
           before: c.before,
           added: round(c.after - c.before),
           after: c.after,
@@ -276,14 +523,25 @@ export class ControlGraceService {
         if (plan.preview.digest !== dto.digest)
           throw conflict('GRACE_PREVIEW_STALE');
         if (!plan.changes.length) throw conflict('GRACE_NO_CHANGES');
+
+        const now = new Date();
+        const isReset = plan.mode === 'reset';
+        const effectiveSheetAmount =
+          plan.mode === 'new_only'
+            ? (plan.sheet.grace?.amount ?? dto.amount)
+            : dto.amount;
+
         const receipt = {
           operationId: dto.operationId,
-          amount: dto.amount,
+          amount: effectiveSheetAmount,
           actorId: user._id,
-          appliedAt: new Date(),
+          appliedAt: plan.sheet.grace?.appliedAt ?? now,
           changed: plan.changes.length,
           capped: plan.preview.counts.capped,
+          totalGraced: plan.modeStats.totalGracedAfter,
+          updatedAt: now,
         };
+
         const claimed = await this.sheets.updateOne(
           {
             _id: plan.sheet._id,
@@ -291,9 +549,12 @@ export class ControlGraceService {
               dto.expectedRevision === 0
                 ? { $in: [0, null] }
                 : dto.expectedRevision,
-            grace: null,
+            grace: plan.mode === 'initial' ? null : { $ne: null },
           },
-          { $set: { grace: receipt }, $inc: { revision: 1 } },
+          {
+            $set: { grace: isReset ? null : receipt },
+            $inc: { revision: 1 },
+          },
           { session },
         );
         if (claimed.matchedCount !== 1) throw conflict('GRACE_PREVIEW_STALE');
@@ -307,6 +568,31 @@ export class ControlGraceService {
           plan.changes.map((c) => {
             const percentage = round((c.after / plan.rules.max) * 100);
             const scale = calculateGradeScale(percentage);
+            const nextRev = c.rev + 1;
+            const setFields: Record<string, unknown> = {
+              grade: c.after,
+              percentage,
+              letterGrade: scale.letter,
+              gradePoints: scale.points,
+              updatedBy: new Types.ObjectId(user._id),
+              controlManaged: true,
+              updatedAt: now,
+            };
+            const unsetFields: Record<string, unknown> = {
+              controlApprovedRev: '',
+            };
+            if (c.clearGrace) {
+              unsetFields.grace = '';
+            } else {
+              setFields.grace = {
+                originalGrade: c.originalGrade,
+                appliedAmount: c.appliedAmount,
+                actualAdded: round(c.after - c.originalGrade),
+                appliedRev: nextRev,
+                operationId: dto.operationId,
+                appliedAt: now,
+              };
+            }
             return {
               updateOne: {
                 filter: {
@@ -314,17 +600,9 @@ export class ControlGraceService {
                   rev: c.rev === 0 ? { $in: [0, null] } : c.rev,
                 },
                 update: {
-                  $set: {
-                    grade: c.after,
-                    percentage,
-                    letterGrade: scale.letter,
-                    gradePoints: scale.points,
-                    updatedBy: new Types.ObjectId(user._id),
-                    controlManaged: true,
-                    updatedAt: receipt.appliedAt,
-                  },
+                  $set: setFields,
                   $inc: { rev: 1 },
-                  $unset: { controlApprovedRev: '' },
+                  $unset: unsetFields,
                 },
               },
             };
@@ -333,6 +611,7 @@ export class ControlGraceService {
         );
         if (result.matchedCount !== plan.changes.length)
           throw conflict('GRACE_PREVIEW_STALE');
+
         const common = {
           sheetId: plan.sheet._id,
           courseId: plan.sheet.courseId,
@@ -342,28 +621,41 @@ export class ControlGraceService {
           action: 'GRACE',
           source: 'SYSTEM',
           actorId: new Types.ObjectId(user._id),
-          at: receipt.appliedAt,
+          at: now,
         };
         await this.audit.insertMany(
           [
-            { ...common, newValue: receipt },
+            {
+              ...common,
+              newValue: {
+                ...(isReset ? { reset: true, amount: 0 } : receipt),
+                mode: plan.mode,
+              },
+            },
             ...plan.changes.map((c) => ({
               ...common,
               gradeId: c.id,
               studentId: c.studentId,
-              oldValue: { score: c.before, status: 'present', rev: c.rev },
+              oldValue: {
+                score: c.before,
+                status: 'present',
+                rev: c.rev,
+                originalGrade: c.originalGrade,
+              },
               newValue: {
                 score: c.after,
                 status: 'present',
                 rev: c.rev + 1,
                 operationId: dto.operationId,
                 added: round(c.after - c.before),
+                originalGrade: c.originalGrade,
+                mode: plan.mode,
               },
             })),
           ],
           { session },
         );
-        return receipt;
+        return isReset ? { ...receipt, reset: true } : receipt;
       });
     } finally {
       await session.endSession();

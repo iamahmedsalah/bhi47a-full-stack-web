@@ -2,9 +2,15 @@
 import { PasskeyLoginButton } from '@/components/auth/passkey-login-button';
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 import { getApiErrorDetails, getApiErrorMessage } from "@/lib/api";
+import { CAIRO_TIME_ZONE } from "@/lib/cairo-time";
+import {
+  getStudentLoginStatus,
+  type StudentLoginMaintenanceStatus,
+} from "@/features/settings/api";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -27,7 +33,9 @@ import {
   UserCircle,
   Loader2,
   Clock,
+  RefreshCw,
   ShieldAlert,
+  Wrench,
   X,
 } from "lucide-react";
 import { STUDENT_PASSWORD_MAX_LENGTH } from "@student-portal/shared";
@@ -44,6 +52,8 @@ type StudentLoginError = {
   attemptsLeft?: number;
   code?: string;
   message?: string;
+  eta?: string | null;
+  customMessage?: string | null;
 };
 
 function createBanExpiry(lockSeconds: number) {
@@ -77,6 +87,35 @@ function StudentLoginContent() {
   } = useAuthStore();
 
   const studentCodeInputRef = useRef<HTMLInputElement>(null);
+  const [forcedMaintenance, setForcedMaintenance] =
+    useState<StudentLoginMaintenanceStatus | null>(null);
+  const [maintenanceNowMs, setMaintenanceNowMs] = useState<number>(0);
+
+  const loginStatusQuery = useQuery({
+    queryKey: ["student-login-maintenance-status"],
+    queryFn: getStudentLoginStatus,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+
+  const activeMaintenance: StudentLoginMaintenanceStatus | null =
+    loginStatusQuery.data?.studentLoginMaintenance
+      ? loginStatusQuery.data
+      : loginStatusQuery.data && !loginStatusQuery.data.studentLoginMaintenance
+        ? null
+        : forcedMaintenance;
+
+  useEffect(() => {
+    if (!activeMaintenance) return;
+    const syncClock = () => setMaintenanceNowMs(Date.now());
+    const initial = setTimeout(syncClock, 0);
+    const id = setInterval(syncClock, 1000);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(id);
+    };
+  }, [activeMaintenance]);
 
   const schema = getStudentLoginSchema((key) => {
     const translationKey = key.replace("validation.", "");
@@ -378,6 +417,16 @@ function StudentLoginContent() {
         toast.error(t("loginError"), {
           description: t("remainingAttemptsDesc", { count: left }),
         });
+      } else if (
+        errorData?.code === "STUDENT_LOGIN_MAINTENANCE" ||
+        getApiErrorDetails(err).code === "STUDENT_LOGIN_MAINTENANCE"
+      ) {
+        setForcedMaintenance({
+          studentLoginMaintenance: true,
+          studentLoginMaintenanceEta: errorData?.eta ?? null,
+          studentLoginMaintenanceMessage: errorData?.customMessage ?? null,
+        });
+        void loginStatusQuery.refetch();
       } else {
         const localizedFallback = t("loginError");
         const errMsg = getApiErrorMessage(err, localizedFallback);
@@ -440,6 +489,150 @@ function StudentLoginContent() {
             </h1>
           </div>
 
+          {activeMaintenance ? (
+            (() => {
+              const etaDate = activeMaintenance.studentLoginMaintenanceEta
+                ? new Date(activeMaintenance.studentLoginMaintenanceEta)
+                : null;
+              const validEta =
+                etaDate && Number.isFinite(etaDate.getTime()) ? etaDate : null;
+              const remainingSec =
+                validEta && maintenanceNowMs > 0
+                  ? Math.max(
+                      0,
+                      Math.floor(
+                        (validEta.getTime() - maintenanceNowMs) / 1000,
+                      ),
+                    )
+                  : 0;
+              const hours = Math.floor(remainingSec / 3600);
+              const minutes = Math.floor((remainingSec % 3600) / 60);
+              const seconds = remainingSec % 60;
+              const formattedCairoEta = validEta
+                ? new Intl.DateTimeFormat(
+                    locale === "ar" ? "ar-EG" : "en-GB",
+                    {
+                      timeZone: CAIRO_TIME_ZONE,
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    },
+                  ).format(validEta)
+                : null;
+
+              return (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="w-full space-y-4 text-center animate-in fade-in zoom-in-95 duration-300"
+                >
+                  <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border border-amber-500/35 bg-amber-500/12 text-amber-300 shadow-sm">
+                    <Wrench className="size-8" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-3 py-1 text-xs font-bold text-amber-300">
+                      <Clock className="size-3.5 shrink-0" />
+                      <span>
+                        {locale === "ar"
+                          ? "صيانة مجدولة للنظام"
+                          : "Scheduled System Maintenance"}
+                      </span>
+                    </span>
+
+                    <h2 className="text-base sm:text-lg font-extrabold text-foreground leading-snug">
+                      {locale === "ar"
+                        ? "جاري العمل على صيانة النظام في الوقت الحالي"
+                        : "System Maintenance Currently in Progress"}
+                    </h2>
+
+                    <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                      {activeMaintenance.studentLoginMaintenanceMessage ||
+                        (locale === "ar"
+                          ? "تم إيقاف واجهة تسجيل دخول الطلاب مؤقتًا لإجراء أعمال صيانة وتحديثات تقنية. الرجاء المحاولة مرة أخرى في وقت لاحق."
+                          : "Student sign-in is temporarily paused while we perform system maintenance and upgrades. Please try again later.")}
+                    </p>
+                  </div>
+
+                  {validEta && formattedCairoEta && (
+                    <div className="rounded-xl border border-border/65 bg-secondary/20 p-4 space-y-3 text-start">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-muted-foreground">
+                          {locale === "ar"
+                            ? "الوقت التقريبي لعودة النظام:"
+                            : "Approximate return time:"}
+                        </span>
+                        <span className="rounded-squircle border border-border/75 bg-card px-2.5 py-1 font-mono text-xs font-bold text-primary">
+                          <bdi>{formattedCairoEta}</bdi>
+                        </span>
+                      </div>
+
+                      {remainingSec > 0 ? (
+                        <div
+                          className="grid grid-cols-3 gap-2 text-center"
+                          dir="ltr"
+                        >
+                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                            <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
+                              {String(hours).padStart(2, "0")}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              {locale === "ar" ? "ساعة" : "Hours"}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                            <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
+                              {String(minutes).padStart(2, "0")}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              {locale === "ar" ? "دقيقة" : "Minutes"}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-border/65 bg-card/85 py-2.5 px-2">
+                            <div className="font-mono text-lg sm:text-xl font-extrabold tabular-nums text-primary">
+                              {String(seconds).padStart(2, "0")}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              {locale === "ar" ? "ثانية" : "Seconds"}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs font-semibold text-amber-300 text-center pt-1">
+                          {locale === "ar"
+                            ? "شارفت أعمال الصيانة على الانتهاء، سيتم إعادة فتح البوابة خلال لحظات."
+                            : "Maintenance is wrapping up — student access will reopen shortly."}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    disabled={loginStatusQuery.isFetching}
+                    onClick={async () => {
+                      const res = await loginStatusQuery.refetch();
+                      if (res.data && !res.data.studentLoginMaintenance) {
+                        setForcedMaintenance(null);
+                      }
+                    }}
+                    className="w-full min-h-11 rounded-squircle gap-2 font-bold text-xs sm:text-sm cursor-pointer"
+                  >
+                    <RefreshCw
+                      className={`size-4 shrink-0 ${
+                        loginStatusQuery.isFetching ? "animate-spin" : ""
+                      }`}
+                    />
+                    <span>
+                      {locale === "ar"
+                        ? "تحديث والتحقق من عودة النظام"
+                        : "Refresh & Check System Status"}
+                    </span>
+                  </Button>
+                </div>
+              );
+            })()
+          ) : (
+            <>
           {isSessionExpired && (
             <Alert className="w-full border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 py-3">
               <Clock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -628,6 +821,8 @@ function StudentLoginContent() {
               />
             </div>
           </form>
+            </>
+          )}
         </div>
       </Card>
 

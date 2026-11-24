@@ -54,6 +54,7 @@ import { getAttendanceErrorMessage } from "../schemas/attendance-schemas";
 import { AttendanceExportButton } from "./attendance-export-button";
 import { AttendancePagination } from "./attendance-pagination";
 import { LiveAttendeeStream } from "./live-attendee-stream";
+import { AttendanceBonusDialog } from "./attendance-bonus-dialog";
 import { toast } from "sonner";
 
 function SessionSearch({
@@ -134,6 +135,9 @@ export function AdminAttendanceOverview({
   const [recordsPage, setRecordsPage] = useState(1);
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
   const [editRecord, setEditRecord] = useState<AttendanceRecordDto | null>(
+    null,
+  );
+  const [bonusRecord, setBonusRecord] = useState<AttendanceRecordDto | null>(
     null,
   );
   const [editStatus, setEditStatus] = useState("present");
@@ -783,6 +787,7 @@ export function AdminAttendanceOverview({
                     setEditStatus(record.status);
                     setEditReason("");
                   }}
+                  onAwardBonus={(record) => setBonusRecord(record)}
                 />
                 <AttendancePagination
                   page={records.data?.page || 1}
@@ -864,6 +869,15 @@ export function AdminAttendanceOverview({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AttendanceBonusDialog
+        record={bonusRecord}
+        isArabic={isArabic}
+        onClose={() => setBonusRecord(null)}
+        onSaved={() => {
+          void records.refetch();
+        }}
+      />
     </div>
   );
 }

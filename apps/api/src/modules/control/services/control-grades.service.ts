@@ -666,6 +666,7 @@ export class ControlGradesService {
               controlApprovedRev: '',
               attendanceMark: '',
               quizzesMark: '',
+              grace: '',
             },
           },
           { new: true, session: args.session },

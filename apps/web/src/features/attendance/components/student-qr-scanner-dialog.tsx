@@ -42,6 +42,11 @@ interface StudentQrScannerDialogProps {
   onSuccess?: () => void;
   locale?: string;
   initialToken?: string;
+  sessionContext?: {
+    courseCode: string;
+    courseName?: string;
+    sessionType?: "lecture" | "section" | "lab";
+  } | null;
 }
 
 interface DetectedBarcode {
@@ -67,6 +72,7 @@ export function StudentQrScannerDialog({
   onSuccess,
   locale = "ar",
   initialToken = "",
+  sessionContext = null,
 }: StudentQrScannerDialogProps) {
   const isAr = locale.startsWith("ar");
   const reducedMotion = useReducedMotion();
@@ -461,9 +467,23 @@ export function StudentQrScannerDialog({
                   : "Academic Attendance Check-in"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                {isAr
-                  ? "امسح رمز QR المعروض على شاشة المحاضر أو أدخل الرمز المؤقت"
-                  : "Scan the rotating QR on the instructor display or enter code"}
+                {sessionContext
+                  ? `${sessionContext.courseCode} · ${sessionContext.courseName || sessionContext.courseCode} (${
+                      sessionContext.sessionType === "lecture"
+                        ? isAr
+                          ? "محاضرة"
+                          : "Lecture"
+                        : sessionContext.sessionType === "section"
+                          ? isAr
+                            ? "سكشن"
+                            : "Section"
+                          : isAr
+                            ? "معمل"
+                            : "Lab"
+                    })`
+                  : isAr
+                    ? "امسح رمز QR المعروض على شاشة المحاضر أو أدخل الرمز المؤقت"
+                    : "Scan the rotating QR on the instructor display or enter code"}
               </DialogDescription>
             </div>
           </div>

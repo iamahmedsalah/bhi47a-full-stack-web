@@ -24,7 +24,6 @@ import { cn } from '@/lib/cn';
 import Themes from '@/components/ui/Themes';
 import LangToggle from '@/components/ui/LangToggle';
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { SessionTimerWidget } from '@/components/common/session-timer-widget';
 import { NotificationDetailsDialog } from '@/components/notifications/notification-details-dialog';
 
 export default function StudentHeader() {
@@ -202,10 +201,7 @@ export default function StudentHeader() {
         </div>
 
         {/* Left/End section: Controls bar */}
-        <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
-          {/* Session Expiry Timer Widget */}
-          <SessionTimerWidget role="student" />
-
+        <div className="flex items-center justify-end gap-2 sm:gap-3 w-full md:w-auto pt-2.5 border-t border-white/10 md:border-t-0 md:pt-0">
           <div className="flex items-center gap-2">
             <div className="h-6 w-[1px] bg-white/10 hidden md:block" />
             <LangToggle hideLabel />

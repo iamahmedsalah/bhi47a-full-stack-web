@@ -446,4 +446,47 @@ describe('AttendanceCheckInService', () => {
       }),
     ).rejects.toThrow(ForbiddenException);
   });
+
+  it('should reject check-in with STUDENT_TUITION_BLOCKED when student account is financially held', async () => {
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
+    const mockSession = {
+      _id: mockSessionId,
+      courseCode: 'CS101',
+      status: 'OPEN',
+      startsAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      lateThresholdMinutes: 10,
+      sessionSecret: 'supersecret',
+      qrRotationSeconds: 20,
+    };
+
+    mockSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue(mockSession),
+      }),
+    });
+    mockTokenService.validateToken.mockReturnValue({ valid: true });
+    mockRegistrationModel.exists.mockResolvedValue(true);
+    mockRecordModel.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    mockStudentProfileModel.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({
+        fullName: 'Ahmed Soliman',
+        studentCode: '2026001',
+        enrollmentStatus: 'active',
+        isBlocked: true,
+        blockReason: 'Unpaid second installment',
+      }),
+    });
+
+    await expect(
+      service.checkIn(mockStudent, { token: rawToken }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'STUDENT_TUITION_BLOCKED',
+      }),
+    });
+    expect(mockRecordModel.create).not.toHaveBeenCalled();
+  });
 });

@@ -68,6 +68,8 @@ export interface ControlSheetDetails {
       changed: number;
       capped: number;
       appliedAt: string;
+      totalGraced?: number;
+      updatedAt?: string;
     } | null;
     passThreshold?: number;
     locked: boolean;
@@ -279,6 +281,12 @@ export interface ControlAuditRow {
 export interface WorkbookEntry extends ControlEntry {
   attendanceMark: number | null;
   quizzesMark: number | null;
+  grace?: {
+    originalGrade: number;
+    appliedAmount: number;
+    actualAdded: number;
+    appliedRev: number;
+  } | null;
 }
 export interface WorkbookRow extends ControlRosterRow {
   tuition?: { isBlocked: boolean; status: "paid" | "unpaid" | "exempt" | null };

@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { apiBaseUrl } from "@/lib/api";
 import { LocationCapture } from "./location-capture";
 import { LiveAttendeeStream } from "./live-attendee-stream";
+import { AttendanceBonusDialog } from "./attendance-bonus-dialog";
 import { AttendanceExportButton } from "./attendance-export-button";
 import { getAttendanceErrorMessage } from "../schemas/attendance-schemas";
 
@@ -89,6 +90,8 @@ export function ActiveSessionPresenter({
 
   // Edit status modal
   const [selectedRecord, setSelectedRecord] =
+    useState<AttendanceRecordDto | null>(null);
+  const [bonusRecord, setBonusRecord] =
     useState<AttendanceRecordDto | null>(null);
   const [editStatus, setEditStatus] = useState<string>("present");
   const [editReason, setEditReason] = useState("");
@@ -316,9 +319,10 @@ export function ActiveSessionPresenter({
         try {
           const data = JSON.parse(event.data);
           if (data.type === "CHECK_IN" && data.record) {
+            const incoming = { ...data.record, _id: data.record._id || data.record.id };
             setAttendees((prev) => {
-              if (prev.some((a) => a._id === data.record.id)) return prev;
-              return [data.record, ...prev];
+              if (prev.some((a) => a._id === incoming._id)) return prev;
+              return [incoming, ...prev];
             });
 
             setStats((prev) => {
@@ -336,8 +340,11 @@ export function ActiveSessionPresenter({
                 : `Checked in: ${data.record.studentName}`,
             );
           } else if (data.type === "STATUS_CHANGE" && data.record) {
+            const targetId = data.record._id || data.record.id;
             setAttendees((prev) =>
-              prev.map((a) => (a._id === data.record.id ? data.record : a)),
+              prev.map((a) =>
+                a._id === targetId ? { ...a, ...data.record, _id: a._id } : a,
+              ),
             );
           } else if (data.type === "SESSION_CLOSED") {
             toast.info(isArabic ? "تم إغلاق الجلسة" : "Session closed");
@@ -836,8 +843,20 @@ export function ActiveSessionPresenter({
             setEditStatus(record.status);
             setEditReason("");
           }}
+          onAwardBonus={(record) => setBonusRecord(record)}
         />
       </div>
+
+      <AttendanceBonusDialog
+        record={bonusRecord}
+        isArabic={isArabic}
+        onClose={() => setBonusRecord(null)}
+        onSaved={(updated) => {
+          setAttendees((prev) =>
+            prev.map((a) => (a._id === updated._id ? { ...a, ...updated } : a)),
+          );
+        }}
+      />
 
       {/* Dialog: Confirm Close Session */}
       <Dialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>

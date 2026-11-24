@@ -10,6 +10,8 @@ import { useTheme } from '@/providers/theme-provider';
 import { isAuthEntryRoute, isPublicRoute, isPublicMarketingRoute } from '@/lib/public-routes';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/browser';
 import { ReauthDialog } from '@/components/auth/reauth-dialog';
+import { SessionTimeoutDialog } from '@/components/common/session-timer-widget';
+import { broadcastSessionLogout } from '@/hooks/use-session-timer';
 
 interface User {
   _id: string;
@@ -24,6 +26,11 @@ interface User {
   permissions?: string[];
   mustChangePassword: boolean;
   theme?: 'light' | 'dark' | 'system';
+  session?: {
+    idleExpiresAt: string;
+    absoluteExpiresAt: string;
+    idleTimeoutSeconds: number;
+  };
 }
 
 interface StudentLoginPayload {
@@ -218,6 +225,7 @@ export function AuthProvider({
     }
 
     // Immediately cancel and reset queries so no background query refetches
+    broadcastSessionLogout('manual_logout');
     queryClient.cancelQueries({ queryKey: queryKeys.auth.me });
     queryClient.setQueryData(queryKeys.auth.me, null);
     queryClient.removeQueries({ queryKey: ['auth'] });
@@ -337,41 +345,16 @@ export function AuthProvider({
     }
   }, [meQuery.data?.theme, currentTheme, setTheme]);
 
-  // Periodic and route-change heartbeat to track live active sessions
+  // Record initial route-load heartbeat once on authenticated navigation (not a blind idle timer!)
   useEffect(() => {
     if (!meQuery.data?._id || meQuery.isError || isLoggingOut) return;
-
-    let isMounted = true;
-    const sendHeartbeat = (force = false) => {
-      if (!isMounted) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      const now = Date.now();
-      if (!force && now - lastHeartbeatTimeRef.current < 60_000) return;
-      lastHeartbeatTimeRef.current = now;
-      api.post('/auth/heartbeat', { route: pathname }).catch(() => {
-        // Silent failure for heartbeat
-      });
-    };
-
-    sendHeartbeat();
-    const interval = setInterval(() => sendHeartbeat(true), 120_000);
-
-    const handleVisibilityChange = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        sendHeartbeat();
-      }
-    };
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
-    };
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    const now = Date.now();
+    if (now - lastHeartbeatTimeRef.current < 60_000) return;
+    lastHeartbeatTimeRef.current = now;
+    api.post('/auth/heartbeat', { route: pathname }).catch(() => {
+      // Silent failure for heartbeat
+    });
   }, [meQuery.data?._id, meQuery.isError, pathname, isLoggingOut]);
 
   const contextValue = React.useMemo<AuthContextType>(
@@ -388,6 +371,16 @@ export function AuthProvider({
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
+      {meQuery.data?._id && !isLoggingOut && (
+        <SessionTimeoutDialog
+          role={meQuery.data.role}
+          locale={locale}
+          enabled={Boolean(meQuery.data._id && !isLoggingOut)}
+          serverIdleExpiresAt={meQuery.data.session?.idleExpiresAt}
+          idleTimeoutSeconds={meQuery.data.session?.idleTimeoutSeconds}
+          onLogout={logout}
+        />
+      )}
       <ReauthDialog />
     </AuthContext.Provider>
   );

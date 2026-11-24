@@ -13,6 +13,8 @@ import {
   IsInt,
   Min,
   Max,
+  IsDateString,
+  ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -565,6 +567,42 @@ export class UpdatePortalSettingsDto {
   @IsOptional()
   @IsBoolean()
   syllabiVisible?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether student login (/login/student) is locked in maintenance mode (Admin only)',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  studentLoginMaintenance?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Approximate ISO datetime when student login maintenance will end (null clears ETA)',
+    example: '2026-11-24T15:30:00.000Z',
+    nullable: true,
+  })
+  @Transform(({ value }) => {
+    if (value === null || value === '') return null;
+    return typeof value === 'string' ? value.trim() : value;
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsDateString()
+  studentLoginMaintenanceEta?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Optional custom maintenance notice displayed to students',
+    nullable: true,
+  })
+  @Transform(({ value }) => {
+    if (value === null || value === '') return null;
+    return typeof value === 'string' ? value.trim() : value;
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(400)
+  studentLoginMaintenanceMessage?: string | null;
 }
 
 export class ResetAcademicRecordsDto {

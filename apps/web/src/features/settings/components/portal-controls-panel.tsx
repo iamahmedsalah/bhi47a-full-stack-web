@@ -14,14 +14,26 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  Wrench,
+  Clock,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { getApiErrorMessage } from "@/lib/api";
+import {
+  CAIRO_TIME_ZONE,
+  cairoDateTimeToIso,
+  toCairoDateTimeLocal,
+} from "@/lib/cairo-time";
+import { useAuth } from "@/providers/auth-provider";
 import {
   getPortalSettings,
   updatePortalSettings,
@@ -37,11 +49,15 @@ interface PortalControlsPanelProps {
 export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
   const isAr = locale === "ar";
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   // Reset Confirmation Dialog State
   const [resetModalType, setResetModalType] = useState<
     "warnings" | "gpa" | "all" | null
   >(null);
+  const [etaDraft, setEtaDraft] = useState<string | undefined>(undefined);
+  const [msgDraft, setMsgDraft] = useState<string | undefined>(undefined);
 
   // Queries
   const portalSettingsQuery = useQuery({
@@ -52,15 +68,33 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
   const settings: PortalSettingsItem = portalSettingsQuery.data ?? {
     registrationVisible: true,
     syllabiVisible: true,
+    studentLoginMaintenance: false,
+    studentLoginMaintenanceEta: null,
+    studentLoginMaintenanceMessage: null,
   };
+
+  const maintenanceActive = Boolean(settings.studentLoginMaintenance);
+  const resolvedEtaInput =
+    etaDraft !== undefined
+      ? etaDraft
+      : toCairoDateTimeLocal(settings.studentLoginMaintenanceEta ?? undefined);
+  const resolvedMsgInput =
+    msgDraft !== undefined
+      ? msgDraft
+      : settings.studentLoginMaintenanceMessage ?? "";
 
   // Mutations
   const updateSettingsMutation = useMutation({
     mutationFn: (dto: Partial<PortalSettingsItem>) => updatePortalSettings(dto),
     onSuccess: (updated) => {
+      setEtaDraft(undefined);
+      setMsgDraft(undefined);
       queryClient.setQueryData(settingsKeys.portalSettings, updated);
       void queryClient.invalidateQueries({
         queryKey: settingsKeys.publicPortalSettings,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["student-login-maintenance-status"],
       });
       toast.success(
         isAr
@@ -393,6 +427,225 @@ export function PortalControlsPanel({ locale }: PortalControlsPanelProps) {
                   </div>
                 </Card>
               ),
+            )}
+
+            {/* Admin-Only Student Login Maintenance Lock Card */}
+            {isAdmin && (
+              <Card className="@container/feature @2xl:col-span-2 min-w-0 flex flex-col justify-between rounded-2xl border border-border/70 bg-secondary/10 p-4 sm:p-5 shadow-sm hover:border-primary/30 transition-all gap-4">
+                <div className="flex flex-col gap-3 min-w-0">
+                  <div className="flex flex-col gap-3 min-w-0 @sm/feature:flex-row @sm/feature:items-start @sm/feature:justify-between">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/20 bg-primary/10 text-primary mt-0.5">
+                        <Wrench className="size-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-foreground leading-snug break-words">
+                          {isAr
+                            ? "قفل واجهة تسجيل دخول الطلاب (وضع الصيانة)"
+                            : "Student Login Maintenance Mode"}
+                        </h3>
+                        <p
+                          className="text-[11px] font-mono text-primary/80 mt-0.5 break-all"
+                          dir="ltr"
+                        >
+                          /login/student · Admin Only
+                        </p>
+                      </div>
+                    </div>
+
+                    <StatusBadge
+                      label={
+                        maintenanceActive
+                          ? isAr
+                            ? "وضع الصيانة مفعّل"
+                            : "Maintenance Active"
+                          : isAr
+                            ? "متاح للطلاب"
+                            : "Open to Students"
+                      }
+                      variant={maintenanceActive ? "warning" : "success"}
+                      className="shrink-0 text-[11px] px-2.5 py-0.5 rounded-squircle"
+                    />
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
+                    {isAr
+                      ? "خاص بالأدمن فقط: عند التفعيل تُعرض شاشة صيانة رسمية على صفحة دخول الطلاب مع الوقت التقريبي لعودة النظام، ويتم إيقاف دخول الطلاب من السيرفر (كود الطالب، Google، Passkey) بينما يظل دخول الأدمن وأعضاء هيئة التدريس متاحًا."
+                      : "Admin-only control: Displays a maintenance screen on /login/student with your approximate return time and blocks student sign-in on the server while keeping Admin/Staff access open."}
+                  </p>
+
+                  {/* ETA Presets + shadcn DateTimePicker + Custom Notice */}
+                  <div className="grid min-w-0 gap-3.5 @xl/feature:grid-cols-2 rounded-xl border border-border/60 bg-secondary/20 p-3.5 sm:p-4">
+                    <div className="min-w-0 space-y-2">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-foreground break-words">
+                        <Clock className="size-3.5 shrink-0 text-primary" />
+                        <span>
+                          {isAr
+                            ? "الوقت التقريبي لعودة النظام (توقيت القاهرة):"
+                            : "Approximate return time (Cairo):"}
+                        </span>
+                      </span>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { mins: 30, ar: "+30 دقيقة", en: "+30m" },
+                          { mins: 60, ar: "+1 ساعة", en: "+1h" },
+                          { mins: 120, ar: "+2 ساعة", en: "+2h" },
+                          { mins: 240, ar: "+4 ساعات", en: "+4h" },
+                        ].map((preset) => (
+                          <button
+                            key={preset.mins}
+                            type="button"
+                            onClick={() => {
+                              const next = new Date(
+                                Date.now() + preset.mins * 60 * 1000,
+                              );
+                              setEtaDraft(toCairoDateTimeLocal(next));
+                            }}
+                            className="rounded-squircle border border-border/75 bg-card px-2.5 py-1 text-[11px] font-bold text-foreground hover:border-primary/45 transition-colors cursor-pointer"
+                          >
+                            {isAr ? preset.ar : preset.en}
+                          </button>
+                        ))}
+                        {resolvedEtaInput && (
+                          <button
+                            type="button"
+                            onClick={() => setEtaDraft("")}
+                            className="rounded-squircle border border-border/75 bg-card px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                          >
+                            {isAr ? "مسح الوقت" : "Clear"}
+                          </button>
+                        )}
+                      </div>
+
+                      <DateTimePicker
+                        value={resolvedEtaInput}
+                        onChange={(val) => setEtaDraft(val)}
+                        locale={locale}
+                        timeZone="Africa/Cairo"
+                        placeholder={
+                          isAr
+                            ? "اختر التاريخ والوقت التقريبي للعودة"
+                            : "Pick approximate return date & time"
+                        }
+                        className="min-w-0 w-full bg-card/85 border-border/70"
+                      />
+
+                      {settings.studentLoginMaintenanceEta && maintenanceActive && (
+                        <p className="text-[11px] text-primary break-words">
+                          {isAr ? "الموعد المعلن للطلاب: " : "Displayed ETA: "}
+                          <bdi className="font-semibold">
+                            {new Intl.DateTimeFormat(
+                              isAr ? "ar-EG" : "en-GB",
+                              {
+                                timeZone: CAIRO_TIME_ZONE,
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              },
+                            ).format(
+                              new Date(settings.studentLoginMaintenanceEta),
+                            )}
+                          </bdi>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 space-y-2">
+                      <label
+                        htmlFor="student-maintenance-msg"
+                        className="block text-xs font-bold text-foreground break-words"
+                      >
+                        {isAr
+                          ? "رسالة تنبيه إضافية للطلاب (اختياري):"
+                          : "Custom maintenance message (optional):"}
+                      </label>
+                      <Input
+                        id="student-maintenance-msg"
+                        value={resolvedMsgInput}
+                        maxLength={400}
+                        onChange={(e) => setMsgDraft(e.target.value)}
+                        placeholder={
+                          isAr
+                            ? "مثال: جاري تحديث نتائج الفصل الدراسي وتحسين الخوادم..."
+                            : "e.g. Updating semester servers and academic services..."
+                        }
+                        className="h-10 min-w-0 w-full rounded-squircle bg-card/85 border-border/70 text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground leading-relaxed break-words">
+                        {isAr
+                          ? "إذا تُركت فارغة ستظهر الرسالة الرسمية: «جاري العمل على صيانة النظام في الوقت الحالي، الرجاء المحاولة في وقت لاحق»."
+                          : "Leave blank to show the default bilingual maintenance notice."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-border/60 pt-3.5 flex flex-col @lg/feature:flex-row gap-2.5 w-full">
+                  <Button
+                    type="button"
+                    disabled={
+                      updateSettingsMutation.isPending ||
+                      portalSettingsQuery.isFetching
+                    }
+                    onClick={() => {
+                      const parsedEta = resolvedEtaInput
+                        ? cairoDateTimeToIso(resolvedEtaInput) ?? null
+                        : null;
+                      updateSettingsMutation.mutate({
+                        studentLoginMaintenance: true,
+                        studentLoginMaintenanceEta: parsedEta,
+                        studentLoginMaintenanceMessage:
+                          resolvedMsgInput.trim() || null,
+                      });
+                    }}
+                    variant={maintenanceActive ? "default" : "outline"}
+                    className={`h-auto min-h-11 flex-1 min-w-0 whitespace-normal rounded-squircle px-3 py-2.5 text-xs font-bold gap-2 transition-all cursor-pointer ${
+                      maintenanceActive
+                        ? "bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm"
+                        : "border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                    }`}
+                  >
+                    {updateSettingsMutation.isPending ? (
+                      <Loader2 className="size-4 animate-spin shrink-0" />
+                    ) : (
+                      <Lock className="size-4 shrink-0" />
+                    )}
+                    <span className="min-w-0 break-words leading-relaxed">
+                      {maintenanceActive
+                        ? isAr
+                          ? "حفظ تحديث وقت العودة / رسالة الصيانة"
+                          : "Save Updated ETA / Maintenance Notice"
+                        : isAr
+                          ? "تفعيل الصيانة وقفل دخول الطلاب"
+                          : "Enable Maintenance & Lock Student Login"}
+                    </span>
+                  </Button>
+
+                  {maintenanceActive && (
+                    <Button
+                      type="button"
+                      disabled={
+                        updateSettingsMutation.isPending ||
+                        portalSettingsQuery.isFetching
+                      }
+                      onClick={() => {
+                        updateSettingsMutation.mutate({
+                          studentLoginMaintenance: false,
+                          studentLoginMaintenanceEta: null,
+                        });
+                      }}
+                      className="h-auto min-h-11 flex-1 min-w-0 whitespace-normal rounded-squircle px-3 py-2.5 text-xs font-bold gap-2 bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm cursor-pointer"
+                    >
+                      <Unlock className="size-4 shrink-0" />
+                      <span className="min-w-0 break-words leading-relaxed">
+                        {isAr
+                          ? "إنهاء الصيانة وفتح الدخول للطلاب"
+                          : "End Maintenance & Reopen Student Login"}
+                      </span>
+                    </Button>
+                  )}
+                </div>
+              </Card>
             )}
           </div>
         )}

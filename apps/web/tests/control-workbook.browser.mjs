@@ -51,6 +51,7 @@ const server = http.createServer(async (req,res)=>{
       const key=Object.keys(ids).find(k=>url.pathname.includes(ids[k])) || 'midterm';
       if(url.pathname.endsWith('/workbook')) {workbookReads++;return res.end(JSON.stringify({revision:states[key].revision,componentStates:Object.fromEntries(Object.entries(states).map(([k,v])=>[k,v.workflowState])),scheme:{version:schemeVersion,components,courseworkAttendanceMax:5,courseworkQuizzesMax:15},rows}));}
       if(url.pathname.endsWith('/checkpoint') && req.method==='GET') return res.end(JSON.stringify(checkpoints.get(key) ?? null));
+      if(url.pathname.endsWith('/grace/status') && req.method==='GET') return res.end(JSON.stringify({revision:states[key].revision,locked:false,workflowState:states[key].workflowState,activeGrace:graceReceipt,gracedCount:graceReceipt?3:0,eligibleNewCount:0,manuallyModifiedCount:0,legacyGrace:false}));
       if(req.method==='GET') return res.end(JSON.stringify(detail(key)));
       const chunks=[];for await(const chunk of req) chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());
       if(url.pathname.endsWith('/checkpoint') && req.method==='PUT') {
@@ -59,8 +60,17 @@ const server = http.createServer(async (req,res)=>{
         if(checkpointEnabled) checkpoints.set(key,checkpoint);
         return res.end(JSON.stringify({saved:true}));
       }
-      if(url.pathname.endsWith('/grace/preview')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.amount,5);return res.end(JSON.stringify({digest:'a'.repeat(64),revision:states[key].revision,amount:5,max:20,counts:{registered:3001,changed:3,capped:1,atMaximum:1,absentOrBanned:2,held:0,unentered:0,other:2995},sample:[{studentCode:rows[0].studentCode,before:0,added:5,after:5},{studentCode:rows[1].studentCode,before:1,added:5,after:6},{studentCode:rows[2].studentCode,before:18,added:2,after:20}]}));}
-      if(url.pathname.endsWith('/grace')) {assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.digest,'a'.repeat(64));assert.equal(body.expectedRevision,states[key].revision);assert.ok(body.operationId);graceReceipt={amount:5,changed:3,capped:1,appliedAt:new Date().toISOString()};[5,6,20].forEach((score,i)=>rows[i].components.midterm={...rows[i].components.midterm,score,rev:rows[i].components.midterm.rev+1});states[key].revision++;return res.end(JSON.stringify(graceReceipt));}
+      if(url.pathname.endsWith('/grace/preview')) {
+        assert.equal(graceAllowed,true);assert.equal(key,'midterm');
+        if(body.mode==='reset') return res.end(JSON.stringify({mode:'reset',digest:'b'.repeat(64),revision:states[key].revision,amount:0,max:20,counts:{registered:3001,changed:3,capped:0,atMaximum:0,absentOrBanned:2,held:0,unentered:0,other:2996},modeStats:{alreadyGraced:0,manuallyModified:0,excludedNew:0,totalGracedAfter:0},sample:[{studentCode:rows[0].studentCode,originalGrade:0,before:5,added:-5,after:0},{studentCode:rows[1].studentCode,originalGrade:1,before:6,added:-5,after:1},{studentCode:rows[2].studentCode,originalGrade:18,before:20,added:-2,after:18}]}));
+        assert.equal(body.amount,5);
+        return res.end(JSON.stringify({mode:'initial',digest:'a'.repeat(64),revision:states[key].revision,amount:5,max:20,counts:{registered:3001,changed:3,capped:1,atMaximum:1,absentOrBanned:2,held:0,unentered:0,other:2995},modeStats:{alreadyGraced:0,manuallyModified:0,excludedNew:0,totalGracedAfter:3},sample:[{studentCode:rows[0].studentCode,originalGrade:0,before:0,added:5,after:5},{studentCode:rows[1].studentCode,originalGrade:1,before:1,added:5,after:6},{studentCode:rows[2].studentCode,originalGrade:18,before:18,added:2,after:20}]}));
+      }
+      if(url.pathname.endsWith('/grace')) {
+        assert.equal(graceAllowed,true);assert.equal(key,'midterm');assert.equal(body.expectedRevision,states[key].revision);assert.ok(body.operationId);
+        if(body.mode==='reset'){assert.equal(body.digest,'b'.repeat(64));graceReceipt=null;[0,1,18].forEach((score,i)=>rows[i].components.midterm={...rows[i].components.midterm,score,grace:null,rev:rows[i].components.midterm.rev+1});states[key].revision++;return res.end(JSON.stringify({reset:true,amount:0}));}
+        assert.equal(body.digest,'a'.repeat(64));graceReceipt={operationId:body.operationId,amount:5,actorId:'fixture-user',changed:3,capped:1,appliedAt:new Date().toISOString()};[5,6,20].forEach((score,i)=>{const orig=[0,1,18][i];rows[i].components.midterm={...rows[i].components.midterm,score,grace:{originalGrade:orig,appliedAmount:5,actualAdded:score-orig,appliedRev:rows[i].components.midterm.rev+1},rev:rows[i].components.midterm.rev+1};});states[key].revision++;return res.end(JSON.stringify(graceReceipt));
+      }
       if(url.pathname.endsWith('/entries')) {
         if(body.expectedSchemeVersion!==schemeVersion){res.statusCode=409;return res.end(JSON.stringify({code:'SCHEME_CHANGED',message:'Synthetic scheme changed'}));}
         if(denySave){res.statusCode=503;return res.end(JSON.stringify({message:'Synthetic save failure'}));}
@@ -282,10 +292,16 @@ try {
   await grace.getByRole('button',{name:'Preview grace marks',exact:true}).click();
   await grace.getByText('Capped at maximum',{exact:true}).waitFor();
   assert.equal(await grace.getByRole('row').count(),4);
-  await grace.getByRole('button',{name:'Confirm once-only grace marks',exact:true}).click();
+  await grace.getByRole('button',{name:'Confirm grace marks',exact:true}).click();
   await grace.getByText('Grace marks applied and recorded in the audit log.',{exact:true}).waitFor();
   await grace.getByRole('button',{name:'Close grace marks',exact:true}).click();
-  await page.getByRole('button',{name:'Grace marks applied',exact:true,disabled:true}).waitFor();
+  await page.getByRole('button',{name:'Grace marks (+5)',exact:true}).click();
+  await grace.getByRole('button',{name:/Reset to original \(0\)/}).click();
+  await grace.getByRole('button',{name:'Preview reset to original',exact:true}).click();
+  await grace.getByRole('button',{name:'Confirm reset to original grades',exact:true}).click();
+  await grace.getByText('Grace marks reset and original grades restored in the audit log.',{exact:true}).waitFor();
+  await grace.getByRole('button',{name:'Close grace marks',exact:true}).click();
+  await page.getByRole('button',{name:'Grace marks',exact:true}).waitFor();
   checkpointEnabled=true;
   states.midterm.workflowState='DRAFT';
   const sheetUrl=`${base}/en/admin/control/${ids.midterm}`;

@@ -58,16 +58,16 @@ export function ConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
-      <AlertDialogContent dir={dir} className="w-[95vw] max-w-md border-border bg-card p-5 sm:p-6 shadow-2xl rounded-2xl">
-        <AlertDialogHeader className="space-y-2 text-start">
-          <AlertDialogTitle className="text-lg font-bold text-foreground">
+      <AlertDialogContent dir={dir} className="w-[95vw] max-w-md border-border/80 bg-card p-6 shadow-2xl rounded-2xl">
+        <AlertDialogHeader className="space-y-1.5 text-start">
+          <AlertDialogTitle className="text-base sm:text-lg font-bold text-foreground">
             {title}
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            {description}
-          </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end rtl:sm:justify-start mt-5">
+        <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground leading-relaxed text-start py-1">
+          {description}
+        </AlertDialogDescription>
+        <AlertDialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end rtl:sm:justify-start">
           <AlertDialogCancel className="w-full sm:w-auto rounded-squircle text-xs border-border hover:bg-secondary cursor-pointer">
             {cancelLabel}
           </AlertDialogCancel>

@@ -267,7 +267,30 @@ export async function reviewControlSheet(
   return res.data;
 }
 
+export type ControlGraceMode = "initial" | "new_only" | "adjust" | "reset";
+
+export interface GraceStatus {
+  revision: number;
+  locked: boolean;
+  workflowState: ControlSheetDetails["sheet"]["workflowState"];
+  activeGrace: {
+    operationId: string;
+    amount: number;
+    actorId: string;
+    appliedAt: string;
+    changed: number;
+    capped: number;
+    totalGraced?: number;
+    updatedAt?: string;
+  } | null;
+  gracedCount: number;
+  eligibleNewCount: number;
+  manuallyModifiedCount: number;
+  legacyGrace: boolean;
+}
+
 export interface GracePreview {
+  mode?: ControlGraceMode;
   digest: string;
   revision: number;
   amount: number;
@@ -282,6 +305,12 @@ export interface GracePreview {
     unentered: number;
     other: number;
   };
+  modeStats?: {
+    alreadyGraced: number;
+    manuallyModified: number;
+    excludedNew: number;
+    totalGracedAfter: number;
+  };
   passRate?: {
     threshold: number;
     total: number;
@@ -292,6 +321,7 @@ export interface GracePreview {
   };
   sample: Array<{
     studentCode: string;
+    originalGrade?: number;
     before: number;
     added: number;
     after: number;
@@ -308,27 +338,50 @@ export async function updateControlPassThreshold(
   );
   return res.data;
 }
+
+export async function getControlGraceStatus(sheetId: string) {
+  const res = await api.get<GraceStatus>(
+    `/admin/control/sheets/${sheetId}/grace/status`,
+  );
+  return res.data;
+}
+
 export async function previewControlGrace(
   sheetId: string,
   amount: number,
   expectedRevision: number,
+  options?: { mode?: ControlGraceMode; includeNewStudents?: boolean },
 ) {
   const res = await api.post<GracePreview>(
     `/admin/control/sheets/${sheetId}/grace/preview`,
-    { amount, expectedRevision },
+    {
+      amount,
+      expectedRevision,
+      ...(options?.mode ? { mode: options.mode } : {}),
+      ...(options?.includeNewStudents !== undefined
+        ? { includeNewStudents: options.includeNewStudents }
+        : {}),
+    },
   );
   return res.data;
 }
+
 export async function applyControlGrace(
   sheetId: string,
   preview: GracePreview,
   operationId: string,
+  options?: { mode?: ControlGraceMode; includeNewStudents?: boolean },
 ) {
+  const mode = options?.mode ?? preview.mode;
   const res = await api.post(`/admin/control/sheets/${sheetId}/grace`, {
     amount: preview.amount,
     expectedRevision: preview.revision,
     digest: preview.digest,
     operationId,
+    ...(mode ? { mode } : {}),
+    ...(options?.includeNewStudents !== undefined
+      ? { includeNewStudents: options.includeNewStudents }
+      : {}),
   });
   return res.data;
 }

@@ -66,6 +66,7 @@ import {
 } from "@radix-ui/react-dropdown-menu";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -1120,21 +1121,28 @@ export function ControlWorkbookGrid({
           }}
         >
           <DialogContent
+            flush
             dir={rtl ? "rtl" : "ltr"}
-            className="max-w-md rounded-2xl border-border bg-card p-6 shadow-2xl"
+            className="max-w-md"
           >
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-start">
-                <Percent className="size-5 text-primary" />
-                {rtl
-                  ? `تعديل درجة حساب نسبة النجاح — ${t(passRate.component)}`
-                  : `Edit Pass Threshold — ${t(passRate.component)}`}
-              </DialogTitle>
-              <DialogDescription className="text-start text-xs">
-                {rtl
-                  ? `حدد الدرجة التي يُحسب بعدها الطالب ناجحًا في ${t(passRate.component)} (الدرجة العظمى: ${detail.rules.max}).`
-                  : `Set the mark above which a student is counted as passing in ${t(passRate.component)} (Max mark: ${detail.rules.max}).`}
-              </DialogDescription>
+              <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/15 text-primary">
+                  <Percent className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <DialogTitle className="text-base font-bold tracking-tight text-start">
+                    {rtl
+                      ? `تعديل درجة حساب نسبة النجاح — ${t(passRate.component)}`
+                      : `Edit Pass Threshold — ${t(passRate.component)}`}
+                  </DialogTitle>
+                  <DialogDescription className="text-start text-xs">
+                    {rtl
+                      ? `حدد الدرجة التي يُحسب بعدها الطالب ناجحًا في ${t(passRate.component)} (الدرجة العظمى: ${detail.rules.max}).`
+                      : `Set the mark above which a student is counted as passing in ${t(passRate.component)} (Max mark: ${detail.rules.max}).`}
+                  </DialogDescription>
+                </div>
+              </div>
             </DialogHeader>
 
             {(() => {
@@ -1161,6 +1169,7 @@ export function ControlWorkbookGrid({
                   }, 0)
                 : passRate.passed;
               const nextRatio = rows.length ? nextPassed / rows.length : 0;
+              const ratioChanged = nextRatio !== passRate.ratio;
               const pctFmt = new Intl.NumberFormat(locale, {
                 style: "percent",
                 minimumFractionDigits: 2,
@@ -1168,79 +1177,110 @@ export function ControlWorkbookGrid({
               });
 
               return (
-                <div className="space-y-4">
-                  <label className="block space-y-1.5 text-xs font-semibold text-foreground">
-                    <span>
-                      {rtl
-                        ? `درجة النجاح (${0} - ${detail.rules.max})`
-                        : `Pass Mark Threshold (0 - ${detail.rules.max})`}
-                    </span>
-                    <Input
-                      dir="ltr"
-                      type="number"
-                      min={0}
-                      max={detail.rules.max}
-                      step={detail.rules.step || 0.5}
-                      value={thresholdInput}
-                      disabled={thresholdBusy}
-                      className="rounded-squircle text-left"
-                      onChange={(e) => setThresholdInput(e.target.value)}
-                    />
-                  </label>
+                <>
+                  <DialogBody>
+                    <div className="space-y-2.5 rounded-xl border border-border/60 bg-secondary/20 p-4">
+                      <label className="block space-y-2 text-xs font-semibold text-foreground">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>
+                            {rtl
+                              ? `درجة النجاح (${0} - ${detail.rules.max})`
+                              : `Pass Mark Threshold (0 - ${detail.rules.max})`}
+                          </span>
+                          <span className="rounded-squircle border border-border/70 bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {rtl ? "العظمى:" : "Max:"}{" "}
+                            <bdi className="font-mono font-bold text-foreground">
+                              {detail.rules.max}
+                            </bdi>
+                          </span>
+                        </div>
+                        <Input
+                          dir="ltr"
+                          type="number"
+                          min={0}
+                          max={detail.rules.max}
+                          step={detail.rules.step || 0.5}
+                          value={thresholdInput}
+                          disabled={thresholdBusy}
+                          className="h-10 rounded-squircle text-left font-mono font-bold"
+                          onChange={(e) => setThresholdInput(e.target.value)}
+                        />
+                      </label>
+                    </div>
 
-                  <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-2">
-                    <span className="block text-xs font-bold text-foreground">
-                      {rtl
-                        ? "معاينة تغير نسبة النجاح:"
-                        : "Pass Rate Change Preview:"}
-                    </span>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="rounded-squircle border border-border/80 bg-background/70 px-3 py-1.5 text-center flex-1">
-                        <span className="block text-[10px] text-muted-foreground">
-                          {rtl
-                            ? `الحالية (> ${passRate.threshold})`
-                            : `Current (> ${passRate.threshold})`}
-                        </span>
-                        <bdi className="text-sm font-bold tabular-nums text-foreground">
-                          {pctFmt.format(passRate.ratio)}
-                        </bdi>
-                        <span className="block text-[10px] text-muted-foreground">
-                          <bdi>
-                            {passRate.passed} / {passRate.total}
+                    <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
+                      <span className="block text-xs font-bold text-foreground">
+                        {rtl
+                          ? "معاينة تغير نسبة النجاح"
+                          : "Pass Rate Change Preview"}
+                      </span>
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div className="rounded-xl border border-border/60 bg-card/85 px-3 py-2.5 text-center flex-1">
+                          <span className="block text-[11px] text-muted-foreground">
+                            {rtl
+                              ? `الحالية (> ${passRate.threshold})`
+                              : `Current (> ${passRate.threshold})`}
+                          </span>
+                          <bdi className="mt-0.5 block text-lg font-extrabold tabular-nums text-foreground">
+                            {pctFmt.format(passRate.ratio)}
                           </bdi>
-                        </span>
-                      </div>
+                          <span className="block text-[11px] text-muted-foreground">
+                            <bdi className="font-mono">
+                              {passRate.passed} / {passRate.total}
+                            </bdi>
+                          </span>
+                        </div>
 
-                      <ArrowRight className="size-4 shrink-0 text-primary rtl:rotate-180" />
+                        <ArrowRight className="size-4 shrink-0 text-primary rtl:rotate-180" />
 
-                      <div className="rounded-squircle border border-primary/35 bg-primary/15 px-3 py-1.5 text-center flex-1">
-                        <span className="block text-[10px] text-primary">
-                          {rtl
-                            ? `الجديدة (> ${isValidNext ? parsedNext : passRate.threshold})`
-                            : `New (> ${isValidNext ? parsedNext : passRate.threshold})`}
-                        </span>
-                        <bdi className="text-sm font-bold tabular-nums text-primary">
-                          {pctFmt.format(nextRatio)}
-                        </bdi>
-                        <span className="block text-[10px] text-primary/85">
-                          <bdi>
-                            {nextPassed} / {passRate.total}
+                        <div
+                          className={cn(
+                            "rounded-xl border px-3 py-2.5 text-center flex-1 transition-colors",
+                            ratioChanged
+                              ? "border-primary/35 bg-primary/[0.09]"
+                              : "border-border/60 bg-card/85",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "block text-[11px] font-semibold",
+                              ratioChanged
+                                ? "text-primary"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {rtl
+                              ? `الجديدة (> ${isValidNext ? parsedNext : passRate.threshold})`
+                              : `New (> ${isValidNext ? parsedNext : passRate.threshold})`}
+                          </span>
+                          <bdi
+                            className={cn(
+                              "mt-0.5 block text-lg font-extrabold tabular-nums",
+                              ratioChanged
+                                ? "text-primary"
+                                : "text-foreground",
+                            )}
+                          >
+                            {pctFmt.format(nextRatio)}
                           </bdi>
-                        </span>
+                          <span
+                            className={cn(
+                              "block text-[11px]",
+                              ratioChanged
+                                ? "text-primary/85"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            <bdi className="font-mono">
+                              {nextPassed} / {passRate.total}
+                            </bdi>
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </DialogBody>
 
                   <DialogFooter className="gap-2 rtl:sm:justify-start">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={thresholdBusy}
-                      onClick={() => setPassThresholdOpen(false)}
-                      className="rounded-squircle"
-                    >
-                      {rtl ? "إلغاء" : "Cancel"}
-                    </Button>
                     <Button
                       type="button"
                       disabled={thresholdBusy || !isValidNext}
@@ -1275,8 +1315,17 @@ export function ControlWorkbookGrid({
                       )}
                       {rtl ? "حفظ وتحديث النسبة" : "Save Threshold"}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={thresholdBusy}
+                      onClick={() => setPassThresholdOpen(false)}
+                      className="rounded-squircle"
+                    >
+                      {rtl ? "إلغاء" : "Cancel"}
+                    </Button>
                   </DialogFooter>
-                </div>
+                </>
               );
             })()}
           </DialogContent>
@@ -1655,11 +1704,14 @@ export function ControlWorkbookGrid({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-xs"
+            className={cn(
+              "h-9 rounded-squircle text-xs",
+              sheet.grace &&
+                "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 font-semibold",
+            )}
             disabled={
               busy ||
               saving ||
-              Boolean(sheet.grace) ||
               sheet.locked ||
               !["DRAFT", "RETURNED", "IN_REVIEW"].includes(sheet.workflowState)
             }
@@ -1670,8 +1722,8 @@ export function ControlWorkbookGrid({
             <CheckCircle2 className="size-3.5 me-1.5" />
             {sheet.grace
               ? rtl
-                ? "تمت إضافة الرأفة"
-                : "Grace marks applied"
+                ? `درجات الرأفة (+${sheet.grace.amount})`
+                : `Grace marks (+${sheet.grace.amount})`
               : rtl
                 ? "درجات الرأفة"
                 : "Grace marks"}

@@ -74,8 +74,17 @@ export class AuthController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current authenticated user' })
-  async getMe(@CurrentUser('_id') userId: string) {
-    return this.authService.getMe(userId);
+  async getMe(
+    @CurrentUser('_id') userId: string,
+    @Req() req?: express.Request,
+  ) {
+    const [me, session] = await Promise.all([
+      this.authService.getMe(userId),
+      typeof this.authService.getSessionTiming === 'function'
+        ? this.authService.getSessionTiming(req?.cookies?.access_token)
+        : Promise.resolve(null),
+    ]);
+    return session ? { ...me, session } : me;
   }
 
   @Get('csrf')
@@ -256,15 +265,21 @@ export class AuthController {
   @Post('heartbeat')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Record user activity heartbeat and current action',
+    summary: 'Record user activity heartbeat and extend sliding idle session',
   })
   async heartbeat(
     @CurrentUser('_id') userId: string,
     @Body() body: { route?: string; action?: string; actionAr?: string },
     @Headers('user-agent') userAgent?: string,
+    @Req() req?: express.Request,
   ) {
     if (!userId) return { ok: true };
-    await this.authService.recordHeartbeat(userId, body, userAgent);
-    return { ok: true };
+    const [, session] = await Promise.all([
+      this.authService.recordHeartbeat(userId, body, userAgent),
+      typeof this.authService.touchSession === 'function'
+        ? this.authService.touchSession(req?.cookies?.access_token)
+        : Promise.resolve(null),
+    ]);
+    return session ? { ok: true, session } : { ok: true };
   }
 }

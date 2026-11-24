@@ -15,6 +15,11 @@ export interface AttendanceLiveEvent {
     markedByName?: string;
     markedByNameAr?: string;
     markedByNameEn?: string;
+    bonusPoints?: number;
+    bonusReason?: string;
+    bonusAwardedByName?: string;
+    bonusAwardedByNameAr?: string;
+    bonusAwardedByNameEn?: string;
     deviceId?: string;
     deviceFingerprint?: string;
     deviceInfo?: string;

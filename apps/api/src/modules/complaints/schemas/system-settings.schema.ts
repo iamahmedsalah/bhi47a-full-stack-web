@@ -77,6 +77,15 @@ export class SystemSettings {
   @Prop({ default: true })
   syllabiVisible?: boolean;
 
+  @Prop({ default: false })
+  studentLoginMaintenance?: boolean;
+
+  @Prop({ type: Date, default: null })
+  studentLoginMaintenanceEta?: Date | null;
+
+  @Prop({ type: String, trim: true, maxlength: 400, default: null })
+  studentLoginMaintenanceMessage?: string | null;
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   updatedBy?: Types.ObjectId;
 }

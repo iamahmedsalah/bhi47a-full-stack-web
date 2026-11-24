@@ -328,15 +328,31 @@ export class ReviewSheetDto {
   reason?: string;
 }
 
+export const CONTROL_GRACE_MODES = [
+  'initial',
+  'new_only',
+  'adjust',
+  'reset',
+] as const;
+export type ControlGraceMode = (typeof CONTROL_GRACE_MODES)[number];
+
 export class GracePreviewDto {
   @IsNumber({ allowNaN: false, allowInfinity: false })
-  @Min(0.01)
+  @Min(0)
   @Max(1000)
   amount!: number;
 
   @IsInt()
   @Min(0)
   expectedRevision!: number;
+
+  @IsOptional()
+  @IsIn(CONTROL_GRACE_MODES)
+  mode?: ControlGraceMode;
+
+  @IsOptional()
+  @IsBoolean()
+  includeNewStudents?: boolean;
 }
 
 export class ApplyGraceDto extends GracePreviewDto {

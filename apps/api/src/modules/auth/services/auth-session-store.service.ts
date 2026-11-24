@@ -28,6 +28,8 @@ export interface AuthSessionRecord {
   expiresAt: Date;
   createdAt: Date;
   lastAuthenticatedAt?: Date;
+  lastActivityAt?: Date;
+  idleExpiresAt?: Date;
   revokedAt?: Date;
   ip?: string;
   userAgent?: string;
@@ -51,6 +53,8 @@ export const AuthSessionSchema = new Schema<AuthSessionRecord>(
     expiresAt: { type: Date, required: true },
     createdAt: { type: Date, default: Date.now },
     lastAuthenticatedAt: Date,
+    lastActivityAt: Date,
+    idleExpiresAt: Date,
     revokedAt: Date,
     ip: String,
     userAgent: String,
@@ -80,6 +84,20 @@ export class AuthSessionStore {
   private key(claims: SessionClaims, raw: string) {
     return sessionDigest(claims.sid ?? `legacy:${raw}`);
   }
+  getIdleTimeoutMs(): number {
+    const raw = Number(
+      this.config.get<string>('SESSION_IDLE_TIMEOUT_MINUTES', '1440'),
+    );
+    const minutes =
+      Number.isFinite(raw) && raw > 0
+        ? Math.min(Math.max(raw, 5), 10080)
+        : 1440;
+    return Math.round(minutes * 60 * 1000);
+  }
+  private computeIdleExpiresAt(expSeconds: number, fromMs: number): Date {
+    const absoluteMs = expSeconds * 1000;
+    return new Date(Math.min(absoluteMs, fromMs + this.getIdleTimeoutMs()));
+  }
   async register(claims: SessionClaims, metadata?: SessionMetadata) {
     if (
       !claims.sid ||
@@ -87,6 +105,8 @@ export class AuthSessionStore {
       !Number.isSafeInteger(claims.exp)
     )
       throw new UnauthorizedException('Invalid session');
+    const now = new Date();
+    const idleExpiresAt = this.computeIdleExpiresAt(claims.exp, now.getTime());
     try {
       // The hashed SID is the database idempotency key. Retries never change the
       // original expiry/creation time or remove a revocation tombstone.
@@ -97,7 +117,9 @@ export class AuthSessionStore {
             userId: claims.sub,
             tokenVersion: claims.tokenVersion ?? 0,
             expiresAt: new Date(claims.exp * 1000),
-            createdAt: new Date(),
+            createdAt: now,
+            lastActivityAt: now,
+            idleExpiresAt,
             ...metadata,
           },
         },
@@ -143,7 +165,16 @@ export class AuthSessionStore {
           ([, value]) => value !== undefined,
         ),
       ),
-      ...(authenticatedAt ? { lastAuthenticatedAt: authenticatedAt } : {}),
+      ...(authenticatedAt
+        ? {
+            lastAuthenticatedAt: authenticatedAt,
+            lastActivityAt: authenticatedAt,
+            idleExpiresAt: this.computeIdleExpiresAt(
+              claims.exp,
+              authenticatedAt.getTime(),
+            ),
+          }
+        : {}),
     };
     await this.records.updateOne(
       {
@@ -157,7 +188,8 @@ export class AuthSessionStore {
     );
   }
   async assertActive(claims: SessionClaims, raw: string) {
-    const now = Math.floor(Date.now() / 1000);
+    const nowDate = new Date();
+    const now = Math.floor(nowDate.getTime() / 1000);
     if (
       !Number.isSafeInteger(claims.iat) ||
       !Number.isSafeInteger(claims.exp) ||
@@ -176,16 +208,31 @@ export class AuthSessionStore {
           this.config.get<string>('JWT_AUDIENCE', 'student-portal-web')
       )
         throw new UnauthorizedException('Invalid session claims');
-      if (
-        !(await this.records.exists({
-          _id: this.key(claims, raw),
-          userId: claims.sub,
-          tokenVersion: claims.tokenVersion ?? 0,
-          revokedAt: null,
-          expiresAt: { $gt: new Date() },
-        }))
-      )
+      const filter = {
+        _id: this.key(claims, raw),
+        userId: claims.sub,
+        tokenVersion: claims.tokenVersion ?? 0,
+        revokedAt: null,
+        expiresAt: { $gt: nowDate },
+      };
+      if (typeof this.records.find === 'function') {
+        const rows = await this.records
+          .find(filter)
+          .select('idleExpiresAt expiresAt lastActivityAt')
+          .limit(1)
+          .lean();
+        const session = rows[0];
+        if (!session)
+          throw new UnauthorizedException('Session revoked or expired');
+        if (session.idleExpiresAt && session.idleExpiresAt <= nowDate) {
+          throw new UnauthorizedException({
+            code: 'SESSION_IDLE_EXPIRED',
+            message: 'Session expired due to inactivity',
+          });
+        }
+      } else if (!(await this.records.exists(filter))) {
         throw new UnauthorizedException('Session revoked or expired');
+      }
     } else {
       const cutoff = Date.parse(
         this.config.get<string>('LEGACY_JWT_ACCEPT_UNTIL', ''),
@@ -202,6 +249,56 @@ export class AuthSessionStore {
       )
         throw new UnauthorizedException('Please sign in again');
     }
+  }
+  async touch(claims: SessionClaims, raw: string) {
+    if (!claims.sid || !Number.isSafeInteger(claims.exp)) return null;
+    const now = new Date();
+    const idleTimeoutMs = this.getIdleTimeoutMs();
+    const absoluteExpiresAt = new Date(claims.exp * 1000);
+    const idleExpiresAt = this.computeIdleExpiresAt(claims.exp, now.getTime());
+    await this.records.updateOne(
+      {
+        _id: this.key(claims, raw),
+        userId: claims.sub,
+        tokenVersion: claims.tokenVersion ?? 0,
+        revokedAt: null,
+        expiresAt: { $gt: now },
+      },
+      { $set: { lastActivityAt: now, idleExpiresAt } },
+    );
+    return {
+      idleExpiresAt: idleExpiresAt.toISOString(),
+      absoluteExpiresAt: absoluteExpiresAt.toISOString(),
+      idleTimeoutSeconds: Math.floor(idleTimeoutMs / 1000),
+    };
+  }
+  async getSessionTiming(claims: SessionClaims, raw: string) {
+    if (!claims.sid || !Number.isSafeInteger(claims.exp)) return null;
+    const now = new Date();
+    const idleTimeoutMs = this.getIdleTimeoutMs();
+    const absoluteExpiresAt = new Date(claims.exp * 1000);
+    let idleExpiresAt = this.computeIdleExpiresAt(claims.exp, now.getTime());
+    if (typeof this.records.find === 'function') {
+      const rows = await this.records
+        .find({
+          _id: this.key(claims, raw),
+          userId: claims.sub,
+          tokenVersion: claims.tokenVersion ?? 0,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        })
+        .select('idleExpiresAt expiresAt')
+        .limit(1)
+        .lean();
+      if (rows[0]?.idleExpiresAt) {
+        idleExpiresAt = new Date(rows[0].idleExpiresAt);
+      }
+    }
+    return {
+      idleExpiresAt: idleExpiresAt.toISOString(),
+      absoluteExpiresAt: absoluteExpiresAt.toISOString(),
+      idleTimeoutSeconds: Math.floor(idleTimeoutMs / 1000),
+    };
   }
   async revoke(claims: SessionClaims, raw: string) {
     await this.records.updateOne(

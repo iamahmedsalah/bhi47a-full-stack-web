@@ -66,12 +66,15 @@ export async function createAttendanceWorkbook(
     ['excused', 'Excused', 'بعذر', 12],
     ['absent', 'Marked absent', 'مسجل غائب', 14],
     ['total', 'Total records', 'إجمالي السجلات', 14],
+    ['totalBonus', 'Total bonus', 'إجمالي البونص', 14],
   ]);
   const attendance = sheet(ar ? 'الحضور' : 'Attendance', [
     ...context,
     ['studentCode', 'Student code', 'كود الطالب', 16],
     ['studentName', 'Student name', 'اسم الطالب', 32],
     ['status', 'Attendance status', 'حالة الحضور'],
+    ['bonusPoints', 'Bonus marks', 'درجات البونص', 14],
+    ['bonusReason', 'Bonus reason', 'سبب البونص', 28],
     ['method', 'Check-in method', 'وسيلة التسجيل'],
     ['checkedInAt', 'Check-in (Cairo)', 'وقت التسجيل (القاهرة)', 24],
     ['checkedInAtUtc', 'Check-in (UTC ISO)', 'وقت التسجيل (UTC)', 26],
@@ -164,10 +167,21 @@ export async function createAttendanceWorkbook(
       venue: session.location?.venueName || '',
       radius: session.location?.radiusMeters,
     };
-    const counts = { present: 0, late: 0, excused: 0, absent: 0, total: 0 };
+    const counts = {
+      present: 0,
+      late: 0,
+      excused: 0,
+      absent: 0,
+      total: 0,
+      totalBonus: 0,
+    };
     for await (const record of records) {
       counts[record.status] += 1;
       counts.total += 1;
+      const bonusVal =
+        typeof record.bonusPoints === 'number' ? record.bonusPoints : 0;
+      counts.totalBonus =
+        Math.round((counts.totalBonus + bonusVal) * 100) / 100;
       const trail = record.auditTrail || [];
       let distance: number | undefined;
       if (record.location && session.location) {
@@ -192,6 +206,8 @@ export async function createAttendanceWorkbook(
         studentCode: String(record.studentCode),
         studentName: record.studentName,
         status: label(record.status),
+        bonusPoints: bonusVal,
+        bonusReason: record.bonusReason || '',
         method: label(record.method),
         checkedInAt: cairo(record.checkedInAt),
         checkedInAtUtc: record.checkedInAt.toISOString(),

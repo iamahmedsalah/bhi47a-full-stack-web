@@ -198,7 +198,10 @@ export function DateTimePicker({
                   <SelectTrigger className="h-9 w-[64px] sm:w-full border-border bg-surface/50 text-xs font-mono rounded-squircle cursor-pointer">
                     <SelectValue placeholder="HH" />
                   </SelectTrigger>
-                  <SelectContent className="border-border bg-card">
+                  <SelectContent
+                    dir={isAr ? 'rtl' : 'ltr'}
+                    className="z-[60] max-h-56 border-border bg-card"
+                  >
                     {Array.from({ length: 12 }, (_, i) =>
                       String(i + 1).padStart(2, '0'),
                     ).map((h) => (
@@ -221,7 +224,10 @@ export function DateTimePicker({
                   <SelectTrigger className="h-9 w-[64px] sm:w-full border-border bg-surface/50 text-xs font-mono rounded-squircle cursor-pointer">
                     <SelectValue placeholder="MM" />
                   </SelectTrigger>
-                  <SelectContent className="border-border bg-card">
+                  <SelectContent
+                    dir={isAr ? 'rtl' : 'ltr'}
+                    className="z-[60] max-h-56 border-border bg-card"
+                  >
                     {Array.from({ length: 60 }, (_, i) =>
                       String(i).padStart(2, '0'),
                     ).map((m) => (
@@ -246,7 +252,10 @@ export function DateTimePicker({
                   <SelectTrigger className="h-9 w-[64px] sm:w-full border-border bg-surface/50 text-xs font-mono rounded-squircle cursor-pointer">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-border bg-card">
+                  <SelectContent
+                    dir={isAr ? 'rtl' : 'ltr'}
+                    className="z-[60] max-h-56 border-border bg-card"
+                  >
                     <SelectItem value="AM" className="text-xs cursor-pointer">
                       {isAr ? 'ص' : 'AM'}
                     </SelectItem>

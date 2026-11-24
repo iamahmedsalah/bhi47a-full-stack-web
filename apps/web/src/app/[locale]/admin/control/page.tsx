@@ -743,66 +743,60 @@ function ControlHomeContent() {
       ]}
     >
       <div className="space-y-6" dir={isAr ? "rtl" : "ltr"}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <PageTitleBanner
-            title={
-              isAr
-                ? "الكنترول — رصد ومراجعة الدرجات"
-                : "Control — Grade Entry & Sheets"
-            }
-            subtitle={
-              isAr
-                ? "إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات."
-                : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
-            }
-            eyebrow={isAr ? "أعمال الكنترول" : "Academic Control Office"}
-            icon={<FileSpreadsheet className="size-4" />}
-          />
-
-          <div className="flex flex-wrap items-center gap-2">
-            {(caps?.canCreatePetitions ||
-              caps?.canApprovePetitions ||
-              caps?.scopeAll) && (
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-squircle gap-2 text-xs font-bold border-primary/30 hover:bg-primary/10"
-                onClick={() =>
-                  router.push(
-                    `/${locale}/admin/control/petitions?academicYear=${encodeURIComponent(academicYear)}&semester=${encodeURIComponent(semester)}`,
-                  )
-                }
-              >
-                <FileCheck2 className="size-4 text-primary" />
-                <span>
-                  {isAr ? "طلبات التماس الدرجات" : "Grade Petitions"}
+        <PageTitleBanner
+          title={
+            isAr
+              ? "الكنترول — رصد ومراجعة الدرجات"
+              : "Control — Grade Entry & Sheets"
+          }
+          subtitle={
+            isAr
+              ? "إدخال ومراجعة درجات الميدتيرم عبر شبكة تفاعلية سريعة مع سجل تدقيق كامل وقفل الكشوف. نشر النتائج للطلاب يظل حصرياً في موديول الدرجات."
+              : "Interactive spreadsheet-style coursework, midterm and final grade entry with full audit logging and sheet locking. Publishing to students remains in the Grades module."
+          }
+          icon={<FileSpreadsheet className="h-6 w-6 text-primary" />}
+        >
+          {(caps?.canCreatePetitions ||
+            caps?.canApprovePetitions ||
+            caps?.scopeAll) && (
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center gap-2 rounded-squircle border-primary/30 font-semibold hover:bg-primary/10"
+              onClick={() =>
+                router.push(
+                  `/${locale}/admin/control/petitions?academicYear=${encodeURIComponent(academicYear)}&semester=${encodeURIComponent(semester)}`,
+                )
+              }
+            >
+              <FileCheck2 className="h-4 w-4 text-primary" />
+              <span>
+                {isAr ? "طلبات التماس الدرجات" : "Grade Petitions"}
+              </span>
+              {totalPetitionNotifications > 0 && (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground animate-pulse">
+                  <Bell className="size-2.5" />
+                  {totalPetitionNotifications}
                 </span>
-                {totalPetitionNotifications > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground animate-pulse">
-                    <Bell className="size-2.5" />
-                    {totalPetitionNotifications}
-                  </span>
-                )}
-              </Button>
-            )}
+              )}
+            </Button>
+          )}
 
-            {(caps?.canLock || caps?.canUnlock) && (
-              <Button
-                type="button"
-                variant="default"
-                className="rounded-squircle gap-1.5 text-xs font-bold"
-                onClick={() => setBulkLockOpen(true)}
-              >
-                <Lock className="size-3.5" />
-                <span>
-                  {isAr
-                    ? "إدارة قفل الكنترول الجماعي"
-                    : "Bulk Lock / Unlock Control"}
-                </span>
-              </Button>
-            )}
-          </div>
-        </div>
+          {(caps?.canLock || caps?.canUnlock) && (
+            <Button
+              type="button"
+              className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle"
+              onClick={() => setBulkLockOpen(true)}
+            >
+              <Lock className="h-4 w-4" />
+              <span>
+                {isAr
+                  ? "إدارة قفل الكنترول الجماعي"
+                  : "Bulk Lock / Unlock Control"}
+              </span>
+            </Button>
+          )}
+        </PageTitleBanner>
 
         {selectedKeys.length > 0 && (caps?.canLock || caps?.canUnlock) && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs">

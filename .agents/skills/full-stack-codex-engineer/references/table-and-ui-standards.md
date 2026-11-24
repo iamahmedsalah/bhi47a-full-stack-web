@@ -88,4 +88,60 @@ Strictly reserve `rounded-squircle` for small-to-medium interactive components a
   - For cards, table containers, and intermediate content blocks: Use `rounded-xl`.
 - **When to use `rounded-full`:** Strictly reserve `rounded-full` for circular user avatars (`<Avatar>`), circular icon indicators, or small circular status dots. Do not use `rounded-full` for text pills or buttons where `rounded-squircle` provides superior typographic rhythm and proportions.
 
+---
+
+## 5. Global Modal Shell & Surface Hierarchy Standards
+
+All dialogs across the Student Portal (`@/components/ui/dialog` and `@/components/ui/alert-dialog`) follow one unified pure-flexbox architecture modeled after `ControlGraceDialog`:
+
+### A. Canonical Modal Structure (`DialogHeader` + `DialogBody` + `DialogFooter`)
+```tsx
+<Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogContent flush dir={isAr ? "rtl" : "ltr"} className="max-w-2xl">
+    <DialogHeader>
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/15 text-primary">
+          <Sparkles className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <DialogTitle className="text-base sm:text-lg font-bold tracking-tight text-start">
+            {/* Title */}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground text-start">
+            {/* Subtitle / context */}
+          </DialogDescription>
+        </div>
+      </div>
+    </DialogHeader>
+
+    <DialogBody>
+      {/* Only this region scrolls; grouped sections use rounded-xl border border-border/60 bg-secondary/20 p-4 */}
+    </DialogBody>
+
+    <DialogFooter className="rtl:sm:justify-start">
+      <Button className="rounded-squircle">{/* Primary action */}</Button>
+      <Button variant="outline" className="rounded-squircle">{/* Secondary / cancel */}</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```
+
+### B. Non-Negotiable Modal Layout & Surface Rules
+1. **Pure Flexbox Only (No Sticky/Negative-Margin Hacks):** `DialogContent` always renders `flex flex-col gap-0 p-0 overflow-hidden max-h-[90vh] rounded-2xl border-border/80 bg-card shadow-2xl`. `DialogHeader` (`shrink-0 bg-background/60 border-b border-border/70`) and `DialogFooter` (`shrink-0 bg-background/80 border-t border-border/70`) stay fixed while only `DialogBody` scrolls. Never add outer padding (`p-6`) or `overflow-y-auto` back onto `DialogContent` when using fixed headers/footers.
+2. **Calm Matte Inner Card Surface:** Inside `bg-card` modals, render grouped input sections, summary cards, and before/after comparison panels (like midterm pass-rate impact cards) with `rounded-xl border border-border/60 bg-secondary/20 p-4`, and nested sub-cards with `rounded-xl border border-border/60 bg-card/85`. Reserve subtle accent tints (`border-primary/35 bg-primary/[0.09]`, `border-amber-500/35 bg-amber-500/[0.08]`, `border-emerald-500/35 bg-emerald-500/12`) strictly for active deltas, badges, and status indicators rather than flooding whole panels in cyan/teal gradients.
+3. **Multi-Stage Modals:** For complex administrative actions (preview → confirm → completed), place a compact 3-step visual progress indicator inside `DialogHeader`, render the stage content inside `DialogBody`, and keep stage actions anchored in `DialogFooter`.
+4. **RTL Close & Action Alignment:** Keep `pe-12` on `DialogHeader` so the top-end close (`X`) button never collides with titles or badges, and align `DialogFooter` via `rtl:sm:justify-start` with the primary CTA first in Arabic RTL.
+
+---
+
+## 6. Mobile-First Student Portal UI Standard (`360px–430px` First)
+
+Because the vast majority of students access the portal (QR attendance check-in, dashboard, quizzes, grades, login) from smartphones, **every student-facing screen and component MUST be designed Mobile-First**:
+1. **Design From `360px–430px` Upward:** Always author base Tailwind classes for a single-column phone screen first, then enhance with `sm:`, `md:`, and `lg:` breakpoints.
+2. **Touch-Friendly Ergonomics:** Primary actions (Scan QR, Check In, Submit, Retry) must be full-width on mobile (`w-full sm:w-auto`) with `min-h-11` (`44px`) comfortable tap targets and generous vertical spacing (`gap-3` / `space-y-3`).
+3. **Zero Horizontal Overflow:** Guard against cramped badges, long course names, or wide tables pushing the viewport horizontally (`min-w-0`, `truncate`, `flex-wrap`, or horizontal snap-scroll strips for filter chips).
+4. **Actionable Above-the-Fold Priority:** On student mobile dashboards, prioritize urgent live states first (Tuition Hold notice → Live QR Attendance Hub → Open Quizzes → Quick summary cards) so students never hunt across multiple pages on a phone screen.
+
+
+
 

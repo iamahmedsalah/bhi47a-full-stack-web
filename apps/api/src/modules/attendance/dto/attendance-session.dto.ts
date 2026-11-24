@@ -272,6 +272,28 @@ export class ManualMarkAttendanceDto {
   note?: string;
 }
 
+export class UpdateAttendanceBonusDto {
+  @ApiProperty({
+    example: 2,
+    description:
+      'Bonus marks awarded to the student for this session (0 removes bonus)',
+  })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(20)
+  bonusPoints!: number;
+
+  @ApiPropertyOptional({
+    example: 'Active participation in lecture exercise',
+    description: 'Optional reason for awarding or adjusting bonus marks',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
 export class ManualStudentCheckInDto {
   @ApiProperty({
     example: '2026001',

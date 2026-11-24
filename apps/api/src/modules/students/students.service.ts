@@ -1178,6 +1178,42 @@ export class StudentsService {
     );
   }
 
+  private formatPortalSettingsResponse(settings?: {
+    registrationVisible?: boolean;
+    syllabiVisible?: boolean;
+    studentLoginMaintenance?: boolean;
+    studentLoginMaintenanceEta?: Date | null;
+    studentLoginMaintenanceMessage?: string | null;
+  }) {
+    return {
+      registrationVisible: settings?.registrationVisible ?? true,
+      syllabiVisible: settings?.syllabiVisible ?? true,
+      studentLoginMaintenance: Boolean(settings?.studentLoginMaintenance),
+      studentLoginMaintenanceEta: settings?.studentLoginMaintenanceEta
+        ? new Date(settings.studentLoginMaintenanceEta).toISOString()
+        : null,
+      studentLoginMaintenanceMessage:
+        settings?.studentLoginMaintenanceMessage ?? null,
+    };
+  }
+
+  async getStudentLoginStatus() {
+    const settings = await this.systemSettingsModel
+      .findOne()
+      .select(
+        'studentLoginMaintenance studentLoginMaintenanceEta studentLoginMaintenanceMessage',
+      )
+      .lean();
+    return {
+      studentLoginMaintenance: Boolean(settings?.studentLoginMaintenance),
+      studentLoginMaintenanceEta: settings?.studentLoginMaintenanceEta
+        ? new Date(settings.studentLoginMaintenanceEta).toISOString()
+        : null,
+      studentLoginMaintenanceMessage:
+        settings?.studentLoginMaintenanceMessage ?? null,
+    };
+  }
+
   async getPortalSettings() {
     let settings = await this.systemSettingsModel.findOne();
     if (!settings) {
@@ -1186,12 +1222,10 @@ export class StudentsService {
         gradesSystemOpen: true,
         registrationVisible: true,
         syllabiVisible: true,
+        studentLoginMaintenance: false,
       });
     }
-    return {
-      registrationVisible: settings.registrationVisible ?? true,
-      syllabiVisible: settings.syllabiVisible ?? true,
-    };
+    return this.formatPortalSettingsResponse(settings);
   }
 
   async updatePortalSettings(dto: UpdatePortalSettingsDto, userId?: string) {
@@ -1202,6 +1236,7 @@ export class StudentsService {
         gradesSystemOpen: true,
         registrationVisible: true,
         syllabiVisible: true,
+        studentLoginMaintenance: false,
       });
     }
     if (dto.registrationVisible !== undefined) {
@@ -1210,14 +1245,29 @@ export class StudentsService {
     if (dto.syllabiVisible !== undefined) {
       settings.syllabiVisible = dto.syllabiVisible;
     }
+    if (dto.studentLoginMaintenance !== undefined) {
+      settings.studentLoginMaintenance = dto.studentLoginMaintenance;
+      if (
+        !dto.studentLoginMaintenance &&
+        dto.studentLoginMaintenanceEta === undefined
+      ) {
+        settings.studentLoginMaintenanceEta = null;
+      }
+    }
+    if (dto.studentLoginMaintenanceEta !== undefined) {
+      settings.studentLoginMaintenanceEta = dto.studentLoginMaintenanceEta
+        ? new Date(dto.studentLoginMaintenanceEta)
+        : null;
+    }
+    if (dto.studentLoginMaintenanceMessage !== undefined) {
+      settings.studentLoginMaintenanceMessage =
+        dto.studentLoginMaintenanceMessage || null;
+    }
     if (userId && Types.ObjectId.isValid(userId)) {
       settings.updatedBy = new Types.ObjectId(userId);
     }
     await settings.save();
-    return {
-      registrationVisible: settings.registrationVisible ?? true,
-      syllabiVisible: settings.syllabiVisible ?? true,
-    };
+    return this.formatPortalSettingsResponse(settings);
   }
 
   async resetAcademicRecords(dto: ResetAcademicRecordsDto) {

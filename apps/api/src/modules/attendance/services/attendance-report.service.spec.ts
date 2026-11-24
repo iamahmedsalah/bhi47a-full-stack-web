@@ -385,4 +385,152 @@ describe('Attendance export permissions', () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('rejects manual staff check-in when the student is financially blocked (isBlocked)', async () => {
+    const targetSessionId = new Types.ObjectId();
+    const targetStudentId = new Types.ObjectId();
+    const recordModel = { findOne: jest.fn(), create: jest.fn() };
+    const sessionModel = {
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          _id: targetSessionId,
+          courseCode: 'BIS301',
+          sessionType: 'lecture',
+          academicYear: '2026-2027',
+          semester: 'first',
+        }),
+      }),
+    };
+    const userModel = {
+      findOne: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          _id: targetStudentId,
+          name: 'Held Student',
+          studentCode: '260999',
+        }),
+      }),
+    };
+    const registrationModel = {
+      exists: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+    };
+    const studentProfileModel = {
+      findOne: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            isBlocked: true,
+            blockReason: 'Unpaid tuition',
+          }),
+        }),
+      }),
+    };
+
+    const service = new AttendanceReportService(
+      recordModel as never,
+      sessionModel as never,
+      userModel as never,
+      { publishEvent: jest.fn() } as never,
+      registrationModel as never,
+      studentProfileModel as never,
+    );
+
+    await expect(
+      service.manualStudentCheckIn(
+        targetSessionId.toString(),
+        { _id: new Types.ObjectId().toString(), name: 'Dr. Ali' },
+        { studentCode: '260999', status: 'present' },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'STUDENT_TUITION_BLOCKED',
+      }),
+    });
+    expect(recordModel.create).not.toHaveBeenCalled();
+  });
+
+  it('awards, audits, broadcasts, and aggregates attendance bonus marks', async () => {
+    const recId = new Types.ObjectId();
+    const sessId = new Types.ObjectId();
+    const studId = new Types.ObjectId();
+    const save = jest.fn().mockResolvedValue(true);
+    const publishEvent = jest.fn();
+    const recordDoc: Record<string, any> = {
+      _id: recId,
+      sessionId: sessId,
+      studentId: studId,
+      studentCode: '260001',
+      studentName: 'Sara Mahmoud',
+      courseCode: 'CS304',
+      status: 'present',
+      method: 'qr',
+      checkedInAt: new Date('2026-11-20T09:00:00Z'),
+      bonusPoints: 0,
+      auditTrail: [],
+      save,
+    };
+
+    const recordModel = {
+      findById: jest.fn().mockResolvedValue(recordDoc),
+      find: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              courseCode: 'CS304',
+              status: 'present',
+              bonusPoints: 2.5,
+              checkedInAt: new Date(),
+            },
+            {
+              courseCode: 'CS304',
+              status: 'late',
+              bonusPoints: 1,
+              checkedInAt: new Date(),
+            },
+          ]),
+        }),
+      }),
+    };
+
+    const service = new AttendanceReportService(
+      recordModel as never,
+      {} as never,
+      {} as never,
+      { publishEvent } as never,
+      {} as never,
+    );
+
+    const updated = await service.updateRecordBonus(
+      recId.toString(),
+      {
+        _id: new Types.ObjectId().toString(),
+        name: 'Dr. Hany',
+        role: 'staff',
+        staffType: 'doctor',
+        titlePrefix: 'dr',
+      },
+      { bonusPoints: 2.5, reason: 'Solved lab problem' },
+    );
+
+    expect(updated.bonusPoints).toBe(2.5);
+    expect(updated.bonusReason).toBe('Solved lab problem');
+    expect(updated.auditTrail).toHaveLength(1);
+    expect(updated.auditTrail[0]).toMatchObject({
+      action: 'BONUS_UPDATED',
+      previousBonusPoints: 0,
+      newBonusPoints: 2.5,
+    });
+    expect(save).toHaveBeenCalled();
+    expect(publishEvent).toHaveBeenCalledWith(
+      sessId.toString(),
+      expect.objectContaining({
+        type: 'STATUS_CHANGE',
+        record: expect.objectContaining({ bonusPoints: 2.5 }),
+      }),
+    );
+
+    const history = await service.getStudentAttendanceHistory(
+      studId.toString(),
+    );
+    expect(history.summary.totalBonusPoints).toBe(3.5);
+    expect(history.courses[0].totalBonusPoints).toBe(3.5);
+  });
 });

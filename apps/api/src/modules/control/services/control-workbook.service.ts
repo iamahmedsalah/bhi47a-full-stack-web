@@ -126,7 +126,7 @@ export class ControlWorkbookService {
           examType: { $in: CONTROL_COMPONENT_KEYS },
         })
         .select(
-          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark carriedFrom',
+          'studentId examType grade status rev cleared isPublished updatedAt attendanceMark quizzesMark carriedFrom grace',
         )
         .batchSize(500)
         .lean(),
@@ -190,6 +190,15 @@ export class ControlWorkbookService {
                 )
                   ? null
                   : (doc.quizzesMark ?? null),
+              grace:
+                doc.cleared || !doc.grace
+                  ? null
+                  : {
+                      originalGrade: doc.grace.originalGrade,
+                      appliedAmount: doc.grace.appliedAmount,
+                      actualAdded: doc.grace.actualAdded,
+                      appliedRev: doc.grace.appliedRev,
+                    },
             },
           ]),
         );

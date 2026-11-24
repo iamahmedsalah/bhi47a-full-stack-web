@@ -32,6 +32,7 @@ import {
   CreateAttendanceSessionDto,
   CheckInAttendanceDto,
   ManualMarkAttendanceDto,
+  UpdateAttendanceBonusDto,
   ManualStudentCheckInDto,
   QueryAttendanceRecordsDto,
   CreateCourseStaffAssignmentDto,
@@ -248,6 +249,20 @@ export class AttendanceController {
     @Body() dto: ManualMarkAttendanceDto,
   ) {
     return this.reportService.manualUpdateRecord(id, user, dto);
+  }
+
+  @Patch('attendance/records/:id/bonus')
+  @Roles('staff', 'admin')
+  @RequireAttendanceSessionAccess('record')
+  @ApiOperation({
+    summary: 'Award or update attendance bonus marks for a student record',
+  })
+  async updateRecordBonus(
+    @Param('id') id: string,
+    @CurrentUser() user: { _id: string; name: string },
+    @Body() dto: UpdateAttendanceBonusDto,
+  ) {
+    return this.reportService.updateRecordBonus(id, user, dto);
   }
 
   @Post('attendance/sessions/:id/manual-mark')

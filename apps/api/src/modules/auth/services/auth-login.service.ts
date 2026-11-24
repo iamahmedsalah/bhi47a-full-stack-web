@@ -1,8 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  Optional,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
@@ -16,6 +20,10 @@ import {
   buildOtpEmail,
   resolveEmailLanguage,
 } from '../../emails/templates/email-content';
+import {
+  SystemSettings,
+  type SystemSettingsDocument,
+} from '../../complaints/schemas/system-settings.schema';
 
 interface VerifiedGoogleAccount {
   googleId: string;
@@ -29,7 +37,6 @@ function normalizeArabicNumerals(value?: string): string {
   return value.trim().replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
 }
 
-import { Optional } from '@nestjs/common';
 import { MetricsService } from '../../../core/metrics/metrics.service';
 import { RecentAuthService } from './recent-auth.service';
 export interface GoogleFlowProof {
@@ -50,9 +57,38 @@ export class AuthLoginService {
     private readonly emailsService: EmailsService,
     @Optional() private readonly metricsService?: MetricsService,
     @Optional() private readonly recentAuth?: RecentAuthService,
+    @Optional()
+    @InjectModel(SystemSettings.name)
+    private readonly systemSettingsModel?: Model<SystemSettingsDocument>,
   ) {}
 
+  async assertStudentLoginOpen() {
+    if (!this.systemSettingsModel) return;
+    const settings = await this.systemSettingsModel
+      .findOne()
+      .select(
+        'studentLoginMaintenance studentLoginMaintenanceEta studentLoginMaintenanceMessage',
+      )
+      .lean();
+    if (settings?.studentLoginMaintenance) {
+      const eta = settings.studentLoginMaintenanceEta
+        ? new Date(settings.studentLoginMaintenanceEta).toISOString()
+        : null;
+      throw new ServiceUnavailableException({
+        code: 'STUDENT_LOGIN_MAINTENANCE',
+        message:
+          settings.studentLoginMaintenanceMessage ||
+          'جاري العمل على صيانة النظام في الوقت الحالي، الرجاء المحاولة في وقت لاحق.',
+        messageEn:
+          'System maintenance is currently in progress. Please try again later.',
+        eta,
+        customMessage: settings.studentLoginMaintenanceMessage ?? null,
+      });
+    }
+  }
+
   async studentLogin(dto: StudentLoginDto) {
+    await this.assertStudentLoginOpen();
     const cleanStudentCode = normalizeArabicNumerals(dto.studentCode);
     const cleanPassword = normalizeArabicNumerals(dto.password);
 
@@ -233,6 +269,7 @@ export class AuthLoginService {
   }
 
   async googleLogin(credential: string, flow?: GoogleFlowProof) {
+    await this.assertStudentLoginOpen();
     let googleAccount: VerifiedGoogleAccount;
     try {
       googleAccount = await this.verifyGoogleCredential(credential, flow);

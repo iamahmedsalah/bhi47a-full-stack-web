@@ -186,6 +186,30 @@ export class AuthSessionService {
     );
   }
 
+  async touchSession(token?: string) {
+    if (!token || !this.sessionStore) return null;
+    try {
+      const claims = this.jwtService.verify<SessionClaims>(token, {
+        algorithms: ['HS256'],
+      });
+      return await this.sessionStore.touch(claims, token);
+    } catch {
+      return null;
+    }
+  }
+
+  async getSessionTiming(token?: string) {
+    if (!token || !this.sessionStore) return null;
+    try {
+      const claims = this.jwtService.verify<SessionClaims>(token, {
+        algorithms: ['HS256'],
+      });
+      return await this.sessionStore.getSessionTiming(claims, token);
+    } catch {
+      return null;
+    }
+  }
+
   async listSessions(userId: string, token: string, req?: Request) {
     if (!this.sessionStore) throw new UnauthorizedException();
     const claims = this.jwtService.verify<SessionClaims>(token, {

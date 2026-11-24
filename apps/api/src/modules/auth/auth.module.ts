@@ -46,6 +46,10 @@ import {
   AcademicEmail,
   AcademicEmailSchema,
 } from '../academic-emails/schemas/academic-email.schema';
+import {
+  SystemSettings,
+  SystemSettingsSchema,
+} from '../complaints/schemas/system-settings.schema';
 
 @Module({
   imports: [
@@ -60,6 +64,7 @@ import {
       { name: 'PasskeySettings', schema: PasskeySettingsSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: AcademicEmail.name, schema: AcademicEmailSchema },
+      { name: SystemSettings.name, schema: SystemSettingsSchema },
     ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

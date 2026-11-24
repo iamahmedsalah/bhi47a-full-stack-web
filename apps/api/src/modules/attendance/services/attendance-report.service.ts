@@ -8,10 +8,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model, Types } from 'mongoose';
+import { Types } from 'mongoose';
+import type { FilterQuery, Model } from 'mongoose';
 import {
   AttendanceRecord,
   AttendanceRecordDocument,
@@ -26,11 +28,16 @@ import {
   CourseRegistrationDocument,
 } from '../../registrations/schemas/course-registration.schema';
 import {
+  StudentProfile,
+  type StudentProfileDocument,
+} from '../../students/schemas/student-profile.schema';
+import {
   attendanceEnrollmentFilter,
   ATTENDANCE_NOT_ENROLLED,
 } from './attendance-enrollment';
 import {
   ManualMarkAttendanceDto,
+  UpdateAttendanceBonusDto,
   ManualStudentCheckInDto,
   QueryAttendanceRecordsDto,
   QueryAttendanceSessionsDto,
@@ -69,6 +76,9 @@ export class AttendanceReportService {
     private realtimeService: AttendanceRealtimeService,
     @InjectModel(CourseRegistration.name)
     private registrationModel: Model<CourseRegistrationDocument>,
+    @Optional()
+    @InjectModel(StudentProfile.name)
+    private studentProfileModel?: Model<StudentProfileDocument>,
   ) {}
 
   async deleteSession(sessionId: string, user: AttendanceViewer) {
@@ -335,8 +345,96 @@ export class AttendanceReportService {
         markedByName: record.markedByName,
         markedByNameAr: record.markedByNameAr,
         markedByNameEn: record.markedByNameEn,
+        bonusPoints: record.bonusPoints ?? 0,
+        bonusReason: record.bonusReason,
+        bonusAwardedByName: record.bonusAwardedByName,
+        bonusAwardedByNameAr: record.bonusAwardedByNameAr,
+        bonusAwardedByNameEn: record.bonusAwardedByNameEn,
       },
       timestamp: new Date(),
+    });
+
+    return record;
+  }
+
+  /**
+   * Awards or updates bonus marks on an attendance record for participation/effort.
+   */
+  async updateRecordBonus(
+    recordId: string,
+    staffUser: { _id: string; name: string } & StaffDisplayLike,
+    dto: UpdateAttendanceBonusDto,
+  ) {
+    if (!Types.ObjectId.isValid(recordId)) {
+      throw new BadRequestException('معرّف السجل غير صالح');
+    }
+
+    const record = await this.recordModel.findById(recordId);
+    if (!record) {
+      throw new NotFoundException('سجل الحضور غير موجود');
+    }
+
+    const normalizedBonus = Math.round(dto.bonusPoints * 100) / 100;
+    const previousBonus = record.bonusPoints ?? 0;
+    const now = new Date();
+    const cleanReason = dto.reason?.trim() || undefined;
+
+    record.bonusPoints = normalizedBonus;
+    if (normalizedBonus > 0) {
+      record.bonusReason = cleanReason;
+      record.bonusAwardedBy = new Types.ObjectId(staffUser._id);
+      record.bonusAwardedByName = staffUser.name;
+      record.bonusAwardedByNameAr = formatStaffDisplayName(staffUser, 'ar');
+      record.bonusAwardedByNameEn = formatStaffDisplayName(staffUser, 'en');
+      record.bonusAwardedAt = now;
+    } else {
+      record.bonusReason = undefined;
+      record.bonusAwardedBy = undefined;
+      record.bonusAwardedByName = undefined;
+      record.bonusAwardedByNameAr = undefined;
+      record.bonusAwardedByNameEn = undefined;
+      record.bonusAwardedAt = undefined;
+    }
+
+    record.auditTrail.push({
+      action: 'BONUS_UPDATED',
+      modifiedBy: new Types.ObjectId(staffUser._id),
+      modifiedByName: staffUser.name,
+      previousStatus: record.status,
+      newStatus: record.status,
+      previousBonusPoints: previousBonus,
+      newBonusPoints: normalizedBonus,
+      reason:
+        cleanReason ||
+        (normalizedBonus > 0
+          ? `Awarded +${normalizedBonus} bonus marks`
+          : 'Removed bonus marks'),
+      timestamp: now,
+    });
+
+    await record.save();
+
+    this.realtimeService.publishEvent(record.sessionId.toString(), {
+      type: 'STATUS_CHANGE',
+      record: {
+        id: record._id.toString(),
+        studentId: record.studentId.toString(),
+        studentCode: record.studentCode,
+        studentName: record.studentName,
+        status: record.status,
+        method: record.method,
+        checkedInAt: record.checkedInAt,
+        note: record.note,
+        markedByName: record.markedByName,
+        markedByNameAr: record.markedByNameAr,
+        markedByNameEn: record.markedByNameEn,
+        bonusPoints: record.bonusPoints,
+        bonusReason: record.bonusReason,
+        bonusAwardedByName: record.bonusAwardedByName,
+        bonusAwardedByNameAr: record.bonusAwardedByNameAr,
+        bonusAwardedByNameEn: record.bonusAwardedByNameEn,
+      },
+      timestamp: now,
     });
 
     return record;
@@ -375,9 +473,28 @@ export class AttendanceReportService {
       );
     }
 
-    const isEnrolled = await this.registrationModel.exists(
-      attendanceEnrollmentFilter(studentUser._id, session),
-    );
+    const [isEnrolled, studentProfile] = await Promise.all([
+      this.registrationModel.exists(
+        attendanceEnrollmentFilter(studentUser._id, session),
+      ),
+      this.studentProfileModel
+        ? this.studentProfileModel
+            .findOne({ userId: studentUser._id })
+            .select('isBlocked blockReason')
+            .lean()
+        : Promise.resolve(null),
+    ]);
+
+    if (studentProfile?.isBlocked) {
+      throw new ForbiddenException({
+        code: 'STUDENT_TUITION_BLOCKED',
+        message:
+          'عفواً، الطالب محجوب ماليًا ولا يمكن تسجيل حضوره يدويًا لحين سداد المصروفات الدراسية.',
+        messageEn:
+          'This student account is withheld due to unpaid tuition fees; manual attendance check-in is disabled.',
+      });
+    }
+
     if (!isEnrolled) {
       throw new ForbiddenException(ATTENDANCE_NOT_ENROLLED);
     }
@@ -475,6 +592,14 @@ export class AttendanceReportService {
     const lateCount = records.filter((r) => r.status === 'late').length;
     const excusedCount = records.filter((r) => r.status === 'excused').length;
     const absentCount = records.filter((r) => r.status === 'absent').length;
+    const totalBonusPoints =
+      Math.round(
+        records.reduce(
+          (sum, r) =>
+            sum + (typeof r.bonusPoints === 'number' ? r.bonusPoints : 0),
+          0,
+        ) * 100,
+      ) / 100;
 
     const attendanceRate =
       totalSessions > 0
@@ -492,6 +617,7 @@ export class AttendanceReportService {
         absentCount: number;
         excusedCount: number;
         attendanceRate: number;
+        totalBonusPoints: number;
       }
     >();
 
@@ -506,6 +632,7 @@ export class AttendanceReportService {
           absentCount: 0,
           excusedCount: 0,
           attendanceRate: 100,
+          totalBonusPoints: 0,
         });
       }
       const entry = coursesMap.get(code)!;
@@ -514,6 +641,10 @@ export class AttendanceReportService {
       else if (r.status === 'late') entry.lateCount += 1;
       else if (r.status === 'excused') entry.excusedCount += 1;
       else if (r.status === 'absent') entry.absentCount += 1;
+      if (typeof r.bonusPoints === 'number' && r.bonusPoints > 0) {
+        entry.totalBonusPoints =
+          Math.round((entry.totalBonusPoints + r.bonusPoints) * 100) / 100;
+      }
     }
 
     for (const entry of coursesMap.values()) {
@@ -534,6 +665,7 @@ export class AttendanceReportService {
         excusedCount,
         absentCount,
         attendanceRate,
+        totalBonusPoints,
       },
       courses: Array.from(coursesMap.values()),
       records,
