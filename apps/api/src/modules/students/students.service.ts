@@ -515,6 +515,15 @@ export class StudentsService {
       this.academicProfileModel.deleteMany({ studentId: userId }),
       this.registrationModel.deleteMany({ studentId: userId }),
       this.advisingCaseModel.deleteMany({ studentId: userId }),
+      this.studentProfileModel.db
+        .collection('quiz_attempts')
+        .deleteMany({ studentId: userId }),
+      this.studentProfileModel.db
+        .collection('quiz_submissions')
+        .deleteMany({ studentId: userId }),
+      this.studentProfileModel.db
+        .collection('attendance_records')
+        .deleteMany({ studentId: userId }),
     ]);
 
     this.invalidateStatsCache();

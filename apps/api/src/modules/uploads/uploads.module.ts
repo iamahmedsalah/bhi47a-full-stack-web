@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { StudentCodesModule } from '../student-codes/student-codes.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UploadsService } from './uploads.service';
+import { UploadsWipeService } from './uploads-wipe.service';
 import { UploadsController } from './uploads.controller';
 import { StudentImporter } from './importers/student.importer';
 import { CourseImporter } from './importers/course.importer';
@@ -61,6 +62,7 @@ import { GradesModule } from '../grades/grades.module';
   controllers: [UploadsController],
   providers: [
     UploadsService,
+    UploadsWipeService,
     StudentImporter,
     CourseImporter,
     GradeImporter,
@@ -69,6 +71,6 @@ import { GradesModule } from '../grades/grades.module';
     AcademicEmailImporter,
     AcademicWarningImporter,
   ],
-  exports: [UploadsService],
+  exports: [UploadsService, UploadsWipeService],
 })
 export class UploadsModule {}

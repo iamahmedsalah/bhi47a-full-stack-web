@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
 import { UploadsTemplateGenerator } from './uploads-template.generator';
 import { BatchUploadDto } from './dto/upload.dto';
+import { WipeDataDto, WipePreviewDto } from './dto/wipe-data.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -106,10 +107,21 @@ export class UploadsController {
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
   @ApiOperation({
     summary:
-      'Get counts of students and academic records for data reset (Admin)',
+      'Get accurate counts across legacy & separated collections plus available academic years/levels (Admin)',
   })
   getWipeSummary() {
     return this.uploadsService.getWipeSummary();
+  }
+
+  @Post('wipe-preview')
+  @Roles('admin')
+  @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
+  @ApiOperation({
+    summary:
+      'Dry-run preview of records that will be wiped and protected Control records under the selected filters (Admin)',
+  })
+  previewWipe(@Body() dto: WipePreviewDto) {
+    return this.uploadsService.previewWipe(dto);
   }
 
   @Post('wipe')
@@ -117,27 +129,10 @@ export class UploadsController {
   @RequirePermissions(PERMISSIONS.UPLOADS_IMPORT)
   @ApiOperation({
     summary:
-      'Wipe/Reset student and academic data before uploading fresh datasets (Admin)',
+      'Wipe/Reset student and academic data with granular year/semester/exam-type filters and Control protection (Admin)',
   })
-  wipeData(
-    @Body('target')
-    target:
-      'students' | 'grades' | 'quizzes' | 'attendance' | 'complaints' | 'all',
-    @CurrentUser('_id') adminId: string,
-  ) {
-    if (
-      ![
-        'students',
-        'grades',
-        'quizzes',
-        'attendance',
-        'complaints',
-        'all',
-      ].includes(target)
-    ) {
-      throw new BadRequestException('Invalid wipe target');
-    }
-    return this.uploadsService.wipeData(target, adminId);
+  wipeData(@Body() dto: WipeDataDto, @CurrentUser('_id') adminId: string) {
+    return this.uploadsService.wipeData(dto, adminId);
   }
 
   @Post()

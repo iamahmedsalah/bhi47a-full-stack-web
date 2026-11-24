@@ -72,10 +72,23 @@ async function resetStudentData() {
       filter: DbFilter;
     }> = [
       { collection: 'advising_graphs', filter: { planId: { $in: planIds } } },
-      { collection: 'advising_notes', filter: { caseId: { $in: caseIds } } },
+      {
+        collection: 'advising_notes',
+        filter: {
+          $or: [
+            { caseId: { $in: caseIds } },
+            { advisingCaseId: { $in: caseIds } },
+          ],
+        },
+      },
       {
         collection: 'advising_audit_logs',
-        filter: { caseId: { $in: caseIds } },
+        filter: {
+          $or: [
+            { caseId: { $in: caseIds } },
+            { advisingCaseId: { $in: caseIds } },
+          ],
+        },
       },
       {
         collection: 'course_recommendations',
@@ -83,6 +96,7 @@ async function resetStudentData() {
           $or: [
             { studentId: { $in: studentIds } },
             { caseId: { $in: caseIds } },
+            { advisingCaseId: { $in: caseIds } },
           ],
         },
       },
@@ -115,7 +129,27 @@ async function resetStudentData() {
         collection: 'course_quizzes',
         filter: { studentId: { $in: studentIds } },
       },
+      {
+        collection: 'quiz_attempts',
+        filter: { studentId: { $in: studentIds } },
+      },
+      {
+        collection: 'quiz_submissions',
+        filter: { studentId: { $in: studentIds } },
+      },
       { collection: 'attendance', filter: { studentId: { $in: studentIds } } },
+      {
+        collection: 'attendance_records',
+        filter: { studentId: { $in: studentIds } },
+      },
+      {
+        collection: 'chat_sessions',
+        filter: { userId: { $in: studentIds } },
+      },
+      {
+        collection: 'student_code_registry',
+        filter: { currentStudentId: { $in: studentIds } },
+      },
       {
         collection: 'academic_emails',
         filter: { studentId: { $in: studentIds } },

@@ -1,5 +1,10 @@
 import { Types } from 'mongoose';
-import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import * as ExcelJS from 'exceljs';
@@ -15,6 +20,12 @@ import { QuizImporter } from './importers/quiz.importer';
 import { AttendanceImporter } from './importers/attendance.importer';
 import { AcademicEmailImporter } from './importers/academic-email.importer';
 import { AcademicWarningImporter } from './importers/academic-warning.importer';
+import { UploadsWipeService } from './uploads-wipe.service';
+import type {
+  WipeDataDto,
+  WipePreviewDto,
+  WipeTarget,
+} from './dto/wipe-data.dto';
 
 const MAX_UPLOAD_ROWS = 5000;
 
@@ -41,6 +52,7 @@ export class UploadsService {
     attendanceImporter: AttendanceImporter,
     academicEmailImporter: AcademicEmailImporter,
     academicWarningImporter: AcademicWarningImporter,
+    @Optional() private readonly wipeService?: UploadsWipeService,
   ) {
     const importers: Importer[] = [
       studentImporter,
@@ -52,6 +64,12 @@ export class UploadsService {
       academicWarningImporter,
     ];
     this.importerMap = new Map(importers.map((imp) => [imp.type, imp]));
+  }
+
+  private getWipeDelegate(): UploadsWipeService {
+    return (
+      this.wipeService ?? new UploadsWipeService(this.logger, this.connection)
+    );
   }
 
   async processUpload(
@@ -210,38 +228,11 @@ export class UploadsService {
   }
 
   async getWipeSummary() {
-    const db = this.connection.db;
-    if (!db) {
-      throw new BadRequestException('Database connection is not available');
-    }
+    return this.getWipeDelegate().getWipeSummary();
+  }
 
-    const [
-      studentsCount,
-      gradesCount,
-      attendanceCount,
-      registrationsCount,
-      advisingCasesCount,
-      quizzesCount,
-      complaintsCount,
-    ] = await Promise.all([
-      db.collection('users').countDocuments({ role: 'student' }),
-      db.collection('grades').countDocuments({}),
-      db.collection('attendance').countDocuments({}),
-      db.collection('course_registrations').countDocuments({}),
-      db.collection('advising_cases').countDocuments({}),
-      db.collection('course_quizzes').countDocuments({}),
-      db.collection('complaints').countDocuments({}),
-    ]);
-
-    return {
-      studentsCount,
-      gradesCount,
-      attendanceCount,
-      registrationsCount,
-      advisingCasesCount,
-      quizzesCount,
-      complaintsCount,
-    };
+  async previewWipe(dto: WipePreviewDto) {
+    return this.getWipeDelegate().previewWipe(dto);
   }
 
   /** A code alone no longer identifies a historical person after explicit reuse. */
@@ -295,174 +286,10 @@ export class UploadsService {
     }
   }
 
-  async wipeData(
-    target:
-      'students' | 'grades' | 'quizzes' | 'attendance' | 'complaints' | 'all',
-    adminId: string,
-  ) {
-    const db = this.connection.db;
-    if (!db) {
-      throw new BadRequestException('Database connection is not available');
-    }
-
-    this.logger.warn(
-      `Admin ${adminId} initiated data wipe for: ${target}`,
-      'UploadsService',
-    );
-    const result: Record<string, number> = {};
-
-    if (target === 'complaints') {
-      const deletedComplaints = await db
-        .collection('complaints')
-        .deleteMany({});
-      result.complaints = deletedComplaints.deletedCount;
-      return { success: true, target, deletedCounts: result };
-    }
-
-    if (target === 'grades') {
-      const deletedGrades = await db.collection('grades').deleteMany({});
-      result.grades = deletedGrades.deletedCount;
-      return { success: true, target, deletedCounts: result };
-    }
-
-    if (target === 'quizzes') {
-      const deletedQuizzes = await db
-        .collection('course_quizzes')
-        .deleteMany({});
-      result.quizzes = deletedQuizzes.deletedCount;
-      return { success: true, target, deletedCounts: result };
-    }
-
-    if (target === 'attendance') {
-      const deletedAttendance = await db
-        .collection('attendance')
-        .deleteMany({});
-      result.attendance = deletedAttendance.deletedCount;
-      return { success: true, target, deletedCounts: result };
-    }
-
-    if (target === 'students' || target === 'all') {
-      const students = await db
-        .collection('users')
-        .find(
-          { role: 'student' },
-          { projection: { _id: 1, studentCode: 1, email: 1 } },
-        )
-        .toArray();
-      const studentIds = students.map((s) => s._id);
-      const studentCodes = students.map((s) => s.studentCode).filter(Boolean);
-
-      const advisingCases = await db
-        .collection('advising_cases')
-        .find({ studentId: { $in: studentIds } }, { projection: { _id: 1 } })
-        .toArray();
-      const caseIds = advisingCases.map((c) => c._id);
-
-      const advisingPlans = await db
-        .collection('advising_plans')
-        .find({ studentId: { $in: studentIds } }, { projection: { _id: 1 } })
-        .toArray();
-      const planIds = advisingPlans.map((p) => p._id);
-
-      const [
-        delUsers,
-        delProfiles,
-        delAcademicProfiles,
-        delGrades,
-        delQuizzes,
-        delAttendance,
-        delRegistrations,
-        delCases,
-        delPlans,
-        _delGraphs,
-        _delNotes,
-        _delAuditLogs,
-        _delRecommendations,
-        _delRequests,
-        delEmails,
-      ] = await Promise.all([
-        db.collection('users').deleteMany({
-          role: 'student',
-          $or: [
-            { _id: { $in: studentIds } },
-            { studentCode: { $in: studentCodes } },
-          ],
-        }),
-        db
-          .collection('student_profiles')
-          .deleteMany({ userId: { $in: studentIds } }),
-        db
-          .collection('student_academic_profiles')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('grades').deleteMany({ studentId: { $in: studentIds } }),
-        db
-          .collection('course_quizzes')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db
-          .collection('attendance')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db
-          .collection('course_registrations')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db
-          .collection('advising_cases')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db.collection('advising_plans').deleteMany({
-          $or: [{ studentId: { $in: studentIds } }, { _id: { $in: planIds } }],
-        }),
-        db
-          .collection('advising_graphs')
-          .deleteMany({ planId: { $in: planIds } }),
-        db
-          .collection('advising_notes')
-          .deleteMany({ advisingCaseId: { $in: caseIds } }),
-        db
-          .collection('advising_audit_logs')
-          .deleteMany({ advisingCaseId: { $in: caseIds } }),
-        db.collection('course_recommendations').deleteMany({
-          $or: [
-            { studentId: { $in: studentIds } },
-            { advisingCaseId: { $in: caseIds } },
-          ],
-        }),
-        db
-          .collection('academic_advising_requests')
-          .deleteMany({ studentId: { $in: studentIds } }),
-        db
-          .collection('academic_emails')
-          .deleteMany({ studentId: { $in: studentIds } }),
-      ]);
-
-      // Cleanup notifications
-      await db
-        .collection('notifications')
-        .deleteMany({ targetStudentId: { $in: studentIds } });
-      await db.collection('notifications').updateMany({}, {
-        $pull: {
-          readBy: { userId: { $in: studentIds } },
-          hiddenBy: { userId: { $in: studentIds } },
-        },
-      } as any);
-
-      result.students = delUsers.deletedCount;
-      result.studentProfiles = delProfiles.deletedCount;
-      result.academicProfiles = delAcademicProfiles.deletedCount;
-      result.grades = delGrades.deletedCount;
-      result.quizzes = delQuizzes.deletedCount;
-      result.attendance = delAttendance.deletedCount;
-      result.registrations = delRegistrations.deletedCount;
-      result.advisingCases = delCases.deletedCount;
-      result.advisingPlans = delPlans.deletedCount;
-      result.academicEmails = delEmails.deletedCount;
-
-      this.logger.log(
-        `Student data wipe completed: ${delUsers.deletedCount} students removed`,
-        'UploadsService',
-      );
-      return { success: true, target, deletedCounts: result };
-    }
-
-    return { success: false, message: 'No action taken' };
+  async wipeData(targetOrDto: WipeTarget | WipeDataDto, adminId: string) {
+    const dto: WipeDataDto =
+      typeof targetOrDto === 'string' ? { target: targetOrDto } : targetOrDto;
+    return this.getWipeDelegate().executeWipe(dto, adminId);
   }
 
   private decodeXml(str: string): string {

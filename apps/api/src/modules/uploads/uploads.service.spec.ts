@@ -115,12 +115,18 @@ describe('UploadsService student data wipe', () => {
     await service.wipeData('students', 'admin-id');
 
     expect(getCollection('advising_notes').deleteMany).toHaveBeenCalledWith({
-      advisingCaseId: { $in: [caseId] },
+      $or: [
+        { advisingCaseId: { $in: [caseId] } },
+        { caseId: { $in: [caseId] } },
+      ],
     });
     expect(
       getCollection('advising_audit_logs').deleteMany,
     ).toHaveBeenCalledWith({
-      advisingCaseId: { $in: [caseId] },
+      $or: [
+        { advisingCaseId: { $in: [caseId] } },
+        { caseId: { $in: [caseId] } },
+      ],
     });
     expect(
       getCollection('course_recommendations').deleteMany,
@@ -128,8 +134,17 @@ describe('UploadsService student data wipe', () => {
       $or: [
         { studentId: { $in: [studentId] } },
         { advisingCaseId: { $in: [caseId] } },
+        { caseId: { $in: [caseId] } },
       ],
     });
+    expect(getCollection('quiz_submissions').deleteMany).toHaveBeenCalledWith({
+      studentId: { $in: [studentId] },
+    });
+    expect(getCollection('attendance_records').deleteMany).toHaveBeenCalledWith(
+      {
+        studentId: { $in: [studentId] },
+      },
+    );
   });
 
   it('wipes grades alone without deleting quizzes', async () => {
@@ -171,12 +186,14 @@ describe('UploadsService student data wipe', () => {
       success: true,
       target: 'grades',
       deletedCounts: { grades: 5 },
+      totalDeleted: 5,
+      protectedControlGradesCount: 0,
     });
     expect(getCollection('grades').deleteMany).toHaveBeenCalledWith({});
     expect(collections.has('course_quizzes')).toBe(false);
   });
 
-  it('wipes quizzes alone without deleting grades', async () => {
+  it('wipes all quiz collections (new and legacy) without deleting grades', async () => {
     const collections = new Map<string, Record<string, jest.Mock>>();
     const getCollection = (name: string) => {
       let collection = collections.get(name);
@@ -214,8 +231,19 @@ describe('UploadsService student data wipe', () => {
     expect(res).toEqual({
       success: true,
       target: 'quizzes',
-      deletedCounts: { quizzes: 3 },
+      deletedCounts: {
+        quizzes: 3,
+        quizAttempts: 3,
+        quizSubmissions: 3,
+        courseQuizzes: 3,
+      },
+      totalDeleted: 12,
     });
+    expect(getCollection('quizzes').deleteMany).toHaveBeenCalledWith({});
+    expect(getCollection('quiz_attempts').deleteMany).toHaveBeenCalledWith({});
+    expect(getCollection('quiz_submissions').deleteMany).toHaveBeenCalledWith(
+      {},
+    );
     expect(getCollection('course_quizzes').deleteMany).toHaveBeenCalledWith({});
     expect(collections.has('grades')).toBe(false);
   });

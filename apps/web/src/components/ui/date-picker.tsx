@@ -48,15 +48,23 @@ export function DatePicker({
     <PopoverPrimitive.Root>
       <PopoverPrimitive.Trigger asChild>
         <Button
+          type="button"
           variant="outline"
           className={cn(
-            'w-full justify-start text-start font-normal h-10 border-border bg-surface/50 rounded-squircle hover:bg-surface/70 focus:ring-1 focus:ring-primary gap-2.5 px-3.5',
+            'h-auto min-h-10 w-full min-w-0 whitespace-normal justify-start text-start font-normal border-border bg-surface/50 rounded-squircle hover:bg-surface/70 focus:ring-1 focus:ring-primary gap-2.5 px-3.5 py-2',
             !value && 'text-muted-foreground',
             className,
           )}
         >
           <CalendarIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="truncate flex-1 text-sm leading-none">{displayText}</span>
+          <span
+            className={cn(
+              'min-w-0 flex-1 break-words text-xs leading-snug',
+              date && 'font-mono',
+            )}
+          >
+            {displayText}
+          </span>
           {value && (
             <span
               role="button"
