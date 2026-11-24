@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { useParams } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   Lock,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   QrCode,
   BookOpen,
   Calendar,
@@ -29,6 +31,7 @@ import {
   type StudentLiveSessionItem,
 } from "@/features/attendance/api/attendance-api";
 import { DashboardLiveAttendanceHub } from "@/features/attendance/components/dashboard-live-attendance-hub";
+import { StudentAttendanceBonusShowcase } from "@/features/attendance/components/student-attendance-bonus-showcase";
 import { StudentQrScannerDialog } from "@/features/attendance/components/student-qr-scanner-dialog";
 
 export default function StudentAttendancePage() {
@@ -39,9 +42,13 @@ export default function StudentAttendancePage() {
   // Filters state
   const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [onlyBonus, setOnlyBonus] = useState<boolean>(false);
   const [showScanDialog, setShowScanDialog] = useState<boolean>(false);
   const [selectedScanSession, setSelectedScanSession] =
     useState<StudentLiveSessionItem | null>(null);
+  const bonusSectionRef = useRef<HTMLDivElement | null>(null);
+  const historySectionRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const profileQuery = useQuery({
     queryKey: ["student-profile"],
@@ -85,8 +92,14 @@ export default function StudentAttendancePage() {
     absentCount: 0,
     attendanceRate: 100,
     totalBonusPoints: 0,
+    bonusAwardsCount: 0,
+    lectureBonusPoints: 0,
+    sectionBonusPoints: 0,
   };
   const totalBonusPoints = summary.totalBonusPoints ?? 0;
+  const bonusAwardsCount =
+    summary.bonusAwardsCount ??
+    (data?.records || []).filter((r) => (r.bonusPoints ?? 0) > 0).length;
   const isStudentBlocked =
     Boolean(profileQuery.data?.isBlocked) ||
     Boolean(liveSessionsQuery.data?.isBlocked);
@@ -104,9 +117,11 @@ export default function StudentAttendancePage() {
       if (selectedCourse !== "all" && r.courseCode !== selectedCourse)
         return false;
       if (selectedStatus !== "all" && r.status !== selectedStatus) return false;
+      if (onlyBonus && !(typeof r.bonusPoints === "number" && r.bonusPoints > 0))
+        return false;
       return true;
     });
-  }, [records, selectedCourse, selectedStatus]);
+  }, [records, selectedCourse, selectedStatus, onlyBonus]);
 
   if (isLoading) {
     return (
@@ -349,23 +364,81 @@ export default function StudentAttendancePage() {
           </div>
         </Card>
 
-        {/* Total Bonus Marks */}
-        <Card className="p-4 bg-card/40 border-amber-500/30 backdrop-blur-sm flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between">
+        {/* Total Bonus Marks (Interactive Scroll-to-Showcase Card) */}
+        <Card
+          role="button"
+          tabIndex={0}
+          onClick={() =>
+            bonusSectionRef.current?.scrollIntoView({
+              behavior: prefersReducedMotion ? "auto" : "smooth",
+              block: "start",
+            })
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              bonusSectionRef.current?.scrollIntoView({
+                behavior: prefersReducedMotion ? "auto" : "smooth",
+                block: "start",
+              });
+            }
+          }}
+          className="p-4 bg-card/45 border-amber-500/35 hover:border-amber-400/60 transition-colors backdrop-blur-sm flex flex-col justify-between shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
+        >
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-amber-300">
               {isAr ? "البونص (Bonus)" : "Bonus"}
             </span>
-            <Award className="h-4 w-4 text-amber-300" />
+            <motion.span
+              animate={
+                prefersReducedMotion || totalBonusPoints <= 0
+                  ? undefined
+                  : { rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] }
+              }
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="inline-flex size-6 items-center justify-center rounded-squircle bg-amber-500/15 text-amber-300"
+            >
+              <Award className="h-4 w-4" />
+            </motion.span>
           </div>
           <div className="mt-3">
             <span className="text-2xl font-black font-mono text-amber-300">
               <bdi dir="ltr">+{totalBonusPoints}</bdi>
             </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isAr ? "درجة مكافأة" : "Reward marks"}
+            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Sparkles className="size-3 text-amber-300 shrink-0" />
+              <span>
+                {bonusAwardsCount > 0
+                  ? isAr
+                    ? `في ${bonusAwardsCount} جلسة — عرض التفاصيل`
+                    : `${bonusAwardsCount} rewards — view`
+                  : isAr
+                    ? "درجة مكافأة"
+                    : "Reward marks"}
+              </span>
             </p>
           </div>
         </Card>
+      </div>
+
+      {/* Motivational Student Bonus Showcase */}
+      <div ref={bonusSectionRef}>
+        <StudentAttendanceBonusShowcase
+          records={records}
+          totalBonusPoints={totalBonusPoints}
+          bonusAwardsCount={bonusAwardsCount}
+          lectureBonusPoints={summary.lectureBonusPoints}
+          sectionBonusPoints={summary.sectionBonusPoints}
+          locale={locale}
+          onSelectCourse={(courseCode) => {
+            setSelectedCourse(courseCode);
+            setOnlyBonus(true);
+            historySectionRef.current?.scrollIntoView({
+              behavior: prefersReducedMotion ? "auto" : "smooth",
+              block: "start",
+            });
+          }}
+        />
       </div>
 
       {/* Course Breakdown Section */}
@@ -396,10 +469,17 @@ export default function StudentAttendancePage() {
                   }`}
                 >
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-mono text-sm font-bold text-foreground">
-                        {course.courseCode}
+                        <bdi dir="ltr">{course.courseCode}</bdi>
                       </span>
+                      {(course.courseNameAr || course.courseName) && (
+                        <p className="text-xs font-semibold text-foreground/85 truncate mt-0.5">
+                          {isAr
+                            ? course.courseNameAr || course.courseName
+                            : course.courseName || course.courseNameAr}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {course.totalSessions}{" "}
                         {isAr ? "جلسات منعقدة" : "sessions held"}
@@ -456,7 +536,10 @@ export default function StudentAttendancePage() {
       )}
 
       {/* Session History Log Section */}
-      <div className="space-y-4 pt-4 border-t border-border/60">
+      <div
+        ref={historySectionRef}
+        className="space-y-4 pt-4 border-t border-border/60"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -476,6 +559,21 @@ export default function StudentAttendancePage() {
 
           {/* Quick Filters */}
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOnlyBonus((prev) => !prev)}
+              className={`h-8 rounded-squircle gap-1.5 text-xs font-semibold cursor-pointer ${
+                onlyBonus
+                  ? "border-amber-500/45 bg-amber-500/15 text-amber-300 hover:bg-amber-500/20"
+                  : "bg-secondary/50 border-border/70 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Award className="size-3.5 shrink-0" />
+              <span>{isAr ? "جلسات البونص فقط" : "Bonus Only"}</span>
+            </Button>
+
             {/* Filter by course */}
             <div className="w-44">
               <CustomDropdown
@@ -487,12 +585,15 @@ export default function StudentAttendancePage() {
                     value: "all",
                     label: isAr ? "جميع المقررات" : "All Courses",
                   },
-                  ...courses.map((c) => ({
-                    value: c.courseCode,
-                    label: c.courseName
-                      ? `${c.courseCode} - ${c.courseName}`
-                      : c.courseCode,
-                  })),
+                  ...courses.map((c) => {
+                    const name = isAr
+                      ? c.courseNameAr || c.courseName
+                      : c.courseName || c.courseNameAr;
+                    return {
+                      value: c.courseCode,
+                      label: name ? `${c.courseCode} - ${name}` : c.courseCode,
+                    };
+                  }),
                 ]}
                 className="h-8 text-xs bg-secondary/50 border-border/70"
               />
@@ -549,15 +650,16 @@ export default function StudentAttendancePage() {
                     : "Try selecting a different course or status filter to see sessions."}
               </p>
             </div>
-            {selectedCourse !== "all" || selectedStatus !== "all" ? (
+            {selectedCourse !== "all" || selectedStatus !== "all" || onlyBonus ? (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   setSelectedCourse("all");
                   setSelectedStatus("all");
+                  setOnlyBonus(false);
                 }}
-                className="text-xs cursor-pointer"
+                className="rounded-squircle text-xs cursor-pointer"
               >
                 {isAr ? "إعادة ضبط التصفية" : "Reset Filters"}
               </Button>
@@ -617,8 +719,9 @@ export default function StudentAttendancePage() {
                       </td>
                       <td className="p-3.5 text-center text-muted-foreground text-[11px]">
                         {new Date(record.checkedInAt).toLocaleString(
-                          isAr ? "ar-EG" : "en-US",
+                          isAr ? "ar-EG" : "en-GB",
                           {
+                            timeZone: "Africa/Cairo",
                             month: "short",
                             day: "numeric",
                             hour: "2-digit",
@@ -698,14 +801,22 @@ export default function StudentAttendancePage() {
                         ? isAr
                           ? "محاضرة"
                           : "Lecture"
-                        : isAr
-                          ? "سكشن"
-                          : "Section"}
+                        : record.sessionType === "section"
+                          ? isAr
+                            ? "سكشن"
+                            : "Section"
+                          : isAr
+                            ? "معمل"
+                            : "Lab"}
                     </span>
                     <span className="font-mono text-[11px]">
                       {new Date(record.checkedInAt).toLocaleTimeString(
-                        isAr ? "ar-EG" : "en-US",
-                        { hour: "2-digit", minute: "2-digit" },
+                        isAr ? "ar-EG" : "en-GB",
+                        {
+                          timeZone: "Africa/Cairo",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        },
                       )}
                     </span>
                     <span className="text-[11px]">

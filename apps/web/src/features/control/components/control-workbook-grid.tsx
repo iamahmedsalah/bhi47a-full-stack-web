@@ -289,28 +289,71 @@ export function ControlWorkbookGrid({
         caps.canApprove ||
         caps.canApproveFinal),
   );
+  const getEffectiveComponentMark = useCallback(
+    (row: WorkbookRow) => {
+      const saved = row.components[key];
+      const draft = drafts[row.studentId];
+      if (!draft) {
+        return {
+          status: saved?.status ?? null,
+          score: saved?.score ?? null,
+        };
+      }
+      const effectiveStatus = draft.status ?? saved?.status ?? null;
+      if (effectiveStatus !== "present") {
+        return {
+          status: effectiveStatus,
+          score: null,
+        };
+      }
+      if (!draft.error) {
+        return {
+          status: effectiveStatus,
+          score: draft.score ?? null,
+        };
+      }
+      return {
+        status: effectiveStatus,
+        score: saved?.status === "present" ? (saved.score ?? null) : null,
+      };
+    },
+    [drafts, key],
+  );
   const passRate = useMemo(() => {
     if (key === "coursework") return null;
     const threshold = activePassThreshold;
-    const passed = rows.reduce((count, row) => {
-      const mark = row.components[key];
-      return (
-        count +
-        Number(
-          mark?.status === "present" &&
-            mark.score != null &&
-            mark.score > threshold,
-        )
-      );
-    }, 0);
+    let passed = 0;
+    let presentCount = 0;
+    let bannedCount = 0;
+    let absentCount = 0;
+    let unenteredCount = 0;
+    for (const row of rows) {
+      const mark = getEffectiveComponentMark(row);
+      if (mark.status === "present") {
+        presentCount += 1;
+        if (mark.score != null && mark.score > threshold) passed += 1;
+      } else if (mark.status === "banned") {
+        bannedCount += 1;
+      } else if (mark.status === "absent") {
+        absentCount += 1;
+      } else if (!mark.status) {
+        unenteredCount += 1;
+      }
+    }
+    const eligibleTotal = presentCount + bannedCount;
     return {
       component: key,
       threshold,
       passed,
-      total: rows.length,
-      ratio: rows.length ? passed / rows.length : 0,
+      total: eligibleTotal,
+      presentCount,
+      bannedCount,
+      absentCount,
+      unenteredCount,
+      rosterTotal: rows.length,
+      ratio: eligibleTotal > 0 ? passed / eligibleTotal : 0,
     };
-  }, [rows, key, activePassThreshold]);
+  }, [rows, key, activePassThreshold, getEffectiveComponentMark]);
   const [searchText, setSearchText] = useState(search);
   const [previousSearch, setPreviousSearch] = useState(search);
   if (previousSearch !== search) {
@@ -1157,18 +1200,18 @@ export function ControlWorkbookGrid({
                 parsedNext <= detail.rules.max;
               const nextPassed = isValidNext
                 ? rows.reduce((count, row) => {
-                    const mark = row.components[key];
+                    const mark = getEffectiveComponentMark(row);
                     return (
                       count +
                       Number(
-                        mark?.status === "present" &&
+                        mark.status === "present" &&
                           mark.score != null &&
                           mark.score > parsedNext,
                       )
                     );
                   }, 0)
                 : passRate.passed;
-              const nextRatio = rows.length ? nextPassed / rows.length : 0;
+              const nextRatio = passRate.total ? nextPassed / passRate.total : 0;
               const ratioChanged = nextRatio !== passRate.ratio;
               const pctFmt = new Intl.NumberFormat(locale, {
                 style: "percent",
@@ -1277,6 +1320,11 @@ export function ControlWorkbookGrid({
                           </span>
                         </div>
                       </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        {rtl
+                          ? `تُحسب نسبة النجاح ديناميكيًا على الحاضرين والمحرومين فقط (${passRate.presentCount} حاضر + ${passRate.bannedCount} محروم = ${passRate.total} طالب)، ويُستبعد الغائبون وغير المرصودين.`
+                          : `Pass rate divides dynamically by Present + Banned students only (${passRate.presentCount} present + ${passRate.bannedCount} banned = ${passRate.total}), excluding absent and unentered.`}
+                      </p>
                     </div>
                   </DialogBody>
 
@@ -1838,57 +1886,120 @@ export function ControlWorkbookGrid({
         </div>
         {passRate && workbook.data && !workbook.isError && (
           <div
-            role="group"
-            aria-label={t("passRate", { component: t(passRate.component) })}
-            onClick={
-              canManagePassThreshold
-                ? () => {
-                    setThresholdInput(String(passRate.threshold));
-                    setPassThresholdOpen(true);
-                  }
-                : undefined
-            }
             className={cn(
-              "inline-flex h-9 w-fit max-w-full items-center gap-2.5 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
-              canManagePassThreshold &&
-                "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+              "flex flex-wrap items-center gap-2 max-w-full",
               rtl ? "ms-auto" : "order-first me-auto",
             )}
           >
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <Percent aria-hidden="true" className="size-3.5 text-primary" />
-              {t("passRate", { component: t(passRate.component) })}
-            </span>
-            <bdi className="text-sm font-bold tabular-nums text-primary">
-              {new Intl.NumberFormat(locale, {
-                style: "percent",
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }).format(passRate.ratio)}
-            </bdi>
-            {canManagePassThreshold && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setThresholdInput(String(passRate.threshold));
-                  setPassThresholdOpen(true);
-                }}
-                aria-label={
-                  rtl
-                    ? "تعديل حد درجة النجاح"
-                    : "Edit pass mark threshold"
-                }
+            <div
+              role="group"
+              aria-label={t("passRate", { component: t(passRate.component) })}
+              onClick={
+                canManagePassThreshold
+                  ? () => {
+                      setThresholdInput(String(passRate.threshold));
+                      setPassThresholdOpen(true);
+                    }
+                  : undefined
+              }
+              title={
+                rtl
+                  ? `نسبة النجاح = الناجحون (${passRate.passed}) ÷ (الحاضرون ${passRate.presentCount} + المحرومون ${passRate.bannedCount})`
+                  : `Pass rate = Passed (${passRate.passed}) / (Present ${passRate.presentCount} + Banned ${passRate.bannedCount})`
+              }
+              className={cn(
+                "inline-flex h-9 w-fit max-w-full items-center gap-2.5 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+                canManagePassThreshold &&
+                  "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <Percent aria-hidden="true" className="size-3.5 text-primary" />
+                {t("passRate", { component: t(passRate.component) })}
+              </span>
+              <bdi className="text-sm font-bold tabular-nums text-primary">
+                {new Intl.NumberFormat(locale, {
+                  style: "percent",
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(passRate.ratio)}
+              </bdi>
+              <bdi className="hidden sm:inline font-mono text-[11px] font-semibold text-muted-foreground tabular-nums">
+                ({passRate.passed}/{passRate.total})
+              </bdi>
+              {canManagePassThreshold && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setThresholdInput(String(passRate.threshold));
+                    setPassThresholdOpen(true);
+                  }}
+                  aria-label={
+                    rtl
+                      ? "تعديل حد درجة النجاح"
+                      : "Edit pass mark threshold"
+                  }
+                  title={
+                    rtl
+                      ? `تعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
+                      : `Edit pass mark threshold (current > ${passRate.threshold})`
+                  }
+                  className="inline-flex size-6 items-center justify-center rounded-squircle text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary cursor-pointer"
+                >
+                  <SlidersHorizontal aria-hidden="true" className="size-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div
+              aria-label={
+                rtl
+                  ? "إحصائيات الحضور والحرمان والغياب الحية"
+                  : "Live present, banned, and absent counts"
+              }
+              className="flex flex-wrap items-center gap-1.5 text-[11px]"
+            >
+              <span
                 title={
                   rtl
-                    ? `تعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
-                    : `Edit pass mark threshold (current > ${passRate.threshold})`
+                    ? "الطلاب الحاضرون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
+                    : "Present students included in pass rate"
                 }
-                className="inline-flex size-6 items-center justify-center rounded-squircle text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary cursor-pointer"
+                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-emerald-500/25 bg-emerald-500/10 px-2.5 font-semibold text-emerald-300"
               >
-                <SlidersHorizontal aria-hidden="true" className="size-3.5" />
-              </button>
-            )}
+                <span>{rtl ? "حاضر:" : "Present:"}</span>
+                <bdi className="font-mono font-bold tabular-nums">
+                  {passRate.presentCount}
+                </bdi>
+              </span>
+              <span
+                title={
+                  rtl
+                    ? "الطلاب المحرومون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
+                    : "Banned students included in pass rate"
+                }
+                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-amber-500/30 bg-amber-500/10 px-2.5 font-semibold text-amber-300"
+              >
+                <span>{rtl ? "محروم:" : "Banned:"}</span>
+                <bdi className="font-mono font-bold tabular-nums">
+                  {passRate.bannedCount}
+                </bdi>
+              </span>
+              <span
+                title={
+                  rtl
+                    ? "الطلاب الغائبون (مستبعدون من مقام نسبة النجاح)"
+                    : "Absent students (excluded from pass rate)"
+                }
+                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-border/70 bg-secondary/40 px-2.5 font-medium text-muted-foreground"
+              >
+                <span>{rtl ? "غائب:" : "Absent:"}</span>
+                <bdi className="font-mono font-bold tabular-nums text-foreground/85">
+                  {passRate.absentCount}
+                </bdi>
+              </span>
+            </div>
           </div>
         )}
       </div>

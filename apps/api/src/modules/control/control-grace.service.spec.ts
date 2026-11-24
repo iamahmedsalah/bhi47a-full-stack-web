@@ -156,13 +156,82 @@ describe('once-only midterm grace marks', () => {
     ]);
     expect(preview.passRate).toEqual({
       threshold: 18,
-      total: 8,
+      total: 6,
+      presentCount: 5,
+      bannedCount: 1,
+      absentCount: 1,
+      rosterTotal: 8,
       passedBefore: 2,
       passedAfter: 2,
-      ratioBefore: 0.25,
-      ratioAfter: 0.25,
+      ratioBefore: 2 / 6,
+      ratioAfter: 2 / 6,
     });
     expect(c.grades.bulkWrite).not.toHaveBeenCalled();
+  });
+  it('computes dynamic passRate on present + banned only and guards zero denominator', async () => {
+    const c = fixture();
+    // 5 present (0, 1, 28, 30, 10 -> 2 passing), 1 absent, 1 banned, 1 unentered
+    // Change student 0 from present to banned => still present(4)+banned(2) = 6
+    c.marks[0].status = 'banned';
+    let preview = await c.service.preview(c.user, String(c.sheet._id), {
+      amount: 5,
+      expectedRevision: 0,
+    });
+    expect(preview.passRate).toEqual({
+      threshold: 18,
+      total: 6,
+      presentCount: 4,
+      bannedCount: 2,
+      absentCount: 1,
+      rosterTotal: 8,
+      passedBefore: 2,
+      passedAfter: 2,
+      ratioBefore: 2 / 6,
+      ratioAfter: 2 / 6,
+    });
+
+    // Change student 0 from banned to absent => eligible drops to present(4)+banned(1) = 5
+    c.marks[0].status = 'absent';
+    preview = await c.service.preview(c.user, String(c.sheet._id), {
+      amount: 5,
+      expectedRevision: 0,
+    });
+    expect(preview.passRate).toEqual({
+      threshold: 18,
+      total: 5,
+      presentCount: 4,
+      bannedCount: 1,
+      absentCount: 2,
+      rosterTotal: 8,
+      passedBefore: 2,
+      passedAfter: 2,
+      ratioBefore: 0.4,
+      ratioAfter: 0.4,
+    });
+
+    // Zero eligible students => ratio is 0 (no NaN)
+    const zeroFixture = fixture();
+    for (const mark of zeroFixture.marks) {
+      mark.status = 'absent';
+      mark.grade = 0;
+    }
+    const zeroPreview = await zeroFixture.service.preview(
+      zeroFixture.user,
+      String(zeroFixture.sheet._id),
+      { amount: 5, expectedRevision: 0 },
+    );
+    expect(zeroPreview.passRate).toEqual({
+      threshold: 18,
+      total: 0,
+      presentCount: 0,
+      bannedCount: 0,
+      absentCount: 7,
+      rosterTotal: 8,
+      passedBefore: 0,
+      passedAfter: 0,
+      ratioBefore: 0,
+      ratioAfter: 0,
+    });
   });
   it('applies one transaction with per-grade audit evidence and returns the same receipt on retry', async () => {
     const c = fixture();

@@ -314,6 +314,10 @@ export interface GracePreview {
   passRate?: {
     threshold: number;
     total: number;
+    presentCount?: number;
+    bannedCount?: number;
+    absentCount?: number;
+    rosterTotal?: number;
     passedBefore: number;
     passedAfter: number;
     ratioBefore: number;

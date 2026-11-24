@@ -16,20 +16,26 @@ await fs.mkdir(output, { recursive: true });
 const write = (name, content) => fs.writeFile(path.join(output, name), content);
 await write('loader.cjs', `const ts=require(${JSON.stringify(requireWeb.resolve('typescript'))}); module.exports=source=>ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
 await write('api.ts', `export const attendanceApi={checkIn:body=>{window.checkInCalls.push(body);return new Promise((resolve,reject)=>{window.resolveCheckIn=resolve;window.rejectCheckIn=reject;});}};`);
-await write('device.ts', `export const getDeviceIdentity=()=>new Promise(resolve=>{window.resolveDevice=()=>resolve({deviceId:'synthetic-device',deviceFingerprint:'synthetic-fingerprint',deviceInfo:'Test phone'});});`);
+await write('device.ts', `export const getDeviceIdentity=()=>new Promise(resolve=>{window.deviceAttempts=(window.deviceAttempts??0)+1;window.resolveDevice=()=>resolve({deviceId:'synthetic-device',deviceFingerprint:'synthetic-fingerprint',deviceInfo:'Test phone'});});`);
+await write('navigation.ts', `export const useSearchParams=()=>new URLSearchParams(location.search);export const useRouter=()=>({push(){}});export const useParams=()=>({locale:'en'});`);
+await write('auth.ts', `import{useState}from'react';export const useAuth=()=>{const[loading,setLoading]=useState(false);window.setAuthLoading=setLoading;return {loading,user:{name:'Test Student',role:'student'}};};`);
 await write('entry.tsx', `
 import React,{useState} from 'react';import{createRoot}from'react-dom/client';
+import StudentCheckInPage from'${path.join(web, 'src/app/[locale]/attendance/check-in/page.tsx').replaceAll('\\', '/')}';
 import{StudentQrScannerDialog}from'${path.join(web, 'src/features/attendance/components/student-qr-scanner-dialog.tsx').replaceAll('\\', '/')}';
 window.checkInCalls=[];window.geoWatches=new Map();let nextWatch=0;
 Object.defineProperty(navigator,'geolocation',{value:{watchPosition:success=>{const id=++nextWatch;window.geoWatches.set(id,success);return id;},clearWatch:id=>window.geoWatches.delete(id)}});
 const locale=new URLSearchParams(location.search).get('locale')||'ar';document.documentElement.dir=locale==='ar'?'rtl':'ltr';
 function App(){const[open,setOpen]=useState(true);return <><button id="reopen" onClick={()=>setOpen(true)}>Open</button><StudentQrScannerDialog open={open} onOpenChange={setOpen} locale={locale}/></>}
-createRoot(document.getElementById('root')).render(<App/>);`);
+createRoot(document.getElementById('root')).render(new URLSearchParams(location.search).has('direct') ? <React.StrictMode><StudentCheckInPage/></React.StrictMode> : <App/>);`);
 await new Promise((resolve, reject) => webpack({
   mode: 'development', devtool: false, target: 'web', entry: path.join(output, 'entry.tsx'),
   output: { path: output, filename: 'bundle.js', publicPath: '/' },
   resolve: { extensions: ['.tsx', '.ts', '.js'], modules: [path.join(web, 'node_modules'), 'node_modules'], alias: {
     '../api/attendance-api': path.join(output, 'api.ts'),
+    '@/features/attendance/api/attendance-api': path.join(output, 'api.ts'),
+    '@/providers/auth-provider': path.join(output, 'auth.ts'),
+    'next/navigation': path.join(output, 'navigation.ts'),
     '@/lib/device-id': path.join(output, 'device.ts'), '@': path.join(web, 'src'),
   } },
   module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.join(output, 'loader.cjs') }] },
@@ -118,6 +124,20 @@ try {
   await page.getByPlaceholder('ABC123-456789').fill('ABC123-456789');
   await page.getByRole('button', { name: 'Verify & Record Attendance', exact: true }).click();
   await page.getByRole('heading', { name: 'Preparing device', exact: true }).waitFor();
+  await page.goto(`${base}/?direct=1&t=ABC123-456789`);
+  await page.waitForFunction(() => typeof window.resolveDevice === 'function');
+  await page.evaluate(() => window.resolveDevice());
+  await page.waitForFunction(() => window.geoWatches.size === 1);
+  await page.evaluate(() => { for (const callback of window.geoWatches.values()) callback({ timestamp: Date.now(), coords: { latitude: 30, longitude: 31, accuracy: 10 } }); });
+  await page.waitForFunction(() => window.checkInCalls.length === 1);
+  await page.evaluate(() => window.setAuthLoading(true));
+  await page.evaluate(value => window.resolveCheckIn(value), result);
+  await page.getByText('PRESENT', { exact: true }).waitFor();
+  await page.evaluate(() => window.setAuthLoading(false));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => window.checkInCalls.length), 1);
+  assert.equal(await page.evaluate(() => window.deviceAttempts), 1);
+  await page.getByText('PRESENT', { exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log('PASS: Arabic/English mobile progress, success, rejection, retry, GPS cleanup, single submission and reduced motion');
 } finally {

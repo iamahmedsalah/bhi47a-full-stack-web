@@ -437,22 +437,40 @@ export class ControlGraceService {
     );
     let passedBefore = 0;
     let passedAfter = 0;
+    let presentCount = 0;
+    let bannedCount = 0;
+    let absentCount = 0;
     for (const mark of docs) {
       const sid = String(mark.studentId);
-      if (!roster.has(sid) || mark.status !== 'present') continue;
-      const beforeScore = mark.grade;
-      const afterScore = changeAfterByStudent.get(sid) ?? beforeScore;
-      if (beforeScore > passThreshold) passedBefore += 1;
-      if (afterScore > passThreshold) passedAfter += 1;
+      if (!roster.has(sid)) continue;
+      if (mark.status === 'present') {
+        presentCount += 1;
+        const beforeScore = mark.grade;
+        const afterScore = changeAfterByStudent.get(sid) ?? beforeScore;
+        if (typeof beforeScore === 'number' && beforeScore > passThreshold) {
+          passedBefore += 1;
+        }
+        if (typeof afterScore === 'number' && afterScore > passThreshold) {
+          passedAfter += 1;
+        }
+      } else if (mark.status === 'banned') {
+        bannedCount += 1;
+      } else if (mark.status === 'absent') {
+        absentCount += 1;
+      }
     }
-    const totalRoster = roster.size;
+    const eligibleTotal = presentCount + bannedCount;
     const passRate = {
       threshold: passThreshold,
-      total: totalRoster,
+      total: eligibleTotal,
+      presentCount,
+      bannedCount,
+      absentCount,
+      rosterTotal: roster.size,
       passedBefore,
       passedAfter,
-      ratioBefore: totalRoster > 0 ? passedBefore / totalRoster : 0,
-      ratioAfter: totalRoster > 0 ? passedAfter / totalRoster : 0,
+      ratioBefore: eligibleTotal > 0 ? passedBefore / eligibleTotal : 0,
+      ratioAfter: eligibleTotal > 0 ? passedAfter / eligibleTotal : 0,
     };
 
     const digest = createHash('sha256')

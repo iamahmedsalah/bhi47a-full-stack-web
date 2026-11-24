@@ -51,6 +51,9 @@ import type { ControlSheetDetails, WorkbookRow } from "../types";
 type PassRateTransition = {
   threshold: number;
   total: number;
+  presentCount?: number;
+  bannedCount?: number;
+  absentCount?: number;
   passedBefore: number;
   passedAfter: number;
   ratioBefore: number;
@@ -408,6 +411,18 @@ function PassRateImpactCard({
             />
           )}
         </div>
+
+        <p className="text-[11px] text-muted-foreground">
+          {transition.presentCount != null && transition.bannedCount != null
+            ? text(
+                `المحسوب على الحاضرين والمحرومين فقط (${transition.presentCount} حاضر + ${transition.bannedCount} محروم = ${transition.total} طالب).`,
+                `Calculated on Present + Banned only (${transition.presentCount} present + ${transition.bannedCount} banned = ${transition.total} students).`,
+              )
+            : text(
+                "المحسوب على الحاضرين والمحرومين فقط (يُستبعد الغائبون وغير المرصودين).",
+                "Calculated on Present + Banned students only (absent & unentered excluded).",
+              )}
+        </p>
       </div>
     </div>
   );
@@ -527,6 +542,9 @@ export function ControlGraceDialog({
       return {
         threshold: preview.passRate.threshold,
         total: preview.passRate.total,
+        presentCount: preview.passRate.presentCount,
+        bannedCount: preview.passRate.bannedCount,
+        absentCount: preview.passRate.absentCount,
         passedBefore: preview.passRate.passedBefore,
         passedAfter: preview.passRate.passedAfter,
         ratioBefore: preview.passRate.ratioBefore,
@@ -545,10 +563,23 @@ export function ControlGraceDialog({
 
     let passedBefore = 0;
     let passedAfter = 0;
+    let presentCount = 0;
+    let bannedCount = 0;
+    let absentCount = 0;
 
     for (const row of rows) {
       const mark = row.components.midterm;
-      if (mark?.status !== "present" || mark.score == null) continue;
+      if (mark?.status === "banned") {
+        bannedCount += 1;
+        continue;
+      }
+      if (mark?.status === "absent") {
+        absentCount += 1;
+        continue;
+      }
+      if (mark?.status !== "present") continue;
+      presentCount += 1;
+      if (mark.score == null) continue;
       const beforeScore = mark.score;
       const canReceiveGrace = !row.tuition?.isBlocked && !row.notRegistered;
       const isManuallyEdited = Boolean(
@@ -583,13 +614,17 @@ export function ControlGraceDialog({
       if (afterScore > resolvedThreshold) passedAfter += 1;
     }
 
+    const eligibleTotal = presentCount + bannedCount;
     return {
       threshold: resolvedThreshold,
-      total: rows.length,
+      total: eligibleTotal,
+      presentCount,
+      bannedCount,
+      absentCount,
       passedBefore,
       passedAfter,
-      ratioBefore: rows.length > 0 ? passedBefore / rows.length : 0,
-      ratioAfter: rows.length > 0 ? passedAfter / rows.length : 0,
+      ratioBefore: eligibleTotal > 0 ? passedBefore / eligibleTotal : 0,
+      ratioAfter: eligibleTotal > 0 ? passedAfter / eligibleTotal : 0,
     };
   }, [
     amount,

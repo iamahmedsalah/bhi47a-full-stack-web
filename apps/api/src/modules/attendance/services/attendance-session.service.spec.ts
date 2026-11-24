@@ -1,6 +1,45 @@
 import { Types } from 'mongoose';
 import { AttendanceSessionService } from './attendance-session.service';
 
+it('invalidates the QR session cache after saving a geofence change', async () => {
+  const _id = new Types.ObjectId();
+  const session = {
+    _id,
+    status: 'OPEN',
+    location: undefined,
+    save: jest.fn().mockResolvedValue(undefined),
+  };
+  const model = {
+    findById: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(session),
+    }),
+  };
+  const cache = { del: jest.fn().mockResolvedValue(undefined) };
+  const service = new AttendanceSessionService(
+    model as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    cache as never,
+  );
+
+  await service.updateSessionLocation(
+    _id.toString(),
+    { _id: new Types.ObjectId().toString(), role: 'admin' },
+    { latitude: 30, longitude: 31, radiusMeters: 75 },
+  );
+  expect(session.location).toMatchObject({ radiusMeters: 75 });
+  expect(cache.del).toHaveBeenCalledWith(
+    `attendance:session:${_id.toString()}`,
+  );
+  expect(session.save.mock.invocationCallOrder[0]).toBeLessThan(
+    cache.del.mock.invocationCallOrder[0],
+  );
+});
+
 describe('Attendance history pagination', () => {
   it('paginates the full filtered history, clamps stale pages, and summarizes only the current page', async () => {
     const id = new Types.ObjectId();

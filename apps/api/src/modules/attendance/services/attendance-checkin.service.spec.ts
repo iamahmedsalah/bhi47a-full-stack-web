@@ -38,6 +38,7 @@ describe('AttendanceCheckInService', () => {
     };
     mockRecordModel = {
       findOne: jest.fn(),
+      exists: jest.fn(),
       create: jest.fn(),
     };
     mockRegistrationModel = {
@@ -137,7 +138,7 @@ describe('AttendanceCheckInService', () => {
       mockSessionModel.findById.mockReturnValue({
         select: jest
           .fn()
-          .mockReturnValue({ exec: jest.fn().mockResolvedValue(session) }),
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue(session) }),
       });
       mockTokenService.validateToken.mockReturnValue({ valid: true });
       mockRecordModel.findOne.mockReturnValue({
@@ -189,7 +190,7 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
 
@@ -273,7 +274,7 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
 
@@ -321,7 +322,7 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
 
@@ -345,12 +346,41 @@ describe('AttendanceCheckInService', () => {
     expect(mockRecordModel.create).not.toHaveBeenCalled();
   });
 
+  it('does not confirm attendance after a duplicate key error without a matching record', async () => {
+    const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
+    const error = Object.assign(new Error('Duplicate key'), { code: 11000 });
+    mockSessionModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          _id: mockSessionId,
+          status: 'OPEN',
+          startsAt: new Date(),
+          expiresAt: new Date(Date.now() + 600_000),
+          lateThresholdMinutes: 10,
+        }),
+      }),
+    });
+    mockTokenService.validateToken.mockReturnValue({ valid: true });
+    mockRegistrationModel.exists.mockResolvedValue(true);
+    mockRecordModel.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    mockRecordModel.create.mockRejectedValue(error);
+
+    await expect(service.checkIn(mockStudent, rawToken)).rejects.toBe(error);
+    expect(mockRecordModel.findOne).toHaveBeenLastCalledWith({
+      sessionId: mockSessionId,
+      studentId: new Types.ObjectId(mockStudent._id),
+    });
+    expect(mockRealtimeService.publishEvent).not.toHaveBeenCalled();
+  });
+
   it('should reject check-in when session is CLOSED', async () => {
     const rawToken = `${mockSessionId.toString()}.100.validsignature32characterslong12`;
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue({
+        lean: jest.fn().mockResolvedValue({
           _id: mockSessionId,
           status: 'CLOSED',
         }),
@@ -378,32 +408,31 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
 
     mockTokenService.validateToken.mockReturnValue({ valid: true });
     mockRegistrationModel.exists.mockResolvedValue(true);
 
-    // Mock existing record for student is null, but device is used by another student
-    mockRecordModel.findOne
-      .mockReturnValueOnce({
-        lean: jest.fn().mockResolvedValue(null), // student not checked in yet
-      })
-      .mockReturnValueOnce({
-        lean: jest.fn().mockResolvedValue({
-          _id: new Types.ObjectId(),
-          studentId: new Types.ObjectId(), // another student
-          deviceId: 'device-xyz-123',
-        }),
-      });
+    mockRecordModel.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    mockRecordModel.exists.mockReturnValue({
+      session: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+    });
 
     await expect(
       service.checkIn(mockStudent, {
         token: rawToken,
         deviceId: 'device-xyz-123',
       }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'ATTENDANCE_DEVICE_ALREADY_USED',
+      }),
+    });
+    expect(mockRecordModel.create).not.toHaveBeenCalled();
   });
 
   it('should reject check-in when student location is outside the geofence radius', async () => {
@@ -427,7 +456,7 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
 
@@ -462,7 +491,7 @@ describe('AttendanceCheckInService', () => {
 
     mockSessionModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockSession),
+        lean: jest.fn().mockResolvedValue(mockSession),
       }),
     });
     mockTokenService.validateToken.mockReturnValue({ valid: true });

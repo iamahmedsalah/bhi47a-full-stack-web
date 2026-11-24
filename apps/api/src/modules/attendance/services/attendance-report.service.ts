@@ -14,15 +14,10 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import type { FilterQuery, Model } from 'mongoose';
-import {
-  AttendanceRecord,
-  AttendanceRecordDocument,
-} from '../schemas/attendance-record.schema';
-import {
-  AttendanceSession,
-  AttendanceSessionDocument,
-} from '../schemas/attendance-session.schema';
-import { User, UserDocument } from '../../users/schemas/user.schema';
+import { AttendanceRecord } from '../schemas/attendance-record.schema';
+import { AttendanceSession } from '../schemas/attendance-session.schema';
+import { Course } from '../../courses/schemas/course.schema';
+import { User } from '../../users/schemas/user.schema';
 import {
   CourseRegistration,
   CourseRegistrationDocument,
@@ -68,17 +63,20 @@ export class AttendanceReportService {
 
   constructor(
     @InjectModel(AttendanceRecord.name)
-    private recordModel: Model<AttendanceRecordDocument>,
+    private recordModel: Model<AttendanceRecord>,
     @InjectModel(AttendanceSession.name)
-    private sessionModel: Model<AttendanceSessionDocument>,
+    private sessionModel: Model<AttendanceSession>,
     @InjectModel(User.name)
-    private userModel: Model<UserDocument>,
+    private userModel: Model<User>,
     private realtimeService: AttendanceRealtimeService,
     @InjectModel(CourseRegistration.name)
     private registrationModel: Model<CourseRegistrationDocument>,
     @Optional()
     @InjectModel(StudentProfile.name)
     private studentProfileModel?: Model<StudentProfileDocument>,
+    @Optional()
+    @InjectModel(Course.name)
+    private courseModel?: Model<Course>,
   ) {}
 
   async deleteSession(sessionId: string, user: AttendanceViewer) {
@@ -222,7 +220,7 @@ export class AttendanceReportService {
       throw new BadRequestException('معرّف الجلسة غير صالح');
     }
 
-    const filter: FilterQuery<AttendanceRecordDocument> = {
+    const filter: FilterQuery<AttendanceRecord> = {
       sessionId: new Types.ObjectId(sessionId),
     };
 
@@ -600,6 +598,22 @@ export class AttendanceReportService {
           0,
         ) * 100,
       ) / 100;
+    const bonusRecords = records.filter(
+      (r) => typeof r.bonusPoints === 'number' && r.bonusPoints > 0,
+    );
+    const bonusAwardsCount = bonusRecords.length;
+    const lectureBonusPoints =
+      Math.round(
+        bonusRecords
+          .filter((r) => r.sessionType === 'lecture')
+          .reduce((sum, r) => sum + (r.bonusPoints ?? 0), 0) * 100,
+      ) / 100;
+    const sectionBonusPoints =
+      Math.round(
+        bonusRecords
+          .filter((r) => r.sessionType !== 'lecture')
+          .reduce((sum, r) => sum + (r.bonusPoints ?? 0), 0) * 100,
+      ) / 100;
 
     const attendanceRate =
       totalSessions > 0
@@ -657,6 +671,45 @@ export class AttendanceReportService {
           : 100;
     }
 
+    const courseLookup = new Map<string, { name?: string; nameAr?: string }>();
+    if (this.courseModel && coursesMap.size > 0) {
+      const codes = Array.from(coursesMap.keys());
+      const foundCourses = await this.courseModel
+        .find({ code: { $in: codes } })
+        .select('code name nameAr')
+        .lean();
+      for (const course of foundCourses) {
+        if (course.code) {
+          courseLookup.set(String(course.code).trim().toUpperCase(), {
+            name: course.name,
+            nameAr: course.nameAr,
+          });
+        }
+      }
+    }
+
+    const courses = Array.from(coursesMap.values()).map((entry) => {
+      const meta = courseLookup.get(entry.courseCode.trim().toUpperCase());
+      return {
+        ...entry,
+        ...(meta?.name ? { courseName: meta.name } : {}),
+        ...(meta?.nameAr ? { courseNameAr: meta.nameAr } : {}),
+      };
+    });
+
+    const enrichedRecords = records.map((r) => {
+      const codeKey = String(r.courseCode || '')
+        .trim()
+        .toUpperCase();
+      const meta = courseLookup.get(codeKey);
+      if (!meta) return r;
+      return {
+        ...r,
+        ...(meta.name ? { courseName: meta.name } : {}),
+        ...(meta.nameAr ? { courseNameAr: meta.nameAr } : {}),
+      };
+    });
+
     return {
       summary: {
         totalSessions,
@@ -666,9 +719,12 @@ export class AttendanceReportService {
         absentCount,
         attendanceRate,
         totalBonusPoints,
+        bonusAwardsCount,
+        lectureBonusPoints,
+        sectionBonusPoints,
       },
-      courses: Array.from(coursesMap.values()),
-      records,
+      courses,
+      records: enrichedRecords,
     };
   }
 

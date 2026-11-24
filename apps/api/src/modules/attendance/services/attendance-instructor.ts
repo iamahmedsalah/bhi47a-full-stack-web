@@ -4,23 +4,23 @@ import {
   inferDoctorPrefix,
   type StaffDisplayLike,
 } from '@student-portal/shared';
-import type { UserDocument } from '../../users/schemas/user.schema';
+import type { User } from '../../users/schemas/user.schema';
 import { attendanceSearchPattern } from './attendance-query';
 
 export async function findAttendanceInstructors(
-  users: Model<UserDocument>,
+  users: Model<User>,
   search?: string,
 ) {
   const pattern = attendanceSearchPattern(search);
   if (!pattern) return [];
-  return users.distinct('_id', {
+  return users.distinct<'_id', Types.ObjectId>('_id', {
     role: { $in: ['staff', 'admin'] },
     $or: [{ name: pattern }, { nameAr: pattern }],
   });
 }
 
 export async function loadAttendanceInstructors(
-  users: Model<UserDocument>,
+  users: Model<User>,
   sessions: { createdBy?: Types.ObjectId }[],
 ) {
   const ids = [

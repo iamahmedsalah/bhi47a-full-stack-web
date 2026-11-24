@@ -475,15 +475,32 @@ describe('Attendance export permissions', () => {
           lean: jest.fn().mockResolvedValue([
             {
               courseCode: 'CS304',
+              sessionType: 'lecture',
               status: 'present',
               bonusPoints: 2.5,
+              bonusReason: 'Solved lab problem',
               checkedInAt: new Date(),
             },
             {
               courseCode: 'CS304',
+              sessionType: 'section',
               status: 'late',
               bonusPoints: 1,
               checkedInAt: new Date(),
+            },
+          ]),
+        }),
+      }),
+    };
+
+    const courseModel = {
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              code: 'CS304',
+              name: 'Database Systems',
+              nameAr: 'نظم قواعد البيانات',
             },
           ]),
         }),
@@ -496,6 +513,8 @@ describe('Attendance export permissions', () => {
       {} as never,
       { publishEvent } as never,
       {} as never,
+      undefined,
+      courseModel as never,
     );
 
     const updated = await service.updateRecordBonus(
@@ -531,6 +550,17 @@ describe('Attendance export permissions', () => {
       studId.toString(),
     );
     expect(history.summary.totalBonusPoints).toBe(3.5);
+    expect(history.summary.bonusAwardsCount).toBe(2);
+    expect(history.summary.lectureBonusPoints).toBe(2.5);
+    expect(history.summary.sectionBonusPoints).toBe(1);
     expect(history.courses[0].totalBonusPoints).toBe(3.5);
+    expect(history.courses[0]).toMatchObject({
+      courseName: 'Database Systems',
+      courseNameAr: 'نظم قواعد البيانات',
+    });
+    expect(history.records[0]).toMatchObject({
+      courseName: 'Database Systems',
+      courseNameAr: 'نظم قواعد البيانات',
+    });
   });
 });

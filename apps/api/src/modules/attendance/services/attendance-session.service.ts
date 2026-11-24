@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { CacheService } from '../../../core/cache/cache.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -19,7 +21,7 @@ import {
   CourseStaffAssignmentDocument,
 } from '../schemas/course-staff-assignment.schema';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
-import { User, UserDocument } from '../../users/schemas/user.schema';
+import { User } from '../../users/schemas/user.schema';
 import {
   CreateAttendanceSessionDto,
   CreateCourseStaffAssignmentDto,
@@ -109,9 +111,10 @@ export class AttendanceSessionService {
     @InjectModel(Course.name)
     private courseModel: Model<CourseDocument>,
     @InjectModel(User.name)
-    private userModel: Model<UserDocument>,
+    private userModel: Model<User>,
     private tokenService: AttendanceTokenService,
     private realtimeService: AttendanceRealtimeService,
+    @Optional() private readonly cacheService?: CacheService,
   ) {}
 
   /**
@@ -310,6 +313,9 @@ export class AttendanceSessionService {
     }
 
     await session.save();
+    await this.cacheService?.del(
+      `attendance:session:${session._id.toString()}`,
+    );
 
     return session;
   }

@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Types } from 'mongoose';
+import type { Model } from 'mongoose';
 import ExcelJS from 'exceljs';
 import { PERMISSIONS } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
@@ -24,6 +26,11 @@ import {
 import { ControlAccessService } from './control-access.service';
 import { ControlSheetsService } from './control-sheets.service';
 import { ControlWorkbookService } from './control-workbook.service';
+import {
+  ControlSheet,
+  type ControlSheetDocument,
+  defaultPassThresholdForComponent,
+} from '../schemas/control-sheet.schema';
 import type { ControlReportQueryDto } from '../dto/control.dto';
 
 const states: Record<string, string> = {
@@ -97,6 +104,9 @@ export class ControlReportsService {
     @InjectModel(Grade.name) private readonly grades: Model<GradeDocument>,
     @InjectModel(CourseRegistration.name)
     private readonly registrations: Model<CourseRegistrationDocument>,
+    @Optional()
+    @InjectModel(ControlSheet.name)
+    private readonly sheetModel?: Model<ControlSheetDocument>,
   ) {}
 
   async export(
@@ -185,6 +195,36 @@ export class ControlReportsService {
           profiles.filter((row) => row.tuitionFeesStatus === 'unpaid').length,
         ],
       ]);
+      const thresholds = new Map<string, number>();
+      if (
+        typeof detail.sheet?.passThreshold === 'number' &&
+        Number.isFinite(detail.sheet.passThreshold) &&
+        detail.sheet?.component
+      ) {
+        thresholds.set(detail.sheet.component, detail.sheet.passThreshold);
+      }
+      if (this.sheetModel && Types.ObjectId.isValid(detail.course.id)) {
+        const componentSheets = await this.sheetModel
+          .find({
+            courseId: new Types.ObjectId(detail.course.id),
+            academicYear: query.academicYear,
+            semester: query.semester,
+            component: { $in: ['midterm', 'final'] },
+          })
+          .select('component passThreshold')
+          .lean();
+        for (const componentSheet of componentSheets) {
+          if (
+            typeof componentSheet.passThreshold === 'number' &&
+            Number.isFinite(componentSheet.passThreshold)
+          ) {
+            thresholds.set(
+              componentSheet.component,
+              componentSheet.passThreshold,
+            );
+          }
+        }
+      }
       for (const key of ['coursework', 'midterm', 'final'] as const) {
         const entered = rows.filter((row) => row.components[key]?.status);
         const numeric = entered.flatMap((row) =>
@@ -207,7 +247,15 @@ export class ControlReportsService {
           ],
         ]);
         if (key === 'midterm' || key === 'final') {
-          const threshold = key === 'midterm' ? 18 : 30;
+          const threshold =
+            thresholds.get(key) ?? defaultPassThresholdForComponent(key);
+          const presentCount = rows.filter(
+            (row) => row.components[key]?.status === 'present',
+          ).length;
+          const bannedCount = rows.filter(
+            (row) => row.components[key]?.status === 'banned',
+          ).length;
+          const eligible = presentCount + bannedCount;
           const passed = rows.filter((row) => {
             const mark = row.components[key];
             return (
@@ -216,13 +264,14 @@ export class ControlReportsService {
               mark.score > threshold
             );
           }).length;
+          analysis.addRow([`${label} - إجمالي الحاضرين والمحرومين`, eligible]);
           analysis.addRow([
             `${label} - عدد الطلاب بدرجة أكبر من ${threshold}`,
             passed,
           ]);
           const percentage = analysis.addRow([
-            `${label} - نسبة النجاح (أكبر من ${threshold} ÷ إجمالي طلاب المادة)`,
-            rows.length ? passed / rows.length : 0,
+            `${label} - نسبة النجاح (أكبر من ${threshold} ÷ الحاضرين والمحرومين)`,
+            eligible ? passed / eligible : 0,
           ]);
           percentage.getCell(2).numFmt = '0.00%';
         }

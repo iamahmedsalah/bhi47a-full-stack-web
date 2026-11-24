@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,22 +8,13 @@ import {
 import { CacheService } from '../../../core/cache/cache.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import {
-  AttendanceSession,
-  AttendanceSessionDocument,
-} from '../schemas/attendance-session.schema';
+import { AttendanceSession } from '../schemas/attendance-session.schema';
 import {
   AttendanceRecord,
   AttendanceRecordDocument,
 } from '../schemas/attendance-record.schema';
-import {
-  CourseRegistration,
-  CourseRegistrationDocument,
-} from '../../registrations/schemas/course-registration.schema';
-import {
-  StudentProfile,
-  StudentProfileDocument,
-} from '../../students/schemas/student-profile.schema';
+import { CourseRegistration } from '../../registrations/schemas/course-registration.schema';
+import { StudentProfile } from '../../students/schemas/student-profile.schema';
 import { AttendanceTokenService } from './attendance-token.service';
 import { AttendanceRealtimeService } from './attendance-realtime.service';
 import { createAttendanceRecord } from './attendance-record-write';
@@ -32,7 +22,7 @@ import {
   attendanceInstructor,
   loadAttendanceInstructors,
 } from './attendance-instructor';
-import { User, type UserDocument } from '../../users/schemas/user.schema';
+import { User } from '../../users/schemas/user.schema';
 import { CheckInAttendanceDto } from '../dto/attendance-session.dto';
 import {
   attendanceEnrollmentFilter,
@@ -53,24 +43,18 @@ function isDuplicateKeyError(err: unknown): err is MongoDuplicateKeyError {
 
 @Injectable()
 export class AttendanceCheckInService {
-  private readonly sessionCache = new Map<
-    string,
-    { session: AttendanceSessionDocument; cachedAt: number }
-  >();
-  private readonly SESSION_CACHE_TTL_MS = 6000; // 6 seconds matching QR rotation intervals
-
   constructor(
     @InjectModel(AttendanceSession.name)
-    private sessionModel: Model<AttendanceSessionDocument>,
+    private sessionModel: Model<AttendanceSession>,
     @InjectModel(AttendanceRecord.name)
-    private recordModel: Model<AttendanceRecordDocument>,
+    private recordModel: Model<AttendanceRecord>,
     @InjectModel(CourseRegistration.name)
-    private registrationModel: Model<CourseRegistrationDocument>,
+    private registrationModel: Model<CourseRegistration>,
     @InjectModel(StudentProfile.name)
-    private studentProfileModel: Model<StudentProfileDocument>,
+    private studentProfileModel: Model<StudentProfile>,
     private tokenService: AttendanceTokenService,
     private realtimeService: AttendanceRealtimeService,
-    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     @Optional() private readonly cacheService?: CacheService,
   ) {}
 
@@ -90,30 +74,6 @@ export class AttendanceCheckInService {
     studentUser: { _id: string; name: string; studentCode?: string },
     payload: string | CheckInAttendanceDto,
     clientIp?: string,
-  ) {
-    const lockHolder: { key?: string } = {};
-    try {
-      return await this.performCheckIn(
-        studentUser,
-        payload,
-        clientIp,
-        lockHolder,
-      );
-    } catch (err) {
-      // Only release the lock this request acquired; a failed attempt must be
-      // retryable immediately (e.g. after enabling GPS or scanning a fresh QR).
-      if (lockHolder.key && this.cacheService) {
-        await this.cacheService.del(lockHolder.key).catch(() => undefined);
-      }
-      throw err;
-    }
-  }
-
-  private async performCheckIn(
-    studentUser: { _id: string; name: string; studentCode?: string },
-    payload: string | CheckInAttendanceDto,
-    clientIp: string | undefined,
-    lockHolder: { key?: string },
   ) {
     const rawToken = typeof payload === 'string' ? payload : payload?.token;
     const deviceId =
@@ -146,7 +106,7 @@ export class AttendanceCheckInService {
     }
 
     const isManualCode = this.tokenService.isManualCode(rawToken);
-    let session: AttendanceSessionDocument | null = null;
+    let session: (AttendanceSession & { _id: Types.ObjectId }) | null = null;
 
     if (isManualCode) {
       const sessionSuffix =
@@ -156,7 +116,7 @@ export class AttendanceCheckInService {
         .select('+sessionSecret')
         .sort({ startsAt: -1 })
         .limit(100)
-        .exec();
+        .lean();
 
       session =
         openSessions.find((candidate) => {
@@ -178,43 +138,16 @@ export class AttendanceCheckInService {
         throw new BadRequestException('صيغة رمز الحضور غير صالحة');
       }
 
-      const sessionIdStr = parts[0];
-      if (this.cacheService) {
-        session = await this.cacheService.wrap(
-          `attendance:session:${sessionIdStr}`,
-          () =>
-            this.sessionModel
-              .findById(sessionIdStr)
-              .select('+sessionSecret')
-              .exec(),
-          15,
-        );
-      } else {
-        const nowMs = Date.now();
-        const cached = this.sessionCache.get(sessionIdStr);
-
-        if (cached && nowMs - cached.cachedAt < this.SESSION_CACHE_TTL_MS) {
-          session = cached.session;
-        } else {
-          session = await this.sessionModel
-            .findById(sessionIdStr)
-            .select('+sessionSecret')
-            .exec();
-          if (session) {
-            this.sessionCache.set(sessionIdStr, { session, cachedAt: nowMs });
-          }
-        }
-
-        // Memory safeguard: evict stale sessions if cache grows
-        if (this.sessionCache.size > 100) {
-          const purgeThreshold = nowMs - 30_000;
-          for (const [key, val] of this.sessionCache.entries()) {
-            if (val.cachedAt < purgeThreshold) {
-              this.sessionCache.delete(key);
-            }
-          }
-        }
-      }
+      const sessionId = new Types.ObjectId(parts[0]);
+      const loadSession = async () =>
+        this.sessionModel.findById(sessionId).select('+sessionSecret').lean();
+      session = this.cacheService
+        ? await this.cacheService.wrap(
+            `attendance:session:${sessionId.toString()}`,
+            loadSession,
+            15,
+          )
+        : await loadSession();
     }
 
     if (!session) {
@@ -222,27 +155,13 @@ export class AttendanceCheckInService {
     }
 
     // Sessions served from Redis are JSON-parsed: Date fields come back as strings.
-    session.startsAt = new Date(session.startsAt);
-    session.expiresAt = new Date(session.expiresAt);
-
-    // 2.5 Deduplication scan lock to reject rapid double-scans in 0ms
-    const scanLockKey = `attendance:lock:${session._id.toString()}:${studentUser._id}`;
-    if (this.cacheService) {
-      const isLocked = await this.cacheService.get(scanLockKey);
-      if (isLocked) {
-        throw new ConflictException(
-          'يتم معالجة تسجيل حضورك حالياً، يرجى الانتظار بضع ثوانٍ',
-        );
-      }
-      await this.cacheService.set(scanLockKey, true, 10);
-      lockHolder.key = scanLockKey;
-    }
+    const startsAt = new Date(session.startsAt);
+    const expiresAt = new Date(session.expiresAt);
 
     // 3. Verify session lifecycle state
     const now = new Date();
 
     if (session.status === 'CLOSED') {
-      this.sessionCache.delete(session._id.toString());
       if (this.cacheService) {
         await this.cacheService.del(
           `attendance:session:${session._id.toString()}`,
@@ -251,23 +170,17 @@ export class AttendanceCheckInService {
       throw new BadRequestException('عذراً، جلسة الحضور أغلقت من قبل المحاضر');
     }
 
-    if (session.status === 'EXPIRED' || now > session.expiresAt) {
-      this.sessionCache.delete(session._id.toString());
+    if (session.status === 'EXPIRED' || now >= expiresAt) {
       if (this.cacheService) {
         await this.cacheService.del(
           `attendance:session:${session._id.toString()}`,
         );
       }
       if (session.status === 'OPEN') {
-        if (typeof session.save === 'function') {
-          session.status = 'EXPIRED';
-          await session.save();
-        } else {
-          await this.sessionModel.updateOne(
-            { _id: session._id, status: 'OPEN' },
-            { $set: { status: 'EXPIRED' } },
-          );
-        }
+        await this.sessionModel.updateOne(
+          { _id: session._id, status: 'OPEN', expiresAt: { $lte: now } },
+          { $set: { status: 'EXPIRED' } },
+        );
       }
       throw new BadRequestException(
         'انتهت الفترة الزمنية المسموح بها لتسجيل الحضور لهذه الجلسة',
@@ -294,45 +207,19 @@ export class AttendanceCheckInService {
       );
     }
 
-    // 5-7. Parallelize independent validation queries:
-    // Profile, Enrollment, Existing Record (Idempotency), and Anti-Proxy Device Lock
+    // 5-7. Check the profile, enrollment and existing attendance in parallel.
     const studentObjectId = new Types.ObjectId(studentUser._id);
     const courseCode = session.courseCode;
 
-    const deviceOrFingerprintConditions: Record<string, any>[] = [];
-    if (deviceId) {
-      deviceOrFingerprintConditions.push({ deviceId });
-    }
-    if (deviceFingerprint) {
-      deviceOrFingerprintConditions.push({ deviceFingerprint });
-    }
-
-    const deviceQuery =
-      deviceOrFingerprintConditions.length === 1
-        ? {
-            sessionId: session._id,
-            studentId: { $ne: studentObjectId },
-            ...deviceOrFingerprintConditions[0],
-          }
-        : deviceOrFingerprintConditions.length > 1
-          ? {
-              sessionId: session._id,
-              studentId: { $ne: studentObjectId },
-              $or: deviceOrFingerprintConditions,
-            }
-          : null;
-
-    const [studentProfile, isEnrolled, existingRecord, deviceUsedByOther] =
-      await Promise.all([
-        this.studentProfileModel.findOne({ userId: studentObjectId }).lean(),
-        this.registrationModel.exists(
-          attendanceEnrollmentFilter(studentObjectId, session),
-        ),
-        this.recordModel
-          .findOne({ sessionId: session._id, studentId: studentObjectId })
-          .lean(),
-        deviceQuery ? this.recordModel.findOne(deviceQuery).lean() : null,
-      ]);
+    const [studentProfile, isEnrolled, existingRecord] = await Promise.all([
+      this.studentProfileModel.findOne({ userId: studentObjectId }).lean(),
+      this.registrationModel.exists(
+        attendanceEnrollmentFilter(studentObjectId, session),
+      ),
+      this.recordModel
+        .findOne({ sessionId: session._id, studentId: studentObjectId })
+        .lean(),
+    ]);
 
     const studentCode =
       studentProfile?.studentCode || studentUser.studentCode || '';
@@ -363,21 +250,7 @@ export class AttendanceCheckInService {
     }
 
     if (existingRecord) {
-      return {
-        alreadyCheckedIn: true,
-        status: existingRecord.status,
-        checkedInAt: existingRecord.checkedInAt,
-        sessionType: existingRecord.sessionType,
-        courseCode: session.courseCode,
-        courseName: session.courseName,
-        message: 'تم تسجيل حضورك مسبقاً في هذه المحاضرة بنجاح.',
-      };
-    }
-
-    if (deviceUsedByOther) {
-      throw new ForbiddenException(
-        'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة. لا يُسمح بتسجيل الحضور بالنيابة (حتى مع تغيير المتصفح أو التصفح الخفي).',
-      );
+      return this.previousCheckIn(session, existingRecord);
     }
 
     // 7.2 Geofencing Proof: If session specifies hall coordinates, verify student proximity
@@ -424,17 +297,18 @@ export class AttendanceCheckInService {
 
     // 8. Determine attendance status using SERVER TIME
     const lateThresholdMs = session.lateThresholdMinutes * 60 * 1000;
-    const isLate = now.getTime() > session.startsAt.getTime() + lateThresholdMs;
+    const isLate = now.getTime() > startsAt.getTime() + lateThresholdMs;
     const attendanceStatus = isLate ? 'late' : 'present';
 
     // 9. Write the check-in while preventing concurrent session deletion.
+    let record: AttendanceRecordDocument;
     try {
-      const record = await createAttendanceRecord(
+      record = await createAttendanceRecord(
         this.sessionModel,
         this.recordModel,
         {
           sessionId: session._id,
-          studentId: new Types.ObjectId(studentUser._id),
+          studentId: studentObjectId,
           studentCode,
           studentName,
           courseCode,
@@ -452,61 +326,66 @@ export class AttendanceCheckInService {
           checkedInAt: now,
         },
       );
-
-      // 10. Emit real-time update to staff monitor
-      this.realtimeService.publishEvent(session._id.toString(), {
-        type: 'CHECK_IN',
-        record: {
-          id: record._id.toString(),
-          studentId: studentUser._id,
-          studentCode,
-          studentName,
-          status: record.status,
-          method: record.method,
-          deviceId: record.deviceId,
-          deviceFingerprint: record.deviceFingerprint,
-          deviceInfo: record.deviceInfo,
-          ipAddress: record.ipAddress,
-          location: record.location,
-          checkedInAt: record.checkedInAt,
-        },
-        timestamp: now,
-      });
-
-      return {
-        alreadyCheckedIn: false,
-        status: record.status,
-        checkedInAt: record.checkedInAt,
-        sessionType: session.sessionType,
-        courseCode: session.courseCode,
-        courseName: session.courseName,
-        message:
-          record.status === 'present'
-            ? 'تم تسجيل حضورك بنجاح!'
-            : 'تم تسجيلك كحاضر متأخر.',
-      };
     } catch (err: unknown) {
       if (isDuplicateKeyError(err)) {
-        // Race condition duplicate handled cleanly
         const duplicate = await this.recordModel
-          .findOne({
-            sessionId: session._id,
-            studentId: new Types.ObjectId(studentUser._id),
-          })
+          .findOne({ sessionId: session._id, studentId: studentObjectId })
           .lean();
 
-        return {
-          alreadyCheckedIn: true,
-          status: duplicate?.status || 'present',
-          checkedInAt: duplicate?.checkedInAt || now,
-          sessionType: session.sessionType,
-          courseCode: session.courseCode,
-          courseName: session.courseName,
-          message: 'تم تسجيل حضورك مسبقاً في هذه الجلسة بنجاح.',
-        };
+        if (duplicate) {
+          return this.previousCheckIn(session, duplicate);
+        }
       }
       throw err;
     }
+
+    // 10. Emit real-time update to staff monitor
+    this.realtimeService.publishEvent(session._id.toString(), {
+      type: 'CHECK_IN',
+      record: {
+        id: record._id.toString(),
+        studentId: studentUser._id,
+        studentCode,
+        studentName,
+        status: record.status,
+        method: record.method,
+        deviceId: record.deviceId,
+        deviceFingerprint: record.deviceFingerprint,
+        deviceInfo: record.deviceInfo,
+        ipAddress: record.ipAddress,
+        location: record.location,
+        checkedInAt: record.checkedInAt,
+      },
+      timestamp: now,
+    });
+
+    return {
+      alreadyCheckedIn: false,
+      status: record.status,
+      checkedInAt: record.checkedInAt,
+      sessionType: session.sessionType,
+      courseCode: session.courseCode,
+      courseName: session.courseName,
+      message:
+        record.status === 'present'
+          ? 'تم تسجيل حضورك بنجاح!'
+          : 'تم تسجيلك كحاضر متأخر.',
+    };
+  }
+
+  private previousCheckIn(
+    session: AttendanceSession,
+    record: Pick<AttendanceRecord, 'status' | 'checkedInAt' | 'sessionType'>,
+  ) {
+    return {
+      alreadyCheckedIn: true,
+      status: record.status,
+      checkedInAt: record.checkedInAt,
+      sessionType: record.sessionType,
+      courseCode: session.courseCode,
+      courseName: session.courseName,
+      message: 'تم تسجيل حضورك مسبقاً في هذه الجلسة بنجاح.',
+    };
   }
 
   /**

@@ -243,13 +243,12 @@ export function getAttendanceErrorMessage(
   }
 
   if (
-    normalized.includes("مسبقاً") ||
-    normalized.includes("already checked in") ||
-    normalized.includes("already recorded")
+    code === "ATTENDANCE_DEVICE_ALREADY_USED" ||
+    normalized.startsWith("تم استخدام هذا الجهاز")
   ) {
     return isAr
-      ? "تم تسجيل حضورك مسبقاً في هذه الجلسة بنجاح."
-      : "You have already checked in for this session.";
+      ? "تم استخدام هذا المتصفح لتسجيل حضور طالب آخر في الجلسة."
+      : "This browser was already used to check in another student for this session.";
   }
 
   if (

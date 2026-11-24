@@ -101,7 +101,7 @@ function fixture() {
   };
 }
 describe('Control XLSX reports', () => {
-  it('uses strict exam thresholds and all course students as denominator with flat fills', async () => {
+  it('uses strict exam thresholds and present + banned denominator with flat fills', async () => {
     const ctx = fixture();
     const original = ctx.rows[0];
     ctx.rows.splice(
@@ -111,6 +111,7 @@ describe('Control XLSX reports', () => {
         { midterm: 18, final: 30, status: 'present' },
         { midterm: 19, final: 31, status: 'present' },
         { midterm: 30, final: 50, status: 'present' },
+        { midterm: null, final: null, status: 'banned' },
         { midterm: 30, final: 50, status: 'absent' },
         { midterm: null, final: null, status: null },
       ].map((mark) => ({
@@ -138,8 +139,9 @@ describe('Control XLSX reports', () => {
         rates.push(row.getCell(2));
     });
     expect(rates).toHaveLength(2);
+    // 2 passed out of (3 present + 1 banned = 4 eligible) = 0.5; absent & null excluded
     for (const cell of rates) {
-      expect(cell.value).toBe(0.4);
+      expect(cell.value).toBe(0.5);
       expect(cell.numFmt).toBe('0.00%');
       expect(cell.fill).toEqual({
         type: 'pattern',

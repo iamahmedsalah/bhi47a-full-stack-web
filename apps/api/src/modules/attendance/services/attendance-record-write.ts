@@ -1,10 +1,19 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { ClientSession, Model } from 'mongoose';
 import type {
   AttendanceRecord,
   AttendanceRecordDocument,
 } from '../schemas/attendance-record.schema';
-import type { AttendanceSessionDocument } from '../schemas/attendance-session.schema';
+import type { AttendanceSession } from '../schemas/attendance-session.schema';
+
+type NewAttendanceRecord = Omit<AttendanceRecord, 'auditTrail'> &
+  Partial<Pick<AttendanceRecord, 'auditTrail'>>;
+
+const pendingWrites = new Map<string, Promise<AttendanceRecordDocument>>();
 
 export function isStandaloneTransactionError(error: unknown): boolean {
   return (
@@ -18,10 +27,30 @@ export function isStandaloneTransactionError(error: unknown): boolean {
 }
 
 export async function createAttendanceRecord(
-  sessions: Model<AttendanceSessionDocument>,
-  records: Model<AttendanceRecordDocument>,
-  record: Omit<AttendanceRecord, 'auditTrail'> &
-    Partial<Pick<AttendanceRecord, 'auditTrail'>>,
+  sessions: Model<AttendanceSession>,
+  records: Model<AttendanceRecord>,
+  record: NewAttendanceRecord,
+) {
+  // Each transaction updates the same parent. Queue writes for that parent
+  // within this process to avoid a burst of competing transaction retries.
+  const key = `${sessions.db.id}:${record.sessionId.toString()}`;
+  const previous = pendingWrites.get(key) ?? Promise.resolve();
+  const write = previous
+    .catch(() => undefined)
+    .then(() => persistAttendanceRecord(sessions, records, record));
+  pendingWrites.set(key, write);
+
+  try {
+    return await write;
+  } finally {
+    if (pendingWrites.get(key) === write) pendingWrites.delete(key);
+  }
+}
+
+async function persistAttendanceRecord(
+  sessions: Model<AttendanceSession>,
+  records: Model<AttendanceRecord>,
+  record: NewAttendanceRecord,
 ) {
   const parent = { _id: record.sessionId };
   const requiresOpenSession = record.method === 'qr';
@@ -38,6 +67,27 @@ export async function createAttendanceRecord(
     }
     throw new NotFoundException('Attendance session not found');
   };
+  const assertBrowserAvailable = async (session?: ClientSession) => {
+    // Identical hardware configurations can share a fingerprint. Use the
+    // stored browser ID and keep the fingerprint on the record for review.
+    if (!requiresOpenSession || !record.deviceId) return;
+
+    const used = await records
+      .exists({
+        sessionId: record.sessionId,
+        studentId: { $ne: record.studentId },
+        deviceId: record.deviceId,
+      })
+      .session(session ?? null);
+    if (used) {
+      throw new ForbiddenException({
+        code: 'ATTENDANCE_DEVICE_ALREADY_USED',
+        message: 'تم استخدام هذا المتصفح لتسجيل حضور طالب آخر في الجلسة.',
+        messageEn:
+          'This browser was already used to check in another student for this session.',
+      });
+    }
+  };
 
   try {
     return await sessions.db.transaction(async (session) => {
@@ -50,6 +100,7 @@ export async function createAttendanceRecord(
       if (matchedCount === 0) {
         await rejectUnavailableSession(session);
       }
+      await assertBrowserAvailable(session);
       const [created] = await records.create([record], { session });
       return created;
     });
@@ -59,6 +110,7 @@ export async function createAttendanceRecord(
     if (!(await sessions.exists(parentFilter()))) {
       await rejectUnavailableSession();
     }
+    await assertBrowserAvailable();
     return records.create(record);
   }
 }

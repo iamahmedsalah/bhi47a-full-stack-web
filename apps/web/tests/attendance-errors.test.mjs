@@ -9,3 +9,18 @@ test('QR and staff manual attendance show the enrollment validation in both lang
     assert.match(getAttendanceErrorMessage(payload, 'en'), /student is not enrolled.*semester/);
   }
 });
+
+test('a browser used by another student never displays a previous check-in confirmation', () => {
+  const errors = [
+    { code: 'ATTENDANCE_DEVICE_ALREADY_USED' },
+    { message: 'تم استخدام هذا الجهاز مسبقاً لتسجيل حضور طالب آخر في هذه المحاضرة.' },
+  ];
+  for (const error of errors) {
+    const response = { response: { data: error } };
+    assert.equal(
+      getAttendanceErrorMessage(response, 'ar'),
+      'تم استخدام هذا المتصفح لتسجيل حضور طالب آخر في الجلسة.',
+    );
+    assert.match(getAttendanceErrorMessage(response, 'en'), /another student/);
+  }
+});

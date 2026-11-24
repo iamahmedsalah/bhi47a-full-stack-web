@@ -1,8 +1,6 @@
 "use client";
 import { getUserDisplayName } from "@/lib/user-name";
-import { useCallback } from "react";
-
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -49,12 +47,16 @@ export default function StudentCheckInPage() {
   const [result, setResult] = useState<CheckInResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [manualToken, setManualToken] = useState<string>("");
+  const inFlightRef = useRef(false);
+  const attemptedTokensRef = useRef(new Set<string>());
 
   const status = !isAuthLoading && !isAuthenticated ? "unauthorized" : verificationStatus;
-  const handleVerifyToken = useCallback(async (tokenToVerify: string) => {
-    if (!tokenToVerify) return;
+  const handleVerifyToken = useCallback(async (tokenToVerify: string, automatic = false) => {
+    if (!tokenToVerify || inFlightRef.current) return;
 
     const cleanToken = extractRawToken(tokenToVerify);
+    if (automatic && attemptedTokensRef.current.has(cleanToken)) return;
+    attemptedTokensRef.current.add(cleanToken);
     const schema = createQrTokenSchema(locale);
     const validation = schema.safeParse(cleanToken);
 
@@ -69,6 +71,7 @@ export default function StudentCheckInPage() {
       return;
     }
 
+    inFlightRef.current = true;
     setStatus("verifying");
     setErrorMessage("");
 
@@ -108,15 +111,17 @@ export default function StudentCheckInPage() {
       setStatus("error");
       const msg = getAttendanceErrorMessage(err, locale);
       setErrorMessage(msg);
+    } finally {
+      inFlightRef.current = false;
     }
   }, [locale, isArabic]);
 
   useEffect(() => {
-    if (isAuthLoading || !isAuthenticated || !token) return;
+    if (isAuthLoading || !isAuthenticated || !token || verificationStatus === "verifying") return;
     // Let the verification UI paint before requesting device/location access.
-    const frame = requestAnimationFrame(() => { void handleVerifyToken(token); });
+    const frame = requestAnimationFrame(() => { void handleVerifyToken(token, true); });
     return () => cancelAnimationFrame(frame);
-  }, [token, isAuthenticated, isAuthLoading, handleVerifyToken]);
+  }, [token, isAuthenticated, isAuthLoading, verificationStatus, handleVerifyToken]);
 
   // Handle Login Redirect
   const handleLoginRedirect = () => {

@@ -104,6 +104,8 @@ export interface AttendanceRecordDto {
   studentCode: string;
   studentName: string;
   courseCode: string;
+  courseName?: string;
+  courseNameAr?: string;
   sessionType: string;
   status: "present" | "late" | "excused" | "absent";
   method: "qr" | "manual";
@@ -150,6 +152,7 @@ export interface CheckInResponse {
 export interface CourseAttendanceSummary {
   courseCode: string;
   courseName?: string;
+  courseNameAr?: string;
   totalSessions: number;
   presentCount: number;
   lateCount: number;
@@ -168,6 +171,9 @@ export interface StudentAttendanceHistoryResponse {
     absentCount: number;
     attendanceRate: number;
     totalBonusPoints?: number;
+    bonusAwardsCount?: number;
+    lectureBonusPoints?: number;
+    sectionBonusPoints?: number;
   };
   courses?: CourseAttendanceSummary[];
   records: AttendanceRecordDto[];
