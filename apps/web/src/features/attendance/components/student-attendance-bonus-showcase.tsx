@@ -11,7 +11,6 @@ import {
   Flame,
   FlaskConical,
   MessageSquareQuote,
-  Sparkles,
   Trophy,
   UserCheck,
 } from "lucide-react";
@@ -193,17 +192,6 @@ export function StudentAttendanceBonusShowcase({
             ) : (
               <Award className="size-6" aria-hidden="true" />
             )}
-
-            {totalBonusPoints > 0 && !prefersReducedMotion && (
-              <motion.span
-                aria-hidden="true"
-                animate={{ scale: [0.85, 1.2, 0.85], opacity: [0.65, 1, 0.65] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute -top-1.5 -end-1.5 flex size-5 items-center justify-center rounded-squircle border border-amber-400/50 bg-background text-amber-300 shadow-xs"
-              >
-                <Sparkles className="size-3" />
-              </motion.span>
-            )}
           </motion.div>
 
           <div className="min-w-0 space-y-1.5">
@@ -235,7 +223,7 @@ export function StudentAttendanceBonusShowcase({
           whileHover={prefersReducedMotion ? undefined : { scale: 1.02 }}
           transition={{ type: "spring", stiffness: 320, damping: 24 }}
           className={cn(
-            "flex items-center justify-between sm:justify-end gap-4 rounded-xl border px-4 py-3 shrink-0",
+            "flex items-center justify-between sm:justify-end gap-4 rounded-squircle border px-4 py-3 shrink-0",
             totalBonusPoints > 0
               ? "border-amber-500/35 bg-amber-500/[0.08]"
               : "border-border/70 bg-secondary/25",
@@ -245,8 +233,7 @@ export function StudentAttendanceBonusShowcase({
             <span className="block text-[11px] font-medium text-muted-foreground">
               {isAr ? "إجمالي درجات البونص" : "Total Bonus Earned"}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] text-amber-300/90 font-semibold">
-              <Sparkles className="size-3 shrink-0" aria-hidden="true" />
+            <span className="block text-[11px] text-amber-300/90 font-semibold">
               {computedSummary.count > 0
                 ? isAr
                   ? `في ${computedSummary.count} جلسات مميزة`
@@ -353,7 +340,7 @@ export function StudentAttendanceBonusShowcase({
             transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
             className="flex size-10 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/12 text-primary"
           >
-            <Sparkles className="size-5" aria-hidden="true" />
+            <Award className="size-5" aria-hidden="true" />
           </motion.div>
           <div className="space-y-1">
             <p className="text-xs sm:text-sm font-bold text-foreground">
@@ -460,7 +447,7 @@ export function StudentAttendanceBonusShowcase({
                         }
                         className="inline-flex shrink-0 items-center gap-1 rounded-squircle border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-extrabold text-amber-300 shadow-xs"
                       >
-                        <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+                        <Award className="size-3.5 shrink-0" aria-hidden="true" />
                         <bdi dir="ltr" className="font-mono tabular-nums">
                           +{formatBonusMarks(award.bonusPoints ?? 0)}
                         </bdi>

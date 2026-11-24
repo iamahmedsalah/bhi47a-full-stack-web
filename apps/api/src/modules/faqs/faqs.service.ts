@@ -16,6 +16,12 @@ import { DEFAULT_FAQ_ITEMS } from './default-faqs.data';
 import { Faq, FaqDocument } from './schemas/faq.schema';
 import { faqTermPattern, faqTerms, scoreFaq } from './faq-retrieval';
 
+// MongoDB's PCRE2 regex engine rejects JS \uXXXX escapes from RegExp literals
+// (/[\u0600-\u06FF]/ serializes with literal "\\u"). Decoding via a JS string
+// yields the UTF-8 character range that both MongoDB PCRE2 and JS accept.
+const ARABIC_CHAR_PATTERN = '[\u0600-\u06FF]';
+const ARABIC_CHAR_REGEX = new RegExp(ARABIC_CHAR_PATTERN);
+
 @Injectable()
 export class FaqsService {
   constructor(@InjectModel(Faq.name) private faqModel: Model<FaqDocument>) {}
@@ -48,9 +54,9 @@ export class FaqsService {
     const andConditions: FilterQuery<FaqDocument>[] = [];
 
     if (query.locale === 'ar') {
-      andConditions.push({ question: { $regex: /[\u0600-\u06FF]/ } });
+      andConditions.push({ question: { $regex: ARABIC_CHAR_PATTERN } });
     } else if (query.locale === 'en') {
-      andConditions.push({ question: { $not: /[\u0600-\u06FF]/ } });
+      andConditions.push({ question: { $not: ARABIC_CHAR_REGEX } });
     }
 
     if (query.search) {

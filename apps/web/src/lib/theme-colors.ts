@@ -3,28 +3,28 @@ export const THEME_COLORS = {
   dark: '#101518',
 } as const;
 
-export const THEME_COLOR_OVERRIDE_ATTR = 'data-theme-override';
-
 export function syncThemeColorMeta(
   theme: 'light' | 'dark' | 'system',
   resolvedTheme: 'light' | 'dark',
 ): void {
   if (typeof document === 'undefined' || !document.head) return;
 
-  const selector = `meta[name="theme-color"][${THEME_COLOR_OVERRIDE_ATTR}="true"]`;
-  const existing = document.head.querySelector<HTMLMetaElement>(selector);
+  const metas = document.head.querySelectorAll<HTMLMetaElement>(
+    'meta[name="theme-color"]',
+  );
 
-  if (theme === 'system') {
-    existing?.remove();
-    return;
-  }
-
-  const meta = existing ?? document.createElement('meta');
-  meta.setAttribute('name', 'theme-color');
-  meta.setAttribute(THEME_COLOR_OVERRIDE_ATTR, 'true');
-  meta.setAttribute('content', THEME_COLORS[resolvedTheme]);
-
-  if (!existing) {
-    document.head.prepend(meta);
+  for (const meta of metas) {
+    if (theme === 'system') {
+      const media = meta.getAttribute('media') || '';
+      if (media.includes('dark')) {
+        meta.setAttribute('content', THEME_COLORS.dark);
+      } else if (media.includes('light')) {
+        meta.setAttribute('content', THEME_COLORS.light);
+      } else {
+        meta.setAttribute('content', THEME_COLORS[resolvedTheme]);
+      }
+    } else {
+      meta.setAttribute('content', THEME_COLORS[resolvedTheme]);
+    }
   }
 }

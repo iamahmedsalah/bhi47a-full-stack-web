@@ -91,16 +91,20 @@ const themeInitScript = `
     document.documentElement.classList.remove('dark');
     const head = document.head;
     if (head) {
-      const existing = head.querySelector('meta[name="theme-color"][data-theme-override="true"]');
-      if (theme === 'system') {
-        if (existing) existing.remove();
-      } else {
-        const color = resolvedTheme === 'dark' ? '${THEME_COLORS.dark}' : '${THEME_COLORS.light}';
-        const meta = existing || document.createElement('meta');
-        meta.setAttribute('name', 'theme-color');
-        meta.setAttribute('data-theme-override', 'true');
-        meta.setAttribute('content', color);
-        if (!existing) head.prepend(meta);
+      const metas = head.querySelectorAll('meta[name="theme-color"]');
+      for (const meta of metas) {
+        if (theme === 'system') {
+          const media = meta.getAttribute('media') || '';
+          if (media.includes('dark')) {
+            meta.setAttribute('content', '${THEME_COLORS.dark}');
+          } else if (media.includes('light')) {
+            meta.setAttribute('content', '${THEME_COLORS.light}');
+          } else {
+            meta.setAttribute('content', resolvedTheme === 'dark' ? '${THEME_COLORS.dark}' : '${THEME_COLORS.light}');
+          }
+        } else {
+          meta.setAttribute('content', resolvedTheme === 'dark' ? '${THEME_COLORS.dark}' : '${THEME_COLORS.light}');
+        }
       }
     }
   } catch {

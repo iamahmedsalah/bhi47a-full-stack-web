@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { useParams } from "next/navigation";
 import {
@@ -13,11 +13,11 @@ import {
   Lock,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   QrCode,
   BookOpen,
   Calendar,
   ChevronRight,
+  X,
   XCircle,
 } from "lucide-react";
 import api from "@/lib/api";
@@ -272,123 +272,155 @@ export default function StudentAttendancePage() {
       />
 
       {/* Aggregate Statistics Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         {/* Overall Percentage */}
-        <Card className="col-span-2 sm:col-span-1 p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between relative overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? "النسبة العامة" : "Overall Rate"}
-            </span>
-            <CheckCircle2 className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-3">
-            <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-black font-mono text-foreground tracking-tight">
+        <motion.div
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22 }}
+          className="col-span-2 sm:col-span-1 rounded-2xl sm:rounded-squircle border border-border/70 bg-card/45 p-3 backdrop-blur-sm flex flex-col justify-between gap-2 shadow-sm"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-xs font-semibold text-muted-foreground truncate">
+                {isAr ? "النسبة العامة" : "Overall Rate"}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-0.5 sm:hidden">
+              <span className="text-xl font-black font-mono text-foreground tracking-tight tabular-nums">
                 {summary.attendanceRate}
               </span>
-              <span className="text-sm font-bold text-primary">%</span>
+              <span className="text-xs font-bold text-primary">%</span>
             </div>
-            <Progress value={summary.attendanceRate} className="h-1.5 mt-2.5" />
           </div>
-        </Card>
+          <div className="space-y-1.5">
+            <div className="hidden sm:flex items-baseline gap-1">
+              <span className="text-2xl font-black font-mono text-foreground tracking-tight tabular-nums">
+                {summary.attendanceRate}
+              </span>
+              <span className="text-xs font-bold text-primary">%</span>
+            </div>
+            <Progress value={summary.attendanceRate} className="h-1.5" />
+          </div>
+        </motion.div>
 
-        {/* Present Sessions */}
-        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? "حضور" : "Present"}
-            </span>
-            <div className="h-2 w-2 rounded-full bg-primary" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black font-mono text-primary">
-              {summary.presentCount}
-            </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isAr ? "جلسة مؤكدة" : "Confirmed"}
-            </p>
-          </div>
-        </Card>
+        {(
+          [
+            {
+              key: "present",
+              label: isAr ? "حضور" : "Present",
+              value: summary.presentCount,
+              sub: isAr ? "جلسة مؤكدة" : "Confirmed",
+              dotClass: "bg-primary",
+              valueClass: "text-primary",
+              activeClass:
+                "border-primary/70 bg-primary/12 ring-2 ring-primary/25",
+            },
+            {
+              key: "late",
+              label: isAr ? "تأخير" : "Late",
+              value: summary.lateCount,
+              sub: isAr ? "بعد الموعد" : "After threshold",
+              dotClass: "bg-amber-400",
+              valueClass: "text-amber-400",
+              activeClass:
+                "border-amber-400/70 bg-amber-500/12 ring-2 ring-amber-400/25",
+            },
+            {
+              key: "excused",
+              label: isAr ? "غياب بعذر" : "Excused",
+              value: summary.excusedCount,
+              sub: isAr ? "مقبول رسمياً" : "Approved",
+              dotClass: "bg-blue-400",
+              valueClass: "text-blue-400",
+              activeClass:
+                "border-blue-400/70 bg-blue-500/12 ring-2 ring-blue-400/25",
+            },
+            {
+              key: "absent",
+              label: isAr ? "غياب" : "Absent",
+              value: summary.absentCount,
+              sub: isAr ? "جلسة فائتة" : "Missed",
+              dotClass: "bg-rose-400",
+              valueClass: "text-rose-400",
+              activeClass:
+                "border-rose-400/70 bg-rose-500/12 ring-2 ring-rose-400/25",
+            },
+          ] as const
+        ).map((stat, idx) => {
+          const isSelected = selectedStatus === stat.key && !onlyBonus;
+          return (
+            <motion.button
+              key={stat.key}
+              type="button"
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: 0.22,
+                delay: prefersReducedMotion ? 0 : (idx + 1) * 0.03,
+              }}
+              whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+              aria-pressed={isSelected}
+              onClick={() => {
+                setSelectedStatus((prev) =>
+                  prev === stat.key && !onlyBonus ? "all" : stat.key,
+                );
+                setOnlyBonus(false);
+                historySectionRef.current?.scrollIntoView({
+                  behavior: prefersReducedMotion ? "auto" : "smooth",
+                  block: "start",
+                });
+              }}
+              className={`rounded-squircle border p-2.5 sm:p-3 text-start backdrop-blur-sm flex flex-col justify-between shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                isSelected
+                  ? stat.activeClass
+                  : "border-border/70 bg-card/45 hover:border-border hover:bg-card/65"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 w-full">
+                <span className="text-[11px] sm:text-xs font-medium text-muted-foreground truncate">
+                  {stat.label}
+                </span>
+                <span
+                  className={`h-2 w-2 rounded-full shrink-0 ${stat.dotClass}`}
+                />
+              </div>
+              <div className="mt-1.5 flex items-baseline justify-between gap-2 sm:block">
+                <span
+                  className={`text-xl sm:text-2xl font-black font-mono tabular-nums ${stat.valueClass}`}
+                >
+                  {stat.value}
+                </span>
+                <p className="text-[10px] sm:text-[11px] text-muted-foreground sm:mt-0.5 truncate">
+                  {stat.sub}
+                </p>
+              </div>
+            </motion.button>
+          );
+        })}
 
-        {/* Late Sessions */}
-        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? "تأخير" : "Late"}
-            </span>
-            <div className="h-2 w-2 rounded-full bg-amber-400" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black font-mono text-amber-400">
-              {summary.lateCount}
-            </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isAr ? "بعد الموعد" : "After threshold"}
-            </p>
-          </div>
-        </Card>
-
-        {/* Excused Sessions */}
-        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? "غياب بعذر" : "Excused"}
-            </span>
-            <div className="h-2 w-2 rounded-full bg-blue-400" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black font-mono text-blue-400">
-              {summary.excusedCount}
-            </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isAr ? "مقبول رسمياً" : "Approved"}
-            </p>
-          </div>
-        </Card>
-
-        {/* Absent Sessions */}
-        <Card className="p-4 bg-card/40 border-border/70 backdrop-blur-sm flex flex-col justify-between shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              {isAr ? "غياب" : "Absent"}
-            </span>
-            <div className="h-2 w-2 rounded-full bg-rose-400" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black font-mono text-rose-400">
-              {summary.absentCount}
-            </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isAr ? "جلسة فائتة" : "Missed"}
-            </p>
-          </div>
-        </Card>
-
-        {/* Total Bonus Marks (Interactive Scroll-to-Showcase Card) */}
-        <Card
-          role="button"
-          tabIndex={0}
+        {/* Total Bonus Marks (Full-width horizontal bar on mobile to avoid orphan slot) */}
+        <motion.button
+          type="button"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: 0.22,
+            delay: prefersReducedMotion ? 0 : 0.16,
+          }}
+          whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.98 }}
           onClick={() =>
             bonusSectionRef.current?.scrollIntoView({
               behavior: prefersReducedMotion ? "auto" : "smooth",
               block: "start",
             })
           }
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              bonusSectionRef.current?.scrollIntoView({
-                behavior: prefersReducedMotion ? "auto" : "smooth",
-                block: "start",
-              });
-            }
-          }}
-          className="p-4 bg-card/45 border-amber-500/35 hover:border-amber-400/60 transition-colors backdrop-blur-sm flex flex-col justify-between shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
+          className="col-span-2 sm:col-span-1 rounded-2xl sm:rounded-squircle border border-amber-500/35 bg-card/50 hover:border-amber-400/65 p-3 text-start transition-colors backdrop-blur-sm flex flex-row sm:flex-col items-center sm:items-stretch justify-between gap-3 sm:gap-1.5 shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-amber-300">
-              {isAr ? "البونص (Bonus)" : "Bonus"}
-            </span>
+          <div className="flex items-center gap-2 sm:justify-between min-w-0">
             <motion.span
               animate={
                 prefersReducedMotion || totalBonusPoints <= 0
@@ -396,18 +428,15 @@ export default function StudentAttendancePage() {
                   : { rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] }
               }
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="inline-flex size-6 items-center justify-center rounded-squircle bg-amber-500/15 text-amber-300"
+              className="inline-flex size-7 sm:size-6 shrink-0 items-center justify-center rounded-squircle bg-amber-500/15 text-amber-300 sm:order-2"
             >
               <Award className="h-4 w-4" />
             </motion.span>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black font-mono text-amber-300">
-              <bdi dir="ltr">+{totalBonusPoints}</bdi>
-            </span>
-            <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-              <Sparkles className="size-3 text-amber-300 shrink-0" />
-              <span>
+            <div className="min-w-0 sm:order-1">
+              <span className="block text-xs font-semibold text-amber-300 truncate">
+                {isAr ? "البونص (Bonus)" : "Bonus"}
+              </span>
+              <span className="block text-[10px] text-muted-foreground sm:hidden truncate">
                 {bonusAwardsCount > 0
                   ? isAr
                     ? `في ${bonusAwardsCount} جلسة — عرض التفاصيل`
@@ -416,9 +445,24 @@ export default function StudentAttendancePage() {
                     ? "درجة مكافأة"
                     : "Reward marks"}
               </span>
+            </div>
+          </div>
+
+          <div className="shrink-0 sm:mt-1 text-end sm:text-start">
+            <span className="text-xl sm:text-2xl font-black font-mono text-amber-300 tabular-nums">
+              <bdi dir="ltr">+{totalBonusPoints}</bdi>
+            </span>
+            <p className="hidden sm:block text-[11px] text-muted-foreground mt-0.5 truncate">
+              {bonusAwardsCount > 0
+                ? isAr
+                  ? `في ${bonusAwardsCount} جلسة — عرض التفاصيل`
+                  : `${bonusAwardsCount} rewards — view`
+                : isAr
+                  ? "درجة مكافأة"
+                  : "Reward marks"}
             </p>
           </div>
-        </Card>
+        </motion.button>
       </div>
 
       {/* Motivational Student Bonus Showcase */}
@@ -459,76 +503,117 @@ export default function StudentAttendancePage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {courses.map((course) => {
+            {courses.map((course, idx) => {
               const isWarning = course.attendanceRate < 75;
+              const isCourseFiltered =
+                selectedCourse === course.courseCode &&
+                selectedStatus === "all" &&
+                !onlyBonus;
               return (
-                <Card
+                <motion.div
                   key={course.courseCode}
-                  className={`p-4 bg-card/45 border-border/70 hover:border-primary/40 transition-all shadow-sm space-y-3 ${
-                    isWarning ? "border-amber-500/30" : ""
-                  }`}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.25,
+                    delay: prefersReducedMotion ? 0 : Math.min(idx * 0.04, 0.2),
+                  }}
+                  whileHover={prefersReducedMotion ? undefined : { y: -2 }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0">
-                      <span className="font-mono text-sm font-bold text-foreground">
-                        <bdi dir="ltr">{course.courseCode}</bdi>
-                      </span>
-                      {(course.courseNameAr || course.courseName) && (
-                        <p className="text-xs font-semibold text-foreground/85 truncate mt-0.5">
-                          {isAr
-                            ? course.courseNameAr || course.courseName
-                            : course.courseName || course.courseNameAr}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {course.totalSessions}{" "}
-                        {isAr ? "جلسات منعقدة" : "sessions held"}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-bold border ${
-                        course.attendanceRate >= 75
-                          ? "bg-primary/10 text-primary border-primary/20"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                      }`}
-                    >
-                      {course.attendanceRate}%
-                    </span>
-                  </div>
-
-                  <Progress value={course.attendanceRate} className="h-1.5" />
-
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
-                    <div className="flex items-center gap-3 font-mono text-[11px]">
-                      <span className="text-primary">
-                        {course.presentCount} {isAr ? "حضور" : "pres"}
-                      </span>
-                      <span className="text-amber-400">
-                        {course.lateCount} {isAr ? "تأخير" : "late"}
-                      </span>
-                      <span className="text-rose-400">
-                        {course.absentCount} {isAr ? "غياب" : "abs"}
-                      </span>
-                      {(course.totalBonusPoints ?? 0) > 0 && (
-                        <span className="text-amber-300 font-bold">
-                          <bdi dir="ltr">+{course.totalBonusPoints}</bdi>{" "}
-                          {isAr ? "بونص" : "bonus"}
+                  <Card
+                    className={`rounded-2xl p-4 bg-card/45 border-border/70 hover:border-primary/40 transition-all shadow-sm space-y-3 h-full flex flex-col justify-between ${
+                      isCourseFiltered
+                        ? "border-primary/65 ring-1 ring-primary/25"
+                        : isWarning
+                          ? "border-amber-500/30"
+                          : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-mono text-sm font-bold text-foreground">
+                          <bdi dir="ltr">{course.courseCode}</bdi>
                         </span>
-                      )}
+                        {(course.courseNameAr || course.courseName) && (
+                          <p className="text-xs font-semibold text-foreground/85 truncate mt-0.5">
+                            {isAr
+                              ? course.courseNameAr || course.courseName
+                              : course.courseName || course.courseNameAr}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {course.totalSessions}{" "}
+                          {isAr ? "جلسات منعقدة" : "sessions held"}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-squircle text-xs font-mono font-bold border shrink-0 ${
+                          course.attendanceRate >= 75
+                            ? "bg-primary/10 text-primary border-primary/25"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                        }`}
+                      >
+                        {course.attendanceRate}%
+                      </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCourse(course.courseCode);
-                      }}
-                      className="text-primary hover:text-primary/80 font-medium flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <span>{isAr ? "تصفية السجل" : "Filter"}</span>
-                      <ChevronRight className="h-3 w-3 rtl:rotate-180" />
-                    </button>
-                  </div>
-                </Card>
+                    <Progress value={course.attendanceRate} className="h-1.5" />
+
+                    <div className="flex items-center justify-between gap-2 text-xs pt-1.5 border-t border-border/50">
+                      <div className="flex flex-wrap items-center gap-2.5 font-mono text-[11px]">
+                        <span className="text-primary">
+                          {course.presentCount} {isAr ? "حضور" : "pres"}
+                        </span>
+                        <span className="text-amber-400">
+                          {course.lateCount} {isAr ? "تأخير" : "late"}
+                        </span>
+                        <span className="text-rose-400">
+                          {course.absentCount} {isAr ? "غياب" : "abs"}
+                        </span>
+                        {(course.totalBonusPoints ?? 0) > 0 && (
+                          <span className="text-amber-300 font-bold">
+                            <bdi dir="ltr">+{course.totalBonusPoints}</bdi>{" "}
+                            {isAr ? "بونص" : "bonus"}
+                          </span>
+                        )}
+                      </div>
+
+                      <motion.button
+                        type="button"
+                        whileTap={prefersReducedMotion ? undefined : { scale: 0.96 }}
+                        onClick={() => {
+                          if (isCourseFiltered) {
+                            setSelectedCourse("all");
+                            return;
+                          }
+                          setSelectedCourse(course.courseCode);
+                          setSelectedStatus("all");
+                          setOnlyBonus(false);
+                          historySectionRef.current?.scrollIntoView({
+                            behavior: prefersReducedMotion ? "auto" : "smooth",
+                            block: "start",
+                          });
+                        }}
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-squircle border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                          isCourseFiltered
+                            ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                            : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/50"
+                        }`}
+                      >
+                        <span>
+                          {isCourseFiltered
+                            ? isAr
+                              ? "مُصفّى الآن"
+                              : "Filtered"
+                            : isAr
+                              ? "تصفية السجل"
+                              : "Filter"}
+                        </span>
+                        <ChevronRight className="h-3 w-3 rtl:rotate-180" />
+                      </motion.button>
+                    </div>
+                  </Card>
+                </motion.div>
               );
             })}
           </div>
@@ -538,9 +623,9 @@ export default function StudentAttendancePage() {
       {/* Session History Log Section */}
       <div
         ref={historySectionRef}
-        className="space-y-4 pt-4 border-t border-border/60"
+        className="space-y-4 pt-4 border-t border-border/60 scroll-mt-20"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-base font-bold text-foreground flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" />
@@ -557,25 +642,10 @@ export default function StudentAttendancePage() {
             </p>
           </div>
 
-          {/* Quick Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setOnlyBonus((prev) => !prev)}
-              className={`h-8 rounded-squircle gap-1.5 text-xs font-semibold cursor-pointer ${
-                onlyBonus
-                  ? "border-amber-500/45 bg-amber-500/15 text-amber-300 hover:bg-amber-500/20"
-                  : "bg-secondary/50 border-border/70 text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Award className="size-3.5 shrink-0" />
-              <span>{isAr ? "جلسات البونص فقط" : "Bonus Only"}</span>
-            </Button>
-
+          {/* Side-by-Side Single-Row Filters on Mobile */}
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1.5 sm:flex sm:w-auto sm:items-center sm:gap-2">
             {/* Filter by course */}
-            <div className="w-44">
+            <div className="min-w-0 sm:w-44">
               <CustomDropdown
                 value={selectedCourse}
                 onValueChange={setSelectedCourse}
@@ -595,12 +665,12 @@ export default function StudentAttendancePage() {
                     };
                   }),
                 ]}
-                className="h-8 text-xs bg-secondary/50 border-border/70"
+                className="h-9 px-2.5 text-xs bg-secondary/50 border-border/70"
               />
             </div>
 
             {/* Filter by status */}
-            <div className="w-36">
+            <div className="min-w-0 sm:w-36">
               <CustomDropdown
                 value={selectedStatus}
                 onValueChange={setSelectedStatus}
@@ -618,11 +688,117 @@ export default function StudentAttendancePage() {
                   { value: "excused", label: isAr ? "معذور" : "Excused" },
                   { value: "absent", label: isAr ? "غائب" : "Absent" },
                 ]}
-                className="h-8 text-xs bg-secondary/50 border-border/70"
+                className="h-9 px-2.5 text-xs bg-secondary/50 border-border/70"
               />
             </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOnlyBonus((prev) => !prev)}
+              aria-pressed={onlyBonus}
+              className={`h-9 shrink-0 rounded-squircle gap-1 px-2.5 sm:px-3 text-xs font-semibold cursor-pointer ${
+                onlyBonus
+                  ? "border-amber-500/55 bg-amber-500/18 text-amber-300 hover:bg-amber-500/25"
+                  : "bg-secondary/50 border-border/70 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Award className="size-3.5 shrink-0" />
+              <span className="sm:hidden">{isAr ? "بونص" : "Bonus"}</span>
+              <span className="hidden sm:inline">
+                {isAr ? "جلسات البونص فقط" : "Bonus Only"}
+              </span>
+            </Button>
           </div>
         </div>
+
+        {/* Active Filter Summary Strip */}
+        <AnimatePresence initial={false}>
+          {(selectedCourse !== "all" || selectedStatus !== "all" || onlyBonus) && (
+            <motion.div
+              initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={prefersReducedMotion ? undefined : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.18 }}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/25 px-3 py-2 text-xs"
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isAr ? "التصفية النشطة:" : "Active filters:"}
+                </span>
+
+                {selectedCourse !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCourse("all")}
+                    className="inline-flex items-center gap-1 rounded-squircle border border-primary/35 bg-primary/12 px-2 py-0.5 text-[11px] font-bold text-primary cursor-pointer hover:bg-primary/20"
+                  >
+                    <bdi dir="ltr">{selectedCourse}</bdi>
+                    <X className="size-3" />
+                  </button>
+                )}
+
+                {selectedStatus !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatus("all")}
+                    className="inline-flex items-center gap-1 rounded-squircle border border-border/75 bg-card/80 px-2 py-0.5 text-[11px] font-semibold text-foreground cursor-pointer hover:bg-secondary"
+                  >
+                    <span>
+                      {selectedStatus === "present"
+                        ? isAr
+                          ? "حاضر"
+                          : "Present"
+                        : selectedStatus === "late"
+                          ? isAr
+                            ? "متأخر"
+                            : "Late"
+                          : selectedStatus === "excused"
+                            ? isAr
+                              ? "معذور"
+                              : "Excused"
+                            : isAr
+                              ? "غائب"
+                              : "Absent"}
+                    </span>
+                    <X className="size-3" />
+                  </button>
+                )}
+
+                {onlyBonus && (
+                  <button
+                    type="button"
+                    onClick={() => setOnlyBonus(false)}
+                    className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-300 cursor-pointer hover:bg-amber-500/25"
+                  >
+                    <Award className="size-3" />
+                    <span>{isAr ? "البونص فقط" : "Bonus only"}</span>
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  {filteredRecords.length}{" "}
+                  {isAr ? "جلسة مطابقة" : "matching"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCourse("all");
+                    setSelectedStatus("all");
+                    setOnlyBonus(false);
+                  }}
+                  className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                >
+                  {isAr ? "مسح الكل" : "Clear all"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Empty State */}
         {filteredRecords.length === 0 ? (
@@ -769,66 +945,85 @@ export default function StudentAttendancePage() {
 
             {/* Mobile Cards (Visible only on phone screens) */}
             <div className="grid grid-cols-1 gap-2.5 sm:hidden">
-              {filteredRecords.map((record) => (
-                <Card
-                  key={record._id}
-                  className="p-3.5 bg-card/45 border-border/70 space-y-2.5 shadow-sm"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-sm font-bold text-foreground">
-                      {record.courseCode}
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {(record.bonusPoints ?? 0) > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-300">
-                          <Award className="h-3 w-3 shrink-0" />
-                          <bdi dir="ltr">+{record.bonusPoints}</bdi>
-                          <span>{isAr ? "بونص" : "Bonus"}</span>
+              <AnimatePresence mode="popLayout">
+                {filteredRecords.map((record, idx) => (
+                  <motion.div
+                    key={record._id}
+                    layout={!prefersReducedMotion}
+                    initial={
+                      prefersReducedMotion
+                        ? false
+                        : { opacity: 0, y: 8, scale: 0.98 }
+                    }
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={
+                      prefersReducedMotion
+                        ? undefined
+                        : { opacity: 0, scale: 0.97 }
+                    }
+                    transition={{
+                      duration: 0.2,
+                      delay: prefersReducedMotion ? 0 : Math.min(idx * 0.03, 0.15),
+                    }}
+                  >
+                    <Card className="rounded-squircle p-3.5 bg-card/45 border-border/70 space-y-2.5 shadow-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-sm font-bold text-foreground">
+                          <bdi dir="ltr">{record.courseCode}</bdi>
                         </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(record.bonusPoints ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[11px] font-bold text-amber-300">
+                              <Award className="h-3 w-3 shrink-0" />
+                              <bdi dir="ltr">+{record.bonusPoints}</bdi>
+                              <span>{isAr ? "بونص" : "Bonus"}</span>
+                            </span>
+                          )}
+                          <AttendanceStatusBadge status={record.status} isAr={isAr} />
+                        </div>
+                      </div>
+                      {record.bonusReason && (record.bonusPoints ?? 0) > 0 && (
+                        <p className="text-[11px] text-amber-300/90">
+                          {record.bonusReason}
+                        </p>
                       )}
-                      <AttendanceStatusBadge status={record.status} isAr={isAr} />
-                    </div>
-                  </div>
-                  {record.bonusReason && (record.bonusPoints ?? 0) > 0 && (
-                    <p className="text-[11px] text-amber-300/90">
-                      {record.bonusReason}
-                    </p>
-                  )}
 
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
-                    <span className="font-sans">
-                      {record.sessionType === "lecture"
-                        ? isAr
-                          ? "محاضرة"
-                          : "Lecture"
-                        : record.sessionType === "section"
-                          ? isAr
-                            ? "سكشن"
-                            : "Section"
-                          : isAr
-                            ? "معمل"
-                            : "Lab"}
-                    </span>
-                    <span className="font-mono text-[11px]">
-                      {new Date(record.checkedInAt).toLocaleTimeString(
-                        isAr ? "ar-EG" : "en-GB",
-                        {
-                          timeZone: "Africa/Cairo",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        },
-                      )}
-                    </span>
-                    <span className="text-[11px]">
-                      {record.method === "qr"
-                        ? "QR Code"
-                        : isAr
-                          ? "يدوي"
-                          : "Manual"}
-                    </span>
-                  </div>
-                </Card>
-              ))}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
+                        <span className="font-sans">
+                          {record.sessionType === "lecture"
+                            ? isAr
+                              ? "محاضرة"
+                              : "Lecture"
+                            : record.sessionType === "section"
+                              ? isAr
+                                ? "سكشن"
+                                : "Section"
+                              : isAr
+                                ? "معمل"
+                                : "Lab"}
+                        </span>
+                        <span className="font-mono text-[11px]">
+                          {new Date(record.checkedInAt).toLocaleTimeString(
+                            isAr ? "ar-EG" : "en-GB",
+                            {
+                              timeZone: "Africa/Cairo",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </span>
+                        <span className="text-[11px]">
+                          {record.method === "qr"
+                            ? "QR Code"
+                            : isAr
+                              ? "يدوي"
+                              : "Manual"}
+                        </span>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           </div>
         )}

@@ -99,4 +99,45 @@ describe('FaqsService', () => {
     expect(adminStaffDefaults).toContain(PERMISSIONS.FAQS_READ);
     expect(adminStaffDefaults).toContain(PERMISSIONS.FAQS_WRITE);
   });
+
+  it('uses a PCRE2-safe $regex string without \\u escapes for locale=ar', async () => {
+    const findMock = jest.fn().mockReturnValue(createChainMock([]));
+    const countMock = jest.fn().mockResolvedValue(0);
+    const service = new FaqsService({
+      find: findMock,
+      countDocuments: countMock,
+    } as never);
+
+    await service.findAll({ locale: 'ar', page: 1, limit: 100 });
+
+    const passedFilter = findMock.mock.calls[0][0] as {
+      question?: { $regex?: unknown };
+    };
+    const pattern = passedFilter.question?.$regex;
+    expect(typeof pattern).toBe('string');
+    expect(String(pattern)).not.toContain('\\u');
+    const regex = new RegExp(String(pattern));
+    expect(regex.test('كيف أعرف الجدول؟')).toBe(true);
+    expect(regex.test('How do I view the schedule?')).toBe(false);
+  });
+
+  it('uses a PCRE2-safe RegExp under $not without \\u escapes for locale=en', async () => {
+    const findMock = jest.fn().mockReturnValue(createChainMock([]));
+    const countMock = jest.fn().mockResolvedValue(0);
+    const service = new FaqsService({
+      find: findMock,
+      countDocuments: countMock,
+    } as never);
+
+    await service.findAll({ locale: 'en', page: 1, limit: 100 });
+
+    const passedFilter = findMock.mock.calls[0][0] as {
+      question?: { $not?: unknown };
+    };
+    const pattern = passedFilter.question?.$not;
+    expect(pattern).toBeInstanceOf(RegExp);
+    expect((pattern as RegExp).source).not.toContain('\\u');
+    expect((pattern as RegExp).test('كيف أعرف الجدول؟')).toBe(true);
+    expect((pattern as RegExp).test('How do I view the schedule?')).toBe(false);
+  });
 });
