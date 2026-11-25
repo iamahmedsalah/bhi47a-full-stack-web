@@ -9,6 +9,7 @@ export interface CustomDropdownOption {
   value: string;
   label: React.ReactNode;
   disabled?: boolean;
+  group?: string;
 }
 
 interface DropdownPosition {
@@ -186,33 +187,51 @@ export function CustomDropdown({
             )}
           >
             <div className="p-1">
-              {options.map((option) => {
+              {options.map((option, index) => {
                 const isSelected = option.value === value;
+                const previousGroup = index > 0 ? options[index - 1]?.group : undefined;
+                const showGroupHeader = Boolean(
+                  option.group && option.group !== previousGroup,
+                );
 
                 return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    disabled={option.disabled}
-                    onClick={(event) => {
-                      if (stopPropagation) event.stopPropagation();
-                      if (!option.disabled) {
-                        onValueChange(option.value);
-                        setOpen(false);
-                      }
-                    }}
-                    className={cn(
-                      'relative flex min-h-9 w-full cursor-pointer select-none items-start rounded-squircle py-2 pl-8 pr-3 text-start text-sm leading-snug text-foreground outline-none transition-colors hover:bg-surface/85 focus:bg-surface/85 disabled:cursor-not-allowed disabled:opacity-50',
-                      isSelected && 'bg-primary/10 text-primary',
+                  <React.Fragment key={option.value}>
+                    {showGroupHeader && (
+                      <div
+                        role="presentation"
+                        className={cn(
+                          'px-3 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground/80 select-none',
+                          index > 0
+                            ? 'mt-1.5 border-t border-border/50 pt-2'
+                            : 'pt-1',
+                        )}
+                      >
+                        {option.group}
+                      </div>
                     )}
-                  >
-                    <span className="absolute left-2.5 top-3 flex h-3.5 w-3.5 items-center justify-center">
-                      {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-                    </span>
-                    <span className="min-w-0 whitespace-normal break-words">{option.label}</span>
-                  </button>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={option.disabled}
+                      onClick={(event) => {
+                        if (stopPropagation) event.stopPropagation();
+                        if (!option.disabled) {
+                          onValueChange(option.value);
+                          setOpen(false);
+                        }
+                      }}
+                      className={cn(
+                        'relative flex min-h-9 w-full cursor-pointer select-none items-start rounded-squircle py-2 pl-8 pr-3 text-start text-sm leading-snug text-foreground outline-none transition-colors hover:bg-surface/85 focus:bg-surface/85 disabled:cursor-not-allowed disabled:opacity-50',
+                        isSelected && 'bg-primary/10 text-primary',
+                      )}
+                    >
+                      <span className="absolute left-2.5 top-3 flex h-3.5 w-3.5 items-center justify-center">
+                        {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                      </span>
+                      <span className="min-w-0 whitespace-normal break-words">{option.label}</span>
+                    </button>
+                  </React.Fragment>
                 );
               })}
             </div>

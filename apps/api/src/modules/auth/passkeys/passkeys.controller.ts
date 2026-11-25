@@ -22,6 +22,7 @@ import {
   PasskeyLoginVerifyDto,
   PasskeyNameDto,
   PasskeyReauthDto,
+  PasskeyRegisterOptionsDto,
   PasskeyRegisterVerifyDto,
   PasskeyIdDto,
   PasskeyLoginOptionsDto,
@@ -83,11 +84,13 @@ export class PasskeysController {
     @CurrentUser('_id') userId: string,
     @Req() req: Request,
     @Headers('origin') origin: string,
+    @Body() dto?: PasskeyRegisterOptionsDto,
   ) {
     return this.passkeys.registerOptions(
       userId,
       req.cookies?.access_token,
       origin,
+      dto?.preferredAuthenticatorType,
     );
   }
 

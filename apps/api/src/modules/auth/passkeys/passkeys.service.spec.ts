@@ -1,7 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { PasskeyNameDto, UpdatePasskeySettingsDto } from './passkeys.dto';
+import {
+  PasskeyNameDto,
+  PasskeyRegisterOptionsDto,
+  UpdatePasskeySettingsDto,
+} from './passkeys.dto';
 import type { Model } from 'mongoose';
 import mongoose from 'mongoose';
 import {
@@ -269,6 +273,30 @@ describe('passkey policy', () => {
       );
       expect(await validate(dto)).toHaveLength(0);
       expect(dto.studentLoginEnabled).toBe(value);
+    },
+  );
+  it.each(['localDevice', 'securityKey', 'remoteDevice', undefined])(
+    'accepts optional preferredAuthenticatorType %s',
+    async (preferredAuthenticatorType) => {
+      expect(
+        await validate(
+          plainToInstance(PasskeyRegisterOptionsDto, {
+            preferredAuthenticatorType,
+          }),
+        ),
+      ).toHaveLength(0);
+    },
+  );
+  it.each(['platform', 'usb', 123, true])(
+    'rejects invalid preferredAuthenticatorType %s',
+    async (preferredAuthenticatorType) => {
+      expect(
+        await validate(
+          plainToInstance(PasskeyRegisterOptionsDto, {
+            preferredAuthenticatorType,
+          }),
+        ),
+      ).not.toHaveLength(0);
     },
   );
   it('restores public key bytes from Mongo lean Binary and Buffer records', () => {
@@ -743,5 +771,42 @@ describe('passkey service with real WebAuthn cryptography and in-memory persiste
     await service.remove(userId, token, origin, id);
     await expect(login(first)).rejects.toThrow();
     await login(second);
+  });
+
+  it('supports backward-compatible registerOptions and maps preferredAuthenticatorType hints cleanly', async () => {
+    await service.reauthenticate(userId, token, 'password', origin);
+    const defaultFlow = await service.registerOptions(userId, token, origin);
+    expect(defaultFlow.options.timeout).toBe(60_000);
+    expect(defaultFlow.options.pubKeyCredParams).toEqual([
+      { alg: -7, type: 'public-key' },
+      { alg: -257, type: 'public-key' },
+    ]);
+    expect(
+      defaultFlow.options.authenticatorSelection?.authenticatorAttachment,
+    ).toBeUndefined();
+
+    await service.reauthenticate(userId, token, 'password', origin);
+    const localFlow = await service.registerOptions(
+      userId,
+      token,
+      origin,
+      'localDevice',
+    );
+    expect(
+      localFlow.options.authenticatorSelection?.authenticatorAttachment,
+    ).toBe('platform');
+    expect(localFlow.options.hints).toEqual(['client-device']);
+
+    await service.reauthenticate(userId, token, 'password', origin);
+    const keyFlow = await service.registerOptions(
+      userId,
+      token,
+      origin,
+      'securityKey',
+    );
+    expect(
+      keyFlow.options.authenticatorSelection?.authenticatorAttachment,
+    ).toBe('cross-platform');
+    expect(keyFlow.options.hints).toEqual(['security-key']);
   });
 });

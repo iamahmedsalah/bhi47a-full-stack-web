@@ -14,8 +14,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  ArrowDownWideNarrow,
   ArrowRight,
+  ArrowUpNarrowWide,
+  ArrowUpToLine,
   Bell,
+  Calculator,
   Download,
   FileCheck2,
   FileEdit,
@@ -27,6 +31,7 @@ import {
   Unlock,
   MoreVertical,
   Loader2,
+  Search,
   Trash2,
   Send,
   CheckCircle2,
@@ -34,6 +39,7 @@ import {
   Percent,
   ShieldCheck,
   UserCheck,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -301,10 +307,11 @@ export function ControlWorkbookGrid({
         caps.canApprove ||
         caps.canApproveFinal),
   );
+  const deferredDrafts = useDeferredValue(drafts);
   const getEffectiveComponentMark = useCallback(
-    (row: WorkbookRow) => {
+    (row: WorkbookRow, draftMap: Record<string, Draft> = deferredDrafts) => {
       const saved = row.components[key];
-      const draft = drafts[row.studentId];
+      const draft = draftMap[row.studentId];
       if (!draft) {
         return {
           status: saved?.status ?? null,
@@ -329,21 +336,34 @@ export function ControlWorkbookGrid({
         score: saved?.status === "present" ? (saved.score ?? null) : null,
       };
     },
-    [drafts, key],
+    [deferredDrafts, key],
   );
-  const passRate = useMemo(() => {
-    if (key === "coursework") return null;
+  const { passRate, scoreMetrics } = useMemo(() => {
+    const maxMark = detail.rules.max;
+    const midpoint = Math.round((maxMark / 2) * 100) / 100;
+    const midRadius = Math.max(1, Math.round(maxMark / 15));
+    const midMin = Math.max(0, Math.round((midpoint - midRadius) * 100) / 100);
+    const midMax = Math.min(
+      maxMark,
+      Math.round((midpoint + midRadius) * 100) / 100,
+    );
     const threshold = activePassThreshold;
     let passed = 0;
     let presentCount = 0;
     let bannedCount = 0;
     let absentCount = 0;
     let unenteredCount = 0;
+    let scoreSum = 0;
+    let scoredCount = 0;
     for (const row of rows) {
-      const mark = getEffectiveComponentMark(row);
+      const mark = getEffectiveComponentMark(row, deferredDrafts);
       if (mark.status === "present") {
         presentCount += 1;
-        if (mark.score != null && mark.score > threshold) passed += 1;
+        if (mark.score != null) {
+          scoreSum += mark.score;
+          scoredCount += 1;
+          if (mark.score > threshold) passed += 1;
+        }
       } else if (mark.status === "banned") {
         bannedCount += 1;
       } else if (mark.status === "absent") {
@@ -354,18 +374,39 @@ export function ControlWorkbookGrid({
     }
     const eligibleTotal = presentCount + bannedCount;
     return {
-      component: key,
-      threshold,
-      passed,
-      total: eligibleTotal,
-      presentCount,
-      bannedCount,
-      absentCount,
-      unenteredCount,
-      rosterTotal: rows.length,
-      ratio: eligibleTotal > 0 ? passed / eligibleTotal : 0,
+      passRate:
+        key === "coursework"
+          ? null
+          : {
+              component: key,
+              threshold,
+              passed,
+              total: eligibleTotal,
+              presentCount,
+              bannedCount,
+              absentCount,
+              unenteredCount,
+              rosterTotal: rows.length,
+              ratio: eligibleTotal > 0 ? passed / eligibleTotal : 0,
+            },
+      scoreMetrics: {
+        maxMark,
+        midpoint,
+        midMin,
+        midMax,
+        scoredCount,
+        mean:
+          scoredCount > 0 ? Math.round((scoreSum / scoredCount) * 100) / 100 : null,
+      },
     };
-  }, [rows, key, activePassThreshold, getEffectiveComponentMark]);
+  }, [
+    detail.rules.max,
+    rows,
+    key,
+    activePassThreshold,
+    deferredDrafts,
+    getEffectiveComponentMark,
+  ]);
   const [searchText, setSearchText] = useState(search);
   const [previousSearch, setPreviousSearch] = useState(search);
   if (previousSearch !== search) {
@@ -429,6 +470,18 @@ export function ControlWorkbookGrid({
       ready: total > 0 && missing === 0,
     };
   }, [rows, key]);
+  const nameCollator = useMemo(
+    () =>
+      new Intl.Collator(rtl ? "ar" : "en", {
+        sensitivity: "base",
+        numeric: true,
+      }),
+    [rtl],
+  );
+  const codeCollator = useMemo(
+    () => new Intl.Collator("en", { numeric: true }),
+    [],
+  );
   const sortedRows = useMemo(
     () =>
       [...rows].sort((a, b) => {
@@ -437,13 +490,14 @@ export function ControlWorkbookGrid({
             ? (a.components[key]?.score ?? -1) -
               (b.components[key]?.score ?? -1)
             : sort === "name"
-              ? (rtl ? a.nameAr || a.name : a.name).localeCompare(
+              ? nameCollator.compare(
+                  rtl ? a.nameAr || a.name : a.name,
                   rtl ? b.nameAr || b.name : b.name,
                 )
-              : a.studentCode.localeCompare(b.studentCode);
+              : codeCollator.compare(a.studentCode, b.studentCode);
         return descending ? -value : value;
       }),
-    [rows, sort, key, rtl, descending],
+    [rows, sort, key, rtl, descending, nameCollator, codeCollator],
   );
   const isPartialOpen =
     sheet.workflowState === "PARTIAL_OPEN" && Boolean(sheet.partialCycle);
@@ -475,38 +529,72 @@ export function ControlWorkbookGrid({
     },
     [caps.canEdit, isPartialOpen, key, partialAllowedSet],
   );
-  const searchableRows = useMemo(
-    () =>
-      sortedRows.filter((row) => {
-        if (!searchIndex.get(row.studentId)?.includes(deferredSearch))
-          return false;
-        if (onlyMissing && row.components[key]?.status) return false;
-        if (filter === "absent" && row.components[key]?.status !== "absent")
-          return false;
-        if (filter === "partial" && !partialAllowedSet.has(row.studentId))
-          return false;
-        return true;
-      }),
-    [
-      sortedRows,
-      deferredSearch,
-      onlyMissing,
-      filter,
-      key,
-      searchIndex,
-      partialAllowedSet,
-    ],
-  );
+  const isPartialFilter = filter === "partial";
+  const searchableRows = useMemo(() => {
+    if (!deferredSearch && !onlyMissing && !isPartialFilter) return sortedRows;
+    return sortedRows.filter((row) => {
+      if (
+        deferredSearch &&
+        !searchIndex.get(row.studentId)?.includes(deferredSearch)
+      ) {
+        return false;
+      }
+      if (onlyMissing && row.components[key]?.status) return false;
+      if (isPartialFilter && !partialAllowedSet.has(row.studentId))
+        return false;
+      return true;
+    });
+  }, [
+    sortedRows,
+    deferredSearch,
+    onlyMissing,
+    isPartialFilter,
+    key,
+    searchIndex,
+    partialAllowedSet,
+  ]);
   const filtered = useMemo(() => {
-    if (!["invalid", "dirty", "errors"].includes(filter)) return searchableRows;
-    return searchableRows.filter((row) =>
-      filter === "invalid"
-        ? Boolean(drafts[row.studentId]?.error)
-        : filter === "dirty"
-          ? Boolean(drafts[row.studentId])
-          : Boolean(errors[row.studentId]),
-    );
-  }, [searchableRows, filter, drafts, errors]);
+    if (filter === "all" || filter === "partial") return searchableRows;
+    if (filter === "invalid" || filter === "dirty" || filter === "errors") {
+      return searchableRows.filter((row) =>
+        filter === "invalid"
+          ? Boolean(drafts[row.studentId]?.error)
+          : filter === "dirty"
+            ? Boolean(drafts[row.studentId])
+            : Boolean(errors[row.studentId]),
+      );
+    }
+    return searchableRows.filter((row) => {
+      const mark = getEffectiveComponentMark(row, deferredDrafts);
+      if (filter === "absent") return mark.status === "absent";
+      if (filter === "banned") return mark.status === "banned";
+      if (mark.status !== "present" || mark.score == null) return false;
+      if (filter === "aroundMid") {
+        return (
+          mark.score >= scoreMetrics.midMin && mark.score <= scoreMetrics.midMax
+        );
+      }
+      if (filter === "aboveMid") return mark.score >= scoreMetrics.midpoint;
+      if (filter === "belowMid") return mark.score < scoreMetrics.midpoint;
+      if (filter === "passed") return mark.score > activePassThreshold;
+      if (filter === "failed") return mark.score <= activePassThreshold;
+      if (filter === "fullMark") return mark.score >= scoreMetrics.maxMark;
+      if (filter === "zero") return mark.score === 0;
+      return true;
+    });
+  }, [
+    searchableRows,
+    filter,
+    drafts,
+    errors,
+    deferredDrafts,
+    getEffectiveComponentMark,
+    scoreMetrics.midMin,
+    scoreMetrics.midMax,
+    scoreMetrics.midpoint,
+    scoreMetrics.maxMark,
+    activePassThreshold,
+  ]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / 100));
   const currentPage = Math.max(
     1,
@@ -1981,37 +2069,211 @@ export function ControlWorkbookGrid({
         </div>
       )}
 
-      {/* Grid Utilities & Data Tools Strip */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <Input
-          aria-label={t("search")}
-          placeholder={t("search")}
-          value={searchText}
-          onChange={(e) => {
-            setSearchText(e.target.value);
-            setSelected([]);
-          }}
-          className="max-w-64 h-9 rounded-squircle text-xs"
-        />
+      {/* Grid Search, Organized Filters & Sort Bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-60">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 start-3 size-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label={t("search")}
+            placeholder={t("search")}
+            value={searchText}
+            onChange={(e) => {
+              setSearchText(e.target.value);
+              setSelected([]);
+            }}
+            className="h-9 w-full rounded-squircle ps-8 text-xs"
+          />
+        </div>
+        <div className="w-full sm:w-56">
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger
+              className={cn(
+                "h-9 w-full rounded-squircle text-xs",
+                filter !== "all" &&
+                  "border-primary/45 bg-primary/10 text-primary font-medium",
+              )}
+              aria-label={t("filter")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent dir={rtl ? "rtl" : "ltr"}>
+              <SelectItem value="all" group={t("filters.groupGeneral")}>
+                {t("filters.all")}
+              </SelectItem>
+              {isPartialOpen && (
+                <SelectItem value="partial" group={t("filters.groupGeneral")}>
+                  {t("filters.partial")}
+                </SelectItem>
+              )}
+              <SelectItem
+                value="aroundMid"
+                group={t("filters.groupByScore", {
+                  max: scoreMetrics.maxMark,
+                  mid: scoreMetrics.midpoint,
+                })}
+              >
+                {t("filters.aroundMid", {
+                  min: scoreMetrics.midMin,
+                  max: scoreMetrics.midMax,
+                })}
+              </SelectItem>
+              <SelectItem
+                value="aboveMid"
+                group={t("filters.groupByScore", {
+                  max: scoreMetrics.maxMark,
+                  mid: scoreMetrics.midpoint,
+                })}
+              >
+                {t("filters.aboveMid", { mid: scoreMetrics.midpoint })}
+              </SelectItem>
+              <SelectItem
+                value="belowMid"
+                group={t("filters.groupByScore", {
+                  max: scoreMetrics.maxMark,
+                  mid: scoreMetrics.midpoint,
+                })}
+              >
+                {t("filters.belowMid", { mid: scoreMetrics.midpoint })}
+              </SelectItem>
+              {key !== "coursework" && (
+                <SelectItem
+                  value="passed"
+                  group={t("filters.groupByScore", {
+                    max: scoreMetrics.maxMark,
+                    mid: scoreMetrics.midpoint,
+                  })}
+                >
+                  {t("filters.passed", { threshold: activePassThreshold })}
+                </SelectItem>
+              )}
+              {key !== "coursework" && (
+                <SelectItem
+                  value="failed"
+                  group={t("filters.groupByScore", {
+                    max: scoreMetrics.maxMark,
+                    mid: scoreMetrics.midpoint,
+                  })}
+                >
+                  {t("filters.failed", { threshold: activePassThreshold })}
+                </SelectItem>
+              )}
+              <SelectItem
+                value="fullMark"
+                group={t("filters.groupByScore", {
+                  max: scoreMetrics.maxMark,
+                  mid: scoreMetrics.midpoint,
+                })}
+              >
+                {t("filters.fullMark", { max: scoreMetrics.maxMark })}
+              </SelectItem>
+              <SelectItem
+                value="zero"
+                group={t("filters.groupByScore", {
+                  max: scoreMetrics.maxMark,
+                  mid: scoreMetrics.midpoint,
+                })}
+              >
+                {t("filters.zero")}
+              </SelectItem>
+              <SelectItem value="absent" group={t("filters.groupStatus")}>
+                {t("filters.absent")}
+              </SelectItem>
+              <SelectItem value="banned" group={t("filters.groupStatus")}>
+                {t("filters.banned")}
+              </SelectItem>
+              <SelectItem value="invalid" group={t("filters.groupStatus")}>
+                {t("filters.invalid")}
+              </SelectItem>
+              <SelectItem value="dirty" group={t("filters.groupStatus")}>
+                {t("filters.dirty")}
+              </SelectItem>
+              <SelectItem value="errors" group={t("filters.groupStatus")}>
+                {t("filters.errors")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-36">
+          <Select
+            value={sort}
+            onValueChange={(value) => setSort(value as typeof sort)}
+          >
+            <SelectTrigger
+              className="h-9 w-full rounded-squircle text-xs"
+              aria-label={t("sort")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent dir={rtl ? "rtl" : "ltr"}>
+              <SelectItem value="code">{t("code")}</SelectItem>
+              <SelectItem value="name">{t("name")}</SelectItem>
+              <SelectItem value="mark">{t("mark")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button
+          type="button"
           variant="outline"
           size="sm"
-          className="h-9 rounded-squircle text-xs font-medium"
+          className="h-9 rounded-squircle text-xs font-medium gap-1.5"
+          onClick={() => setDescending(!descending)}
+        >
+          {descending ? (
+            <ArrowDownWideNarrow aria-hidden="true" className="size-3.5" />
+          ) : (
+            <ArrowUpNarrowWide aria-hidden="true" className="size-3.5" />
+          )}
+          {t(descending ? "descending" : "ascending")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-9 rounded-squircle text-xs font-medium",
+            onlyMissing &&
+              "border-primary/45 bg-primary/10 text-primary hover:bg-primary/15",
+          )}
           onClick={() => setOnlyMissing(!onlyMissing)}
         >
           {onlyMissing ? t("all") : t("missing")}
         </Button>
+        {(filter !== "all" || onlyMissing || searchText.trim() !== "") && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 rounded-squircle text-xs text-muted-foreground hover:text-foreground gap-1"
+            onClick={() => {
+              setSearchText("");
+              onSearchChange("");
+              setFilter("all");
+              setOnlyMissing(false);
+              setSelected([]);
+            }}
+          >
+            <X aria-hidden="true" className="size-3.5" />
+            {t("resetFilters")}
+          </Button>
+        )}
+      </div>
+
+      {/* Sheet Tools & Live Pass Rate / Average Strip */}
+      <div className="flex flex-wrap items-center gap-2">
         {(caps.canReview || caps.canApproveFinal) && (
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-xs"
+            className="h-9 rounded-squircle text-xs font-medium gap-1.5"
             disabled={busy}
             onClick={async () => {
               if (await save()) setAttemptDialog({ approval: false });
             }}
           >
-            <GitCompareArrows className="size-3.5 me-1.5" />
+            <GitCompareArrows className="size-3.5" />
             {t("attempts")}
           </Button>
         )}
@@ -2020,7 +2282,7 @@ export function ControlWorkbookGrid({
             variant="outline"
             size="sm"
             className={cn(
-              "h-9 rounded-squircle text-xs",
+              "h-9 rounded-squircle text-xs font-medium gap-1.5",
               sheet.grace &&
                 "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 font-semibold",
             )}
@@ -2034,7 +2296,7 @@ export function ControlWorkbookGrid({
               if (await save()) setGraceOpen(true);
             }}
           >
-            <CheckCircle2 className="size-3.5 me-1.5" />
+            <CheckCircle2 className="size-3.5" />
             {sheet.grace
               ? rtl
                 ? `درجات الرأفة (+${sheet.grace.amount})`
@@ -2048,11 +2310,11 @@ export function ControlWorkbookGrid({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 rounded-squircle text-xs font-medium"
+            className="h-9 rounded-squircle text-xs font-medium gap-1.5"
             disabled={pending}
             onClick={onOpenScheme}
           >
-            <SlidersHorizontal className="size-3.5 me-1.5" />
+            <SlidersHorizontal className="size-3.5" />
             {t("scheme")}
           </Button>
         )}
@@ -2060,11 +2322,11 @@ export function ControlWorkbookGrid({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 rounded-squircle text-xs font-semibold border-primary/35 text-primary hover:bg-primary/10"
+            className="h-9 rounded-squircle text-xs font-semibold gap-1.5 border-primary/35 text-primary hover:bg-primary/10"
             disabled={pending || busy}
             onClick={() => setPetitionCreateOpen(true)}
           >
-            <FileEdit className="size-3.5 me-1.5" />
+            <FileEdit className="size-3.5" />
             {rtl ? "طلب التماس درجات" : "Grade Petition"}
           </Button>
         )}
@@ -2072,10 +2334,10 @@ export function ControlWorkbookGrid({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 rounded-squircle text-xs font-medium"
+            className="h-9 rounded-squircle text-xs font-medium gap-1.5"
             onClick={onOpenSheetAudit}
           >
-            <History className="size-3.5 me-1.5" />
+            <History className="size-3.5" />
             {t("audit")}
           </Button>
         )}
@@ -2084,6 +2346,7 @@ export function ControlWorkbookGrid({
             <Button
               variant="outline"
               size="sm"
+              className="h-9 rounded-squircle text-xs font-medium gap-1.5"
               disabled={pending || busy}
               onClick={() => setDownloadKind("templates")}
             >
@@ -2093,6 +2356,7 @@ export function ControlWorkbookGrid({
             <Button
               variant="outline"
               size="sm"
+              className="h-9 rounded-squircle text-xs font-medium gap-1.5"
               disabled={pending || busy}
               onClick={() => setDownloadKind("reports")}
             >
@@ -2102,190 +2366,170 @@ export function ControlWorkbookGrid({
           </>
         )}
         {caps.canImport && caps.canEdit && !isPartialOpen && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 rounded-squircle text-xs font-medium"
-              disabled={pending || busy}
-              onClick={async () => {
-                if (await save()) setImportOpen(true);
-              }}
-            >
-              <Upload className="size-3.5 me-1.5" />
-              {t("import")}
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-squircle text-xs font-medium gap-1.5"
+            disabled={pending || busy}
+            onClick={async () => {
+              if (await save()) setImportOpen(true);
+            }}
+          >
+            <Upload className="size-3.5" />
+            {t("import")}
+          </Button>
         )}
-      </div>
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="w-44">
-          <Select
-            value={sort}
-            onValueChange={(value) => setSort(value as typeof sort)}
-          >
-            <SelectTrigger className="w-44" aria-label={t("sort")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent dir={rtl ? "rtl" : "ltr"}>
-              <SelectItem value="code">{t("code")}</SelectItem>
-              <SelectItem value="name">{t("name")}</SelectItem>
-              <SelectItem value="mark">{t("mark")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button variant="outline" onClick={() => setDescending(!descending)}>
-          {t(descending ? "descending" : "ascending")}
-        </Button>
-        <div className="w-44">
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="w-44" aria-label={t("filter")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent dir={rtl ? "rtl" : "ltr"}>
-              {[
-                "all",
-                ...(isPartialOpen ? ["partial"] : []),
-                "invalid",
-                "dirty",
-                "errors",
-                "absent",
-              ].map((mode) => (
-                <SelectItem key={mode} value={mode}>
-                  {t(`filters.${mode}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {passRate && workbook.data && !workbook.isError && (
-          <div
-            className={cn(
-              "flex flex-wrap items-center gap-2 max-w-full",
-              rtl ? "ms-auto" : "order-first me-auto",
-            )}
-          >
-            <div
-              role="group"
-              aria-label={t("passRate", { component: t(passRate.component) })}
-              onClick={
-                canManagePassThreshold
-                  ? () => {
-                      setThresholdInput(String(passRate.threshold));
-                      setPassThresholdOpen(true);
-                    }
-                  : undefined
-              }
-              title={
-                rtl
-                  ? `نسبة النجاح = الناجحون (${passRate.passed}) ÷ (الحاضرون ${passRate.presentCount} + المحرومون ${passRate.bannedCount})`
-                  : `Pass rate = Passed (${passRate.passed}) / (Present ${passRate.presentCount} + Banned ${passRate.bannedCount})`
-              }
-              className={cn(
-                "inline-flex h-9 w-fit max-w-full items-center gap-2.5 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
-                canManagePassThreshold &&
-                  "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
-              )}
-            >
-              <span className="inline-flex items-center gap-1.5 font-medium">
-                <Percent aria-hidden="true" className="size-3.5 text-primary" />
-                {t("passRate", { component: t(passRate.component) })}
-              </span>
-              <bdi className="text-sm font-bold tabular-nums text-primary">
-                {new Intl.NumberFormat(locale, {
-                  style: "percent",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }).format(passRate.ratio)}
-              </bdi>
-              <bdi className="hidden sm:inline font-mono text-[11px] font-semibold text-muted-foreground tabular-nums">
-                ({passRate.passed}/{passRate.total})
-              </bdi>
-              {canManagePassThreshold && (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setThresholdInput(String(passRate.threshold));
-                    setPassThresholdOpen(true);
-                  }}
-                  aria-label={
-                    rtl
-                      ? "تعديل حد درجة النجاح"
-                      : "Edit pass mark threshold"
+        {(passRate || scoreMetrics.mean !== null) &&
+          workbook.data &&
+          !workbook.isError && (
+            <div className="flex flex-wrap items-center gap-2 max-w-full ms-auto">
+              {passRate && (
+                <div
+                  role="group"
+                  aria-label={t("passRate", {
+                    component: t(passRate.component),
+                  })}
+                  onClick={
+                    canManagePassThreshold
+                      ? () => {
+                          setThresholdInput(String(passRate.threshold));
+                          setPassThresholdOpen(true);
+                        }
+                      : undefined
                   }
                   title={
                     rtl
-                      ? `تعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
-                      : `Edit pass mark threshold (current > ${passRate.threshold})`
+                      ? `نسبة النجاح = الناجحون (${passRate.passed}) ÷ (الحاضرون ${passRate.presentCount} + المحرومون ${passRate.bannedCount})`
+                      : `Pass rate = Passed (${passRate.passed}) / (Present ${passRate.presentCount} + Banned ${passRate.bannedCount})`
                   }
-                  className="inline-flex size-6 items-center justify-center rounded-squircle text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary cursor-pointer"
+                  className={cn(
+                    "inline-flex h-9 w-fit max-w-full items-center gap-2 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+                    canManagePassThreshold &&
+                      "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
+                  )}
                 >
-                  <SlidersHorizontal aria-hidden="true" className="size-3.5" />
-                </button>
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <Percent
+                      aria-hidden="true"
+                      className="size-3.5 text-primary"
+                    />
+                    {t("passRate", { component: t(passRate.component) })}
+                  </span>
+                  <bdi className="text-sm font-bold tabular-nums text-primary">
+                    {new Intl.NumberFormat(locale, {
+                      style: "percent",
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }).format(passRate.ratio)}
+                  </bdi>
+                  <bdi className="hidden sm:inline font-mono text-[11px] font-semibold text-muted-foreground tabular-nums">
+                    ({passRate.passed}/{passRate.total})
+                  </bdi>
+                  {canManagePassThreshold && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setThresholdInput(String(passRate.threshold));
+                        setPassThresholdOpen(true);
+                      }}
+                      aria-label={
+                        rtl
+                          ? "تعديل حد درجة النجاح"
+                          : "Edit pass mark threshold"
+                      }
+                      title={
+                        rtl
+                          ? `تعديل حد درجة النجاح (الحالي > ${passRate.threshold})`
+                          : `Edit pass mark threshold (current > ${passRate.threshold})`
+                      }
+                      className="inline-flex size-6 items-center justify-center rounded-squircle text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary cursor-pointer"
+                    >
+                      <SlidersHorizontal
+                        aria-hidden="true"
+                        className="size-3.5"
+                      />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {scoreMetrics.mean !== null && (
+                <span
+                  title={
+                    rtl
+                      ? `متوسط درجات الحاضرين المرصودة (${scoreMetrics.scoredCount} طالب) · نصف الدرجة العظمى = ${scoreMetrics.midpoint}`
+                      : `Mean of entered present marks (${scoreMetrics.scoredCount} students) · Half mark = ${scoreMetrics.midpoint}`
+                  }
+                  className="inline-flex h-9 items-center gap-1.5 rounded-squircle border border-border/70 bg-secondary/40 px-2.5 text-xs font-medium text-muted-foreground"
+                >
+                  <Calculator
+                    aria-hidden="true"
+                    className="size-3.5 text-primary/80"
+                  />
+                  <span>{t("averageScore")}:</span>
+                  <bdi
+                    dir="ltr"
+                    className="font-mono font-bold tabular-nums text-foreground"
+                  >
+                    {scoreMetrics.mean}/{scoreMetrics.maxMark}
+                  </bdi>
+                </span>
+              )}
+
+              {passRate && (
+                <div
+                  aria-label={
+                    rtl
+                      ? "إحصائيات الحضور والحرمان والغياب الحية"
+                      : "Live present, banned, and absent counts"
+                  }
+                  className="flex flex-wrap items-center gap-1.5 text-[11px]"
+                >
+                  <span
+                    title={
+                      rtl
+                        ? "الطلاب الحاضرون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
+                        : "Present students included in pass rate"
+                    }
+                    className="inline-flex h-8 items-center gap-1 rounded-squircle border border-emerald-500/25 bg-emerald-500/10 px-2.5 font-semibold text-emerald-300"
+                  >
+                    <span>{rtl ? "حاضر:" : "Present:"}</span>
+                    <bdi className="font-mono font-bold tabular-nums">
+                      {passRate.presentCount}
+                    </bdi>
+                  </span>
+                  <span
+                    title={
+                      rtl
+                        ? "الطلاب المحرومون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
+                        : "Banned students included in pass rate"
+                    }
+                    className="inline-flex h-8 items-center gap-1 rounded-squircle border border-amber-500/30 bg-amber-500/10 px-2.5 font-semibold text-amber-300"
+                  >
+                    <span>{rtl ? "محروم:" : "Banned:"}</span>
+                    <bdi className="font-mono font-bold tabular-nums">
+                      {passRate.bannedCount}
+                    </bdi>
+                  </span>
+                  <span
+                    title={
+                      rtl
+                        ? "الطلاب الغائبون (مستبعدون من مقام نسبة النجاح)"
+                        : "Absent students (excluded from pass rate)"
+                    }
+                    className="inline-flex h-8 items-center gap-1 rounded-squircle border border-border/70 bg-secondary/40 px-2.5 font-medium text-muted-foreground"
+                  >
+                    <span>{rtl ? "غائب:" : "Absent:"}</span>
+                    <bdi className="font-mono font-bold tabular-nums text-foreground/85">
+                      {passRate.absentCount}
+                    </bdi>
+                  </span>
+                </div>
               )}
             </div>
-
-            <div
-              aria-label={
-                rtl
-                  ? "إحصائيات الحضور والحرمان والغياب الحية"
-                  : "Live present, banned, and absent counts"
-              }
-              className="flex flex-wrap items-center gap-1.5 text-[11px]"
-            >
-              <span
-                title={
-                  rtl
-                    ? "الطلاب الحاضرون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
-                    : "Present students included in pass rate"
-                }
-                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-emerald-500/25 bg-emerald-500/10 px-2.5 font-semibold text-emerald-300"
-              >
-                <span>{rtl ? "حاضر:" : "Present:"}</span>
-                <bdi className="font-mono font-bold tabular-nums">
-                  {passRate.presentCount}
-                </bdi>
-              </span>
-              <span
-                title={
-                  rtl
-                    ? "الطلاب المحرومون في هذا الامتحان (يدخلون في حساب نسبة النجاح)"
-                    : "Banned students included in pass rate"
-                }
-                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-amber-500/30 bg-amber-500/10 px-2.5 font-semibold text-amber-300"
-              >
-                <span>{rtl ? "محروم:" : "Banned:"}</span>
-                <bdi className="font-mono font-bold tabular-nums">
-                  {passRate.bannedCount}
-                </bdi>
-              </span>
-              <span
-                title={
-                  rtl
-                    ? "الطلاب الغائبون (مستبعدون من مقام نسبة النجاح)"
-                    : "Absent students (excluded from pass rate)"
-                }
-                className="inline-flex h-8 items-center gap-1 rounded-squircle border border-border/70 bg-secondary/40 px-2.5 font-medium text-muted-foreground"
-              >
-                <span>{rtl ? "غائب:" : "Absent:"}</span>
-                <bdi className="font-mono font-bold tabular-nums text-foreground/85">
-                  {passRate.absentCount}
-                </bdi>
-              </span>
-            </div>
-          </div>
-        )}
+          )}
       </div>
-      {caps.canEdit && (
-        <Input
-          aria-label={t("stateReasonOptional")}
-          placeholder={t("stateReasonOptional")}
-          value={reason}
-          maxLength={500}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      )}
       {sheetPetitions.length > 0 && (
         <div className="space-y-2 rounded-xl border border-primary/25 bg-primary/5 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -2460,43 +2704,77 @@ export function ControlWorkbookGrid({
           {t("undo")}
         </Button>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          {caps.canEdit && (
+            <div className="relative w-full sm:w-80 md:w-96 max-w-full">
+              <Input
+                aria-label={t("stateReasonOptional")}
+                placeholder={t("stateReasonOptional")}
+                value={reason}
+                maxLength={150}
+                onChange={(e) => setReason(e.target.value.slice(0, 150))}
+                className="h-9 w-full rounded-squircle pe-12 text-xs"
+              />
+              <span
+                aria-live="polite"
+                className={cn(
+                  "pointer-events-none absolute top-1/2 end-2.5 -translate-y-1/2 font-mono text-[10px] tabular-nums",
+                  reason.length >= 140
+                    ? "text-amber-400 font-semibold"
+                    : "text-muted-foreground/70",
+                )}
+              >
+                <bdi dir="ltr">{reason.length}/150</bdi>
+              </span>
+            </div>
+          )}
+          {hiddenCheckpoint && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-squircle text-xs font-medium"
+              onClick={() => {
+                const checkpoint: ControlCheckpoint = {
+                  ...hiddenCheckpoint,
+                  filter: "all",
+                  onlyMissing: false,
+                  search: "",
+                };
+                remember(checkpoint, true);
+                setRestore(checkpoint);
+                setHiddenCheckpoint(null);
+              }}
+            >
+              {t("goToLastStudent")}
+            </Button>
+          )}
+          {(checkpointLoading || restore) && (
+            <ControlWorkbookLoading stage="restoringPosition" />
+          )}
+          {saveError && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 rounded-squircle text-xs"
+              onClick={retry}
+            >
+              {t("retryCheckpoint")}
+            </Button>
+          )}
+        </div>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="h-9 rounded-squircle text-xs font-medium gap-1.5 ms-auto shrink-0"
           onClick={startFromFirstPage}
         >
+          <ArrowUpToLine aria-hidden="true" className="size-3.5 text-primary" />
           {t("startFromFirstPage")}
         </Button>
-        {hiddenCheckpoint && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const checkpoint: ControlCheckpoint = {
-                ...hiddenCheckpoint,
-                filter: "all",
-                onlyMissing: false,
-                search: "",
-              };
-              remember(checkpoint, true);
-              setRestore(checkpoint);
-              setHiddenCheckpoint(null);
-            }}
-          >
-            {t("goToLastStudent")}
-          </Button>
-        )}
-        {(checkpointLoading || restore) && (
-          <ControlWorkbookLoading stage="restoringPosition" />
-        )}
-        {saveError && (
-          <Button type="button" variant="ghost" size="sm" onClick={retry}>
-            {t("retryCheckpoint")}
-          </Button>
-        )}
       </div>
       <div
         ref={tableViewport}

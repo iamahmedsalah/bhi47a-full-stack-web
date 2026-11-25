@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   browserSupportsWebAuthn,
   startRegistration,
+  type PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/browser";
 import {
   KeyRound,
@@ -22,6 +23,12 @@ import {
   Hash,
   ChevronDown,
   Check,
+  Laptop,
+  Smartphone,
+  Usb,
+  ArrowLeft,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import api, { getApiErrorDetails } from "@/lib/api";
@@ -33,6 +40,7 @@ import { Card } from "@/components/ui/card";
 import * as Select from "@radix-ui/react-select";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -40,18 +48,32 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  detectPlatformAuthenticator,
   getPasskeyCapabilities,
   getPasskeys,
   passkeyKeys,
+  passkeyPreferredAuthenticators,
   passkeyRegisterOptions,
   passkeyErrorKey,
   type PasskeyMetadata,
+  type PasskeyPreferredAuthenticator,
   passkeyUnlockMethods,
   type PasskeyUnlockMethod,
 } from "@/features/auth/passkeys";
 
 type Action =
-  { type: "add" } | { type: "rename" | "remove"; credential: PasskeyMetadata };
+  | { type: "add" }
+  | { type: "rename" | "remove"; credential: PasskeyMetadata };
+
+type AddStep = "reauth" | "readyToSign";
+
+interface PreparedRegisterFlow {
+  flowId: string;
+  options: PublicKeyCredentialCreationOptionsJSON;
+  expiresAt: number;
+}
+
+const PREPARED_REGISTER_TTL_MS = 150_000;
 
 export function PasskeyManager() {
   const t = useTranslations("passkeys");
@@ -76,6 +98,14 @@ export function PasskeyManager() {
   });
 
   const [action, setAction] = useState<Action | null>(null);
+  const [addStep, setAddStep] = useState<AddStep>("reauth");
+  const [authenticatorType, setAuthenticatorType] =
+    useState<PasskeyPreferredAuthenticator>("localDevice");
+  const [preparedFlow, setPreparedFlow] =
+    useState<PreparedRegisterFlow | null>(null);
+  const [platformAvailable, setPlatformAvailable] = useState<boolean | null>(
+    null,
+  );
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [unlockMethod, setUnlockMethod] =
@@ -85,7 +115,27 @@ export function PasskeyManager() {
   const [message, setMessage] = useState("");
   const [dialogMessage, setDialogMessage] = useState("");
 
+  useEffect(() => {
+    let cancelled = false;
+    void detectPlatformAuthenticator().then((available) => {
+      if (!cancelled) {
+        setPlatformAvailable(available);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!capabilities.data?.enabled || !user) return null;
+
+  const resetDialogState = () => {
+    setAction(null);
+    setAddStep("reauth");
+    setPreparedFlow(null);
+    setPassword("");
+    setDialogMessage("");
+  };
 
   const open = (next: Action) => {
     setPassword("");
@@ -95,11 +145,16 @@ export function PasskeyManager() {
         ? "unspecified"
         : (next.credential.unlockMethod ?? "unspecified"),
     );
+    setAuthenticatorType(
+      platformAvailable === false ? "securityKey" : "localDevice",
+    );
+    setAddStep("reauth");
+    setPreparedFlow(null);
     setDialogMessage("");
     setAction(next);
   };
 
-  const submit = async (event: React.FormEvent) => {
+  const submitStep1 = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!action || inFlight.current) return;
     inFlight.current = true;
@@ -123,16 +178,21 @@ export function PasskeyManager() {
       });
 
       setPassword("");
+
       if (action.type === "add") {
-        const flow = await passkeyRegisterOptions();
-        const response = await startRegistration({ optionsJSON: flow.options });
-        await api.post("/auth/passkeys/register/verify", {
+        // Prepare challenge/options in Step 1 so Step 2 invokes startRegistration()
+        // synchronously inside a direct tap gesture (required for Safari iPhone).
+        const flow = await passkeyRegisterOptions(authenticatorType);
+        setPreparedFlow({
           flowId: flow.flowId,
-          response,
-          name: name.trim(),
-          unlockMethod,
+          options: flow.options,
+          expiresAt: Date.now() + PREPARED_REGISTER_TTL_MS,
         });
-      } else if (action.type === "rename") {
+        setAddStep("readyToSign");
+        return;
+      }
+
+      if (action.type === "rename") {
         await api.patch(`/auth/passkeys/${action.credential._id}`, {
           name: name.trim(),
           unlockMethod,
@@ -141,7 +201,7 @@ export function PasskeyManager() {
         await api.delete(`/auth/passkeys/${action.credential._id}`);
       }
 
-      setAction(null);
+      resetDialogState();
       setMessage(t("saved"));
       await client.invalidateQueries({ queryKey });
     } catch (error: unknown) {
@@ -149,10 +209,63 @@ export function PasskeyManager() {
       if (details.message.includes("Password verification failed")) {
         setDialogMessage(t("incorrectPassword"));
       } else {
-        setDialogMessage(t(passkeyErrorKey(error)));
+        setDialogMessage(t(passkeyErrorKey(error, "manage")));
       }
     } finally {
       setPassword("");
+      setBusy(false);
+      inFlight.current = false;
+    }
+  };
+
+  const completeRegistration = async () => {
+    if (!preparedFlow || inFlight.current) return;
+    const currentFlow = preparedFlow;
+    if (Date.now() >= currentFlow.expiresAt) {
+      setPreparedFlow(null);
+      setAddStep("reauth");
+      setDialogMessage(t("reauthExpired"));
+      return;
+    }
+
+    inFlight.current = true;
+    setBusy(true);
+    setDialogMessage("");
+
+    let registrationResponse: Awaited<ReturnType<typeof startRegistration>>;
+    try {
+      // Must be the very first awaited operation inside the click handler for Safari iOS.
+      registrationResponse = await startRegistration({
+        optionsJSON: currentFlow.options,
+      });
+    } catch (error: unknown) {
+      setDialogMessage(t(passkeyErrorKey(error, "manage")));
+      if (Date.now() >= currentFlow.expiresAt) {
+        setPreparedFlow(null);
+        setAddStep("reauth");
+      }
+      setBusy(false);
+      inFlight.current = false;
+      return;
+    }
+
+    try {
+      await api.post("/auth/passkeys/register/verify", {
+        flowId: currentFlow.flowId,
+        response: registrationResponse,
+        name: name.trim(),
+        unlockMethod,
+      });
+
+      resetDialogState();
+      setMessage(t("saved"));
+      await client.invalidateQueries({ queryKey });
+    } catch (error: unknown) {
+      // Server consumed flowId during verify attempt; return to Step 1 for a fresh flow.
+      setPreparedFlow(null);
+      setAddStep("reauth");
+      setDialogMessage(t(passkeyErrorKey(error, "manage")));
+    } finally {
       setBusy(false);
       inFlight.current = false;
     }
@@ -164,6 +277,14 @@ export function PasskeyManager() {
       timeStyle: "short",
       timeZone: "Africa/Cairo",
     }).format(new Date(value));
+
+  const targetIcon = (target: PasskeyPreferredAuthenticator) => {
+    if (target === "localDevice") return Laptop;
+    if (target === "securityKey") return Usb;
+    return Smartphone;
+  };
+
+  const isAddStep2 = action?.type === "add" && addStep === "readyToSign";
 
   return (
     <Card className="@container min-w-0 rounded-2xl border border-border/60 bg-card p-4 sm:p-6 shadow-sm space-y-5">
@@ -234,6 +355,28 @@ export function PasskeyManager() {
           </div>
         ))}
       </div>
+
+      {/* Platform Authenticator Readiness Indicator */}
+      {platformAvailable !== null && (
+        <div
+          className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-xs leading-relaxed ${
+            platformAvailable
+              ? "border-primary/25 bg-primary/[0.06] text-foreground/90"
+              : "border-amber-500/30 bg-amber-500/[0.06] text-amber-200/95"
+          }`}
+        >
+          {platformAvailable ? (
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+          ) : (
+            <Info className="mt-0.5 size-4 shrink-0 text-amber-400" />
+          )}
+          <span>
+            {platformAvailable
+              ? t("platformAvailableHint")
+              : t("platformUnavailableHint")}
+          </span>
+        </div>
+      )}
 
       {/* This deployment does not reliably receive the authenticator's exact UV method. */}
       <div className="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
@@ -404,183 +547,335 @@ export function PasskeyManager() {
         </p>
       )}
 
-      {/* Action Dialog (Add / Rename / Remove) */}
+      {/* Unified Flush Modal Shell (Add 2-Step / Rename / Remove) */}
       <Dialog
         open={Boolean(action)}
         onOpenChange={(value) => {
           if (!value && !busy) {
-            setAction(null);
-            setPassword("");
+            resetDialogState();
           }
         }}
       >
         <DialogContent
+          flush
           dir={isAr ? "rtl" : "ltr"}
-          className="max-w-md rounded-2xl border-border bg-card p-6 shadow-xl"
+          className="max-w-md"
         >
-          <DialogHeader className={isAr ? "sm:text-start" : ""}>
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
-                <KeyRound className="h-5 w-5" />
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/15 text-primary">
+                {isAddStep2 ? (
+                  <Fingerprint className="size-4.5" />
+                ) : (
+                  <KeyRound className="size-4.5" />
+                )}
               </div>
-              <DialogTitle className="text-base font-bold">
-                {t(action?.type ?? "add")}
-              </DialogTitle>
+              <div className="min-w-0">
+                <DialogTitle className="text-base font-bold">
+                  {action?.type === "add"
+                    ? isAddStep2
+                      ? t("step2Title")
+                      : t("step1Title")
+                    : t(action?.type ?? "add")}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  {action?.type === "remove"
+                    ? t("removeConfirm")
+                    : isAddStep2
+                      ? t("readyToVerifyHint")
+                      : t("reauth")}
+                </DialogDescription>
+              </div>
             </div>
-            <DialogDescription className="text-xs text-muted-foreground mt-1">
-              {action?.type === "remove" ? t("removeConfirm") : t("reauth")}
-            </DialogDescription>
           </DialogHeader>
 
-          <form
-            onSubmit={(event) => void submit(event)}
-            className="space-y-4 py-2"
-          >
-            {action?.type !== "remove" && (
-              <>
+          {isAddStep2 ? (
+            <>
+              <DialogBody>
+                <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-muted-foreground">{t("name")}</span>
+                    <span className="font-bold text-foreground truncate">
+                      <bdi>{name.trim()}</bdi>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs border-t border-border/40 pt-2.5">
+                    <span className="text-muted-foreground">
+                      {t("authenticatorTargetLabel")}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-primary">
+                      {React.createElement(targetIcon(authenticatorType), {
+                        className: "size-3.5 shrink-0",
+                      })}
+                      <span>{t(`targets.${authenticatorType}`)}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {dialogMessage && (
+                  <p
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-400 font-medium leading-relaxed"
+                  >
+                    {dialogMessage}
+                  </p>
+                )}
+              </DialogBody>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void completeRegistration()}
+                  className="min-h-11 rounded-squircle text-xs font-semibold bg-primary text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
+                >
+                  {busy ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>{t("working")}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Fingerprint className="h-4 w-4" />
+                      <span>{t("verifyWithDeviceNow")}</span>
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setPreparedFlow(null);
+                    setAddStep("reauth");
+                    setDialogMessage("");
+                  }}
+                  className="min-h-11 rounded-squircle text-xs gap-1.5 cursor-pointer"
+                >
+                  {isAr ? (
+                    <ArrowRight className="size-3.5" />
+                  ) : (
+                    <ArrowLeft className="size-3.5" />
+                  )}
+                  <span>{t("backToEdit")}</span>
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <form
+              onSubmit={(event) => void submitStep1(event)}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <DialogBody>
+                {action?.type !== "remove" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="passkey-name"
+                        className="text-xs font-semibold text-foreground"
+                      >
+                        {t("name")}
+                      </label>
+                      <Input
+                        id="passkey-name"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder={t("namePlaceholder")}
+                        maxLength={80}
+                        required
+                        disabled={busy}
+                        className="h-10 rounded-squircle text-xs"
+                      />
+                    </div>
+
+                    {action?.type === "add" && (
+                      <div className="space-y-1.5">
+                        <span className="block text-xs font-semibold text-foreground">
+                          {t("authenticatorTargetLabel")}
+                        </span>
+                        <div
+                          role="radiogroup"
+                          aria-label={t("authenticatorTargetLabel")}
+                          className="grid grid-cols-1 gap-2"
+                        >
+                          {passkeyPreferredAuthenticators.map((target) => {
+                            const Icon = targetIcon(target);
+                            const active = authenticatorType === target;
+                            return (
+                              <button
+                                key={target}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                disabled={busy}
+                                onClick={() => setAuthenticatorType(target)}
+                                className={`flex min-h-11 items-center justify-between gap-3 rounded-squircle border px-3 py-2 text-start transition-colors cursor-pointer ${
+                                  active
+                                    ? "border-primary/60 bg-primary/12 text-foreground"
+                                    : "border-border/70 bg-secondary/20 text-muted-foreground hover:border-border hover:text-foreground"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2.5 min-w-0">
+                                  <Icon
+                                    className={`size-4 shrink-0 ${
+                                      active
+                                        ? "text-primary"
+                                        : "text-muted-foreground"
+                                    }`}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-semibold text-foreground">
+                                      {t(`targets.${target}`)}
+                                    </span>
+                                    <span className="block text-[11px] text-muted-foreground">
+                                      {t(`targetHints.${target}`)}
+                                    </span>
+                                  </span>
+                                </span>
+                                <span
+                                  className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${
+                                    active
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border"
+                                  }`}
+                                >
+                                  {active && <Check className="size-2.5" />}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="passkey-unlock-method"
+                        className="text-xs font-semibold"
+                      >
+                        {t("unlockLabel")}
+                      </label>
+                      <Select.Root
+                        dir={isAr ? "rtl" : "ltr"}
+                        value={unlockMethod}
+                        onValueChange={(value) =>
+                          setUnlockMethod(value as PasskeyUnlockMethod)
+                        }
+                        disabled={busy}
+                      >
+                        <Select.Trigger
+                          id="passkey-unlock-method"
+                          aria-describedby="passkey-unlock-hint"
+                          className="flex min-h-10 w-full items-center justify-between gap-2 rounded-squircle border border-input bg-background px-3 text-start text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                        >
+                          <Select.Value />
+                          <Select.Icon>
+                            <ChevronDown className="size-4" />
+                          </Select.Icon>
+                        </Select.Trigger>
+                        <Select.Portal>
+                          <Select.Content
+                            dir={isAr ? "rtl" : "ltr"}
+                            position="popper"
+                            sideOffset={4}
+                            className="z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl"
+                          >
+                            <Select.Viewport>
+                              {passkeyUnlockMethods.map((method) => (
+                                <Select.Item
+                                  key={method}
+                                  value={method}
+                                  className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2.5 text-xs outline-none data-highlighted:bg-accent"
+                                >
+                                  <Select.ItemText>
+                                    {t(`unlockMethods.${method}`)}
+                                  </Select.ItemText>
+                                  <Select.ItemIndicator>
+                                    <Check className="size-4" />
+                                  </Select.ItemIndicator>
+                                </Select.Item>
+                              ))}
+                            </Select.Viewport>
+                          </Select.Content>
+                        </Select.Portal>
+                      </Select.Root>
+                      <p
+                        id="passkey-unlock-hint"
+                        className="text-[11px] leading-relaxed text-muted-foreground"
+                      >
+                        {t("unlockLabelHint")}
+                      </p>
+                    </div>
+                  </>
+                )}
+
                 <div className="space-y-1.5">
                   <label
-                    htmlFor="passkey-name"
+                    htmlFor="passkey-password"
                     className="text-xs font-semibold text-foreground"
                   >
-                    {t("name")}
+                    {t("password")}
                   </label>
-                  <Input
-                    id="passkey-name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder={t("namePlaceholder")}
-                    maxLength={80}
+                  <PasswordInput
+                    id="passkey-password"
+                    dir="ltr"
+                    className="text-left h-10 rounded-squircle text-xs"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    maxLength={256}
                     required
                     disabled={busy}
-                    className="h-9 rounded-squircle text-xs"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="passkey-unlock-method"
-                    className="text-xs font-semibold"
-                  >
-                    {t("unlockLabel")}
-                  </label>
-                  <Select.Root
-                    dir={isAr ? "rtl" : "ltr"}
-                    value={unlockMethod}
-                    onValueChange={(value) =>
-                      setUnlockMethod(value as PasskeyUnlockMethod)
-                    }
-                    disabled={busy}
-                  >
-                    <Select.Trigger
-                      id="passkey-unlock-method"
-                      aria-describedby="passkey-unlock-hint"
-                      className="flex min-h-11 w-full items-center justify-between gap-2 rounded-squircle border border-input bg-background px-3 text-start text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                    >
-                      <Select.Value />
-                      <Select.Icon>
-                        <ChevronDown className="size-4" />
-                      </Select.Icon>
-                    </Select.Trigger>
-                    <Select.Portal>
-                      <Select.Content
-                        dir={isAr ? "rtl" : "ltr"}
-                        position="popper"
-                        sideOffset={4}
-                        className="z-50 max-h-(--radix-select-content-available-height) min-w-(--radix-select-trigger-width) max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl"
-                      >
-                        <Select.Viewport>
-                          {passkeyUnlockMethods.map((method) => (
-                            <Select.Item
-                              key={method}
-                              value={method}
-                              className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2.5 text-xs outline-none data-highlighted:bg-accent"
-                            >
-                              <Select.ItemText>
-                                {t(`unlockMethods.${method}`)}
-                              </Select.ItemText>
-                              <Select.ItemIndicator>
-                                <Check className="size-4" />
-                              </Select.ItemIndicator>
-                            </Select.Item>
-                          ))}
-                        </Select.Viewport>
-                      </Select.Content>
-                    </Select.Portal>
-                  </Select.Root>
+
+                {dialogMessage && (
                   <p
-                    id="passkey-unlock-hint"
-                    className="text-xs leading-relaxed text-muted-foreground"
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-400 font-medium leading-relaxed"
                   >
-                    {t("unlockLabelHint")}
+                    {dialogMessage}
                   </p>
-                </div>
-              </>
-            )}
-
-            <div className="space-y-1.5">
-              <label
-                htmlFor="passkey-password"
-                className="text-xs font-semibold text-foreground"
-              >
-                {t("password")}
-              </label>
-              <PasswordInput
-                id="passkey-password"
-                dir="ltr"
-                className="text-left h-9 rounded-squircle text-xs"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                maxLength={256}
-                required
-                disabled={busy}
-              />
-            </div>
-
-            {dialogMessage && (
-              <p
-                role="alert"
-                aria-live="polite"
-                className="text-xs text-rose-500 font-medium"
-              >
-                {dialogMessage}
-              </p>
-            )}
-
-            <DialogFooter className="gap-2 rtl:sm:justify-start pt-2">
-              <Button
-                type="submit"
-                disabled={
-                  busy ||
-                  !password ||
-                  (action?.type !== "remove" && !name.trim())
-                }
-                className="rounded-squircle text-xs font-semibold bg-primary text-white hover:bg-primary-hover"
-              >
-                {busy ? (
-                  <span className="flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>{t("working")}</span>
-                  </span>
-                ) : (
-                  t("confirm")
                 )}
-              </Button>
+              </DialogBody>
 
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  setAction(null);
-                  setPassword("");
-                }}
-                className="rounded-squircle text-xs"
-              >
-                {t("cancel")}
-              </Button>
-            </DialogFooter>
-          </form>
+              <DialogFooter className="gap-2">
+                <Button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    !password ||
+                    (action?.type !== "remove" && !name.trim())
+                  }
+                  className="min-h-11 rounded-squircle text-xs font-semibold bg-primary text-white hover:bg-primary-hover cursor-pointer"
+                >
+                  {busy ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>{t("working")}</span>
+                    </span>
+                  ) : action?.type === "add" ? (
+                    t("prepareContinue")
+                  ) : (
+                    t("confirm")
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={resetDialogState}
+                  className="min-h-11 rounded-squircle text-xs cursor-pointer"
+                >
+                  {t("cancel")}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </Card>

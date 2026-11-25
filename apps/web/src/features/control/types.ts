@@ -30,6 +30,15 @@ export interface ControlCapabilities {
   scopeAll: boolean;
 }
 
+export interface ControlPassRateSummary {
+  passed: number;
+  total: number;
+  presentCount: number;
+  bannedCount: number;
+  ratio: number;
+  threshold: number;
+}
+
 export interface ControlCourseSummaryComponent {
   key: ControlComponentKey;
   sheetId: string | null;
@@ -39,6 +48,7 @@ export interface ControlCourseSummaryComponent {
   published: number;
   workflowState?: ControlSheetDetails["sheet"]["workflowState"];
   releaseActive?: boolean;
+  passRate?: ControlPassRateSummary | null;
 }
 
 export interface ControlCourseSummary {

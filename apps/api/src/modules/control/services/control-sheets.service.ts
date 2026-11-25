@@ -9,6 +9,7 @@ import { Model, Types } from 'mongoose';
 import type { ClientSession } from 'mongoose';
 import {
   CONTROL_ENABLED_COMPONENT_KEYS,
+  DEFAULT_CONTROL_COMPONENTS,
   PERMISSIONS,
   type ControlComponentKey,
   type Semester,
@@ -103,65 +104,162 @@ export class ControlSheetsService {
     const codes = courses.map((c) => String(c.code).toUpperCase());
     const examTypes = [...CONTROL_ENABLED_COMPONENT_KEYS];
 
-    const [sheets, counts, rosterCounts, activeReleases] = await Promise.all([
-      this.sheetModel
-        .find({
-          courseId: { $in: courseIds },
-          academicYear: query.academicYear,
-          semester: query.semester,
-          component: { $in: examTypes },
-        })
-        .select('_id courseId component slug locked workflowState')
-        .lean(),
-      this.gradeModel.aggregate<{
-        _id: { courseId: Types.ObjectId; examType: string };
-        entered: number;
-        published: number;
-      }>([
-        {
-          $match: {
+    const defaultMaxByKey = new Map<ControlComponentKey, number>(
+      DEFAULT_CONTROL_COMPONENTS.map((c) => [c.key, c.max]),
+    );
+
+    const [sheets, rosterCounts, activeReleases, schemeMaxMap] =
+      await Promise.all([
+        this.sheetModel
+          .find({
             courseId: { $in: courseIds },
             academicYear: query.academicYear,
             semester: query.semester,
-            examType: { $in: examTypes },
-            cleared: { $ne: true },
+            component: { $in: examTypes },
+          })
+          .select(
+            '_id courseId component slug locked workflowState passThreshold',
+          )
+          .lean(),
+        this.registrationModel.aggregate<{ _id: string; n: number }>([
+          {
+            $match: {
+              academicYear: query.academicYear,
+              semester: query.semester,
+              status: 'approved',
+              courses: { $in: codes },
+            },
           },
-        },
-        {
-          $group: {
-            _id: { courseId: '$courseId', examType: '$examType' },
-            entered: { $sum: 1 },
-            published: { $sum: { $cond: ['$isPublished', 1, 0] } },
-          },
-        },
-      ]),
-      this.registrationModel.aggregate<{ _id: string; n: number }>([
-        {
-          $match: {
-            academicYear: query.academicYear,
-            semester: query.semester,
-            status: 'approved',
-            courses: { $in: codes },
-          },
-        },
-        { $unwind: '$courses' },
-        { $match: { courses: { $in: codes } } },
-        { $group: { _id: { $toUpper: '$courses' }, n: { $sum: 1 } } },
-      ]),
-      this.sheetModel.db
-        .collection('control_release_pointers')
-        .find({
-          active: true,
-          'scope.courseId': { $in: courseIds },
-          'scope.academicYear': query.academicYear,
-          'scope.semester': query.semester,
-        })
-        .toArray(),
-    ]);
+          { $unwind: '$courses' },
+          { $match: { courses: { $in: codes } } },
+          { $group: { _id: { $toUpper: '$courses' }, n: { $sum: 1 } } },
+        ]),
+        this.sheetModel.db
+          .collection('control_release_pointers')
+          .find({
+            active: true,
+            'scope.courseId': { $in: courseIds },
+            'scope.academicYear': query.academicYear,
+            'scope.semester': query.semester,
+          })
+          .toArray(),
+        typeof this.schemes?.getComponentMaxMap === 'function'
+          ? this.schemes.getComponentMaxMap(
+              courseIds,
+              query.academicYear,
+              query.semester,
+            )
+          : Promise.resolve(
+              new Map<string, Map<ControlComponentKey, number>>(),
+            ),
+      ]);
 
     const sheetByKey = new Map(
       sheets.map((s) => [`${String(s.courseId)}:${s.component}`, s]),
     );
+
+    const thresholdByKey = new Map<string, number>();
+    const customThresholdBranches: Array<{
+      case: Record<string, unknown>;
+      then: number;
+    }> = [];
+
+    for (const course of courses) {
+      const courseIdStr = String(course._id);
+      const schemeMax = schemeMaxMap.get(courseIdStr);
+      for (const key of examTypes) {
+        if (key === 'coursework') continue;
+        const mapKey = `${courseIdStr}:${key}`;
+        const sheet = sheetByKey.get(mapKey);
+        const componentMax = schemeMax?.get(key) ?? defaultMaxByKey.get(key);
+        const defaultForComponent = defaultPassThresholdForComponent(
+          key,
+          componentMax,
+        );
+        const rawThreshold = (sheet as { passThreshold?: number } | undefined)
+          ?.passThreshold;
+        const threshold =
+          typeof rawThreshold === 'number' && Number.isFinite(rawThreshold)
+            ? rawThreshold
+            : defaultForComponent;
+        thresholdByKey.set(mapKey, threshold);
+
+        const baseDefault = key === 'midterm' ? 18 : 30;
+        if (threshold !== baseDefault) {
+          customThresholdBranches.push({
+            case: {
+              $and: [
+                { $eq: ['$courseId', course._id] },
+                { $eq: ['$examType', key] },
+              ],
+            },
+            then: threshold,
+          });
+        }
+      }
+    }
+
+    const defaultThresholdExpr = {
+      $cond: [{ $eq: ['$examType', 'midterm'] }, 18, 30],
+    };
+    const thresholdExpr =
+      customThresholdBranches.length > 0
+        ? {
+            $switch: {
+              branches: customThresholdBranches,
+              default: defaultThresholdExpr,
+            },
+          }
+        : defaultThresholdExpr;
+
+    const counts = await this.gradeModel.aggregate<{
+      _id: { courseId: Types.ObjectId; examType: string };
+      entered: number;
+      published: number;
+      presentCount?: number;
+      bannedCount?: number;
+      passed?: number;
+    }>([
+      {
+        $match: {
+          courseId: { $in: courseIds },
+          academicYear: query.academicYear,
+          semester: query.semester,
+          examType: { $in: examTypes },
+          cleared: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: { courseId: '$courseId', examType: '$examType' },
+          entered: { $sum: 1 },
+          published: { $sum: { $cond: ['$isPublished', 1, 0] } },
+          presentCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] },
+          },
+          bannedCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'banned'] }, 1, 0] },
+          },
+          passed: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $in: ['$examType', ['midterm', 'final']] },
+                    { $eq: ['$status', 'present'] },
+                    { $ne: ['$grade', null] },
+                    { $gt: ['$grade', thresholdExpr] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
     const countByKey = new Map(
       counts.map((c) => [`${String(c._id.courseId)}:${c._id.examType}`, c]),
     );
@@ -177,8 +275,26 @@ export class ControlSheetsService {
         level: (course as { level?: string }).level ?? null,
         rosterCount: rosterByCode.get(String(course.code).toUpperCase()) ?? 0,
         components: examTypes.map((key) => {
-          const sheet = sheetByKey.get(`${String(course._id)}:${key}`);
-          const count = countByKey.get(`${String(course._id)}:${key}`);
+          const mapKey = `${String(course._id)}:${key}`;
+          const sheet = sheetByKey.get(mapKey);
+          const count = countByKey.get(mapKey);
+          const presentCount = count?.presentCount ?? 0;
+          const bannedCount = count?.bannedCount ?? 0;
+          const passed = count?.passed ?? 0;
+          const eligibleTotal = presentCount + bannedCount;
+          const passRate =
+            key === 'coursework'
+              ? null
+              : {
+                  passed,
+                  total: eligibleTotal,
+                  presentCount,
+                  bannedCount,
+                  ratio: eligibleTotal > 0 ? passed / eligibleTotal : 0,
+                  threshold:
+                    thresholdByKey.get(mapKey) ??
+                    defaultPassThresholdForComponent(key),
+                };
           return {
             key,
             sheetId: sheet ? String(sheet._id) : null,
@@ -200,6 +316,7 @@ export class ControlSheetsService {
             ),
             entered: count?.entered ?? 0,
             published: count?.published ?? 0,
+            passRate,
           };
         }),
       })),

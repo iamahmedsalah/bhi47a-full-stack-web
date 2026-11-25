@@ -128,6 +128,7 @@ describe('control course summary projection', () => {
               releaseActive: false,
               entered: 0,
               published: 0,
+              passRate: null,
             },
             {
               key: 'midterm',
@@ -138,6 +139,14 @@ describe('control course summary projection', () => {
               releaseActive: false,
               entered: 0,
               published: 0,
+              passRate: {
+                passed: 0,
+                total: 0,
+                presentCount: 0,
+                bannedCount: 0,
+                ratio: 0,
+                threshold: 18,
+              },
             },
             {
               key: 'final',
@@ -148,6 +157,14 @@ describe('control course summary projection', () => {
               releaseActive: true,
               entered: 5,
               published: 3,
+              passRate: {
+                passed: 0,
+                total: 0,
+                presentCount: 0,
+                bannedCount: 0,
+                ratio: 0,
+                threshold: 30,
+              },
             },
           ],
         },
@@ -176,6 +193,116 @@ describe('control course summary projection', () => {
     // Compare with the previous full-document result, not just the selected fields.
     sheetQuery.lean.mockImplementation(() => Promise.resolve(sourceSheets));
     expect(await service.listCourses(user, term)).toEqual(projected);
+  });
+
+  it('listCourses computes passRate for midterm/final using custom threshold and present+banned denominator', async () => {
+    const courseId = new Types.ObjectId();
+    const midtermId = new Types.ObjectId();
+    const findCourses = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        sort: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([
+              {
+                _id: courseId,
+                code: 'BIS201',
+                name: 'Systems',
+                nameAr: 'نظم',
+                nameEn: 'Systems',
+                level: '2',
+              },
+            ]),
+          }),
+        }),
+      }),
+    });
+    const findSheets = jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          {
+            _id: midtermId,
+            courseId,
+            component: 'midterm',
+            slug: 'bis201-midterm-2026-2027-first',
+            locked: false,
+            workflowState: 'IN_REVIEW',
+            passThreshold: 15,
+          },
+        ]),
+      }),
+    });
+    const aggregateGrades = jest.fn().mockResolvedValue([
+      {
+        _id: { courseId, examType: 'midterm' },
+        entered: 12,
+        published: 0,
+        presentCount: 9,
+        bannedCount: 1,
+        passed: 8,
+      },
+      {
+        _id: { courseId, examType: 'coursework' },
+        entered: 10,
+        published: 0,
+        presentCount: 10,
+        bannedCount: 0,
+        passed: 0,
+      },
+    ]);
+    const service = new ControlSheetsService(
+      {
+        find: findSheets,
+        db: {
+          collection: jest.fn().mockReturnValue({
+            find: jest
+              .fn()
+              .mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+          }),
+        },
+      } as never,
+      { find: findCourses } as never,
+      { aggregate: aggregateGrades } as never,
+      {} as never,
+      {
+        aggregate: jest.fn().mockResolvedValue([{ _id: 'BIS201', n: 12 }]),
+      } as never,
+      {} as never,
+      {
+        assertPermission: jest.fn(),
+        listScopedCourseIds: jest.fn().mockResolvedValue([courseId]),
+      } as never,
+      {
+        getComponentMaxMap: jest.fn().mockResolvedValue(new Map()),
+      } as never,
+    );
+
+    const result = await service.listCourses(
+      {
+        _id: new Types.ObjectId().toHexString(),
+        role: 'admin',
+        name: 'Admin',
+        permissions: [PERMISSIONS.CONTROL_SHEETS_VIEW],
+        mustChangePassword: false,
+        tokenVersion: 0,
+      },
+      { academicYear: '2026-2027', semester: 'first' },
+    );
+
+    const components = result.items[0].components;
+    expect(components.find((c) => c.key === 'coursework')?.passRate).toBeNull();
+    expect(components.find((c) => c.key === 'midterm')?.passRate).toEqual({
+      passed: 8,
+      total: 10,
+      presentCount: 9,
+      bannedCount: 1,
+      ratio: 0.8,
+      threshold: 15,
+    });
+    const pipeline = aggregateGrades.mock.calls[0][0] as Array<
+      Record<string, unknown>
+    >;
+    const groupStage = pipeline[1]?.$group as Record<string, unknown>;
+    expect(JSON.stringify(groupStage?.passed)).toContain('"then":15');
   });
 
   it('returns 4-stage workflow breakdown and actor history for getWorkflowHistory()', async () => {

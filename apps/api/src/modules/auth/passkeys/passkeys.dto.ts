@@ -45,6 +45,20 @@ export class PasskeyNameDto {
   unlockMethod?: PasskeyUnlockMethod;
 }
 
+export const PASSKEY_PREFERRED_AUTHENTICATOR_TYPES = [
+  'localDevice',
+  'securityKey',
+  'remoteDevice',
+] as const;
+export type PasskeyPreferredAuthenticatorType =
+  (typeof PASSKEY_PREFERRED_AUTHENTICATOR_TYPES)[number];
+
+export class PasskeyRegisterOptionsDto {
+  @IsOptional()
+  @IsIn(PASSKEY_PREFERRED_AUTHENTICATOR_TYPES)
+  preferredAuthenticatorType?: PasskeyPreferredAuthenticatorType;
+}
+
 export class PasskeyLoginOptionsDto {
   @IsOptional()
   @IsIn(['student', 'management'])

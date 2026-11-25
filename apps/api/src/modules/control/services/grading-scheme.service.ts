@@ -93,6 +93,34 @@ export class GradingSchemeService {
     };
   }
 
+  /** Batched component max lookup for many courses in one term (no N+1). */
+  async getComponentMaxMap(
+    courseIds: Types.ObjectId[],
+    academicYear: string,
+    semester: string,
+  ): Promise<Map<string, Map<ControlComponentKey, number>>> {
+    const result = new Map<string, Map<ControlComponentKey, number>>();
+    if (courseIds.length === 0) return result;
+    const stored = await this.schemeModel
+      .find({
+        courseId: { $in: courseIds },
+        academicYear,
+        semester,
+      })
+      .select('courseId components')
+      .lean();
+    for (const scheme of stored) {
+      const byKey = new Map<ControlComponentKey, number>();
+      for (const comp of scheme.components ?? []) {
+        if (typeof comp.max === 'number' && Number.isFinite(comp.max)) {
+          byKey.set(comp.key, comp.key === 'coursework' ? 20 : comp.max);
+        }
+      }
+      result.set(String(scheme.courseId), byKey);
+    }
+    return result;
+  }
+
   /** Returns the component's rules or throws when it is not enabled. */
   async requireEnabledComponent(
     courseId: string,

@@ -351,6 +351,68 @@ function ControlHomeContent() {
         },
       },
       {
+        key: "passRate",
+        header: isAr ? "نسبة النجاح" : "Pass Rate",
+        className: "w-32 text-center",
+        render: (item) => {
+          const comp = item.components.find((c) => c.key === component);
+          const pr = comp?.passRate;
+          if (component === "coursework" || !pr || pr.total === 0) {
+            return (
+              <TableCell
+                className="w-32 text-center"
+                title={
+                  component === "coursework"
+                    ? isAr
+                      ? "لا تُحسب نسبة نجاح مستقلة لأعمال السنة"
+                      : "Pass rate applies to midterm and final sheets"
+                    : isAr
+                      ? "لم تُرصد درجات حضور أو حرمان بعد"
+                      : "No present or banned marks entered yet"
+                }
+              >
+                <span className="text-xs font-medium text-muted-foreground/60">
+                  —
+                </span>
+              </TableCell>
+            );
+          }
+          const percentLabel = new Intl.NumberFormat(locale, {
+            style: "percent",
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          }).format(pr.ratio);
+          const toneClass =
+            pr.ratio >= 0.75
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : pr.ratio >= 0.5
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-amber-500/35 bg-amber-500/10 text-amber-400";
+          const tooltip = isAr
+            ? `نسبة النجاح: ${percentLabel} (${pr.passed} ناجح ÷ ${pr.total} من حاضر ${pr.presentCount} + محروم ${pr.bannedCount} · حد النجاح > ${pr.threshold})`
+            : `Pass rate: ${percentLabel} (${pr.passed} passed / ${pr.total} eligible: ${pr.presentCount} present + ${pr.bannedCount} banned · threshold > ${pr.threshold})`;
+          return (
+            <TableCell className="w-32 text-center" title={tooltip}>
+              <div className="inline-flex flex-col items-center gap-0.5">
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-squircle border px-2.5 py-0.5 text-xs font-bold tabular-nums",
+                    toneClass,
+                  )}
+                >
+                  <bdi dir="ltr">{percentLabel}</bdi>
+                </span>
+                <span className="font-mono text-[10px] font-medium text-muted-foreground tabular-nums">
+                  <bdi dir="ltr">
+                    {pr.passed}/{pr.total}
+                  </bdi>
+                </span>
+              </div>
+            </TableCell>
+          );
+        },
+      },
+      {
         key: "component",
         header: isAr ? "المكوّن" : "Component",
         className: "w-28 text-center",

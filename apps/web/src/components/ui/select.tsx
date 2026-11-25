@@ -29,6 +29,7 @@ type SelectContentMarkerProps = React.ComponentPropsWithoutRef<'div'> & {
 };
 type SelectItemMarkerProps = React.ComponentPropsWithoutRef<'button'> & {
   value: string;
+  group?: string;
 };
 
 function getTextContent(node: React.ReactNode): string {
@@ -79,6 +80,7 @@ function extractItems(node: React.ReactNode): CustomDropdownOption[] {
         value: child.props.value,
         label: child.props.children,
         disabled: child.props.disabled,
+        group: child.props.group,
       });
       return;
     }

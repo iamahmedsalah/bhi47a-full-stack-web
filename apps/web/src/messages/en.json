@@ -316,7 +316,32 @@
     "cancelled": "The request was cancelled or timed out. Try again or use another sign-in method.",
     "duplicate": "This passkey is already registered. Try another authenticator.",
     "unsupported": "Passkeys are unavailable in this browser or context. Use a supported browser over HTTPS, or sign in with your portal password.",
-    "error": "Could not complete the request. Check your password and connection, then try again. Password sign-in remains available."
+    "error": "Could not complete the request. Check your password and connection, then try again. Password sign-in remains available.",
+    "step1Title": "Add a passkey — Step 1 of 2",
+    "step2Title": "Activate passkey — Step 2 of 2",
+    "prepareContinue": "Verify & continue",
+    "verifyWithDeviceNow": "Verify with device now",
+    "backToEdit": "Edit details",
+    "readyToVerifyHint": "Password verified. Tap the button below to open Windows Hello, Face ID, or Touch ID immediately.",
+    "authenticatorTargetLabel": "Where to save this passkey",
+    "targets": {
+      "localDevice": "This device (Windows Hello / Face ID / Touch ID)",
+      "securityKey": "External security key (USB / NFC)",
+      "remoteDevice": "Another phone or device (QR code)"
+    },
+    "targetHints": {
+      "localDevice": "Uses built-in fingerprint, face recognition, or device PIN.",
+      "securityKey": "Store the passkey on a hardware key such as YubiKey.",
+      "remoteDevice": "Pair your phone by scanning a QR code from this computer."
+    },
+    "platformAvailableHint": "Built-in device verification (Windows Hello / Face ID / Touch ID) is available on this device.",
+    "platformUnavailableHint": "No built-in biometric or Windows Hello unlock was detected. Enable Windows Hello or iCloud Keychain, or choose an external security key.",
+    "cookieBlocked": "Your browser did not keep the login session cookie. Enable cookies for this site or open the official portal domain.",
+    "maintenance": "Student sign-in is temporarily unavailable for maintenance. Please try again later.",
+    "reauthExpired": "Password verification expired. Please enter your password again to continue.",
+    "rateLimited": "Too many passkey attempts. Please wait a few minutes and try again.",
+    "constraintUnsupported": "Built-in device verification is not ready. Enable Windows Hello (Face/Fingerprint/PIN) or iPhone Passcode & iCloud Keychain, or choose an external security key.",
+    "signInFailed": "Passkey sign-in failed. Make sure this passkey is registered to your account, then try again or sign in with your password."
   },
   "nav": {
     "security": "Account security",
@@ -1980,8 +2005,21 @@
       "dirty": "Pending edits",
       "errors": "Save errors / conflicts",
       "absent": "Absent",
-      "partial": "Partial entry students only"
+      "banned": "Banned",
+      "partial": "Partial entry students only",
+      "aroundMid": "Around midpoint ({min} – {max})",
+      "aboveMid": "Half mark & above (≥ {mid})",
+      "belowMid": "Below half mark (< {mid})",
+      "passed": "Passed (> {threshold})",
+      "failed": "Failed (≤ {threshold})",
+      "fullMark": "Full mark ({max})",
+      "zero": "Zero mark (0)",
+      "groupGeneral": "General",
+      "groupByScore": "By score (max {max} · mid {mid})",
+      "groupStatus": "Statuses & review"
     },
+    "averageScore": "Average score",
+    "resetFilters": "Reset filters",
     "copy": "Copy selected",
     "fillDown": "Fill from first selected row",
     "pageCount": "Page {page} of {pages} - {count} students",

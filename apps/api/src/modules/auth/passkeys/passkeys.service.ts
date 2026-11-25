@@ -40,11 +40,15 @@ import type {
 import type {
   PasskeyNameDto,
   PasskeyLoginVerifyDto,
+  PasskeyPreferredAuthenticatorType,
   PasskeyRegisterVerifyDto,
 } from './passkeys.dto';
 
 const FLOW_TTL = 3 * 60 * 1000;
 const REAUTH_TTL = 5 * 60 * 1000;
+const CEREMONY_TIMEOUT_MS = 60_000;
+// Standard COSE algorithms: ES256 (-7, Apple Secure Enclave & Windows Hello) and RS256 (-257, Windows Hello TPM).
+const SUPPORTED_PASSKEY_ALGORITHMS = [-7, -257];
 export const passkeyHash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 
@@ -259,7 +263,12 @@ export class PasskeysService implements OnModuleInit {
       .digest();
   }
 
-  async registerOptions(userId: string, token: string, origin: string) {
+  async registerOptions(
+    userId: string,
+    token: string,
+    origin: string,
+    preferredAuthenticatorType?: PasskeyPreferredAuthenticatorType,
+  ) {
     const binding = await this.requireRecent(userId, token, origin);
     const user = await this.activeUser(userId);
     const existing = await this.credentials.find({ userId }).limit(100).lean();
@@ -331,11 +340,14 @@ export class PasskeysService implements OnModuleInit {
       userID: new Uint8Array(this.userHandle(userId)),
       userName: accountIdentifier,
       userDisplayName,
+      timeout: CEREMONY_TIMEOUT_MS,
       attestationType: 'none',
+      supportedAlgorithmIDs: SUPPORTED_PASSKEY_ALGORITHMS,
       authenticatorSelection: {
         residentKey: 'required',
         userVerification: 'required',
       },
+      ...(preferredAuthenticatorType ? { preferredAuthenticatorType } : {}),
       excludeCredentials: existing.map((c) => ({
         id: c.credentialId,
         transports: c.transports,
@@ -444,6 +456,7 @@ export class PasskeysService implements OnModuleInit {
     if (area === 'student') await this.assertStudentLoginEnabled();
     const options = await generateAuthenticationOptions({
       rpID: this.policy.rpID,
+      timeout: CEREMONY_TIMEOUT_MS,
       userVerification: 'required',
     });
     const flowId = randomUUID();
