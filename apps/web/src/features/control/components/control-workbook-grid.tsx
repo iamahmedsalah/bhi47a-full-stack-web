@@ -2070,7 +2070,10 @@ export function ControlWorkbookGrid({
       )}
 
       {/* Grid Search, Organized Filters & Sort Bar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        data-testid="control-workbook-toolbar"
+        className="flex flex-wrap items-center gap-2"
+      >
         <div className="relative w-full sm:w-60">
           <Search
             aria-hidden="true"
@@ -2382,7 +2385,7 @@ export function ControlWorkbookGrid({
         {(passRate || scoreMetrics.mean !== null) &&
           workbook.data &&
           !workbook.isError && (
-            <div className="flex flex-wrap items-center gap-2 max-w-full ms-auto">
+            <div className="mr-auto flex max-w-full flex-wrap items-center gap-2 ltr:order-first">
               {passRate && (
                 <div
                   role="group"
@@ -2403,7 +2406,7 @@ export function ControlWorkbookGrid({
                       : `Pass rate = Passed (${passRate.passed}) / (Present ${passRate.presentCount} + Banned ${passRate.bannedCount})`
                   }
                   className={cn(
-                    "inline-flex h-9 w-fit max-w-full items-center gap-2 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs",
+                    "inline-flex h-9 w-fit max-w-full items-center gap-2 rounded-squircle border border-primary/20 bg-primary/5 px-3 text-xs rtl:order-last rtl:mr-auto",
                     canManagePassThreshold &&
                       "transition-colors hover:border-primary/50 hover:bg-primary/15 cursor-pointer",
                   )}

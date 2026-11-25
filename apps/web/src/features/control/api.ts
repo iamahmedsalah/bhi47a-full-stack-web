@@ -524,15 +524,22 @@ export async function downloadControlReport(
 export async function previewControlFile(
   sheetId: string,
   file: File,
-  batch = 0,
   onProgress?: ControlTransferProgress,
 ) {
   const body = new FormData();
   body.append("file", file);
-  const res = await api.post<import("./types").ControlImportPreview>(
+  const res = await api.post<
+    import("./types").ControlImportPreview & { remainingBatchIds: string[] }
+  >(
     `/admin/control/sheets/${sheetId}/import/preview`,
     body,
-    { params: { batch }, onUploadProgress: transferProgress(onProgress) },
+    { onUploadProgress: transferProgress(onProgress) },
+  );
+  return res.data;
+}
+export async function previewControlFileBatch(sheetId: string, batchId: string) {
+  const res = await api.post<import("./types").ControlImportPreview>(
+    `/admin/control/sheets/${sheetId}/import/batches/${batchId}/preview`,
   );
   return res.data;
 }

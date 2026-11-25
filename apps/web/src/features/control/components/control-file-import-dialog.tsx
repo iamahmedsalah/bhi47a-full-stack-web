@@ -28,6 +28,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { getApiErrorMessage } from "@/lib/api";
 import {
   previewControlFile,
+  previewControlFileBatch,
   commitControlImport,
   exportControlImportErrors,
 } from "../api";
@@ -35,6 +36,7 @@ import type { ControlImportPreview, WorkbookRow } from "../types";
 
 type Batch = {
   preview: ControlImportPreview;
+  batchId?: string;
   receipt?: string;
   saved?: number;
   failures?: string[];
@@ -98,21 +100,18 @@ export function ControlFileImportDialog({
         const first = await previewControlFile(
           sheetId,
           file,
-          0,
           reportProgress,
         );
         const next: Batch[] = [{ preview: first }];
-        if (alive) setBatches([...next]);
-        for (let batch = 1; batch < (first.totalBatches ?? 1); batch++) {
+        if (alive) {
+          setTransferPercent(100);
+          setBatches([...next]);
+        }
+        for (const batchId of first.remainingBatchIds) {
           if (!alive) return;
-          setTransferPercent(null);
           next.push({
-            preview: await previewControlFile(
-              sheetId,
-              file,
-              batch,
-              reportProgress,
-            ),
+            batchId,
+            preview: await previewControlFileBatch(sheetId, batchId),
           });
           if (alive) setBatches([...next]);
         }
@@ -151,8 +150,8 @@ export function ControlFileImportDialog({
         setIndex(batchIndex);
         setPage(1);
         if (!plan.receipt) {
-          if (batchIndex > 0) {
-            const fresh = await previewControlFile(sheetId, file, batchIndex);
+          if (plan.batchId) {
+            const fresh = await previewControlFileBatch(sheetId, plan.batchId);
             if (signature(fresh) !== signature(plan.preview))
               throw new Error(t("batchChanged"));
             plan.preview = fresh;

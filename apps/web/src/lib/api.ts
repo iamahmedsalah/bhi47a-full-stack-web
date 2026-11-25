@@ -782,6 +782,10 @@ const CONTROL_VALIDATION_MESSAGES: Record<string, { ar: string; en: string }> = 
     ar: 'الملف لا يحتوي على صفوف طلاب. قد يكون كشف الدرجات الناقصة فارغًا لأن الرصد مكتمل. نزّل الكشف الكامل، وعدّل الدرجة في ورقة الرصد ثم أعد رفعه.',
     en: 'This file has no student rows. A missing-grades export can be empty when entry is complete. Download the full workbook, edit its entry worksheet, then upload again.',
   },
+  CONTROL_IMPORT_FILE_EXPIRED: {
+    ar: 'انتهت صلاحية معاينة الملف. أعد رفعه للمعاينة، والدفعات التي حُفظت تظل محفوظة.',
+    en: 'The file preview expired. Upload the file again to preview it. Saved batches remain saved.',
+  },
   SCHEME_FROZEN: {
     ar: 'لا يمكن تغيير الدرجة العظمى أو خطوة الإدخال أو تفعيل مكوّن بعد رصد درجاته. احتفظ بالإعدادات الحالية، أو استخدم فصلًا جديدًا. لتصحيح بيانات التجربة يستطيع admin تصفير المقرر أولًا؛ لا يكفي فك قفل الكشف.',
     en: 'Maximums, increments and enabled state cannot change after marks exist for that component. Keep the current settings or use a new term. Admin can reset test data first; unlocking the sheet alone does not unfreeze its scheme.',

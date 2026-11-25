@@ -4,6 +4,10 @@ import {
   ControlImport,
   ControlImportSchema,
 } from './schemas/control-import.schema';
+import {
+  ControlImportFileBatch,
+  ControlImportFileBatchSchema,
+} from './schemas/control-import-file-batch.schema';
 import { ControlWorkbookService } from './services/control-workbook.service';
 import { ControlReportsService } from './services/control-reports.service';
 import {
@@ -59,6 +63,10 @@ import { GradingSchemeService } from './services/grading-scheme.service';
     MongooseModule.forFeature([
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: ControlImport.name, schema: ControlImportSchema },
+      {
+        name: ControlImportFileBatch.name,
+        schema: ControlImportFileBatchSchema,
+      },
       { name: ControlSheet.name, schema: ControlSheetSchema },
       { name: ControlPetition.name, schema: ControlPetitionSchema },
       {

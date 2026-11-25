@@ -40,6 +40,7 @@ import {
   ControlImport,
   type ControlImportDocument,
 } from '../schemas/control-import.schema';
+import { ControlImportFileBatch } from '../schemas/control-import-file-batch.schema';
 import { ControlAccessService } from './control-access.service';
 import { ControlSheetsService } from './control-sheets.service';
 import { ControlGradesService } from './control-grades.service';
@@ -103,6 +104,8 @@ export class ControlWorkbookService {
     private readonly attempts: ControlAttemptsService,
     @InjectModel(StudentProfile.name)
     private readonly profiles: Model<StudentProfileDocument>,
+    @InjectModel(ControlImportFileBatch.name)
+    private readonly fileBatches: Model<ControlImportFileBatch>,
   ) {}
 
   async workbook(user: AuthenticatedUser, sheetId: string) {
@@ -1058,13 +1061,7 @@ export class ControlWorkbookService {
     buffer: Buffer,
     batch = 0,
   ) {
-    this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
-    const detail = await this.sheetService.getSheet(user, sheetId);
-    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
-      throw new ConflictException(
-        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
-      );
-    }
+    const detail = await this.requireEditableImportSheet(user, sheetId);
     const book = new ExcelJS.Workbook();
     try {
       await book.xlsx.load(
@@ -1211,18 +1208,69 @@ export class ControlWorkbookService {
     const totalBatches = Math.max(1, Math.ceil(rows.length / 500));
     if (batch >= totalBatches)
       throw new BadRequestException('Invalid import batch');
-    const preview = await this.preview(
+    const schemeVersion = Number(
+      compact ? compact.getCell('K1').text : scope!.getCell('B5').text,
+    );
+    const preview = await this.previewRows(
       user,
       sheetId,
+      detail,
       rows.slice(batch * 500, (batch + 1) * 500),
-      Number(compact ? compact.getCell('K1').text : scope!.getCell('B5').text),
+      schemeVersion,
     );
+    const remaining = [];
+    if (batch === 0) {
+      const expiresAt = new Date(Date.now() + 30 * 60_000);
+      const sheetObjectId = new Types.ObjectId(detail.sheet.id || sheetId);
+      const actorId = new Types.ObjectId(user._id);
+      for (let start = 500; start < rows.length; start += 500) {
+        remaining.push({
+          sheetId: sheetObjectId,
+          actorId,
+          schemeVersion,
+          rows: rows.slice(start, start + 500),
+          expiresAt,
+        });
+      }
+    }
+    const staged = remaining.length
+      ? await this.fileBatches.insertMany(remaining)
+      : [];
     return {
       ...preview,
       batchIndex: batch,
       totalBatches,
       totalRows: rows.length,
+      remainingBatchIds: staged.map((item) => item._id.toHexString()),
     };
+  }
+
+  async previewFileBatch(
+    user: AuthenticatedUser,
+    sheetId: string,
+    batchId: string,
+  ) {
+    const detail = await this.requireEditableImportSheet(user, sheetId);
+    const batch = await this.fileBatches
+      .findOne({
+        _id: new Types.ObjectId(batchId),
+        sheetId: new Types.ObjectId(detail.sheet.id || sheetId),
+        actorId: new Types.ObjectId(user._id),
+        expiresAt: { $gt: new Date() },
+      })
+      .lean();
+    if (!batch)
+      throw new BadRequestException({
+        code: 'CONTROL_IMPORT_FILE_EXPIRED',
+        message: 'File preview expired or inaccessible',
+      });
+    return this.previewRows(
+      user,
+      sheetId,
+      detail,
+      batch.rows,
+      batch.schemeVersion,
+    );
   }
 
   async preview(
@@ -1231,8 +1279,21 @@ export class ControlWorkbookService {
     rows: Record<string, unknown>[],
     expectedScheme?: number,
   ) {
+    const detail = await this.requireEditableImportSheet(user, sheetId);
+    return this.previewRows(user, sheetId, detail, rows, expectedScheme);
+  }
+
+  private async requireEditableImportSheet(
+    user: AuthenticatedUser,
+    sheetId: string,
+  ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
+      throw new ConflictException(
+        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
+      );
+    }
     this.access.assertPermission(
       user,
       detail.sheet.workflowState === 'IN_REVIEW'
@@ -1241,11 +1302,16 @@ export class ControlWorkbookService {
     );
     if (!detail.capabilities.canEdit)
       throw new ConflictException('SHEET_NOT_EDITABLE');
-    if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
-      throw new ConflictException(
-        'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
-      );
-    }
+    return detail;
+  }
+
+  private async previewRows(
+    user: AuthenticatedUser,
+    sheetId: string,
+    detail: Awaited<ReturnType<ControlSheetsService['getSheet']>>,
+    rows: Record<string, unknown>[],
+    expectedScheme?: number,
+  ) {
     const { rows: roster, scheme } = await this.workbook(user, sheetId);
     if (expectedScheme !== undefined && scheme.version !== expectedScheme)
       throw new ConflictException('SCHEME_CHANGED');
@@ -1258,6 +1324,8 @@ export class ControlWorkbookService {
     const errors: string[] = [],
       changes: GradeChangeDto[] = [],
       seen = new Set<string>();
+    const changeByRow = new Map<number, GradeChangeDto>();
+    const errorByRow = new Map<number, string>();
     if (!rows.length || rows.length > 500)
       throw new BadRequestException('Import between 1 and 500 rows');
     for (const [index, row] of rows.entries()) {
@@ -1271,10 +1339,11 @@ export class ControlWorkbookService {
           : '';
       const student = rawId ? byId.get(rawId) : byCode.get(rawCode);
       const id = student?.studentId ?? rawId;
-      const fail = (message: string) =>
-        errors.push(
-          `Row ${typeof row.sourceRow === 'number' ? row.sourceRow : index + 2}: ${message}`,
-        );
+      const fail = (message: string) => {
+        const issue = `Row ${typeof row.sourceRow === 'number' ? row.sourceRow : index + 2}: ${message}`;
+        errors.push(issue);
+        errorByRow.set(index, issue);
+      };
       if (
         !student ||
         student.notRegistered ||
@@ -1417,7 +1486,7 @@ export class ControlWorkbookService {
         fail('Coursework must equal attendance + quizzes, max 20');
         continue;
       }
-      changes.push({
+      const change: GradeChangeDto = {
         studentId: id,
         score: score.value,
         status: status as GradeChangeDto['status'],
@@ -1433,7 +1502,9 @@ export class ControlWorkbookService {
             }
           : {}),
         reason: typeof row.reason === 'string' ? row.reason : undefined,
-      });
+      };
+      changes.push(change);
+      changeByRow.set(index, change);
     }
     const resolvedSheetId = detail.sheet.id || sheetId;
     const batch = await this.imports.create({
@@ -1465,12 +1536,8 @@ export class ControlWorkbookService {
             ? String(row.studentCode).trim()
             : '';
         const student = byCode.get(code);
-        const change = changes.find(
-          (item) => item.studentId === student?.studentId,
-        );
-        const issues = errors.filter((message) =>
-          message.startsWith(`Row ${sourceRow}:`),
-        );
+        const change = changeByRow.get(index);
+        const issue = errorByRow.get(index);
         const inputScore = parseMarkInput(row.score);
         return {
           sourceRow,
@@ -1487,8 +1554,8 @@ export class ControlWorkbookService {
             (typeof row.score === 'string' || typeof row.score === 'number'
               ? row.score
               : null),
-          status: issues.length ? 'invalid' : change ? 'valid' : 'unchanged',
-          issues,
+          status: issue ? 'invalid' : change ? 'valid' : 'unchanged',
+          issues: issue ? [issue] : [],
         };
       }),
     };

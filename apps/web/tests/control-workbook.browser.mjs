@@ -88,6 +88,15 @@ const server = http.createServer(async (req,res)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const base=`http://127.0.0.1:${server.address().port}`;
+
+async function assertPassRateLayout(page, rate) {
+  await rate.waitFor({state:'visible'});
+  const toolbar = await page.getByTestId('control-workbook-toolbar').boundingBox();
+  const card = await rate.boundingBox();
+  assert.ok(toolbar && card, 'The pass rate and workbook toolbar must be visible');
+  assert.ok(Math.abs(card.x - toolbar.x) <= 1, `Pass rate must start at the physical left of the toolbar (card x=${card.x}, toolbar x=${toolbar.x})`);
+  assert.ok(card.width < 350, `Pass rate card must stay compact (width=${card.width})`);
+}
 let browser,page;
 try {
   browser=await chromium.launch({headless:true});page=await browser.newPage({viewport:{width:1500,height:950}});
@@ -107,12 +116,7 @@ try {
   assert.equal(await finalRate.count(),0,'only the selected midterm rate is displayed');
   // One of two present marks exceeds 18. Unentered rows do not count.
   await midtermRate.getByText('50.00%',{exact:true}).waitFor();
-  const rateGeometry=await midtermRate.evaluate(element=>({
-    left:element.parentElement.getBoundingClientRect().left,
-    parentLeft:element.parentElement.parentElement.getBoundingClientRect().left,
-    width:element.getBoundingClientRect().width,
-  }));
-  assert.ok(Math.abs(rateGeometry.left-rateGeometry.parentLeft)<=1 && rateGeometry.width<350,'rate is compact and aligned to the physical left');
+  await assertPassRateLayout(page, midtermRate);
   const heldRow=page.locator('tbody tr').filter({hasText:'260001'});
   await heldRow.getByText('Blocked',{exact:true}).waitFor();
   assert.equal(await mark.isDisabled(),true,'financial hold locks grade inputs');
@@ -178,6 +182,7 @@ try {
   await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
   assert.equal(await midtermRate.count(),0,'midterm rate is hidden on the final tab');
   await finalRate.getByText('50.00%',{exact:true}).waitFor();
+  await assertPassRateLayout(page, finalRate);
   for(const state of ['Banned','Incomplete','Excused']) {
     await page.getByRole('button',{name:'260001 Component status',exact:true}).click();
     await page.getByRole('option',{name:state,exact:true}).click();
@@ -220,12 +225,7 @@ try {
   assert.equal(await page.locator('html').getAttribute('dir'),'rtl');await page.getByText('محجوب',{exact:true}).waitFor();await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});await page.screenshot({path:path.join(output,'arabic-workbook.png'),fullPage:true});
   const messages=JSON.parse(await fs.readFile(path.join(web,'src/messages/ar.json'),'utf8')).control;
   const arabicRate=page.getByRole('group',{name:'نسبة نجاح '+messages.midterm,exact:true});
-  await arabicRate.waitFor();
-  const rtlGeometry=await arabicRate.evaluate(element=>({
-    left:element.parentElement.getBoundingClientRect().left,
-    parentLeft:element.parentElement.parentElement.getBoundingClientRect().left,
-  }));
-  assert.ok(Math.abs(rtlGeometry.left-rtlGeometry.parentLeft)<=1,'Arabic indicator is also at the physical left');
+  await assertPassRateLayout(page, arabicRate);
   await page.getByRole('button',{name:messages.SUBMIT,exact:true}).click();
   const arabicReview=page.getByRole('dialog');
   await arabicReview.getByText('مراجعة الكشف قبل المتابعة',{exact:true}).waitFor();
@@ -252,7 +252,9 @@ try {
   }).format(1/3));
   await arabicRate.getByText(arabicPercent,{exact:true}).waitFor();
   await page.getByRole('textbox',{name:messages.search,exact:true}).fill('');
-  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await assertPassRateLayout(page, arabicRate);
+  await page.screenshot({path:path.join(output,'arabic-mobile.png'),fullPage:true});
   for(const row of rows)if(!row.components.midterm)row.components.midterm={studentId:row.studentId,score:10,status:'present',rev:1,isPublished:false};
   rows[1].tuition={isBlocked:true,status:'unpaid'};
   rows[0].tuition={isBlocked:false,status:'paid'};

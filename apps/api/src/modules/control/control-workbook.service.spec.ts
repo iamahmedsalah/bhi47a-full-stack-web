@@ -91,6 +91,47 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     ),
     findOne: jest.fn(() => chain(null)),
   };
+  const staged = new Map<
+    string,
+    {
+      _id: Types.ObjectId;
+      sheetId: Types.ObjectId;
+      actorId: Types.ObjectId;
+      expiresAt: Date;
+    }
+  >();
+  const fileBatches = {
+    insertMany: jest.fn(
+      (items: Array<Omit<NonNullable<ReturnType<typeof staged.get>>, '_id'>>) =>
+        Promise.resolve(
+          items.map((item) => {
+            const stored = { ...item, _id: new Types.ObjectId() };
+            staged.set(stored._id.toHexString(), stored);
+            return stored;
+          }),
+        ),
+    ),
+    findOne: ({
+      _id,
+      sheetId,
+      actorId,
+      expiresAt,
+    }: {
+      _id: Types.ObjectId;
+      sheetId: Types.ObjectId;
+      actorId: Types.ObjectId;
+      expiresAt: { $gt: Date };
+    }) => {
+      const item = staged.get(_id.toHexString());
+      return chain(
+        item?.sheetId.equals(sheetId) &&
+          item.actorId.equals(actorId) &&
+          item.expiresAt > expiresAt.$gt
+          ? item
+          : null,
+      );
+    },
+  };
   const access = {
     assertPermission: jest.fn(),
     getCapabilities: () => ({ canManageStates: false }),
@@ -140,6 +181,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     { getScheme: () => Promise.resolve(scheme), freeze: jest.fn() } as never,
     { approve: jest.fn().mockResolvedValue(undefined) } as never,
     profiles as never,
+    fileBatches as never,
   );
   const rows = [
     {
@@ -176,6 +218,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     sheet,
     doc,
     imports,
+    staged,
     audit,
     access,
     rows,
@@ -771,11 +814,12 @@ describe('Control workbook import and review', () => {
       bytes,
       0,
     );
-    const lastBatch = await ctx.service.previewFile(
+    expect(firstBatch.remainingBatchIds).toHaveLength(1);
+    const [batchId] = firstBatch.remainingBatchIds;
+    const lastBatch = await ctx.service.previewFileBatch(
       ctx.user,
       ctx.sheetId,
-      bytes,
-      1,
+      batchId,
     );
     expect(firstBatch).toMatchObject({
       valid: 500,
@@ -783,8 +827,29 @@ describe('Control workbook import and review', () => {
       totalRows: 501,
       batchIndex: 0,
     });
-    expect(lastBatch).toMatchObject({ valid: 1, batchIndex: 1 });
+    expect(lastBatch).toMatchObject({ valid: 1 });
     expect(lastBatch.changes[0].studentId).toBe(ctx.rows[500].studentId);
+    await expect(
+      ctx.service.previewFileBatch(
+        { ...ctx.user, _id: new Types.ObjectId().toHexString() },
+        ctx.sheetId,
+        batchId,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    ctx.sheet.revision++;
+    const refreshed = await ctx.service.previewFileBatch(
+      ctx.user,
+      ctx.sheetId,
+      batchId,
+    );
+    expect(refreshed.previewId).not.toBe(lastBatch.previewId);
+    expect(ctx.imports.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ revision: ctx.sheet.revision }),
+    );
+    ctx.staged.get(batchId)!.expiresAt = new Date(0);
+    await expect(
+      ctx.service.previewFileBatch(ctx.user, ctx.sheetId, batchId),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(ctx.mutations.applyChanges).not.toHaveBeenCalled();
     page.getCell('C502').value = 25;
     const invalid = await ctx.service.previewFile(

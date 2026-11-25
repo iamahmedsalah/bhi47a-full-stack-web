@@ -23,6 +23,7 @@ import {
   type GradeAuditLogDocument,
 } from '../../src/modules/control/schemas/grade-audit-log.schema';
 import { ControlImportSchema } from '../../src/modules/control/schemas/control-import.schema';
+import { ControlImportFileBatchSchema } from '../../src/modules/control/schemas/control-import-file-batch.schema';
 import {
   GradeSchema,
   type GradeDocument,
@@ -279,6 +280,7 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       schemeService,
       new ControlAttemptsService(grade as never, access, sheets, schemeService),
       connection.model('StudentProfile') as never,
+      model('ControlImportFileBatch', ControlImportFileBatchSchema) as never,
     );
   }, 120000);
   afterAll(async () => {

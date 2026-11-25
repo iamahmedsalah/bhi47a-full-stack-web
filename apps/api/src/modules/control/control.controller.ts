@@ -328,6 +328,15 @@ export class ControlController {
     return this.workbook.previewFile(user, id, file.buffer, query.batch);
   }
 
+  @Post('sheets/:id/import/batches/:batchId/preview')
+  previewFileBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('batchId', ParseObjectIdPipe) batchId: string,
+  ) {
+    return this.workbook.previewFileBatch(user, id, batchId);
+  }
+
   @Post('sheets/:id/import/rows')
   previewRows(
     @CurrentUser() user: AuthenticatedUser,
